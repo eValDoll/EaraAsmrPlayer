@@ -41,18 +41,23 @@ android {
             ?: earaKeystoreProps.getProperty("EARA_RELEASE_KEY_PASSWORD")
             ?: ""
 
+    val earaReleaseStoreFileOnDisk = rootProject.file(earaReleaseStoreFile)
+    val hasEaraReleaseKeystore =
+        earaReleaseStoreFileOnDisk.isFile &&
+            earaReleaseStorePassword.isNotBlank() &&
+            earaReleaseKeyAlias.isNotBlank() &&
+            earaReleaseKeyPassword.isNotBlank()
+
     signingConfigs {
         create("earaRelease") {
-            storeFile = rootProject.file(earaReleaseStoreFile)
-            storePassword = earaReleaseStorePassword
-            keyAlias = earaReleaseKeyAlias
-            keyPassword = earaReleaseKeyPassword
-        }
-        getByName("debug") {
-            storeFile = rootProject.file(earaReleaseStoreFile)
-            storePassword = earaReleaseStorePassword
-            keyAlias = earaReleaseKeyAlias
-            keyPassword = earaReleaseKeyPassword
+            if (hasEaraReleaseKeystore) {
+                storeFile = earaReleaseStoreFileOnDisk
+                storePassword = earaReleaseStorePassword
+                keyAlias = earaReleaseKeyAlias
+                keyPassword = earaReleaseKeyPassword
+            } else {
+                initWith(getByName("debug"))
+            }
         }
     }
 
