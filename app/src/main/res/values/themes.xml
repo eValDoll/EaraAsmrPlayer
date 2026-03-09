@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.AsmrPlayer" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="android:windowBackground">#FFF0F4F8</item>
+        <item name="android:statusBarColor">#FFF0F4F8</item>
+        <item name="android:navigationBarColor">#FFF0F4F8</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">true</item>
+    </style>
+</resources>
