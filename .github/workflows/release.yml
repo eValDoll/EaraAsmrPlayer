@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  github-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+      - name: Enable Gradle Wrapper
+        shell: bash
+        run: |
+          set -euo pipefail
+          sed -i 's/\r$//' gradlew
+          chmod +x gradlew
+      - name: Prepare release signing keystore
+        shell: bash
+        env:
+          EARA_RELEASE_JKS_BASE64: ${{ secrets.EARA_RELEASE_JKS_BASE64 }}
+        run: |
+          set -euo pipefail
+          if [ -z "${EARA_RELEASE_JKS_BASE64}" ]; then
+            echo "Missing EARA_RELEASE_JKS_BASE64 secret"
+            exit 1
+          fi
+          printf '%s' "${EARA_RELEASE_JKS_BASE64}" | base64 --decode > eara-release.jks
+          chmod 600 eara-release.jks
+      - name: Build release APK
+        run: ./gradlew :app:assembleRelease
+        env:
+          EARA_RELEASE_STORE_FILE: eara-release.jks
+          EARA_RELEASE_STORE_PASSWORD: ${{ secrets.EARA_RELEASE_STORE_PASSWORD }}
+          EARA_RELEASE_KEY_ALIAS: ${{ secrets.EARA_RELEASE_KEY_ALIAS }}
+          EARA_RELEASE_KEY_PASSWORD: ${{ secrets.EARA_RELEASE_KEY_PASSWORD }}
+      - name: Prepare release artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          APK_PATH="$(find . -type f -path '*/outputs/apk/release/*.apk' -name '*release*.apk' | head -n 1)"
+          if [ -z "$APK_PATH" ]; then
+            echo "Release APK not found under outputs/apk/release"
+            find . -maxdepth 4 -type d -name outputs -print
+            exit 1
+          fi
+          echo "Using APK: $APK_PATH"
+          cp "$APK_PATH" "dist/AsmrPlayer-${{ github.ref_name }}-release.apk"
+      - uses: softprops/action-gh-release@v2
+        with:
+          name: ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
+          generate_release_notes: true
+          overwrite: true
+          files: dist/AsmrPlayer-${{ github.ref_name }}-release.apk
+          token: ${{ secrets.GITHUB_TOKEN }}

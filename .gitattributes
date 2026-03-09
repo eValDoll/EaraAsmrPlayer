@@ -1,0 +1,7 @@
+* text=auto
+
+.github/workflows/*.yml text eol=lf
+.github/workflows/*.yaml text eol=lf
+
+gradlew text eol=lf
+*.sh text eol=lf
