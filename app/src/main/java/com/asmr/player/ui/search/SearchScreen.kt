@@ -486,7 +486,7 @@ private fun SearchPaginationHeader(
                     } else Modifier
                 )
                 .clip(RoundedCornerShape(14.dp))
-                .background(if (isDark) colorScheme.surface.copy(alpha = 0.3f) else Color.White)
+                .background(if (isDark) colorScheme.surface else Color.White)
                 .padding(horizontal = 8.dp, vertical = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {

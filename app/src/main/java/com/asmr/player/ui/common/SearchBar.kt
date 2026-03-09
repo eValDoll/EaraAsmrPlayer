@@ -67,7 +67,7 @@ fun CustomSearchBar(
                 } else Modifier
             )
             .background(
-                color = if (isDark) colorScheme.surface.copy(alpha = 0.3f) else Color.White,
+                color = if (isDark) colorScheme.surface else Color.White,
                 shape = CircleShape
             ),
         textStyle = MaterialTheme.typography.bodyLarge.copy(color = if (isDark) colorScheme.textPrimary else Color.Black),
