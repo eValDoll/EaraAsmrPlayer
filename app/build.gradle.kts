@@ -67,6 +67,8 @@ android {
         targetSdk = 34
         versionCode = 10000
         versionName = "1.0.0"
+        buildConfigField("String", "UPDATE_REPO_OWNER", "\"eValDoll\"")
+        buildConfigField("String", "UPDATE_REPO_NAME", "\"EaraAsmrPlayer\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

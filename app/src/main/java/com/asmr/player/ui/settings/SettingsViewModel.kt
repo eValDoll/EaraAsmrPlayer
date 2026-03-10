@@ -106,7 +106,11 @@ class SettingsViewModel @Inject constructor(
         updateJob = viewModelScope.launch(Dispatchers.IO) {
             _updateState.value = AppUpdateState.Checking
             try {
-                val release = updateClient.fetchLatestRelease(owner = "eValDoll", repo = "AsmrPlayer")
+                val release =
+                    updateClient.fetchLatestRelease(
+                        owner = BuildConfig.UPDATE_REPO_OWNER,
+                        repo = BuildConfig.UPDATE_REPO_NAME
+                    )
                 val currentVersion = BuildConfig.VERSION_NAME
                 val newer = updateClient.isNewerThanCurrent(release.versionName, currentVersion)
                 _updateState.value = if (newer) {
