@@ -729,14 +729,63 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun addScanRoot(uriString: String): Boolean {
+        val existingRoots = scanRootsStore.getRoots()
+        
+        // 检查重复
+        if (existingRoots.contains(uriString)) {
+            messageManager.showInfo("扫描目录已存在")
+            return false
+        }
+        
+        // 检查嵌套：新目录是否是现有目录的子目录
+        val newUri = runCatching { Uri.parse(uriString) }.getOrNull()
+        if (newUri != null) {
+            for (existingRoot in existingRoots) {
+                val existingUri = runCatching { Uri.parse(existingRoot) }.getOrNull() ?: continue
+                
+                // 检查新目录是否是现有目录的子目录
+                if (isSubdirectory(newUri, existingUri)) {
+                    messageManager.showInfo("该目录已被包含在现有扫描目录中")
+                    return false
+                }
+                
+                // 检查现有目录是否是新目录的子目录
+                if (isSubdirectory(existingUri, newUri)) {
+                    messageManager.showInfo("该目录包含了现有的扫描目录，请先移除子目录")
+                    return false
+                }
+            }
+        }
+        
         val added = scanRootsStore.addRoot(uriString)
         _scanRoots.value = runCatching { scanRootsStore.getRoots() }.getOrDefault(emptySet())
         if (added) {
             messageManager.showSuccess("已添加扫描目录")
-        } else {
-            messageManager.showInfo("扫描目录已存在")
         }
         return added
+    }
+    
+    private fun isSubdirectory(child: Uri, parent: Uri): Boolean {
+        // 比较 URI 的路径部分
+        val childPath = child.toString()
+        val parentPath = parent.toString()
+        
+        // 如果是相同的 URI scheme 和 authority
+        if (child.scheme != parent.scheme || child.authority != parent.authority) {
+            return false
+        }
+        
+        // 获取文档树 ID
+        val childTreeId = runCatching { 
+            DocumentsContract.getTreeDocumentId(child) 
+        }.getOrNull() ?: return false
+        
+        val parentTreeId = runCatching { 
+            DocumentsContract.getTreeDocumentId(parent) 
+        }.getOrNull() ?: return false
+        
+        // 检查子目录关系
+        return childTreeId.startsWith(parentTreeId) && childTreeId != parentTreeId
     }
 
     fun removeScanRoot(uriString: String) {
