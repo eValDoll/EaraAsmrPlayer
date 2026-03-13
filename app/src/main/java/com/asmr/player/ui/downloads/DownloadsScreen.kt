@@ -1,5 +1,8 @@
 package com.asmr.player.ui.downloads
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,11 +13,15 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Folder
@@ -29,6 +36,8 @@ import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Movie
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Error
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
@@ -40,13 +49,17 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.theme.AsmrTheme
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import java.io.File
 
@@ -123,7 +136,10 @@ fun DownloadsScreen(
             } else {
                 LazyColumn(
                     verticalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
+                    contentPadding = PaddingValues(
+                        top = 4.dp,
+                        bottom = LocalBottomOverlayPadding.current + 6.dp
+                    )
                 ) {
                     items(shownTasks, key = { it.taskId }) { task ->
                         DownloadTaskCard(
@@ -137,7 +153,9 @@ fun DownloadsScreen(
                             onResumeItem = { viewModel.resumeItem(it) },
                             onRetryItem = { viewModel.retryItem(it) },
                             onDeleteItem = { pendingDelete = PendingDeleteAction.Item(workId = it) },
-                            onRetryFailedInTask = { viewModel.retryFailedInTask(task.taskId) }
+                            onRetryFailedInTask = { viewModel.retryFailedInTask(task.taskId) },
+                            onPauseTask = { viewModel.pauseTask(task.taskId) },
+                            onResumeTask = { viewModel.resumeTask(task.taskId) }
                         )
                     }
                 }
@@ -236,89 +254,215 @@ private fun DownloadTaskCard(
     onResumeItem: (String) -> Unit,
     onRetryItem: (String) -> Unit,
     onDeleteItem: (String) -> Unit,
-    onRetryFailedInTask: () -> Unit
+    onRetryFailedInTask: () -> Unit,
+    onPauseTask: () -> Unit,
+    onResumeTask: () -> Unit
 ) {
     val folderExpanded = remember(task.taskId) { mutableStateListOf<String>() }
     val treeEntries = remember(task.items, folderExpanded.toList()) {
         flattenDownloadTreeForUi(task.items, folderExpanded.toSet())
     }
     val hasFailedItems = remember(task.items) { task.items.any { it.state == DownloadItemState.FAILED } }
+    val hasActiveItems = remember(task.items) { 
+        task.items.any { it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED } 
+    }
+    val hasPausedItems = remember(task.items) { 
+        task.items.any { it.state == DownloadItemState.PAUSED } 
+    }
+    val colors = AsmrTheme.colorScheme
 
-    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-        Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = colors.surfaceVariant
+        ),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = 4.dp
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable(onClick = onToggleExpanded),
+                    .clip(RoundedCornerShape(8.dp))
+                    .clickable(onClick = onToggleExpanded)
+                    .padding(vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Icon(
                     imageVector = if (expanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowRight,
-                    contentDescription = null
+                    contentDescription = null,
+                    tint = colors.primary,
+                    modifier = Modifier.size(24.dp)
                 )
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(8.dp))
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(task.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
-                        task.subtitle.ifBlank { task.rootDir.substringAfterLast('\\').substringAfterLast('/') },
+                        text = task.title,
+                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = colors.textPrimary
+                    )
+                    Spacer(modifier = Modifier.height(2.dp))
+                    Text(
+                        text = task.subtitle.ifBlank { task.rootDir.substringAfterLast('\\').substringAfterLast('/') },
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        color = colors.textSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                 }
-                IconButton(
-                    onClick = onRequestDeleteTask
-                ) {
-                    Icon(Icons.Default.Close, contentDescription = null)
-                }
                 if (hasFailedItems) {
-                    IconButton(onClick = onRetryFailedInTask) {
-                        Icon(Icons.Default.Refresh, contentDescription = null)
+                    IconButton(
+                        onClick = onRetryFailedInTask,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Refresh,
+                            contentDescription = null,
+                            tint = colors.primary
+                        )
                     }
+                }
+                if (hasActiveItems) {
+                    IconButton(
+                        onClick = onPauseTask,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.Pause,
+                            contentDescription = null,
+                            tint = colors.primary
+                        )
+                    }
+                } else if (hasPausedItems) {
+                    IconButton(
+                        onClick = onResumeTask,
+                        modifier = Modifier.size(40.dp)
+                    ) {
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription = null,
+                            tint = colors.primary
+                        )
+                    }
+                }
+                IconButton(
+                    onClick = onRequestDeleteTask,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Close,
+                        contentDescription = null,
+                        tint = colors.textSecondary
+                    )
                 }
             }
 
             when {
                 task.progressFraction != null -> {
-                    LinearProgressIndicator(progress = task.progressFraction, modifier = Modifier.fillMaxWidth())
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "下载进度",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = colors.textSecondary,
+                                fontSize = 12.sp
+                            )
+                            Text(
+                                text = "${(task.progressFraction * 100).toInt()}%",
+                                style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium),
+                                color = colors.primary,
+                                fontSize = 12.sp
+                            )
+                        }
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(colors.surfaceVariant)
+                        ) {
+                            val animatedProgress by animateFloatAsState(
+                                targetValue = task.progressFraction,
+                                animationSpec = tween(durationMillis = 300),
+                                label = "progress"
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth(animatedProgress)
+                                    .fillMaxHeight()
+                                    .background(colors.primary)
+                            )
+                        }
+                    }
                 }
                 task.hasUnknownTotalRunning -> {
-                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "下载中...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colors.textSecondary,
+                            fontSize = 12.sp
+                        )
+                        LinearProgressIndicator(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(8.dp)
+                                .clip(RoundedCornerShape(4.dp)),
+                            color = colors.primary,
+                            trackColor = colors.surfaceVariant
+                        )
+                    }
                 }
             }
 
             if (expanded) {
-                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                    treeEntries.forEachIndexed { index, entry ->
-                        when (entry) {
-                            is DownloadTreeUiEntry.Folder -> {
-                                DownloadFolderRow(
-                                    title = entry.title,
-                                    depth = entry.depth,
-                                    expanded = folderExpanded.contains(entry.path),
-                                    onToggle = {
-                                        if (folderExpanded.contains(entry.path)) folderExpanded.remove(entry.path) else folderExpanded.add(entry.path)
-                                    }
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    color = colors.surfaceVariant.copy(alpha = 0.3f)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        treeEntries.forEachIndexed { index, entry ->
+                            when (entry) {
+                                is DownloadTreeUiEntry.Folder -> {
+                                    DownloadFolderRow(
+                                        title = entry.title,
+                                        depth = entry.depth,
+                                        expanded = folderExpanded.contains(entry.path),
+                                        onToggle = {
+                                            if (folderExpanded.contains(entry.path)) folderExpanded.remove(entry.path) else folderExpanded.add(entry.path)
+                                        }
+                                    )
+                                }
+                                is DownloadTreeUiEntry.File -> {
+                                    DownloadFileRow(
+                                        item = entry.item,
+                                        depth = entry.depth,
+                                        onPause = { onPauseItem(entry.item.workId) },
+                                        onResume = { onResumeItem(entry.item.workId) },
+                                        onRetry = { onRetryItem(entry.item.workId) },
+                                        onDelete = { onDeleteItem(entry.item.workId) }
+                                    )
+                                }
+                            }
+                            if (index < treeEntries.size - 1) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 8.dp),
+                                    thickness = 0.5.dp,
+                                    color = colors.onSurfaceVariant.copy(alpha = 0.2f)
                                 )
                             }
-                            is DownloadTreeUiEntry.File -> {
-                                DownloadFileRow(
-                                    item = entry.item,
-                                    depth = entry.depth,
-                                    onPause = { onPauseItem(entry.item.workId) },
-                                    onResume = { onResumeItem(entry.item.workId) },
-                                    onRetry = { onRetryItem(entry.item.workId) },
-                                    onDelete = { onDeleteItem(entry.item.workId) }
-                                )
-                            }
-                        }
-                        if (index < treeEntries.size - 1) {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 16.dp),
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
-                            )
                         }
                     }
                 }
@@ -397,25 +541,39 @@ private fun DownloadFolderRow(
     expanded: Boolean,
     onToggle: () -> Unit
 ) {
-    ListItem(
-        headlineContent = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        leadingContent = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (depth > 0) Spacer(modifier = Modifier.width((depth * 16).dp))
-                Icon(Icons.Default.Folder, contentDescription = null)
-            }
-        },
-        trailingContent = {
-            Icon(
-                imageVector = if (expanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowRight,
-                contentDescription = null
-            )
-        },
+    val colors = AsmrTheme.colorScheme
+    
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onToggle),
-        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-    )
+            .padding(start = (depth * 16).dp)
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onToggle)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            Icons.Default.Folder,
+            contentDescription = null,
+            tint = colors.primary.copy(alpha = 0.8f),
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = colors.textPrimary,
+            modifier = Modifier.weight(1f)
+        )
+        Icon(
+            imageVector = if (expanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowRight,
+            contentDescription = null,
+            tint = colors.textSecondary,
+            modifier = Modifier.size(20.dp)
+        )
+    }
 }
 
 @Composable
@@ -427,50 +585,207 @@ private fun DownloadFileRow(
     onRetry: () -> Unit,
     onDelete: () -> Unit
 ) {
+    val colors = AsmrTheme.colorScheme
     val percent: Int? = when {
         item.state == DownloadItemState.SUCCEEDED -> 100
         item.total > 0 -> ((item.downloaded * 100 / item.total).toInt().coerceIn(0, 100))
         else -> null
     }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        ListItem(
-            headlineContent = { Text(item.fileName, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-            supportingContent = {
-                val text = buildString {
-                    append(item.state.name)
-                    if (percent != null) append(" · $percent%")
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                when (item.state) {
+                    DownloadItemState.SUCCEEDED -> colors.primary.copy(alpha = 0.05f)
+                    DownloadItemState.FAILED -> colors.danger.copy(alpha = 0.05f)
+                    else -> Color.Transparent
                 }
-                Text(text, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            },
-            leadingContent = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (depth > 0) Spacer(modifier = Modifier.width((depth * 16).dp))
-                    Icon(pickFileIcon(item.fileName), contentDescription = null)
-                }
-            },
-            trailingContent = {
-                Row {
-                    when (item.state) {
-                        DownloadItemState.RUNNING, DownloadItemState.ENQUEUED -> {
-                            IconButton(onClick = onPause) { Icon(Icons.Default.Pause, contentDescription = null) }
-                        }
-                        DownloadItemState.PAUSED, DownloadItemState.CANCELLED -> {
-                            IconButton(onClick = onResume) { Icon(Icons.Default.PlayArrow, contentDescription = null) }
-                        }
-                        DownloadItemState.FAILED -> {
-                            IconButton(onClick = onRetry) { Icon(Icons.Default.Refresh, contentDescription = null) }
-                        }
-                        else -> {}
+            )
+            .padding(horizontal = 12.dp, vertical = 10.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(36.dp)
+                    .clip(CircleShape)
+                    .background(colors.surfaceVariant),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = pickFileIcon(item.fileName),
+                    contentDescription = null,
+                    tint = colors.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(12.dp))
+            
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = item.fileName,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = colors.textPrimary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // 状态标签
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .background(
+                                when (item.state) {
+                                    DownloadItemState.SUCCEEDED -> colors.primary.copy(alpha = 0.15f)
+                                    DownloadItemState.FAILED -> colors.danger.copy(alpha = 0.15f)
+                                    DownloadItemState.RUNNING -> colors.primary.copy(alpha = 0.15f)
+                                    else -> colors.surfaceVariant
+                                }
+                            )
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = when (item.state) {
+                                DownloadItemState.SUCCEEDED -> "已完成"
+                                DownloadItemState.FAILED -> "失败"
+                                DownloadItemState.RUNNING -> "下载中"
+                                DownloadItemState.PAUSED -> "已暂停"
+                                DownloadItemState.CANCELLED -> "已取消"
+                                DownloadItemState.ENQUEUED -> "等待中"
+                            },
+                            style = MaterialTheme.typography.labelSmall,
+                            color = when (item.state) {
+                                DownloadItemState.SUCCEEDED -> colors.primary
+                                DownloadItemState.FAILED -> colors.danger
+                                DownloadItemState.RUNNING -> colors.primary
+                                else -> colors.textSecondary
+                            },
+                            fontSize = 11.sp
+                        )
                     }
-                    IconButton(onClick = onDelete) { Icon(Icons.Default.Delete, contentDescription = null) }
+                    
+                    if (percent != null) {
+                        Text(
+                            text = "$percent%",
+                            style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Medium),
+                            color = colors.textSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
                 }
             }
-        )
+            
+            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                when (item.state) {
+                    DownloadItemState.RUNNING, DownloadItemState.ENQUEUED -> {
+                        IconButton(
+                            onClick = onPause,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Pause,
+                                contentDescription = null,
+                                tint = colors.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    DownloadItemState.PAUSED, DownloadItemState.CANCELLED -> {
+                        IconButton(
+                            onClick = onResume,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.PlayArrow,
+                                contentDescription = null,
+                                tint = colors.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    DownloadItemState.FAILED -> {
+                        IconButton(
+                            onClick = onRetry,
+                            modifier = Modifier.size(36.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = null,
+                                tint = colors.danger,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                    else -> {}
+                }
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(36.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Delete,
+                        contentDescription = null,
+                        tint = colors.textSecondary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+        
+        // 进度条
         when {
-            percent != null -> LinearProgressIndicator(progress = percent / 100f, modifier = Modifier.fillMaxWidth())
-            item.state == DownloadItemState.SUCCEEDED -> LinearProgressIndicator(progress = 1f, modifier = Modifier.fillMaxWidth())
-            item.total <= 0 && (item.state == DownloadItemState.RUNNING || item.state == DownloadItemState.ENQUEUED) -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            percent != null && item.state != DownloadItemState.SUCCEEDED -> {
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(colors.surfaceVariant)
+                ) {
+                    val animatedProgress by animateFloatAsState(
+                        targetValue = percent / 100f,
+                        animationSpec = tween(durationMillis = 300),
+                        label = "file_progress"
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth(animatedProgress)
+                            .fillMaxHeight()
+                            .background(colors.primary)
+                    )
+                }
+            }
+            item.state == DownloadItemState.SUCCEEDED -> {
+                Spacer(modifier = Modifier.height(8.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(colors.primary.copy(alpha = 0.3f))
+                )
+            }
+            item.total <= 0 && (item.state == DownloadItemState.RUNNING || item.state == DownloadItemState.ENQUEUED) -> {
+                Spacer(modifier = Modifier.height(8.dp))
+                LinearProgressIndicator(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                    color = colors.primary,
+                    trackColor = colors.surfaceVariant
+                )
+            }
         }
     }
 }
