@@ -167,26 +167,29 @@ fun DownloadsScreen(
                 }
             }
             if (resolved != null) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .align(Alignment.BottomCenter)
-                        .padding(horizontal = 16.dp, vertical = 16.dp),
-                    contentAlignment = Alignment.BottomCenter
-                ) {
-                    DeleteConfirmBanner(
-                        title = resolved.title,
-                        message = resolved.message,
-                        onConfirm = {
-                            pendingDelete = null
-                            when (action) {
-                                is PendingDeleteAction.Task -> viewModel.deleteTask(action.taskId)
-                                is PendingDeleteAction.Item -> viewModel.deleteItem(action.workId)
+                AlertDialog(
+                    onDismissRequest = { pendingDelete = null },
+                    title = { Text(resolved.title) },
+                    text = { Text(resolved.message) },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                pendingDelete = null
+                                when (action) {
+                                    is PendingDeleteAction.Task -> viewModel.deleteTask(action.taskId)
+                                    is PendingDeleteAction.Item -> viewModel.deleteItem(action.workId)
+                                }
                             }
-                        },
-                        onDismiss = { pendingDelete = null }
-                    )
-                }
+                        ) {
+                            Text("删除")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { pendingDelete = null }) {
+                            Text("取消")
+                        }
+                    }
+                )
             } else {
                 pendingDelete = null
             }
