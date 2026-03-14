@@ -86,4 +86,16 @@ interface DownloadDao {
 
     @Query("DELETE FROM download_tasks WHERE id = :taskId")
     suspend fun deleteTaskById(taskId: Long)
+
+    @Query("UPDATE download_items SET state = :state, updatedAt = :updatedAt WHERE taskId = :taskId AND state NOT IN ('SUCCEEDED', 'PAUSED')")
+    suspend fun pauseAllItemsInTask(taskId: Long, state: String, updatedAt: Long)
+
+    @Query("SELECT * FROM download_items WHERE state = 'PAUSED' OR state IN ('RUNNING', 'ENQUEUED', 'BLOCKED')")
+    suspend fun getAllActiveOrPausedItems(): List<DownloadItemEntity>
+
+    @Query("SELECT COUNT(*) FROM download_items WHERE state IN ('RUNNING', 'ENQUEUED', 'BLOCKED')")
+    suspend fun countActiveItems(): Int
+
+    @Query("SELECT COUNT(*) FROM download_items WHERE state = 'PAUSED'")
+    suspend fun countPausedItems(): Int
 }
