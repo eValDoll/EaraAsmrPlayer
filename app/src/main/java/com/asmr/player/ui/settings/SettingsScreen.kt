@@ -290,24 +290,25 @@ fun SettingsScreen(
                         selected = staticHueArgb == null,
                         onClick = { viewModel.setStaticHueArgb(null) }
                     )
-                val isDark = AsmrTheme.colorScheme.isDark
-                val presets = if (isDark) {
+                // 浅色主题用深色调（深红、深蓝、墨綠等），深色/柔和深色主题用高饱和亮色
+                val presets = if (themeMode == "light") {
                     listOf(
-                        Color(0xFF81C784), // Green 300
-                        Color(0xFF64B5F6), // Blue 300
-                        Color(0xFFBA68C8), // Purple 300
-                        Color(0xFFF06292), // Pink 300
-                        Color(0xFFFFB74D), // Orange 300
-                        Color(0xFF4DB6AC)  // Teal 300
+                        Color(0xFF0B3D2E), // 墨綠
+                        Color(0xFF0D47A1), // 深蓝
+                        Color(0xFF880E4F), // 深玫红
+                        Color(0xFF4A148C), // 深紫
+                        Color(0xFF7B1A1A), // 深砖红
+                        Color(0xFF004D40)  // 深青綠
                     )
                 } else {
+                    // dark / soft_dark：饱和度稍高的亮色，在暗背景上清晰醒目
                     listOf(
-                        Color(0xFF2E7D32), // Green 700
-                        Color(0xFF3E75C3), // Custom Blue
-                        Color(0xFF8E24AA), // Purple 600
-                        Color(0xFFD81B60), // Pink 600
-                        Color(0xFFFF8F00), // Orange 800
-                        Color(0xFF00897B)  // Teal 600
+                        Color(0xFF29B6F6), // 亮天蓝
+                        Color(0xFF26C17A), // 亮翠綠
+                        Color(0xFF7C4DFF), // 亮紫罗兰
+                        Color(0xFFFF5252), // 亮珊瑚红
+                        Color(0xFFFFCA28), // 亮琥珀黄
+                        Color(0xFF26C7C7)  // 亮青色
                     )
                 }
                 presets.forEach { c ->
