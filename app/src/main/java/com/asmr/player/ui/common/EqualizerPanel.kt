@@ -232,9 +232,23 @@ fun EqualizerPanel(
         return out
     }
 
+
+    // Local state to track editing values - completely independent from settings
+    var editingLevels by remember { mutableStateOf(normalizedLevels()) }
+    
+    // Only sync when user explicitly selects a preset (not when we change to "自定义")
+    val currentPresetName = settings.presetName
+    LaunchedEffect(currentPresetName) {
+        // When preset changes to something other than "自定义", update our local state
+        if (currentPresetName != "自定义") {
+            editingLevels = normalizedLevels()
+        }
+    }
+
     fun updateLevel(index: Int, value: Int) {
-        val newLevels = normalizedLevels().toMutableList()
+        val newLevels = editingLevels.toMutableList()
         newLevels[index] = value
+        editingLevels = newLevels
         onSettingsChanged(settings.copy(enabled = true, bandLevels = newLevels, presetName = "自定义"))
     }
 
@@ -819,7 +833,7 @@ fun EqualizerPanel(
                     text = "每个滑条对应一个中心频段。向上提升、向下削减该频段的能量。"
                 )
             }
-            val levels = normalizedLevels()
+            // val levels = normalizedLevels()  // 不再使用，改用 currentLevels
             val scrollState = rememberScrollState()
             val sliderHeight = 230.dp
             val sliderThickness = 44.dp
@@ -832,7 +846,7 @@ fun EqualizerPanel(
                     verticalAlignment = Alignment.Bottom
                 ) {
                     for (i in 0 until 10) {
-                        val db = (levels[i] / 100f)
+                        val db = (editingLevels[i] / 100f)
                         val dbText = if (abs(db) < 0.01f) "0 dB" else "${db.toInt()} dB"
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -846,7 +860,7 @@ fun EqualizerPanel(
                                 contentAlignment = Alignment.Center
                             ) {
                                 VerticalSlider(
-                                    value = levels[i].toFloat(),
+                                    value = editingLevels[i].toFloat(),
                                     onValueChange = { updateLevel(i, it.toInt()) },
                                     valueRange = -1500f..1500f,
                                     enabled = eqEnabled,
