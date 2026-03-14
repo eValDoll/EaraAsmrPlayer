@@ -132,16 +132,10 @@ class PlaylistRepository @Inject constructor(
     }
 
     private suspend fun resolvePlaylistItemArtwork(item: MediaItem): String {
-        val artwork = item.mediaMetadata.artworkUri?.toString().orEmpty().trim()
-        android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - artworkUri from metadata: '$artwork'")
-        if (artwork.isNotBlank()) {
-            android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - returning artwork from metadata: '$artwork'")
-            return artwork
-        }
         val extras = item.mediaMetadata.extras
         android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - extras: $extras")
         val albumId = extras?.getLong("album_id") ?: 0L
-        android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - albumId: $albumId")
+        android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtworkwork - albumId: $albumId")
         if (albumId > 0L) {
             val album = runCatching { albumDao.getAlbumById(albumId) }.getOrNull()
             android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - album from db: $album")
@@ -151,8 +145,15 @@ class PlaylistRepository @Inject constructor(
             }
         }
 
+        val artwork = item.mediaMetadata.artworkUri?.toString().orEmpty().trim()
+        android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - artworkUri from metadata: '$artwork'")
+        if (artwork.isNotBlank()) {
+            android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - returning artwork from metadata: '$artwork'")
+            return artwork
+        }
+
         val uriString = item.localConfiguration?.uri?.toString().orEmpty().trim()
-        android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - uriString: '$uriString'")
+        android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - uriString: 'uriString'")
         val path = when {
             uriString.startsWith("file://", ignoreCase = true) -> runCatching {
                 Uri.parse(uriString).path.orEmpty()
