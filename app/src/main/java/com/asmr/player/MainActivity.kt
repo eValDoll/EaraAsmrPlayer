@@ -63,6 +63,7 @@ import com.asmr.player.ui.sidepanel.LocalRightPanelExpandedState
 import com.asmr.player.ui.common.rememberDominantColorCenterWeighted
 import com.asmr.player.ui.downloads.DownloadsScreen
 import com.asmr.player.ui.downloads.DownloadsViewModel
+import com.asmr.player.ui.downloads.DownloadItemState
 import com.asmr.player.ui.dlsite.DlsiteLoginScreen
 import com.asmr.player.ui.playlists.PlaylistDetailScreen
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
@@ -810,10 +811,29 @@ fun MainContainer(
                                                 }
                                             } else if (entry != null && currentRoute == "downloads") {
                                                 val downloadsViewModel: DownloadsViewModel = hiltViewModel(entry)
-                                                TextButton(
-                                                    onClick = { downloadsViewModel.cancelAll() },
-                                                    colors = ButtonDefaults.textButtonColors(contentColor = topBarContentColor)
-                                                ) { Text("全部暂停") }
+                                                val tasks by downloadsViewModel.tasks.collectAsState()
+                                                val hasActiveDownloads = remember(tasks) {
+                                                    tasks.any { task ->
+                                                        task.items.any { it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED }
+                                                    }
+                                                }
+                                                val hasPausedDownloads = remember(tasks) {
+                                                    tasks.any { task ->
+                                                        task.items.any { it.state == DownloadItemState.PAUSED }
+                                                    }
+                                                }
+                                                
+                                                if (hasActiveDownloads) {
+                                                    TextButton(
+                                                        onClick = { downloadsViewModel.pauseAll() },
+                                                        colors = ButtonDefaults.textButtonColors(contentColor = topBarContentColor)
+                                                    ) { Text("全部暂停") }
+                                                } else if (hasPausedDownloads) {
+                                                    TextButton(
+                                                        onClick = { downloadsViewModel.resumeAll() },
+                                                        colors = ButtonDefaults.textButtonColors(contentColor = topBarContentColor)
+                                                    ) { Text("全部继续") }
+                                                }
                                             } else if (entry != null && (
                                                 currentRoute?.startsWith("album_detail/{albumId}") == true ||
                                                     currentRoute?.startsWith("album_detail/") == true

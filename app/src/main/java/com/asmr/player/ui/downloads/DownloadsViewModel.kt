@@ -139,7 +139,6 @@ class DownloadsViewModel @Inject constructor(
     fun cancelItem(workId: String) {
         runCatching { 
             workManager.cancelWorkById(java.util.UUID.fromString(workId))
-            messageManager.showInfo("已取消下载任务")
         }
     }
 
@@ -148,7 +147,6 @@ class DownloadsViewModel @Inject constructor(
             runCatching { workManager.cancelWorkById(UUID.fromString(workId)) }
             runCatching { 
                 downloadDao.updateItemState(workId, "PAUSED", System.currentTimeMillis())
-                messageManager.showInfo("下载已暂停")
             }
         }
     }
@@ -191,7 +189,6 @@ class DownloadsViewModel @Inject constructor(
                 downloaded = existingBytes.coerceAtLeast(0L),
                 updatedAt = updatedAt
             )
-            messageManager.showInfo("下载已继续")
         }
     }
 
@@ -210,18 +207,68 @@ class DownloadsViewModel @Inject constructor(
         }
     }
 
+    fun pauseTask(taskId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val items = downloadDao.getItemsForTask(taskId)
+            items.filter { 
+                it.state == WorkInfo.State.RUNNING.name || 
+                it.state == WorkInfo.State.ENQUEUED.name 
+            }.forEach { item ->
+                runCatching { workManager.cancelWorkById(UUID.fromString(item.workId)) }
+                runCatching { 
+                    downloadDao.updateItemState(item.workId, "PAUSED", System.currentTimeMillis())
+                }
+            }
+
+        }
+    }
+
+    fun resumeTask(taskId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val items = downloadDao.getItemsForTask(taskId)
+            items.filter { it.state == "PAUSED" }.forEach { item ->
+                resumeItem(item.workId)
+            }
+
+        }
+    }
+
+    fun pauseAll() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val items = downloadDao.getAllActiveOrPausedItems()
+            items.filter { 
+                it.state == WorkInfo.State.RUNNING.name || 
+                it.state == WorkInfo.State.ENQUEUED.name 
+            }.forEach { item ->
+                runCatching { workManager.cancelWorkById(UUID.fromString(item.workId)) }
+                runCatching { 
+                    downloadDao.updateItemState(item.workId, "PAUSED", System.currentTimeMillis())
+                }
+            }
+
+        }
+    }
+
+    fun resumeAll() {
+        viewModelScope.launch(Dispatchers.IO) {
+            val items = downloadDao.getAllActiveOrPausedItems()
+            items.filter { it.state == "PAUSED" }.forEach { item ->
+                resumeItem(item.workId)
+            }
+
+        }
+    }
+
     fun cancelTask(taskKey: String) {
         if (taskKey.isBlank()) return
         runCatching { 
             workManager.cancelAllWorkByTag(taskKey)
-            messageManager.showInfo("已取消所有任务")
         }
     }
 
     fun cancelAll() {
         runCatching { 
             workManager.cancelAllWorkByTag("download")
-            messageManager.showInfo("已取消所有下载")
         }
     }
 
