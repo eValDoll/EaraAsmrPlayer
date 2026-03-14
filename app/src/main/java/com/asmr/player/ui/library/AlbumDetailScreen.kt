@@ -4005,13 +4005,23 @@ private data class PlaylistAddTarget(
     val uri: String,
     val title: String,
     val artist: String,
-    val artworkUri: String
+    val artworkUri: String,
+    val albumId: Long = 0L,
+    val trackId: Long = 0L,
+    val rjCode: String = ""
 ) {
     fun toMediaItem(): MediaItem {
         val metadata = androidx.media3.common.MediaMetadata.Builder()
             .setTitle(title)
             .setArtist(artist)
             .setArtworkUri(artworkUri.takeIf { it.isNotBlank() }?.toUri())
+            .setExtras(
+                android.os.Bundle().apply {
+                    if (albumId > 0L) putLong("album_id", albumId)
+                    if (trackId > 0L) putLong("track_id", trackId)
+                    if (rjCode.isNotBlank()) putString("rj_code", rjCode)
+                }
+            )
             .build()
         return MediaItem.Builder()
             .setMediaId(mediaId)
@@ -4035,7 +4045,10 @@ private data class PlaylistAddTarget(
                 uri = track.path,
                 title = title,
                 artist = artist.orEmpty(),
-                artworkUri = artwork
+                artworkUri = artwork,
+                albumId = album.id,
+                trackId = track.id,
+                rjCode = rj
             )
         }
 
