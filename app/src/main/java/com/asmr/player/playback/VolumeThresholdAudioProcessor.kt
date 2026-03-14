@@ -16,6 +16,11 @@ class VolumeThresholdAudioProcessor : BaseAudioProcessor() {
     companion object {
         const val MODE_THRESHOLD = 0
         const val MODE_LOUDNESS = 1
+        
+        // Improved loudness measurement windows (based on ITU-R BS.1770)
+        private const val MOMENTARY_WINDOW_SEC = 0.4
+        private const val SHORT_TERM_WINDOW_SEC = 3.0
+        private const val INTEGRATED_WINDOW_SEC = 10.0
     }
 
     @Volatile
@@ -38,11 +43,9 @@ class VolumeThresholdAudioProcessor : BaseAudioProcessor() {
     private var limiterGain = 1f
     private var sampleRateHz = 44_100
     private val peakSafety = 0.95f
-    private val boostNoiseFloorDb = -75f
-    private val gateOpenDb = -70f
-    private val gateCloseDb = -75f
     private var gateOpen = false
     private var momentaryEmaPower = 0.0
+    private var shortTermEmaPower = 0.0
     private var integratedEmaPower = 0.0
     private var elapsedSec = 0.0
 
@@ -51,6 +54,7 @@ class VolumeThresholdAudioProcessor : BaseAudioProcessor() {
         limiterGain = 1f
         gateOpen = false
         momentaryEmaPower = 0.0
+        shortTermEmaPower = 0.0
         integratedEmaPower = 0.0
         elapsedSec = 0.0
     }
@@ -121,27 +125,53 @@ class VolumeThresholdAudioProcessor : BaseAudioProcessor() {
 
         val modeSnapshot = mode
         val minGain = 0.125f
-        if (db >= gateOpenDb) gateOpen = true
-        if (db <= gateCloseDb) gateOpen = false
-
         if (dtSec > 0.0) elapsedSec += dtSec
 
         var desiredGain = when (modeSnapshot) {
             MODE_LOUDNESS -> {
+                // Improved loudness normalization with multi-window measurement
                 if (dtSec > 0.0 && gateOpen) {
                     val power = (rms * rms).toDouble()
-                    val alphaMomentary = exp(-dtSec / 0.4)
-                    val alphaIntegrated = exp(-dtSec / 3.0)
-                    momentaryEmaPower =
-                        if (momentaryEmaPower <= 0.0) power else (momentaryEmaPower * alphaMomentary + power * (1.0 - alphaMomentary))
-                    integratedEmaPower =
-                        if (integratedEmaPower <= 0.0) power else (integratedEmaPower * alphaIntegrated + power * (1.0 - alphaIntegrated))
+                    
+                    // Momentary loudness (400ms window)
+                    val alphaMomentary = exp(-dtSec / MOMENTARY_WINDOW_SEC)
+                    momentaryEmaPower = if (momentaryEmaPower <= 0.0) {
+                        power
+                    } else {
+                        momentaryEmaPower * alphaMomentary + power * (1.0 - alphaMomentary)
+                    }
+                    
+                    // Short-term loudness (3s window)
+                    val alphaShortTerm = exp(-dtSec / SHORT_TERM_WINDOW_SEC)
+                    shortTermEmaPower = if (shortTermEmaPower <= 0.0) {
+                        power
+                    } else {
+                        shortTermEmaPower * alphaShortTerm + power * (1.0 - alphaShortTerm)
+                    }
+                    
+                    // Integrated loudness (10s window for better stability)
+                    val alphaIntegrated = exp(-dtSec / INTEGRATED_WINDOW_SEC)
+                    integratedEmaPower = if (integratedEmaPower <= 0.0) {
+                        power
+                    } else {
+                        integratedEmaPower * alphaIntegrated + power * (1.0 - alphaIntegrated)
+                    }
                 }
-                val loudPower =
-                    if (elapsedSec < 2.0) momentaryEmaPower.coerceAtLeast(0.0) else integratedEmaPower.coerceAtLeast(0.0)
+                
+                // Use appropriate measurement window based on elapsed time
+                val loudPower = when {
+                    elapsedSec < 1.0 -> momentaryEmaPower.coerceAtLeast(0.0)
+                    elapsedSec < 5.0 -> shortTermEmaPower.coerceAtLeast(0.0)
+                    else -> integratedEmaPower.coerceAtLeast(0.0)
+                }
+                
                 val loudDb = if (loudPower <= 1e-12) -120f else (10f * log10(loudPower.toFloat()))
                 val deltaDb = loudnessTargetDb - loudDb
+                
+                // Apply gain with smooth limiting
                 var g = dbToGain(deltaDb).coerceIn(minGain, 8f)
+                
+                // Don't boost when gate is closed
                 if (!gateOpen && g > 1f) g = 1f
                 g
             }
@@ -163,9 +193,9 @@ class VolumeThresholdAudioProcessor : BaseAudioProcessor() {
         }
 
         if (!gateOpen && desiredGain > 1f) desiredGain = 1f
-        val attackMs = if (modeSnapshot == MODE_LOUDNESS) 300.0 else 30.0
-        val releaseMs = if (modeSnapshot == MODE_LOUDNESS) 3_000.0 else 200.0
-        val (maxUpDbPerSec, maxDownDbPerSec) = if (modeSnapshot == MODE_LOUDNESS) 12f to 24f else 6f to 18f
+        val attackMs = if (modeSnapshot == MODE_LOUDNESS) 500.0 else 30.0
+        val releaseMs = if (modeSnapshot == MODE_LOUDNESS) 2_000.0 else 200.0
+        val (maxUpDbPerSec, maxDownDbPerSec) = if (modeSnapshot == MODE_LOUDNESS) 8f to 16f else 6f to 18f
         val gainEnd =
             limitGainSlew(
                 current = currentGain,

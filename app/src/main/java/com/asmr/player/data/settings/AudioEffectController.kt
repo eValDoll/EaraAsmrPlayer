@@ -102,16 +102,18 @@ class AudioEffectController @Inject constructor(
     }
 
     fun applyTo(equalizer: Equalizer, settings: EqualizerSettings) {
-        if (settings.enabled != equalizer.enabled) {
-            equalizer.enabled = settings.enabled
+        // Always enable the equalizer object itself, but apply flat response when disabled
+        if (!equalizer.enabled) {
+            equalizer.enabled = true
         }
-        if (!settings.enabled) return
         
         val bands = equalizer.numberOfBands.toInt()
         val minLevel = equalizer.bandLevelRange[0].toInt()
         val maxLevel = equalizer.bandLevelRange[1].toInt()
-        val levels = settings.bandLevels
+        val levels = if (settings.enabled) settings.bandLevels else List(10) { 0 }
+        
         if (levels.isEmpty() || bands <= 0) return
+        
         val targetHz = intArrayOf(31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000)
         val centerHz = IntArray(bands) { idx ->
             (equalizer.getCenterFreq(idx.toShort()).toLong() / 1000L).toInt().coerceAtLeast(1)
@@ -119,6 +121,7 @@ class AudioEffectController @Inject constructor(
         val sum = IntArray(bands)
         val count = IntArray(bands)
         val takeN = minOf(levels.size, targetHz.size)
+        
         for (i in 0 until takeN) {
             val hz = targetHz[i]
             var best = 0
@@ -133,10 +136,15 @@ class AudioEffectController @Inject constructor(
             sum[best] += levels[i]
             count[best] += 1
         }
+        
         for (b in 0 until bands) {
             val raw = if (count[b] == 0) 0 else (sum[b] / count[b])
             val clamped = raw.coerceIn(minLevel, maxLevel).toShort()
-            equalizer.setBandLevel(b.toShort(), clamped)
+            try {
+                equalizer.setBandLevel(b.toShort(), clamped)
+            } catch (e: Exception) {
+                // Ignore errors for individual bands
+            }
         }
     }
 }
