@@ -182,9 +182,11 @@ private fun buildPlaylistAddMediaItem(
         .setArtist(artist)
         .setArtworkUri(artworkUri.takeIf { it.isNotBlank() }?.toUri())
         .build()
+    val mimeType = guessMimeType(uri)
     return androidx.media3.common.MediaItem.Builder()
         .setMediaId(mediaId)
         .setUri(toPlayableUriForPlaylist(uri))
+        .setMimeType(mimeType)
         .setMediaMetadata(metadata)
         .build()
 }
@@ -217,4 +219,19 @@ private fun repairDocumentUri(raw: String): String {
     val encodedDocId = Uri.encode(docId)
     val encodedPath = "/" + segs.take(docIndex + 1).joinToString("/") + "/" + encodedDocId
     return u.buildUpon().encodedPath(encodedPath).build().toString()
+}
+
+private fun guessMimeType(path: String): String? {
+    val trimmed = path.trim()
+    val ext = trimmed.substringBefore('#').substringBefore('?').substringAfterLast('.', "").lowercase()
+    return when (ext) {
+        "mp3" -> "audio/mpeg"
+        "flac" -> "audio/flac"
+        "wav" -> "audio/wav"
+        "m4a" -> "audio/mp4"
+        "aac" -> "audio/aac"
+        "ogg" -> "audio/ogg"
+        "opus" -> "audio/opus"
+        else -> null
+    }
 }
