@@ -1,7 +1,7 @@
 package com.asmr.player.ui.search
 
-import android.util.Log
 import android.os.SystemClock
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.asmr.player.BuildConfig
@@ -14,21 +14,22 @@ import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.domain.model.Album
 import com.asmr.player.util.MessageManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.yield
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.coroutines.yield
 import org.jsoup.HttpStatusException
 import retrofit2.HttpException
 import java.io.IOException
@@ -37,8 +38,18 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.math.ceil
 import javax.inject.Inject
+import kotlin.math.ceil
+
+enum class SearchPendingRequestKind {
+    Search,
+    Page
+}
+
+data class SearchPendingRequest(
+    val kind: SearchPendingRequestKind,
+    val targetPage: Int
+)
 
 @HiltViewModel
 class SearchViewModel @Inject constructor(
@@ -82,92 +93,111 @@ class SearchViewModel @Inject constructor(
             if (cached != null && cached.results.isNotEmpty()) {
                 applyCachedState(cached)
                 lastRequestedKeyword = cached.keyword
-                goToPage(cached.keyword, targetPage = cached.page, showFullScreenLoading = false)
+                requestPage(cached.keyword, cached.page, SearchPendingRequestKind.Page)
             } else {
                 purchasedOnly = initialPurchasedOnly
                 currentLocale = initialLocale
                 lastRequestedKeyword = initialKeyword.trim()
-                goToPage(lastRequestedKeyword, targetPage = 1, showFullScreenLoading = true)
+                requestPage(lastRequestedKeyword, 1, SearchPendingRequestKind.Search)
             }
         }
     }
 
     fun stopBackgroundLoading() {
-        enrichJob?.cancel()
-        asmrOneJob?.cancel()
+        cancelBackgroundJobs()
         _uiState.update { state ->
             val cur = state as? SearchUiState.Success ?: return@update state
-            cur.copy(isEnriching = false, isAsmrOneChecking = false, asmrOneChecked = 0, asmrOneTotal = 0)
+            cur.copy(
+                isEnriching = false,
+                isAsmrOneChecking = false,
+                asmrOneChecked = 0,
+                asmrOneTotal = 0
+            )
         }
     }
 
     fun search(keyword: String) {
-        Log.d("SearchViewModel", "Search requested: keyword=$keyword")
+        if (_uiState.value is SearchUiState.Loading) return
+        val current = _uiState.value as? SearchUiState.Success
+        if (current?.isBusy == true) return
         val normalizedKeyword = keyword.trim()
+        Log.d("SearchViewModel", "Search requested: keyword=$normalizedKeyword")
         lastRequestedKeyword = normalizedKeyword
-        goToPage(normalizedKeyword, targetPage = 1, showFullScreenLoading = true)
+        requestPage(normalizedKeyword, 1, SearchPendingRequestKind.Search)
     }
 
     fun setOrder(order: SearchSortOption) {
-        if (currentOrder == order) return
-        currentOrder = order
-        val current = _uiState.value as? SearchUiState.Success ?: return
-        goToPage(current.keyword, targetPage = 1, showFullScreenLoading = false)
+        updateSearchOptions(order = order)
     }
 
     fun setPurchasedOnly(enabled: Boolean) {
-        if (purchasedOnly == enabled) return
-        purchasedOnly = enabled
-        val current = _uiState.value as? SearchUiState.Success ?: return
-        goToPage(current.keyword, targetPage = 1, showFullScreenLoading = false)
+        updateSearchOptions(purchasedOnly = enabled)
     }
 
     fun setLocale(locale: String?) {
-        if (currentLocale == locale) return
-        currentLocale = locale
+        updateSearchOptions(locale = locale)
+    }
+
+    fun updateSearchOptions(
+        order: SearchSortOption = currentOrder,
+        purchasedOnly: Boolean = this.purchasedOnly,
+        locale: String? = currentLocale
+    ) {
         val current = _uiState.value as? SearchUiState.Success ?: return
-        goToPage(current.keyword, targetPage = 1, showFullScreenLoading = false)
+        if (current.isBusy) return
+        if (currentOrder == order && this.purchasedOnly == purchasedOnly && currentLocale == locale) return
+        currentOrder = order
+        this.purchasedOnly = purchasedOnly
+        currentLocale = locale
+        requestPage(current.keyword, 1, SearchPendingRequestKind.Search)
     }
 
     fun nextPage() {
         val current = _uiState.value as? SearchUiState.Success ?: return
-        if (!current.canGoNext || current.isPaging) return
-        goToPage(current.keyword, targetPage = current.page + 1, showFullScreenLoading = false)
+        if (!current.canGoNext || current.isBusy) return
+        requestPage(current.keyword, current.page + 1, SearchPendingRequestKind.Page)
     }
 
     fun prevPage() {
         val current = _uiState.value as? SearchUiState.Success ?: return
-        if (!current.canGoPrev || current.isPaging) return
-        goToPage(current.keyword, targetPage = current.page - 1, showFullScreenLoading = false)
+        if (!current.canGoPrev || current.isBusy) return
+        requestPage(current.keyword, current.page - 1, SearchPendingRequestKind.Page)
     }
 
     fun refreshPage() {
         val current = _uiState.value as? SearchUiState.Success ?: return
-        if (current.isPaging) return
-        goToPage(current.keyword, targetPage = current.page, showFullScreenLoading = false)
+        if (current.isBusy) return
+        requestPage(current.keyword, current.page, SearchPendingRequestKind.Page)
     }
 
-    private fun goToPage(keyword: String, targetPage: Int, showFullScreenLoading: Boolean) {
+    private fun requestPage(
+        keyword: String,
+        targetPage: Int,
+        requestKind: SearchPendingRequestKind
+    ) {
         val normalizedKeyword = keyword.trim()
         val page = targetPage.coerceAtLeast(1)
         lastRequestedKeyword = normalizedKeyword
 
         viewModelScope.launch {
-            val current = _uiState.value as? SearchUiState.Success
-            _uiState.value = when {
-                showFullScreenLoading -> SearchUiState.Loading
-                current != null && current.keyword == normalizedKeyword -> current.copy(
-                    isPaging = true,
-                    isEnriching = false,
-                    isAsmrOneChecking = false,
-                    asmrOneChecked = 0,
-                    asmrOneTotal = 0
-                )
-                else -> SearchUiState.Loading
-            }
+            val previousSuccess = _uiState.value as? SearchUiState.Success
+            cancelBackgroundJobs()
+
+            _uiState.value = previousSuccess?.copy(
+                pendingRequest = SearchPendingRequest(kind = requestKind, targetPage = page),
+                isEnriching = false,
+                isAsmrOneChecking = false,
+                asmrOneChecked = 0,
+                asmrOneTotal = 0
+            ) ?: SearchUiState.Loading
+
             try {
-                val pageResult = fetchPage(normalizedKeyword, page = page, order = currentOrder, purchasedOnly = purchasedOnly)
-                val canGoNext = pageResult.canGoNext
+                val pageResult = fetchPage(
+                    keyword = normalizedKeyword,
+                    page = page,
+                    order = currentOrder,
+                    purchasedOnly = purchasedOnly
+                )
                 _uiState.value = SearchUiState.Success(
                     results = pageResult.items,
                     keyword = normalizedKeyword,
@@ -176,8 +206,9 @@ class SearchViewModel @Inject constructor(
                     purchasedOnly = purchasedOnly,
                     locale = currentLocale,
                     canGoPrev = page > 1,
-                    canGoNext = canGoNext,
-                    isPaging = false,
+                    canGoNext = pageResult.canGoNext,
+                    pendingRequest = null,
+                    visitedPages = buildVisitedPages(previousSuccess, requestKind, page),
                     isEnriching = false,
                     isAsmrOneChecking = false,
                     asmrOneChecked = 0,
@@ -195,22 +226,27 @@ class SearchViewModel @Inject constructor(
                         baseItems = pageResult.items
                     )
                 } else {
-                    enrichJob?.cancel()
-                    asmrOneJob?.cancel()
                     val cur = _uiState.value as? SearchUiState.Success
                     if (cur != null && cur.keyword == normalizedKeyword && cur.page == page) {
-                        _uiState.value = cur.copy(isAsmrOneChecking = false, asmrOneChecked = 0, asmrOneTotal = 0)
+                        _uiState.value = cur.copy(
+                            isAsmrOneChecking = false,
+                            asmrOneChecked = 0,
+                            asmrOneTotal = 0
+                        )
                     }
                 }
                 scheduleCacheWrite()
             } catch (e: Exception) {
+                if (e is CancellationException) throw e
                 Log.e("SearchViewModel", "Search paging failed", e)
                 val msg = toUserMessage(e)
                 messageManager.showError(msg)
-                val cur = _uiState.value as? SearchUiState.Success
-                if (cur != null && cur.keyword == normalizedKeyword && cur.page == page) {
-                    _uiState.value = cur.copy(
-                        isPaging = false,
+                if (previousSuccess != null) {
+                    currentOrder = previousSuccess.order
+                    purchasedOnly = previousSuccess.purchasedOnly
+                    currentLocale = previousSuccess.locale
+                    _uiState.value = previousSuccess.copy(
+                        pendingRequest = null,
                         isEnriching = false,
                         isAsmrOneChecking = false,
                         asmrOneChecked = 0,
@@ -223,7 +259,34 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    private suspend fun fetchPage(keyword: String, page: Int, order: SearchSortOption, purchasedOnly: Boolean): SearchPageResult {
+    private fun buildVisitedPages(
+        previousSuccess: SearchUiState.Success?,
+        requestKind: SearchPendingRequestKind,
+        page: Int
+    ): List<Int> {
+        return when (requestKind) {
+            SearchPendingRequestKind.Search -> listOf(1)
+            SearchPendingRequestKind.Page -> {
+                (previousSuccess?.visitedPages.orEmpty() + page)
+                    .filter { it > 0 }
+                    .distinct()
+                    .sorted()
+                    .ifEmpty { listOf(page) }
+            }
+        }
+    }
+
+    private fun cancelBackgroundJobs() {
+        enrichJob?.cancel()
+        asmrOneJob?.cancel()
+    }
+
+    private suspend fun fetchPage(
+        keyword: String,
+        page: Int,
+        order: SearchSortOption,
+        purchasedOnly: Boolean
+    ): SearchPageResult {
         if (purchasedOnly) {
             val resp = dlsitePlayLibraryClient.searchPurchased(keyword, page, pageSize)
             return SearchPageResult(items = resp.items, canGoNext = resp.canGoNext)
@@ -233,13 +296,18 @@ class SearchViewModel @Inject constructor(
         if (page == 1 && Regex("""RJ\d{6,}""").matches(normalizedRj)) {
             val preferred = currentLocale
             val info = when {
-                !preferred.isNullOrBlank() -> runCatching { dlsiteScraper.getWorkInfo(normalizedRj, locale = preferred) }.getOrNull()
-                    ?: runCatching { dlsiteScraper.getWorkInfo(normalizedRj, locale = "zh_CN") }.getOrNull()
-                    ?: runCatching { dlsiteScraper.getWorkInfo(normalizedRj, locale = "ja_JP") }.getOrNull()
-                    ?: runCatching { dlsiteScraper.getWorkInfo(normalizedRj) }.getOrNull()
-                else -> runCatching { dlsiteScraper.getWorkInfo(normalizedRj, locale = "zh_CN") }.getOrNull()
-                    ?: runCatching { dlsiteScraper.getWorkInfo(normalizedRj, locale = "ja_JP") }.getOrNull()
-                    ?: runCatching { dlsiteScraper.getWorkInfo(normalizedRj) }.getOrNull()
+                !preferred.isNullOrBlank() -> {
+                    runCatching { dlsiteScraper.getWorkInfo(normalizedRj, locale = preferred) }.getOrNull()
+                        ?: runCatching { dlsiteScraper.getWorkInfo(normalizedRj, locale = "zh_CN") }.getOrNull()
+                        ?: runCatching { dlsiteScraper.getWorkInfo(normalizedRj, locale = "ja_JP") }.getOrNull()
+                        ?: runCatching { dlsiteScraper.getWorkInfo(normalizedRj) }.getOrNull()
+                }
+
+                else -> {
+                    runCatching { dlsiteScraper.getWorkInfo(normalizedRj, locale = "zh_CN") }.getOrNull()
+                        ?: runCatching { dlsiteScraper.getWorkInfo(normalizedRj, locale = "ja_JP") }.getOrNull()
+                        ?: runCatching { dlsiteScraper.getWorkInfo(normalizedRj) }.getOrNull()
+                }
             }
             if (info != null) {
                 val album = info.album.copy(workId = normalizedRj, rjCode = normalizedRj)
@@ -272,7 +340,9 @@ class SearchViewModel @Inject constructor(
                     }
                 }
                 deferreds.forEach { deferred ->
-                    val (idx, detail) = runCatching { deferred.await() }.getOrNull() ?: return@forEach
+                    val result = runCatching { deferred.await() }.getOrNull() ?: return@forEach
+                    val idx = result.first
+                    val detail = result.second
                     if (detail == null) return@forEach
                     val cur = _uiState.value as? SearchUiState.Success ?: return@forEach
                     if (cur.keyword != keyword || cur.page != page || cur.purchasedOnly) return@forEach
@@ -293,29 +363,37 @@ class SearchViewModel @Inject constructor(
     }
 
     fun retry() {
-        val cur = _uiState.value
-        when (cur) {
-            is SearchUiState.Success -> goToPage(cur.keyword, targetPage = cur.page, showFullScreenLoading = false)
-            is SearchUiState.Error -> goToPage(lastRequestedKeyword, targetPage = 1, showFullScreenLoading = true)
-            else -> goToPage(lastRequestedKeyword, targetPage = 1, showFullScreenLoading = true)
+        when (val cur = _uiState.value) {
+            is SearchUiState.Success -> {
+                if (cur.isBusy) return
+                requestPage(cur.keyword, cur.page, SearchPendingRequestKind.Page)
+            }
+
+            is SearchUiState.Error -> requestPage(lastRequestedKeyword, 1, SearchPendingRequestKind.Search)
+            is SearchUiState.Loading -> return
+            else -> requestPage(lastRequestedKeyword, 1, SearchPendingRequestKind.Search)
         }
     }
 
     private fun applyCachedState(cached: LastSearchStateV1) {
-        val order = SearchSortOption.values().firstOrNull { it.name == cached.orderName } ?: SearchSortOption.Trend
+        val order = SearchSortOption.values()
+            .firstOrNull { it.name == cached.orderName }
+            ?: SearchSortOption.Trend
+        val page = cached.page.coerceAtLeast(1)
         currentOrder = order
         purchasedOnly = cached.purchasedOnly
         currentLocale = cached.locale
         _uiState.value = SearchUiState.Success(
             results = cached.results,
             keyword = cached.keyword,
-            page = cached.page.coerceAtLeast(1),
+            page = page,
             order = order,
             purchasedOnly = cached.purchasedOnly,
             locale = cached.locale,
-            canGoPrev = cached.page > 1,
+            canGoPrev = page > 1,
             canGoNext = cached.canGoNext,
-            isPaging = false,
+            pendingRequest = null,
+            visitedPages = listOf(page),
             isEnriching = false,
             isAsmrOneChecking = false,
             asmrOneChecked = 0,
@@ -325,12 +403,12 @@ class SearchViewModel @Inject constructor(
 
     private fun scheduleCacheWrite() {
         val cur = _uiState.value as? SearchUiState.Success ?: return
-        if (cur.isPaging) return
+        if (cur.isBusy) return
         cacheWriteJob?.cancel()
         cacheWriteJob = viewModelScope.launch(Dispatchers.IO) {
             delay(700)
             val latest = _uiState.value as? SearchUiState.Success ?: return@launch
-            if (latest.isPaging) return@launch
+            if (latest.isBusy) return@launch
             runCatching {
                 searchCacheStore.writeLast(
                     LastSearchStateV1(
@@ -350,7 +428,7 @@ class SearchViewModel @Inject constructor(
 
     private fun toUserMessage(e: Throwable): String {
         val raw = e.message.orEmpty()
-        if (raw.contains("请先登录")) return "请先登录后再使用“仅已购”搜索"
+        if (raw.contains("请先登录")) return "请先登录后再使用\"仅已购\"搜索"
         return when (e) {
             is SocketTimeoutException -> "连接超时，请稍后重试"
             is IOException -> "网络连接失败，请检查网络后重试"
@@ -363,6 +441,7 @@ class SearchViewModel @Inject constructor(
                     else -> "请求失败，请稍后重试"
                 }
             }
+
             is HttpStatusException -> {
                 when (e.statusCode) {
                     403, 429 -> "访问受限或触发风控，请稍后再试"
@@ -370,6 +449,7 @@ class SearchViewModel @Inject constructor(
                     else -> "请求失败，请稍后重试"
                 }
             }
+
             else -> "搜索失败，请稍后重试"
         }
     }
@@ -405,7 +485,9 @@ class SearchViewModel @Inject constructor(
         var falseCount = 0
         repeat(3) { idx ->
             if (idx > 0) delay(250L * idx)
-            val result = runCatching { asmrOneCrawler.hasWorkFast(normalized, timeoutMs = timeoutMs) }.getOrNull()
+            val result = runCatching {
+                asmrOneCrawler.hasWorkFast(normalized, timeoutMs = timeoutMs)
+            }.getOrNull()
             when (result) {
                 true -> return true
                 false -> falseCount += 1
@@ -437,7 +519,11 @@ class SearchViewModel @Inject constructor(
             }
 
             val normalizedKeywordUpper = keyword.trim().uppercase()
-            if (BuildConfig.DEBUG && normalizedKeywordUpper == DEBUG_DELAY_TEST_RJ && debugDelayTestOnce.compareAndSet(false, true)) {
+            if (
+                BuildConfig.DEBUG &&
+                normalizedKeywordUpper == DEBUG_DELAY_TEST_RJ &&
+                debugDelayTestOnce.compareAndSet(false, true)
+            ) {
                 launch {
                     runDebugDelayTestForRj01491538()
                 }
@@ -457,29 +543,43 @@ class SearchViewModel @Inject constructor(
                                 sequenceOf(
                                     w.source_id,
                                     w.original_workno.orEmpty(),
-                                    *w.language_editions.orEmpty().map { it.workno.orEmpty() }.toTypedArray()
+                                    *w.language_editions.orEmpty()
+                                        .map { it.workno.orEmpty() }
+                                        .toTypedArray()
                                 )
                             }
                             .mapNotNull { s -> RJ_CODE_REGEX.find(s.trim().uppercase())?.value }
                             .toSet()
-                        val idsBackup = asmrOneCrawler.searchBackupPreferredRjIds(normalizedKeyword, page = pageNo)
+                        val idsBackup = asmrOneCrawler.searchBackupPreferredRjIds(
+                            normalizedKeyword,
+                            page = pageNo
+                        )
                         val ids = if (idsBackup.isEmpty()) idsPrimary else (idsPrimary + idsBackup)
                         if (ids.isNotEmpty()) {
                             indexByRj.keys.forEach { baseRj ->
                                 if (asmrOneAvailabilityCache[baseRj] == true) return@forEach
                                 if (baseRj in ids) {
                                     asmrOneAvailabilityCache[baseRj] = true
-                                    updateAsmrOneAvailability(keyword = keyword, page = page, rj = baseRj, has = true, indexByRj = indexByRj)
+                                    updateAsmrOneAvailability(
+                                        keyword = keyword,
+                                        page = page,
+                                        rj = baseRj,
+                                        has = true,
+                                        indexByRj = indexByRj
+                                    )
                                 }
                             }
                         }
-                        val hasMorePrimary = resp?.pagination?.let { it.totalCount > it.page * it.pageSize } == true
+                        val hasMorePrimary =
+                            resp?.pagination?.let { it.totalCount > it.page * it.pageSize } == true
                         if (!hasMorePrimary && idsBackup.isEmpty()) break
                         pageNo += 1
                     }
                 }
 
-                val ordered = indexByRj.keys.sortedByDescending { rj -> indexByRj[rj]?.maxOrNull() ?: -1 }
+                val ordered = indexByRj.keys.sortedByDescending { rj ->
+                    indexByRj[rj]?.maxOrNull() ?: -1
+                }
                 val pending = ConcurrentLinkedQueue<String>()
 
                 val semFast = Semaphore(4)
@@ -498,7 +598,9 @@ class SearchViewModel @Inject constructor(
                                     return@withPermit
                                 }
 
-                                val has = runCatching { asmrOneCrawler.hasWorkFast(baseRj, timeoutMs = 900L) }.getOrNull()
+                                val has = runCatching {
+                                    asmrOneCrawler.hasWorkFast(baseRj, timeoutMs = 900L)
+                                }.getOrNull()
                                 if (has == true) {
                                     asmrOneAvailabilityCache[baseRj] = true
                                     updateAsmrOneAvailability(
@@ -537,6 +639,7 @@ class SearchViewModel @Inject constructor(
                                                 indexByRj = indexByRj
                                             )
                                         }
+
                                         false -> asmrOneAvailabilityCache[baseRj] = false
                                         null -> {}
                                     }
@@ -544,8 +647,14 @@ class SearchViewModel @Inject constructor(
                                 val done = doneCounter.incrementAndGet().coerceIn(0, total)
                                 _uiState.update { state ->
                                     val cur = state as? SearchUiState.Success ?: return@update state
-                                    if (cur.keyword != keyword || cur.page != page || cur.purchasedOnly) return@update state
-                                    if (!cur.isAsmrOneChecking) cur else cur.copy(asmrOneChecked = done, asmrOneTotal = total)
+                                    if (cur.keyword != keyword || cur.page != page || cur.purchasedOnly) {
+                                        return@update state
+                                    }
+                                    if (!cur.isAsmrOneChecking) {
+                                        cur
+                                    } else {
+                                        cur.copy(asmrOneChecked = done, asmrOneTotal = total)
+                                    }
                                 }
                             }
                         }
@@ -555,7 +664,11 @@ class SearchViewModel @Inject constructor(
 
                 if (BuildConfig.DEBUG) {
                     val dt = (SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0L)
-                    Log.d("SearchViewModel", "asmrOne availability page done keyword=$normalizedKeyword page=$page rjCount=${indexByRj.size} dt=${dt}ms")
+                    Log.d(
+                        "SearchViewModel",
+                        "asmrOne availability page done keyword=$normalizedKeyword page=$page " +
+                            "rjCount=${indexByRj.size} dt=${dt}ms"
+                    )
                 }
             } finally {
                 _uiState.update { state ->
@@ -619,7 +732,8 @@ class SearchViewModel @Inject constructor(
                 val ok = result?.response?.works?.any { w ->
                     w.source_id.equals(rj, ignoreCase = true) ||
                         w.original_workno.orEmpty().equals(rj, ignoreCase = true) ||
-                        w.language_editions.orEmpty().any { it.workno.orEmpty().equals(rj, ignoreCase = true) }
+                        w.language_editions.orEmpty()
+                            .any { it.workno.orEmpty().equals(rj, ignoreCase = true) }
                 } == true
                 asmrOneAvailabilityCache[rj] = ok
                 networkCalls++
@@ -634,7 +748,8 @@ class SearchViewModel @Inject constructor(
         val overallStats = percentileStatsMs(durations)
         Log.d(
             "SearchViewModel",
-            "RJ01491538 delay test: n=$DEBUG_DELAY_TEST_ROUNDS cacheHit=$cacheHits network=$networkCalls fallbackUsed=$fallbackUsed " +
+            "RJ01491538 delay test: n=$DEBUG_DELAY_TEST_ROUNDS cacheHit=$cacheHits " +
+                "network=$networkCalls fallbackUsed=$fallbackUsed " +
                 "overall(p50=${overallStats.p50}ms p95=${overallStats.p95}ms max=${overallStats.max}ms) " +
                 "network(p50=${networkStats.p50}ms p95=${networkStats.p95}ms max=${networkStats.max}ms)"
         )
@@ -674,6 +789,7 @@ private data class SearchPageResult(
 sealed class SearchUiState {
     object Idle : SearchUiState()
     object Loading : SearchUiState()
+
     data class Success(
         val results: List<Album>,
         val keyword: String,
@@ -683,11 +799,22 @@ sealed class SearchUiState {
         val locale: String?,
         val canGoPrev: Boolean,
         val canGoNext: Boolean,
-        val isPaging: Boolean,
+        val pendingRequest: SearchPendingRequest? = null,
+        val visitedPages: List<Int> = listOf(page),
         val isEnriching: Boolean = false,
         val isAsmrOneChecking: Boolean = false,
         val asmrOneChecked: Int = 0,
         val asmrOneTotal: Int = 0
-    ) : SearchUiState()
+    ) : SearchUiState() {
+        val isBusy: Boolean
+            get() = pendingRequest != null
+
+        val isPaging: Boolean
+            get() = pendingRequest?.kind == SearchPendingRequestKind.Page
+
+        val isSearching: Boolean
+            get() = pendingRequest?.kind == SearchPendingRequestKind.Search
+    }
+
     data class Error(val message: String) : SearchUiState()
 }
