@@ -112,6 +112,7 @@ import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.theme.AsmrPlayerTheme
+import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.util.Formatting
 import com.asmr.player.util.MessageManager
 
@@ -1353,6 +1354,8 @@ private fun OnlineTrackRow(
     onManageTags: (() -> Unit)?
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val materialColorScheme = MaterialTheme.colorScheme
+    val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
     ListItem(
         headlineContent = {
             Text(
@@ -1381,55 +1384,78 @@ private fun OnlineTrackRow(
                 IconButton(onClick = { expanded = true }) {
                     Icon(Icons.Default.MoreVert, contentDescription = null, tint = colorScheme.onSurfaceVariant)
                 }
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false }
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("播放") },
-                        onClick = {
-                            onPlay()
-                            expanded = false
-                        },
-                        leadingIcon = {
-                            Icon(Icons.Default.PlayArrow, contentDescription = null, tint = colorScheme.primary)
-                        }
+                MaterialTheme(
+                    colorScheme = materialColorScheme.copy(
+                        surface = dynamicContainerColor,
+                        surfaceContainer = dynamicContainerColor
                     )
-                    if (onAddToQueue != null) {
+                ) {
+                    DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false },
+                        modifier = Modifier.background(dynamicContainerColor)
+                    ) {
                         DropdownMenuItem(
-                            text = { Text("添加到播放队列") },
+                            text = { Text("播放") },
                             onClick = {
-                                onAddToQueue.invoke()
+                                onPlay()
                                 expanded = false
                             },
                             leadingIcon = {
-                                Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null, tint = colorScheme.onSurfaceVariant)
+                                Icon(Icons.Default.PlayArrow, contentDescription = null, tint = colorScheme.primary)
                             }
                         )
-                    }
-                    if (onAddToPlaylist != null) {
-                        DropdownMenuItem(
-                            text = { Text("添加到我的列表") },
-                            onClick = {
-                                onAddToPlaylist.invoke()
-                                expanded = false
-                            },
-                            leadingIcon = {
-                                Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, tint = colorScheme.onSurfaceVariant)
-                            }
-                        )
-                    }
-                    if (onManageTags != null) {
-                        DropdownMenuItem(
-                            text = { Text("标签管理") },
-                            onClick = {
-                                onManageTags.invoke()
-                                expanded = false
-                            },
-                            leadingIcon = {
-                                Icon(Icons.AutoMirrored.Filled.Label, contentDescription = null, tint = colorScheme.onSurfaceVariant)
-                            }
-                        )
+                        if (onAddToQueue != null) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 8.dp),
+                                thickness = 0.5.dp,
+                                color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                            )
+                            DropdownMenuItem(
+                                text = { Text("添加到播放队列") },
+                                onClick = {
+                                    onAddToQueue.invoke()
+                                    expanded = false
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null, tint = colorScheme.onSurfaceVariant)
+                                }
+                            )
+                        }
+                        if (onAddToPlaylist != null) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 8.dp),
+                                thickness = 0.5.dp,
+                                color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                            )
+                            DropdownMenuItem(
+                                text = { Text("添加到我的列表") },
+                                onClick = {
+                                    onAddToPlaylist.invoke()
+                                    expanded = false
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, tint = colorScheme.onSurfaceVariant)
+                                }
+                            )
+                        }
+                        if (onManageTags != null) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 8.dp),
+                                thickness = 0.5.dp,
+                                color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                            )
+                            DropdownMenuItem(
+                                text = { Text("标签管理") },
+                                onClick = {
+                                    onManageTags.invoke()
+                                    expanded = false
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.AutoMirrored.Filled.Label, contentDescription = null, tint = colorScheme.onSurfaceVariant)
+                                }
+                            )
+                        }
                     }
                 }
             }
@@ -2657,6 +2683,8 @@ private fun TreeFileRow(
     onRemoveFromAlbum: (() -> Unit)? = null
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val materialColorScheme = MaterialTheme.colorScheme
+    val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
     val icon = when (fileType) {
         TreeFileType.Audio -> Icons.Default.Audiotrack
         TreeFileType.Video -> Icons.Default.Movie
@@ -2752,105 +2780,132 @@ private fun TreeFileRow(
                                     )
                                 }
 
-                                DropdownMenu(
-                                    expanded = showMenuExpanded,
-                                    onDismissRequest = { showMenuExpanded = false }
+                                MaterialTheme(
+                                    colorScheme = materialColorScheme.copy(
+                                        surface = dynamicContainerColor,
+                                        surfaceContainer = dynamicContainerColor
+                                    )
                                 ) {
-                                    if (showPrimaryAction) {
-                                        DropdownMenuItem(
-                                            text = { Text("播放") },
-                                            onClick = {
-                                                onPrimary()
-                                                showMenuExpanded = false
-                                            },
-                                            leadingIcon = {
-                                                Icon(
-                                                    Icons.Default.PlayArrow,
-                                                    contentDescription = null,
-                                                    tint = colorScheme.primary
-                                                )
-                                            }
-                                        )
+                                    val dividerColor = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                                    var hasVisibleItem = false
+                                    @Composable
+                                    fun addDividerIfNeeded() {
+                                        if (hasVisibleItem) {
+                                            HorizontalDivider(
+                                                modifier = Modifier.padding(horizontal = 8.dp),
+                                                thickness = 0.5.dp,
+                                                color = dividerColor
+                                            )
+                                        }
+                                        hasVisibleItem = true
                                     }
-                                    if (onDownload != null) {
-                                        DropdownMenuItem(
-                                            text = { Text("下载") },
-                                            onClick = {
-                                                onDownload.invoke()
-                                                showMenuExpanded = false
-                                            },
-                                            leadingIcon = {
-                                                Icon(
-                                                    Icons.Default.Download,
-                                                    contentDescription = null,
-                                                    tint = colorScheme.textSecondary
-                                                )
-                                            }
-                                        )
-                                    }
-                                    if (onAddToQueue != null) {
-                                        DropdownMenuItem(
-                                            text = { Text("添加到播放队列") },
-                                            onClick = {
-                                                onAddToQueue.invoke()
-                                                showMenuExpanded = false
-                                            },
-                                            leadingIcon = {
-                                                Icon(
-                                                    Icons.AutoMirrored.Filled.PlaylistPlay,
-                                                    contentDescription = null,
-                                                    tint = colorScheme.textSecondary
-                                                )
-                                            }
-                                        )
-                                    }
-                                    if (onAddToPlaylist != null) {
-                                        DropdownMenuItem(
-                                            text = { Text("添加到我的列表") },
-                                            onClick = {
-                                                onAddToPlaylist.invoke()
-                                                showMenuExpanded = false
-                                            },
-                                            leadingIcon = {
-                                                Icon(
-                                                    Icons.AutoMirrored.Filled.PlaylistAdd,
-                                                    contentDescription = null,
-                                                    tint = colorScheme.textSecondary
-                                                )
-                                            }
-                                        )
-                                    }
-                                    if (onManageTags != null) {
-                                        DropdownMenuItem(
-                                            text = { Text("标签管理") },
-                                            onClick = {
-                                                onManageTags.invoke()
-                                                showMenuExpanded = false
-                                            },
-                                            leadingIcon = {
-                                                Icon(
-                                                    Icons.AutoMirrored.Filled.Label,
-                                                    contentDescription = null,
-                                                    tint = colorScheme.textSecondary
-                                                )
-                                            }
-                                        )
-                                    }
-                                    if (onRemoveFromAlbum != null) {
-                                        DropdownMenuItem(
-                                            text = { Text("从专辑移除") },
-                                            onClick = {
-                                                onRemoveFromAlbum.invoke()
-                                                showMenuExpanded = false
-                                            },
-                                            leadingIcon = {
-                                                Icon(
-                                                    Icons.Default.Delete,
-                                                    contentDescription = null,
-                                                    tint = colorScheme.textSecondary
-                                                )
-                                            }
-                                        )
+                                    DropdownMenu(
+                                        expanded = showMenuExpanded,
+                                        onDismissRequest = { showMenuExpanded = false },
+                                        modifier = Modifier.background(dynamicContainerColor)
+                                    ) {
+                                        if (showPrimaryAction) {
+                                            addDividerIfNeeded()
+                                            DropdownMenuItem(
+                                                text = { Text("播放") },
+                                                onClick = {
+                                                    onPrimary()
+                                                    showMenuExpanded = false
+                                                },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        Icons.Default.PlayArrow,
+                                                        contentDescription = null,
+                                                        tint = colorScheme.primary
+                                                    )
+                                                }
+                                            )
+                                        }
+                                        if (onDownload != null) {
+                                            addDividerIfNeeded()
+                                            DropdownMenuItem(
+                                                text = { Text("下载") },
+                                                onClick = {
+                                                    onDownload.invoke()
+                                                    showMenuExpanded = false
+                                                },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        Icons.Default.Download,
+                                                        contentDescription = null,
+                                                        tint = colorScheme.textSecondary
+                                                    )
+                                                }
+                                            )
+                                        }
+                                        if (onAddToQueue != null) {
+                                            addDividerIfNeeded()
+                                            DropdownMenuItem(
+                                                text = { Text("添加到播放队列") },
+                                                onClick = {
+                                                    onAddToQueue.invoke()
+                                                    showMenuExpanded = false
+                                                },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        Icons.AutoMirrored.Filled.PlaylistPlay,
+                                                        contentDescription = null,
+                                                        tint = colorScheme.textSecondary
+                                                    )
+                                                }
+                                            )
+                                        }
+                                        if (onAddToPlaylist != null) {
+                                            addDividerIfNeeded()
+                                            DropdownMenuItem(
+                                                text = { Text("添加到我的列表") },
+                                                onClick = {
+                                                    onAddToPlaylist.invoke()
+                                                    showMenuExpanded = false
+                                                },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        Icons.AutoMirrored.Filled.PlaylistAdd,
+                                                        contentDescription = null,
+                                                        tint = colorScheme.textSecondary
+                                                    )
+                                                }
+                                            )
+                                        }
+                                        if (onManageTags != null) {
+                                            addDividerIfNeeded()
+                                            DropdownMenuItem(
+                                                text = { Text("标签管理") },
+                                                onClick = {
+                                                    onManageTags.invoke()
+                                                    showMenuExpanded = false
+                                                },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        Icons.AutoMirrored.Filled.Label,
+                                                        contentDescription = null,
+                                                        tint = colorScheme.textSecondary
+                                                    )
+                                                }
+                                            )
+                                        }
+                                        if (onRemoveFromAlbum != null) {
+                                            addDividerIfNeeded()
+                                            DropdownMenuItem(
+                                                text = { Text("从专辑移除") },
+                                                onClick = {
+                                                    onRemoveFromAlbum.invoke()
+                                                    showMenuExpanded = false
+                                                },
+                                                leadingIcon = {
+                                                    Icon(
+                                                        Icons.Default.Delete,
+                                                        contentDescription = null,
+                                                        tint = colorScheme.textSecondary
+                                                    )
+                                                }
+                                            )
+                                        }
                                     }
                                 }
                             }

@@ -8,13 +8,30 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -32,7 +49,7 @@ fun QueueSheetContent(
     val playback by viewModel.playback.collectAsState()
     val queue by viewModel.queue.collectAsState()
     val colorScheme = AsmrTheme.colorScheme
-    
+
     val currentId = playback.currentMediaItem?.mediaId.orEmpty()
     val currentIndex = remember(queue, currentId) { queue.indexOfFirst { it.mediaId == currentId } }
 
@@ -53,53 +70,63 @@ fun QueueSheetContent(
                 val uriText = mediaItem.localConfiguration?.uri?.toString().orEmpty()
                 val sourceLabel = if (uriText.startsWith("http", ignoreCase = true)) "在线" else "本地"
                 val selected = index == currentIndex
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            if (index in queue.indices) viewModel.playQueueIndex(index)
-                            onDismiss()
-                        }
-                        .padding(horizontal = 20.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Box(
-                        modifier = Modifier.size(width = 22.dp, height = 14.dp),
-                        contentAlignment = Alignment.Center
+
+                Column {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                if (index in queue.indices) viewModel.playQueueIndex(index)
+                                onDismiss()
+                            }
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        if (selected) {
-                            PlayingWaveIndicator(
-                                isPlaying = playback.isPlaying,
-                                color = colorScheme.primary,
-                                modifier = Modifier.fillMaxSize()
+                        Box(
+                            modifier = Modifier.size(width = 22.dp, height = 14.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (selected) {
+                                PlayingWaveIndicator(
+                                    isPlaying = playback.isPlaying,
+                                    color = colorScheme.primary,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal
+                                ),
+                                color = if (selected) colorScheme.primary else colorScheme.textPrimary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = if (artist.isNotBlank()) "$sourceLabel · $artist" else sourceLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = colorScheme.textSecondary,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        IconButton(onClick = { viewModel.removeFromQueue(index) }) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = "移除",
+                                tint = colorScheme.textSecondary,
+                                modifier = Modifier.size(20.dp)
                             )
                         }
                     }
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text(
-                            text = title,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal),
-                            color = if (selected) colorScheme.primary else colorScheme.textPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        Text(
-                            text = if (artist.isNotBlank()) "$sourceLabel · $artist" else sourceLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = colorScheme.textSecondary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    IconButton(onClick = { viewModel.removeFromQueue(index) }) {
-                        Icon(
-                            imageVector = Icons.Default.Close,
-                            contentDescription = "移除",
-                            tint = colorScheme.textSecondary,
-                            modifier = Modifier.size(20.dp)
+                    if (index < queue.lastIndex) {
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 20.dp),
+                            thickness = 0.5.dp,
+                            color = colorScheme.textSecondary.copy(alpha = 0.18f)
                         )
                     }
                 }
