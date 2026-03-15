@@ -185,6 +185,7 @@ private fun PlaylistItemRow(
                 .size(40.dp)
                 .clip(RoundedCornerShape(6.dp)),
         )
+        android.util.Log.d("PlaylistDetailScreen", "PlaylistItemRow - loading artwork for item: ${item.title}, artworkUri: '${item.artworkUri}'")
         Spacer(modifier = Modifier.width(12.dp))
         Column(modifier = Modifier.weight(1f)) {
             Text(

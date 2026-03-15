@@ -133,9 +133,9 @@ class PlaylistRepository @Inject constructor(
 
     private suspend fun resolvePlaylistItemArtwork(item: MediaItem): String {
         val extras = item.mediaMetadata.extras
-        android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - extras: $extras")
+        android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - START - mediaId: ${item.mediaId}, extras: $extras")
         val albumId = extras?.getLong("album_id") ?: 0L
-        android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtworkwork - albumId: $albumId")
+        android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - albumId: $albumId")
         if (albumId > 0L) {
             val album = runCatching { albumDao.getAlbumById(albumId) }.getOrNull()
             android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - album from db: $album")
@@ -153,7 +153,7 @@ class PlaylistRepository @Inject constructor(
         }
 
         val uriString = item.localConfiguration?.uri?.toString().orEmpty().trim()
-        android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - uriString: 'uriString'")
+        android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - uriString: '$uriString'")
         val path = when {
             uriString.startsWith("file://", ignoreCase = true) -> runCatching {
                 Uri.parse(uriString).path.orEmpty()
@@ -174,7 +174,7 @@ class PlaylistRepository @Inject constructor(
                 }
             }
         }
-        android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - returning empty string")
+        android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - END - returning empty string")
         return ""
     }
 
