@@ -1,29 +1,32 @@
 package com.asmr.player.ui.library
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ManageSearch
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.ManageSearch
 import androidx.compose.material.icons.filled.Restore
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
@@ -39,6 +42,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,9 +53,89 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
 import com.asmr.player.data.local.db.dao.TagWithCount
+import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.theme.AsmrTheme
+import com.asmr.player.ui.theme.dynamicPageContainerColor
+
+@Composable
+fun LibraryFilterScreen(
+    onClose: () -> Unit,
+    viewModel: LibraryViewModel
+) {
+    val querySpec by viewModel.querySpec.collectAsState()
+    val tags by viewModel.availableTags.collectAsState()
+    val circles by viewModel.availableCircles.collectAsState()
+    val cvs by viewModel.availableCvs.collectAsState()
+    val presets by viewModel.filterPresets.collectAsState()
+    val colorScheme = AsmrTheme.colorScheme
+    var showTagManager by remember { mutableStateOf(false) }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.End,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { showTagManager = true }) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ManageSearch,
+                    contentDescription = "管理标签",
+                    tint = colorScheme.primary
+                )
+            }
+            IconButton(onClick = { viewModel.clearFilters() }) {
+                Icon(
+                    imageVector = Icons.Default.Restore,
+                    contentDescription = "重置筛选",
+                    tint = colorScheme.primary
+                )
+            }
+        }
+
+        LibraryFilterSheet(
+            modifier = Modifier.weight(1f),
+            showHeader = false,
+            querySpec = querySpec,
+            tags = tags,
+            circles = circles,
+            cvs = cvs,
+            presets = presets,
+            onOpenTagManager = { showTagManager = true },
+            onSetSource = { viewModel.setSourceFilter(it) },
+            onToggleTag = { viewModel.toggleTag(it) },
+            onToggleCircle = { viewModel.toggleCircle(it) },
+            onToggleCv = { viewModel.toggleCv(it) },
+            onClear = { viewModel.clearFilters() },
+            onApplyPreset = {
+                viewModel.applyPreset(it)
+                onClose()
+            },
+            onSavePreset = { viewModel.savePreset(it) },
+            onDeletePreset = { viewModel.deletePreset(it) },
+            onClose = onClose
+        )
+    }
+
+    if (showTagManager) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = { showTagManager = false },
+            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                TagManagerSheet(
+                    tags = tags,
+                    onRename = { tagId, newName -> viewModel.renameUserTag(tagId, newName) },
+                    onDelete = { tagId -> viewModel.deleteUserTag(tagId) },
+                    onClose = { showTagManager = false }
+                )
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -70,39 +154,44 @@ fun LibraryFilterSheet(
     onApplyPreset: (LibraryFilterPreset) -> Unit,
     onSavePreset: (String) -> Unit,
     onDeletePreset: (String) -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    modifier: Modifier = Modifier,
+    showHeader: Boolean = true
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val tagListContainerColor = dynamicPageContainerColor(colorScheme)
     var tagSearch by rememberSaveable { mutableStateOf("") }
     var showSavePreset by remember { mutableStateOf(false) }
     var presetName by rememberSaveable { mutableStateOf("") }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                Icon(imageVector = Icons.Default.FilterList, contentDescription = null, tint = colorScheme.primary)
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(text = "筛选", maxLines = 1, overflow = TextOverflow.Ellipsis)
-            }
-            IconButton(onClick = onOpenTagManager) {
-                Icon(imageVector = Icons.Default.ManageSearch, contentDescription = null)
-            }
-            IconButton(onClick = onClear) {
-                Icon(imageVector = Icons.Default.Restore, contentDescription = null)
-            }
-            IconButton(onClick = onClose) {
-                Icon(imageVector = Icons.Default.Close, contentDescription = null)
+    Column(modifier = modifier.fillMaxWidth()) {
+        if (showHeader) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(imageVector = Icons.Default.FilterList, contentDescription = null, tint = colorScheme.primary)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(text = "筛选", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                IconButton(onClick = onOpenTagManager) {
+                    Icon(imageVector = Icons.AutoMirrored.Filled.ManageSearch, contentDescription = null)
+                }
+                IconButton(onClick = onClear) {
+                    Icon(imageVector = Icons.Default.Restore, contentDescription = null)
+                }
+                IconButton(onClick = onClose) {
+                    Icon(imageVector = Icons.Default.Close, contentDescription = null)
+                }
             }
         }
 
         LazyColumn(
             modifier = Modifier.fillMaxWidth(),
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(bottom = 16.dp),
+            contentPadding = PaddingValues(bottom = 16.dp).withAddedBottomPadding(LocalBottomOverlayPadding.current),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             item { Spacer(modifier = Modifier.height(2.dp)) }
@@ -139,8 +228,9 @@ fun LibraryFilterSheet(
                         }
                     }
                     Surface(
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        shape = RoundedCornerShape(16.dp),
                         tonalElevation = 1.dp,
+                        color = tagListContainerColor,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         val ordered = remember(filtered, querySpec.includeTagIds) {
@@ -162,14 +252,14 @@ fun LibraryFilterSheet(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
-                                ordered.forEach { t ->
-                                    val selected = querySpec.includeTagIds.contains(t.id)
+                                ordered.forEach { tag ->
+                                    val selected = querySpec.includeTagIds.contains(tag.id)
                                     TagStamp(
-                                        name = t.name,
-                                        count = t.albumCount,
-                                        isUserTag = t.userAlbumCount > 0L,
+                                        name = tag.name,
+                                        count = tag.albumCount,
+                                        isUserTag = tag.userAlbumCount > 0L,
                                         selected = selected,
-                                        onClick = { onToggleTag(t.id) }
+                                        onClick = { onToggleTag(tag.id) }
                                     )
                                 }
                             }
@@ -231,7 +321,9 @@ fun LibraryFilterSheet(
                 ) {
                     ListItem(
                         headlineContent = { Text(preset.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        supportingContent = { Text(buildPresetSummary(preset.spec), maxLines = 2, overflow = TextOverflow.Ellipsis) },
+                        supportingContent = {
+                            Text(buildPresetSummary(preset.spec), maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        },
                         trailingContent = {
                             IconButton(onClick = { onDeletePreset(preset.id) }) {
                                 Icon(imageVector = Icons.Default.Delete, contentDescription = null)
@@ -285,7 +377,12 @@ private fun SectionCard(
     content: @Composable () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+    val sectionContainerColor = dynamicPageContainerColor(colorScheme)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp)
+    ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(text = title, color = colorScheme.textPrimary, modifier = Modifier.weight(1f))
             if (!subtitle.isNullOrBlank()) {
@@ -294,8 +391,9 @@ private fun SectionCard(
         }
         Spacer(modifier = Modifier.height(8.dp))
         Surface(
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(20.dp),
             tonalElevation = 1.dp,
+            color = sectionContainerColor,
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(
@@ -361,6 +459,8 @@ private fun SourceChip(
         onClick = onClick,
         label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         colors = FilterChipDefaults.filterChipColors(
+            containerColor = colorScheme.surfaceVariant.copy(alpha = 0.42f),
+            labelColor = colorScheme.textPrimary,
             selectedContainerColor = colorScheme.primary.copy(alpha = 0.18f),
             selectedLabelColor = colorScheme.primary,
             selectedLeadingIconColor = colorScheme.primary
@@ -436,6 +536,8 @@ private fun ValueChipGrid(
                 onClick = { onToggle(value) },
                 label = { Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                 colors = FilterChipDefaults.filterChipColors(
+                    containerColor = colorScheme.surfaceVariant.copy(alpha = 0.42f),
+                    labelColor = colorScheme.textPrimary,
                     selectedContainerColor = colorScheme.primary.copy(alpha = 0.18f),
                     selectedLabelColor = colorScheme.primary,
                     selectedLeadingIconColor = colorScheme.primary

@@ -1,5 +1,6 @@
 package com.asmr.player.ui.playlists
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -45,6 +46,7 @@ import com.asmr.player.ui.common.SubtitleStamp
 
 import androidx.compose.foundation.lazy.itemsIndexed
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.theme.dynamicPageContainerColor
 
 @Composable
 fun PlaylistDetailScreen(
@@ -168,6 +170,8 @@ private fun PlaylistItemRow(
     onRemove: () -> Unit
 ) {
     val colorScheme = com.asmr.player.ui.theme.AsmrTheme.colorScheme
+    val materialColorScheme = MaterialTheme.colorScheme
+    val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
     var expanded by remember { mutableStateOf(false) }
     Row(
         modifier = Modifier
@@ -204,21 +208,37 @@ private fun PlaylistItemRow(
             IconButton(onClick = { expanded = true }) {
                 Icon(imageVector = Icons.Default.MoreVert, contentDescription = null)
             }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                DropdownMenuItem(
-                    text = { Text("播放") },
-                    onClick = {
-                        expanded = false
-                        onPlay()
-                    }
+            MaterialTheme(
+                colorScheme = materialColorScheme.copy(
+                    surface = dynamicContainerColor,
+                    surfaceContainer = dynamicContainerColor
                 )
-                DropdownMenuItem(
-                    text = { Text("移除") },
-                    onClick = {
-                        expanded = false
-                        onRemove()
-                    }
-                )
+            ) {
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                    modifier = Modifier.background(dynamicContainerColor)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("播放") },
+                        onClick = {
+                            expanded = false
+                            onPlay()
+                        }
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        thickness = 0.5.dp,
+                        color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                    )
+                    DropdownMenuItem(
+                        text = { Text("移除") },
+                        onClick = {
+                            expanded = false
+                            onRemove()
+                        }
+                    )
+                }
             }
         }
     }
