@@ -136,7 +136,7 @@ fun AlbumDetailScreen(
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
     onPlayMediaItems: (List<MediaItem>, Int) -> Unit = { _, _ -> },
     onAddToQueue: (Album, Track) -> Boolean = { _, _ -> false },
-    onOpenPlaylistPicker: (mediaId: String, uri: String, title: String, artist: String, artworkUri: String) -> Unit = { _, _, _, _, _ -> },
+    onOpenPlaylistPicker: (mediaId: String, uri: String, title: String, artist: String, artworkUri: String, albumId: Long, trackId: Long, rjCode: String) -> Unit = { _, _, _, _, _, _, _, _ -> },
     onOpenGroupPicker: (albumId: Long) -> Unit = { _ -> },
     onPlayVideo: (String, String, String, String) -> Unit = { _, _, _, _ -> },
     onOpenDlsiteLogin: () -> Unit = {},
@@ -443,7 +443,10 @@ fun AlbumDetailScreen(
                                                         target.uri,
                                                         target.title,
                                                         target.artist,
-                                                        target.artworkUri
+                                                        target.artworkUri,
+                                                        target.albumId,
+                                                        target.trackId,
+                                                        target.rjCode
                                                     )
                                                 },
                                                 onManageTrackTags = { track ->
@@ -489,7 +492,10 @@ fun AlbumDetailScreen(
                                                 target.uri,
                                                 target.title,
                                                 target.artist,
-                                                target.artworkUri
+                                                target.artworkUri,
+                                                target.albumId,
+                                                target.trackId,
+                                                target.rjCode
                                             )
                                         },
                                         onAddToPlaylist = { track ->
@@ -499,7 +505,10 @@ fun AlbumDetailScreen(
                                                 target.uri,
                                                 target.title,
                                                 target.artist,
-                                                target.artworkUri
+                                                target.artworkUri,
+                                                target.albumId,
+                                                target.trackId,
+                                                target.rjCode
                                             )
                                         },
                                         onPreviewFile = { onlinePreviewFile = it },
@@ -4005,13 +4014,23 @@ private data class PlaylistAddTarget(
     val uri: String,
     val title: String,
     val artist: String,
-    val artworkUri: String
+    val artworkUri: String,
+    val albumId: Long = 0L,
+    val trackId: Long = 0L,
+    val rjCode: String = ""
 ) {
     fun toMediaItem(): MediaItem {
         val metadata = androidx.media3.common.MediaMetadata.Builder()
             .setTitle(title)
             .setArtist(artist)
             .setArtworkUri(artworkUri.takeIf { it.isNotBlank() }?.toUri())
+            .setExtras(
+                android.os.Bundle().apply {
+                    if (albumId > 0L) putLong("album_id", albumId)
+                    if (trackId > 0L) putLong("track_id", trackId)
+                    if (rjCode.isNotBlank()) putString("rj_code", rjCode)
+                }
+            )
             .build()
         return MediaItem.Builder()
             .setMediaId(mediaId)
@@ -4035,7 +4054,10 @@ private data class PlaylistAddTarget(
                 uri = track.path,
                 title = title,
                 artist = artist.orEmpty(),
-                artworkUri = artwork
+                artworkUri = artwork,
+                albumId = album.id,
+                trackId = track.id,
+                rjCode = rj
             )
         }
 

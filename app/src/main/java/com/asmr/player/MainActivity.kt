@@ -904,14 +904,17 @@ fun MainContainer(
                             playerViewModel.playTracks(album, tracks, startTrack)
                             navController.navigateSingleTop("now_playing")
                         },
-                        onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri ->
+                        onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode ->
                             navController.navigateSingleTop(
                                 "playlist_picker" +
                                     "?mediaId=${encodeRouteArg(mediaId)}" +
                                     "&uri=${encodeRouteArg(uri)}" +
                                     "&title=${encodeRouteArg(title)}" +
                                     "&artist=${encodeRouteArg(artist)}" +
-                                    "&artworkUri=${encodeRouteArg(artworkUri)}"
+                                    "&artworkUri=${encodeRouteArg(artworkUri)}" +
+                                    "&albumId=$albumId" +
+                                    "&trackId=$trackId" +
+                                    "&rjCode=${encodeRouteArg(rjCode)}"
                             )
                         },
                         onOpenGroupPicker = { albumId ->
@@ -953,14 +956,17 @@ fun MainContainer(
                         onAddToQueue = { album, track ->
                             playerViewModel.addTrackToQueue(album, track)
                         },
-                        onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri ->
+                        onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode ->
                             navController.navigateSingleTop(
                                 "playlist_picker" +
                                     "?mediaId=${encodeRouteArg(mediaId)}" +
                                     "&uri=${encodeRouteArg(uri)}" +
                                     "&title=${encodeRouteArg(title)}" +
                                     "&artist=${encodeRouteArg(artist)}" +
-                                    "&artworkUri=${encodeRouteArg(artworkUri)}"
+                                    "&artworkUri=${encodeRouteArg(artworkUri)}" +
+                                    "&albumId=$albumId" +
+                                    "&trackId=$trackId" +
+                                    "&rjCode=${encodeRouteArg(rjCode)}"
                             )
                         },
                         onOpenGroupPicker = { albumId ->
@@ -1001,14 +1007,17 @@ fun MainContainer(
                         onAddToQueue = { album, track ->
                             playerViewModel.addTrackToQueue(album, track)
                         },
-                        onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri ->
+                        onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode ->
                             navController.navigateSingleTop(
                                 "playlist_picker" +
                                     "?mediaId=${encodeRouteArg(mediaId)}" +
                                     "&uri=${encodeRouteArg(uri)}" +
                                     "&title=${encodeRouteArg(title)}" +
                                     "&artist=${encodeRouteArg(artist)}" +
-                                    "&artworkUri=${encodeRouteArg(artworkUri)}"
+                                    "&artworkUri=${encodeRouteArg(artworkUri)}" +
+                                    "&albumId=$albumId" +
+                                    "&trackId=$trackId" +
+                                    "&rjCode=${encodeRouteArg(rjCode)}"
                             )
                         },
                         onOpenGroupPicker = { albumId ->
@@ -1044,14 +1053,17 @@ fun MainContainer(
                         onAddToQueue = { album, track ->
                             playerViewModel.addTrackToQueue(album, track)
                         },
-                        onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri ->
+                        onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode ->
                             navController.navigateSingleTop(
                                 "playlist_picker" +
                                     "?mediaId=${encodeRouteArg(mediaId)}" +
                                     "&uri=${encodeRouteArg(uri)}" +
                                     "&title=${encodeRouteArg(title)}" +
                                     "&artist=${encodeRouteArg(artist)}" +
-                                    "&artworkUri=${encodeRouteArg(artworkUri)}"
+                                    "&artworkUri=${encodeRouteArg(artworkUri)}" +
+                                    "&albumId=$albumId" +
+                                    "&trackId=$trackId" +
+                                    "&rjCode=${encodeRouteArg(rjCode)}"
                             )
                         },
                         onOpenGroupPicker = { albumId ->
@@ -1100,14 +1112,17 @@ fun MainContainer(
                             onOpenLyrics = { navController.navigateSingleTop("lyrics") },
                             onShowQueue = onShowQueue,
                             onShowSleepTimer = onShowSleepTimer,
-                            onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri ->
+                            onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode ->
                                 navController.navigateSingleTop(
                                     "playlist_picker" +
                                         "?mediaId=${encodeRouteArg(mediaId)}" +
                                         "&uri=${encodeRouteArg(uri)}" +
                                         "&title=${encodeRouteArg(title)}" +
                                         "&artist=${encodeRouteArg(artist)}" +
-                                        "&artworkUri=${encodeRouteArg(artworkUri)}"
+                                        "&artworkUri=${encodeRouteArg(artworkUri)}" +
+                                        "&albumId=$albumId" +
+                                        "&trackId=$trackId" +
+                                        "&rjCode=${encodeRouteArg(rjCode)}"
                                 )
                             },
                             viewModel = playerViewModel,
@@ -1121,14 +1136,17 @@ fun MainContainer(
                             onOpenLyrics = { navController.navigateSingleTop("lyrics") },
                             onShowQueue = onShowQueue,
                             onShowSleepTimer = onShowSleepTimer,
-                            onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri ->
+                            onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode ->
                                 navController.navigateSingleTop(
                                     "playlist_picker" +
                                         "?mediaId=${encodeRouteArg(mediaId)}" +
                                         "&uri=${encodeRouteArg(uri)}" +
                                         "&title=${encodeRouteArg(title)}" +
                                         "&artist=${encodeRouteArg(artist)}" +
-                                        "&artworkUri=${encodeRouteArg(artworkUri)}"
+                                        "&artworkUri=${encodeRouteArg(artworkUri)}" +
+                                        "&albumId=$albumId" +
+                                        "&trackId=$trackId" +
+                                        "&rjCode=${encodeRouteArg(rjCode)}"
                                 )
                             },
                             viewModel = playerViewModel,
@@ -1237,13 +1255,16 @@ fun MainContainer(
                     )
                 }
                 composable(
-                    route = "playlist_picker?mediaId={mediaId}&uri={uri}&title={title}&artist={artist}&artworkUri={artworkUri}",
+                    route = "playlist_picker?mediaId={mediaId}&uri={uri}&title={title}&artist={artist}&artworkUri={artworkUri}&albumId={albumId}&trackId={trackId}&rjCode={rjCode}",
                     arguments = listOf(
                         navArgument("mediaId") { defaultValue = "" },
                         navArgument("uri") { defaultValue = "" },
                         navArgument("title") { defaultValue = "" },
                         navArgument("artist") { defaultValue = "" },
-                        navArgument("artworkUri") { defaultValue = "" }
+                        navArgument("artworkUri") { defaultValue = "" },
+                        navArgument("albumId") { type = NavType.LongType },
+                        navArgument("trackId") { type = NavType.LongType },
+                        navArgument("rjCode") { defaultValue = "" }
                     )
                 ) { backStackEntry ->
                     val mediaId = decodeRouteArg(backStackEntry.arguments?.getString("mediaId").orEmpty())
@@ -1251,6 +1272,9 @@ fun MainContainer(
                     val title = decodeRouteArg(backStackEntry.arguments?.getString("title").orEmpty())
                     val artist = decodeRouteArg(backStackEntry.arguments?.getString("artist").orEmpty())
                     val artworkUri = decodeRouteArg(backStackEntry.arguments?.getString("artworkUri").orEmpty())
+                    val albumId = backStackEntry.arguments?.getLong("albumId") ?: 0L
+                    val trackId = backStackEntry.arguments?.getLong("trackId") ?: 0L
+                    val rjCode = decodeRouteArg(backStackEntry.arguments?.getString("rjCode").orEmpty())
                     PlaylistPickerScreen(
                         windowSizeClass = windowSizeClass,
                         mediaId = mediaId,
@@ -1258,6 +1282,9 @@ fun MainContainer(
                         title = title,
                         artist = artist,
                         artworkUri = artworkUri,
+                        albumId = albumId,
+                        trackId = trackId,
+                        rjCode = rjCode,
                         onBack = { navController.popBackStack() }
                     )
                 }
