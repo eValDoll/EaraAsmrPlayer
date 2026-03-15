@@ -55,6 +55,7 @@ fun EqualizerPanel(
     playbackPitch: Float? = null,
     onPlaybackSpeedChanged: ((Float) -> Unit)? = null,
     onPlaybackPitchChanged: ((Float) -> Unit)? = null,
+    onPlaybackParametersChanged: ((Float, Float) -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val colorScheme = AsmrTheme.colorScheme
@@ -83,6 +84,46 @@ fun EqualizerPanel(
     var newPresetName by remember { mutableStateOf("") }
     var activeTipKey by remember { mutableStateOf<String?>(null) }
     val freqLabels = remember { listOf("31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k") }
+    val updatePlaybackParameters: (Float, Float) -> Unit = remember(
+        onPlaybackParametersChanged,
+        onPlaybackSpeedChanged,
+        onPlaybackPitchChanged
+    ) {
+        { speed: Float, pitch: Float ->
+            if (onPlaybackParametersChanged != null) {
+                onPlaybackParametersChanged(speed, pitch)
+            } else {
+                onPlaybackSpeedChanged?.invoke(speed)
+                onPlaybackPitchChanged?.invoke(pitch)
+            }
+        }
+    }
+    val updatePlaybackSpeed: (Float) -> Unit = remember(
+        onPlaybackParametersChanged,
+        onPlaybackSpeedChanged,
+        playbackPitch
+    ) {
+        { speed: Float ->
+            if (onPlaybackParametersChanged != null && playbackPitch != null) {
+                onPlaybackParametersChanged(speed, playbackPitch)
+            } else {
+                onPlaybackSpeedChanged?.invoke(speed)
+            }
+        }
+    }
+    val updatePlaybackPitch: (Float) -> Unit = remember(
+        onPlaybackParametersChanged,
+        onPlaybackPitchChanged,
+        playbackSpeed
+    ) {
+        { pitch: Float ->
+            if (onPlaybackParametersChanged != null && playbackSpeed != null) {
+                onPlaybackParametersChanged(playbackSpeed, pitch)
+            } else {
+                onPlaybackPitchChanged?.invoke(pitch)
+            }
+        }
+    }
 
     @Composable
     fun InfoTip(key: String, title: String, text: String) {
@@ -467,7 +508,11 @@ fun EqualizerPanel(
             }
         }
 
-        if (playbackSpeed != null && playbackPitch != null && onPlaybackSpeedChanged != null && onPlaybackPitchChanged != null) {
+        if (
+            playbackSpeed != null &&
+            playbackPitch != null &&
+            (onPlaybackParametersChanged != null || (onPlaybackSpeedChanged != null && onPlaybackPitchChanged != null))
+        ) {
             val speedPitchEnabled = settings.speedPitchEnabled
             ModuleCard(
                 title = "变速变调",
@@ -475,15 +520,13 @@ fun EqualizerPanel(
                 onEnabledChange = { enabled ->
                     onSettingsChanged(settings.copy(speedPitchEnabled = enabled))
                     if (!enabled) {
-                        onPlaybackSpeedChanged(1f)
-                        onPlaybackPitchChanged(1f)
+                        updatePlaybackParameters(1f, 1f)
                     }
                 },
                 expanded = settings.speedPitchExpanded,
                 onExpandedChange = { onSettingsChanged(settings.copy(speedPitchExpanded = it)) },
                 onReset = {
-                    onPlaybackSpeedChanged(1f)
-                    onPlaybackPitchChanged(1f)
+                    updatePlaybackParameters(1f, 1f)
                 },
                 resetEnabled = speedPitchEnabled
             ) {
@@ -501,7 +544,7 @@ fun EqualizerPanel(
                     }
                     Slider(
                         value = playbackSpeed,
-                        onValueChange = { onPlaybackSpeedChanged(it) },
+                        onValueChange = updatePlaybackSpeed,
                         valueRange = 0.5f..2f,
                         enabled = speedPitchEnabled,
                         colors = sliderColors
@@ -522,7 +565,7 @@ fun EqualizerPanel(
                     }
                     Slider(
                         value = playbackPitch,
-                        onValueChange = { onPlaybackPitchChanged(it) },
+                        onValueChange = updatePlaybackPitch,
                         valueRange = 0.5f..2f,
                         enabled = speedPitchEnabled,
                         colors = sliderColors
@@ -781,7 +824,14 @@ fun EqualizerPanel(
                             .exposedDropdownSize(matchTextFieldWidth = true)
                             .background(moduleCardContainerColor, RoundedCornerShape(14.dp))
                     ) {
-                        allPresets.forEach { preset ->
+                        allPresets.forEachIndexed { index, preset ->
+                            if (index > 0) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 8.dp),
+                                    thickness = 0.5.dp,
+                                    color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                                )
+                            }
                             DropdownMenuItem(
                                 text = {
                                     Row(verticalAlignment = Alignment.CenterVertically) {

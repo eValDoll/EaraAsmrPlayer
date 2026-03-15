@@ -53,6 +53,7 @@ import androidx.navigation.navArgument
 import com.asmr.player.ui.library.AlbumDetailScreen
 import com.asmr.player.ui.library.AlbumDetailUiState
 import com.asmr.player.ui.library.AlbumDetailViewModel
+import com.asmr.player.ui.library.LibraryFilterScreen
 import com.asmr.player.ui.library.LibraryScreen
 import com.asmr.player.ui.library.LibraryViewModel
 import com.asmr.player.ui.library.BulkPhase
@@ -133,6 +134,7 @@ import com.asmr.player.ui.theme.deriveHuePalette
 import com.asmr.player.ui.theme.neutralPaletteForMode
 import com.asmr.player.ui.theme.rememberDynamicHuePalette
 import com.asmr.player.ui.theme.rememberDynamicHuePaletteFromVideoFrame
+import com.asmr.player.ui.theme.dynamicPageContainerColor
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
@@ -518,6 +520,8 @@ fun MainContainer(
     }
 
     val colorScheme = AsmrTheme.colorScheme
+    val materialColorScheme = MaterialTheme.colorScheme
+    val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
     val surfaceColor = colorScheme.surface
     
     val topBarContainerColor = Color.Transparent
@@ -684,6 +688,7 @@ fun MainContainer(
                                 Column {
                                     val compactTopBar =
                                         currentRoute == "library" ||
+                                            currentRoute == "library_filter" ||
                                             currentRoute == "search" ||
                                             currentRoute == "playlists" ||
                                             currentRoute == "playlist/{playlistId}/{playlistName}" ||
@@ -713,6 +718,7 @@ fun MainContainer(
                                                 Text(
                                                     when {
                                                         currentRoute == "library" -> "本地库"
+                                                        currentRoute == "library_filter" -> "筛选"
                                                         currentRoute == "search" -> "在线搜索"
                                                         currentRoute == "playlists" -> "我的列表"
                                                         currentRoute == "playlist/{playlistId}/{playlistName}" ->
@@ -747,7 +753,7 @@ fun MainContainer(
                                             actionIconContentColor = topBarContentColor
                                         ),
                                         navigationIcon = {
-                                            if (currentRoute?.startsWith("playlist_picker") == true) {
+                                            if (currentRoute == "library_filter" || currentRoute?.startsWith("playlist_picker") == true) {
                                                 IconButton(onClick = { navController.popBackStack() }) {
                                                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                                                 }
@@ -773,16 +779,28 @@ fun MainContainer(
                                                         IconButton(onClick = { viewMenuExpanded = true }) {
                                                             Icon(imageVector = icon, contentDescription = "切换视图")
                                                         }
-                                                        DropdownMenu(
-                                                            expanded = viewMenuExpanded,
-                                                            onDismissRequest = { viewMenuExpanded = false }
+                                                        MaterialTheme(
+                                                            colorScheme = materialColorScheme.copy(
+                                                                surface = dynamicContainerColor,
+                                                                surfaceContainer = dynamicContainerColor
+                                                            )
                                                         ) {
+                                                            DropdownMenu(
+                                                                expanded = viewMenuExpanded,
+                                                                onDismissRequest = { viewMenuExpanded = false },
+                                                                modifier = Modifier.background(dynamicContainerColor)
+                                                            ) {
                                                             DropdownMenuItem(
                                                                 text = { Text("专辑列表") },
                                                                 onClick = {
                                                                     viewMenuExpanded = false
                                                                     libraryViewModel.setLibraryViewMode(0)
                                                                 }
+                                                            )
+                                                            HorizontalDivider(
+                                                                modifier = Modifier.padding(horizontal = 8.dp),
+                                                                thickness = 0.5.dp,
+                                                                color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
                                                             )
                                                             DropdownMenuItem(
                                                                 text = { Text("专辑卡片") },
@@ -791,6 +809,11 @@ fun MainContainer(
                                                                     libraryViewModel.setLibraryViewMode(1)
                                                                 }
                                                             )
+                                                            HorizontalDivider(
+                                                                modifier = Modifier.padding(horizontal = 8.dp),
+                                                                thickness = 0.5.dp,
+                                                                color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                                                            )
                                                             DropdownMenuItem(
                                                                 text = { Text("音轨列表") },
                                                                 onClick = {
@@ -798,6 +821,7 @@ fun MainContainer(
                                                                     libraryViewModel.setLibraryViewMode(2)
                                                                 }
                                                             )
+                                                            }
                                                         }
                                                     }
                                                 }
@@ -892,7 +916,7 @@ fun MainContainer(
                                 modifier = Modifier.fillMaxSize()
                             ) {
 
-                                composable("library") {
+                composable("library") {
                     LibraryScreen(
                         windowSizeClass = windowSizeClass,
                         onAlbumClick = { album ->
@@ -921,6 +945,13 @@ fun MainContainer(
                         onOpenGroupPicker = { albumId ->
                             navController.navigateSingleTop("group_picker?albumId=$albumId")
                         },
+                        onOpenFilterScreen = { navController.navigateSingleTop("library_filter") },
+                        viewModel = libraryViewModel
+                    )
+                }
+                                composable("library_filter") {
+                    LibraryFilterScreen(
+                        onClose = { navController.popBackStack() },
                         viewModel = libraryViewModel
                     )
                 }

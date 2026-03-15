@@ -56,6 +56,7 @@ import com.asmr.player.data.local.db.dao.AlbumGroupTrackRow
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.theme.AsmrTheme
+import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.util.Formatting
 import kotlin.math.roundToLong
 
@@ -72,7 +73,6 @@ fun AlbumGroupDetailScreen(
     }
     val tracks by viewModel.tracks.collectAsState()
     val colorScheme = AsmrTheme.colorScheme
-
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
     val expandedAlbumIds = rememberSaveable(groupId) { mutableStateOf(setOf<Long>()) }
 
@@ -279,6 +279,8 @@ private fun GroupTrackRow(
     onRemove: () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val materialColorScheme = MaterialTheme.colorScheme
+    val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
     var expanded by remember { mutableStateOf(false) }
     val durationMs = remember(item.trackDuration) { (item.trackDuration * 1000.0).roundToLong().coerceAtLeast(0L) }
     val subtitle = remember(durationMs) { Formatting.formatTrackTime(durationMs) }
@@ -318,21 +320,37 @@ private fun GroupTrackRow(
             IconButton(onClick = { expanded = true }) {
                 Icon(imageVector = Icons.Default.MoreVert, contentDescription = null)
             }
-            DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                DropdownMenuItem(
-                    text = { Text("播放") },
-                    onClick = {
-                        expanded = false
-                        onPlay()
-                    }
+            MaterialTheme(
+                colorScheme = materialColorScheme.copy(
+                    surface = dynamicContainerColor,
+                    surfaceContainer = dynamicContainerColor
                 )
-                DropdownMenuItem(
-                    text = { Text("从分组移除") },
-                    onClick = {
-                        expanded = false
-                        onRemove()
-                    }
-                )
+            ) {
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                    modifier = Modifier.background(dynamicContainerColor)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("播放") },
+                        onClick = {
+                            expanded = false
+                            onPlay()
+                        }
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        thickness = 0.5.dp,
+                        color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                    )
+                    DropdownMenuItem(
+                        text = { Text("从分组移除") },
+                        onClick = {
+                            expanded = false
+                            onRemove()
+                        }
+                    )
+                }
             }
         }
     }
