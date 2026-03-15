@@ -65,6 +65,8 @@ fun SettingsScreen(
     val dynamicPlayerHueEnabled by viewModel.dynamicPlayerHueEnabled.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
     val staticHueArgb by viewModel.staticHueArgb.collectAsState()
+    val staticHueArgbLight by viewModel.staticHueArgbLight.collectAsState()
+    val staticHueArgbDark by viewModel.staticHueArgbDark.collectAsState()
     val coverBackgroundEnabled by viewModel.coverBackgroundEnabled.collectAsState()
     val coverBackgroundClarity by viewModel.coverBackgroundClarity.collectAsState()
     val updateState by viewModel.updateState.collectAsState()
@@ -285,9 +287,10 @@ fun SettingsScreen(
                 Spacer(modifier = Modifier.height(8.dp))
                 Text("主题色", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    val currentHueArgb = if (themeMode == "light") staticHueArgbLight else staticHueArgbDark
                     ThemeColorDot(
                         color = null,
-                        selected = staticHueArgb == null,
+                        selected = currentHueArgb == null,
                         onClick = { viewModel.setStaticHueArgb(null) }
                     )
                 // 浅色主题用深色调（深红、深蓝、墨綠等），深色/柔和深色主题用高饱和亮色
@@ -314,7 +317,7 @@ fun SettingsScreen(
                 presets.forEach { c ->
                         ThemeColorDot(
                             color = c,
-                            selected = staticHueArgb == c.toArgb(),
+                            selected = currentHueArgb == c.toArgb(),
                             onClick = { viewModel.setStaticHueArgb(c.toArgb()) }
                         )
                     }
@@ -661,7 +664,8 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(
             text = title,
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
             color = colorScheme.primary,
             modifier = Modifier.padding(bottom = 8.dp)
         )
