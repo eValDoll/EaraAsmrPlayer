@@ -17,7 +17,8 @@ class SettingsDataStore @Inject constructor(
     private val sfwModeKey = booleanPreferencesKey("sfw_mode")
     private val libraryRootsKey = stringSetPreferencesKey("library_roots")
     private val dynamicPlayerHueEnabledKey = booleanPreferencesKey("dynamic_player_hue_enabled")
-    private val staticHueArgbKey = intPreferencesKey("static_hue_argb")
+    private val staticHueArgbLightKey = intPreferencesKey("static_hue_argb_light")
+    private val staticHueArgbDarkKey = intPreferencesKey("static_hue_argb_dark")
     private val coverBackgroundEnabledKey = booleanPreferencesKey("cover_background_enabled")
     private val coverBackgroundClarityKey = floatPreferencesKey("cover_background_clarity")
     private val recentAlbumsPanelExpandedKey = booleanPreferencesKey("recent_albums_panel_expanded")
@@ -26,8 +27,17 @@ class SettingsDataStore @Inject constructor(
     val sfwMode: Flow<Boolean> = context.settingsDataStore.data.map { it[sfwModeKey] ?: false }
     val libraryRoots: Flow<Set<String>> = context.settingsDataStore.data.map { it[libraryRootsKey] ?: emptySet() }
     val dynamicPlayerHueEnabled: Flow<Boolean> = context.settingsDataStore.data.map { it[dynamicPlayerHueEnabledKey] ?: false }
+    val staticHueArgbLight: Flow<Int?> = context.settingsDataStore.data.map { prefs ->
+        if (prefs.contains(staticHueArgbLightKey)) prefs[staticHueArgbLightKey] else null
+    }
+    val staticHueArgbDark: Flow<Int?> = context.settingsDataStore.data.map { prefs ->
+        if (prefs.contains(staticHueArgbDarkKey)) prefs[staticHueArgbDarkKey] else null
+    }
     val staticHueArgb: Flow<Int?> = context.settingsDataStore.data.map { prefs ->
-        if (prefs.contains(staticHueArgbKey)) prefs[staticHueArgbKey] else null
+        val themeMode = prefs[themeKey] ?: "system"
+        val isDark = themeMode == "dark" || themeMode == "soft_dark"
+        val key = if (isDark) staticHueArgbDarkKey else staticHueArgbLightKey
+        if (prefs.contains(key)) prefs[key] else null
     }
     val coverBackgroundEnabled: Flow<Boolean> = context.settingsDataStore.data.map { it[coverBackgroundEnabledKey] ?: true }
     val coverBackgroundClarity: Flow<Float> = context.settingsDataStore.data.map { it[coverBackgroundClarityKey] ?: 0.35f }
@@ -47,10 +57,13 @@ class SettingsDataStore @Inject constructor(
 
     suspend fun setStaticHueArgb(argb: Int?) {
         context.settingsDataStore.edit { prefs ->
+            val themeMode = prefs[themeKey] ?: "system"
+            val isDark = themeMode == "dark" || themeMode == "soft_dark"
+            val key = if (isDark) staticHueArgbDarkKey else staticHueArgbLightKey
             if (argb == null) {
-                prefs.remove(staticHueArgbKey)
+                prefs.remove(key)
             } else {
-                prefs[staticHueArgbKey] = argb
+                prefs[key] = argb
             }
         }
     }

@@ -60,6 +60,12 @@ class SettingsViewModel @Inject constructor(
     val staticHueArgb: StateFlow<Int?> = settingsDataStore.staticHueArgb
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    val staticHueArgbLight: StateFlow<Int?> = settingsDataStore.staticHueArgbLight
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val staticHueArgbDark: StateFlow<Int?> = settingsDataStore.staticHueArgbDark
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     val coverBackgroundEnabled: StateFlow<Boolean> = settingsDataStore.coverBackgroundEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 

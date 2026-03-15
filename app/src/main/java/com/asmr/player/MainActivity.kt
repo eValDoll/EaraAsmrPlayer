@@ -10,6 +10,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.filled.AccessTime
@@ -1579,23 +1580,28 @@ private fun DrawerSiteRow(
     val colorScheme = AsmrTheme.colorScheme
     val isDark = colorScheme.isDark
     val dotColor = when (status.type) {
-        SiteStatusType.Ok -> {
-            val latency = status.latencyMs ?: 0L
-            when {
-                latency < 500 -> Color(0xFF2E7D32) // 绿色 (500ms以下)
-                latency < 1000 -> Color(0xFFF9A825) // 黄色 (500ms - 1000ms)
-                else -> Color(0xFFEF6C00) // 橙色 (1000ms以上)
-            }
-        }
-        SiteStatusType.Fail -> Color(0xFFC62828) // 红色 (无法连接)
-        SiteStatusType.Testing -> Color(0xFFF9A825)
+        SiteStatusType.Ok -> Color(0xFF2E7D32) // 绿色
+        SiteStatusType.Fail -> Color(0xFFC62828) // 红色
+        SiteStatusType.Testing -> Color(0xFFF9A825) // 黄色
         SiteStatusType.Unknown -> colorScheme.onSurface.copy(alpha = 0.35f)
     }
-    val latencyText = when (status.type) {
-        SiteStatusType.Ok -> "${status.latencyMs}ms"
-        SiteStatusType.Testing -> "测试中"
-        SiteStatusType.Fail -> "失败"
-        SiteStatusType.Unknown -> "未测试"
+    val statusIcon = when (status.type) {
+        SiteStatusType.Ok -> Icons.Default.Check
+        SiteStatusType.Fail -> Icons.Default.Close
+        SiteStatusType.Testing -> Icons.Default.Refresh
+        SiteStatusType.Unknown -> null
+    }
+    
+    var rotationAngle by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(status.type) {
+        if (status.type == SiteStatusType.Testing) {
+            while (true) {
+                rotationAngle = (rotationAngle + 10f) % 360f
+                kotlinx.coroutines.delay(50)
+            }
+        } else {
+            rotationAngle = 0f
+        }
     }
     
     val shape = RoundedCornerShape(16.dp)
@@ -1643,18 +1649,22 @@ private fun DrawerSiteRow(
             }
 
             Spacer(modifier = Modifier.weight(1f))
-            Text(
-                text = latencyText,
-                style = MaterialTheme.typography.bodySmall,
-                color = colorScheme.textSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 60.dp)
-            )
+            if (statusIcon != null) {
+                Icon(
+                    imageVector = statusIcon,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .graphicsLayer {
+                            rotationZ = rotationAngle
+                        },
+                    tint = dotColor
+                )
+            }
             FilledTonalButton(
                 onClick = onTest,
-                modifier = Modifier.height(30.dp).widthIn(min = 44.dp),
-                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                modifier = Modifier.height(30.dp).widthIn(min = 48.dp),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
                 colors = ButtonDefaults.filledTonalButtonColors(
                     containerColor = colorScheme.primarySoft,
                     contentColor = colorScheme.onPrimaryContainer
