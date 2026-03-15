@@ -99,7 +99,7 @@ fun NowPlayingScreen(
     onOpenLyrics: () -> Unit,
     onShowQueue: () -> Unit,
     onShowSleepTimer: () -> Unit,
-    onOpenPlaylistPicker: (mediaId: String, uri: String, title: String, artist: String, artworkUri: String) -> Unit,
+    onOpenPlaylistPicker: (mediaId: String, uri: String, title: String, artist: String, artworkUri: String, albumId: Long, trackId: Long, rjCode: String) -> Unit,
     viewModel: PlayerViewModel,
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
@@ -397,12 +397,19 @@ fun NowPlayingScreen(
                             onShowPlaylistPicker = {
                                 val current = playback.currentMediaItem ?: return@PlaybackControls
                                 val md = current.mediaMetadata
+                                val extras = md.extras
+                                val albumId = extras?.getLong("album_id") ?: 0L
+                                val trackId = extras?.getLong("track_id") ?: 0L
+                                val rjCode = extras?.getString("rj_code").orEmpty()
                                 onOpenPlaylistPicker(
                                     current.mediaId,
                                     current.localConfiguration?.uri?.toString().orEmpty(),
                                     md.title?.toString().orEmpty(),
                                     md.artist?.toString().orEmpty(),
-                                    md.artworkUri?.toString().orEmpty()
+                                    md.artworkUri?.toString().orEmpty(),
+                                    albumId,
+                                    trackId,
+                                    rjCode
                                 )
                             },
                             onShowEqualizer = { showEqualizer = true },
@@ -594,12 +601,19 @@ fun NowPlayingScreen(
                             onShowPlaylistPicker = {
                                 val current = playback.currentMediaItem ?: return@PlaybackControls
                                 val md = current.mediaMetadata
+                                val extras = md.extras
+                                val albumId = extras?.getLong("album_id") ?: 0L
+                                val trackId = extras?.getLong("track_id") ?: 0L
+                                val rjCode = extras?.getString("rj_code").orEmpty()
                                 onOpenPlaylistPicker(
                                     current.mediaId,
                                     current.localConfiguration?.uri?.toString().orEmpty(),
                                     md.title?.toString().orEmpty(),
                                     md.artist?.toString().orEmpty(),
-                                    md.artworkUri?.toString().orEmpty()
+                                    md.artworkUri?.toString().orEmpty(),
+                                    albumId,
+                                    trackId,
+                                    rjCode
                                 )
                             },
                             onShowEqualizer = { showEqualizer = true },
@@ -781,12 +795,19 @@ fun NowPlayingScreen(
                         onShowPlaylistPicker = {
                             val current = playback.currentMediaItem ?: return@PlaybackControls
                             val md = current.mediaMetadata
+                            val extras = md.extras
+                            val albumId = extras?.getLong("album_id") ?: 0L
+                            val trackId = extras?.getLong("track_id") ?: 0L
+                            val rjCode = extras?.getString("rj_code").orEmpty()
                             onOpenPlaylistPicker(
                                 current.mediaId,
                                 current.localConfiguration?.uri?.toString().orEmpty(),
                                 md.title?.toString().orEmpty(),
                                 md.artist?.toString().orEmpty(),
-                                md.artworkUri?.toString().orEmpty()
+                                md.artworkUri?.toString().orEmpty(),
+                                albumId,
+                                trackId,
+                                rjCode
                             )
                         },
                         onShowEqualizer = { showEqualizer = true },

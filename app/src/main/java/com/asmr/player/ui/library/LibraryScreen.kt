@@ -191,7 +191,7 @@ fun LibraryScreen(
     windowSizeClass: WindowSizeClass,
     onAlbumClick: (Album) -> Unit,
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
-    onOpenPlaylistPicker: (mediaId: String, uri: String, title: String, artist: String, artworkUri: String) -> Unit = { _, _, _, _, _ -> },
+    onOpenPlaylistPicker: (mediaId: String, uri: String, title: String, artist: String, artworkUri: String, albumId: Long, trackId: Long, rjCode: String) -> Unit = { _, _, _, _, _, _, _, _ -> },
     onOpenGroupPicker: (albumId: Long) -> Unit = { _ -> },
     viewModel: LibraryViewModel = hiltViewModel()
 ) {
@@ -570,7 +570,10 @@ fun LibraryScreen(
                                                                     track.path,
                                                                     displayTitle,
                                                                     artist.orEmpty(),
-                                                                    artwork
+                                                                    artwork,
+                                                                    album.id,
+                                                                    track.id,
+                                                                    rj
                                                                 )
                                                             },
                                                             onManageTags = {

@@ -136,7 +136,7 @@ fun AlbumDetailScreen(
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
     onPlayMediaItems: (List<MediaItem>, Int) -> Unit = { _, _ -> },
     onAddToQueue: (Album, Track) -> Boolean = { _, _ -> false },
-    onOpenPlaylistPicker: (mediaId: String, uri: String, title: String, artist: String, artworkUri: String) -> Unit = { _, _, _, _, _ -> },
+    onOpenPlaylistPicker: (mediaId: String, uri: String, title: String, artist: String, artworkUri: String, albumId: Long, trackId: Long, rjCode: String) -> Unit = { _, _, _, _, _, _, _, _ -> },
     onOpenGroupPicker: (albumId: Long) -> Unit = { _ -> },
     onPlayVideo: (String, String, String, String) -> Unit = { _, _, _, _ -> },
     onOpenDlsiteLogin: () -> Unit = {},
@@ -443,7 +443,10 @@ fun AlbumDetailScreen(
                                                         target.uri,
                                                         target.title,
                                                         target.artist,
-                                                        target.artworkUri
+                                                        target.artworkUri,
+                                                        target.albumId,
+                                                        target.trackId,
+                                                        target.rjCode
                                                     )
                                                 },
                                                 onManageTrackTags = { track ->
@@ -489,7 +492,10 @@ fun AlbumDetailScreen(
                                                 target.uri,
                                                 target.title,
                                                 target.artist,
-                                                target.artworkUri
+                                                target.artworkUri,
+                                                target.albumId,
+                                                target.trackId,
+                                                target.rjCode
                                             )
                                         },
                                         onAddToPlaylist = { track ->
@@ -499,7 +505,10 @@ fun AlbumDetailScreen(
                                                 target.uri,
                                                 target.title,
                                                 target.artist,
-                                                target.artworkUri
+                                                target.artworkUri,
+                                                target.albumId,
+                                                target.trackId,
+                                                target.rjCode
                                             )
                                         },
                                         onPreviewFile = { onlinePreviewFile = it },
