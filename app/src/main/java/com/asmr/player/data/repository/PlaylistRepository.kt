@@ -132,17 +132,28 @@ class PlaylistRepository @Inject constructor(
     }
 
     private suspend fun resolvePlaylistItemArtwork(item: MediaItem): String {
-        val artwork = item.mediaMetadata.artworkUri?.toString().orEmpty().trim()
-        if (artwork.isNotBlank()) return artwork
-
         val extras = item.mediaMetadata.extras
+        android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - START - mediaId: ${item.mediaId}, extras: $extras")
         val albumId = extras?.getLong("album_id") ?: 0L
+        android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - albumId: $albumId")
         if (albumId > 0L) {
             val album = runCatching { albumDao.getAlbumById(albumId) }.getOrNull()
-            albumArtworkOrEmpty(album)?.let { if (it.isNotBlank()) return it }
+            android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - album from db: $album")
+            albumArtworkOrEmpty(album)?.let { 
+                android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - returning album artwork: '$it'")
+                if (it.isNotBlank()) return it 
+            }
+        }
+
+        val artwork = item.mediaMetadata.artworkUri?.toString().orEmpty().trim()
+        android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - artworkUri from metadata: '$artwork'")
+        if (artwork.isNotBlank()) {
+            android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - returning artwork from metadata: '$artwork'")
+            return artwork
         }
 
         val uriString = item.localConfiguration?.uri?.toString().orEmpty().trim()
+        android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - uriString: '$uriString'")
         val path = when {
             uriString.startsWith("file://", ignoreCase = true) -> runCatching {
                 Uri.parse(uriString).path.orEmpty()
@@ -150,13 +161,20 @@ class PlaylistRepository @Inject constructor(
             uriString.startsWith("/") -> uriString
             else -> ""
         }.trim()
+        android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - path: '$path'")
         if (path.isNotBlank()) {
             val track = runCatching { trackDao.getTrackByPathOnce(path) }.getOrNull()
+            android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - track: $track")
             if (track != null) {
                 val album = runCatching { albumDao.getAlbumById(track.albumId) }.getOrNull()
-                albumArtworkOrEmpty(album)?.let { if (it.isNotBlank()) return it }
+                android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - album from track: $album")
+                albumArtworkOrEmpty(album)?.let { 
+                    android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - returning track album artwork: '$it'")
+                    if (it.isNotBlank()) return it 
+                }
             }
         }
+        android.util.Log.d("PlaylistRepository", "resolvePlaylistItemArtwork - END - returning empty string")
         return ""
     }
 

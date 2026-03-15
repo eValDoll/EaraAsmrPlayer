@@ -53,6 +53,9 @@ fun PlaylistPickerScreen(
     title: String,
     artist: String,
     artworkUri: String,
+    albumId: Long = 0L,
+    trackId: Long = 0L,
+    rjCode: String = "",
     onBack: () -> Unit,
     viewModel: PlaylistsViewModel = hiltViewModel()
 ) {
@@ -63,13 +66,16 @@ fun PlaylistPickerScreen(
     var createName by rememberSaveable { mutableStateOf("") }
     val canCreate = remember(createName) { createName.trim().isNotBlank() }
 
-    val item = remember(mediaId, uri, title, artist, artworkUri) {
+    val item = remember(mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode) {
         buildPlaylistAddMediaItem(
             mediaId = mediaId,
             uri = uri,
             title = title,
             artist = artist,
-            artworkUri = artworkUri
+            artworkUri = artworkUri,
+            albumId = albumId,
+            trackId = trackId,
+            rjCode = rjCode
         )
     }
 
@@ -175,18 +181,37 @@ private fun buildPlaylistAddMediaItem(
     uri: String,
     title: String,
     artist: String,
-    artworkUri: String
+    artworkUri: String,
+    albumId: Long = 0L,
+    trackId: Long = 0L,
+    rjCode: String = ""
 ): androidx.media3.common.MediaItem {
+    android.util.Log.d("PlaylistPicker", "buildPlaylistAddMediaItem - mediaId: $mediaId, uri: $uri, title: $title, artist: $artist, artworkUri: $artworkUri, albumId: $albumId, trackId: $trackId, rjCode: $rjCode")
+    
     val metadata = androidx.media3.common.MediaMetadata.Builder()
         .setTitle(title)
         .setArtist(artist)
         .setArtworkUri(artworkUri.takeIf { it.isNotBlank() }?.toUri())
+        .setExtras(
+            android.os.Bundle().apply {
+                if (albumId > 0L) putLong("album_id", albumId)
+                if (trackId > 0L) putLong("track_id", trackId)
+                if (rjCode.isNotBlank()) putString("rj_code", rjCode)
+            }
+        )
         .build()
-    return androidx.media3.common.MediaItem.Builder()
+    
+    val mimeType = guessMimeType(uri)
+    val mediaItem = androidx.media3.common.MediaItem.Builder()
         .setMediaId(mediaId)
         .setUri(toPlayableUriForPlaylist(uri))
+        .setMimeType(mimeType)
         .setMediaMetadata(metadata)
         .build()
+    
+    android.util.Log.d("PlaylistPicker", "buildPlaylistAddMediaItem - created MediaItem with extras: ${mediaItem.mediaMetadata.extras}, artworkUri: ${mediaItem.mediaMetadata.artworkUri}")
+    
+    return mediaItem
 }
 
 private fun toPlayableUriForPlaylist(raw: String): Uri {
@@ -217,4 +242,19 @@ private fun repairDocumentUri(raw: String): String {
     val encodedDocId = Uri.encode(docId)
     val encodedPath = "/" + segs.take(docIndex + 1).joinToString("/") + "/" + encodedDocId
     return u.buildUpon().encodedPath(encodedPath).build().toString()
+}
+
+private fun guessMimeType(path: String): String? {
+    val trimmed = path.trim()
+    val ext = trimmed.substringBefore('#').substringBefore('?').substringAfterLast('.', "").lowercase()
+    return when (ext) {
+        "mp3" -> "audio/mpeg"
+        "flac" -> "audio/flac"
+        "wav" -> "audio/wav"
+        "m4a" -> "audio/mp4"
+        "aac" -> "audio/aac"
+        "ogg" -> "audio/ogg"
+        "opus" -> "audio/opus"
+        else -> null
+    }
 }
