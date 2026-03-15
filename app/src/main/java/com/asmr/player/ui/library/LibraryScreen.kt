@@ -136,6 +136,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.asmr.player.ui.common.AsmrAsyncImage
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
+import com.asmr.player.ui.theme.dynamicPageContainerColor
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.Dispatchers
@@ -193,16 +194,16 @@ fun LibraryScreen(
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
     onOpenPlaylistPicker: (mediaId: String, uri: String, title: String, artist: String, artworkUri: String, albumId: Long, trackId: Long, rjCode: String) -> Unit = { _, _, _, _, _, _, _, _ -> },
     onOpenGroupPicker: (albumId: Long) -> Unit = { _ -> },
+    onOpenFilterScreen: () -> Unit = {},
     viewModel: LibraryViewModel = hiltViewModel()
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val materialColorScheme = MaterialTheme.colorScheme
+    val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
     val uiState by viewModel.uiState.collectAsState()
     val viewMode by viewModel.libraryViewMode.collectAsState()
     val querySpec by viewModel.querySpec.collectAsState()
     val tags by viewModel.availableTags.collectAsState()
-    val circles by viewModel.availableCircles.collectAsState()
-    val cvs by viewModel.availableCvs.collectAsState()
-    val presets by viewModel.filterPresets.collectAsState()
     val userTagsByAlbumId by viewModel.userTagsByAlbumId.collectAsState()
     val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsState()
     val isGlobalSyncRunning by viewModel.isGlobalSyncRunning.collectAsState()
@@ -210,7 +211,6 @@ fun LibraryScreen(
     val scope = rememberCoroutineScope()
     var searchText by rememberSaveable { mutableStateOf(querySpec.textQuery.orEmpty()) }
     var sortMenuExpanded by remember { mutableStateOf(false) }
-    var showFilterSheet by remember { mutableStateOf(false) }
     var showTagManager by remember { mutableStateOf(false) }
     var tagAssignTarget by remember { mutableStateOf<TagAssignTarget?>(null) }
 
@@ -237,8 +237,6 @@ fun LibraryScreen(
     var showAlbumActions by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val filterSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val tagManagerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     LaunchedEffect(isTrackList) {
         if (!isTrackList) {
@@ -731,37 +729,55 @@ fun LibraryScreen(
                                             icon = Icons.Default.SwapVert,
                                             onClick = { sortMenuExpanded = true }
                                         )
-                                        DropdownMenu(
-                                            expanded = sortMenuExpanded,
-                                            onDismissRequest = { sortMenuExpanded = false }
+                                        MaterialTheme(
+                                            colorScheme = materialColorScheme.copy(
+                                                surface = dynamicContainerColor,
+                                                surfaceContainer = dynamicContainerColor
+                                            )
                                         ) {
-                                            DropdownMenuItem(
-                                                text = { Text("最近播放") },
-                                                onClick = {
-                                                    sortMenuExpanded = false
-                                                    viewModel.setSort(LibrarySort.LastPlayedDesc)
-                                                }
-                                            )
-                                            DropdownMenuItem(
-                                                text = { Text("最近加入") },
-                                                onClick = {
-                                                    sortMenuExpanded = false
-                                                    viewModel.setSort(LibrarySort.AddedDesc)
-                                                }
-                                            )
-                                            DropdownMenuItem(
-                                                text = { Text("标题") },
-                                                onClick = {
-                                                    sortMenuExpanded = false
-                                                    viewModel.setSort(LibrarySort.TitleAsc)
-                                                }
-                                            )
+                                            DropdownMenu(
+                                                expanded = sortMenuExpanded,
+                                                onDismissRequest = { sortMenuExpanded = false },
+                                                modifier = Modifier.background(dynamicContainerColor)
+                                            ) {
+                                                DropdownMenuItem(
+                                                    text = { Text("最近") },
+                                                    onClick = {
+                                                        sortMenuExpanded = false
+                                                        viewModel.setSort(LibrarySort.LastPlayedDesc)
+                                                    }
+                                                )
+                                                HorizontalDivider(
+                                                    modifier = Modifier.padding(horizontal = 8.dp),
+                                                    thickness = 0.5.dp,
+                                                    color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("最近加入") },
+                                                    onClick = {
+                                                        sortMenuExpanded = false
+                                                        viewModel.setSort(LibrarySort.AddedDesc)
+                                                    }
+                                                )
+                                                HorizontalDivider(
+                                                    modifier = Modifier.padding(horizontal = 8.dp),
+                                                    thickness = 0.5.dp,
+                                                    color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                                                )
+                                                DropdownMenuItem(
+                                                    text = { Text("标题") },
+                                                    onClick = {
+                                                        sortMenuExpanded = false
+                                                        viewModel.setSort(LibrarySort.TitleAsc)
+                                                    }
+                                                )
+                                            }
                                         }
                                     }
                                     Spacer(modifier = Modifier.width(8.dp))
                                     ActionButton(
                                         icon = Icons.Default.FilterList,
-                                        onClick = { showFilterSheet = true }
+                                        onClick = onOpenFilterScreen
                                     )
                                     if (rightPanelToggle != null) {
                                         Spacer(modifier = Modifier.width(8.dp))
@@ -774,34 +790,6 @@ fun LibraryScreen(
                 }
             }
             }
-        }
-    }
-
-    if (showFilterSheet) {
-        ModalBottomSheet(
-            onDismissRequest = { showFilterSheet = false },
-            sheetState = filterSheetState
-        ) {
-            LibraryFilterSheet(
-                querySpec = querySpec,
-                tags = tags,
-                circles = circles,
-                cvs = cvs,
-                presets = presets,
-                onOpenTagManager = {
-                    showFilterSheet = false
-                    showTagManager = true
-                },
-                onSetSource = { viewModel.setSourceFilter(it) },
-                onToggleTag = { viewModel.toggleTag(it) },
-                onToggleCircle = { viewModel.toggleCircle(it) },
-                onToggleCv = { viewModel.toggleCv(it) },
-                onClear = { viewModel.clearFilters() },
-                onApplyPreset = { viewModel.applyPreset(it) },
-                onSavePreset = { viewModel.savePreset(it) },
-                onDeletePreset = { viewModel.deletePreset(it) },
-                onClose = { showFilterSheet = false }
-            )
         }
     }
 
@@ -1050,6 +1038,8 @@ private fun TrackListRow(
     onRemove: () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val materialColorScheme = MaterialTheme.colorScheme
+    val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
     ListItem(
         headlineContent = {
             Text(
@@ -1069,35 +1059,61 @@ private fun TrackListRow(
                     IconButton(onClick = { expanded = true }) {
                         Icon(imageVector = Icons.Default.MoreVert, contentDescription = null)
                     }
-                    DropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-                        DropdownMenuItem(
-                            text = { Text("添加到播放队列") },
-                            onClick = {
-                                expanded = false
-                                onAddToQueue()
-                            }
+                    MaterialTheme(
+                        colorScheme = materialColorScheme.copy(
+                            surface = dynamicContainerColor,
+                            surfaceContainer = dynamicContainerColor
                         )
-                        DropdownMenuItem(
-                            text = { Text("添加到歌单") },
-                            onClick = {
-                                expanded = false
-                                onAddToPlaylist()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("标签管理") },
-                            onClick = {
-                                expanded = false
-                                onManageTags()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("从专辑移除") },
-                            onClick = {
-                                expanded = false
-                                onRemove()
-                            }
-                        )
+                    ) {
+                        DropdownMenu(
+                            expanded = expanded,
+                            onDismissRequest = { expanded = false },
+                            modifier = Modifier.background(dynamicContainerColor)
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("添加到播放队列") },
+                                onClick = {
+                                    expanded = false
+                                    onAddToQueue()
+                                }
+                            )
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 8.dp),
+                                thickness = 0.5.dp,
+                                color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                            )
+                            DropdownMenuItem(
+                                text = { Text("添加到歌单") },
+                                onClick = {
+                                    expanded = false
+                                    onAddToPlaylist()
+                                }
+                            )
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 8.dp),
+                                thickness = 0.5.dp,
+                                color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                            )
+                            DropdownMenuItem(
+                                text = { Text("标签管理") },
+                                onClick = {
+                                    expanded = false
+                                    onManageTags()
+                                }
+                            )
+                            HorizontalDivider(
+                                modifier = Modifier.padding(horizontal = 8.dp),
+                                thickness = 0.5.dp,
+                                color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                            )
+                            DropdownMenuItem(
+                                text = { Text("从专辑移除") },
+                                onClick = {
+                                    expanded = false
+                                    onRemove()
+                                }
+                            )
+                        }
                     }
                 }
             }

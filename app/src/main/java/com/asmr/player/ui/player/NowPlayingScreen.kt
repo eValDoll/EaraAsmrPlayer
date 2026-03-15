@@ -1013,6 +1013,7 @@ fun NowPlayingScreen(
                         playbackPitch = playback.playbackPitch,
                         onPlaybackSpeedChanged = { viewModel.setPlaybackParameters(it, playback.playbackPitch) },
                         onPlaybackPitchChanged = { viewModel.setPlaybackParameters(playback.playbackSpeed, it) },
+                        onPlaybackParametersChanged = { speed, pitch -> viewModel.setPlaybackParameters(speed, pitch) },
                         modifier = Modifier
                             .fillMaxSize()
                             .verticalScroll(scrollState)

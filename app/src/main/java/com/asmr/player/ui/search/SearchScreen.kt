@@ -331,7 +331,19 @@ fun SearchScreen(
                                                 viewModel.setPurchasedOnly(true)
                                             }
                                         )
-                                        SearchSortOption.values().forEach { option ->
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(horizontal = 8.dp),
+                                            thickness = 0.5.dp,
+                                            color = colorScheme.textSecondary.copy(alpha = 0.2f)
+                                        )
+                                        SearchSortOption.values().forEachIndexed { index, option ->
+                                            if (index > 0) {
+                                                HorizontalDivider(
+                                                    modifier = Modifier.padding(horizontal = 8.dp),
+                                                    thickness = 0.5.dp,
+                                                    color = colorScheme.textSecondary.copy(alpha = 0.2f)
+                                                )
+                                            }
                                             DropdownMenuItem(
                                                 text = { Text(option.label, color = colorScheme.textPrimary) },
                                                 onClick = {
@@ -377,6 +389,11 @@ fun SearchScreen(
                                                     viewModel.setLocale("ja_JP")
                                                 }
                                             )
+                                            HorizontalDivider(
+                                                modifier = Modifier.padding(horizontal = 8.dp),
+                                                thickness = 0.5.dp,
+                                                color = colorScheme.textSecondary.copy(alpha = 0.2f)
+                                            )
                                             DropdownMenuItem(
                                                 text = { Text("简中", color = colorScheme.textPrimary) },
                                                 onClick = {
@@ -386,6 +403,11 @@ fun SearchScreen(
                                                     viewModel.setPurchasedOnly(false)
                                                     viewModel.setLocale("zh_CN")
                                                 }
+                                            )
+                                            HorizontalDivider(
+                                                modifier = Modifier.padding(horizontal = 8.dp),
+                                                thickness = 0.5.dp,
+                                                color = colorScheme.textSecondary.copy(alpha = 0.2f)
                                             )
                                             DropdownMenuItem(
                                                 text = { Text("繁中", color = colorScheme.textPrimary) },
