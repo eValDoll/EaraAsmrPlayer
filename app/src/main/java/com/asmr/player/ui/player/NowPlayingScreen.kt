@@ -168,6 +168,18 @@ fun NowPlayingScreen(
 
     var showSliceSheet by remember { mutableStateOf(false) }
     var timeEditTarget by remember { mutableStateOf<Pair<Long, Boolean>?>(null) }
+    val dismissSliceSheet = {
+        showSliceSheet = false
+        viewModel.selectSlice(null)
+    }
+    val toggleSelectedSlice = { sliceId: Long ->
+        viewModel.selectSlice(if (sliceUiState.selectedSliceId == sliceId) null else sliceId)
+    }
+    val highlightedPlaybackSliceId = currentSliceIdForPosition(
+        positionMs = playback.positionMs,
+        slices = sliceUiState.slices,
+        sliceModeEnabled = sliceUiState.sliceModeEnabled
+    )
     
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -842,7 +854,7 @@ fun NowPlayingScreen(
         if (showSliceSheet) {
             val sheetMinHeight = (configuration.screenHeightDp.dp * 0.66f).coerceAtLeast(320.dp)
             ModalBottomSheet(
-                onDismissRequest = { showSliceSheet = false },
+                onDismissRequest = dismissSliceSheet,
                 sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
                 containerColor = colorScheme.surface,
                 contentColor = colorScheme.onSurface
@@ -874,13 +886,16 @@ fun NowPlayingScreen(
                         positionMs = playback.positionMs,
                         durationMs = progressDurationMs,
                         slices = sliceUiState.slices,
+                        highlightedSliceId = highlightedPlaybackSliceId,
                         selectedSliceId = sliceUiState.selectedSliceId,
                         activeColor = accentColor,
                         inactiveColor = accentColor.copy(alpha = 0.18f),
                         onSeekTo = { viewModel.seekTo(it) },
-                        onSelectSlice = { viewModel.selectSlice(it) },
+                        onSelectSlice = { id ->
+                            if (id == null) viewModel.selectSlice(null) else toggleSelectedSlice(id)
+                        },
                         onLongPressSlice = { id ->
-                            viewModel.selectSlice(id)
+                            toggleSelectedSlice(id)
                         }
                     )
 
@@ -909,7 +924,7 @@ fun NowPlayingScreen(
                                     Row(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clickable { viewModel.selectSlice(slice.id) }
+                                            .clickable { toggleSelectedSlice(slice.id) }
                                             .padding(horizontal = 12.dp, vertical = 10.dp),
                                         verticalAlignment = Alignment.CenterVertically,
                                         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -1793,6 +1808,11 @@ private fun PlayerProgress(
         if (safeDuration > 0L) (effectivePosition.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f) else 0f
     }
     val rangeDuration = safeDuration
+    val highlightedSliceId = currentSliceIdForPosition(
+        positionMs = effectivePosition,
+        slices = sliceUiState.slices,
+        sliceModeEnabled = sliceUiState.sliceModeEnabled
+    )
     val sliderValue = if (isDragging) dragFraction else safeFraction
     val displayPosition = if (isDragging && rangeDuration > 0L) {
         (sliderValue.toDouble() * rangeDuration.toDouble()).roundToLong().coerceIn(0L, rangeDuration)
@@ -1805,12 +1825,12 @@ private fun PlayerProgress(
             SliceScrubbableSeekBar(
                 enabled = rangeDuration > 0L,
                 fraction = sliderValue.coerceIn(0f, 1f),
-                positionMs = effectivePosition,
                 rangeDurationMs = rangeDuration,
                 activeColor = activeColor,
                 inactiveColor = inactiveColor,
                 slices = sliceUiState.slices,
                 tempStartMs = sliceUiState.tempStartMs,
+                highlightedSliceId = highlightedSliceId,
                 selectedSliceId = sliceUiState.selectedSliceId,
                 onSelectSlice = onSelectSlice,
                 onLongPressSlice = onLongPressSlice,
@@ -1869,12 +1889,12 @@ private fun PlayerProgress(
 private fun SliceScrubbableSeekBar(
     enabled: Boolean,
     fraction: Float,
-    positionMs: Long,
     rangeDurationMs: Long,
     activeColor: Color,
     inactiveColor: Color,
     slices: List<com.asmr.player.domain.model.Slice>,
     tempStartMs: Long?,
+    highlightedSliceId: Long?,
     selectedSliceId: Long?,
     onSelectSlice: (Long?) -> Unit,
     onLongPressSlice: (Long) -> Unit,
@@ -1901,24 +1921,11 @@ private fun SliceScrubbableSeekBar(
         }
     }
 
-    // 荧光效果 Paint
-    val blurRadius = remember(density) { with(density) { 6.dp.toPx() } }
-    val glowPaint = remember(blurRadius) {
-        android.graphics.Paint().apply {
-            isAntiAlias = true
-            style = android.graphics.Paint.Style.FILL
-            maskFilter = android.graphics.BlurMaskFilter(blurRadius, android.graphics.BlurMaskFilter.Blur.NORMAL)
-            // 使用 SCREEN 混合模式，使光晕叠加后变亮，产生发光感
-            xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.SCREEN)
-        }
-    }
-    val corePaint = remember {
-        android.graphics.Paint().apply {
-            isAntiAlias = true
-            style = android.graphics.Paint.Style.FILL
-        }
-    }
-    val androidPath = remember { android.graphics.Path() }
+    val sliceBorderPx = remember(density) { with(density) { 0.9.dp.toPx() } }
+    val selectedSliceExtraHeightPx = remember(density) { with(density) { 3.dp.toPx() } }
+    val selectedSliceBorderPx = remember(density) { with(density) { 1.25.dp.toPx() } }
+    val tempMarkerWidthPx = remember(density) { with(density) { 3.dp.toPx() } }
+    val tempMarkerHeightPx = remember(density) { with(density) { 16.dp.toPx() } }
 
     val selectedSlice = remember(selectedSliceId, slices) {
         val id = selectedSliceId ?: return@remember null
@@ -1934,14 +1941,7 @@ private fun SliceScrubbableSeekBar(
     var tooltipX by remember { mutableFloatStateOf(0f) }
     var tooltipY by remember { mutableFloatStateOf(0f) }
 
-    val inSlice = remember(positionMs, slices) { slices.any { positionMs >= it.startMs && positionMs < it.endMs } }
-    val infinite = rememberInfiniteTransition(label = "slice_breath")
-    val breathAlpha by infinite.animateFloat(
-        initialValue = 0.18f,
-        targetValue = 0.28f,
-        animationSpec = infiniteRepeatable(animation = tween(1200, easing = LinearEasing), repeatMode = RepeatMode.Reverse),
-        label = "slice_breath_alpha"
-    )
+    val inHighlightedSlice = highlightedSliceId != null
 
     Canvas(
         modifier = modifier
@@ -2080,11 +2080,16 @@ private fun SliceScrubbableSeekBar(
             startX
         }
 
-        val sliceAlpha = if (inSlice) breathAlpha else 0.20f
-        // 切片高度调整：原为 trackHeightPx * 3.2f，现减小以收窄
-        val sliceHeightPx = (trackHeightPx * 1.8f).coerceAtLeast(trackHeightPx + 1f)
-        val sliceTop = centerY - sliceHeightPx / 2f
-        val sliceCorner = sliceHeightPx / 2f
+        val sliceHeightPx = (trackHeightPx * 2.35f).coerceAtLeast(trackHeightPx + 3.dp.toPx())
+        val tooltipAnchorHeightPx = sliceHeightPx + selectedSliceExtraHeightPx
+
+        drawLine(
+            color = inactiveColor,
+            start = Offset(startX, centerY),
+            end = Offset(endX, centerY),
+            strokeWidth = trackHeightPx,
+            cap = androidx.compose.ui.graphics.StrokeCap.Round
+        )
 
         if (rangeDurationMs > 0L) {
             val span = (endX - startX).coerceAtLeast(1f)
@@ -2095,123 +2100,50 @@ private fun SliceScrubbableSeekBar(
                 val ex = startX + span * ef
                 val w = (ex - sx).coerceAtLeast(1f)
                 val isSelected = s.id == selectedSliceId
-                val a = if (isSelected) (sliceAlpha + 0.15f).coerceAtMost(0.50f) else sliceAlpha
-
-                // 1. 绘制切片区域的光晕背景 (荧光)
-                drawIntoCanvas { canvas ->
-                    glowPaint.color = activeColor.toArgb()
-                    // 提高 Alpha 并利用 SCREEN 模式叠加
-                    glowPaint.alpha = 200
-                    val rect = android.graphics.RectF(sx, sliceTop, sx + w, sliceTop + sliceHeightPx)
-                    canvas.nativeCanvas.drawRoundRect(rect, sliceCorner, sliceCorner, glowPaint)
-                    // 叠加第二层增强亮度
-                    glowPaint.alpha = 100
-                    canvas.nativeCanvas.drawRoundRect(rect, sliceCorner, sliceCorner, glowPaint)
+                val isHighlighted = s.id == highlightedSliceId
+                val visualHeightPx = if (isSelected) sliceHeightPx + selectedSliceExtraHeightPx else sliceHeightPx
+                val sliceTop = centerY - visualHeightPx / 2f
+                val sliceCorner = visualHeightPx / 2f
+                val fillAlpha = when {
+                    isSelected -> 0.42f
+                    isHighlighted -> 0.28f
+                    else -> 0.16f
                 }
-
-                // 2. 绘制切片实体
-                val brush = Brush.horizontalGradient(
-                    colors = listOf(
-                        activeColor.copy(alpha = (a * 0.9f).coerceIn(0f, 1f)),
-                        activeColor.copy(alpha = (a * 1.2f).coerceAtMost(1f))
-                    ),
-                    startX = sx,
-                    endX = ex
-                )
+                val borderAlpha = when {
+                    isSelected -> 0.82f
+                    isHighlighted -> 0.40f
+                    else -> 0.22f
+                }
+                val borderWidthPx = if (isSelected) selectedSliceBorderPx else sliceBorderPx
                 drawRoundRect(
-                    brush = brush,
+                    color = activeColor.copy(alpha = fillAlpha),
                     topLeft = Offset(sx, sliceTop),
-                    size = Size(w, sliceHeightPx),
+                    size = Size(w, visualHeightPx),
                     cornerRadius = CornerRadius(sliceCorner, sliceCorner)
                 )
-
-                // 三角形参数 (缩小尺寸)
-                val tipY = (centerY - trackHeightPx * 0.55f).coerceAtLeast(14.dp.toPx())
-                val markerW = (trackHeightPx * 2.8f).coerceAtLeast(8f)
-                val markerH = (trackHeightPx * 2.4f).coerceAtLeast(7f)
-                val baseY = tipY - markerH
-                
-                // 绘制起止三角形
-                drawIntoCanvas { canvas ->
-                    val nativeCanvas = canvas.nativeCanvas
-                    // 核心颜色改回 activeColor
-                    val colorInt = activeColor.toArgb()
-                    
-                    val pulse = ((breathAlpha - 0.18f) / 0.10f).coerceIn(0f, 1f)
-                    val glowAlpha = (180 + 75 * pulse).toInt().coerceIn(0, 255)
-                    
-                    glowPaint.color = colorInt
-                    glowPaint.alpha = glowAlpha
-                    corePaint.color = colorInt
-                    corePaint.alpha = 255
-
-                    // Start Triangle
-                    androidPath.reset()
-                    androidPath.moveTo(sx, tipY)
-                    androidPath.lineTo(sx - markerW / 2f, baseY)
-                    androidPath.lineTo(sx + markerW / 2f, baseY)
-                    androidPath.close()
-                    // 绘制多层光晕
-                    nativeCanvas.drawPath(androidPath, glowPaint)
-                    nativeCanvas.drawPath(androidPath, glowPaint) 
-                    // 绘制核心
-                    nativeCanvas.drawPath(androidPath, corePaint)
-
-                    // End Triangle
-                    androidPath.reset()
-                    androidPath.moveTo(ex, tipY)
-                    androidPath.lineTo(ex - markerW / 2f, baseY)
-                    androidPath.lineTo(ex + markerW / 2f, baseY)
-                    androidPath.close()
-                    // 绘制多层光晕
-                    nativeCanvas.drawPath(androidPath, glowPaint)
-                    nativeCanvas.drawPath(androidPath, glowPaint)
-                    // 绘制核心
-                    nativeCanvas.drawPath(androidPath, corePaint)
-                }
+                drawRoundRect(
+                    color = activeColor.copy(alpha = borderAlpha),
+                    topLeft = Offset(sx, sliceTop),
+                    size = Size(w, visualHeightPx),
+                    cornerRadius = CornerRadius(sliceCorner, sliceCorner),
+                    style = Stroke(width = borderWidthPx)
+                )
             }
 
             val tmp = tempStartMs
             if (tmp != null) {
                 val tf = (tmp.toFloat() / rangeDurationMs.toFloat()).coerceIn(0f, 1f)
                 val tx = startX + span * tf
-                
-                val tipY = (centerY - trackHeightPx * 0.55f).coerceAtLeast(14.dp.toPx())
-                val markerW = (trackHeightPx * 2.8f).coerceAtLeast(8f)
-                val markerH = (trackHeightPx * 2.4f).coerceAtLeast(7f)
-                val baseY = tipY - markerH
-
-                drawIntoCanvas { canvas ->
-                    val nativeCanvas = canvas.nativeCanvas
-                    
-                    val colorInt = activeColor.toArgb()
-                    glowPaint.color = colorInt
-                    glowPaint.alpha = 255 
-                    corePaint.color = colorInt
-                    corePaint.alpha = 255
-                    
-                    androidPath.reset()
-                    androidPath.moveTo(tx, tipY)
-                    androidPath.lineTo(tx - markerW / 2f, baseY)
-                    androidPath.lineTo(tx + markerW / 2f, baseY)
-                    androidPath.close()
-                    
-                    nativeCanvas.drawPath(androidPath, glowPaint)
-                    nativeCanvas.drawPath(androidPath, glowPaint)
-                    nativeCanvas.drawPath(androidPath, corePaint)
-                }
+                drawRoundRect(
+                    color = activeColor.copy(alpha = 0.92f),
+                    topLeft = Offset(tx - tempMarkerWidthPx / 2f, centerY - tempMarkerHeightPx / 2f),
+                    size = Size(tempMarkerWidthPx, tempMarkerHeightPx),
+                    cornerRadius = CornerRadius(tempMarkerWidthPx, tempMarkerWidthPx)
+                )
             }
         }
-
         drawLine(
-            color = inactiveColor,
-            start = Offset(startX, centerY),
-            end = Offset(endX, centerY),
-            strokeWidth = trackHeightPx,
-            cap = androidx.compose.ui.graphics.StrokeCap.Round
-        )
-        drawLine(
-            color = if (inSlice) activeColor else activeColor.copy(alpha = 0.85f),
+            color = if (inHighlightedSlice) activeColor else activeColor.copy(alpha = 0.85f),
             start = Offset(startX, centerY),
             end = Offset(x, centerY),
             strokeWidth = trackHeightPx,
@@ -2234,7 +2166,7 @@ private fun SliceScrubbableSeekBar(
             val boxW = textWidth + tooltipPadX * 2f
             val boxH = tooltipTextSizePx + tooltipPadY * 2f
             val bx = (tooltipX - boxW / 2f).coerceIn(0f, width - boxW)
-            val by = (centerY - sliceHeightPx / 2f - boxH - 6.dp.toPx()).coerceAtLeast(0f)
+            val by = (centerY - tooltipAnchorHeightPx / 2f - boxH - 6.dp.toPx()).coerceAtLeast(0f)
             drawRoundRect(
                 color = Color.Black.copy(alpha = 0.55f),
                 topLeft = Offset(bx, by),
@@ -2259,6 +2191,7 @@ private fun SliceOverviewBar(
     positionMs: Long,
     durationMs: Long,
     slices: List<com.asmr.player.domain.model.Slice>,
+    highlightedSliceId: Long?,
     selectedSliceId: Long?,
     activeColor: Color,
     inactiveColor: Color,
@@ -2320,35 +2253,6 @@ private fun SliceOverviewBar(
         val span = (endX - startX).coerceAtLeast(1f)
         val x = startX + span * fraction
 
-        if (safeDuration > 0L) {
-            val sliceHeightPx = (trackHeightPx * 3.0f).coerceAtLeast(trackHeightPx + 2f)
-            val top = centerY - sliceHeightPx / 2f
-            val corner = sliceHeightPx / 2f
-            for (s in slices) {
-                val sf = (s.startMs.toFloat() / safeDuration.toFloat()).coerceIn(0f, 1f)
-                val ef = (s.endMs.toFloat() / safeDuration.toFloat()).coerceIn(0f, 1f)
-                val sx = startX + span * sf
-                val ex = startX + span * ef
-                val w = (ex - sx).coerceAtLeast(1f)
-                val selected = s.id == selectedSliceId
-                val a = if (selected) 0.32f else 0.20f
-                val brush = Brush.horizontalGradient(
-                    colors = listOf(
-                        activeColor.copy(alpha = a * 0.65f),
-                        activeColor.copy(alpha = a)
-                    ),
-                    startX = sx,
-                    endX = ex
-                )
-                drawRoundRect(
-                    brush = brush,
-                    topLeft = Offset(sx, top),
-                    size = Size(w, sliceHeightPx),
-                    cornerRadius = CornerRadius(corner, corner)
-                )
-            }
-        }
-
         drawLine(
             color = inactiveColor,
             start = Offset(startX, centerY),
@@ -2356,6 +2260,49 @@ private fun SliceOverviewBar(
             strokeWidth = trackHeightPx,
             cap = androidx.compose.ui.graphics.StrokeCap.Round
         )
+        if (safeDuration > 0L) {
+            val sliceHeightPx = (trackHeightPx * 2.4f).coerceAtLeast(trackHeightPx + 3.dp.toPx())
+            val sliceBorderPx = 0.85.dp.toPx()
+            val selectedSliceExtraHeightPx = 2.dp.toPx()
+            val selectedSliceBorderPx = 1.dp.toPx()
+            for (s in slices) {
+                val sf = (s.startMs.toFloat() / safeDuration.toFloat()).coerceIn(0f, 1f)
+                val ef = (s.endMs.toFloat() / safeDuration.toFloat()).coerceIn(0f, 1f)
+                val sx = startX + span * sf
+                val ex = startX + span * ef
+                val w = (ex - sx).coerceAtLeast(1f)
+                val selected = s.id == selectedSliceId
+                val highlighted = s.id == highlightedSliceId
+                val visualHeightPx = if (selected) sliceHeightPx + selectedSliceExtraHeightPx else sliceHeightPx
+                val top = centerY - visualHeightPx / 2f
+                val corner = visualHeightPx / 2f
+                val fillAlpha = when {
+                    selected -> 0.34f
+                    highlighted -> 0.24f
+                    else -> 0.14f
+                }
+                val borderAlpha = when {
+                    selected -> 0.72f
+                    highlighted -> 0.34f
+                    else -> 0.20f
+                }
+                val borderWidthPx = if (selected) selectedSliceBorderPx else sliceBorderPx
+
+                drawRoundRect(
+                    color = activeColor.copy(alpha = fillAlpha),
+                    topLeft = Offset(sx, top),
+                    size = Size(w, visualHeightPx),
+                    cornerRadius = CornerRadius(corner, corner)
+                )
+                drawRoundRect(
+                    color = activeColor.copy(alpha = borderAlpha),
+                    topLeft = Offset(sx, top),
+                    size = Size(w, visualHeightPx),
+                    cornerRadius = CornerRadius(corner, corner),
+                    style = Stroke(width = borderWidthPx)
+                )
+            }
+        }
         drawLine(
             color = activeColor,
             start = Offset(startX, centerY),
@@ -2374,6 +2321,15 @@ private fun SliceOverviewBar(
             center = Offset(x, centerY)
         )
     }
+}
+
+private fun currentSliceIdForPosition(
+    positionMs: Long,
+    slices: List<com.asmr.player.domain.model.Slice>,
+    sliceModeEnabled: Boolean
+): Long? {
+    if (!sliceModeEnabled) return null
+    return slices.firstOrNull { positionMs >= it.startMs && positionMs < it.endMs }?.id
 }
 
 @Composable

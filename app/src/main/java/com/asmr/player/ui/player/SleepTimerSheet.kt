@@ -1,6 +1,8 @@
 package com.asmr.player.ui.player
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -41,7 +43,8 @@ import java.util.Locale
 @Composable
 fun SleepTimerSheetContent(
     viewModel: PlayerViewModel,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val endAtMs by viewModel.sleepTimerEndAtMs.collectAsState()
@@ -70,8 +73,9 @@ fun SleepTimerSheetContent(
     val dividerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.12f)
 
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
+            .verticalScroll(rememberScrollState())
             .padding(bottom = 24.dp)
     ) {
         Row(
