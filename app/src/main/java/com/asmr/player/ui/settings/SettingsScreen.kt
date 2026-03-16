@@ -73,6 +73,7 @@ fun SettingsScreen(
     val staticHueArgbDark by viewModel.staticHueArgbDark.collectAsState()
     val coverBackgroundEnabled by viewModel.coverBackgroundEnabled.collectAsState()
     val coverBackgroundClarity by viewModel.coverBackgroundClarity.collectAsState()
+    val coverMotionEnabled by viewModel.coverMotionEnabled.collectAsState()
     val updateState by viewModel.updateState.collectAsState()
     val scanRoots by libraryViewModel.scanRoots.collectAsState()
     val bulkProgress by libraryViewModel.bulkProgress.collectAsState()
@@ -337,6 +338,11 @@ fun SettingsScreen(
                     text = "播放页/歌词页封面背景",
                     checked = coverBackgroundEnabled,
                     onCheckedChange = viewModel::setCoverBackgroundEnabled
+                )
+                SettingsToggleRow(
+                    text = "封面随手机转动查看完整图片",
+                    checked = coverMotionEnabled,
+                    onCheckedChange = viewModel::setCoverMotionEnabled
                 )
                 if (coverBackgroundEnabled) {
                     key("cover_background_clarity_slider") {
