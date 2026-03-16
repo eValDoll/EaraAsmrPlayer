@@ -27,6 +27,7 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.FormatAlignCenter
 import androidx.compose.material.icons.filled.FormatAlignLeft
 import androidx.compose.material.icons.filled.FormatAlignRight
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
@@ -40,14 +41,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.BuildConfig
+import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.FloatingLyricsSettings
 import com.asmr.player.ui.library.BulkPhase
 import com.asmr.player.ui.library.LibraryViewModel
@@ -73,15 +79,24 @@ fun SettingsScreen(
     val staticHueArgbDark by viewModel.staticHueArgbDark.collectAsState()
     val coverBackgroundEnabled by viewModel.coverBackgroundEnabled.collectAsState()
     val coverBackgroundClarity by viewModel.coverBackgroundClarity.collectAsState()
-    val coverMotionEnabled by viewModel.coverMotionEnabled.collectAsState()
+    val coverPreviewMode by viewModel.coverPreviewMode.collectAsState()
     val updateState by viewModel.updateState.collectAsState()
     val scanRoots by libraryViewModel.scanRoots.collectAsState()
     val bulkProgress by libraryViewModel.bulkProgress.collectAsState()
     val isGlobalSyncRunning by libraryViewModel.isGlobalSyncRunning.collectAsState()
     val context = LocalContext.current
     val colorScheme = AsmrTheme.colorScheme
+    val segmentedButtonColors = SegmentedButtonDefaults.colors(
+        activeContainerColor = colorScheme.primarySoft,
+        activeContentColor = if (colorScheme.isDark) colorScheme.onPrimaryContainer else colorScheme.primaryStrong,
+        activeBorderColor = colorScheme.primaryStrong,
+        inactiveContainerColor = Color.Transparent,
+        inactiveContentColor = colorScheme.onSurfaceVariant,
+        inactiveBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+    )
     
     var overlayGranted by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+    var activeTipKey by remember { mutableStateOf<String?>(null) }
     val overlayLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         overlayGranted = Settings.canDrawOverlays(context)
     }
@@ -339,11 +354,52 @@ fun SettingsScreen(
                     checked = coverBackgroundEnabled,
                     onCheckedChange = viewModel::setCoverBackgroundEnabled
                 )
+                /*
                 SettingsToggleRow(
                     text = "封面随手机转动查看完整图片",
                     checked = coverMotionEnabled,
                     onCheckedChange = viewModel::setCoverMotionEnabled
                 )
+                */
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("背景封面预览方式", style = MaterialTheme.typography.bodyMedium)
+                    PreviewModeInfoTip(
+                        active = activeTipKey == "cover_preview_mode",
+                        onToggle = {
+                            activeTipKey = if (activeTipKey == "cover_preview_mode") null else "cover_preview_mode"
+                        }
+                    )
+                    Spacer(modifier = Modifier.weight(1f))
+                    SingleChoiceSegmentedButtonRow {
+                        SegmentedButton(
+                            selected = coverPreviewMode == CoverPreviewMode.Disabled,
+                            onClick = { viewModel.setCoverPreviewMode(CoverPreviewMode.Disabled) },
+                            shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                            colors = segmentedButtonColors,
+                            icon = {},
+                            label = { Text("关闭") }
+                        )
+                        SegmentedButton(
+                            selected = coverPreviewMode == CoverPreviewMode.Drag,
+                            onClick = { viewModel.setCoverPreviewMode(CoverPreviewMode.Drag) },
+                            shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                            colors = segmentedButtonColors,
+                            icon = {},
+                            label = { Text("滑动") }
+                        )
+                        SegmentedButton(
+                            selected = coverPreviewMode == CoverPreviewMode.Motion,
+                            onClick = { viewModel.setCoverPreviewMode(CoverPreviewMode.Motion) },
+                            shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                            colors = segmentedButtonColors,
+                            icon = {},
+                            label = { Text("转动") }
+                        )
+                    }
+                }
                 if (coverBackgroundEnabled) {
                     key("cover_background_clarity_slider") {
                         DeferredCommitSettingsSliderRow(
@@ -422,6 +478,7 @@ fun SettingsScreen(
                                 selected = floatingSettings.align == 0,
                                 onClick = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(align = 0)) },
                                 shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                                colors = segmentedButtonColors,
                                 icon = {},
                                 label = { Icon(Icons.AutoMirrored.Filled.FormatAlignLeft, null) }
                             )
@@ -429,6 +486,7 @@ fun SettingsScreen(
                                 selected = floatingSettings.align == 1,
                                 onClick = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(align = 1)) },
                                 shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                                colors = segmentedButtonColors,
                                 icon = {},
                                 label = { Icon(Icons.Default.FormatAlignCenter, null) }
                             )
@@ -436,6 +494,7 @@ fun SettingsScreen(
                                 selected = floatingSettings.align == 2,
                                 onClick = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(align = 2)) },
                                 shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                                colors = segmentedButtonColors,
                                 icon = {},
                                 label = { Icon(Icons.AutoMirrored.Filled.FormatAlignRight, null) }
                             )
@@ -790,4 +849,75 @@ private fun ThemeColorDot(color: Color?, selected: Boolean, onClick: () -> Unit)
             .border(borderWidth, borderColor, CircleShape)
             .clickable(onClick = onClick)
     )
+}
+
+@Composable
+private fun PreviewModeInfoTip(active: Boolean, onToggle: () -> Unit) {
+    val density = LocalDensity.current
+    val offset = with(density) { IntOffset(0, 26.dp.roundToPx()) }
+
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+    ) {
+        Box {
+            IconButton(
+                onClick = onToggle,
+                modifier = Modifier.size(22.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+            if (active) {
+                Popup(
+                    alignment = Alignment.TopStart,
+                    offset = offset,
+                    onDismissRequest = onToggle,
+                    properties = PopupProperties(
+                        focusable = true,
+                        dismissOnBackPress = true,
+                        dismissOnClickOutside = true
+                    )
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        tonalElevation = 6.dp,
+                        shadowElevation = 10.dp,
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                        border = androidx.compose.foundation.BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.widthIn(max = 260.dp).padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "背景封面预览方式",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "关闭：背景与封面保持居中静止",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Text(
+                                text = "滑动：播放页封面与歌词页背景都使用双指拖动预览，且会临时屏蔽左侧菜单侧滑",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Text(
+                                text = "转动：通过转动手机预览封面其他区域",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

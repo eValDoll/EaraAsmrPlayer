@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.asmr.player.BuildConfig
 import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.data.remote.update.GitHubUpdateClient
+import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.remote.update.UpdateRelease
 import com.asmr.player.data.settings.FloatingLyricsSettings
 import com.asmr.player.data.settings.SettingsRepository
@@ -72,8 +73,8 @@ class SettingsViewModel @Inject constructor(
     val coverBackgroundClarity: StateFlow<Float> = settingsDataStore.coverBackgroundClarity
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.35f)
 
-    val coverMotionEnabled: StateFlow<Boolean> = settingsDataStore.coverMotionEnabled
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val coverPreviewMode: StateFlow<CoverPreviewMode> = settingsDataStore.coverPreviewMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CoverPreviewMode.Disabled)
 
     private val updateClient = GitHubUpdateClient(okHttpClient)
     private val _updateState = MutableStateFlow<AppUpdateState>(AppUpdateState.Idle)
@@ -108,8 +109,8 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsDataStore.setCoverBackgroundClarity(clarity) }
     }
 
-    fun setCoverMotionEnabled(enabled: Boolean) {
-        viewModelScope.launch { settingsDataStore.setCoverMotionEnabled(enabled) }
+    fun setCoverPreviewMode(mode: CoverPreviewMode) {
+        viewModelScope.launch { settingsDataStore.setCoverPreviewMode(mode) }
     }
 
     fun checkUpdate() {
