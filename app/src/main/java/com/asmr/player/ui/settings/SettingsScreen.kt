@@ -9,6 +9,8 @@ import android.provider.DocumentsContract
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -31,6 +33,7 @@ import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,6 +55,7 @@ import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.withAddedBottomPadding
 import java.io.File
+import kotlin.math.abs
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -252,7 +256,7 @@ fun SettingsScreen(
                                     Icon(Icons.Default.Delete, contentDescription = null, tint = colorScheme.onSurface)
                                 }
                             }
-                        }
+                            }
                     }
                 }
             }
@@ -335,27 +339,16 @@ fun SettingsScreen(
                     onCheckedChange = viewModel::setCoverBackgroundEnabled
                 )
                 if (coverBackgroundEnabled) {
-                    var editingClarity by remember { mutableFloatStateOf(coverBackgroundClarity.coerceIn(0f, 1f)) }
-                    var clarityDragging by remember { mutableStateOf(false) }
-                    LaunchedEffect(coverBackgroundClarity) {
-                        if (!clarityDragging) {
-                            editingClarity = coverBackgroundClarity.coerceIn(0f, 1f)
-                        }
+                    key("cover_background_clarity_slider") {
+                        DeferredCommitSettingsSliderRow(
+                            committedValue = coverBackgroundClarity,
+                            range = 0f..1f,
+                            textForValue = { value ->
+                                "封面背景清晰度：${(value.coerceIn(0f, 1f) * 100).toInt()}%"
+                            },
+                            onValueCommitted = viewModel::setCoverBackgroundClarity
+                        )
                     }
-                    val percent = (editingClarity * 100).toInt()
-                    SettingsSliderRow(
-                        text = "封面背景清晰度：$percent%",
-                        value = editingClarity,
-                        range = 0f..1f,
-                        onValueChange = {
-                            clarityDragging = true
-                            editingClarity = it.coerceIn(0f, 1f)
-                        },
-                        onValueChangeFinished = {
-                            clarityDragging = false
-                            viewModel.setCoverBackgroundClarity(editingClarity)
-                        }
-                    )
                 }
             }
 
@@ -700,8 +693,10 @@ private fun SettingsSliderRow(
     value: Float,
     range: ClosedFloatingPointRange<Float>,
     onValueChange: (Float) -> Unit,
-    onValueChangeFinished: (() -> Unit)? = null
+    onValueChangeFinished: (() -> Unit)? = null,
+    interactionSource: MutableInteractionSource? = null
 ) {
+    val sliderInteractionSource = interactionSource ?: remember { MutableInteractionSource() }
     Column(modifier = Modifier.fillMaxWidth()) {
         Text(text, style = MaterialTheme.typography.bodyMedium)
         Slider(
@@ -709,9 +704,56 @@ private fun SettingsSliderRow(
             onValueChange = onValueChange,
             valueRange = range,
             onValueChangeFinished = onValueChangeFinished,
+            interactionSource = sliderInteractionSource,
             modifier = Modifier.fillMaxWidth()
         )
     }
+}
+
+@Composable
+private fun DeferredCommitSettingsSliderRow(
+    committedValue: Float,
+    range: ClosedFloatingPointRange<Float>,
+    textForValue: (Float) -> String,
+    onValueCommitted: (Float) -> Unit
+) {
+    val coercedCommittedValue = committedValue.coerceIn(range.start, range.endInclusive)
+    var draftValue by rememberSaveable(range.start, range.endInclusive) {
+        mutableStateOf(coercedCommittedValue)
+    }
+    var pendingCommit by rememberSaveable { mutableStateOf<Float?>(null) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val isDragging by interactionSource.collectIsDraggedAsState()
+
+    LaunchedEffect(coercedCommittedValue, isDragging, pendingCommit) {
+        when {
+            isDragging -> Unit
+            pendingCommit != null -> {
+                if (abs(coercedCommittedValue - pendingCommit!!) <= 0.001f) {
+                    draftValue = coercedCommittedValue
+                    pendingCommit = null
+                }
+            }
+            abs(draftValue - coercedCommittedValue) > 0.001f -> {
+                draftValue = coercedCommittedValue
+            }
+        }
+    }
+
+    SettingsSliderRow(
+        text = textForValue(draftValue),
+        value = draftValue,
+        range = range,
+        onValueChange = { newValue ->
+            draftValue = newValue.coerceIn(range.start, range.endInclusive)
+        },
+        onValueChangeFinished = {
+            val valueToCommit = draftValue.coerceIn(range.start, range.endInclusive)
+            pendingCommit = valueToCommit
+            onValueCommitted(valueToCommit)
+        },
+        interactionSource = interactionSource
+    )
 }
 
 @Composable

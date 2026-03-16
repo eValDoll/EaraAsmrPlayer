@@ -98,6 +98,13 @@ fun AsmrAsyncImage(
     }
     val progress = crossfade.value.coerceIn(0f, 1f)
     Box {
+        // Keep a measurable anchor even when loading/empty UI intentionally renders nothing.
+        Box(
+            modifier = sizedModifier.graphicsLayer {
+                this.alpha = 0f
+                compositingStrategy = CompositingStrategy.ModulateAlpha
+            }
+        )
         if (state.value == AsmrAsyncImageState.Loading || (fadeIn && progress < 1f)) {
             val loadingAlpha = if (state.value == AsmrAsyncImageState.Loading) 1f else (1f - progress)
             val loadingModifier = if (loadingAlpha >= 0.999f) {
