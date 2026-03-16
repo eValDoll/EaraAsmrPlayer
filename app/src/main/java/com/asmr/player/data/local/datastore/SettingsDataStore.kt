@@ -2,6 +2,7 @@ package com.asmr.player.data.local.datastore
 
 import android.content.Context
 import androidx.datastore.preferences.core.*
+import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.settingsDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -21,7 +22,7 @@ class SettingsDataStore @Inject constructor(
     private val staticHueArgbDarkKey = intPreferencesKey("static_hue_argb_dark")
     private val coverBackgroundEnabledKey = booleanPreferencesKey("cover_background_enabled")
     private val coverBackgroundClarityKey = floatPreferencesKey("cover_background_clarity")
-    private val coverMotionEnabledKey = booleanPreferencesKey("cover_motion_enabled")
+    private val coverPreviewModeKey = stringPreferencesKey("cover_preview_mode")
     private val recentAlbumsPanelExpandedKey = booleanPreferencesKey("recent_albums_panel_expanded")
 
     val theme: Flow<String> = context.settingsDataStore.data.map { it[themeKey] ?: "system" }
@@ -42,7 +43,9 @@ class SettingsDataStore @Inject constructor(
     }
     val coverBackgroundEnabled: Flow<Boolean> = context.settingsDataStore.data.map { it[coverBackgroundEnabledKey] ?: true }
     val coverBackgroundClarity: Flow<Float> = context.settingsDataStore.data.map { it[coverBackgroundClarityKey] ?: 0.35f }
-    val coverMotionEnabled: Flow<Boolean> = context.settingsDataStore.data.map { it[coverMotionEnabledKey] ?: false }
+    val coverPreviewMode: Flow<CoverPreviewMode> = context.settingsDataStore.data.map {
+        CoverPreviewMode.fromStorageValue(it[coverPreviewModeKey])
+    }
     val recentAlbumsPanelExpanded: Flow<Boolean> = context.settingsDataStore.data.map { it[recentAlbumsPanelExpandedKey] ?: true }
 
     suspend fun setTheme(theme: String) {
@@ -78,8 +81,8 @@ class SettingsDataStore @Inject constructor(
         context.settingsDataStore.edit { it[coverBackgroundClarityKey] = clarity }
     }
 
-    suspend fun setCoverMotionEnabled(enabled: Boolean) {
-        context.settingsDataStore.edit { it[coverMotionEnabledKey] = enabled }
+    suspend fun setCoverPreviewMode(mode: CoverPreviewMode) {
+        context.settingsDataStore.edit { it[coverPreviewModeKey] = mode.storageValue }
     }
 
     suspend fun setRecentAlbumsPanelExpanded(expanded: Boolean) {

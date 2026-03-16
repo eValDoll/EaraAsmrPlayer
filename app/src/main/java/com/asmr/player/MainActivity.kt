@@ -123,6 +123,7 @@ import com.asmr.player.ui.player.QueueSheetContent
 import com.asmr.player.ui.player.SleepTimerSheetContent
 
 import com.asmr.player.data.local.datastore.SettingsDataStore
+import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.util.MessageManager
 import com.asmr.player.ui.common.NonTouchableAppMessageOverlay
 import com.asmr.player.ui.common.VisibleAppMessage
@@ -190,7 +191,7 @@ class MainActivity : ComponentActivity() {
             val staticHueArgb by settingsDataStore.staticHueArgb.collectAsState(initial = null)
             val coverBackgroundEnabled by settingsDataStore.coverBackgroundEnabled.collectAsState(initial = true)
             val coverBackgroundClarity by settingsDataStore.coverBackgroundClarity.collectAsState(initial = 0.35f)
-            val coverMotionEnabled by settingsDataStore.coverMotionEnabled.collectAsState(initial = false)
+            val coverPreviewMode by settingsDataStore.coverPreviewMode.collectAsState(initial = CoverPreviewMode.Disabled)
             val neutral = remember(mode) { neutralPaletteForMode(mode) }
             val cacheManager = remember(context.applicationContext) {
                 dagger.hilt.android.EntryPointAccessors.fromApplication(
@@ -323,7 +324,7 @@ class MainActivity : ComponentActivity() {
                         globalDynamicHueEnabled = globalDynamicHueEnabled,
                         coverBackgroundEnabled = coverBackgroundEnabled,
                         coverBackgroundClarity = coverBackgroundClarity,
-                        coverMotionEnabled = coverMotionEnabled,
+                        coverPreviewMode = coverPreviewMode,
                         forceImmersive = showSplash,
                         baseStaticHue = baseStaticHue
                     )
@@ -401,7 +402,7 @@ fun MainContainer(
     globalDynamicHueEnabled: Boolean,
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
-    coverMotionEnabled: Boolean,
+    coverPreviewMode: CoverPreviewMode,
     forceImmersive: Boolean,
     baseStaticHue: HuePalette
 ) {
@@ -542,9 +543,14 @@ fun MainContainer(
         scope.launch { drawerState.close() }
     }
 
+    val drawerGesturesEnabled = remember(currentRoute, coverPreviewMode) {
+        val dragPreviewRoute = currentRoute == "now_playing" || currentRoute == "lyrics"
+        !(dragPreviewRoute && coverPreviewMode == CoverPreviewMode.Drag)
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = true,
+        gesturesEnabled = drawerGesturesEnabled,
         drawerContent = {
             Box(
                 modifier = Modifier
@@ -1169,7 +1175,7 @@ fun MainContainer(
                             viewModel = playerViewModel,
                             coverBackgroundEnabled = coverBackgroundEnabled,
                             coverBackgroundClarity = coverBackgroundClarity,
-                            coverMotionEnabled = coverMotionEnabled
+                            coverPreviewMode = coverPreviewMode
                         )
                     } else {
                         NowPlayingScreen(
@@ -1194,7 +1200,7 @@ fun MainContainer(
                             viewModel = playerViewModel,
                             coverBackgroundEnabled = coverBackgroundEnabled,
                             coverBackgroundClarity = coverBackgroundClarity,
-                            coverMotionEnabled = coverMotionEnabled
+                            coverPreviewMode = coverPreviewMode
                         )
                     }
                 }
@@ -1206,7 +1212,7 @@ fun MainContainer(
                             playerViewModel = playerViewModel,
                             coverBackgroundEnabled = coverBackgroundEnabled,
                             coverBackgroundClarity = coverBackgroundClarity,
-                            coverMotionEnabled = coverMotionEnabled
+                            coverPreviewMode = coverPreviewMode
                         )
                     } else {
                         LyricsPage(
@@ -1215,7 +1221,7 @@ fun MainContainer(
                             playerViewModel = playerViewModel,
                             coverBackgroundEnabled = coverBackgroundEnabled,
                             coverBackgroundClarity = coverBackgroundClarity,
-                            coverMotionEnabled = coverMotionEnabled
+                            coverPreviewMode = coverPreviewMode
                         )
                     }
                 }
