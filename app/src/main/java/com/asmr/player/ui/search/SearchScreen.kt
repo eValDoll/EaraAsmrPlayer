@@ -1,58 +1,95 @@
 package com.asmr.player.ui.search
 
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.items as lazyItems
+import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
-import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
-import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
-import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.ViewModule
 import androidx.compose.material.icons.filled.WifiOff
-import androidx.compose.material3.*
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.domain.model.Album
-import com.asmr.player.ui.library.AlbumGridItem
-import com.asmr.player.ui.library.AlbumItem
-import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.background
-import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.CustomSearchBar
-import com.asmr.player.ui.common.ActionButton
-import androidx.compose.foundation.lazy.items as lazyItems
-
-import androidx.compose.runtime.rememberCoroutineScope
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.withAddedBottomPadding
-import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
+import com.asmr.player.ui.library.AlbumGridItem
+import com.asmr.player.ui.library.AlbumItem
 import com.asmr.player.ui.sidepanel.LandscapeRightPanelHost
+import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
+import com.asmr.player.ui.theme.AsmrTheme
 import kotlinx.coroutines.launch
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
-import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
 import kotlin.math.absoluteValue
-import androidx.compose.ui.draw.shadow
-import androidx.compose.foundation.border
 
-private enum class SearchResultViewMode { Grid, List }
+internal const val SEARCH_INPUT_TAG = "search_input"
+internal const val SEARCH_SCOPE_BUTTON_TAG = "search_scope_button"
+internal const val SEARCH_LANGUAGE_BUTTON_TAG = "search_language_button"
+internal const val SEARCH_SUBMIT_BUTTON_TAG = "search_submit_button"
+internal const val SEARCH_SUBMIT_SPINNER_TAG = "search_submit_spinner"
+internal const val SEARCH_PREV_BUTTON_TAG = "search_prev_button"
+internal const val SEARCH_NEXT_BUTTON_TAG = "search_next_button"
+internal const val SEARCH_PAGINATION_SPINNER_TAG = "search_pagination_spinner"
 
 private fun stableAlbumKey(album: Album): String {
     val id = album.rjCode.ifBlank { album.workId }.trim()
@@ -69,63 +106,92 @@ fun SearchScreen(
     viewModel: SearchViewModel = hiltViewModel()
 ) {
     var keyword by rememberSaveable { mutableStateOf("") }
-    val viewMode by viewModel.viewMode.collectAsState()
-    var scopeMenuExpanded by remember { mutableStateOf(false) }
-    var languageMenuExpanded by remember { mutableStateOf(false) }
     var purchasedOnly by rememberSaveable { mutableStateOf(false) }
     var selectedLocale by rememberSaveable { mutableStateOf("ja_JP") }
+    var selectedOrderName by rememberSaveable { mutableStateOf(SearchSortOption.Trend.name) }
+    val selectedOrder = remember(selectedOrderName) {
+        SearchSortOption.values().firstOrNull { it.name == selectedOrderName } ?: SearchSortOption.Trend
+    }
+    val viewMode by viewModel.viewMode.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
-    val currentPageKey = (uiState as? SearchUiState.Success)?.page ?: 0
+    val success = uiState as? SearchUiState.Success
+    val currentPageKey = success?.page ?: 0
     val listState = rememberSaveable(currentPageKey, saver = LazyListState.Saver) { LazyListState(0, 0) }
     val gridState = rememberSaveable(currentPageKey, saver = LazyStaggeredGridState.Saver) { LazyStaggeredGridState() }
     val colorScheme = AsmrTheme.colorScheme
     val scope = rememberCoroutineScope()
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
+
+    var keywordSyncedFromState by rememberSaveable { mutableStateOf(false) }
+    var optionsSyncedFromState by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         viewModel.bootstrap(keyword, purchasedOnly, selectedLocale)
     }
 
-    val success = uiState as? SearchUiState.Success
-    var syncedFromState by rememberSaveable { mutableStateOf(false) }
-    LaunchedEffect(success) {
-        if (syncedFromState) return@LaunchedEffect
-        val s = success ?: return@LaunchedEffect
-        keyword = s.keyword
-        purchasedOnly = s.purchasedOnly
-        val loc = s.locale
-        if (!loc.isNullOrBlank()) selectedLocale = loc
-        syncedFromState = true
+    LaunchedEffect(success?.keyword) {
+        val state = success ?: return@LaunchedEffect
+        if (!keywordSyncedFromState) {
+            keyword = state.keyword
+            keywordSyncedFromState = true
+        }
     }
-    
-    // 屏幕尺寸判断
-    val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
+
+    LaunchedEffect(success?.pendingRequest, success?.order, success?.purchasedOnly, success?.locale) {
+        val state = success ?: return@LaunchedEffect
+        if (!optionsSyncedFromState || state.pendingRequest == null) {
+            purchasedOnly = state.purchasedOnly
+            selectedLocale = state.locale ?: "ja_JP"
+            selectedOrderName = state.order.name
+            optionsSyncedFromState = true
+        }
+    }
+
+    val interactionLocked = success?.isBusy == true
+    val filterControlsLocked = success == null || interactionLocked
+    val searchSubmitLocked = uiState is SearchUiState.Loading || interactionLocked
+    val showSearchSpinner = success?.isSearching == true
+    val showPaginationSpinner = success?.isPaging == true
+    val highlightedPage = success?.page ?: 1
+    val canGoPrev = success?.canGoPrev == true && success?.isSearching != true
+    val canGoNext = success?.canGoNext == true && success?.isSearching != true
+
+    fun scrollResultsToTop() {
+        scope.launch {
+            runCatching { listState.scrollToItem(0) }
+            runCatching { gridState.scrollToItem(0) }
+        }
+    }
+
+    fun submitSearch() {
+        if (searchSubmitLocked) return
+        keyboardController?.hide()
+        viewModel.search(keyword)
+        scrollResultsToTop()
+    }
 
     val pullToRefreshState = rememberPullToRefreshState()
     val latestKeyword by rememberUpdatedState(keyword)
-    val latestPurchasedOnly by rememberUpdatedState(purchasedOnly)
-    val latestLocale by rememberUpdatedState(selectedLocale)
     LaunchedEffect(pullToRefreshState.isRefreshing) {
-        if (pullToRefreshState.isRefreshing) {
-            val state = uiState
-            if (state is SearchUiState.Success) {
-                if (state.isPaging) {
+        if (!pullToRefreshState.isRefreshing) return@LaunchedEffect
+        when (val state = uiState) {
+            is SearchUiState.Success -> {
+                if (state.isBusy) {
                     pullToRefreshState.endRefresh()
                 } else {
                     viewModel.refreshPage()
                 }
-            } else {
-                viewModel.setPurchasedOnly(latestPurchasedOnly)
-                viewModel.setLocale(latestLocale)
-                viewModel.search(latestKeyword)
             }
+
+            is SearchUiState.Loading -> Unit
+            else -> viewModel.search(latestKeyword)
         }
     }
     LaunchedEffect(uiState) {
         if (!pullToRefreshState.isRefreshing) return@LaunchedEffect
-        val state = uiState
-        val canEnd = when (state) {
-            is SearchUiState.Success -> !state.isPaging
-            is SearchUiState.Error -> true
+        val canEnd = when (val state = uiState) {
+            is SearchUiState.Success -> !state.isBusy
             is SearchUiState.Loading -> false
             else -> true
         }
@@ -144,22 +210,22 @@ fun SearchScreen(
                 .fillMaxSize(),
             topPanel = {
                 RecentAlbumsPanel(
-                    onOpenAlbum = { a ->
+                    onOpenAlbum = { album ->
                         onAlbumClick(
                             Album(
-                                id = a.id,
-                                title = a.title,
-                                path = a.path,
-                                localPath = a.localPath,
-                                downloadPath = a.downloadPath,
-                                circle = a.circle,
-                                cv = a.cv,
-                                coverUrl = a.coverUrl,
-                                coverPath = a.coverPath,
-                                coverThumbPath = a.coverThumbPath,
-                                workId = a.workId,
-                                rjCode = a.rjCode,
-                                description = a.description
+                                id = album.id,
+                                title = album.title,
+                                path = album.path,
+                                localPath = album.localPath,
+                                downloadPath = album.downloadPath,
+                                circle = album.circle,
+                                cv = album.cv,
+                                coverUrl = album.coverUrl,
+                                coverPath = album.coverPath,
+                                coverThumbPath = album.coverThumbPath,
+                                workId = album.workId,
+                                rjCode = album.rjCode,
+                                description = album.description
                             )
                         )
                     },
@@ -173,9 +239,7 @@ fun SearchScreen(
                 contentAlignment = if (hasRightPanel) Alignment.TopStart else Alignment.TopCenter
             ) {
                 Box(
-                    modifier = if (isCompact) {
-                        Modifier.fillMaxSize()
-                    } else if (hasRightPanel) {
+                    modifier = if (isCompact || hasRightPanel) {
                         Modifier.fillMaxSize()
                     } else {
                         Modifier
@@ -217,7 +281,11 @@ fun SearchScreen(
                                             key = { album -> stableAlbumKey(album) },
                                             contentType = { "album" }
                                         ) { album ->
-                                            AlbumItem(album = album, onClick = { onAlbumClick(album) }, emptyCoverUseShimmer = true)
+                                            AlbumItem(
+                                                album = album,
+                                                onClick = { onAlbumClick(album) },
+                                                emptyCoverUseShimmer = true
+                                            )
                                         }
                                     }
                                 } else {
@@ -225,20 +293,21 @@ fun SearchScreen(
                                         columns = StaggeredGridCells.Adaptive(150.dp),
                                         state = gridState,
                                         modifier = Modifier.fillMaxSize(),
-                                        contentPadding = PaddingValues(top = topPadding, start = 16.dp, end = 16.dp, bottom = 16.dp)
-                                            .withAddedBottomPadding(LocalBottomOverlayPadding.current),
+                                        contentPadding = PaddingValues(
+                                            top = topPadding,
+                                            start = 16.dp,
+                                            end = 16.dp,
+                                            bottom = 16.dp
+                                        ).withAddedBottomPadding(LocalBottomOverlayPadding.current),
                                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                                         verticalItemSpacing = 16.dp
                                     ) {
                                         items(
                                             state.results.size,
-                                            key = { idx ->
-                                                val a = state.results[idx]
-                                                stableAlbumKey(a)
-                                            },
+                                            key = { index -> stableAlbumKey(state.results[index]) },
                                             contentType = { "albumGrid" }
-                                        ) { idx ->
-                                            val album = state.results[idx]
+                                        ) { index ->
+                                            val album = state.results[index]
                                             AlbumGridItem(
                                                 album = album,
                                                 onClick = { onAlbumClick(album) },
@@ -289,178 +358,72 @@ fun SearchScreen(
                             modifier = Modifier
                                 .align(Alignment.TopCenter)
                                 .padding(top = topPadding)
-                                .then(if (pullToRefreshState.progress > 0 || pullToRefreshState.isRefreshing) Modifier else Modifier.size(0.dp))
+                                .then(
+                                    if (pullToRefreshState.progress > 0 || pullToRefreshState.isRefreshing) {
+                                        Modifier
+                                    } else {
+                                        Modifier.size(0.dp)
+                                    }
+                                )
                         )
                     }
 
                     Column(modifier = Modifier.align(Alignment.TopCenter)) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            CustomSearchBar(
-                                value = keyword,
-                                onValueChange = { keyword = it },
-                                placeholder = "搜索专辑、社团、CV...",
-                                modifier = Modifier.weight(1f),
-                                leadingIcon = {
-                                val currentOrder = success?.order ?: SearchSortOption.Trend
-                                val label = if (purchasedOnly) "仅已购" else currentOrder.label
-                                Box {
-                                    TextButton(
-                                        onClick = { scopeMenuExpanded = true },
-                                        enabled = success != null && !(success.isPaging),
-                                        modifier = Modifier.height(32.dp),
-                                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                                        colors = ButtonDefaults.textButtonColors(contentColor = colorScheme.primary)
-                                    ) {
-                                        Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                                    }
-                                    DropdownMenu(
-                                        expanded = scopeMenuExpanded,
-                                        onDismissRequest = { scopeMenuExpanded = false },
-                                        modifier = Modifier.background(colorScheme.surface)
-                                    ) {
-                                        DropdownMenuItem(
-                                            text = { Text("仅已购", color = colorScheme.textPrimary) },
-                                            onClick = {
-                                                scopeMenuExpanded = false
-                                                purchasedOnly = true
-                                                viewModel.setPurchasedOnly(true)
-                                            }
-                                        )
-                                        HorizontalDivider(
-                                            modifier = Modifier.padding(horizontal = 8.dp),
-                                            thickness = 0.5.dp,
-                                            color = colorScheme.textSecondary.copy(alpha = 0.2f)
-                                        )
-                                        SearchSortOption.values().forEachIndexed { index, option ->
-                                            if (index > 0) {
-                                                HorizontalDivider(
-                                                    modifier = Modifier.padding(horizontal = 8.dp),
-                                                    thickness = 0.5.dp,
-                                                    color = colorScheme.textSecondary.copy(alpha = 0.2f)
-                                                )
-                                            }
-                                            DropdownMenuItem(
-                                                text = { Text(option.label, color = colorScheme.textPrimary) },
-                                                onClick = {
-                                                    scopeMenuExpanded = false
-                                                    purchasedOnly = false
-                                                    viewModel.setPurchasedOnly(false)
-                                                    viewModel.setOrder(option)
-                                                }
-                                            )
-                                        }
-                                    }
-                                }
+                        SearchToolbar(
+                            keyword = keyword,
+                            onKeywordChange = { keyword = it },
+                            selectedOrder = selectedOrder,
+                            purchasedOnly = purchasedOnly,
+                            selectedLocale = selectedLocale,
+                            filterControlsLocked = filterControlsLocked,
+                            searchSubmitLocked = searchSubmitLocked,
+                            showSearchSpinner = showSearchSpinner,
+                            onSearchSubmit = ::submitSearch,
+                            onPurchasedOnlySelected = {
+                                purchasedOnly = true
+                                viewModel.updateSearchOptions(
+                                    order = selectedOrder,
+                                    purchasedOnly = true,
+                                    locale = selectedLocale
+                                )
                             },
-                            trailingIcon = {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    val languageLabel = when (selectedLocale.trim()) {
-                                        "zh_CN" -> "简中"
-                                        "zh_TW" -> "繁中"
-                                        else -> "日语"
-                                    }
-                                    Box {
-                                        TextButton(
-                                            onClick = { languageMenuExpanded = true },
-                                            enabled = success != null && !(success.isPaging),
-                                            modifier = Modifier.height(32.dp),
-                                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                                            colors = ButtonDefaults.textButtonColors(contentColor = colorScheme.primary)
-                                        ) {
-                                            Text(languageLabel, style = MaterialTheme.typography.labelSmall, maxLines = 1)
-                                        }
-                                        DropdownMenu(
-                                            expanded = languageMenuExpanded,
-                                            onDismissRequest = { languageMenuExpanded = false },
-                                            modifier = Modifier.background(colorScheme.surface)
-                                        ) {
-                                            DropdownMenuItem(
-                                                text = { Text("日语", color = colorScheme.textPrimary) },
-                                                onClick = {
-                                                    languageMenuExpanded = false
-                                                    purchasedOnly = false
-                                                    selectedLocale = "ja_JP"
-                                                    viewModel.setPurchasedOnly(false)
-                                                    viewModel.setLocale("ja_JP")
-                                                }
-                                            )
-                                            HorizontalDivider(
-                                                modifier = Modifier.padding(horizontal = 8.dp),
-                                                thickness = 0.5.dp,
-                                                color = colorScheme.textSecondary.copy(alpha = 0.2f)
-                                            )
-                                            DropdownMenuItem(
-                                                text = { Text("简中", color = colorScheme.textPrimary) },
-                                                onClick = {
-                                                    languageMenuExpanded = false
-                                                    purchasedOnly = false
-                                                    selectedLocale = "zh_CN"
-                                                    viewModel.setPurchasedOnly(false)
-                                                    viewModel.setLocale("zh_CN")
-                                                }
-                                            )
-                                            HorizontalDivider(
-                                                modifier = Modifier.padding(horizontal = 8.dp),
-                                                thickness = 0.5.dp,
-                                                color = colorScheme.textSecondary.copy(alpha = 0.2f)
-                                            )
-                                            DropdownMenuItem(
-                                                text = { Text("繁中", color = colorScheme.textPrimary) },
-                                                onClick = {
-                                                    languageMenuExpanded = false
-                                                    purchasedOnly = false
-                                                    selectedLocale = "zh_TW"
-                                                    viewModel.setPurchasedOnly(false)
-                                                    viewModel.setLocale("zh_TW")
-                                                }
-                                            )
-                                        }
-                                    }
-                                    IconButton(
-                                        onClick = {
-                                            viewModel.search(keyword)
-                                            scope.launch {
-                                                listState.scrollToItem(0)
-                                                gridState.scrollToItem(0)
-                                            }
-                                        },
-                                        modifier = Modifier.size(32.dp)
-                                    ) {
-                                        Icon(Icons.Default.Search, contentDescription = null, tint = colorScheme.primary)
-                                    }
-                                }
+                            onOrderSelected = { order ->
+                                selectedOrderName = order.name
+                                purchasedOnly = false
+                                viewModel.updateSearchOptions(
+                                    order = order,
+                                    purchasedOnly = false,
+                                    locale = selectedLocale
+                                )
+                            },
+                            onLocaleSelected = { locale ->
+                                selectedLocale = locale
+                                purchasedOnly = false
+                                viewModel.updateSearchOptions(
+                                    order = selectedOrder,
+                                    purchasedOnly = false,
+                                    locale = locale
+                                )
                             }
                         )
 
                         if (rightPanelToggle != null) {
-                            Spacer(modifier = Modifier.width(8.dp))
+                            Spacer(modifier = Modifier.height(8.dp))
                             rightPanelToggle(Modifier.size(50.dp))
                         }
-                    }
-
-                    if (success != null) {
+                        if (success != null) {
                             SearchPaginationHeader(
-                                page = success.page,
-                                canGoPrev = success.canGoPrev,
-                                canGoNext = success.canGoNext,
-                                isPaging = success.isPaging,
+                                page = highlightedPage,
+                                canGoPrev = canGoPrev,
+                                canGoNext = canGoNext,
+                                controlsLocked = interactionLocked,
+                                showPagingSpinner = showPaginationSpinner,
                                 onPrev = {
-                                    scope.launch {
-                                        listState.scrollToItem(0)
-                                        gridState.scrollToItem(0)
-                                    }
+                                    scrollResultsToTop()
                                     viewModel.prevPage()
                                 },
                                 onNext = {
-                                    scope.launch {
-                                        listState.scrollToItem(0)
-                                        gridState.scrollToItem(0)
-                                    }
+                                    scrollResultsToTop()
                                     viewModel.nextPage()
                                 }
                             )
@@ -473,17 +436,192 @@ fun SearchScreen(
 }
 
 @Composable
-private fun SearchPaginationHeader(
+internal fun SearchToolbar(
+    keyword: String,
+    onKeywordChange: (String) -> Unit,
+    selectedOrder: SearchSortOption,
+    purchasedOnly: Boolean,
+    selectedLocale: String,
+    filterControlsLocked: Boolean,
+    searchSubmitLocked: Boolean,
+    showSearchSpinner: Boolean,
+    onSearchSubmit: () -> Unit,
+    onPurchasedOnlySelected: () -> Unit,
+    onOrderSelected: (SearchSortOption) -> Unit,
+    onLocaleSelected: (String) -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    var scopeMenuExpanded by remember { mutableStateOf(false) }
+    var languageMenuExpanded by remember { mutableStateOf(false) }
+
+    LaunchedEffect(filterControlsLocked, searchSubmitLocked) {
+        if (filterControlsLocked || searchSubmitLocked) {
+            scopeMenuExpanded = false
+            languageMenuExpanded = false
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CustomSearchBar(
+            value = keyword,
+            onValueChange = onKeywordChange,
+            placeholder = "搜索专辑、社团、CV...",
+            modifier = Modifier
+                .weight(1f)
+                .testTag(SEARCH_INPUT_TAG),
+            leadingIcon = {
+                val label = if (purchasedOnly) "仅已购" else selectedOrder.label
+                Box {
+                    TextButton(
+                        onClick = { scopeMenuExpanded = true },
+                        enabled = !filterControlsLocked,
+                        modifier = Modifier
+                            .height(32.dp)
+                            .testTag(SEARCH_SCOPE_BUTTON_TAG),
+                        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = colorScheme.primary
+                        )
+                    ) {
+                        Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                    }
+                    DropdownMenu(
+                        expanded = scopeMenuExpanded,
+                        onDismissRequest = { scopeMenuExpanded = false },
+                        modifier = Modifier.background(colorScheme.surface)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("仅已购", color = colorScheme.textPrimary) },
+                            onClick = {
+                                scopeMenuExpanded = false
+                                onPurchasedOnlySelected()
+                            }
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                            thickness = 0.5.dp,
+                            color = colorScheme.textSecondary.copy(alpha = 0.2f)
+                        )
+                        SearchSortOption.values().forEachIndexed { index, option ->
+                            if (index > 0) {
+                                HorizontalDivider(
+                                    modifier = Modifier.padding(horizontal = 8.dp),
+                                    thickness = 0.5.dp,
+                                    color = colorScheme.textSecondary.copy(alpha = 0.2f)
+                                )
+                            }
+                            DropdownMenuItem(
+                                text = { Text(option.label, color = colorScheme.textPrimary) },
+                                onClick = {
+                                    scopeMenuExpanded = false
+                                    onOrderSelected(option)
+                                }
+                            )
+                        }
+                    }
+                }
+            },
+            trailingIcon = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    val languageLabel = when (selectedLocale.trim()) {
+                        "zh_CN" -> "简中"
+                        "zh_TW" -> "繁中"
+                        else -> "日语"
+                    }
+                    Box {
+                        TextButton(
+                            onClick = { languageMenuExpanded = true },
+                            enabled = !filterControlsLocked,
+                            modifier = Modifier
+                                .height(32.dp)
+                                .testTag(SEARCH_LANGUAGE_BUTTON_TAG),
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                            colors = ButtonDefaults.textButtonColors(
+                                contentColor = colorScheme.primary
+                            )
+                        ) {
+                            Text(languageLabel, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                        }
+                        DropdownMenu(
+                            expanded = languageMenuExpanded,
+                            onDismissRequest = { languageMenuExpanded = false },
+                            modifier = Modifier.background(colorScheme.surface)
+                        ) {
+                            listOf(
+                                "ja_JP" to "日语",
+                                "zh_CN" to "简中",
+                                "zh_TW" to "繁中"
+                            ).forEachIndexed { index, (locale, label) ->
+                                if (index > 0) {
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(horizontal = 8.dp),
+                                        thickness = 0.5.dp,
+                                        color = colorScheme.textSecondary.copy(alpha = 0.2f)
+                                    )
+                                }
+                                DropdownMenuItem(
+                                    text = { Text(label, color = colorScheme.textPrimary) },
+                                    onClick = {
+                                        languageMenuExpanded = false
+                                        onLocaleSelected(locale)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    IconButton(
+                        onClick = onSearchSubmit,
+                        enabled = !searchSubmitLocked,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .testTag(SEARCH_SUBMIT_BUTTON_TAG)
+                    ) {
+                        if (showSearchSpinner) {
+                            CircularProgressIndicator(
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .testTag(SEARCH_SUBMIT_SPINNER_TAG),
+                                strokeWidth = 2.dp,
+                                color = colorScheme.primary
+                            )
+                        } else {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = null,
+                                tint = colorScheme.primary
+                            )
+                        }
+                    }
+                }
+            },
+            keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                imeAction = ImeAction.Search
+            ),
+            keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                onSearch = { onSearchSubmit() }
+            )
+        )
+    }
+}
+
+@Composable
+internal fun SearchPaginationHeader(
     page: Int,
     canGoPrev: Boolean,
     canGoNext: Boolean,
-    isPaging: Boolean,
+    controlsLocked: Boolean,
+    showPagingSpinner: Boolean,
     onPrev: () -> Unit,
     onNext: () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val isDark = colorScheme.isDark
-    
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -505,42 +643,76 @@ private fun SearchPaginationHeader(
                             color = Color.White.copy(alpha = 0.2f),
                             shape = RoundedCornerShape(14.dp)
                         )
-                    } else Modifier
+                    } else {
+                        Modifier
+                    }
                 )
                 .clip(RoundedCornerShape(14.dp))
                 .background(if (isDark) colorScheme.surface else Color.White)
-                .padding(horizontal = 8.dp, vertical = 2.dp),
+                .padding(horizontal = 8.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(
                 onClick = onPrev,
-                enabled = canGoPrev && !isPaging,
-                modifier = Modifier.size(36.dp)
+                enabled = canGoPrev && !controlsLocked,
+                modifier = Modifier
+                    .size(36.dp)
+                    .testTag(SEARCH_PREV_BUTTON_TAG)
             ) {
                 Icon(
-                    Icons.AutoMirrored.Filled.ArrowBack, 
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                     contentDescription = null,
-                    tint = if (canGoPrev && !isPaging) colorScheme.primary else (if (isDark) colorScheme.textTertiary else Color.Gray)
+                    tint = if (canGoPrev && !controlsLocked) {
+                        colorScheme.primary
+                    } else if (isDark) {
+                        colorScheme.textTertiary
+                    } else {
+                        Color.Gray
+                    }
                 )
             }
+
             Spacer(modifier = Modifier.weight(1f))
-            Row(verticalAlignment = Alignment.CenterVertically) {
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 Text(
-                    text = "第 $page 页", 
+                    text = "第 ${page.coerceAtLeast(1)} 页",
                     style = MaterialTheme.typography.bodySmall,
                     color = if (isDark) colorScheme.textPrimary else Color.Black
                 )
+                if (showPagingSpinner) {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .size(16.dp)
+                            .testTag(SEARCH_PAGINATION_SPINNER_TAG),
+                        strokeWidth = 2.dp,
+                        color = colorScheme.primary
+                    )
+                }
             }
+
             Spacer(modifier = Modifier.weight(1f))
+
             IconButton(
                 onClick = onNext,
-                enabled = canGoNext && !isPaging,
-                modifier = Modifier.size(36.dp)
+                enabled = canGoNext && !controlsLocked,
+                modifier = Modifier
+                    .size(36.dp)
+                    .testTag(SEARCH_NEXT_BUTTON_TAG)
             ) {
                 Icon(
-                    Icons.AutoMirrored.Filled.ArrowForward, 
+                    imageVector = Icons.AutoMirrored.Filled.ArrowForward,
                     contentDescription = null,
-                    tint = if (canGoNext && !isPaging) colorScheme.primary else (if (isDark) colorScheme.textTertiary else Color.Gray)
+                    tint = if (canGoNext && !controlsLocked) {
+                        colorScheme.primary
+                    } else if (isDark) {
+                        colorScheme.textTertiary
+                    } else {
+                        Color.Gray
+                    }
                 )
             }
         }

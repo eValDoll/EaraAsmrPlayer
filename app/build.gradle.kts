@@ -104,6 +104,7 @@ android {
         kotlinCompilerExtensionVersion = "1.5.8"
     }
     testOptions {
+        unitTests.isIncludeAndroidResources = true
         unitTests.all {
             it.systemProperty("asmr.latency", (project.findProperty("asmr.latency") as? String).orEmpty())
         }
@@ -183,7 +184,11 @@ dependencies {
     implementation("androidx.palette:palette-ktx:1.0.0")
 
     // Unit Testing
+    testImplementation(platform("androidx.compose:compose-bom:2024.02.00"))
     testImplementation("junit:junit:4.13.2")
+    testImplementation("androidx.test.ext:junit:1.1.5")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    testImplementation("org.robolectric:robolectric:4.11.1")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.02.00"))
