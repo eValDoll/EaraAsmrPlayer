@@ -10,6 +10,7 @@ keystore.properties
 *.keystore
 
 .gradle/
+.gradle-home
 **/build/
 .build_asmr_player_android/
 captures/
