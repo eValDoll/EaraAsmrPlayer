@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
@@ -27,6 +28,7 @@ fun CoverArtworkBackground(
     clarity: Float,
     overlayBaseColor: Color,
     tintBaseColor: Color,
+    artworkAlignment: Alignment = Alignment.Center,
     isDark: Boolean = true
 ) {
     if (!enabled) return
@@ -62,6 +64,7 @@ fun CoverArtworkBackground(
             contentDescription = null,
             modifier = Modifier.fillMaxSize().then(artworkModifier),
             contentScale = ContentScale.Crop,
+            alignment = artworkAlignment,
             alpha = style.artworkAlpha,
             loading = {},
         )
