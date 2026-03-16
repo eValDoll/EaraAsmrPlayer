@@ -71,6 +71,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.ui.PlayerView
 import com.asmr.player.R
+import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.ui.common.EqualizerPanel
@@ -103,7 +104,7 @@ fun NowPlayingScreen(
     viewModel: PlayerViewModel,
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
-    coverMotionEnabled: Boolean,
+    coverPreviewMode: CoverPreviewMode,
     lyricsViewModel: LyricsViewModel = hiltViewModel()
 ) {
     val playback by viewModel.playback.collectAsState()
@@ -198,11 +199,21 @@ fun NowPlayingScreen(
     val useSplitLayout = heightClass != WindowHeightSizeClass.Compact && isLandscape
     val player = viewModel.playerOrNull()
     val videoAspectRatio = rememberPlayerVideoAspectRatio(player)
+    val useDragPreview = coverPreviewMode == CoverPreviewMode.Drag && !isVideo
+    val useMotionPreview = coverPreviewMode == CoverPreviewMode.Motion && !isVideo
     val coverMotionState = rememberCoverMotionState(
-        enabled = coverMotionEnabled && !isVideo,
+        enabled = useMotionPreview,
         resetKey = item?.mediaId
     )
-    val coverMotionAlignment = coverMotionState.toAlignment()
+    val coverDragPreviewState = rememberCoverDragPreviewState(
+        enabled = useDragPreview,
+        resetKey = item?.mediaId
+    )
+    val coverPreviewAlignment = when {
+        useDragPreview -> coverDragPreviewState.toAlignment()
+        useMotionPreview -> coverMotionState.toAlignment()
+        else -> Alignment.Center
+    }
 
     Box(
         modifier = Modifier.fillMaxSize()
@@ -221,7 +232,7 @@ fun NowPlayingScreen(
                 clarity = coverBackgroundClarity,
                 overlayBaseColor = colorScheme.background,
                 tintBaseColor = accentColor,
-                artworkAlignment = coverMotionAlignment,
+                artworkAlignment = coverPreviewAlignment,
                 isDark = colorScheme.isDark
             )
         }
@@ -308,7 +319,11 @@ fun NowPlayingScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Box(modifier = Modifier.widthIn(max = 420.dp).aspectRatio(if (isVideo) videoAspectRatio else 1f)) {
+                        Box(
+                            modifier = Modifier
+                                .widthIn(max = 420.dp)
+                                .aspectRatio(if (isVideo) videoAspectRatio else 1f)
+                        ) {
                             ArtworkBox(
                                 isVideo = isVideo,
                                 metadata = metadata,
@@ -317,7 +332,9 @@ fun NowPlayingScreen(
                                 edgeBlendEnabled = false,
                                 edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
                                 videoBackdropColor = videoBackdropColor,
-                                artworkAlignment = coverMotionAlignment
+                                artworkAlignment = coverPreviewAlignment,
+                                dragPreviewEnabled = useDragPreview,
+                                dragPreviewState = coverDragPreviewState
                             )
                         }
                         
@@ -531,7 +548,9 @@ fun NowPlayingScreen(
                                 edgeBlendEnabled = false,
                                 edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
                                 videoBackdropColor = videoBackdropColor,
-                                artworkAlignment = coverMotionAlignment
+                                artworkAlignment = coverPreviewAlignment,
+                                dragPreviewEnabled = useDragPreview,
+                                dragPreviewState = coverDragPreviewState
                             )
                         }
 
@@ -779,7 +798,9 @@ fun NowPlayingScreen(
                                 edgeBlendEnabled = false,
                                 edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
                                 videoBackdropColor = videoBackdropColor,
-                                artworkAlignment = coverMotionAlignment
+                                artworkAlignment = coverPreviewAlignment,
+                                dragPreviewEnabled = useDragPreview,
+                                dragPreviewState = coverDragPreviewState
                             )
                         }
                     }
@@ -1064,13 +1085,21 @@ private fun ArtworkBox(
     edgeBlendEnabled: Boolean,
     edgeBlendColor: Color,
     videoBackdropColor: Color,
-    artworkAlignment: Alignment = Alignment.Center
+    artworkAlignment: Alignment = Alignment.Center,
+    dragPreviewEnabled: Boolean = false,
+    dragPreviewState: CoverDragPreviewState? = null,
+    modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(28.dp)
     val hasArtwork = metadata?.artworkUri != null
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
+            .coverDragPreviewGesture(
+                enabled = dragPreviewEnabled && dragPreviewState != null,
+                state = dragPreviewState ?: CoverDragPreviewState(),
+                minPointers = 2
+            )
             .clip(shape)
             .background(if (isVideo) videoBackdropColor else Color.Transparent)
             .then(if (hasArtwork && !edgeBlendEnabled) Modifier.shadow(12.dp, shape) else Modifier)

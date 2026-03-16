@@ -57,6 +57,7 @@ import com.asmr.player.ui.common.rememberDominantColorCenterWeighted
 
 import android.content.res.Configuration
 import androidx.compose.ui.platform.LocalConfiguration
+import com.asmr.player.data.settings.CoverPreviewMode
 
 @Composable
 fun LyricsPage(
@@ -65,7 +66,7 @@ fun LyricsPage(
     playerViewModel: PlayerViewModel,
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
-    coverMotionEnabled: Boolean,
+    coverPreviewMode: CoverPreviewMode,
     viewModel: LyricsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -84,19 +85,38 @@ fun LyricsPage(
     )
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val useDragPreview = coverBackgroundEnabled && coverPreviewMode == CoverPreviewMode.Drag
+    val useMotionPreview = coverBackgroundEnabled && coverPreviewMode == CoverPreviewMode.Motion
     val coverMotionState = rememberCoverMotionState(
-        enabled = coverBackgroundEnabled && coverMotionEnabled,
+        enabled = useMotionPreview,
         resetKey = playback.currentMediaItem?.mediaId
     )
+    val coverDragPreviewState = rememberCoverDragPreviewState(
+        enabled = useDragPreview,
+        resetKey = playback.currentMediaItem?.mediaId
+    )
+    val artworkAlignment = when {
+        useDragPreview -> coverDragPreviewState.toAlignment()
+        useMotionPreview -> coverMotionState.toAlignment()
+        else -> Alignment.Center
+    }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .coverDragPreviewGesture(
+                enabled = useDragPreview,
+                state = coverDragPreviewState,
+                minPointers = 2
+            )
+    ) {
         CoverArtworkBackground(
             artworkModel = artwork,
             enabled = coverBackgroundEnabled,
             clarity = coverBackgroundClarity,
             overlayBaseColor = colorScheme.background,
             tintBaseColor = dominantColor,
-            artworkAlignment = coverMotionState.toAlignment(),
+            artworkAlignment = artworkAlignment,
             isDark = colorScheme.isDark
         )
 
