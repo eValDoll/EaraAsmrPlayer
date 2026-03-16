@@ -2,7 +2,6 @@ package com.asmr.player.service
 
 import android.app.PendingIntent
 import android.content.Intent
-import android.media.audiofx.Equalizer
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.media.AudioManager
@@ -38,6 +37,7 @@ import com.asmr.player.playback.AsmrRenderersFactory
 import com.asmr.player.playback.BalanceAudioProcessor
 import com.asmr.player.playback.ChannelModeAudioProcessor
 import com.asmr.player.playback.FadingPlayer
+import com.asmr.player.playback.GraphicEqualizerAudioProcessor
 import com.asmr.player.playback.StereoFftAnalyzer
 import com.asmr.player.playback.StereoOrbitAudioProcessor
 import com.asmr.player.playback.StereoPcmRingBuffer
@@ -70,7 +70,7 @@ class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
     private lateinit var exoPlayer: ExoPlayer
-    private var equalizer: Equalizer? = null
+    private val graphicEqualizerAudioProcessor = GraphicEqualizerAudioProcessor()
     private val balanceAudioProcessor = BalanceAudioProcessor()
     private val stereoOrbitAudioProcessor = StereoOrbitAudioProcessor()
     private val channelModeAudioProcessor = ChannelModeAudioProcessor()
@@ -93,7 +93,6 @@ class PlaybackService : MediaSessionService() {
     private val sessionSettings = MutableStateFlow<EqualizerSettings?>(null)
     private var effectApplyJob: Job? = null
     private var sleepTimerJob: Job? = null
-    @Volatile private var currentAudioSessionId: Int = 0
     @Volatile private var lastEffectiveSettings: EqualizerSettings = EqualizerSettings()
     
     private var currentLyrics: List<SubtitleEntry> = emptyList()
@@ -191,6 +190,7 @@ class PlaybackService : MediaSessionService() {
             .setRenderersFactory(
                 AsmrRenderersFactory(
                     this,
+                    graphicEqualizerAudioProcessor,
                     balanceAudioProcessor,
                     stereoOrbitAudioProcessor,
                     channelModeAudioProcessor,
@@ -312,25 +312,13 @@ class PlaybackService : MediaSessionService() {
         setMediaNotificationProvider(LyricMediaNotificationProvider(this))
         overlay = FloatingLyricsOverlay(this)
         
-        // Basic Equalizer setup
         exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
-            override fun onAudioSessionIdChanged(audioSessionId: Int) {
-                if (audioSessionId != C.AUDIO_SESSION_ID_UNSET && audioSessionId != 0) {
-                    Log.i("PlaybackService", "AudioSessionId changed: $audioSessionId")
-                    setupEqualizer(audioSessionId)
-                }
-            }
-
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 StereoSpectrumBus.playbackActive = isPlaying
                 if (isPlaying) {
                     markCurrentAlbumPlayed()
                 } else {
                     serviceScope.launch { persistCurrentTrackProgressIfNeeded(force = true) }
-                }
-                val sid = exoPlayer.audioSessionId
-                if (sid != C.AUDIO_SESSION_ID_UNSET && sid != 0 && sid != currentAudioSessionId) {
-                    setupEqualizer(sid)
                 }
             }
 
@@ -350,11 +338,6 @@ class PlaybackService : MediaSessionService() {
             }
         })
         StereoSpectrumBus.playbackActive = exoPlayer.isPlaying
-        val currentSessionId = exoPlayer.audioSessionId
-        if (currentSessionId != C.AUDIO_SESSION_ID_UNSET && currentSessionId != 0) {
-            Log.i("PlaybackService", "Initial AudioSessionId: $currentSessionId")
-            setupEqualizer(currentSessionId)
-        }
 
         statsJob = serviceScope.launch {
             while (isActive) {
@@ -625,19 +608,6 @@ class PlaybackService : MediaSessionService() {
         return rawDelay.coerceIn(200L, maxDelay)
     }
 
-    private fun setupEqualizer(audioSessionId: Int) {
-        try {
-            currentAudioSessionId = audioSessionId
-            equalizer?.release()
-            equalizer = Equalizer(0, audioSessionId).apply {
-                enabled = true
-            }
-            applyEffectsToCurrentSession(lastEffectiveSettings)
-        } catch (e: Exception) {
-            Log.e("PlaybackService", "setupEqualizer failed (sessionId=$audioSessionId)", e)
-        }
-    }
-
     private fun startEffectLoops() {
         effectApplyJob?.cancel()
         effectApplyJob = serviceScope.launch {
@@ -645,6 +615,8 @@ class PlaybackService : MediaSessionService() {
                 session ?: global
             }.collect { settings ->
                 lastEffectiveSettings = settings
+                graphicEqualizerAudioProcessor.setEnabled(settings.enabled)
+                graphicEqualizerAudioProcessor.setBandLevels(settings.bandLevels)
                 val stereoEnabled = settings.stereoEnabled
                 val panActive = stereoEnabled && (settings.orbitEnabled || settings.orbitAzimuthDeg != 0f)
                 balanceAudioProcessor.setBalance(if (stereoEnabled && !panActive) settings.balance else 0f)
@@ -658,19 +630,6 @@ class PlaybackService : MediaSessionService() {
                 stereoOrbitAudioProcessor.setOrbitSpeedDegPerSec(settings.orbitSpeed)
                 stereoOrbitAudioProcessor.setDistance(settings.orbitDistance)
                 stereoOrbitAudioProcessor.setAzimuthDeg(settings.orbitAzimuthDeg)
-
-                applyEffectsToCurrentSession(settings)
-            }
-        }
-    }
-
-    private fun applyEffectsToCurrentSession(settings: EqualizerSettings) {
-        val eq = equalizer
-        if (eq != null) {
-            runCatching {
-                audioEffectController.applyTo(eq, settings)
-            }.onFailure { e ->
-                Log.w("PlaybackService", "apply equalizer failed (sessionId=$currentAudioSessionId)", e)
             }
         }
     }
@@ -696,7 +655,6 @@ class PlaybackService : MediaSessionService() {
         effectApplyJob?.cancel()
         sleepTimerJob?.cancel()
         spectrumAnalyzer.stop()
-        equalizer?.release()
         mediaSession?.run {
             player.release()
             release()
