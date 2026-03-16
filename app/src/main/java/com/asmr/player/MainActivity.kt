@@ -142,6 +142,11 @@ import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 
+private enum class OverlaySheet {
+    Queue,
+    SleepTimer
+}
+
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     @Inject
@@ -254,8 +259,7 @@ class MainActivity : ComponentActivity() {
                 state.value
             } else baseStaticHue
 
-            var showQueue by remember { mutableStateOf(false) }
-            var showSleepTimer by remember { mutableStateOf(false) }
+            var overlaySheet by remember { mutableStateOf<OverlaySheet?>(null) }
 
             val visibleMessages = remember { mutableStateListOf<VisibleAppMessage>() }
             val dismissJobs = remember { linkedMapOf<Long, kotlinx.coroutines.Job>() }
@@ -309,8 +313,8 @@ class MainActivity : ComponentActivity() {
                         settingsDataStore = settingsDataStore,
                         recentAlbumsPanelExpandedInitial = recentAlbumsPanelExpandedInitial,
                         startRouteFromIntent = startRouteFromIntent,
-                        onShowQueue = { showQueue = true },
-                        onShowSleepTimer = { showSleepTimer = true },
+                        onShowQueue = { overlaySheet = OverlaySheet.Queue },
+                        onShowSleepTimer = { overlaySheet = OverlaySheet.SleepTimer },
                         onContentReady = { contentReady = true },
                         visibleMessages = visibleMessagesSnapshot,
                         mode = mode,
@@ -328,47 +332,45 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     
-                    if (showQueue) {
-                        val screenHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
-                        val sheetHeight = screenHeight * 3 / 4
-                        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-                        ModalBottomSheet(
-                            onDismissRequest = { showQueue = false },
-                            sheetState = sheetState,
-                            containerColor = MaterialTheme.colorScheme.background,
-                            contentColor = MaterialTheme.colorScheme.onBackground
+                    val overlayConfiguration = LocalConfiguration.current
+                    val activeOverlaySheet = overlaySheet
+                    if (activeOverlaySheet != null) {
+                        val sheetMaxHeight = overlayConfiguration.screenHeightDp.dp * 3 / 4
+                        key(
+                            activeOverlaySheet,
+                            overlayConfiguration.screenWidthDp,
+                            overlayConfiguration.screenHeightDp
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = sheetHeight)
+                            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+                            ModalBottomSheet(
+                                onDismissRequest = { overlaySheet = null },
+                                sheetState = sheetState,
+                                containerColor = MaterialTheme.colorScheme.background,
+                                contentColor = MaterialTheme.colorScheme.onBackground
                             ) {
-                                QueueSheetContent(
-                                    viewModel = playerViewModel,
-                                    onDismiss = { showQueue = false }
-                                )
-                            }
-                        }
-                    }
-                    if (showSleepTimer) {
-                        val screenHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
-                        val sheetHeight = screenHeight * 3 / 4
-                        val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-                        ModalBottomSheet(
-                            onDismissRequest = { showSleepTimer = false },
-                            sheetState = sheetState,
-                            containerColor = MaterialTheme.colorScheme.background,
-                            contentColor = MaterialTheme.colorScheme.onBackground
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(max = sheetHeight)
-                            ) {
-                                SleepTimerSheetContent(
-                                    viewModel = playerViewModel,
-                                    onDismiss = { showSleepTimer = false }
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = sheetMaxHeight)
+                                ) {
+                                    when (activeOverlaySheet) {
+                                        OverlaySheet.Queue -> QueueSheetContent(
+                                            viewModel = playerViewModel,
+                                            onDismiss = { overlaySheet = null },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(max = sheetMaxHeight)
+                                        )
+
+                                        OverlaySheet.SleepTimer -> SleepTimerSheetContent(
+                                            viewModel = playerViewModel,
+                                            onDismiss = { overlaySheet = null },
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(max = sheetMaxHeight)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

@@ -44,7 +44,8 @@ import com.asmr.player.ui.theme.AsmrTheme
 @Composable
 fun QueueSheetContent(
     viewModel: PlayerViewModel,
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val playback by viewModel.playback.collectAsState()
     val queue by viewModel.queue.collectAsState()
@@ -53,7 +54,7 @@ fun QueueSheetContent(
     val currentId = playback.currentMediaItem?.mediaId.orEmpty()
     val currentIndex = remember(queue, currentId) { queue.indexOfFirst { it.mediaId == currentId } }
 
-    Column(modifier = Modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth()) {
         Text(
             text = "当前播放队列",
             modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
@@ -61,7 +62,9 @@ fun QueueSheetContent(
             color = colorScheme.textSecondary
         )
         LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f, fill = true),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
             itemsIndexed(queue, key = { idx, it -> "${it.mediaId}#$idx" }) { index, mediaItem ->
