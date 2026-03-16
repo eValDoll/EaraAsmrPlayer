@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
@@ -29,7 +30,8 @@ fun CoverArtworkEdgeBlend(
     artworkModel: Any?,
     blendColor: Color,
     modifier: Modifier = Modifier,
-    cornerRadius: Dp = 28.dp
+    cornerRadius: Dp = 28.dp,
+    artworkAlignment: Alignment = Alignment.Center
 ) {
     val shape = remember(cornerRadius) { RoundedCornerShape(cornerRadius) }
     val blurDp = 32.dp
@@ -70,6 +72,7 @@ fun CoverArtworkEdgeBlend(
                 }
                 .then(blurModifier),
             contentScale = ContentScale.Crop,
+            alignment = artworkAlignment,
             placeholder = {},
             loading = {},
         )
@@ -107,6 +110,7 @@ fun CoverArtworkEdgeBlend(
                     }
                 },
             contentScale = ContentScale.Crop,
+            alignment = artworkAlignment,
             placeholderCornerRadius = cornerRadius.value.toInt(),
         )
     }
