@@ -47,7 +47,7 @@ internal fun deriveHuePalette(
         Color(ColorUtils.blendARGB(primaryArgb, target.toArgb(), strongBlend))
     }
 
-    val onPrimary = bestOnPrimary(primary, fallbackOnPrimary)
+    val onPrimary = bestOnPrimary(primaryStrong, fallbackOnPrimary)
 
     return HuePalette(
         primary = primary,
@@ -70,20 +70,47 @@ internal fun bestOnPrimary(primary: Color, fallback: Color): Color {
 }
 
 internal fun clampPrimaryHslForMode(hsl: FloatArray, mode: ThemeMode) {
+    val hue = ((hsl[0] % 360f) + 360f) % 360f
+    val saturation = hsl[1].coerceIn(0f, 1f)
     val lightnessMin = when (mode) {
-        ThemeMode.Light -> 0.12f
-        ThemeMode.Dark -> 0.18f
-        ThemeMode.SoftDark -> 0.20f
+        ThemeMode.Light -> 0.18f
+        ThemeMode.Dark -> when {
+            hue in 38f..85f -> 0.58f
+            hue in 85f..170f -> 0.54f
+            hue in 170f..260f -> 0.48f
+            else -> 0.52f
+        }
+        ThemeMode.SoftDark -> when {
+            hue in 38f..85f -> 0.54f
+            hue in 85f..170f -> 0.50f
+            hue in 170f..260f -> 0.45f
+            else -> 0.48f
+        }
     }
     val lightnessMax = when (mode) {
-        ThemeMode.Light -> 0.62f
-        ThemeMode.Dark -> 0.70f
-        ThemeMode.SoftDark -> 0.66f
+        ThemeMode.Light -> when {
+            hue in 38f..85f -> if (saturation >= 0.45f) 0.38f else 0.42f
+            hue in 85f..170f -> if (saturation >= 0.45f) 0.40f else 0.44f
+            hue in 170f..260f -> if (saturation >= 0.45f) 0.46f else 0.50f
+            else -> if (saturation >= 0.45f) 0.42f else 0.46f
+        }
+        ThemeMode.Dark -> when {
+            hue in 38f..85f -> 0.74f
+            hue in 85f..170f -> 0.70f
+            hue in 170f..260f -> 0.66f
+            else -> 0.68f
+        }
+        ThemeMode.SoftDark -> when {
+            hue in 38f..85f -> 0.70f
+            hue in 85f..170f -> 0.66f
+            hue in 170f..260f -> 0.62f
+            else -> 0.64f
+        }
     }
     val saturationMax = when (mode) {
-        ThemeMode.Light -> 0.82f
-        ThemeMode.Dark -> 0.80f
-        ThemeMode.SoftDark -> 0.78f
+        ThemeMode.Light -> 0.76f
+        ThemeMode.Dark -> 0.78f
+        ThemeMode.SoftDark -> 0.76f
     }
     hsl[1] = hsl[1].coerceIn(0f, saturationMax)
     hsl[2] = hsl[2].coerceIn(lightnessMin, lightnessMax)
