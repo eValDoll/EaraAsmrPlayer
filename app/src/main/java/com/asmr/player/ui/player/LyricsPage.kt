@@ -65,6 +65,7 @@ fun LyricsPage(
     playerViewModel: PlayerViewModel,
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
+    coverMotionEnabled: Boolean,
     viewModel: LyricsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -83,6 +84,10 @@ fun LyricsPage(
     )
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    val coverMotionState = rememberCoverMotionState(
+        enabled = coverBackgroundEnabled && coverMotionEnabled,
+        resetKey = playback.currentMediaItem?.mediaId
+    )
 
     Box(modifier = Modifier.fillMaxSize()) {
         CoverArtworkBackground(
@@ -91,6 +96,7 @@ fun LyricsPage(
             clarity = coverBackgroundClarity,
             overlayBaseColor = colorScheme.background,
             tintBaseColor = dominantColor,
+            artworkAlignment = coverMotionState.toAlignment(),
             isDark = colorScheme.isDark
         )
 

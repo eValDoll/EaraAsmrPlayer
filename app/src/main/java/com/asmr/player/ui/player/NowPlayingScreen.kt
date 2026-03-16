@@ -103,6 +103,7 @@ fun NowPlayingScreen(
     viewModel: PlayerViewModel,
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
+    coverMotionEnabled: Boolean,
     lyricsViewModel: LyricsViewModel = hiltViewModel()
 ) {
     val playback by viewModel.playback.collectAsState()
@@ -197,6 +198,11 @@ fun NowPlayingScreen(
     val useSplitLayout = heightClass != WindowHeightSizeClass.Compact && isLandscape
     val player = viewModel.playerOrNull()
     val videoAspectRatio = rememberPlayerVideoAspectRatio(player)
+    val coverMotionState = rememberCoverMotionState(
+        enabled = coverMotionEnabled && !isVideo,
+        resetKey = item?.mediaId
+    )
+    val coverMotionAlignment = coverMotionState.toAlignment()
 
     Box(
         modifier = Modifier.fillMaxSize()
@@ -215,6 +221,7 @@ fun NowPlayingScreen(
                 clarity = coverBackgroundClarity,
                 overlayBaseColor = colorScheme.background,
                 tintBaseColor = accentColor,
+                artworkAlignment = coverMotionAlignment,
                 isDark = colorScheme.isDark
             )
         }
@@ -309,7 +316,8 @@ fun NowPlayingScreen(
                                 onOpenLyrics = onOpenLyrics,
                                 edgeBlendEnabled = false,
                                 edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
-                                videoBackdropColor = videoBackdropColor
+                                videoBackdropColor = videoBackdropColor,
+                                artworkAlignment = coverMotionAlignment
                             )
                         }
                         
@@ -522,7 +530,8 @@ fun NowPlayingScreen(
                                 onOpenLyrics = onOpenLyrics,
                                 edgeBlendEnabled = false,
                                 edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
-                                videoBackdropColor = videoBackdropColor
+                                videoBackdropColor = videoBackdropColor,
+                                artworkAlignment = coverMotionAlignment
                             )
                         }
 
@@ -769,7 +778,8 @@ fun NowPlayingScreen(
                                 onOpenLyrics = onOpenLyrics,
                                 edgeBlendEnabled = false,
                                 edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
-                                videoBackdropColor = videoBackdropColor
+                                videoBackdropColor = videoBackdropColor,
+                                artworkAlignment = coverMotionAlignment
                             )
                         }
                     }
@@ -1053,7 +1063,8 @@ private fun ArtworkBox(
     onOpenLyrics: () -> Unit,
     edgeBlendEnabled: Boolean,
     edgeBlendColor: Color,
-    videoBackdropColor: Color
+    videoBackdropColor: Color,
+    artworkAlignment: Alignment = Alignment.Center
 ) {
     val shape = RoundedCornerShape(28.dp)
     val hasArtwork = metadata?.artworkUri != null
@@ -1107,7 +1118,8 @@ private fun ArtworkBox(
                         CoverArtworkEdgeBlend(
                             artworkModel = artwork,
                             blendColor = edgeBlendColor,
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.fillMaxSize(),
+                            artworkAlignment = artworkAlignment
                         )
                     } else {
                         DiscPlaceholder(modifier = Modifier.fillMaxSize(), cornerRadius = 28)
@@ -1117,6 +1129,7 @@ private fun ArtworkBox(
                         model = metadata?.artworkUri,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
+                        alignment = artworkAlignment,
                         placeholderCornerRadius = 28,
                         modifier = Modifier.fillMaxSize(),
                     )

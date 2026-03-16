@@ -190,6 +190,7 @@ class MainActivity : ComponentActivity() {
             val staticHueArgb by settingsDataStore.staticHueArgb.collectAsState(initial = null)
             val coverBackgroundEnabled by settingsDataStore.coverBackgroundEnabled.collectAsState(initial = true)
             val coverBackgroundClarity by settingsDataStore.coverBackgroundClarity.collectAsState(initial = 0.35f)
+            val coverMotionEnabled by settingsDataStore.coverMotionEnabled.collectAsState(initial = false)
             val neutral = remember(mode) { neutralPaletteForMode(mode) }
             val cacheManager = remember(context.applicationContext) {
                 dagger.hilt.android.EntryPointAccessors.fromApplication(
@@ -322,6 +323,7 @@ class MainActivity : ComponentActivity() {
                         globalDynamicHueEnabled = globalDynamicHueEnabled,
                         coverBackgroundEnabled = coverBackgroundEnabled,
                         coverBackgroundClarity = coverBackgroundClarity,
+                        coverMotionEnabled = coverMotionEnabled,
                         forceImmersive = showSplash,
                         baseStaticHue = baseStaticHue
                     )
@@ -399,6 +401,7 @@ fun MainContainer(
     globalDynamicHueEnabled: Boolean,
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
+    coverMotionEnabled: Boolean,
     forceImmersive: Boolean,
     baseStaticHue: HuePalette
 ) {
@@ -1165,7 +1168,8 @@ fun MainContainer(
                             },
                             viewModel = playerViewModel,
                             coverBackgroundEnabled = coverBackgroundEnabled,
-                            coverBackgroundClarity = coverBackgroundClarity
+                            coverBackgroundClarity = coverBackgroundClarity,
+                            coverMotionEnabled = coverMotionEnabled
                         )
                     } else {
                         NowPlayingScreen(
@@ -1189,7 +1193,8 @@ fun MainContainer(
                             },
                             viewModel = playerViewModel,
                             coverBackgroundEnabled = coverBackgroundEnabled,
-                            coverBackgroundClarity = coverBackgroundClarity
+                            coverBackgroundClarity = coverBackgroundClarity,
+                            coverMotionEnabled = coverMotionEnabled
                         )
                     }
                 }
@@ -1200,7 +1205,8 @@ fun MainContainer(
                             onSeekTo = { pos -> playerViewModel.seekTo(pos) },
                             playerViewModel = playerViewModel,
                             coverBackgroundEnabled = coverBackgroundEnabled,
-                            coverBackgroundClarity = coverBackgroundClarity
+                            coverBackgroundClarity = coverBackgroundClarity,
+                            coverMotionEnabled = coverMotionEnabled
                         )
                     } else {
                         LyricsPage(
@@ -1208,7 +1214,8 @@ fun MainContainer(
                             onSeekTo = { pos -> playerViewModel.seekTo(pos) },
                             playerViewModel = playerViewModel,
                             coverBackgroundEnabled = coverBackgroundEnabled,
-                            coverBackgroundClarity = coverBackgroundClarity
+                            coverBackgroundClarity = coverBackgroundClarity,
+                            coverMotionEnabled = coverMotionEnabled
                         )
                     }
                 }

@@ -72,6 +72,9 @@ class SettingsViewModel @Inject constructor(
     val coverBackgroundClarity: StateFlow<Float> = settingsDataStore.coverBackgroundClarity
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.35f)
 
+    val coverMotionEnabled: StateFlow<Boolean> = settingsDataStore.coverMotionEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
     private val updateClient = GitHubUpdateClient(okHttpClient)
     private val _updateState = MutableStateFlow<AppUpdateState>(AppUpdateState.Idle)
     val updateState = _updateState.asStateFlow()
@@ -103,6 +106,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setCoverBackgroundClarity(clarity: Float) {
         viewModelScope.launch { settingsDataStore.setCoverBackgroundClarity(clarity) }
+    }
+
+    fun setCoverMotionEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setCoverMotionEnabled(enabled) }
     }
 
     fun checkUpdate() {
