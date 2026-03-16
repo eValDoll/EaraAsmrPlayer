@@ -76,6 +76,11 @@ fun LyricsPage(
         model = artwork,
         defaultColor = colorScheme.background
     )
+    val lyricColors = rememberLyricReadableColors(
+        accentColor = dominantColor,
+        coverBackgroundEnabled = coverBackgroundEnabled,
+        coverBackgroundClarity = coverBackgroundClarity
+    )
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
@@ -128,7 +133,7 @@ fun LyricsPage(
                     lyrics = uiState.lyrics,
                     currentPosition = position,
                     onSeekTo = onSeekTo,
-                    activeColor = dominantColor, // Use dominant color
+                    colors = lyricColors,
                     modifier = Modifier.fillMaxSize(),
                     isLandscape = isLandscape,
                     contentPadding = PaddingValues(top = topPad, bottom = bottomPad)

@@ -12,33 +12,28 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.SubtitleIndexFinder
 import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
 
 @Composable
-fun AppleLyricsView(
+internal fun AppleLyricsView(
     lyrics: List<SubtitleEntry>,
     currentPosition: Long,
     onSeekTo: (Long) -> Unit,
     onOpenLyrics: () -> Unit = {},
-    activeColor: Color = MaterialTheme.colorScheme.primary,
-    inactiveColor: Color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+    colors: LyricReadableColors,
     modifier: Modifier = Modifier,
     isLandscape: Boolean = false,
     contentPadding: PaddingValues = PaddingValues(0.dp)
@@ -49,8 +44,6 @@ fun AppleLyricsView(
     }
 
     val listState = rememberLazyListState()
-    val coroutineScope = rememberCoroutineScope()
-    val density = LocalDensity.current
 
     // Store per-item translation offsets
     // Key: Item Index, Value: Animatable OffsetY
@@ -129,8 +122,6 @@ fun AppleLyricsView(
 
     LaunchedEffect(activeIndex) {
         if (activeIndex != previousIndex && activeIndex >= 0 && lyrics.isNotEmpty()) {
-            val isMovingDown = activeIndex > previousIndex
-            
             // 1. Calculate the Snap
             // We want to center the NEW activeIndex at `viewportHeight * focusRatio`
             val layoutInfo = listState.layoutInfo
@@ -151,9 +142,6 @@ fun AppleLyricsView(
             // Check if we actually NEED to scroll.
             // If the item is already above the focus point (and we are near top), we might not need to scroll.
             // But for consistency, we try to scroll to focus point, and LazyColumn clamps it.
-            
-            // Current position of i+1 (if visible)
-            val nextItemInfo = layoutInfo.visibleItemsInfo.find { it.index == activeIndex }
             val currentItemInfo = layoutInfo.visibleItemsInfo.find { it.index == previousIndex }
             
             // Fallback height if not visible (estimate)
@@ -328,40 +316,24 @@ fun AppleLyricsView(
                 contentType = { _, _ -> "appleLyricLine" }
             ) { index, entry ->
                 val isActive = index == activeIndex
-                val isPast = index < activeIndex
-                
-                // Animate visual properties
                 val targetScale = 1.0f // Unified scale for active and inactive
                 val scale by animateFloatAsState(targetScale, animationSpec = tween(400))
-                
-                val targetBlur = if (isActive) 0.dp else 1.5.dp // Slight blur for inactive?
-                // Blur is expensive on Android < 12 (RenderEffect). 
-                // Maybe just alpha/color is enough. Apple Music has blur on background but text is usually sharp, just dim.
-                // Let's skip blur for performance unless requested. User said "Transparency/Color transition".
-                
-                val targetAlpha = if (isActive) 1f else 0.55f
+
+                val targetAlpha = if (isActive) 1f else if (AsmrTheme.colorScheme.isDark) 0.76f else 0.72f
                 val alpha by animateFloatAsState(targetAlpha, animationSpec = tween(400))
 
-                val targetColor = if (isActive) activeColor else inactiveColor
-                // We animate color manually or via animateColorAsState
+                val targetColor = if (isActive) colors.activeText else colors.inactiveText
                 val color by animateColorAsState(targetColor, animationSpec = tween(400))
-                
                 val targetFontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.Bold
                 val fontSize = if (isLandscape) 22.sp else 24.sp
-                
-                // Add shadow for active lyric
                 val shadow = if (isActive) {
-                     Shadow(
-                         color = Color.Black.copy(alpha = 0.6f),
-                         offset = androidx.compose.ui.geometry.Offset(0f, 2f),
-                         blurRadius = 4f
-                     )
+                    Shadow(
+                        color = colors.accentEmphasis.copy(alpha = if (AsmrTheme.colorScheme.isDark) 0.40f else 0.24f),
+                        offset = Offset.Zero,
+                        blurRadius = if (isLandscape) 14f else 18f
+                    )
                 } else null
 
-                // Get the wave offset
-                // We need to observe the Animatable.
-                // Note: itemOffsets is a SnapshotStateMap, so accessing it is state-read.
-                // But the Animatable inside is stable. We need to read `.value`.
                 val offsetAnim = itemOffsets[index]
                 val translationY = offsetAnim?.value ?: 0f
 
@@ -369,22 +341,23 @@ fun AppleLyricsView(
                     text = entry.text,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(vertical = 12.dp, horizontal = 24.dp)
+                        .padding(horizontal = if (isLandscape) 10.dp else 14.dp, vertical = 2.dp)
                         .graphicsLayer {
                             this.translationY = translationY
                             this.scaleX = scale
                             this.scaleY = scale
                             this.alpha = alpha
                         }
-                        .clickable { 
+                        .clickable {
                             onSeekTo(entry.startMs) 
                             onOpenLyrics()
-                        },
+                        }
+                        .padding(horizontal = if (isLandscape) 8.dp else 10.dp, vertical = if (isLandscape) 6.dp else 8.dp),
                     style = MaterialTheme.typography.titleLarge.copy(
                         fontWeight = targetFontWeight,
                         fontSize = fontSize,
                         textAlign = TextAlign.Center,
-                        lineHeight = if (isLandscape) 32.sp else 36.sp,
+                        lineHeight = if (isLandscape) 30.sp else 34.sp,
                         shadow = shadow
                     ),
                     color = color

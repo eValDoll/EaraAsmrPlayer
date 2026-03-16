@@ -143,6 +143,11 @@ fun NowPlayingScreen(
         ),
         label = "nowPlayingAccentColor"
     )
+    val lyricColors = rememberLyricReadableColors(
+        accentColor = accentColor,
+        coverBackgroundEnabled = coverBackgroundEnabled,
+        coverBackgroundClarity = coverBackgroundClarity
+    )
     val onAccentColor = if (accentColor.luminance() > 0.55f) Color.Black else Color.White
     val videoBackdropColor = if (isVideo) {
         if (coverBackgroundEnabled) accentColor else colorScheme.background
@@ -374,7 +379,7 @@ fun NowPlayingScreen(
                                     currentPosition = playback.positionMs,
                                     onSeekTo = { viewModel.seekTo(it) },
                                     onOpenLyrics = onOpenLyrics,
-                                    activeColor = accentColor,
+                                    colors = lyricColors,
                                     modifier = Modifier
                                         .weight(0.70f)
                                         .fillMaxHeight(),
@@ -578,7 +583,7 @@ fun NowPlayingScreen(
                                     currentPosition = playback.positionMs,
                                     onSeekTo = { viewModel.seekTo(it) },
                                     onOpenLyrics = onOpenLyrics,
-                                    activeColor = accentColor,
+                                    colors = lyricColors,
                                     modifier = Modifier
                                         .weight(0.72f)
                                         .fillMaxHeight(),
@@ -774,7 +779,7 @@ fun NowPlayingScreen(
                             lyrics = lyricsState.lyrics,
                             currentPosition = playback.positionMs,
                             onOpenLyrics = onOpenLyrics,
-                            accentColor = accentColor,
+                            colors = lyricColors,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -1438,7 +1443,7 @@ private fun SingleLineLyrics(
     lyrics: List<SubtitleEntry>,
     currentPosition: Long,
     onOpenLyrics: () -> Unit,
-    accentColor: Color,
+    colors: LyricReadableColors,
     modifier: Modifier = Modifier,
 ) {
     val sortedLyrics = remember(lyrics) {
@@ -1478,16 +1483,23 @@ private fun SingleLineLyrics(
     Column(
         modifier = modifier
             .clickable { onOpenLyrics() }
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         AnimatedLyricLine(
             text = currentText,
             durationMs = lineDuration,
-            color = accentColor,
+            colors = colors,
             fontWeight = FontWeight.ExtraBold,
             modifier = Modifier.fillMaxWidth()
+        )
+        Box(
+            modifier = Modifier
+                .width(52.dp)
+                .height(2.dp)
+                .clip(RoundedCornerShape(percent = 50))
+                .background(colors.accentEmphasis.copy(alpha = if (AsmrTheme.colorScheme.isDark) 0.72f else 0.56f))
         )
     }
 }
@@ -1497,7 +1509,7 @@ private fun SingleLineLyrics(
 private fun AnimatedLyricLine(
     text: String,
     durationMs: Long,
-    color: Color,
+    colors: LyricReadableColors,
     fontWeight: FontWeight,
     modifier: Modifier = Modifier
 ) {
@@ -1507,7 +1519,7 @@ private fun AnimatedLyricLine(
             ContentTransform(
                 targetContentEnter = slideInVertically(animationSpec = tween(600)) { it } + fadeIn(animationSpec = tween(600)),
                 initialContentExit = slideOutVertically(animationSpec = tween(600)) { -it } + fadeOut(animationSpec = tween(600)),
-                sizeTransform = SizeTransform(clip = false)
+                sizeTransform = null
             )
         },
         label = "lyricLine"
@@ -1516,7 +1528,7 @@ private fun AnimatedLyricLine(
             text = target,
             durationMs = durationMs,
             style = MaterialTheme.typography.titleMedium,
-            color = color,
+            colors = colors,
             fontWeight = fontWeight,
             modifier = modifier
         )
@@ -1529,17 +1541,18 @@ private fun SlowMarqueeText(
     text: String,
     durationMs: Long,
     style: androidx.compose.ui.text.TextStyle,
-    color: Color,
+    colors: LyricReadableColors,
     fontWeight: FontWeight,
     modifier: Modifier = Modifier
 ) {
     val singleLine = remember(text) { normalizeSingleLineText(text) }
     val content = singleLine.ifBlank { " " }
-    val shadow = if (AsmrTheme.colorScheme.isDark) {
-        Shadow(color = Color.Black.copy(alpha = 0.6f), offset = Offset(0f, 2f), blurRadius = 4f)
-    } else {
-        Shadow(color = Color.Black.copy(alpha = 0.15f), offset = Offset(0f, 1f), blurRadius = 2f)
-    }
+    val colorScheme = AsmrTheme.colorScheme
+    val shadow = Shadow(
+        color = colors.accentEmphasis.copy(alpha = if (colorScheme.isDark) 0.28f else 0.18f),
+        offset = Offset.Zero,
+        blurRadius = if (colorScheme.isDark) 14f else 10f
+    )
     
     val textMeasurer = androidx.compose.ui.text.rememberTextMeasurer()
     val textLayoutResult = remember(content, style, fontWeight) {
@@ -1600,15 +1613,18 @@ private fun SlowMarqueeText(
                 fontWeight = fontWeight,
                 shadow = shadow
             ),
-            color = color,
+            color = colors.activeText,
             maxLines = 1,
             softWrap = false,
             overflow = TextOverflow.Clip,
             textAlign = TextAlign.Center,
-            modifier = Modifier.basicMarquee(
-                iterations = Int.MAX_VALUE,
-                velocity = finalVelocity.coerceAtLeast(10.dp) // Minimum speed
-            )
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 2.dp)
+                .basicMarquee(
+                    iterations = Int.MAX_VALUE,
+                    velocity = finalVelocity.coerceAtLeast(10.dp)
+                )
         )
     }
 }
