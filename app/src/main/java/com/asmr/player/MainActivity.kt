@@ -124,6 +124,7 @@ import com.asmr.player.ui.player.SleepTimerSheetContent
 
 import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.data.settings.CoverPreviewMode
+import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.util.MessageManager
 import com.asmr.player.ui.common.NonTouchableAppMessageOverlay
 import com.asmr.player.ui.common.VisibleAppMessage
@@ -192,6 +193,7 @@ class MainActivity : ComponentActivity() {
             val coverBackgroundEnabled by settingsDataStore.coverBackgroundEnabled.collectAsState(initial = true)
             val coverBackgroundClarity by settingsDataStore.coverBackgroundClarity.collectAsState(initial = 0.35f)
             val coverPreviewMode by settingsDataStore.coverPreviewMode.collectAsState(initial = CoverPreviewMode.Disabled)
+            val lyricsPageSettings by settingsDataStore.lyricsPageSettings.collectAsState(initial = LyricsPageSettings())
             val neutral = remember(mode) { neutralPaletteForMode(mode) }
             val cacheManager = remember(context.applicationContext) {
                 dagger.hilt.android.EntryPointAccessors.fromApplication(
@@ -325,6 +327,7 @@ class MainActivity : ComponentActivity() {
                         coverBackgroundEnabled = coverBackgroundEnabled,
                         coverBackgroundClarity = coverBackgroundClarity,
                         coverPreviewMode = coverPreviewMode,
+                        lyricsPageSettings = lyricsPageSettings,
                         forceImmersive = showSplash,
                         baseStaticHue = baseStaticHue
                     )
@@ -403,6 +406,7 @@ fun MainContainer(
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
     coverPreviewMode: CoverPreviewMode,
+    lyricsPageSettings: LyricsPageSettings,
     forceImmersive: Boolean,
     baseStaticHue: HuePalette
 ) {
@@ -1212,7 +1216,8 @@ fun MainContainer(
                             playerViewModel = playerViewModel,
                             coverBackgroundEnabled = coverBackgroundEnabled,
                             coverBackgroundClarity = coverBackgroundClarity,
-                            coverPreviewMode = coverPreviewMode
+                            coverPreviewMode = coverPreviewMode,
+                            lyricsPageSettings = lyricsPageSettings
                         )
                     } else {
                         LyricsPage(
@@ -1221,7 +1226,8 @@ fun MainContainer(
                             playerViewModel = playerViewModel,
                             coverBackgroundEnabled = coverBackgroundEnabled,
                             coverBackgroundClarity = coverBackgroundClarity,
-                            coverPreviewMode = coverPreviewMode
+                            coverPreviewMode = coverPreviewMode,
+                            lyricsPageSettings = lyricsPageSettings
                         )
                     }
                 }

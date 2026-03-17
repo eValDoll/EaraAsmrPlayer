@@ -45,14 +45,10 @@ internal fun rememberLyricReadableColors(
         } else {
             colorScheme.textPrimary
         }
-        val inactiveAlpha = if (coverBackgroundEnabled) {
-            if (activeText.luminance() > 0.5f) 0.60f else 0.54f
-        } else if (colorScheme.isDark) {
-            0.54f
-        } else {
-            0.50f
-        }
-        val inactiveText = activeText.copy(alpha = inactiveAlpha)
+        val inactiveText = inactiveLyricTextColor(
+            activeText = activeText,
+            fallback = colorScheme.textSecondary
+        )
 
         LyricReadableColors(
             activeText = activeText,
@@ -60,6 +56,21 @@ internal fun rememberLyricReadableColors(
             accentEmphasis = accentColor.copy(alpha = emphasisAlpha),
             activeContainer = accentColor.copy(alpha = containerAlpha).compositeOver(containerBase)
         )
+    }
+}
+
+private fun inactiveLyricTextColor(
+    activeText: Color,
+    fallback: Color
+): Color {
+    val lightGrayCandidate = Color(0xFFD7DCE4)
+    val darkGrayCandidate = Color(0xFF58606C)
+    return if (activeText.luminance() > 0.5f) {
+        lightGrayCandidate
+    } else if (activeText.luminance() < 0.2f) {
+        darkGrayCandidate
+    } else {
+        fallback
     }
 }
 
