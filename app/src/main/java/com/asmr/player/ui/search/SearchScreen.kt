@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -101,6 +102,7 @@ internal const val SEARCH_PREV_BUTTON_TAG = "search_prev_button"
 internal const val SEARCH_NEXT_BUTTON_TAG = "search_next_button"
 internal const val SEARCH_PAGINATION_SPINNER_TAG = "search_pagination_spinner"
 internal const val SEARCH_CHROME_TAG = "search_chrome"
+private val SearchChromeContentGap = 16.dp
 
 private fun stableAlbumKey(album: Album): String {
     val id = album.rjCode.ifBlank { album.workId }.trim()
@@ -178,7 +180,7 @@ fun SearchScreen(
         success != null -> with(androidx.compose.ui.platform.LocalDensity.current) { 120.dp.toPx() }
         else -> with(androidx.compose.ui.platform.LocalDensity.current) { 80.dp.toPx() }
     }
-    val topPadding = with(androidx.compose.ui.platform.LocalDensity.current) { chromeVisibleHeightPx.toDp() }
+    val topPadding = with(androidx.compose.ui.platform.LocalDensity.current) { chromeVisibleHeightPx.toDp() } + SearchChromeContentGap
 
     fun scrollResultsToTop() {
         scope.launch {
@@ -518,13 +520,9 @@ internal fun SearchChrome(
             onSearchSubmit = onSearchSubmit,
             onPurchasedOnlySelected = onPurchasedOnlySelected,
             onOrderSelected = onOrderSelected,
-            onLocaleSelected = onLocaleSelected
+            onLocaleSelected = onLocaleSelected,
+            rightPanelToggle = rightPanelToggle
         )
-
-        if (rightPanelToggle != null) {
-            Spacer(modifier = Modifier.height(8.dp))
-            rightPanelToggle(Modifier.size(50.dp))
-        }
         if (showPagination) {
             SearchPaginationHeader(
                 page = page,
@@ -552,7 +550,8 @@ internal fun SearchToolbar(
     onSearchSubmit: () -> Unit,
     onPurchasedOnlySelected: () -> Unit,
     onOrderSelected: (SearchSortOption) -> Unit,
-    onLocaleSelected: (String) -> Unit
+    onLocaleSelected: (String) -> Unit,
+    rightPanelToggle: (@Composable (Modifier) -> Unit)? = null
 ) {
     val colorScheme = AsmrTheme.colorScheme
     var scopeMenuExpanded by remember { mutableStateOf(false) }
@@ -710,6 +709,10 @@ internal fun SearchToolbar(
                 onSearch = { onSearchSubmit() }
             )
         )
+        if (rightPanelToggle != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            rightPanelToggle(Modifier.size(50.dp))
+        }
     }
 }
 
