@@ -2,6 +2,9 @@ package com.asmr.player.ui.library
 
 import android.content.Intent
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
@@ -132,6 +135,7 @@ import androidx.compose.material3.Card
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextOverflow
 import com.asmr.player.ui.common.AsmrAsyncImage
 import androidx.paging.LoadState
@@ -141,8 +145,22 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import com.asmr.player.ui.common.CustomSearchBar
 import com.asmr.player.ui.common.ActionButton
+import com.asmr.player.ui.common.collapsibleHeaderUiState
+import com.asmr.player.ui.common.rememberCollapsibleHeaderState
+
+internal const val LIBRARY_CHROME_TAG = "library_chrome"
+internal const val LIBRARY_SEARCH_INPUT_TAG = "library_search_input"
+internal const val LIBRARY_SORT_BUTTON_TAG = "library_sort_button"
+internal const val LIBRARY_FILTER_BUTTON_TAG = "library_filter_button"
+private val LibraryChromeContentGap = 12.dp
+private val LibraryChromeCollapseOvershoot = 12.dp
 
 @Composable
 private fun LibraryActionItem(
@@ -237,6 +255,18 @@ fun LibraryScreen(
     var showAlbumActions by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val chromeState = rememberCollapsibleHeaderState()
+    val animatedChromeOffsetPx by animateFloatAsState(
+        targetValue = chromeState.offsetPx,
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "libraryChromeOffset"
+    )
+    val chromeVisibleHeightPx = if (chromeState.heightPx > 0f) {
+        (chromeState.heightPx + animatedChromeOffsetPx).coerceIn(0f, chromeState.heightPx)
+    } else {
+        with(LocalDensity.current) { 80.dp.toPx() }
+    }
+    val topPadding = with(LocalDensity.current) { chromeVisibleHeightPx.toDp() } + LibraryChromeContentGap
 
     LaunchedEffect(isTrackList) {
         if (!isTrackList) {
@@ -250,6 +280,25 @@ fun LibraryScreen(
     LaunchedEffect(showDeleteConfirm, actionAlbum) {
         if (showDeleteConfirm && (actionAlbum == null || actionAlbum?.id?.let { it <= 0L } == true)) {
             showDeleteConfirm = false
+        }
+    }
+    LaunchedEffect(mode) {
+        chromeState.expand()
+    }
+    LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset, mode) {
+        if ((mode == 0 || mode == 2) &&
+            listState.firstVisibleItemIndex == 0 &&
+            listState.firstVisibleItemScrollOffset == 0
+        ) {
+            chromeState.expand()
+        }
+    }
+    LaunchedEffect(gridState.firstVisibleItemIndex, gridState.firstVisibleItemScrollOffset, mode) {
+        if (mode == 1 &&
+            gridState.firstVisibleItemIndex == 0 &&
+            gridState.firstVisibleItemScrollOffset == 0
+        ) {
+            chromeState.expand()
         }
     }
 
@@ -442,8 +491,10 @@ fun LibraryScreen(
                                 } else if (isTrackList) {
                                     LazyColumn(
                                         state = listState,
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentPadding = PaddingValues(top = 80.dp, bottom = 8.dp)
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .nestedScroll(chromeState.nestedScrollConnection),
+                                        contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                                     ) {
                                         val headerCount = pagedTrackAlbumHeaders.itemCount
@@ -608,8 +659,10 @@ fun LibraryScreen(
                                     LazyVerticalStaggeredGrid(
                                         columns = StaggeredGridCells.Adaptive(150.dp),
                                         state = gridState,
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentPadding = PaddingValues(top = 80.dp, start = 16.dp, end = 16.dp, bottom = 16.dp)
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .nestedScroll(chromeState.nestedScrollConnection),
+                                        contentPadding = PaddingValues(top = topPadding, start = 16.dp, end = 16.dp, bottom = 16.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current),
                                         verticalItemSpacing = 16.dp,
                                         horizontalArrangement = Arrangement.spacedBy(16.dp)
@@ -660,8 +713,10 @@ fun LibraryScreen(
                                     )
                                     LazyColumn(
                                         state = listState,
-                                        modifier = Modifier.fillMaxSize(),
-                                        contentPadding = PaddingValues(top = 80.dp, bottom = 8.dp)
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .nestedScroll(chromeState.nestedScrollConnection),
+                                        contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                                     ) {
                                         items(
@@ -683,107 +738,30 @@ fun LibraryScreen(
                                     }
                                 }
 
-                                Row(
-                                    modifier = Modifier
-                                        .align(Alignment.TopCenter)
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    CustomSearchBar(
-                                        value = searchText,
-                                        onValueChange = {
-                                            searchText = it
-                                            viewModel.setSearchQuery(it)
-                                        },
-                                        placeholder = "社团 / CV / 标签...",
-                                        modifier = Modifier.weight(1f),
-                                        leadingIcon = {
-                                            Icon(
-                                                imageVector = Icons.Default.Search,
-                                                contentDescription = null,
-                                                tint = colorScheme.onSurfaceVariant
-                                            )
-                                        },
-                                        trailingIcon = if (searchText.isNotBlank()) {
-                                            {
-                                                IconButton(
-                                                    onClick = {
-                                                        searchText = ""
-                                                        viewModel.setSearchQuery("")
-                                                    },
-                                                    modifier = Modifier.size(24.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Close,
-                                                        contentDescription = null,
-                                                        tint = colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                            }
-                                        } else null
-                                    )
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Box {
-                                        ActionButton(
-                                            icon = Icons.Default.SwapVert,
-                                            onClick = { sortMenuExpanded = true }
-                                        )
-                                        MaterialTheme(
-                                            colorScheme = materialColorScheme.copy(
-                                                surface = dynamicContainerColor,
-                                                surfaceContainer = dynamicContainerColor
-                                            )
-                                        ) {
-                                            DropdownMenu(
-                                                expanded = sortMenuExpanded,
-                                                onDismissRequest = { sortMenuExpanded = false },
-                                                modifier = Modifier.background(dynamicContainerColor)
-                                            ) {
-                                                DropdownMenuItem(
-                                                    text = { Text("最近") },
-                                                    onClick = {
-                                                        sortMenuExpanded = false
-                                                        viewModel.setSort(LibrarySort.LastPlayedDesc)
-                                                    }
-                                                )
-                                                HorizontalDivider(
-                                                    modifier = Modifier.padding(horizontal = 8.dp),
-                                                    thickness = 0.5.dp,
-                                                    color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
-                                                )
-                                                DropdownMenuItem(
-                                                    text = { Text("最近加入") },
-                                                    onClick = {
-                                                        sortMenuExpanded = false
-                                                        viewModel.setSort(LibrarySort.AddedDesc)
-                                                    }
-                                                )
-                                                HorizontalDivider(
-                                                    modifier = Modifier.padding(horizontal = 8.dp),
-                                                    thickness = 0.5.dp,
-                                                    color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
-                                                )
-                                                DropdownMenuItem(
-                                                    text = { Text("标题") },
-                                                    onClick = {
-                                                        sortMenuExpanded = false
-                                                        viewModel.setSort(LibrarySort.TitleAsc)
-                                                    }
-                                                )
-                                            }
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    ActionButton(
-                                        icon = Icons.Default.FilterList,
-                                        onClick = onOpenFilterScreen
-                                    )
-                                    if (rightPanelToggle != null) {
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        rightPanelToggle(Modifier.size(50.dp))
-                                    }
-                                }
+                                LibraryChrome(
+                                    modifier = Modifier.align(Alignment.TopCenter),
+                                    searchText = searchText,
+                                    onSearchTextChange = {
+                                        searchText = it
+                                        viewModel.setSearchQuery(it)
+                                    },
+                                    onClearSearch = {
+                                        searchText = ""
+                                        viewModel.setSearchQuery("")
+                                    },
+                                    sortMenuExpanded = sortMenuExpanded,
+                                    onSortMenuExpandedChange = { sortMenuExpanded = it },
+                                    onSortLastPlayed = { viewModel.setSort(LibrarySort.LastPlayedDesc) },
+                                    onSortAdded = { viewModel.setSort(LibrarySort.AddedDesc) },
+                                    onSortTitle = { viewModel.setSort(LibrarySort.TitleAsc) },
+                                    onOpenFilterScreen = onOpenFilterScreen,
+                                    rightPanelToggle = rightPanelToggle,
+                                    dynamicContainerColor = dynamicContainerColor,
+                                    materialColorScheme = materialColorScheme,
+                                    chromeOffsetPx = animatedChromeOffsetPx,
+                                    collapseFraction = chromeState.collapseFraction,
+                                    onMeasured = { chromeState.updateHeight(it.height.toFloat()) }
+                                )
                             }
                         }
                     }
@@ -963,6 +941,137 @@ fun LibraryScreen(
         }
     }
 
+}
+
+@Composable
+internal fun LibraryChrome(
+    modifier: Modifier = Modifier,
+    searchText: String,
+    onSearchTextChange: (String) -> Unit,
+    onClearSearch: () -> Unit,
+    sortMenuExpanded: Boolean,
+    onSortMenuExpandedChange: (Boolean) -> Unit,
+    onSortLastPlayed: () -> Unit,
+    onSortAdded: () -> Unit,
+    onSortTitle: () -> Unit,
+    onOpenFilterScreen: () -> Unit,
+    rightPanelToggle: (@Composable (Modifier) -> Unit)?,
+    dynamicContainerColor: Color,
+    materialColorScheme: androidx.compose.material3.ColorScheme,
+    chromeOffsetPx: Float,
+    collapseFraction: Float,
+    onMeasured: (IntSize) -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val collapseOvershootPx = with(LocalDensity.current) { LibraryChromeCollapseOvershoot.toPx() }
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .onSizeChanged(onMeasured)
+            .graphicsLayer {
+                translationY = chromeOffsetPx - (collapseFraction.coerceIn(0f, 1f) * collapseOvershootPx)
+                alpha = 1f - (collapseFraction.coerceIn(0f, 1f) * 0.1f)
+            }
+            .semantics { stateDescription = collapsibleHeaderUiState(collapseFraction) }
+            .testTag(LIBRARY_CHROME_TAG),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        CustomSearchBar(
+            value = searchText,
+            onValueChange = onSearchTextChange,
+            placeholder = "社团 / CV / 标签...",
+            modifier = Modifier
+                .weight(1f)
+                .testTag(LIBRARY_SEARCH_INPUT_TAG),
+            leadingIcon = {
+                Icon(
+                    imageVector = Icons.Default.Search,
+                    contentDescription = null,
+                    tint = colorScheme.onSurfaceVariant
+                )
+            },
+            trailingIcon = if (searchText.isNotBlank()) {
+                {
+                    IconButton(
+                        onClick = onClearSearch,
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = null,
+                            tint = colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            } else {
+                null
+            }
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Box {
+            ActionButton(
+                icon = Icons.Default.SwapVert,
+                onClick = { onSortMenuExpandedChange(true) },
+                modifier = Modifier.testTag(LIBRARY_SORT_BUTTON_TAG)
+            )
+            MaterialTheme(
+                colorScheme = materialColorScheme.copy(
+                    surface = dynamicContainerColor,
+                    surfaceContainer = dynamicContainerColor
+                )
+            ) {
+                DropdownMenu(
+                    expanded = sortMenuExpanded,
+                    onDismissRequest = { onSortMenuExpandedChange(false) },
+                    modifier = Modifier.background(dynamicContainerColor)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("最近") },
+                        onClick = {
+                            onSortMenuExpandedChange(false)
+                            onSortLastPlayed()
+                        }
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        thickness = 0.5.dp,
+                        color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                    )
+                    DropdownMenuItem(
+                        text = { Text("最近加入") },
+                        onClick = {
+                            onSortMenuExpandedChange(false)
+                            onSortAdded()
+                        }
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        thickness = 0.5.dp,
+                        color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                    )
+                    DropdownMenuItem(
+                        text = { Text("标题") },
+                        onClick = {
+                            onSortMenuExpandedChange(false)
+                            onSortTitle()
+                        }
+                    )
+                }
+            }
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        ActionButton(
+            icon = Icons.Default.FilterList,
+            onClick = onOpenFilterScreen,
+            modifier = Modifier.testTag(LIBRARY_FILTER_BUTTON_TAG)
+        )
+        if (rightPanelToggle != null) {
+            Spacer(modifier = Modifier.width(8.dp))
+            rightPanelToggle(Modifier.size(50.dp))
+        }
+    }
 }
 
 private sealed class TagAssignTarget {
