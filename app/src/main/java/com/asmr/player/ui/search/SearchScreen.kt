@@ -1,5 +1,8 @@
 package com.asmr.player.ui.search
 
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -64,15 +67,22 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.domain.model.Album
 import com.asmr.player.ui.common.CustomSearchBar
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.collapsibleHeaderUiState
+import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.library.AlbumGridItem
 import com.asmr.player.ui.library.AlbumItem
@@ -90,6 +100,7 @@ internal const val SEARCH_SUBMIT_SPINNER_TAG = "search_submit_spinner"
 internal const val SEARCH_PREV_BUTTON_TAG = "search_prev_button"
 internal const val SEARCH_NEXT_BUTTON_TAG = "search_next_button"
 internal const val SEARCH_PAGINATION_SPINNER_TAG = "search_pagination_spinner"
+internal const val SEARCH_CHROME_TAG = "search_chrome"
 
 private fun stableAlbumKey(album: Album): String {
     val id = album.rjCode.ifBlank { album.workId }.trim()
@@ -122,6 +133,7 @@ fun SearchScreen(
     val scope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
+    val chromeState = rememberCollapsibleHeaderState()
 
     var keywordSyncedFromState by rememberSaveable { mutableStateOf(false) }
     var optionsSyncedFromState by rememberSaveable { mutableStateOf(false) }
@@ -156,6 +168,17 @@ fun SearchScreen(
     val highlightedPage = success?.page ?: 1
     val canGoPrev = success?.canGoPrev == true && success?.isSearching != true
     val canGoNext = success?.canGoNext == true && success?.isSearching != true
+    val animatedChromeOffsetPx by animateFloatAsState(
+        targetValue = chromeState.offsetPx,
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "searchChromeOffset"
+    )
+    val chromeVisibleHeightPx = when {
+        chromeState.heightPx > 0f -> (chromeState.heightPx + animatedChromeOffsetPx).coerceIn(0f, chromeState.heightPx)
+        success != null -> with(androidx.compose.ui.platform.LocalDensity.current) { 120.dp.toPx() }
+        else -> with(androidx.compose.ui.platform.LocalDensity.current) { 80.dp.toPx() }
+    }
+    val topPadding = with(androidx.compose.ui.platform.LocalDensity.current) { chromeVisibleHeightPx.toDp() }
 
     fun scrollResultsToTop() {
         scope.launch {
@@ -196,6 +219,19 @@ fun SearchScreen(
             else -> true
         }
         if (canEnd) pullToRefreshState.endRefresh()
+    }
+    LaunchedEffect(currentPageKey, viewMode) {
+        chromeState.expand()
+    }
+    LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset, viewMode) {
+        if (viewMode == 0 && listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
+            chromeState.expand()
+        }
+    }
+    LaunchedEffect(gridState.firstVisibleItemIndex, gridState.firstVisibleItemScrollOffset, viewMode) {
+        if (viewMode != 0 && gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0) {
+            chromeState.expand()
+        }
     }
 
     Scaffold(
@@ -248,8 +284,6 @@ fun SearchScreen(
                             .fillMaxWidth()
                     }
                 ) {
-                    val topPadding = if (success != null) 120.dp else 80.dp
-
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
@@ -272,7 +306,9 @@ fun SearchScreen(
                                 if (viewMode == 0) {
                                     LazyColumn(
                                         state = listState,
-                                        modifier = Modifier.fillMaxSize(),
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .nestedScroll(chromeState.nestedScrollConnection),
                                         contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                                     ) {
@@ -292,7 +328,9 @@ fun SearchScreen(
                                     LazyVerticalStaggeredGrid(
                                         columns = StaggeredGridCells.Adaptive(150.dp),
                                         state = gridState,
-                                        modifier = Modifier.fillMaxSize(),
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .nestedScroll(chromeState.nestedScrollConnection),
                                         contentPadding = PaddingValues(
                                             top = topPadding,
                                             start = 16.dp,
@@ -368,69 +406,135 @@ fun SearchScreen(
                         )
                     }
 
-                    Column(modifier = Modifier.align(Alignment.TopCenter)) {
-                        SearchToolbar(
-                            keyword = keyword,
-                            onKeywordChange = { keyword = it },
-                            selectedOrder = selectedOrder,
-                            purchasedOnly = purchasedOnly,
-                            selectedLocale = selectedLocale,
-                            filterControlsLocked = filterControlsLocked,
-                            searchSubmitLocked = searchSubmitLocked,
-                            showSearchSpinner = showSearchSpinner,
-                            onSearchSubmit = ::submitSearch,
-                            onPurchasedOnlySelected = {
-                                purchasedOnly = true
-                                viewModel.updateSearchOptions(
-                                    order = selectedOrder,
-                                    purchasedOnly = true,
-                                    locale = selectedLocale
-                                )
-                            },
-                            onOrderSelected = { order ->
-                                selectedOrderName = order.name
-                                purchasedOnly = false
-                                viewModel.updateSearchOptions(
-                                    order = order,
-                                    purchasedOnly = false,
-                                    locale = selectedLocale
-                                )
-                            },
-                            onLocaleSelected = { locale ->
-                                selectedLocale = locale
-                                purchasedOnly = false
-                                viewModel.updateSearchOptions(
-                                    order = selectedOrder,
-                                    purchasedOnly = false,
-                                    locale = locale
-                                )
-                            }
-                        )
-
-                        if (rightPanelToggle != null) {
-                            Spacer(modifier = Modifier.height(8.dp))
-                            rightPanelToggle(Modifier.size(50.dp))
-                        }
-                        if (success != null) {
-                            SearchPaginationHeader(
-                                page = highlightedPage,
-                                canGoPrev = canGoPrev,
-                                canGoNext = canGoNext,
-                                controlsLocked = interactionLocked,
-                                showPagingSpinner = showPaginationSpinner,
-                                onPrev = {
-                                    scrollResultsToTop()
-                                    viewModel.prevPage()
-                                },
-                                onNext = {
-                                    scrollResultsToTop()
-                                    viewModel.nextPage()
-                                }
+                    SearchChrome(
+                        modifier = Modifier.align(Alignment.TopCenter),
+                        keyword = keyword,
+                        onKeywordChange = { keyword = it },
+                        selectedOrder = selectedOrder,
+                        purchasedOnly = purchasedOnly,
+                        selectedLocale = selectedLocale,
+                        filterControlsLocked = filterControlsLocked,
+                        searchSubmitLocked = searchSubmitLocked,
+                        showSearchSpinner = showSearchSpinner,
+                        showPagination = success != null,
+                        page = highlightedPage,
+                        canGoPrev = canGoPrev,
+                        canGoNext = canGoNext,
+                        controlsLocked = interactionLocked,
+                        showPagingSpinner = showPaginationSpinner,
+                        rightPanelToggle = rightPanelToggle,
+                        animatedOffsetPx = animatedChromeOffsetPx,
+                        collapseFraction = chromeState.collapseFraction,
+                        onMeasured = { size: IntSize -> chromeState.updateHeight(size.height.toFloat()) },
+                        onSearchSubmit = ::submitSearch,
+                        onPurchasedOnlySelected = {
+                            purchasedOnly = true
+                            viewModel.updateSearchOptions(
+                                order = selectedOrder,
+                                purchasedOnly = true,
+                                locale = selectedLocale
                             )
+                        },
+                        onOrderSelected = { order ->
+                            selectedOrderName = order.name
+                            purchasedOnly = false
+                            viewModel.updateSearchOptions(
+                                order = order,
+                                purchasedOnly = false,
+                                locale = selectedLocale
+                            )
+                        },
+                        onLocaleSelected = { locale ->
+                            selectedLocale = locale
+                            purchasedOnly = false
+                            viewModel.updateSearchOptions(
+                                order = selectedOrder,
+                                purchasedOnly = false,
+                                locale = locale
+                            )
+                        },
+                        onPrev = {
+                            scrollResultsToTop()
+                            viewModel.prevPage()
+                        },
+                        onNext = {
+                            scrollResultsToTop()
+                            viewModel.nextPage()
                         }
-                    }
+                    )
                 }
             }
+        }
+    }
+}
+
+@Composable
+internal fun SearchChrome(
+    modifier: Modifier = Modifier,
+    keyword: String,
+    onKeywordChange: (String) -> Unit,
+    selectedOrder: SearchSortOption,
+    purchasedOnly: Boolean,
+    selectedLocale: String,
+    filterControlsLocked: Boolean,
+    searchSubmitLocked: Boolean,
+    showSearchSpinner: Boolean,
+    showPagination: Boolean,
+    page: Int,
+    canGoPrev: Boolean,
+    canGoNext: Boolean,
+    controlsLocked: Boolean,
+    showPagingSpinner: Boolean,
+    rightPanelToggle: (@Composable (Modifier) -> Unit)?,
+    animatedOffsetPx: Float,
+    collapseFraction: Float,
+    onMeasured: (IntSize) -> Unit,
+    onSearchSubmit: () -> Unit,
+    onPurchasedOnlySelected: () -> Unit,
+    onOrderSelected: (SearchSortOption) -> Unit,
+    onLocaleSelected: (String) -> Unit,
+    onPrev: () -> Unit,
+    onNext: () -> Unit
+) {
+    Column(
+        modifier = modifier
+            .onSizeChanged(onMeasured)
+            .graphicsLayer {
+                translationY = animatedOffsetPx
+                alpha = 1f - (collapseFraction.coerceIn(0f, 1f) * 0.1f)
+            }
+            .semantics { stateDescription = collapsibleHeaderUiState(collapseFraction) }
+            .testTag(SEARCH_CHROME_TAG)
+    ) {
+        SearchToolbar(
+            keyword = keyword,
+            onKeywordChange = onKeywordChange,
+            selectedOrder = selectedOrder,
+            purchasedOnly = purchasedOnly,
+            selectedLocale = selectedLocale,
+            filterControlsLocked = filterControlsLocked,
+            searchSubmitLocked = searchSubmitLocked,
+            showSearchSpinner = showSearchSpinner,
+            onSearchSubmit = onSearchSubmit,
+            onPurchasedOnlySelected = onPurchasedOnlySelected,
+            onOrderSelected = onOrderSelected,
+            onLocaleSelected = onLocaleSelected
+        )
+
+        if (rightPanelToggle != null) {
+            Spacer(modifier = Modifier.height(8.dp))
+            rightPanelToggle(Modifier.size(50.dp))
+        }
+        if (showPagination) {
+            SearchPaginationHeader(
+                page = page,
+                canGoPrev = canGoPrev,
+                canGoNext = canGoNext,
+                controlsLocked = controlsLocked,
+                showPagingSpinner = showPagingSpinner,
+                onPrev = onPrev,
+                onNext = onNext
+            )
         }
     }
 }
