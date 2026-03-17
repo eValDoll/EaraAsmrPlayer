@@ -159,7 +159,7 @@ internal const val LIBRARY_CHROME_TAG = "library_chrome"
 internal const val LIBRARY_SEARCH_INPUT_TAG = "library_search_input"
 internal const val LIBRARY_SORT_BUTTON_TAG = "library_sort_button"
 internal const val LIBRARY_FILTER_BUTTON_TAG = "library_filter_button"
-private val LibraryChromeContentGap = 12.dp
+private val LibraryChromeContentGap = 20.dp
 private val LibraryChromeCollapseOvershoot = 12.dp
 
 @Composable
