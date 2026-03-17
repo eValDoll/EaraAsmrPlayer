@@ -3,7 +3,6 @@ package com.asmr.player.ui.player
 import androidx.compose.ui.text.style.TextAlign
 import com.asmr.player.data.settings.LyricsPageSettings
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LyricsPageLayoutTest {
@@ -18,17 +17,28 @@ class LyricsPageLayoutTest {
     fun viewportLayout_clampsVisibleLinesAndTopOffset() {
         val layout = buildLyricsViewportLayout(
             settings = LyricsPageSettings(
-                maxVisibleLines = 9,
-                centerPositionFraction = 0.9f
+                displayAreaMode = 2
             ),
             viewportHeightPx = 640f,
-            lineBlockHeightPx = 100f
+            nominalItemHeightPx = 100f
         )
 
-        assertEquals(6, layout.runtimeMaxVisibleLines)
-        assertEquals(6, layout.effectiveVisibleLines)
-        assertEquals(600f, layout.viewportWindowHeightPx, 0.001f)
-        assertTrue(layout.viewportTopOffsetPx in 0f..40f)
+        assertEquals(100f, layout.nominalItemHeightPx, 0.001f)
+        assertEquals(160f, layout.viewportWindowHeightPx, 0.001f)
+        assertEquals(240f, layout.viewportTopOffsetPx, 0.001f)
+    }
+
+    @Test
+    fun viewportLayout_respectsMeasuredWindowWithinRequestedBounds() {
+        val layout = buildLyricsViewportLayout(
+            settings = LyricsPageSettings(displayAreaMode = 1),
+            viewportHeightPx = 640f,
+            nominalItemHeightPx = 100f,
+            measuredWindowHeightPx = 140f
+        )
+
+        assertEquals(140f, layout.viewportWindowHeightPx, 0.001f)
+        assertEquals(0f, layout.viewportTopOffsetPx, 0.001f)
     }
 
     @Test
