@@ -11,8 +11,8 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
-import androidx.compose.foundation.border
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -40,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -55,6 +56,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.BuildConfig
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.FloatingLyricsSettings
+import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.ui.library.BulkPhase
 import com.asmr.player.ui.library.LibraryViewModel
 import com.asmr.player.ui.theme.AsmrTheme
@@ -72,6 +74,7 @@ fun SettingsScreen(
 ) {
     val floatingLyricsEnabled by viewModel.floatingLyricsEnabled.collectAsState()
     val floatingSettings by viewModel.floatingLyricsSettings.collectAsState()
+    val lyricsPageSettings by viewModel.lyricsPageSettings.collectAsState()
     val dynamicPlayerHueEnabled by viewModel.dynamicPlayerHueEnabled.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
     val staticHueArgb by viewModel.staticHueArgb.collectAsState()
@@ -84,6 +87,8 @@ fun SettingsScreen(
     val scanRoots by libraryViewModel.scanRoots.collectAsState()
     val bulkProgress by libraryViewModel.bulkProgress.collectAsState()
     val isGlobalSyncRunning by libraryViewModel.isGlobalSyncRunning.collectAsState()
+    val configuration = LocalConfiguration.current
+    val density = LocalDensity.current
     val context = LocalContext.current
     val colorScheme = AsmrTheme.colorScheme
     val segmentedButtonColors = SegmentedButtonDefaults.colors(
@@ -120,7 +125,6 @@ fun SettingsScreen(
 
     // 屏幕尺寸判断
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
-
     Scaffold(
         contentWindowInsets = WindowInsets.navigationBars,
         containerColor = Color.Transparent,
@@ -417,131 +421,133 @@ fun SettingsScreen(
                 }
 
                 // 悬浮歌词
-                item(key = "group:floating_lyrics") {
-                    SettingsGroup(title = "悬浮歌词") {
-                SettingsToggleRow(
-                    text = "开启悬浮歌词",
-                    checked = floatingLyricsEnabled,
-                    onCheckedChange = { viewModel.setFloatingLyricsEnabled(it) }
-                )
-
-                if (!overlayGranted && floatingLyricsEnabled) {
-                    OutlinedButton(
-                        onClick = {
-                            val intent = Intent(
-                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                Uri.parse("package:${context.packageName}")
-                            )
-                            overlayLauncher.launch(intent)
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.outlinedButtonColors()
-                    ) {
-                        Text("授权悬浮窗权限")
-                    }
-                }
-
-                if (floatingLyricsEnabled && overlayGranted) {
-                    // 字体大小
-                    SettingsSliderRow(
-                        text = "字体大小: ${floatingSettings.size.toInt()}",
-                        value = floatingSettings.size,
-                        range = 12f..32f,
-                        onValueChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(size = it)) }
-                    )
-
-                    // 背景透明度
-                    SettingsSliderRow(
-                        text = "背景透明度: ${(floatingSettings.opacity * 100).toInt()}%",
-                        value = floatingSettings.opacity,
-                        range = 0f..1f,
-                        onValueChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(opacity = it)) }
-                    )
-
-                    // 垂直位置
-                    SettingsSliderRow(
-                        text = "垂直位置 (Y轴)",
-                        value = floatingSettings.yOffset.toFloat(),
-                        range = 0f..2000f,
-                        onValueChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(yOffset = it.toInt())) }
-                    )
-
-                    // 对齐方式
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("对齐方式", style = MaterialTheme.typography.bodyMedium)
-                        Spacer(modifier = Modifier.weight(1f))
-                        SingleChoiceSegmentedButtonRow {
-                            SegmentedButton(
-                                selected = floatingSettings.align == 0,
-                                onClick = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(align = 0)) },
-                                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
-                                colors = segmentedButtonColors,
-                                icon = {},
-                                label = { Icon(Icons.AutoMirrored.Filled.FormatAlignLeft, null) }
-                            )
-                            SegmentedButton(
-                                selected = floatingSettings.align == 1,
-                                onClick = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(align = 1)) },
-                                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
-                                colors = segmentedButtonColors,
-                                icon = {},
-                                label = { Icon(Icons.Default.FormatAlignCenter, null) }
-                            )
-                            SegmentedButton(
-                                selected = floatingSettings.align == 2,
-                                onClick = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(align = 2)) },
-                                shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
-                                colors = segmentedButtonColors,
-                                icon = {},
-                                label = { Icon(Icons.AutoMirrored.Filled.FormatAlignRight, null) }
-                            )
-                        }
-                    }
-
-                    val presetColors = remember {
-                        listOf(
-                            0xFFFFFFFF.toInt(),
-                            0xFFFFEB3B.toInt(),
-                            0xFF00E5FF.toInt(),
-                            0xFF69F0AE.toInt(),
-                            0xFFFF4081.toInt()
+                item(key = "group:lyrics") {
+                    SettingsGroup(title = "歌词") {
+                        LyricsPageSettingsSection(
+                            settings = lyricsPageSettings,
+                            segmentedButtonColors = segmentedButtonColors,
+                            onSettingsChange = { next -> viewModel.updateLyricsPageSettings(next) }
                         )
-                    }
-                    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Text("歌词颜色", style = MaterialTheme.typography.bodyMedium)
-                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
-                            presetColors.forEach { c ->
-                                val selected = floatingSettings.color == c
-                                Box(
-                                    modifier = Modifier
-                                        .size(30.dp)
-                                        .clip(CircleShape)
-                                        .background(Color(c))
-                                        .border(
-                                            width = if (selected) 2.dp else 1.dp,
-                                            color = if (selected) colorScheme.primary else colorScheme.onSurface.copy(alpha = 0.25f),
-                                            shape = CircleShape
-                                        )
-                                        .clickable { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(color = c)) }
-                                )
+
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+
+                        Text("悬浮歌词", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        SettingsToggleRow(
+                            text = "开启悬浮歌词",
+                            checked = floatingLyricsEnabled,
+                            onCheckedChange = { viewModel.setFloatingLyricsEnabled(it) }
+                        )
+
+                        if (!overlayGranted && floatingLyricsEnabled) {
+                            OutlinedButton(
+                                onClick = {
+                                    val intent = Intent(
+                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                        Uri.parse("package:${context.packageName}")
+                                    )
+                                    overlayLauncher.launch(intent)
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.outlinedButtonColors()
+                            ) {
+                                Text("授权悬浮窗权限")
                             }
                         }
+
+                        if (floatingLyricsEnabled && overlayGranted) {
+                            SettingsSliderRow(
+                                text = "字体大小: ${floatingSettings.size.toInt()}",
+                                value = floatingSettings.size,
+                                range = 12f..32f,
+                                onValueChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(size = it)) }
+                            )
+
+                            SettingsSliderRow(
+                                text = "背景透明度: ${(floatingSettings.opacity * 100).toInt()}%",
+                                value = floatingSettings.opacity,
+                                range = 0f..1f,
+                                onValueChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(opacity = it)) }
+                            )
+
+                            SettingsSliderRow(
+                                text = "垂直位置 (Y轴)",
+                                value = floatingSettings.yOffset.toFloat(),
+                                range = 0f..2000f,
+                                onValueChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(yOffset = it.toInt())) }
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("对齐方式", style = MaterialTheme.typography.bodyMedium)
+                                Spacer(modifier = Modifier.weight(1f))
+                                SingleChoiceSegmentedButtonRow {
+                                    SegmentedButton(
+                                        selected = floatingSettings.align == 0,
+                                        onClick = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(align = 0)) },
+                                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                                        colors = segmentedButtonColors,
+                                        icon = {},
+                                        label = { Icon(Icons.AutoMirrored.Filled.FormatAlignLeft, null) }
+                                    )
+                                    SegmentedButton(
+                                        selected = floatingSettings.align == 1,
+                                        onClick = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(align = 1)) },
+                                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                                        colors = segmentedButtonColors,
+                                        icon = {},
+                                        label = { Icon(Icons.Default.FormatAlignCenter, null) }
+                                    )
+                                    SegmentedButton(
+                                        selected = floatingSettings.align == 2,
+                                        onClick = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(align = 2)) },
+                                        shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                                        colors = segmentedButtonColors,
+                                        icon = {},
+                                        label = { Icon(Icons.AutoMirrored.Filled.FormatAlignRight, null) }
+                                    )
+                                }
+                            }
+
+                            val presetColors = remember {
+                                listOf(
+                                    0xFFFFFFFF.toInt(),
+                                    0xFFFFEB3B.toInt(),
+                                    0xFF00E5FF.toInt(),
+                                    0xFF69F0AE.toInt(),
+                                    0xFFFF4081.toInt()
+                                )
+                            }
+                            Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text("歌词颜色", style = MaterialTheme.typography.bodyMedium)
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    presetColors.forEach { c ->
+                                        val selected = floatingSettings.color == c
+                                        Box(
+                                            modifier = Modifier
+                                                .size(30.dp)
+                                                .clip(CircleShape)
+                                                .background(Color(c))
+                                                .border(
+                                                    width = if (selected) 2.dp else 1.dp,
+                                                    color = if (selected) colorScheme.primary else colorScheme.onSurface.copy(alpha = 0.25f),
+                                                    shape = CircleShape
+                                                )
+                                                .clickable { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(color = c)) }
+                                        )
+                                    }
+                                }
+                            }
+
+                            SettingsToggleRow(
+                                text = "点击穿透(锁定位置)",
+                                checked = !floatingSettings.touchable,
+                                onCheckedChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(touchable = !it)) }
+                            )
+                        }
                     }
-
-                    // 点击穿透
-                    SettingsToggleRow(
-                        text = "点击穿透 (锁定位置)",
-                        checked = !floatingSettings.touchable,
-                        onCheckedChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(touchable = !it)) }
-                    )
                 }
-            }
-
-                }
-
                 item(key = "group:about_update") {
                     SettingsGroup(title = "关于") {
                         val isDark = AsmrTheme.colorScheme.isDark
@@ -705,6 +711,108 @@ fun SettingsScreen(
                 }
             }
         )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun LyricsPageSettingsSection(
+    settings: LyricsPageSettings,
+    segmentedButtonColors: SegmentedButtonColors,
+    onSettingsChange: (LyricsPageSettings) -> Unit
+) {
+    Text("歌词页", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+    SettingsSliderRow(
+        text = "字体大小: ${settings.fontSizeSp.toInt()}sp",
+        value = settings.fontSizeSp,
+        range = 18f..36f,
+        onValueChange = { onSettingsChange(settings.copy(fontSizeSp = it)) }
+    )
+    SettingsSliderRow(
+        text = "字体阴影: ${"%.1f".format(settings.strokeWidthSp)}sp",
+        value = settings.strokeWidthSp,
+        range = 0f..3f,
+        onValueChange = { onSettingsChange(settings.copy(strokeWidthSp = it)) }
+    )
+    SettingsSliderRow(
+        text = "行间距: ${"%.2f".format(settings.lineHeightMultiplier)}x",
+        value = settings.lineHeightMultiplier,
+        range = 0.1f..3.0f,
+        onValueChange = { onSettingsChange(settings.copy(lineHeightMultiplier = it)) }
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("显示区域", style = MaterialTheme.typography.bodyMedium)
+        Spacer(modifier = Modifier.weight(1f))
+        SingleChoiceSegmentedButtonRow {
+            SegmentedButton(
+                selected = settings.displayAreaMode == 0,
+                onClick = { onSettingsChange(settings.copy(displayAreaMode = 0)) },
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 4),
+                colors = segmentedButtonColors,
+                icon = {},
+                label = { Text("全屏") }
+            )
+            SegmentedButton(
+                selected = settings.displayAreaMode == 1,
+                onClick = { onSettingsChange(settings.copy(displayAreaMode = 1)) },
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 4),
+                colors = segmentedButtonColors,
+                icon = {},
+                label = { Text("上1/4") }
+            )
+            SegmentedButton(
+                selected = settings.displayAreaMode == 2,
+                onClick = { onSettingsChange(settings.copy(displayAreaMode = 2)) },
+                shape = SegmentedButtonDefaults.itemShape(index = 2, count = 4),
+                colors = segmentedButtonColors,
+                icon = {},
+                label = { Text("中1/4") }
+            )
+            SegmentedButton(
+                selected = settings.displayAreaMode == 3,
+                onClick = { onSettingsChange(settings.copy(displayAreaMode = 3)) },
+                shape = SegmentedButtonDefaults.itemShape(index = 3, count = 4),
+                colors = segmentedButtonColors,
+                icon = {},
+                label = { Text("下1/4") }
+            )
+        }
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("对齐方式", style = MaterialTheme.typography.bodyMedium)
+        Spacer(modifier = Modifier.weight(1f))
+        SingleChoiceSegmentedButtonRow {
+            SegmentedButton(
+                selected = settings.align == 0,
+                onClick = { onSettingsChange(settings.copy(align = 0)) },
+                shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                colors = segmentedButtonColors,
+                icon = {},
+                label = { Icon(Icons.AutoMirrored.Filled.FormatAlignLeft, null) }
+            )
+            SegmentedButton(
+                selected = settings.align == 1,
+                onClick = { onSettingsChange(settings.copy(align = 1)) },
+                shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                colors = segmentedButtonColors,
+                icon = {},
+                label = { Icon(Icons.Default.FormatAlignCenter, null) }
+            )
+            SegmentedButton(
+                selected = settings.align == 2,
+                onClick = { onSettingsChange(settings.copy(align = 2)) },
+                shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                colors = segmentedButtonColors,
+                icon = {},
+                label = { Icon(Icons.AutoMirrored.Filled.FormatAlignRight, null) }
+            )
+        }
     }
 }
 
