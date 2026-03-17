@@ -6,7 +6,10 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.test.assertExists
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -14,7 +17,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performTextInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.asmr.player.ui.theme.AsmrTheme
+import com.asmr.player.ui.common.CollapsibleHeaderState
+import com.asmr.player.ui.theme.AsmrPlayerTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -32,7 +36,7 @@ class SearchScreenChromeTest {
         composeRule.setContent {
             var keyword by remember { mutableStateOf("") }
 
-            AsmrTheme {
+            AsmrPlayerTheme {
                 SearchToolbar(
                     keyword = keyword,
                     onKeywordChange = { keyword = it },
@@ -65,10 +69,10 @@ class SearchScreenChromeTest {
     @Test
     fun searchPending_disablesChromeAndShowsSearchSpinner() {
         composeRule.setContent {
-            AsmrTheme {
+            AsmrPlayerTheme {
                 Column {
                     SearchToolbar(
-                        keyword = "耳かき",
+                        keyword = "test",
                         onKeywordChange = {},
                         selectedOrder = SearchSortOption.Trend,
                         purchasedOnly = false,
@@ -97,16 +101,18 @@ class SearchScreenChromeTest {
         composeRule.onNodeWithTag(SEARCH_SCOPE_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_LANGUAGE_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_SUBMIT_BUTTON_TAG).assertIsNotEnabled()
-        composeRule.onNodeWithTag(SEARCH_SUBMIT_SPINNER_TAG).assertExists()
+        composeRule.onNodeWithTag(SEARCH_SUBMIT_SPINNER_TAG).assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.TestTag, SEARCH_SUBMIT_SPINNER_TAG)
+        )
     }
 
     @Test
     fun pagePending_disablesChromeAndShowsPaginationSpinner() {
         composeRule.setContent {
-            AsmrTheme {
+            AsmrPlayerTheme {
                 Column {
                     SearchToolbar(
-                        keyword = "耳かき",
+                        keyword = "test",
                         onKeywordChange = {},
                         selectedOrder = SearchSortOption.Trend,
                         purchasedOnly = false,
@@ -137,6 +143,78 @@ class SearchScreenChromeTest {
         composeRule.onNodeWithTag(SEARCH_SUBMIT_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_PREV_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_NEXT_BUTTON_TAG).assertIsNotEnabled()
-        composeRule.onNodeWithTag(SEARCH_PAGINATION_SPINNER_TAG).assertExists()
+        composeRule.onNodeWithTag(SEARCH_PAGINATION_SPINNER_TAG).assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.TestTag, SEARCH_PAGINATION_SPINNER_TAG)
+        )
+    }
+
+    @Test
+    fun searchChrome_collapsesAndExpandsWhileKeepingControlsMounted() {
+        composeRule.mainClock.autoAdvance = false
+        lateinit var chromeState: CollapsibleHeaderState
+
+        composeRule.setContent {
+            chromeState = remember { CollapsibleHeaderState() }
+
+            AsmrPlayerTheme {
+                SearchChrome(
+                    modifier = Modifier,
+                    keyword = "RJ123456",
+                    onKeywordChange = {},
+                    selectedOrder = SearchSortOption.Trend,
+                    purchasedOnly = false,
+                    selectedLocale = "ja_JP",
+                    filterControlsLocked = false,
+                    searchSubmitLocked = false,
+                    showSearchSpinner = false,
+                    showPagination = true,
+                    page = 2,
+                    canGoPrev = true,
+                    canGoNext = true,
+                    controlsLocked = false,
+                    showPagingSpinner = false,
+                    rightPanelToggle = null,
+                    animatedOffsetPx = chromeState.offsetPx,
+                    collapseFraction = chromeState.collapseFraction,
+                    onMeasured = { chromeState.updateHeight(it.height.toFloat()) },
+                    onSearchSubmit = {},
+                    onPurchasedOnlySelected = {},
+                    onOrderSelected = {},
+                    onLocaleSelected = {},
+                    onPrev = {},
+                    onNext = {}
+                )
+            }
+        }
+
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag(SEARCH_CHROME_TAG).assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "expanded")
+        )
+
+        composeRule.runOnIdle { chromeState.onScrollDelta(-1000f) }
+        composeRule.mainClock.advanceTimeBy(250)
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(SEARCH_CHROME_TAG).assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "collapsed")
+        )
+        composeRule.onNodeWithTag(SEARCH_INPUT_TAG).assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.TestTag, SEARCH_INPUT_TAG)
+        )
+        composeRule.onNodeWithTag(SEARCH_PREV_BUTTON_TAG).assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.TestTag, SEARCH_PREV_BUTTON_TAG)
+        )
+        composeRule.onNodeWithTag(SEARCH_NEXT_BUTTON_TAG).assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.TestTag, SEARCH_NEXT_BUTTON_TAG)
+        )
+
+        composeRule.runOnIdle { chromeState.expand() }
+        composeRule.mainClock.advanceTimeBy(250)
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag(SEARCH_CHROME_TAG).assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "expanded")
+        )
     }
 }
