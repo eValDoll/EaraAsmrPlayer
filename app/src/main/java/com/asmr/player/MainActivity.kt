@@ -21,6 +21,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.net.Uri
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -122,6 +123,8 @@ import com.asmr.player.ui.player.QueueSheetContent
 import com.asmr.player.ui.player.SleepTimerSheetContent
 
 import com.asmr.player.data.local.datastore.SettingsDataStore
+import com.asmr.player.data.settings.CoverPreviewMode
+import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.util.MessageManager
 import com.asmr.player.ui.common.NonTouchableAppMessageOverlay
 import com.asmr.player.ui.common.VisibleAppMessage
@@ -138,9 +141,12 @@ import com.asmr.player.ui.theme.dynamicPageContainerColor
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
+import androidx.media3.common.MediaItem
 
 private enum class OverlaySheet {
     Queue,
@@ -165,7 +171,11 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             val playerViewModel: PlayerViewModel = hiltViewModel()
             val libraryViewModel: LibraryViewModel = hiltViewModel()
-            val playback by playerViewModel.playback.collectAsState()
+            val themeMediaSource by remember(playerViewModel) {
+                playerViewModel.playback
+                    .map { it.currentMediaItem.toThemeMediaSource() }
+                    .distinctUntilChanged()
+            }.collectAsState(initial = ThemeMediaSource())
             val systemDark = isSystemInDarkTheme()
             val themePref by settingsDataStore.theme.collectAsState(initial = "system")
             val mode = when (themePref.lowercase()) {
@@ -175,20 +185,15 @@ class MainActivity : ComponentActivity() {
                 "system" -> if (systemDark) ThemeMode.Dark else ThemeMode.Light
                 else -> if (systemDark) ThemeMode.Dark else ThemeMode.Light
             }
-            val item = playback.currentMediaItem
-            val metadata = item?.mediaMetadata
-            val artworkUri = metadata?.artworkUri
-            val videoUri = item?.localConfiguration?.uri
-            val uriText = videoUri?.toString().orEmpty()
-            val mimeType = item?.localConfiguration?.mimeType.orEmpty()
-            val ext = uriText.substringBefore('#').substringBefore('?').substringAfterLast('.', "").lowercase()
-            val isVideo = metadata?.extras?.getBoolean("is_video") == true ||
-                mimeType.startsWith("video/") ||
-                ext in setOf("mp4", "m4v", "webm", "mkv", "mov")
+            val artworkUri = themeMediaSource.artworkUri
+            val videoUri = themeMediaSource.videoUri
+            val isVideo = themeMediaSource.isVideo
             val globalDynamicHueEnabled by settingsDataStore.dynamicPlayerHueEnabled.collectAsState(initial = false)
             val staticHueArgb by settingsDataStore.staticHueArgb.collectAsState(initial = null)
             val coverBackgroundEnabled by settingsDataStore.coverBackgroundEnabled.collectAsState(initial = true)
             val coverBackgroundClarity by settingsDataStore.coverBackgroundClarity.collectAsState(initial = 0.35f)
+            val coverPreviewMode by settingsDataStore.coverPreviewMode.collectAsState(initial = CoverPreviewMode.Disabled)
+            val lyricsPageSettings by settingsDataStore.lyricsPageSettings.collectAsState(initial = LyricsPageSettings())
             val neutral = remember(mode) { neutralPaletteForMode(mode) }
             val cacheManager = remember(context.applicationContext) {
                 dagger.hilt.android.EntryPointAccessors.fromApplication(
@@ -321,6 +326,8 @@ class MainActivity : ComponentActivity() {
                         globalDynamicHueEnabled = globalDynamicHueEnabled,
                         coverBackgroundEnabled = coverBackgroundEnabled,
                         coverBackgroundClarity = coverBackgroundClarity,
+                        coverPreviewMode = coverPreviewMode,
+                        lyricsPageSettings = lyricsPageSettings,
                         forceImmersive = showSplash,
                         baseStaticHue = baseStaticHue
                     )
@@ -398,6 +405,8 @@ fun MainContainer(
     globalDynamicHueEnabled: Boolean,
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
+    coverPreviewMode: CoverPreviewMode,
+    lyricsPageSettings: LyricsPageSettings,
     forceImmersive: Boolean,
     baseStaticHue: HuePalette
 ) {
@@ -418,8 +427,11 @@ fun MainContainer(
     var touchBlockSeq by remember { mutableIntStateOf(0) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    val playback by playerViewModel.playback.collectAsState()
-    val artworkUri = playback.currentMediaItem?.mediaMetadata?.artworkUri
+    val hasCurrentMediaItem by remember(playerViewModel) {
+        playerViewModel.playback
+            .map { it.currentMediaItem != null }
+            .distinctUntilChanged()
+    }.collectAsState(initial = false)
     val drawerStatusViewModel: DrawerStatusViewModel = hiltViewModel()
     val statisticsViewModel: StatisticsViewModel = hiltViewModel()
     val bulkProgress by libraryViewModel.bulkProgress.collectAsState()
@@ -535,9 +547,14 @@ fun MainContainer(
         scope.launch { drawerState.close() }
     }
 
+    val drawerGesturesEnabled = remember(currentRoute, coverPreviewMode) {
+        val dragPreviewRoute = currentRoute == "now_playing" || currentRoute == "lyrics"
+        !(dragPreviewRoute && coverPreviewMode == CoverPreviewMode.Drag)
+    }
+
     ModalNavigationDrawer(
         drawerState = drawerState,
-        gesturesEnabled = true,
+        gesturesEnabled = drawerGesturesEnabled,
         drawerContent = {
             Box(
                 modifier = Modifier
@@ -655,7 +672,7 @@ fun MainContainer(
             }
         }
     ) {
-        val miniPlayerVisible = playback.currentMediaItem != null && currentRoute != "now_playing" && currentRoute != "lyrics"
+        val miniPlayerVisible = hasCurrentMediaItem && currentRoute != "now_playing" && currentRoute != "lyrics"
         val rightPanelExpandedFromStore by settingsDataStore.recentAlbumsPanelExpanded.collectAsState(initial = recentAlbumsPanelExpandedInitial)
         val rightPanelExpandedState = remember(settingsDataStore, scope, recentAlbumsPanelExpandedInitial) {
             PersistedBooleanState(initial = recentAlbumsPanelExpandedInitial) { expanded ->
@@ -1161,7 +1178,8 @@ fun MainContainer(
                             },
                             viewModel = playerViewModel,
                             coverBackgroundEnabled = coverBackgroundEnabled,
-                            coverBackgroundClarity = coverBackgroundClarity
+                            coverBackgroundClarity = coverBackgroundClarity,
+                            coverPreviewMode = coverPreviewMode
                         )
                     } else {
                         NowPlayingScreen(
@@ -1185,7 +1203,8 @@ fun MainContainer(
                             },
                             viewModel = playerViewModel,
                             coverBackgroundEnabled = coverBackgroundEnabled,
-                            coverBackgroundClarity = coverBackgroundClarity
+                            coverBackgroundClarity = coverBackgroundClarity,
+                            coverPreviewMode = coverPreviewMode
                         )
                     }
                 }
@@ -1196,7 +1215,9 @@ fun MainContainer(
                             onSeekTo = { pos -> playerViewModel.seekTo(pos) },
                             playerViewModel = playerViewModel,
                             coverBackgroundEnabled = coverBackgroundEnabled,
-                            coverBackgroundClarity = coverBackgroundClarity
+                            coverBackgroundClarity = coverBackgroundClarity,
+                            coverPreviewMode = coverPreviewMode,
+                            lyricsPageSettings = lyricsPageSettings
                         )
                     } else {
                         LyricsPage(
@@ -1204,7 +1225,9 @@ fun MainContainer(
                             onSeekTo = { pos -> playerViewModel.seekTo(pos) },
                             playerViewModel = playerViewModel,
                             coverBackgroundEnabled = coverBackgroundEnabled,
-                            coverBackgroundClarity = coverBackgroundClarity
+                            coverBackgroundClarity = coverBackgroundClarity,
+                            coverPreviewMode = coverPreviewMode,
+                            lyricsPageSettings = lyricsPageSettings
                         )
                     }
                 }
@@ -1869,6 +1892,34 @@ private data class DefaultSystemUiState(
     val lightStatusBars: Boolean,
     val lightNavigationBars: Boolean
 )
+
+private data class ThemeMediaSource(
+    val artworkUri: Uri? = null,
+    val videoUri: Uri? = null,
+    val isVideo: Boolean = false
+)
+
+private fun MediaItem?.toThemeMediaSource(): ThemeMediaSource {
+    val item = this ?: return ThemeMediaSource()
+    val metadata = item.mediaMetadata
+    val artworkUri = metadata.artworkUri
+    val videoUri = item.localConfiguration?.uri
+    val mimeType = item.localConfiguration?.mimeType.orEmpty()
+    val uriText = videoUri?.toString().orEmpty()
+    val fileExtension = uriText
+        .substringBefore('#')
+        .substringBefore('?')
+        .substringAfterLast('.', "")
+        .lowercase()
+    val isVideo = metadata.extras?.getBoolean("is_video") == true ||
+        mimeType.startsWith("video/") ||
+        fileExtension in setOf("mp4", "m4v", "webm", "mkv", "mov")
+    return ThemeMediaSource(
+        artworkUri = artworkUri,
+        videoUri = videoUri,
+        isVideo = isVideo
+    )
+}
 
 private fun Context.findActivity(): Activity? {
     var context = this

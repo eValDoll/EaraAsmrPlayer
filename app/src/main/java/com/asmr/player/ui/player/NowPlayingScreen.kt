@@ -71,6 +71,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.ui.PlayerView
 import com.asmr.player.R
+import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.ui.common.EqualizerPanel
@@ -103,6 +104,7 @@ fun NowPlayingScreen(
     viewModel: PlayerViewModel,
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
+    coverPreviewMode: CoverPreviewMode,
     lyricsViewModel: LyricsViewModel = hiltViewModel()
 ) {
     val playback by viewModel.playback.collectAsState()
@@ -142,6 +144,11 @@ fun NowPlayingScreen(
             easing = FastOutSlowInEasing
         ),
         label = "nowPlayingAccentColor"
+    )
+    val lyricColors = rememberLyricReadableColors(
+        accentColor = accentColor,
+        coverBackgroundEnabled = coverBackgroundEnabled,
+        coverBackgroundClarity = coverBackgroundClarity
     )
     val onAccentColor = if (accentColor.luminance() > 0.55f) Color.Black else Color.White
     val videoBackdropColor = if (isVideo) {
@@ -192,6 +199,21 @@ fun NowPlayingScreen(
     val useSplitLayout = heightClass != WindowHeightSizeClass.Compact && isLandscape
     val player = viewModel.playerOrNull()
     val videoAspectRatio = rememberPlayerVideoAspectRatio(player)
+    val useDragPreview = coverPreviewMode == CoverPreviewMode.Drag && !isVideo
+    val useMotionPreview = coverPreviewMode == CoverPreviewMode.Motion && !isVideo
+    val coverMotionState = rememberCoverMotionState(
+        enabled = useMotionPreview,
+        resetKey = item?.mediaId
+    )
+    val coverDragPreviewState = rememberCoverDragPreviewState(
+        enabled = useDragPreview,
+        resetKey = item?.mediaId
+    )
+    val coverPreviewAlignment = when {
+        useDragPreview -> coverDragPreviewState.toAlignment()
+        useMotionPreview -> coverMotionState.toAlignment()
+        else -> Alignment.Center
+    }
 
     Box(
         modifier = Modifier.fillMaxSize()
@@ -210,6 +232,7 @@ fun NowPlayingScreen(
                 clarity = coverBackgroundClarity,
                 overlayBaseColor = colorScheme.background,
                 tintBaseColor = accentColor,
+                artworkAlignment = coverPreviewAlignment,
                 isDark = colorScheme.isDark
             )
         }
@@ -296,7 +319,11 @@ fun NowPlayingScreen(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        Box(modifier = Modifier.widthIn(max = 420.dp).aspectRatio(if (isVideo) videoAspectRatio else 1f)) {
+                        Box(
+                            modifier = Modifier
+                                .widthIn(max = 420.dp)
+                                .aspectRatio(if (isVideo) videoAspectRatio else 1f)
+                        ) {
                             ArtworkBox(
                                 isVideo = isVideo,
                                 metadata = metadata,
@@ -304,7 +331,10 @@ fun NowPlayingScreen(
                                 onOpenLyrics = onOpenLyrics,
                                 edgeBlendEnabled = false,
                                 edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
-                                videoBackdropColor = videoBackdropColor
+                                videoBackdropColor = videoBackdropColor,
+                                artworkAlignment = coverPreviewAlignment,
+                                dragPreviewEnabled = useDragPreview,
+                                dragPreviewState = coverDragPreviewState
                             )
                         }
                         
@@ -374,7 +404,7 @@ fun NowPlayingScreen(
                                     currentPosition = playback.positionMs,
                                     onSeekTo = { viewModel.seekTo(it) },
                                     onOpenLyrics = onOpenLyrics,
-                                    activeColor = accentColor,
+                                    colors = lyricColors,
                                     modifier = Modifier
                                         .weight(0.70f)
                                         .fillMaxHeight(),
@@ -517,7 +547,10 @@ fun NowPlayingScreen(
                                 onOpenLyrics = onOpenLyrics,
                                 edgeBlendEnabled = false,
                                 edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
-                                videoBackdropColor = videoBackdropColor
+                                videoBackdropColor = videoBackdropColor,
+                                artworkAlignment = coverPreviewAlignment,
+                                dragPreviewEnabled = useDragPreview,
+                                dragPreviewState = coverDragPreviewState
                             )
                         }
 
@@ -578,7 +611,7 @@ fun NowPlayingScreen(
                                     currentPosition = playback.positionMs,
                                     onSeekTo = { viewModel.seekTo(it) },
                                     onOpenLyrics = onOpenLyrics,
-                                    activeColor = accentColor,
+                                    colors = lyricColors,
                                     modifier = Modifier
                                         .weight(0.72f)
                                         .fillMaxHeight(),
@@ -764,7 +797,10 @@ fun NowPlayingScreen(
                                 onOpenLyrics = onOpenLyrics,
                                 edgeBlendEnabled = false,
                                 edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
-                                videoBackdropColor = videoBackdropColor
+                                videoBackdropColor = videoBackdropColor,
+                                artworkAlignment = coverPreviewAlignment,
+                                dragPreviewEnabled = useDragPreview,
+                                dragPreviewState = coverDragPreviewState
                             )
                         }
                     }
@@ -774,7 +810,7 @@ fun NowPlayingScreen(
                             lyrics = lyricsState.lyrics,
                             currentPosition = playback.positionMs,
                             onOpenLyrics = onOpenLyrics,
-                            accentColor = accentColor,
+                            colors = lyricColors,
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
@@ -1048,13 +1084,22 @@ private fun ArtworkBox(
     onOpenLyrics: () -> Unit,
     edgeBlendEnabled: Boolean,
     edgeBlendColor: Color,
-    videoBackdropColor: Color
+    videoBackdropColor: Color,
+    artworkAlignment: Alignment = Alignment.Center,
+    dragPreviewEnabled: Boolean = false,
+    dragPreviewState: CoverDragPreviewState? = null,
+    modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(28.dp)
     val hasArtwork = metadata?.artworkUri != null
     Box(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxSize()
+            .coverDragPreviewGesture(
+                enabled = dragPreviewEnabled && dragPreviewState != null,
+                state = dragPreviewState ?: CoverDragPreviewState(),
+                minPointers = 2
+            )
             .clip(shape)
             .background(if (isVideo) videoBackdropColor else Color.Transparent)
             .then(if (hasArtwork && !edgeBlendEnabled) Modifier.shadow(12.dp, shape) else Modifier)
@@ -1102,7 +1147,8 @@ private fun ArtworkBox(
                         CoverArtworkEdgeBlend(
                             artworkModel = artwork,
                             blendColor = edgeBlendColor,
-                            modifier = Modifier.fillMaxSize()
+                            modifier = Modifier.fillMaxSize(),
+                            artworkAlignment = artworkAlignment
                         )
                     } else {
                         DiscPlaceholder(modifier = Modifier.fillMaxSize(), cornerRadius = 28)
@@ -1112,6 +1158,7 @@ private fun ArtworkBox(
                         model = metadata?.artworkUri,
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
+                        alignment = artworkAlignment,
                         placeholderCornerRadius = 28,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -1438,7 +1485,7 @@ private fun SingleLineLyrics(
     lyrics: List<SubtitleEntry>,
     currentPosition: Long,
     onOpenLyrics: () -> Unit,
-    accentColor: Color,
+    colors: LyricReadableColors,
     modifier: Modifier = Modifier,
 ) {
     val sortedLyrics = remember(lyrics) {
@@ -1478,16 +1525,23 @@ private fun SingleLineLyrics(
     Column(
         modifier = modifier
             .clickable { onOpenLyrics() }
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+            .padding(horizontal = 16.dp, vertical = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         AnimatedLyricLine(
             text = currentText,
             durationMs = lineDuration,
-            color = accentColor,
+            colors = colors,
             fontWeight = FontWeight.ExtraBold,
             modifier = Modifier.fillMaxWidth()
+        )
+        Box(
+            modifier = Modifier
+                .width(52.dp)
+                .height(2.dp)
+                .clip(RoundedCornerShape(percent = 50))
+                .background(colors.accentEmphasis.copy(alpha = if (AsmrTheme.colorScheme.isDark) 0.72f else 0.56f))
         )
     }
 }
@@ -1497,7 +1551,7 @@ private fun SingleLineLyrics(
 private fun AnimatedLyricLine(
     text: String,
     durationMs: Long,
-    color: Color,
+    colors: LyricReadableColors,
     fontWeight: FontWeight,
     modifier: Modifier = Modifier
 ) {
@@ -1507,7 +1561,7 @@ private fun AnimatedLyricLine(
             ContentTransform(
                 targetContentEnter = slideInVertically(animationSpec = tween(600)) { it } + fadeIn(animationSpec = tween(600)),
                 initialContentExit = slideOutVertically(animationSpec = tween(600)) { -it } + fadeOut(animationSpec = tween(600)),
-                sizeTransform = SizeTransform(clip = false)
+                sizeTransform = null
             )
         },
         label = "lyricLine"
@@ -1516,7 +1570,7 @@ private fun AnimatedLyricLine(
             text = target,
             durationMs = durationMs,
             style = MaterialTheme.typography.titleMedium,
-            color = color,
+            colors = colors,
             fontWeight = fontWeight,
             modifier = modifier
         )
@@ -1529,17 +1583,18 @@ private fun SlowMarqueeText(
     text: String,
     durationMs: Long,
     style: androidx.compose.ui.text.TextStyle,
-    color: Color,
+    colors: LyricReadableColors,
     fontWeight: FontWeight,
     modifier: Modifier = Modifier
 ) {
     val singleLine = remember(text) { normalizeSingleLineText(text) }
     val content = singleLine.ifBlank { " " }
-    val shadow = if (AsmrTheme.colorScheme.isDark) {
-        Shadow(color = Color.Black.copy(alpha = 0.6f), offset = Offset(0f, 2f), blurRadius = 4f)
-    } else {
-        Shadow(color = Color.Black.copy(alpha = 0.15f), offset = Offset(0f, 1f), blurRadius = 2f)
-    }
+    val colorScheme = AsmrTheme.colorScheme
+    val shadow = Shadow(
+        color = colors.accentEmphasis.copy(alpha = if (colorScheme.isDark) 0.28f else 0.18f),
+        offset = Offset.Zero,
+        blurRadius = if (colorScheme.isDark) 14f else 10f
+    )
     
     val textMeasurer = androidx.compose.ui.text.rememberTextMeasurer()
     val textLayoutResult = remember(content, style, fontWeight) {
@@ -1600,15 +1655,18 @@ private fun SlowMarqueeText(
                 fontWeight = fontWeight,
                 shadow = shadow
             ),
-            color = color,
+            color = colors.activeText,
             maxLines = 1,
             softWrap = false,
             overflow = TextOverflow.Clip,
             textAlign = TextAlign.Center,
-            modifier = Modifier.basicMarquee(
-                iterations = Int.MAX_VALUE,
-                velocity = finalVelocity.coerceAtLeast(10.dp) // Minimum speed
-            )
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 10.dp, vertical = 2.dp)
+                .basicMarquee(
+                    iterations = Int.MAX_VALUE,
+                    velocity = finalVelocity.coerceAtLeast(10.dp)
+                )
         )
     }
 }

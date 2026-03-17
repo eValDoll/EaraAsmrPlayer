@@ -5,8 +5,10 @@ import androidx.lifecycle.viewModelScope
 import com.asmr.player.BuildConfig
 import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.data.remote.update.GitHubUpdateClient
+import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.remote.update.UpdateRelease
 import com.asmr.player.data.settings.FloatingLyricsSettings
+import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -51,6 +53,9 @@ class SettingsViewModel @Inject constructor(
     val floatingLyricsSettings: StateFlow<FloatingLyricsSettings> = settingsRepository.floatingLyricsSettings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), FloatingLyricsSettings())
 
+    val lyricsPageSettings: StateFlow<LyricsPageSettings> = settingsDataStore.lyricsPageSettings
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LyricsPageSettings())
+
     val dynamicPlayerHueEnabled: StateFlow<Boolean> = settingsDataStore.dynamicPlayerHueEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
@@ -72,6 +77,9 @@ class SettingsViewModel @Inject constructor(
     val coverBackgroundClarity: StateFlow<Float> = settingsDataStore.coverBackgroundClarity
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.35f)
 
+    val coverPreviewMode: StateFlow<CoverPreviewMode> = settingsDataStore.coverPreviewMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CoverPreviewMode.Disabled)
+
     private val updateClient = GitHubUpdateClient(okHttpClient)
     private val _updateState = MutableStateFlow<AppUpdateState>(AppUpdateState.Idle)
     val updateState = _updateState.asStateFlow()
@@ -83,6 +91,10 @@ class SettingsViewModel @Inject constructor(
 
     fun updateFloatingLyricsSettings(settings: FloatingLyricsSettings) {
         viewModelScope.launch { settingsRepository.updateFloatingLyricsSettings(settings) }
+    }
+
+    fun updateLyricsPageSettings(settings: LyricsPageSettings) {
+        viewModelScope.launch { settingsDataStore.setLyricsPageSettings(settings) }
     }
 
     fun setDynamicPlayerHueEnabled(enabled: Boolean) {
@@ -103,6 +115,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setCoverBackgroundClarity(clarity: Float) {
         viewModelScope.launch { settingsDataStore.setCoverBackgroundClarity(clarity) }
+    }
+
+    fun setCoverPreviewMode(mode: CoverPreviewMode) {
+        viewModelScope.launch { settingsDataStore.setCoverPreviewMode(mode) }
     }
 
     fun checkUpdate() {

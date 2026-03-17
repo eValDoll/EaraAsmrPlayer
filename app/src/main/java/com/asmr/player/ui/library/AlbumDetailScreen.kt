@@ -8,6 +8,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
@@ -19,6 +20,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -47,15 +49,20 @@ import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -101,6 +108,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.zIndex
 import com.asmr.player.ui.common.rememberDominantColor
@@ -109,6 +117,8 @@ import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
 import com.asmr.player.ui.common.CvChipsFlow
+import com.asmr.player.ui.common.collapsibleHeaderUiState
+import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.theme.AsmrPlayerTheme
@@ -125,6 +135,9 @@ private enum class OnlineDownloadSource {
     AsmrOne,
     DlsitePlay
 }
+
+private val AlbumDetailTabContentGap = 12.dp
+private val AlbumDetailTabCollapseOvershoot = 10.dp
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -228,11 +241,33 @@ fun AlbumDetailScreen(
                     )
                     var localPreviewFile by remember { mutableStateOf<LocalTreeUiEntry.File?>(null) }
                     var onlinePreviewFile by remember { mutableStateOf<AsmrTreeUiEntry.File?>(null) }
+                    val tabChromeState = rememberCollapsibleHeaderState()
+                    val animatedTabChromeOffsetPx by animateFloatAsState(
+                        targetValue = tabChromeState.offsetPx,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioNoBouncy,
+                            stiffness = Spring.StiffnessMediumLow
+                        ),
+                        label = "albumDetailTabChromeOffset"
+                    )
+                    val tabChromeVisibleHeight = if (tabChromeState.heightPx > 0f) {
+                        with(LocalDensity.current) {
+                            (tabChromeState.heightPx + tabChromeState.offsetPx)
+                                .coerceIn(0f, tabChromeState.heightPx)
+                                .toDp()
+                        }
+                    } else {
+                        56.dp
+                    }
+                    val tabContentTopPadding = tabChromeVisibleHeight + AlbumDetailTabContentGap
     
                     LaunchedEffect(model.rjCode, model.dlsiteWorkno, model.localAlbum?.id, selectedTab) {
                         if (selectedTab != 0 && model.dlsiteInfo == null && model.dlsiteWorkno.isNotBlank()) {
                             viewModel.ensureDlsiteLoaded()
                         }
+                    }
+                    LaunchedEffect(selectedTab) {
+                        tabChromeState.expand()
                     }
     
                     Column(modifier = Modifier.fillMaxSize()) {
@@ -272,109 +307,6 @@ fun AlbumDetailScreen(
                     }
                     
                     val tabTitles = remember { listOf("本地", "DL", "DL Play") }
-                    val tabDockOffset = 10.dp
-                    val tabLift = 6.dp
-                    val tabContainerShape = RoundedCornerShape(18.dp)
-                    val tabItemShape = RoundedCornerShape(14.dp)
-                    val tabBarIsDark = colorScheme.isDark
-                    BoxWithConstraints(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 10.dp)
-                            .zIndex(1f)
-                    ) {
-                        val count = tabTitles.size
-                        val segmentGap = 4.dp
-                        val segmentPadding = 4.dp
-                        val segmentHeight = 36.dp
-                        val segmentTopPadding = tabDockOffset - tabLift
-                        val innerWidth = maxWidth - segmentPadding * 2
-                        val itemWidth = (innerWidth - segmentGap * (count - 1)) / count
-                        val density = LocalDensity.current
-                        val highlightX by animateDpAsState(
-                            targetValue = segmentPadding + (itemWidth + segmentGap) * selectedTab,
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioNoBouncy,
-                                stiffness = Spring.StiffnessMediumLow
-                            ),
-                            label = "albumDetailTabHighlightX"
-                        )
-                        Surface(
-                            modifier = Modifier.matchParentSize(),
-                            color = if (tabBarIsDark) {
-                                colorScheme.surface.copy(alpha = 0.28f)
-                            } else {
-                                colorScheme.surface.copy(alpha = 0.86f)
-                            },
-                            contentColor = colorScheme.textPrimary,
-                            shape = tabContainerShape,
-                            tonalElevation = 0.dp,
-                            shadowElevation = 0.dp
-                        ) { }
-                        Box(modifier = Modifier.fillMaxWidth().padding(top = segmentTopPadding)) {
-                            Surface(
-                                modifier = Modifier
-                                    .offset {
-                                        val px = with(density) { highlightX.roundToPx() }
-                                        IntOffset(px, 0)
-                                    }
-                                    .width(itemWidth)
-                                    .height(segmentHeight)
-                                    .zIndex(0f)
-                                    .border(
-                                        width = 1.dp,
-                                        color = if (tabBarIsDark) {
-                                            Color.White.copy(alpha = 0.18f)
-                                        } else {
-                                            Color.Black.copy(alpha = 0.10f)
-                                        },
-                                        shape = tabItemShape
-                                    ),
-                                color = colorScheme.surface,
-                                contentColor = colorScheme.textPrimary,
-                                shape = tabItemShape,
-                                tonalElevation = 0.dp,
-                                shadowElevation = 10.dp
-                            ) { }
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(4.dp)
-                                    .zIndex(1f),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                tabTitles.forEachIndexed { index, title ->
-                                    val selected = selectedTab == index
-                                    Box(
-                                        modifier = Modifier
-                                            .width(itemWidth)
-                                            .height(segmentHeight)
-                                            .clip(tabItemShape)
-                                            .clickable(
-                                                indication = null,
-                                                interactionSource = remember { MutableInteractionSource() }
-                                            ) {
-                                                selectedTab = index
-                                                userSelectedTab = true
-                                            }
-                                            .padding(horizontal = 10.dp),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Text(
-                                            title,
-                                            modifier = Modifier.offset(y = (-3).dp),
-                                            color = if (selected) colorScheme.textPrimary else colorScheme.textSecondary,
-                                            style = MaterialTheme.typography.titleSmall.copy(fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium),
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
                     LaunchedEffect(selectedTab, model.rjCode, model.dlsiteWorkno) {
                         when (selectedTab) {
                             1 -> {
@@ -385,16 +317,19 @@ fun AlbumDetailScreen(
                         }
                     }
 
-                    Surface(
+                    Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .zIndex(0f),
-                        color = colorScheme.surface,
-                        shape = RectangleShape,
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp
+                            .clipToBounds()
+                            .zIndex(0f)
                     ) {
-                        Box(modifier = Modifier.fillMaxSize().padding(top = tabDockOffset)) {
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = Color.Transparent,
+                            shape = RectangleShape,
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp
+                        ) {
                             AnimatedContent(
                                 targetState = selectedTab,
                                 transitionSpec = {
@@ -429,6 +364,8 @@ fun AlbumDetailScreen(
                                                 onPersistScroll = { index, offset ->
                                                     viewModel.persistListScrollPosition("scroll:$localTreeStateKey", index, offset)
                                                 },
+                                                topContentPadding = tabContentTopPadding,
+                                                chromeState = tabChromeState,
                                                 album = local,
                                                 header = headerContent,
                                                 onPlayTracks = onPlayTracks,
@@ -516,6 +453,8 @@ fun AlbumDetailScreen(
                                         treeStateKey = "tree:asmrOne:${model.rjCode.trim().uppercase()}",
                                         treeInitialExpanded = viewModel.getTreeExpanded("tree:asmrOne:${model.rjCode.trim().uppercase()}"),
                                         treeWasInitialized = viewModel.isTreeInitialized("tree:asmrOne:${model.rjCode.trim().uppercase()}"),
+                                        topContentPadding = tabContentTopPadding,
+                                        chromeState = tabChromeState,
                                         onPersistTreeState = { expanded ->
                                             val rj = model.rjCode.trim().uppercase()
                                             viewModel.persistTreeState("tree:asmrOne:$rj", expanded)
@@ -548,6 +487,8 @@ fun AlbumDetailScreen(
                                         treeStateKey = "tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}",
                                         treeInitialExpanded = viewModel.getTreeExpanded("tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}"),
                                         treeWasInitialized = viewModel.isTreeInitialized("tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}"),
+                                        topContentPadding = tabContentTopPadding,
+                                        chromeState = tabChromeState,
                                         onPersistTreeState = { expanded ->
                                             val rj = model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()
                                             viewModel.persistTreeState("tree:dlsitePlay:$rj", expanded)
@@ -560,6 +501,18 @@ fun AlbumDetailScreen(
                                 }
                             }
                         }
+                        AlbumDetailTabChrome(
+                            modifier = Modifier.align(Alignment.TopCenter),
+                            titles = tabTitles,
+                            selectedTab = selectedTab,
+                            animatedOffsetPx = animatedTabChromeOffsetPx,
+                            collapseFraction = tabChromeState.collapseFraction,
+                            onMeasured = { tabChromeState.updateHeight(it.height.toFloat()) },
+                            onTabSelected = { index ->
+                                selectedTab = index
+                                userSelectedTab = true
+                            }
+                        )
                     }
                 }
 
@@ -656,6 +609,154 @@ fun AlbumDetailScreen(
                             text = state.message,
                             color = MaterialTheme.colorScheme.error
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlbumDetailTabChrome(
+    modifier: Modifier = Modifier,
+    titles: List<String>,
+    selectedTab: Int,
+    animatedOffsetPx: Float,
+    collapseFraction: Float,
+    onMeasured: (IntSize) -> Unit,
+    onTabSelected: (Int) -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val isDark = colorScheme.isDark
+    val tabContainerShape = RoundedCornerShape(26.dp)
+    val tabItemShape = RoundedCornerShape(18.dp)
+    val collapseOvershootPx = with(LocalDensity.current) { AlbumDetailTabCollapseOvershoot.toPx() }
+
+    BoxWithConstraints(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .onSizeChanged(onMeasured)
+            .graphicsLayer {
+                translationY = animatedOffsetPx -
+                    (collapseFraction.coerceIn(0f, 1f) * collapseOvershootPx)
+                alpha = 1f - (collapseFraction.coerceIn(0f, 1f) * 0.08f)
+            }
+            .semantics { stateDescription = collapsibleHeaderUiState(collapseFraction) }
+            .zIndex(1f)
+    ) {
+        val count = titles.size.coerceAtLeast(1)
+        val segmentGap = 6.dp
+        val segmentPadding = 6.dp
+        val segmentHeight = 42.dp
+        val slotWidth = (maxWidth - (segmentPadding * 2) - (segmentGap * (count - 1))) / count
+        val highlightX by animateDpAsState(
+            targetValue = (slotWidth + segmentGap) * selectedTab,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessMediumLow
+            ),
+            label = "albumDetailTabHighlightX"
+        )
+
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .shadow(
+                    elevation = if (isDark) 12.dp else 8.dp,
+                    shape = tabContainerShape,
+                    spotColor = if (isDark) Color.Black.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.25f),
+                    ambientColor = if (isDark) Color.Black.copy(alpha = 0.8f) else Color.Black.copy(alpha = 0.25f)
+                )
+                .then(
+                    if (isDark) {
+                        Modifier.border(
+                            width = 1.dp,
+                            color = Color.White.copy(alpha = 0.2f),
+                            shape = tabContainerShape
+                        )
+                    } else {
+                        Modifier
+                    }
+                ),
+            color = if (isDark) {
+                colorScheme.surface.copy(alpha = 0.96f)
+            } else {
+                colorScheme.surface.copy(alpha = 0.96f)
+            },
+            contentColor = colorScheme.textPrimary,
+            shape = tabContainerShape,
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(segmentPadding)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .offset(x = highlightX)
+                        .width(slotWidth)
+                        .height(segmentHeight)
+                        .clip(tabItemShape)
+                        .background(
+                            color = if (isDark) {
+                                colorScheme.primary.copy(alpha = 0.22f)
+                            } else {
+                                colorScheme.primary.copy(alpha = 0.12f)
+                            },
+                            shape = tabItemShape
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = if (isDark) {
+                                colorScheme.primary.copy(alpha = 0.28f)
+                            } else {
+                                colorScheme.primary.copy(alpha = 0.18f)
+                            },
+                            shape = tabItemShape
+                        )
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(segmentGap),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    titles.forEachIndexed { index, title ->
+                        val selected = selectedTab == index
+                        Box(
+                            modifier = Modifier
+                                .width(slotWidth)
+                                .height(segmentHeight)
+                                .clip(tabItemShape)
+                                .clickable(
+                                    indication = null,
+                                    interactionSource = remember { MutableInteractionSource() }
+                                ) { onTabSelected(index) }
+                                .padding(horizontal = 4.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = title,
+                                modifier = Modifier.fillMaxWidth(),
+                                color = if (selected) {
+                                    if (isDark) {
+                                        colorScheme.primary
+                                    } else {
+                                        colorScheme.primary
+                                    }
+                                } else {
+                                    colorScheme.textSecondary
+                                },
+                                style = MaterialTheme.typography.titleSmall.copy(
+                                    fontWeight = if (selected) FontWeight.ExtraBold else FontWeight.Medium
+                                ),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
                     }
                 }
             }
@@ -1473,6 +1574,8 @@ private fun AlbumLocalTab(
     onPersistTreeState: (List<String>) -> Unit,
     initialScroll: Pair<Int, Int>,
     onPersistScroll: (Int, Int) -> Unit,
+    topContentPadding: Dp,
+    chromeState: com.asmr.player.ui.common.CollapsibleHeaderState,
     album: Album,
     header: @Composable () -> Unit,
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
@@ -1511,6 +1614,11 @@ private fun AlbumLocalTab(
         snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
             .distinctUntilChanged()
             .collect { (idx, off) -> onPersistScroll(idx, off) }
+    }
+    LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
+        if (listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
+            chromeState.expand()
+        }
     }
 
     val subtitleTrackIds by produceState(
@@ -1569,9 +1677,11 @@ private fun AlbumLocalTab(
     }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(chromeState.nestedScrollConnection),
         state = listState,
-        contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
+        contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
     ) {
         item { header() }
         if (treeResult.entries.isEmpty()) {
@@ -3424,6 +3534,8 @@ private fun AlbumDlsiteInfoTab(
     treeStateKey: String,
     treeInitialExpanded: List<String>,
     treeWasInitialized: Boolean,
+    topContentPadding: Dp,
+    chromeState: com.asmr.player.ui.common.CollapsibleHeaderState,
     onPersistTreeState: (List<String>) -> Unit,
     initialScroll: Pair<Int, Int>,
     onPersistScroll: (Int, Int) -> Unit,
@@ -3454,10 +3566,17 @@ private fun AlbumDlsiteInfoTab(
             .distinctUntilChanged()
             .collect { (idx, off) -> onPersistScroll(idx, off) }
     }
+    LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
+        if (listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
+            chromeState.expand()
+        }
+    }
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(chromeState.nestedScrollConnection),
         state = listState,
-        contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
+        contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
     ) {
         item { header() }
         if (dlsiteInfo == null && isLoading) {
@@ -3797,6 +3916,8 @@ private fun AlbumDlsitePlayTreeTab(
     treeStateKey: String,
     treeInitialExpanded: List<String>,
     treeWasInitialized: Boolean,
+    topContentPadding: Dp,
+    chromeState: com.asmr.player.ui.common.CollapsibleHeaderState,
     onPersistTreeState: (List<String>) -> Unit,
     initialScroll: Pair<Int, Int>,
     onPersistScroll: (Int, Int) -> Unit,
@@ -3844,6 +3965,11 @@ private fun AlbumDlsitePlayTreeTab(
                 onPersistScroll(persistedIndex, off)
             }
     }
+    LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
+        if (listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
+            chromeState.expand()
+        }
+    }
 
     val rj = rjCode.trim().uppercase()
     val leafTracks = remember(tree) { flattenAsmrOneTracksForUi(tree) }
@@ -3857,9 +3983,11 @@ private fun AlbumDlsitePlayTreeTab(
     val treeResult = remember(tree, expanded.toList()) { flattenAsmrOneTreeForUi(tree, expanded.toSet()) }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(chromeState.nestedScrollConnection),
         state = listState,
-        contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
+        contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
     ) {
         item { header() }
         item {

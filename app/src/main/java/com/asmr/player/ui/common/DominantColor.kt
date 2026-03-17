@@ -37,6 +37,30 @@ data class DominantColorResult(
     val fromCache: Boolean
 )
 
+internal fun dominantColorBackgroundPolarity(defaultColor: Color): String {
+    return if (defaultColor.luminance() < 0.5f) "dark" else "light"
+}
+
+internal fun centerWeightedDominantColorCacheKey(
+    baseKey: String,
+    centerRegionRatio: Float,
+    defaultColor: Color
+): String {
+    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
+    val backgroundKey = dominantColorBackgroundPolarity(defaultColor)
+    return "cw:$regionKey:bg=$backgroundKey:$baseKey"
+}
+
+internal fun centerWeightedVideoFrameDominantColorCacheKey(
+    baseKey: String,
+    centerRegionRatio: Float,
+    defaultColor: Color
+): String {
+    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
+    val backgroundKey = dominantColorBackgroundPolarity(defaultColor)
+    return "vf:cw:$regionKey:bg=$backgroundKey:$baseKey"
+}
+
 @Composable
 fun rememberDominantColor(
     model: Any?,
@@ -106,12 +130,16 @@ fun rememberDominantColorCenterWeighted(
         EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java).imageCacheManager()
     }
     val baseKey = model?.toString().orEmpty()
-    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
-    val key = "cw:$regionKey:$baseKey"
+    val preferDarkBackground = defaultColor.luminance() < 0.5f
+    val key = centerWeightedDominantColorCacheKey(
+        baseKey = baseKey,
+        centerRegionRatio = centerRegionRatio,
+        defaultColor = defaultColor
+    )
     val animatable = remember { Animatable(defaultColor, ColorVectorConverter) }
     val animatedColor = remember { derivedStateOf { animatable.value } }
 
-    LaunchedEffect(key, defaultColor, baseKey) {
+    LaunchedEffect(key, defaultColor, baseKey, preferDarkBackground) {
         if (baseKey.isBlank()) {
             animatable.animateTo(defaultColor, animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing))
             return@LaunchedEffect
@@ -134,7 +162,6 @@ fun rememberDominantColorCenterWeighted(
                 val colorInt = runCatching {
                     val palette = Palette.from(bitmap).generate()
                     val hint = computeCenterWeightedHintColorInt(bitmap, centerRegionRatio)
-                    val preferDarkBackground = defaultColor.luminance() < 0.5f
                     pickBestColorInt(
                         palette = palette,
                         fallbackColorInt = defaultColor.toArgb(),
@@ -145,7 +172,6 @@ fun rememberDominantColorCenterWeighted(
 
                 val hsl = FloatArray(3)
                 ColorUtils.colorToHSL(colorInt, hsl)
-                val preferDarkBackground = defaultColor.luminance() < 0.5f
                 adjustHslForUi(hsl, preferDarkBackground)
 
                 Color(ColorUtils.HSLToColor(hsl))
@@ -230,12 +256,16 @@ fun rememberVideoFrameDominantColorCenterWeighted(
 ): State<Color> {
     val context = LocalContext.current
     val baseKey = videoUri?.toString().orEmpty()
-    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
-    val key = "vf:cw:$regionKey:$baseKey"
+    val preferDarkBackground = defaultColor.luminance() < 0.5f
+    val key = centerWeightedVideoFrameDominantColorCacheKey(
+        baseKey = baseKey,
+        centerRegionRatio = centerRegionRatio,
+        defaultColor = defaultColor
+    )
     val animatable = remember { Animatable(defaultColor, ColorVectorConverter) }
     val animatedColor = remember { derivedStateOf { animatable.value } }
 
-    LaunchedEffect(key, defaultColor, baseKey) {
+    LaunchedEffect(key, defaultColor, baseKey, preferDarkBackground) {
         if (baseKey.isBlank()) {
             animatable.animateTo(defaultColor, animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing))
             return@LaunchedEffect
@@ -253,7 +283,6 @@ fun rememberVideoFrameDominantColorCenterWeighted(
                     val colorInt = runCatching {
                         val palette = Palette.from(bitmap).generate()
                         val hint = computeCenterWeightedHintColorInt(bitmap, centerRegionRatio)
-                        val preferDarkBackground = defaultColor.luminance() < 0.5f
                         pickBestColorInt(
                             palette = palette,
                             fallbackColorInt = defaultColor.toArgb(),
@@ -264,7 +293,6 @@ fun rememberVideoFrameDominantColorCenterWeighted(
 
                     val hsl = FloatArray(3)
                     ColorUtils.colorToHSL(colorInt, hsl)
-                    val preferDarkBackground = defaultColor.luminance() < 0.5f
                     adjustHslForUi(hsl, preferDarkBackground)
 
                     Color(ColorUtils.HSLToColor(hsl))
@@ -291,12 +319,16 @@ fun rememberComputedDominantColorCenterWeighted(
         EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java).imageCacheManager()
     }
     val baseKey = model?.toString().orEmpty()
-    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
-    val key = "cw:$regionKey:$baseKey"
+    val preferDarkBackground = defaultColor.luminance() < 0.5f
+    val key = centerWeightedDominantColorCacheKey(
+        baseKey = baseKey,
+        centerRegionRatio = centerRegionRatio,
+        defaultColor = defaultColor
+    )
     val cached = remember(key) { DominantColorCache.get(key) }
     val state = remember(key) { mutableStateOf(DominantColorResult(color = cached, fromCache = cached != null)) }
 
-    LaunchedEffect(key, defaultColor, baseKey) {
+    LaunchedEffect(key, defaultColor, baseKey, preferDarkBackground) {
         if (baseKey.isBlank()) {
             state.value = DominantColorResult(color = null, fromCache = false)
             return@LaunchedEffect
@@ -317,7 +349,6 @@ fun rememberComputedDominantColorCenterWeighted(
                 val colorInt = runCatching {
                     val palette = Palette.from(bitmap).generate()
                     val hint = computeCenterWeightedHintColorInt(bitmap, centerRegionRatio)
-                    val preferDarkBackground = defaultColor.luminance() < 0.5f
                     pickBestColorInt(
                         palette = palette,
                         fallbackColorInt = defaultColor.toArgb(),
@@ -328,7 +359,6 @@ fun rememberComputedDominantColorCenterWeighted(
 
                 val hsl = FloatArray(3)
                 ColorUtils.colorToHSL(colorInt, hsl)
-                val preferDarkBackground = defaultColor.luminance() < 0.5f
                 adjustHslForUi(hsl, preferDarkBackground)
 
                 Color(ColorUtils.HSLToColor(hsl))
@@ -351,12 +381,16 @@ fun rememberComputedVideoFrameDominantColorCenterWeighted(
 ): State<DominantColorResult> {
     val context = LocalContext.current
     val baseKey = videoUri?.toString().orEmpty()
-    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
-    val key = "vf:cw:$regionKey:$baseKey"
+    val preferDarkBackground = defaultColor.luminance() < 0.5f
+    val key = centerWeightedVideoFrameDominantColorCacheKey(
+        baseKey = baseKey,
+        centerRegionRatio = centerRegionRatio,
+        defaultColor = defaultColor
+    )
     val cached = remember(key) { DominantColorCache.get(key) }
     val state = remember(key) { mutableStateOf(DominantColorResult(color = cached, fromCache = cached != null)) }
 
-    LaunchedEffect(key, defaultColor, baseKey) {
+    LaunchedEffect(key, defaultColor, baseKey, preferDarkBackground) {
         if (baseKey.isBlank() || videoUri == null) {
             state.value = DominantColorResult(color = null, fromCache = false)
             return@LaunchedEffect
@@ -371,7 +405,6 @@ fun rememberComputedVideoFrameDominantColorCenterWeighted(
                     val colorInt = runCatching {
                         val palette = Palette.from(bitmap).generate()
                         val hint = computeCenterWeightedHintColorInt(bitmap, centerRegionRatio)
-                        val preferDarkBackground = defaultColor.luminance() < 0.5f
                         pickBestColorInt(
                             palette = palette,
                             fallbackColorInt = defaultColor.toArgb(),
@@ -382,7 +415,6 @@ fun rememberComputedVideoFrameDominantColorCenterWeighted(
 
                     val hsl = FloatArray(3)
                     ColorUtils.colorToHSL(colorInt, hsl)
-                    val preferDarkBackground = defaultColor.luminance() < 0.5f
                     adjustHslForUi(hsl, preferDarkBackground)
 
                     Color(ColorUtils.HSLToColor(hsl))
@@ -409,10 +441,14 @@ fun PrewarmDominantColorCenterWeighted(
         EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java).imageCacheManager()
     }
     val baseKey = model?.toString().orEmpty()
-    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
-    val key = "cw:$regionKey:$baseKey"
+    val preferDarkBackground = defaultColor.luminance() < 0.5f
+    val key = centerWeightedDominantColorCacheKey(
+        baseKey = baseKey,
+        centerRegionRatio = centerRegionRatio,
+        defaultColor = defaultColor
+    )
 
-    LaunchedEffect(key, defaultColor, baseKey) {
+    LaunchedEffect(key, defaultColor, baseKey, preferDarkBackground) {
         if (baseKey.isBlank()) return@LaunchedEffect
         if (DominantColorCache.get(key) != null) return@LaunchedEffect
 
@@ -430,7 +466,6 @@ fun PrewarmDominantColorCenterWeighted(
                 val colorInt = runCatching {
                     val palette = Palette.from(bitmap).generate()
                     val hint = computeCenterWeightedHintColorInt(bitmap, centerRegionRatio)
-                    val preferDarkBackground = defaultColor.luminance() < 0.5f
                     pickBestColorInt(
                         palette = palette,
                         fallbackColorInt = defaultColor.toArgb(),
@@ -441,7 +476,6 @@ fun PrewarmDominantColorCenterWeighted(
 
                 val hsl = FloatArray(3)
                 ColorUtils.colorToHSL(colorInt, hsl)
-                val preferDarkBackground = defaultColor.luminance() < 0.5f
                 adjustHslForUi(hsl, preferDarkBackground)
 
                 Color(ColorUtils.HSLToColor(hsl))
@@ -460,10 +494,14 @@ fun PrewarmVideoFrameDominantColorCenterWeighted(
 ) {
     val context = LocalContext.current
     val baseKey = videoUri?.toString().orEmpty()
-    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
-    val key = "vf:cw:$regionKey:$baseKey"
+    val preferDarkBackground = defaultColor.luminance() < 0.5f
+    val key = centerWeightedVideoFrameDominantColorCacheKey(
+        baseKey = baseKey,
+        centerRegionRatio = centerRegionRatio,
+        defaultColor = defaultColor
+    )
 
-    LaunchedEffect(key, defaultColor, baseKey) {
+    LaunchedEffect(key, defaultColor, baseKey, preferDarkBackground) {
         if (baseKey.isBlank() || videoUri == null) return@LaunchedEffect
         if (DominantColorCache.get(key) != null) return@LaunchedEffect
 
@@ -474,7 +512,6 @@ fun PrewarmVideoFrameDominantColorCenterWeighted(
                     val colorInt = runCatching {
                         val palette = Palette.from(bitmap).generate()
                         val hint = computeCenterWeightedHintColorInt(bitmap, centerRegionRatio)
-                        val preferDarkBackground = defaultColor.luminance() < 0.5f
                         pickBestColorInt(
                             palette = palette,
                             fallbackColorInt = defaultColor.toArgb(),
@@ -485,7 +522,6 @@ fun PrewarmVideoFrameDominantColorCenterWeighted(
 
                     val hsl = FloatArray(3)
                     ColorUtils.colorToHSL(colorInt, hsl)
-                    val preferDarkBackground = defaultColor.luminance() < 0.5f
                     adjustHslForUi(hsl, preferDarkBackground)
 
                     Color(ColorUtils.HSLToColor(hsl))
