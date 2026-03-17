@@ -3,6 +3,7 @@ package com.asmr.player.data.local.datastore
 import android.content.Context
 import androidx.datastore.preferences.core.*
 import com.asmr.player.data.settings.CoverPreviewMode
+import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.settingsDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
@@ -23,6 +24,11 @@ class SettingsDataStore @Inject constructor(
     private val coverBackgroundEnabledKey = booleanPreferencesKey("cover_background_enabled")
     private val coverBackgroundClarityKey = floatPreferencesKey("cover_background_clarity")
     private val coverPreviewModeKey = stringPreferencesKey("cover_preview_mode")
+    private val lyricsPageFontSizeKey = floatPreferencesKey("lyrics_page_font_size")
+    private val lyricsPageStrokeWidthKey = floatPreferencesKey("lyrics_page_stroke_width")
+    private val lyricsPageLineHeightMultiplierKey = floatPreferencesKey("lyrics_page_line_height_multiplier")
+    private val lyricsPageAlignKey = intPreferencesKey("lyrics_page_align")
+    private val lyricsPageDisplayAreaModeKey = intPreferencesKey("lyrics_page_display_area_mode")
     private val recentAlbumsPanelExpandedKey = booleanPreferencesKey("recent_albums_panel_expanded")
 
     val theme: Flow<String> = context.settingsDataStore.data.map { it[themeKey] ?: "system" }
@@ -45,6 +51,15 @@ class SettingsDataStore @Inject constructor(
     val coverBackgroundClarity: Flow<Float> = context.settingsDataStore.data.map { it[coverBackgroundClarityKey] ?: 0.35f }
     val coverPreviewMode: Flow<CoverPreviewMode> = context.settingsDataStore.data.map {
         CoverPreviewMode.fromStorageValue(it[coverPreviewModeKey])
+    }
+    val lyricsPageSettings: Flow<LyricsPageSettings> = context.settingsDataStore.data.map { prefs ->
+        LyricsPageSettings(
+            fontSizeSp = prefs[lyricsPageFontSizeKey] ?: 21f,
+            strokeWidthSp = prefs[lyricsPageStrokeWidthKey] ?: 0.1f,
+            lineHeightMultiplier = prefs[lyricsPageLineHeightMultiplierKey] ?: 1.5f,
+            align = prefs[lyricsPageAlignKey] ?: 0,
+            displayAreaMode = prefs[lyricsPageDisplayAreaModeKey] ?: 0
+        )
     }
     val recentAlbumsPanelExpanded: Flow<Boolean> = context.settingsDataStore.data.map { it[recentAlbumsPanelExpandedKey] ?: true }
 
@@ -83,6 +98,16 @@ class SettingsDataStore @Inject constructor(
 
     suspend fun setCoverPreviewMode(mode: CoverPreviewMode) {
         context.settingsDataStore.edit { it[coverPreviewModeKey] = mode.storageValue }
+    }
+
+    suspend fun setLyricsPageSettings(settings: LyricsPageSettings) {
+        context.settingsDataStore.edit {
+            it[lyricsPageFontSizeKey] = settings.fontSizeSp
+            it[lyricsPageStrokeWidthKey] = settings.strokeWidthSp
+            it[lyricsPageLineHeightMultiplierKey] = settings.lineHeightMultiplier
+            it[lyricsPageAlignKey] = settings.align
+            it[lyricsPageDisplayAreaModeKey] = settings.displayAreaMode
+        }
     }
 
     suspend fun setRecentAlbumsPanelExpanded(expanded: Boolean) {
