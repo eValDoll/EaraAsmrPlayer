@@ -11,6 +11,8 @@ import androidx.datastore.preferences.preferencesDataStore
 val Context.settingsDataStore by preferencesDataStore(name = "settings")
 
 object SettingsKeys {
+    val APP_VOLUME_PERCENT = intPreferencesKey("app_volume_percent")
+
     val EQ_ENABLED = booleanPreferencesKey("eq_enabled")
     fun eqBandLevel(index: Int) = intPreferencesKey("eq_band_$index")
 

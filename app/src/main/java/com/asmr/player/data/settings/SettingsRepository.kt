@@ -1,6 +1,7 @@
 package com.asmr.player.data.settings
 
 import android.content.Context
+import com.asmr.player.playback.AppVolume
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -14,6 +15,10 @@ import kotlinx.coroutines.withContext
 class SettingsRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    val appVolumePercent: Flow<Int> = context.settingsDataStore.data.map { prefs ->
+        AppVolume.clampPercent(prefs[SettingsKeys.APP_VOLUME_PERCENT] ?: AppVolume.DefaultPercent)
+    }
+
     val libraryViewMode: Flow<Int> = context.settingsDataStore.data.map { prefs ->
         prefs[SettingsKeys.LIBRARY_VIEW_MODE] ?: 0
     }
@@ -235,6 +240,26 @@ class SettingsRepository @Inject constructor(
     suspend fun setPlayMode(mode: Int) {
         withContext(Dispatchers.IO) {
             context.settingsDataStore.edit { it[SettingsKeys.PLAY_MODE] = mode }
+        }
+    }
+
+    suspend fun setAppVolumePercent(percent: Int) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit {
+                it[SettingsKeys.APP_VOLUME_PERCENT] = AppVolume.clampPercent(percent)
+            }
+        }
+    }
+
+    suspend fun adjustAppVolumePercent(deltaPercent: Int): Int {
+        return withContext(Dispatchers.IO) {
+            var updated = AppVolume.DefaultPercent
+            context.settingsDataStore.edit {
+                val current = AppVolume.clampPercent(it[SettingsKeys.APP_VOLUME_PERCENT] ?: AppVolume.DefaultPercent)
+                updated = AppVolume.adjustPercent(current, deltaPercent)
+                it[SettingsKeys.APP_VOLUME_PERCENT] = updated
+            }
+            updated
         }
     }
 
