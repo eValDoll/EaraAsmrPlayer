@@ -19,9 +19,11 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.datasource.FileDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
+import androidx.media3.datasource.cache.CacheDataSource
 import com.asmr.player.MainActivity
 import com.asmr.player.data.local.db.AppDatabase
 import com.asmr.player.data.local.db.entities.TrackPlaybackProgressEntity
@@ -38,6 +40,8 @@ import com.asmr.player.playback.BalanceAudioProcessor
 import com.asmr.player.playback.ChannelModeAudioProcessor
 import com.asmr.player.playback.FadingPlayer
 import com.asmr.player.playback.GraphicEqualizerAudioProcessor
+import com.asmr.player.playback.PlaybackMediaCache
+import com.asmr.player.playback.RoutingPlaybackDataSource
 import com.asmr.player.playback.StereoFftAnalyzer
 import com.asmr.player.playback.StereoOrbitAudioProcessor
 import com.asmr.player.playback.StereoPcmRingBuffer
@@ -159,7 +163,7 @@ class PlaybackService : MediaSessionService() {
             override fun onTransferEnd(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {}
         }
 
-        val dataSourceFactory = DefaultDataSource.Factory(
+        val upstreamDataSourceFactory = DefaultDataSource.Factory(
             this,
             ResolvingDataSource.Factory(httpFactory) { dataSpec ->
                 val uri = dataSpec.uri
@@ -185,6 +189,17 @@ class PlaybackService : MediaSessionService() {
         ).apply {
             setTransferListener(transferListener)
         }
+
+        val cacheDataSourceFactory = CacheDataSource.Factory()
+            .setCache(PlaybackMediaCache.getInstance(applicationContext))
+            .setCacheReadDataSourceFactory(FileDataSource.Factory())
+            .setUpstreamDataSourceFactory(upstreamDataSourceFactory)
+            .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
+
+        val dataSourceFactory = RoutingPlaybackDataSource.Factory(
+            upstreamFactory = upstreamDataSourceFactory,
+            cachedFactory = cacheDataSourceFactory
+        )
 
         exoPlayer = ExoPlayer.Builder(this)
             .setRenderersFactory(
@@ -660,6 +675,7 @@ class PlaybackService : MediaSessionService() {
             release()
             mediaSession = null
         }
+        runCatching { PlaybackMediaCache.release() }
         super.onDestroy()
     }
 
