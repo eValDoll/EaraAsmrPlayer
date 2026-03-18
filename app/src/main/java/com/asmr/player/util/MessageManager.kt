@@ -35,9 +35,22 @@ class MessageManager @Inject constructor() {
     val messages = _messages.asSharedFlow()
 
     fun showMessage(message: String, type: MessageType = MessageType.Info, durationMs: Long = 3000) {
+        val normalizedMessage = when (type) {
+            MessageType.Error -> AppErrorMessageFormatter.sanitize(message)
+            else -> message.trim()
+        }
+        if (normalizedMessage.isBlank()) return
         val now = System.currentTimeMillis()
         val id = seq.incrementAndGet()
-        _messages.tryEmit(AppMessage(id = id, message = message, type = type, durationMs = durationMs, createdAtMs = now))
+        _messages.tryEmit(
+            AppMessage(
+                id = id,
+                message = normalizedMessage,
+                type = type,
+                durationMs = durationMs,
+                createdAtMs = now
+            )
+        )
     }
 
     fun showSuccess(message: String) = showMessage(message, MessageType.Success)

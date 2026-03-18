@@ -346,13 +346,13 @@ class AlbumDetailViewModel @Inject constructor(
     fun manualSetRjAndSync(input: String) {
         val normalized = Regex("""RJ\d+""", RegexOption.IGNORE_CASE).find(input.trim())?.value?.uppercase().orEmpty()
         if (normalized.isBlank()) {
-            messageManager.showError("请输入有效 RJ 号（如 RJ123456）")
+            messageManager.showError("请输入有效的作品编号")
             return
         }
         val current = _uiState.value as? AlbumDetailUiState.Success
         val local = current?.model?.localAlbum
         if (local == null || local.id <= 0L) {
-            messageManager.showError("仅支持本地库专辑手动绑定 RJ")
+            messageManager.showError("仅支持本地库专辑手动绑定作品编号")
             return
         }
 
@@ -418,7 +418,7 @@ class AlbumDetailViewModel @Inject constructor(
                 messageManager.showSuccess("已绑定 $normalized 并完成云同步")
                 loadAlbum(local.id, normalized, force = true)
             } catch (e: Exception) {
-                messageManager.showError("同步异常：${e.message}")
+                messageManager.showError("同步失败，请稍后重试")
                 loadAlbum(local.id, normalized, force = true)
             } finally {
                 syncCoordinator.end(token)
@@ -444,7 +444,7 @@ class AlbumDetailViewModel @Inject constructor(
                 val rj = current.model.rjCode.ifBlank { local.rjCode.ifBlank { local.workId } }
                 loadAlbum(local.id, rj, force = true)
             } catch (e: Exception) {
-                messageManager.showError("设置封面失败：${e.message}")
+                messageManager.showError("设置封面失败，请检查后重试")
             }
         }
     }
@@ -774,8 +774,7 @@ class AlbumDetailViewModel @Inject constructor(
                 val updated = (_uiState.value as? AlbumDetailUiState.Success)?.model ?: return@launch
                 val updatedWorkno = updated.dlsiteWorkno.trim().uppercase().ifBlank { updated.rjCode.trim().uppercase() }
                 if (token != dlsiteTrialLoadToken || !updatedWorkno.equals(workno, ignoreCase = true)) return@launch
-                val errMsg = e.message?.trim().orEmpty().ifBlank { "未知错误" }
-                messageManager.showError("试听刷新失败：$errMsg")
+                messageManager.showError("试听刷新失败，请稍后重试")
                 _uiState.value = AlbumDetailUiState.Success(model = updated.copy(isLoadingDlsiteTrial = false))
             }
         }
@@ -929,8 +928,7 @@ class AlbumDetailViewModel @Inject constructor(
                 val updatedKey = updated.rjCode.trim().uppercase()
                 if (updatedKey.equals(keyRj, ignoreCase = true)) {
                     if (updated.asmrOneTree.isEmpty()) {
-                        val errMsg = e.message?.trim().orEmpty().ifBlank { "未知错误" }
-                        messageManager.showError("在线资源加载失败：$errMsg")
+                        messageManager.showError("在线资源加载失败，请稍后重试")
                     }
                     if (updated.isLoadingAsmrOne) {
                         _uiState.value = AlbumDetailUiState.Success(model = updated.copy(isLoadingAsmrOne = false))
@@ -999,8 +997,7 @@ class AlbumDetailViewModel @Inject constructor(
                 }
                 val updated = (_uiState.value as? AlbumDetailUiState.Success)?.model ?: return@launch
                 if (pickedResult == null && lastError != null) {
-                    val errMsg = lastError?.message?.trim().orEmpty().ifBlank { "未知错误" }
-                    messageManager.showError("DLsite Play 加载失败：$errMsg")
+                    messageManager.showError("DLsite Play 加载失败，请稍后重试")
                 }
                 _uiState.value = AlbumDetailUiState.Success(
                     model = updated.copy(

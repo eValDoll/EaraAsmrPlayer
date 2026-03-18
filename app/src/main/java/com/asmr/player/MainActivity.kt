@@ -618,10 +618,7 @@ fun MainContainer(
         scope.launch { drawerState.close() }
     }
 
-    val drawerGesturesEnabled = remember(currentRoute, coverPreviewMode) {
-        val dragPreviewRoute = currentRoute == "now_playing" || currentRoute == "lyrics"
-        !(dragPreviewRoute && coverPreviewMode == CoverPreviewMode.Drag)
-    }
+    val drawerGesturesEnabled = currentRoute != "now_playing" && currentRoute != "lyrics"
 
     ModalNavigationDrawer(
         drawerState = drawerState,
