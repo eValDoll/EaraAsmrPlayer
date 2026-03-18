@@ -10,6 +10,7 @@ import androidx.media3.exoplayer.audio.DefaultAudioSink
 class AsmrRenderersFactory(
     context: Context,
     private val graphicEqualizerAudioProcessor: GraphicEqualizerAudioProcessor,
+    private val gainAudioProcessor: GainAudioProcessor,
     private val balanceAudioProcessor: BalanceAudioProcessor,
     private val stereoOrbitAudioProcessor: StereoOrbitAudioProcessor,
     private val channelModeAudioProcessor: ChannelModeAudioProcessor,
@@ -25,6 +26,7 @@ class AsmrRenderersFactory(
             .setAudioProcessors(
                 arrayOf(
                     spectrumTapAudioProcessor,
+                    gainAudioProcessor,
                     graphicEqualizerAudioProcessor,
                     channelModeAudioProcessor,
                     stereoOrbitAudioProcessor,

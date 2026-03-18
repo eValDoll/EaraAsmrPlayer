@@ -16,25 +16,33 @@ class FadingPlayer(
 ) : ForwardingPlayer(delegate) {
 
     private var pendingSwitchFadeIn: Boolean = false
+    private var baseVolume: Float = 1f
+    private var fadeVolume: Float = 1f
 
     private val transitionListener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
             if (!pendingSwitchFadeIn) return
             pendingSwitchFadeIn = false
-            volumeFader.fadeTo(delegate, 1f, switchFadeInMs)
+            volumeFader.fadeTo(this@FadingPlayer, 1f, switchFadeInMs)
         }
     }
 
     init {
         delegate.addListener(transitionListener)
+        syncOutputVolume()
+    }
+
+    fun setBaseVolume(volume: Float) {
+        baseVolume = volume.coerceIn(0f, 1f)
+        syncOutputVolume()
     }
 
     override fun play() {
         pendingSwitchFadeIn = false
         volumeFader.cancel()
-        delegate.volume = 0f
+        volume = 0f
         delegate.play()
-        volumeFader.fadeTo(delegate, 1f, playFadeMs)
+        volumeFader.fadeTo(this, 1f, playFadeMs)
     }
 
     override fun pause() {
@@ -43,7 +51,7 @@ class FadingPlayer(
             delegate.pause()
             return
         }
-        volumeFader.fadeTo(delegate, 0f, pauseFadeMs) {
+        volumeFader.fadeTo(this, 0f, pauseFadeMs) {
             delegate.pause()
         }
     }
@@ -64,13 +72,24 @@ class FadingPlayer(
             return
         }
         val beforeIndex = delegate.currentMediaItemIndex
-        volumeFader.fadeTo(delegate, 0f, switchFadeOutMs) {
+        volumeFader.fadeTo(this, 0f, switchFadeOutMs) {
             seekAction()
             val afterIndex = delegate.currentMediaItemIndex
             if (afterIndex == beforeIndex) {
                 pendingSwitchFadeIn = false
-                volumeFader.fadeTo(delegate, 1f, switchFadeInMs)
+                volumeFader.fadeTo(this, 1f, switchFadeInMs)
             }
         }
+    }
+
+    override fun getVolume(): Float = fadeVolume
+
+    override fun setVolume(volume: Float) {
+        fadeVolume = volume.coerceIn(0f, 1f)
+        syncOutputVolume()
+    }
+
+    private fun syncOutputVolume() {
+        delegate.volume = (baseVolume * fadeVolume).coerceIn(0f, 1f)
     }
 }

@@ -1,6 +1,7 @@
 package com.asmr.player
 
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -147,6 +148,12 @@ import kotlinx.coroutines.flow.map
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 import androidx.media3.common.MediaItem
+import androidx.lifecycle.lifecycleScope
+import com.asmr.player.data.settings.SettingsRepository
+import com.asmr.player.playback.AppVolume
+import com.asmr.player.ui.common.AppVolumeVerticalSlider
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 private enum class OverlaySheet {
     Queue,
@@ -161,6 +168,12 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var settingsDataStore: SettingsDataStore
 
+    @Inject
+    lateinit var settingsRepository: SettingsRepository
+
+    private val volumeKeyEventTick = MutableStateFlow(0L)
+    private var volumeKeyEventSeq = 0L
+
     @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -171,6 +184,7 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             val playerViewModel: PlayerViewModel = hiltViewModel()
             val libraryViewModel: LibraryViewModel = hiltViewModel()
+            val volumeKeyTick by volumeKeyEventTick.asStateFlow().collectAsState()
             val themeMediaSource by remember(playerViewModel) {
                 playerViewModel.playback
                     .map { it.currentMediaItem.toThemeMediaSource() }
@@ -329,7 +343,8 @@ class MainActivity : ComponentActivity() {
                         coverPreviewMode = coverPreviewMode,
                         lyricsPageSettings = lyricsPageSettings,
                         forceImmersive = showSplash,
-                        baseStaticHue = baseStaticHue
+                        baseStaticHue = baseStaticHue,
+                        volumeKeyEventTick = volumeKeyTick
                     )
 
                     if (showSplash) {
@@ -385,6 +400,21 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        val isVolumeKey = event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
+        if (!isVolumeKey) return super.dispatchKeyEvent(event)
+
+        if (event.action == KeyEvent.ACTION_DOWN) {
+            val delta = if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP) AppVolume.StepPercent else -AppVolume.StepPercent
+            lifecycleScope.launch {
+                settingsRepository.adjustAppVolumePercent(delta)
+            }
+            volumeKeyEventSeq += 1L
+            volumeKeyEventTick.value = volumeKeyEventSeq
+        }
+        return true
+    }
 }
 
 @Composable
@@ -408,7 +438,8 @@ fun MainContainer(
     coverPreviewMode: CoverPreviewMode,
     lyricsPageSettings: LyricsPageSettings,
     forceImmersive: Boolean,
-    baseStaticHue: HuePalette
+    baseStaticHue: HuePalette,
+    volumeKeyEventTick: Long
 ) {
     val navController = rememberNavController()
     val navigator = remember(navController) { AppNavigator(navController) }
@@ -435,8 +466,14 @@ fun MainContainer(
     val drawerStatusViewModel: DrawerStatusViewModel = hiltViewModel()
     val statisticsViewModel: StatisticsViewModel = hiltViewModel()
     val bulkProgress by libraryViewModel.bulkProgress.collectAsState()
+    val appVolumePercent by playerViewModel.appVolumePercent.collectAsState()
     var showManualRjDialog by remember { mutableStateOf(false) }
     var manualRjInput by remember { mutableStateOf("") }
+    var showHardwareVolumeOverlay by remember { mutableStateOf(false) }
+    var hardwareVolumeOverlayInteracting by remember { mutableStateOf(false) }
+    var hardwareVolumeOverlayHoldTick by remember { mutableLongStateOf(0L) }
+    var lastHandledVolumeKeyTick by remember { mutableLongStateOf(0L) }
+    var lastNonZeroAppVolumePercent by rememberSaveable { mutableIntStateOf(AppVolume.DefaultPercent) }
     
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -447,6 +484,8 @@ fun MainContainer(
     val immersivePlayer = forceImmersive || currentRoute == "now_playing" || currentRoute == "lyrics"
 
     LaunchedEffect(currentRoute) {
+        showHardwareVolumeOverlay = false
+        hardwareVolumeOverlayInteracting = false
         val last = lastRouteForTouchBlock
         val seq = ++touchBlockSeq
         if (last != null && currentRoute != null && last != currentRoute) {
@@ -542,6 +581,38 @@ fun MainContainer(
     val topBarContentColor = colorScheme.onSurface
     
     val drawerContainerColor = if (colorScheme.isDark) Color(0xFF121212) else Color.White
+
+    LaunchedEffect(appVolumePercent) {
+        if (appVolumePercent > 0) {
+            lastNonZeroAppVolumePercent = appVolumePercent
+        }
+    }
+
+    LaunchedEffect(volumeKeyEventTick) {
+        if (volumeKeyEventTick <= 0L) return@LaunchedEffect
+        if (volumeKeyEventTick == lastHandledVolumeKeyTick) return@LaunchedEffect
+        lastHandledVolumeKeyTick = volumeKeyEventTick
+        if (currentRoute == "now_playing") {
+            showHardwareVolumeOverlay = false
+            return@LaunchedEffect
+        }
+        showHardwareVolumeOverlay = true
+        hardwareVolumeOverlayHoldTick = volumeKeyEventTick
+    }
+
+    LaunchedEffect(showHardwareVolumeOverlay, hardwareVolumeOverlayHoldTick, hardwareVolumeOverlayInteracting, currentRoute) {
+        if (!showHardwareVolumeOverlay) return@LaunchedEffect
+        if (currentRoute == "now_playing") {
+            showHardwareVolumeOverlay = false
+            return@LaunchedEffect
+        }
+        if (hardwareVolumeOverlayInteracting) return@LaunchedEffect
+        val snapshot = hardwareVolumeOverlayHoldTick
+        delay(2_000)
+        if (!hardwareVolumeOverlayInteracting && hardwareVolumeOverlayHoldTick == snapshot) {
+            showHardwareVolumeOverlay = false
+        }
+    }
 
     BackHandler(drawerState.isOpen) {
         scope.launch { drawerState.close() }
@@ -1159,6 +1230,7 @@ fun MainContainer(
                     if (globalDynamicHueEnabled) {
                         NowPlayingScreen(
                             windowSizeClass = windowSizeClass,
+                            hardwareVolumeEventTick = volumeKeyEventTick,
                             onBack = { navController.popBackStack() },
                             onOpenLyrics = { navController.navigateSingleTop("lyrics") },
                             onShowQueue = onShowQueue,
@@ -1184,6 +1256,7 @@ fun MainContainer(
                     } else {
                         NowPlayingScreen(
                             windowSizeClass = windowSizeClass,
+                            hardwareVolumeEventTick = volumeKeyEventTick,
                             onBack = { navController.popBackStack() },
                             onOpenLyrics = { navController.navigateSingleTop("lyrics") },
                             onShowQueue = onShowQueue,
@@ -1404,6 +1477,43 @@ fun MainContainer(
                 )
             }
 
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(end = 18.dp),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                AnimatedVisibility(
+                    visible = showHardwareVolumeOverlay,
+                    enter = fadeIn(animationSpec = tween(140)) + slideInHorizontally(animationSpec = tween(180)) { it / 3 },
+                    exit = fadeOut(animationSpec = tween(160)) + slideOutHorizontally(animationSpec = tween(180)) { it / 3 }
+                ) {
+                    HardwareVolumeOverlay(
+                        volumePercent = appVolumePercent,
+                        onVolumeChange = {
+                            playerViewModel.setAppVolumePercent(it)
+                            hardwareVolumeOverlayHoldTick += 1L
+                        },
+                        onToggleMute = {
+                            if (appVolumePercent > 0) {
+                                playerViewModel.setAppVolumePercent(0)
+                            } else {
+                                playerViewModel.setAppVolumePercent(
+                                    lastNonZeroAppVolumePercent.coerceAtLeast(AppVolume.StepPercent)
+                                )
+                            }
+                            hardwareVolumeOverlayHoldTick += 1L
+                        },
+                        onInteractionActiveChanged = { active ->
+                            hardwareVolumeOverlayInteracting = active
+                            if (!active) {
+                                hardwareVolumeOverlayHoldTick += 1L
+                            }
+                        }
+                    )
+                }
+            }
+
             NonTouchableAppMessageOverlay(messages = visibleMessages)
         }
 
@@ -1455,6 +1565,56 @@ fun MainContainer(
 
 }
 
+}
+
+@Composable
+private fun HardwareVolumeOverlay(
+    volumePercent: Int,
+    onVolumeChange: (Int) -> Unit,
+    onToggleMute: () -> Unit,
+    onInteractionActiveChanged: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val accentColor = colorScheme.primary
+
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(22.dp),
+        color = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.92f else 0.96f),
+        contentColor = colorScheme.onSurface,
+        shadowElevation = if (colorScheme.isDark) 0.dp else 10.dp,
+        tonalElevation = 0.dp
+    ) {
+        Column(
+            modifier = Modifier
+                .width(88.dp)
+                .padding(horizontal = 14.dp, vertical = 18.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                imageVector = if (volumePercent == 0) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                contentDescription = null,
+                tint = accentColor,
+                modifier = Modifier
+                    .size(20.dp)
+                    .clickable(onClick = onToggleMute)
+            )
+            AppVolumeVerticalSlider(
+                valuePercent = volumePercent,
+                onValueChange = onVolumeChange,
+                accentColor = accentColor,
+                onInteractionActiveChanged = onInteractionActiveChanged
+            )
+            Text(
+                text = "${AppVolume.clampPercent(volumePercent)}%",
+                style = MaterialTheme.typography.labelLarge,
+                color = colorScheme.onSurface,
+                fontWeight = FontWeight.SemiBold
+            )
+        }
+    }
 }
 
 @Stable

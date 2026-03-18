@@ -41,6 +41,7 @@ import com.asmr.player.data.repository.SliceOverlapException
 import com.asmr.player.data.settings.EqualizerSettings
 import com.asmr.player.data.settings.AsmrPreset
 import com.asmr.player.playback.SlicePlaybackController
+import com.asmr.player.playback.AppVolume
 
 import com.asmr.player.util.MessageManager
 import kotlin.math.roundToLong
@@ -93,6 +94,9 @@ class PlayerViewModel @Inject constructor(
 
     val sleepTimerLastDurationMin: StateFlow<Int> = settingsRepository.sleepTimerLastDurationMin
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 30)
+
+    val appVolumePercent: StateFlow<Int> = playerConnection.appVolumePercent
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppVolume.DefaultPercent)
 
     private val _sessionEqualizer = MutableStateFlow<EqualizerSettings?>(null)
     val sessionEqualizer: StateFlow<EqualizerSettings> = combine(
@@ -243,6 +247,14 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun togglePlayPause() = playerConnection.togglePlayPause()
+
+    fun setAppVolumePercent(percent: Int) {
+        playerConnection.setAppVolumePercent(percent)
+    }
+
+    fun adjustAppVolumePercent(deltaPercent: Int) {
+        playerConnection.adjustAppVolumePercent(deltaPercent)
+    }
 
     fun toggleFloatingLyrics() {
         viewModelScope.launch {

@@ -20,6 +20,7 @@ import com.asmr.player.service.PlaybackService
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.util.MessageManager
+import com.asmr.player.playback.AppVolume
 import dagger.hilt.android.qualifiers.ApplicationContext
 import com.asmr.player.util.NetworkMeteredChecker
 import kotlinx.coroutines.CoroutineScope
@@ -28,12 +29,14 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
@@ -75,6 +78,9 @@ class PlayerConnection @Inject constructor(
     private var didRestorePlaybackState: Boolean = false
     private val meteredWarnedMediaIds = LinkedHashSet<String>()
     private var lastMeteredWarnAtMs: Long = 0L
+
+    val appVolumePercent: StateFlow<Int> = settingsRepository.appVolumePercent
+        .stateIn(scope, SharingStarted.Eagerly, AppVolume.DefaultPercent)
 
     init {
         scope.launch {
@@ -544,6 +550,18 @@ class PlayerConnection @Inject constructor(
         val c = controller ?: return
         val cmd = androidx.media3.session.SessionCommand(action, android.os.Bundle.EMPTY)
         c.sendCustomCommand(cmd, args)
+    }
+
+    fun setAppVolumePercent(percent: Int) {
+        scope.launch {
+            settingsRepository.setAppVolumePercent(percent)
+        }
+    }
+
+    fun adjustAppVolumePercent(deltaPercent: Int) {
+        scope.launch {
+            settingsRepository.adjustAppVolumePercent(deltaPercent)
+        }
     }
 
     private fun updateQueue() {
