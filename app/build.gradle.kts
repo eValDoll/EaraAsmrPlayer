@@ -144,6 +144,8 @@ dependencies {
     implementation("androidx.media3:media3-session:$media3_version")
     implementation("androidx.media3:media3-ui:$media3_version")
     implementation("androidx.media3:media3-common:$media3_version")
+    implementation("androidx.media3:media3-datasource:$media3_version")
+    implementation("androidx.media3:media3-database:$media3_version")
 
     // Room
     implementation("androidx.room:room-runtime:$room_version")
