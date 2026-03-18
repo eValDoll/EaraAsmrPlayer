@@ -5,7 +5,6 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
-import android.media.AudioManager
 import android.os.SystemClock
 import android.view.LayoutInflater
 import androidx.activity.compose.BackHandler
@@ -73,6 +72,8 @@ import androidx.media3.ui.PlayerView
 import com.asmr.player.R
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.ui.common.AsmrAsyncImage
+import com.asmr.player.ui.common.AppVolumeSlider
+import com.asmr.player.playback.AppVolume
 import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.ui.common.EqualizerPanel
 import com.asmr.player.ui.common.rememberComputedDominantColorCenterWeighted
@@ -96,6 +97,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 fun NowPlayingScreen(
     windowSizeClass: WindowSizeClass,
+    hardwareVolumeEventTick: Long,
     onBack: () -> Unit,
     onOpenLyrics: () -> Unit,
     onShowQueue: () -> Unit,
@@ -869,7 +871,12 @@ fun NowPlayingScreen(
                         onPrimaryColor = onAccentColor
                     )
 
-                    VolumeControl(modifier = Modifier.fillMaxWidth(), accentColor = accentColor)
+                    VolumeControl(
+                        modifier = Modifier.fillMaxWidth(),
+                        accentColor = accentColor,
+                        viewModel = viewModel,
+                        hardwareVolumeEventTick = hardwareVolumeEventTick
+                    )
                 }
             }
         }
@@ -1683,27 +1690,31 @@ private fun normalizeSingleLineText(text: String): String {
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
-private fun VolumeControl(modifier: Modifier = Modifier, accentColor: Color) {
-    val context = LocalContext.current
-    val audioManager = remember(context) {
-        context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-    }
-    val maxVolume = remember(audioManager) { audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC).coerceAtLeast(1) }
+private fun VolumeControl(
+    modifier: Modifier = Modifier,
+    accentColor: Color,
+    viewModel: PlayerViewModel,
+    hardwareVolumeEventTick: Long
+) {
     var expanded by rememberSaveable { mutableStateOf(false) }
-    var volume by remember { mutableIntStateOf(audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).coerceIn(0, maxVolume)) }
-    var lastNonZeroVolume by remember { mutableIntStateOf(volume.coerceAtLeast(1)) }
+    val volume by viewModel.appVolumePercent.collectAsState()
+    var lastNonZeroVolume by rememberSaveable { mutableIntStateOf(AppVolume.DefaultPercent) }
     var lastInteractionAt by remember { mutableLongStateOf(0L) }
 
-    fun refreshVolumeFromSystem() {
-        volume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).coerceIn(0, maxVolume)
+    LaunchedEffect(volume) {
         if (volume > 0) lastNonZeroVolume = volume
     }
 
+    LaunchedEffect(hardwareVolumeEventTick) {
+        if (hardwareVolumeEventTick <= 0L) return@LaunchedEffect
+        expanded = true
+        lastInteractionAt = SystemClock.elapsedRealtime()
+    }
+
     fun setVolume(newVolume: Int) {
-        val v = newVolume.coerceIn(0, maxVolume)
-        volume = v
-        if (v > 0) lastNonZeroVolume = v
-        audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, v, 0)
+        val next = AppVolume.clampPercent(newVolume)
+        if (next > 0) lastNonZeroVolume = next
+        viewModel.setAppVolumePercent(next)
     }
 
     LaunchedEffect(expanded, lastInteractionAt) {
@@ -1733,15 +1744,13 @@ private fun VolumeControl(modifier: Modifier = Modifier, accentColor: Color) {
                     .padding(vertical = 6.dp)
                     .combinedClickable(
                         onClick = {
-                            refreshVolumeFromSystem()
                             if (volume > 0) {
                                 setVolume(0)
                             } else {
-                                setVolume(lastNonZeroVolume.coerceIn(1, maxVolume))
+                                setVolume(lastNonZeroVolume.coerceAtLeast(AppVolume.StepPercent))
                             }
                         },
                         onLongClick = {
-                            refreshVolumeFromSystem()
                             expanded = true
                             lastInteractionAt = SystemClock.elapsedRealtime()
                         }
@@ -1782,11 +1791,10 @@ private fun VolumeControl(modifier: Modifier = Modifier, accentColor: Color) {
                             .size(20.dp)
                             .combinedClickable(
                                 onClick = {
-                                    refreshVolumeFromSystem()
                                     if (volume > 0) {
                                         setVolume(0)
                                     } else {
-                                        setVolume(lastNonZeroVolume.coerceIn(1, maxVolume))
+                                        setVolume(lastNonZeroVolume.coerceAtLeast(AppVolume.StepPercent))
                                     }
                                     lastInteractionAt = SystemClock.elapsedRealtime()
                                 },
@@ -1801,27 +1809,25 @@ private fun VolumeControl(modifier: Modifier = Modifier, accentColor: Color) {
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
-                        text = "${(volume.toFloat() / maxVolume.toFloat() * 100f).roundToInt()}%",
+                        text = "${AppVolume.clampPercent(volume)}%",
                         style = MaterialTheme.typography.bodySmall,
                         color = colorScheme.textTertiary
                     )
                 }
 
-                Slider(
-                    value = volume.toFloat(),
-                    onValueChange = { v ->
-                        val newVol = v.roundToInt().coerceIn(0, maxVolume)
+                AppVolumeSlider(
+                    valuePercent = volume,
+                    onValueChange = { newVol ->
                         if (newVol != volume) {
                             setVolume(newVol)
                         }
                         lastInteractionAt = SystemClock.elapsedRealtime()
                     },
-                    valueRange = 0f..maxVolume.toFloat(),
-                    colors = SliderDefaults.colors(
-                        thumbColor = accentColor,
-                        activeTrackColor = accentColor,
-                        inactiveTrackColor = accentColor.copy(alpha = 0.2f)
-                    )
+                    modifier = Modifier.fillMaxWidth(),
+                    accentColor = accentColor,
+                    onInteractionActiveChanged = {
+                        lastInteractionAt = SystemClock.elapsedRealtime()
+                    }
                 )
             }
         }

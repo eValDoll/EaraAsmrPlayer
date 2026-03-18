@@ -39,6 +39,8 @@ import com.asmr.player.playback.AsmrRenderersFactory
 import com.asmr.player.playback.BalanceAudioProcessor
 import com.asmr.player.playback.ChannelModeAudioProcessor
 import com.asmr.player.playback.FadingPlayer
+import com.asmr.player.playback.GainAudioProcessor
+import com.asmr.player.playback.AppVolume
 import com.asmr.player.playback.GraphicEqualizerAudioProcessor
 import com.asmr.player.playback.PlaybackMediaCache
 import com.asmr.player.playback.RoutingPlaybackDataSource
@@ -74,7 +76,9 @@ class PlaybackService : MediaSessionService() {
 
     private var mediaSession: MediaSession? = null
     private lateinit var exoPlayer: ExoPlayer
+    private lateinit var sessionPlayer: FadingPlayer
     private val graphicEqualizerAudioProcessor = GraphicEqualizerAudioProcessor()
+    private val gainAudioProcessor = GainAudioProcessor()
     private val balanceAudioProcessor = BalanceAudioProcessor()
     private val stereoOrbitAudioProcessor = StereoOrbitAudioProcessor()
     private val channelModeAudioProcessor = ChannelModeAudioProcessor()
@@ -206,6 +210,7 @@ class PlaybackService : MediaSessionService() {
                 AsmrRenderersFactory(
                     this,
                     graphicEqualizerAudioProcessor,
+                    gainAudioProcessor,
                     balanceAudioProcessor,
                     stereoOrbitAudioProcessor,
                     channelModeAudioProcessor,
@@ -225,9 +230,8 @@ class PlaybackService : MediaSessionService() {
             .build()
 
         spectrumAnalyzer.start()
-        startEffectLoops()
 
-        val sessionPlayer = FadingPlayer(
+        sessionPlayer = FadingPlayer(
             delegate = exoPlayer,
             volumeFader = volumeFader,
             playFadeMs = 1000L,
@@ -235,6 +239,7 @@ class PlaybackService : MediaSessionService() {
             switchFadeOutMs = 250L,
             switchFadeInMs = 250L
         )
+        startEffectLoops()
         mediaSession = MediaSession.Builder(this, sessionPlayer)
             .setSessionActivity(createContentIntent())
             .setCallback(object : MediaSession.Callback {
@@ -626,12 +631,18 @@ class PlaybackService : MediaSessionService() {
     private fun startEffectLoops() {
         effectApplyJob?.cancel()
         effectApplyJob = serviceScope.launch {
-            combine(audioEffectController.equalizerSettings, sessionSettings) { global, session ->
-                session ?: global
-            }.collect { settings ->
+            combine(
+                audioEffectController.equalizerSettings,
+                sessionSettings,
+                settingsRepository.appVolumePercent
+            ) { global, session, appVolumePercent ->
+                (session ?: global) to appVolumePercent
+            }.collect { (settings, appVolumePercent) ->
                 lastEffectiveSettings = settings
                 graphicEqualizerAudioProcessor.setEnabled(settings.enabled)
                 graphicEqualizerAudioProcessor.setBandLevels(settings.bandLevels)
+                sessionPlayer.setBaseVolume(AppVolume.basePlayerVolume(appVolumePercent))
+                gainAudioProcessor.setGain(AppVolume.gainMultiplier(appVolumePercent))
                 val stereoEnabled = settings.stereoEnabled
                 val panActive = stereoEnabled && (settings.orbitEnabled || settings.orbitAzimuthDeg != 0f)
                 balanceAudioProcessor.setBalance(if (stereoEnabled && !panActive) settings.balance else 0f)
