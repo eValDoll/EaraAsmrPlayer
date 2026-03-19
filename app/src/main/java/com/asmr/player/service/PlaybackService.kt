@@ -41,6 +41,7 @@ import com.asmr.player.playback.ChannelModeAudioProcessor
 import com.asmr.player.playback.FadingPlayer
 import com.asmr.player.playback.GainAudioProcessor
 import com.asmr.player.playback.AppVolume
+import com.asmr.player.playback.AppVolumeBoostController
 import com.asmr.player.playback.GraphicEqualizerAudioProcessor
 import com.asmr.player.playback.PlaybackMediaCache
 import com.asmr.player.playback.RoutingPlaybackDataSource
@@ -67,6 +68,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
@@ -77,6 +79,7 @@ class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private lateinit var exoPlayer: ExoPlayer
     private lateinit var sessionPlayer: FadingPlayer
+    private lateinit var appVolumeBoostController: AppVolumeBoostController
     private val graphicEqualizerAudioProcessor = GraphicEqualizerAudioProcessor()
     private val gainAudioProcessor = GainAudioProcessor()
     private val balanceAudioProcessor = BalanceAudioProcessor()
@@ -137,6 +140,11 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         ensureNotificationChannel()
+        appVolumeBoostController =
+            AppVolumeBoostController(getSystemService(AUDIO_SERVICE) as AudioManager)
+        runBlocking {
+            settingsRepository.setAppVolumePercent(appVolumeBoostController.currentVolumePercent())
+        }
         runCatching {
             val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
             val sr = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull()
@@ -641,8 +649,8 @@ class PlaybackService : MediaSessionService() {
                 lastEffectiveSettings = settings
                 graphicEqualizerAudioProcessor.setEnabled(settings.enabled)
                 graphicEqualizerAudioProcessor.setBandLevels(settings.bandLevels)
-                sessionPlayer.setBaseVolume(AppVolume.basePlayerVolume(appVolumePercent))
-                gainAudioProcessor.setGain(AppVolume.gainMultiplier(appVolumePercent))
+                sessionPlayer.setBaseVolume(appVolumeBoostController.applyVolumePercent(appVolumePercent))
+                gainAudioProcessor.setGain(1f)
                 val stereoEnabled = settings.stereoEnabled
                 val panActive = stereoEnabled && (settings.orbitEnabled || settings.orbitAzimuthDeg != 0f)
                 balanceAudioProcessor.setBalance(if (stereoEnabled && !panActive) settings.balance else 0f)
@@ -680,6 +688,7 @@ class PlaybackService : MediaSessionService() {
         statsJob?.cancel()
         effectApplyJob?.cancel()
         sleepTimerJob?.cancel()
+        appVolumeBoostController.release()
         spectrumAnalyzer.stop()
         mediaSession?.run {
             player.release()
