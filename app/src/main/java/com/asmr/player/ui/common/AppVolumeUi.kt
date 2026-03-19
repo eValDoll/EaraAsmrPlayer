@@ -123,13 +123,12 @@ private fun AppVolumeTrack(
             .pointerInput(enabled, clampedValue, orientation) {
                 if (!enabled) return@pointerInput
                 detectTapGestures { offset ->
-                    if (clampedValue > AppVolume.NormalMaxPercent) return@detectTapGestures
                     val fraction = if (orientation == Orientation.Horizontal) {
                         (offset.x / size.width.toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f)
                     } else {
                         (1f - offset.y / size.height.toFloat().coerceAtLeast(1f)).coerceIn(0f, 1f)
                     }
-                    onValueChange((fraction * AppVolume.NormalMaxPercent).roundToInt())
+                    onValueChange((fraction * AppVolume.MaxPercent).roundToInt())
                 }
             }
             .draggable(
@@ -156,7 +155,7 @@ private fun AppVolumeTrack(
             } else {
                 clampedValue.toFloat()
             }
-            val visualFraction = (displayPercent.coerceAtMost(AppVolume.NormalMaxPercent.toFloat()) / AppVolume.NormalMaxPercent.toFloat())
+            val visualFraction = (displayPercent / AppVolume.MaxPercent.toFloat())
                 .coerceIn(0f, 1f)
 
             if (orientation == Orientation.Horizontal) {

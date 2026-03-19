@@ -1,61 +1,35 @@
 package com.asmr.player.playback
 
-import android.media.audiofx.LoudnessEnhancer
+import android.media.AudioManager
 import android.util.Log
 
-class AppVolumeBoostController {
-    private var audioSessionId: Int = 0
-    private var boostGainMb: Int = 0
-    private var enhancer: LoudnessEnhancer? = null
+class AppVolumeBoostController(
+    private val audioManager: AudioManager
+) {
+    fun applyVolumePercent(percent: Int): Float {
+        val maxSystemVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        if (maxSystemVolume <= 0) return 0f
+        val (targetSystemVolume, playerVolume) =
+            AppVolume.resolveSystemVolume(percent, maxSystemVolume)
+        val currentSystemVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
 
-    fun setAudioSessionId(audioSessionId: Int) {
-        if (this.audioSessionId == audioSessionId) return
-        this.audioSessionId = audioSessionId
-        releaseEnhancer()
-        ensureEnhancer()
-    }
-
-    fun setVolumePercent(percent: Int) {
-        val nextBoostGainMb = AppVolume.boostGainMb(percent)
-        if (boostGainMb == nextBoostGainMb) return
-        boostGainMb = nextBoostGainMb
-        applyBoost()
-    }
-
-    fun release() {
-        releaseEnhancer()
-    }
-
-    private fun ensureEnhancer() {
-        if (audioSessionId <= 0 || boostGainMb <= 0 || enhancer != null) return
-        enhancer = runCatching { LoudnessEnhancer(audioSessionId) }
-            .onFailure {
-                Log.w(TAG, "Failed to create LoudnessEnhancer for session=$audioSessionId", it)
+        if (currentSystemVolume != targetSystemVolume) {
+            runCatching {
+                audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, targetSystemVolume, 0)
+            }.onFailure {
+                Log.w(TAG, "Failed to apply system media volume=$targetSystemVolume", it)
             }
-            .getOrNull()
-        applyBoost()
+        }
+        return playerVolume
     }
 
-    private fun applyBoost() {
-        if (boostGainMb <= 0) {
-            runCatching { enhancer?.enabled = false }
-            return
-        }
-        ensureEnhancer()
-        val currentEnhancer = enhancer ?: return
-        runCatching {
-            currentEnhancer.setTargetGain(boostGainMb)
-            currentEnhancer.enabled = true
-        }.onFailure {
-            Log.w(TAG, "Failed to apply loudness boost=${boostGainMb}mB", it)
-            releaseEnhancer()
-        }
+    fun currentVolumePercent(): Int {
+        val maxSystemVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val currentSystemVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+        return AppVolume.percentFromSystemVolume(currentSystemVolume, maxSystemVolume)
     }
 
-    private fun releaseEnhancer() {
-        enhancer?.release()
-        enhancer = null
-    }
+    fun release() = Unit
 
     private companion object {
         private const val TAG = "AppVolumeBoost"
