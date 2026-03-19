@@ -8,6 +8,7 @@ import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
@@ -55,9 +56,11 @@ import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.SubtitleIndexFinder
+import androidx.compose.runtime.withFrameNanos
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.absoluteValue
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 @Composable
@@ -97,6 +100,7 @@ internal fun AppleLyricsView(
     var autoFocusSuspended by remember { mutableStateOf(false) }
     var lastUserScrollAt by remember { mutableLongStateOf(0L) }
     var pendingAnimatedRefocus by remember { mutableStateOf(false) }
+    var pendingSmoothFocusIndex by remember { mutableIntStateOf(-1) }
     val nestedScrollConnection = remember {
         object : NestedScrollConnection {
             override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
@@ -104,6 +108,7 @@ internal fun AppleLyricsView(
                     autoFocusSuspended = true
                     lastUserScrollAt = SystemClock.uptimeMillis()
                     pendingAnimatedRefocus = false
+                    pendingSmoothFocusIndex = -1
                 }
                 return Offset.Zero
             }
@@ -174,6 +179,9 @@ internal fun AppleLyricsView(
                 nominalItemHeightPx = nominalItemHeightPx
             )
         }
+        val cumulativeItemOffsetsPx = remember(lyricItemHeightsPx) {
+            buildLyricItemOffsets(lyricItemHeightsPx)
+        }
         val activeItemHeightPx = remember(
             activeIndex,
             lyricItemHeightsPx,
@@ -194,6 +202,8 @@ internal fun AppleLyricsView(
         val viewportTopOffsetDp = with(density) { viewportLayout.viewportTopOffsetPx.toDp() }
         val centeredActiveTopPx = ((viewportLayout.viewportWindowHeightPx - activeItemHeightPx) / 2f).coerceAtLeast(0f)
         val centeredActiveBottomDp = viewportWindowHeightDp / 2f
+        val viewportCenterY = viewportLayout.viewportWindowHeightPx / 2f
+        val maxWaveOffsetPx = viewportLayout.viewportWindowHeightPx * 0.22f
         LaunchedEffect(lastUserScrollAt, autoFocusSuspended) {
             if (autoFocusSuspended) {
                 val scheduledAt = lastUserScrollAt
@@ -205,52 +215,49 @@ internal fun AppleLyricsView(
             }
         }
 
-        LaunchedEffect(activeIndex, autoFocusSuspended) {
+        LaunchedEffect(lyrics) {
+            previousActiveIndex = activeIndex
+            pendingSmoothFocusIndex = -1
+        }
+
+        LaunchedEffect(activeIndex, autoFocusSuspended, lyricItemHeightsPx, viewportLayout, pendingSmoothFocusIndex) {
             if (lyrics.isEmpty() || activeIndex < 0 || autoFocusSuspended) return@LaunchedEffect
 
             val targetScrollOffset = -centeredActiveTopPx.roundToInt()
             var didReposition = false
             val indexDelta = activeIndex - previousActiveIndex
-            val shouldPlayWave = indexDelta != 0 && indexDelta.absoluteValue <= 2
-            val movementDeltaPx = if (shouldPlayWave) {
-                accumulatedCenterShiftPx(
-                    lyricItemHeightsPx = lyricItemHeightsPx,
-                    fromIndex = previousActiveIndex,
-                    toIndex = activeIndex,
-                    nominalItemHeightPx = nominalItemHeightPx
-                )
-            } else {
-                0f
-            }
-            val affectedIndices = if (shouldPlayWave) {
-                (
-                    listState.layoutInfo.visibleItemsInfo.map { it.index } +
-                        targetLyricsWindowRange(
-                            totalCount = lyrics.size,
-                            activeIndex = activeIndex,
-                            visibleItemCount = effectiveVisibleLines
-                        ).toList()
-                    ).distinct().sorted()
-            } else {
-                emptyList()
-            }
+            val visibleItems = listState.layoutInfo.visibleItemsInfo
+            val activeItemInfo = visibleItems.firstOrNull { it.index == activeIndex }
+            val activeTopPx = activeItemInfo?.offset?.toFloat()
+            val isPinnedAtTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+            val hasReachedViewportCenter = activeTopPx?.let { top ->
+                top + activeItemHeightPx / 2f >= viewportCenterY
+            } ?: false
+            val isFirstCenterTransition = indexDelta != 0 &&
+                indexDelta.absoluteValue <= 2 &&
+                isPinnedAtTop &&
+                hasReachedViewportCenter &&
+                activeTopPx != null
+            val shouldUseSmoothFocus = pendingAnimatedRefocus || pendingSmoothFocusIndex == activeIndex
+            val defaultAffectedIndices = (
+                visibleItems.map { it.index } +
+                    targetWindowRange.toList()
+                ).distinct().sorted()
+            val shouldPlayNeighborWave = !shouldUseSmoothFocus &&
+                indexDelta != 0 &&
+                indexDelta.absoluteValue <= 2
 
-            if (shouldPlayWave) {
-                affectedIndices.forEach { index ->
-                    val anim = itemOffsets.getOrPut(index) { Animatable(0f) }
-                    anim.snapTo(movementDeltaPx)
-                }
-            }
-
-            if (listState.layoutInfo.visibleItemsInfo.any { it.index == activeIndex }) {
-                val activeItemInfo = listState.layoutInfo.visibleItemsInfo.first { it.index == activeIndex }
-                val activeTopPx = activeItemInfo.offset.toFloat()
-                val isPinnedAtTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+            if (activeTopPx != null) {
                 if (!(isPinnedAtTop && activeTopPx <= centeredActiveTopPx)) {
                     val desiredTopPx = centeredActiveTopPx
                     if (kotlin.math.abs(activeTopPx - desiredTopPx) > 1f) {
-                        if (pendingAnimatedRefocus) {
-                            listState.animateScrollToItem(activeIndex, targetScrollOffset)
+                        if (shouldUseSmoothFocus) {
+                            listState.animateLyricFocusToIndex(
+                                index = activeIndex,
+                                anchorOffsetPx = targetScrollOffset,
+                                cumulativeItemOffsetsPx = cumulativeItemOffsetsPx,
+                                viewportHeightPx = viewportLayout.viewportWindowHeightPx
+                            )
                         } else {
                             listState.scrollToItem(activeIndex, targetScrollOffset)
                         }
@@ -258,19 +265,52 @@ internal fun AppleLyricsView(
                     }
                 }
             } else {
-                if (pendingAnimatedRefocus) {
-                    listState.animateScrollToItem(activeIndex, targetScrollOffset)
+                if (shouldUseSmoothFocus) {
+                    listState.animateLyricFocusToIndex(
+                        index = activeIndex,
+                        anchorOffsetPx = targetScrollOffset,
+                        cumulativeItemOffsetsPx = cumulativeItemOffsetsPx,
+                        viewportHeightPx = viewportLayout.viewportWindowHeightPx
+                    )
                 } else {
                     listState.scrollToItem(activeIndex, targetScrollOffset)
                 }
                 didReposition = true
             }
 
-            if (didReposition && shouldPlayWave) {
-                val firstVisible = affectedIndices.minOrNull() ?: 0
-                affectedIndices.forEach { index ->
+            val resolvedWave = when {
+                !didReposition || shouldUseSmoothFocus -> null
+                isFirstCenterTransition -> activeTopPx?.plus(activeItemHeightPx / 2f)?.minus(viewportCenterY)
+                shouldPlayNeighborWave -> lyricCenterDistancePx(
+                    lyricItemHeightsPx = lyricItemHeightsPx,
+                    fromIndex = previousActiveIndex,
+                    toIndex = activeIndex,
+                    nominalItemHeightPx = nominalItemHeightPx
+                )
+                else -> null
+            }?.coerceIn(-maxWaveOffsetPx, maxWaveOffsetPx)
+
+            if (resolvedWave != null) {
+                resetLyricWaveOffsets(
+                    itemOffsets = itemOffsets,
+                    indices = defaultAffectedIndices
+                )
+                defaultAffectedIndices.forEach { index ->
+                    val anim = itemOffsets.getOrPut(index) { Animatable(0f) }
+                    anim.snapTo(resolvedWave)
+                }
+            } else {
+                resetLyricWaveOffsets(
+                    itemOffsets = itemOffsets,
+                    indices = defaultAffectedIndices
+                )
+            }
+
+            if (didReposition && resolvedWave != null) {
+                val firstVisible = defaultAffectedIndices.minOrNull() ?: 0
+                defaultAffectedIndices.forEach { index ->
                     val anim = itemOffsets[index] ?: return@forEach
-                    val rowDelay = (index - firstVisible) * 40
+                    val rowDelay = ((index - firstVisible) * 40).coerceAtLeast(0)
                     launch {
                         anim.animateTo(
                             targetValue = 0f,
@@ -283,7 +323,11 @@ internal fun AppleLyricsView(
                     }
                 }
             }
+
             pendingAnimatedRefocus = false
+            if (pendingSmoothFocusIndex == activeIndex) {
+                pendingSmoothFocusIndex = -1
+            }
             previousActiveIndex = activeIndex
         }
 
@@ -351,6 +395,9 @@ internal fun AppleLyricsView(
                                 this.alpha = alpha
                             }
                             .clickable {
+                                pendingSmoothFocusIndex = if (activeIndex >= 0 && activeIndex != index) index else -1
+                                autoFocusSuspended = false
+                                pendingAnimatedRefocus = false
                                 onSeekTo(entry.startMs)
                                 onOpenLyrics()
                             }
@@ -408,7 +455,7 @@ private fun measuredWindowHeight(
     }.toFloat()
 }
 
-private fun accumulatedCenterShiftPx(
+private fun lyricCenterDistancePx(
     lyricItemHeightsPx: List<Float>,
     fromIndex: Int,
     toIndex: Int,
@@ -426,6 +473,94 @@ private fun accumulatedCenterShiftPx(
         currentIndex = nextIndex
     }
     return distancePx
+}
+
+private fun buildLyricItemOffsets(
+    lyricItemHeightsPx: List<Float>
+): List<Float> {
+    if (lyricItemHeightsPx.isEmpty()) return emptyList()
+    val offsets = ArrayList<Float>(lyricItemHeightsPx.size)
+    var cumulative = 0f
+    lyricItemHeightsPx.forEach { height ->
+        offsets += cumulative
+        cumulative += height
+    }
+    return offsets
+}
+
+private suspend fun androidx.compose.foundation.lazy.LazyListState.animateLyricFocusToIndex(
+    index: Int,
+    anchorOffsetPx: Int,
+    cumulativeItemOffsetsPx: List<Float>,
+    viewportHeightPx: Float
+) {
+    if (index !in cumulativeItemOffsetsPx.indices) return
+    runCatching {
+        val firstVisible = layoutInfo.visibleItemsInfo.firstOrNull()
+        val currentScrollPx = if (firstVisible != null) {
+            cumulativeItemOffsetsPx.getOrNull(firstVisible.index).orElseZero() - firstVisible.offset
+        } else {
+            cumulativeItemOffsetsPx.getOrNull(firstVisibleItemIndex).orElseZero() + firstVisibleItemScrollOffset
+        }
+        val targetScrollPx = cumulativeItemOffsetsPx[index] + anchorOffsetPx
+        val totalDistancePx = targetScrollPx - currentScrollPx
+        if (abs(totalDistancePx) <= 1f) return@runCatching
+
+        val durationMillis = focusScrollDurationMillis(
+            distancePx = totalDistancePx,
+            viewportHeightPx = viewportHeightPx
+        )
+        val durationNanos = durationMillis * 1_000_000L
+        val startTime = withFrameNanos { it }
+        var previousOffsetPx = 0f
+
+        while (true) {
+            val frameTime = withFrameNanos { it }
+            val rawFraction = ((frameTime - startTime).toDouble() / durationNanos.toDouble()).toFloat()
+            val fraction = rawFraction.coerceIn(0f, 1f)
+            val easedOffsetPx = totalDistancePx * FastOutSlowInEasing.transform(fraction)
+            val deltaPx = easedOffsetPx - previousOffsetPx
+            previousOffsetPx = easedOffsetPx
+            if (abs(deltaPx) > 0f) {
+                scrollBy(deltaPx)
+            }
+            if (fraction >= 1f) break
+        }
+
+        val remainingPx = totalDistancePx - previousOffsetPx
+        if (abs(remainingPx) > 0.5f) {
+            scrollBy(remainingPx)
+        }
+    }.onFailure {
+        runCatching { scrollToItem(index = index, scrollOffset = anchorOffsetPx) }
+    }
+}
+
+private fun focusScrollDurationMillis(
+    distancePx: Float,
+    viewportHeightPx: Float
+): Int {
+    val normalizedDistance = if (viewportHeightPx > 0f) {
+        abs(distancePx) / viewportHeightPx
+    } else {
+        1f
+    }
+    return (420 + normalizedDistance * 180f).roundToInt().coerceIn(360, 760)
+}
+
+private fun Float?.orElseZero(): Float = this ?: 0f
+
+private suspend fun resetLyricWaveOffsets(
+    itemOffsets: Map<Int, Animatable<Float, AnimationVector1D>>,
+    indices: Collection<Int>
+) {
+    indices.forEach { index ->
+        val anim = itemOffsets[index] ?: return@forEach
+        anim.stop()
+        if (anim.value != 0f) {
+            anim.snapTo(0f)
+        }
+    }
 }
 
 private fun measuredLyricItemHeight(
