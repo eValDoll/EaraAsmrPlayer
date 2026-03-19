@@ -473,6 +473,7 @@ fun MainContainer(
     var hardwareVolumeOverlayInteracting by remember { mutableStateOf(false) }
     var hardwareVolumeOverlayHoldTick by remember { mutableLongStateOf(0L) }
     var lastHandledVolumeKeyTick by remember { mutableLongStateOf(0L) }
+    var nowPlayingVolumeEventTick by remember { mutableLongStateOf(0L) }
     var lastNonZeroAppVolumePercent by rememberSaveable { mutableIntStateOf(AppVolume.DefaultPercent) }
     
     val configuration = LocalConfiguration.current
@@ -486,6 +487,9 @@ fun MainContainer(
     LaunchedEffect(currentRoute) {
         showHardwareVolumeOverlay = false
         hardwareVolumeOverlayInteracting = false
+        if (currentRoute == "now_playing") {
+            nowPlayingVolumeEventTick = 0L
+        }
         val last = lastRouteForTouchBlock
         val seq = ++touchBlockSeq
         if (last != null && currentRoute != null && last != currentRoute) {
@@ -594,6 +598,7 @@ fun MainContainer(
         lastHandledVolumeKeyTick = volumeKeyEventTick
         if (currentRoute == "now_playing") {
             showHardwareVolumeOverlay = false
+            nowPlayingVolumeEventTick = volumeKeyEventTick
             return@LaunchedEffect
         }
         showHardwareVolumeOverlay = true
@@ -1227,7 +1232,7 @@ fun MainContainer(
                     if (globalDynamicHueEnabled) {
                         NowPlayingScreen(
                             windowSizeClass = windowSizeClass,
-                            hardwareVolumeEventTick = volumeKeyEventTick,
+                            hardwareVolumeEventTick = nowPlayingVolumeEventTick,
                             onBack = { navController.popBackStack() },
                             onOpenLyrics = { navController.navigateSingleTop("lyrics") },
                             onShowQueue = onShowQueue,
@@ -1253,7 +1258,7 @@ fun MainContainer(
                     } else {
                         NowPlayingScreen(
                             windowSizeClass = windowSizeClass,
-                            hardwareVolumeEventTick = volumeKeyEventTick,
+                            hardwareVolumeEventTick = nowPlayingVolumeEventTick,
                             onBack = { navController.popBackStack() },
                             onOpenLyrics = { navController.navigateSingleTop("lyrics") },
                             onShowQueue = onShowQueue,

@@ -1696,17 +1696,26 @@ private fun VolumeControl(
     viewModel: PlayerViewModel,
     hardwareVolumeEventTick: Long
 ) {
-    var expanded by rememberSaveable { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(false) }
     val volume by viewModel.appVolumePercent.collectAsState()
-    var lastNonZeroVolume by rememberSaveable { mutableIntStateOf(AppVolume.DefaultPercent) }
+    var lastNonZeroVolume by remember { mutableIntStateOf(AppVolume.DefaultPercent) }
     var lastInteractionAt by remember { mutableLongStateOf(0L) }
+    var hasObservedInitialHardwareVolumeEventTick by remember { mutableStateOf(false) }
+    var lastHandledHardwareVolumeEventTick by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(volume) {
         if (volume > 0) lastNonZeroVolume = volume
     }
 
     LaunchedEffect(hardwareVolumeEventTick) {
+        if (!hasObservedInitialHardwareVolumeEventTick) {
+            lastHandledHardwareVolumeEventTick = hardwareVolumeEventTick
+            hasObservedInitialHardwareVolumeEventTick = true
+            return@LaunchedEffect
+        }
         if (hardwareVolumeEventTick <= 0L) return@LaunchedEffect
+        if (hardwareVolumeEventTick == lastHandledHardwareVolumeEventTick) return@LaunchedEffect
+        lastHandledHardwareVolumeEventTick = hardwareVolumeEventTick
         expanded = true
         lastInteractionAt = SystemClock.elapsedRealtime()
     }
