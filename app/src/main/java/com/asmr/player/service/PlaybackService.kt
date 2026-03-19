@@ -68,6 +68,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
@@ -78,9 +79,9 @@ class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
     private lateinit var exoPlayer: ExoPlayer
     private lateinit var sessionPlayer: FadingPlayer
+    private lateinit var appVolumeBoostController: AppVolumeBoostController
     private val graphicEqualizerAudioProcessor = GraphicEqualizerAudioProcessor()
     private val gainAudioProcessor = GainAudioProcessor()
-    private val appVolumeBoostController = AppVolumeBoostController()
     private val balanceAudioProcessor = BalanceAudioProcessor()
     private val stereoOrbitAudioProcessor = StereoOrbitAudioProcessor()
     private val channelModeAudioProcessor = ChannelModeAudioProcessor()
@@ -139,6 +140,11 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         ensureNotificationChannel()
+        appVolumeBoostController =
+            AppVolumeBoostController(getSystemService(AUDIO_SERVICE) as AudioManager)
+        runBlocking {
+            settingsRepository.setAppVolumePercent(appVolumeBoostController.currentVolumePercent())
+        }
         runCatching {
             val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
             val sr = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull()
@@ -241,7 +247,6 @@ class PlaybackService : MediaSessionService() {
             switchFadeOutMs = 250L,
             switchFadeInMs = 250L
         )
-        appVolumeBoostController.setAudioSessionId(exoPlayer.audioSessionId)
         startEffectLoops()
         mediaSession = MediaSession.Builder(this, sessionPlayer)
             .setSessionActivity(createContentIntent())
@@ -358,10 +363,6 @@ class PlaybackService : MediaSessionService() {
                 currentTrackListenedMs = 0L
                 isCurrentTrackCounted = false
                 lastProgressPersistElapsedMs = 0L
-            }
-
-            override fun onAudioSessionIdChanged(audioSessionId: Int) {
-                appVolumeBoostController.setAudioSessionId(audioSessionId)
             }
         })
         StereoSpectrumBus.playbackActive = exoPlayer.isPlaying
@@ -648,9 +649,8 @@ class PlaybackService : MediaSessionService() {
                 lastEffectiveSettings = settings
                 graphicEqualizerAudioProcessor.setEnabled(settings.enabled)
                 graphicEqualizerAudioProcessor.setBandLevels(settings.bandLevels)
-                sessionPlayer.setBaseVolume(AppVolume.basePlayerVolume(appVolumePercent))
+                sessionPlayer.setBaseVolume(appVolumeBoostController.applyVolumePercent(appVolumePercent))
                 gainAudioProcessor.setGain(1f)
-                appVolumeBoostController.setVolumePercent(appVolumePercent)
                 val stereoEnabled = settings.stereoEnabled
                 val panActive = stereoEnabled && (settings.orbitEnabled || settings.orbitAzimuthDeg != 0f)
                 balanceAudioProcessor.setBalance(if (stereoEnabled && !panActive) settings.balance else 0f)
