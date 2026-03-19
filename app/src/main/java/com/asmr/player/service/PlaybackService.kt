@@ -1,9 +1,16 @@
 package com.asmr.player.service
 
 import android.app.PendingIntent
+import android.bluetooth.BluetoothAdapter
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioFocusRequest
 import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
@@ -66,6 +73,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -111,6 +119,70 @@ class PlaybackService : MediaSessionService() {
     private var lastLyricIndex: Int = Int.MIN_VALUE
     private var floatingLyricsEnabled: Boolean = false
     private var overlay: FloatingLyricsOverlay? = null
+    private var pauseOnOutputDisconnectEnabled: Boolean = true
+    private var resumeOnOutputConnectEnabled: Boolean = false
+    private var pauseOnOtherAudioEnabled: Boolean = true
+    private var autoPausedByDisconnect: Boolean = false
+    private var autoPausedByAudioFocusLoss: Boolean = false
+    private var lastOutputEventAtMs: Long = 0L
+    private var audioFocusRequest: AudioFocusRequest? = null
+    private var hasAudioFocus: Boolean = false
+    private var notificationProvider: LyricMediaNotificationProvider? = null
+
+    private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
+        when (focusChange) {
+            AudioManager.AUDIOFOCUS_GAIN -> hasAudioFocus = true
+            AudioManager.AUDIOFOCUS_LOSS,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+                hasAudioFocus = false
+                if (pauseOnOtherAudioEnabled && exoPlayer.isPlaying) {
+                    autoPausedByAudioFocusLoss = true
+                    serviceScope.launch(Dispatchers.Main.immediate) {
+                        sessionPlayer.pause()
+                    }
+                }
+            }
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> Unit
+        }
+    }
+
+    private val outputBroadcastReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                AudioManager.ACTION_AUDIO_BECOMING_NOISY -> handlePotentialOutputDisconnect("becoming_noisy")
+                Intent.ACTION_HEADSET_PLUG -> {
+                    val state = intent.getIntExtra("state", -1)
+                    if (state == 0) {
+                        handlePotentialOutputDisconnect("headset_unplugged")
+                    } else if (state == 1) {
+                        handlePotentialOutputConnect("headset_plugged")
+                    }
+                }
+                BluetoothAdapter.ACTION_STATE_CHANGED -> {
+                    val state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR)
+                    if (state == BluetoothAdapter.STATE_OFF || state == BluetoothAdapter.STATE_TURNING_OFF) {
+                        handlePotentialOutputDisconnect("bluetooth_off")
+                    } else if (state == BluetoothAdapter.STATE_ON) {
+                        handlePotentialOutputConnect("bluetooth_on")
+                    }
+                }
+            }
+        }
+    }
+
+    private val audioDeviceCallback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>) {
+            if (addedDevices.any { it.isRelevantOutputDevice() }) {
+                handlePotentialOutputConnect("device_added")
+            }
+        }
+
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>) {
+            if (removedDevices.any { it.isRelevantOutputDevice() }) {
+                handlePotentialOutputDisconnect("device_removed")
+            }
+        }
+    }
 
     @Inject
     lateinit var audioEffectController: AudioEffectController
@@ -232,7 +304,7 @@ class PlaybackService : MediaSessionService() {
                     .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
                     .setUsage(C.USAGE_MEDIA)
                     .build(),
-                true
+                false
             )
             .setHandleAudioBecomingNoisy(true)
             .build()
@@ -242,11 +314,13 @@ class PlaybackService : MediaSessionService() {
         sessionPlayer = FadingPlayer(
             delegate = exoPlayer,
             volumeFader = volumeFader,
-            playFadeMs = 1000L,
+            playFadeMs = 500L,
             pauseFadeMs = 500L,
             switchFadeOutMs = 250L,
-            switchFadeInMs = 250L
+            switchFadeInMs = 250L,
+            onPlayRequested = { requestPlaybackAudioFocus() }
         )
+        registerPlaybackRouteListeners()
         startEffectLoops()
         mediaSession = MediaSession.Builder(this, sessionPlayer)
             .setSessionActivity(createContentIntent())
@@ -337,7 +411,8 @@ class PlaybackService : MediaSessionService() {
             })
             .build()
 
-        setMediaNotificationProvider(LyricMediaNotificationProvider(this))
+        notificationProvider = LyricMediaNotificationProvider(this, settingsRepository)
+        setMediaNotificationProvider(notificationProvider!!)
         overlay = FloatingLyricsOverlay(this)
         
         exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
@@ -346,6 +421,7 @@ class PlaybackService : MediaSessionService() {
                 if (isPlaying) {
                     markCurrentAlbumPlayed()
                 } else {
+                    abandonPlaybackAudioFocus()
                     serviceScope.launch { persistCurrentTrackProgressIfNeeded(force = true) }
                 }
             }
@@ -397,6 +473,41 @@ class PlaybackService : MediaSessionService() {
         serviceScope.launch {
             settingsRepository.floatingLyricsSettings.collect { settings ->
                 overlay?.applySettings(settings)
+            }
+        }
+        serviceScope.launch {
+            settingsRepository.pauseOnOutputDisconnect.collectLatest { enabled ->
+                pauseOnOutputDisconnectEnabled = enabled
+                if (!enabled) autoPausedByDisconnect = false
+            }
+        }
+        serviceScope.launch {
+            settingsRepository.resumeOnOutputConnect.collectLatest { enabled ->
+                resumeOnOutputConnectEnabled = enabled
+            }
+        }
+        serviceScope.launch {
+            settingsRepository.pauseOnOtherAudio.collectLatest { enabled ->
+                pauseOnOtherAudioEnabled = enabled
+                if (!enabled) autoPausedByAudioFocusLoss = false
+            }
+        }
+        serviceScope.launch {
+            combine(
+                settingsRepository.playFadeInMs,
+                settingsRepository.pauseFadeOutMs
+            ) { fadeInMs, fadeOutMs ->
+                fadeInMs to fadeOutMs
+            }.collectLatest { (fadeInMs, fadeOutMs) ->
+                sessionPlayer.setFadeDurations(
+                    playFadeMs = fadeInMs.toLong(),
+                    pauseFadeMs = fadeOutMs.toLong()
+                )
+            }
+        }
+        serviceScope.launch {
+            settingsRepository.sfwHideSystemControls.collectLatest { hide ->
+                notificationProvider?.setHideSystemControls(hide)
             }
         }
         serviceScope.launch {
@@ -556,6 +667,100 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    private fun requestPlaybackAudioFocus(): Boolean {
+        val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+        val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val request = (audioFocusRequest ?: AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
+                .setAudioAttributes(
+                    android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_MUSIC)
+                        .build()
+                )
+                .setAcceptsDelayedFocusGain(false)
+                .setOnAudioFocusChangeListener(audioFocusChangeListener)
+                .build()
+                .also { audioFocusRequest = it })
+            audioManager.requestAudioFocus(request)
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.requestAudioFocus(
+                audioFocusChangeListener,
+                AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN
+            )
+        }
+        hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
+        return hasAudioFocus
+    }
+
+    private fun abandonPlaybackAudioFocus() {
+        val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            audioFocusRequest?.let { audioManager.abandonAudioFocusRequest(it) }
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.abandonAudioFocus(audioFocusChangeListener)
+        }
+        hasAudioFocus = false
+    }
+
+    private fun registerPlaybackRouteListeners() {
+        val intentFilter = IntentFilter().apply {
+            addAction(AudioManager.ACTION_AUDIO_BECOMING_NOISY)
+            addAction(Intent.ACTION_HEADSET_PLUG)
+            addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
+        }
+        registerReceiver(outputBroadcastReceiver, intentFilter)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+            audioManager.registerAudioDeviceCallback(audioDeviceCallback, null)
+        }
+    }
+
+    private fun unregisterPlaybackRouteListeners() {
+        runCatching { unregisterReceiver(outputBroadcastReceiver) }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+            runCatching { audioManager.unregisterAudioDeviceCallback(audioDeviceCallback) }
+        }
+    }
+
+    private fun handlePotentialOutputDisconnect(reason: String) {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastOutputEventAtMs < OUTPUT_EVENT_DEBOUNCE_MS) return
+        lastOutputEventAtMs = now
+        if (!pauseOnOutputDisconnectEnabled) return
+        if (!exoPlayer.isPlaying) return
+        autoPausedByDisconnect = true
+        Log.d("PlaybackService", "Auto pause due to output disconnect: $reason")
+        serviceScope.launch(Dispatchers.Main.immediate) {
+            sessionPlayer.pause()
+        }
+    }
+
+    private fun handlePotentialOutputConnect(reason: String) {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastOutputEventAtMs < OUTPUT_EVENT_DEBOUNCE_MS) return
+        lastOutputEventAtMs = now
+        if (!resumeOnOutputConnectEnabled) return
+        if (!hasRelevantOutputDevice()) return
+        if (exoPlayer.isPlaying) return
+        Log.d("PlaybackService", "Auto resume due to output connect: $reason")
+        serviceScope.launch(Dispatchers.Main.immediate) {
+            runCatching { sessionPlayer.play() }
+            autoPausedByDisconnect = false
+            autoPausedByAudioFocusLoss = false
+        }
+    }
+
+    private fun hasRelevantOutputDevice(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
+        val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+        return audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
+            .any { it.isRelevantOutputDevice() }
+    }
+
     private fun ensureNotificationChannel() {
         if (Build.VERSION.SDK_INT < 26) return
         val manager = getSystemService(NotificationManager::class.java) ?: return
@@ -688,6 +893,8 @@ class PlaybackService : MediaSessionService() {
         statsJob?.cancel()
         effectApplyJob?.cancel()
         sleepTimerJob?.cancel()
+        unregisterPlaybackRouteListeners()
+        abandonPlaybackAudioFocus()
         appVolumeBoostController.release()
         spectrumAnalyzer.stop()
         mediaSession?.run {
@@ -695,6 +902,7 @@ class PlaybackService : MediaSessionService() {
             release()
             mediaSession = null
         }
+        notificationProvider = null
         runCatching { PlaybackMediaCache.release() }
         super.onDestroy()
     }
@@ -710,5 +918,28 @@ class PlaybackService : MediaSessionService() {
         private const val DLSITE_UA =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         private const val LYRICS_CHANNEL_ID = "playback"
+        private const val OUTPUT_EVENT_DEBOUNCE_MS = 1200L
+    }
+}
+
+private fun AudioDeviceInfo.isRelevantOutputDevice(): Boolean {
+    return when (type) {
+        AudioDeviceInfo.TYPE_WIRED_HEADSET,
+        AudioDeviceInfo.TYPE_WIRED_HEADPHONES,
+        AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
+        AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
+        AudioDeviceInfo.TYPE_BLE_HEADSET,
+        AudioDeviceInfo.TYPE_BLE_SPEAKER,
+        AudioDeviceInfo.TYPE_BLE_BROADCAST,
+        AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+        AudioDeviceInfo.TYPE_USB_HEADSET,
+        AudioDeviceInfo.TYPE_USB_DEVICE,
+        AudioDeviceInfo.TYPE_USB_ACCESSORY,
+        AudioDeviceInfo.TYPE_HDMI,
+        AudioDeviceInfo.TYPE_HDMI_ARC,
+        AudioDeviceInfo.TYPE_HDMI_EARC,
+        AudioDeviceInfo.TYPE_LINE_ANALOG,
+        AudioDeviceInfo.TYPE_LINE_DIGITAL -> true
+        else -> false
     }
 }

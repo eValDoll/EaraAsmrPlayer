@@ -67,4 +67,12 @@ object SettingsKeys {
 
     val SLEEP_TIMER_END_AT_MS = longPreferencesKey("sleep_timer_end_at_ms")
     val SLEEP_TIMER_LAST_DURATION_MIN = intPreferencesKey("sleep_timer_last_duration_min")
+
+    val PAUSE_ON_OUTPUT_DISCONNECT = booleanPreferencesKey("pause_on_output_disconnect")
+    val RESUME_ON_OUTPUT_CONNECT = booleanPreferencesKey("resume_on_output_connect")
+    val PAUSE_ON_OTHER_AUDIO = booleanPreferencesKey("pause_on_other_audio")
+    val PLAY_FADE_IN_MS = intPreferencesKey("play_fade_in_ms")
+    val PAUSE_FADE_OUT_MS = intPreferencesKey("pause_fade_out_ms")
+    val SFW_HIDE_SYSTEM_CONTROLS = booleanPreferencesKey("sfw_hide_system_controls")
+    val SHOW_MINI_PLAYER_BAR = booleanPreferencesKey("show_mini_player_bar")
 }

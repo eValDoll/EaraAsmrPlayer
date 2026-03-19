@@ -208,6 +208,7 @@ class MainActivity : ComponentActivity() {
             val coverBackgroundClarity by settingsDataStore.coverBackgroundClarity.collectAsState(initial = 0.35f)
             val coverPreviewMode by settingsDataStore.coverPreviewMode.collectAsState(initial = CoverPreviewMode.Disabled)
             val lyricsPageSettings by settingsDataStore.lyricsPageSettings.collectAsState(initial = LyricsPageSettings())
+            val showMiniPlayerBar by settingsRepository.showMiniPlayerBar.collectAsState(initial = true)
             val neutral = remember(mode) { neutralPaletteForMode(mode) }
             val cacheManager = remember(context.applicationContext) {
                 dagger.hilt.android.EntryPointAccessors.fromApplication(
@@ -337,6 +338,7 @@ class MainActivity : ComponentActivity() {
                         onContentReady = { contentReady = true },
                         visibleMessages = visibleMessagesSnapshot,
                         mode = mode,
+                        showMiniPlayerBar = showMiniPlayerBar,
                         globalDynamicHueEnabled = globalDynamicHueEnabled,
                         coverBackgroundEnabled = coverBackgroundEnabled,
                         coverBackgroundClarity = coverBackgroundClarity,
@@ -432,6 +434,7 @@ fun MainContainer(
     onContentReady: () -> Unit,
     visibleMessages: List<VisibleAppMessage>,
     mode: ThemeMode,
+    showMiniPlayerBar: Boolean,
     globalDynamicHueEnabled: Boolean,
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
@@ -745,7 +748,7 @@ fun MainContainer(
             }
         }
     ) {
-        val miniPlayerVisible = hasCurrentMediaItem && currentRoute != "now_playing" && currentRoute != "lyrics"
+        val miniPlayerVisible = showMiniPlayerBar && hasCurrentMediaItem && currentRoute != "now_playing" && currentRoute != "lyrics"
         val rightPanelExpandedFromStore by settingsDataStore.recentAlbumsPanelExpanded.collectAsState(initial = recentAlbumsPanelExpandedInitial)
         val rightPanelExpandedState = remember(settingsDataStore, scope, recentAlbumsPanelExpandedInitial) {
             PersistedBooleanState(initial = recentAlbumsPanelExpandedInitial) { expanded ->

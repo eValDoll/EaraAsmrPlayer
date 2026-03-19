@@ -83,6 +83,13 @@ fun SettingsScreen(
     val coverBackgroundEnabled by viewModel.coverBackgroundEnabled.collectAsState()
     val coverBackgroundClarity by viewModel.coverBackgroundClarity.collectAsState()
     val coverPreviewMode by viewModel.coverPreviewMode.collectAsState()
+    val pauseOnOutputDisconnect by viewModel.pauseOnOutputDisconnect.collectAsState()
+    val resumeOnOutputConnect by viewModel.resumeOnOutputConnect.collectAsState()
+    val pauseOnOtherAudio by viewModel.pauseOnOtherAudio.collectAsState()
+    val playFadeInMs by viewModel.playFadeInMs.collectAsState()
+    val pauseFadeOutMs by viewModel.pauseFadeOutMs.collectAsState()
+    val sfwHideSystemControls by viewModel.sfwHideSystemControls.collectAsState()
+    val showMiniPlayerBar by viewModel.showMiniPlayerBar.collectAsState()
     val updateState by viewModel.updateState.collectAsState()
     val scanRoots by libraryViewModel.scanRoots.collectAsState()
     val bulkProgress by libraryViewModel.bulkProgress.collectAsState()
@@ -409,6 +416,7 @@ fun SettingsScreen(
                         DeferredCommitSettingsSliderRow(
                             committedValue = coverBackgroundClarity,
                             range = 0f..1f,
+                            stepSize = 0.05f,
                             textForValue = { value ->
                                 "封面背景清晰度：${(value.coerceIn(0f, 1f) * 100).toInt()}%"
                             },
@@ -418,6 +426,85 @@ fun SettingsScreen(
                 }
             }
 
+                }
+
+                item(key = "group:playback") {
+                    SettingsGroup(title = "播放设置") {
+                        SettingsToggleRow(
+                            text = "断开扬声器、有线/蓝牙耳机或蓝牙关闭时立刻暂停播放",
+                            checked = pauseOnOutputDisconnect,
+                            onCheckedChange = viewModel::setPauseOnOutputDisconnect,
+                            infoKey = "pause_on_output_disconnect",
+                            infoTitle = "输出断开自动暂停",
+                            infoText = "播放中如果外放、耳机或蓝牙输出被移除，会立刻暂停，避免声音突然外放。",
+                            activeTipKey = activeTipKey,
+                            onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
+                        )
+                        SettingsToggleRow(
+                            text = "打开蓝牙、有线/蓝牙耳机、扬声器时继续播放",
+                            checked = resumeOnOutputConnect,
+                            onCheckedChange = viewModel::setResumeOnOutputConnect,
+                            infoKey = "resume_on_output_connect",
+                            infoTitle = "输出接入自动恢复",
+                            infoText = "检测到新的可用输出设备时，如果播放器当前处于暂停，会自动尝试恢复播放。",
+                            activeTipKey = activeTipKey,
+                            onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
+                        )
+                        SettingsToggleRow(
+                            text = "其他应用播放音/视频时暂停",
+                            checked = pauseOnOtherAudio,
+                            onCheckedChange = viewModel::setPauseOnOtherAudio,
+                            infoKey = "pause_on_other_audio",
+                            infoTitle = "音频焦点暂停",
+                            infoText = "当其他音乐或视频应用抢占音频焦点时暂停播放；普通通知提示音不会触发。",
+                            activeTipKey = activeTipKey,
+                            onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
+                        )
+                        DeferredCommitSettingsSliderRow(
+                            committedValue = playFadeInMs.toFloat(),
+                            range = 0f..3000f,
+                            stepSize = 100f,
+                            textForValue = { value -> "播放时逐渐增强音量: ${value.toInt()}ms" },
+                            onValueCommitted = { viewModel.setPlayFadeInMs(it.toInt()) },
+                            infoKey = "play_fade_in",
+                            infoTitle = "播放淡入",
+                            infoText = "点击播放时，音量会在设定时长内从低到高平滑升到正常值。",
+                            activeTipKey = activeTipKey,
+                            onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
+                        )
+                        DeferredCommitSettingsSliderRow(
+                            committedValue = pauseFadeOutMs.toFloat(),
+                            range = 0f..3000f,
+                            stepSize = 100f,
+                            textForValue = { value -> "暂停时逐渐降低音量: ${value.toInt()}ms" },
+                            onValueCommitted = { viewModel.setPauseFadeOutMs(it.toInt()) },
+                            infoKey = "pause_fade_out",
+                            infoTitle = "暂停淡出",
+                            infoText = "点击暂停时，音量会在设定时长内逐渐降到 0，然后再真正暂停。",
+                            activeTipKey = activeTipKey,
+                            onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
+                        )
+                        SettingsToggleRow(
+                            text = "SFW开关",
+                            checked = sfwHideSystemControls,
+                            onCheckedChange = viewModel::setSfwHideSystemControls,
+                            infoKey = "sfw_hide_system_controls",
+                            infoTitle = "SFW",
+                            infoText = "开启后会尽量隐藏系统锁屏和通知栏里的媒体控制按钮，但仍保留后台播放所需的前台通知。",
+                            activeTipKey = activeTipKey,
+                            onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
+                        )
+                        SettingsToggleRow(
+                            text = "迷你播放栏开关",
+                            checked = showMiniPlayerBar,
+                            onCheckedChange = viewModel::setShowMiniPlayerBar,
+                            infoKey = "show_mini_player_bar",
+                            infoTitle = "迷你播放栏",
+                            infoText = "关闭后，应用底部的迷你播放栏会隐藏，同时页面底部不会再为它预留空白。",
+                            activeTipKey = activeTipKey,
+                            onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
+                        )
+                    }
                 }
 
                 // 悬浮歌词
@@ -726,18 +813,21 @@ private fun LyricsPageSettingsSection(
         text = "字体大小: ${settings.fontSizeSp.toInt()}sp",
         value = settings.fontSizeSp,
         range = 18f..36f,
+        stepSize = 1f,
         onValueChange = { onSettingsChange(settings.copy(fontSizeSp = it)) }
     )
     SettingsSliderRow(
         text = "字体阴影: ${"%.1f".format(settings.strokeWidthSp)}sp",
         value = settings.strokeWidthSp,
         range = 0f..3f,
+        stepSize = 0.1f,
         onValueChange = { onSettingsChange(settings.copy(strokeWidthSp = it)) }
     )
     SettingsSliderRow(
         text = "行间距: ${"%.2f".format(settings.lineHeightMultiplier)}x",
         value = settings.lineHeightMultiplier,
         range = 0.1f..3.0f,
+        stepSize = 0.1f,
         onValueChange = { onSettingsChange(settings.copy(lineHeightMultiplier = it)) }
     )
     Row(
@@ -852,10 +942,27 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
 }
 
 @Composable
-private fun SettingsToggleRow(text: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+private fun SettingsToggleRow(
+    text: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    infoKey: String? = null,
+    infoTitle: String = text,
+    infoText: String? = null,
+    activeTipKey: String? = null,
+    onToggleTip: ((String) -> Unit)? = null
+) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(text, style = MaterialTheme.typography.bodyMedium)
-        Spacer(modifier = Modifier.weight(1f))
+        SettingsRowLabel(
+            text = text,
+            infoKey = infoKey,
+            infoTitle = infoTitle,
+            infoText = infoText,
+            activeTipKey = activeTipKey,
+            onToggleTip = onToggleTip,
+            modifier = Modifier.weight(1f)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
@@ -865,17 +972,36 @@ private fun SettingsSliderRow(
     text: String,
     value: Float,
     range: ClosedFloatingPointRange<Float>,
+    stepSize: Float? = null,
+    infoKey: String? = null,
+    infoTitle: String = text,
+    infoText: String? = null,
+    activeTipKey: String? = null,
+    onToggleTip: ((String) -> Unit)? = null,
     onValueChange: (Float) -> Unit,
     onValueChangeFinished: (() -> Unit)? = null,
     interactionSource: MutableInteractionSource? = null
 ) {
     val sliderInteractionSource = interactionSource ?: remember { MutableInteractionSource() }
+    val steps = stepSize
+        ?.takeIf { it > 0f }
+        ?.let { ((range.endInclusive - range.start) / it).toInt() - 1 }
+        ?.coerceAtLeast(0)
+        ?: 0
     Column(modifier = Modifier.fillMaxWidth()) {
-        Text(text, style = MaterialTheme.typography.bodyMedium)
+        SettingsRowLabel(
+            text = text,
+            infoKey = infoKey,
+            infoTitle = infoTitle,
+            infoText = infoText,
+            activeTipKey = activeTipKey,
+            onToggleTip = onToggleTip
+        )
         Slider(
             value = value,
             onValueChange = onValueChange,
             valueRange = range,
+            steps = steps,
             onValueChangeFinished = onValueChangeFinished,
             interactionSource = sliderInteractionSource,
             modifier = Modifier.fillMaxWidth()
@@ -887,12 +1013,30 @@ private fun SettingsSliderRow(
 private fun DeferredCommitSettingsSliderRow(
     committedValue: Float,
     range: ClosedFloatingPointRange<Float>,
+    stepSize: Float? = null,
     textForValue: (Float) -> String,
-    onValueCommitted: (Float) -> Unit
+    onValueCommitted: (Float) -> Unit,
+    infoKey: String? = null,
+    infoTitle: String = "",
+    infoText: String? = null,
+    activeTipKey: String? = null,
+    onToggleTip: ((String) -> Unit)? = null
 ) {
     val coercedCommittedValue = committedValue.coerceIn(range.start, range.endInclusive)
-    var draftValue by rememberSaveable(range.start, range.endInclusive) {
-        mutableStateOf(coercedCommittedValue)
+    val snap: (Float) -> Float = remember(range.start, range.endInclusive, stepSize) {
+        { raw ->
+            val bounded = raw.coerceIn(range.start, range.endInclusive)
+            val step = stepSize
+            if (step == null || step <= 0f) {
+                bounded
+            } else {
+                val snapped = ((bounded - range.start) / step).toInt().toFloat() * step + range.start
+                snapped.coerceIn(range.start, range.endInclusive)
+            }
+        }
+    }
+    var draftValue by rememberSaveable(range.start, range.endInclusive, stepSize) {
+        mutableStateOf(snap(coercedCommittedValue))
     }
     var pendingCommit by rememberSaveable { mutableStateOf<Float?>(null) }
     val interactionSource = remember { MutableInteractionSource() }
@@ -908,7 +1052,7 @@ private fun DeferredCommitSettingsSliderRow(
                 }
             }
             abs(draftValue - coercedCommittedValue) > 0.001f -> {
-                draftValue = coercedCommittedValue
+                draftValue = snap(coercedCommittedValue)
             }
         }
     }
@@ -917,16 +1061,116 @@ private fun DeferredCommitSettingsSliderRow(
         text = textForValue(draftValue),
         value = draftValue,
         range = range,
+        stepSize = stepSize,
+        infoKey = infoKey,
+        infoTitle = infoTitle.ifBlank { textForValue(draftValue) },
+        infoText = infoText,
+        activeTipKey = activeTipKey,
+        onToggleTip = onToggleTip,
         onValueChange = { newValue ->
-            draftValue = newValue.coerceIn(range.start, range.endInclusive)
+            draftValue = snap(newValue)
         },
         onValueChangeFinished = {
-            val valueToCommit = draftValue.coerceIn(range.start, range.endInclusive)
+            val valueToCommit = snap(draftValue)
             pendingCommit = valueToCommit
             onValueCommitted(valueToCommit)
         },
         interactionSource = interactionSource
     )
+}
+
+@Composable
+private fun SettingsRowLabel(
+    text: String,
+    infoKey: String? = null,
+    infoTitle: String = text,
+    infoText: String? = null,
+    activeTipKey: String? = null,
+    onToggleTip: ((String) -> Unit)? = null,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.weight(1f, fill = false)
+        )
+        if (infoKey != null && !infoText.isNullOrBlank() && onToggleTip != null) {
+            SettingsInfoTip(
+                active = activeTipKey == infoKey,
+                title = infoTitle,
+                text = infoText,
+                onToggle = { onToggleTip(infoKey) }
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsInfoTip(active: Boolean, title: String, text: String, onToggle: () -> Unit) {
+    val density = LocalDensity.current
+    val offset = with(density) { IntOffset(0, 26.dp.roundToPx()) }
+
+    Surface(
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+    ) {
+        Box {
+            IconButton(
+                onClick = onToggle,
+                modifier = Modifier.size(22.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(14.dp)
+                )
+            }
+            if (active) {
+                Popup(
+                    alignment = Alignment.TopStart,
+                    offset = offset,
+                    onDismissRequest = onToggle,
+                    properties = PopupProperties(
+                        focusable = true,
+                        dismissOnBackPress = true,
+                        dismissOnClickOutside = true
+                    )
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(10.dp),
+                        tonalElevation = 6.dp,
+                        shadowElevation = 10.dp,
+                        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                        border = androidx.compose.foundation.BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.widthIn(max = 260.dp).padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = title,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = text,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable
