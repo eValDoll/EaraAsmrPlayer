@@ -9,15 +9,18 @@ import androidx.media3.common.util.UnstableApi
 class FadingPlayer(
     private val delegate: Player,
     private val volumeFader: VolumeFader,
-    private val playFadeMs: Long,
-    private val pauseFadeMs: Long,
+    playFadeMs: Long,
+    pauseFadeMs: Long,
     private val switchFadeOutMs: Long,
-    private val switchFadeInMs: Long
+    private val switchFadeInMs: Long,
+    private val onPlayRequested: (() -> Boolean)? = null
 ) : ForwardingPlayer(delegate) {
 
     private var pendingSwitchFadeIn: Boolean = false
     private var baseVolume: Float = 1f
     private var fadeVolume: Float = 1f
+    @Volatile private var playFadeDurationMs: Long = playFadeMs.coerceAtLeast(0L)
+    @Volatile private var pauseFadeDurationMs: Long = pauseFadeMs.coerceAtLeast(0L)
 
     private val transitionListener = object : Player.Listener {
         override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
@@ -37,12 +40,18 @@ class FadingPlayer(
         syncOutputVolume()
     }
 
+    fun setFadeDurations(playFadeMs: Long, pauseFadeMs: Long) {
+        playFadeDurationMs = playFadeMs.coerceAtLeast(0L)
+        pauseFadeDurationMs = pauseFadeMs.coerceAtLeast(0L)
+    }
+
     override fun play() {
+        if (onPlayRequested?.invoke() == false) return
         pendingSwitchFadeIn = false
         volumeFader.cancel()
         volume = 0f
         delegate.play()
-        volumeFader.fadeTo(this, 1f, playFadeMs)
+        volumeFader.fadeTo(this, 1f, playFadeDurationMs)
     }
 
     override fun pause() {
@@ -51,7 +60,7 @@ class FadingPlayer(
             delegate.pause()
             return
         }
-        volumeFader.fadeTo(this, 0f, pauseFadeMs) {
+        volumeFader.fadeTo(this, 0f, pauseFadeDurationMs) {
             delegate.pause()
         }
     }

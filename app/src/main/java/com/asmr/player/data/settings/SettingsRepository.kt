@@ -121,6 +121,34 @@ class SettingsRepository @Inject constructor(
         prefs[SettingsKeys.SLEEP_TIMER_LAST_DURATION_MIN] ?: 30
     }
 
+    val pauseOnOutputDisconnect: Flow<Boolean> = context.settingsDataStore.data.map { prefs ->
+        prefs[SettingsKeys.PAUSE_ON_OUTPUT_DISCONNECT] ?: true
+    }
+
+    val resumeOnOutputConnect: Flow<Boolean> = context.settingsDataStore.data.map { prefs ->
+        prefs[SettingsKeys.RESUME_ON_OUTPUT_CONNECT] ?: false
+    }
+
+    val pauseOnOtherAudio: Flow<Boolean> = context.settingsDataStore.data.map { prefs ->
+        prefs[SettingsKeys.PAUSE_ON_OTHER_AUDIO] ?: true
+    }
+
+    val playFadeInMs: Flow<Int> = context.settingsDataStore.data.map { prefs ->
+        (prefs[SettingsKeys.PLAY_FADE_IN_MS] ?: 500).coerceIn(0, 3000)
+    }
+
+    val pauseFadeOutMs: Flow<Int> = context.settingsDataStore.data.map { prefs ->
+        (prefs[SettingsKeys.PAUSE_FADE_OUT_MS] ?: 500).coerceIn(0, 3000)
+    }
+
+    val sfwHideSystemControls: Flow<Boolean> = context.settingsDataStore.data.map { prefs ->
+        prefs[SettingsKeys.SFW_HIDE_SYSTEM_CONTROLS] ?: false
+    }
+
+    val showMiniPlayerBar: Flow<Boolean> = context.settingsDataStore.data.map { prefs ->
+        prefs[SettingsKeys.SHOW_MINI_PLAYER_BAR] ?: true
+    }
+
     suspend fun setSleepTimerEndAtMs(endAtMs: Long) {
         withContext(Dispatchers.IO) {
             context.settingsDataStore.edit { it[SettingsKeys.SLEEP_TIMER_END_AT_MS] = endAtMs }
@@ -134,6 +162,48 @@ class SettingsRepository @Inject constructor(
     suspend fun setSleepTimerLastDurationMin(minutes: Int) {
         withContext(Dispatchers.IO) {
             context.settingsDataStore.edit { it[SettingsKeys.SLEEP_TIMER_LAST_DURATION_MIN] = minutes }
+        }
+    }
+
+    suspend fun setPauseOnOutputDisconnect(enabled: Boolean) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { it[SettingsKeys.PAUSE_ON_OUTPUT_DISCONNECT] = enabled }
+        }
+    }
+
+    suspend fun setResumeOnOutputConnect(enabled: Boolean) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { it[SettingsKeys.RESUME_ON_OUTPUT_CONNECT] = enabled }
+        }
+    }
+
+    suspend fun setPauseOnOtherAudio(enabled: Boolean) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { it[SettingsKeys.PAUSE_ON_OTHER_AUDIO] = enabled }
+        }
+    }
+
+    suspend fun setPlayFadeInMs(durationMs: Int) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { it[SettingsKeys.PLAY_FADE_IN_MS] = durationMs.coerceIn(0, 3000) }
+        }
+    }
+
+    suspend fun setPauseFadeOutMs(durationMs: Int) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { it[SettingsKeys.PAUSE_FADE_OUT_MS] = durationMs.coerceIn(0, 3000) }
+        }
+    }
+
+    suspend fun setSfwHideSystemControls(enabled: Boolean) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { it[SettingsKeys.SFW_HIDE_SYSTEM_CONTROLS] = enabled }
+        }
+    }
+
+    suspend fun setShowMiniPlayerBar(enabled: Boolean) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { it[SettingsKeys.SHOW_MINI_PLAYER_BAR] = enabled }
         }
     }
 

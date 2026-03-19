@@ -80,6 +80,27 @@ class SettingsViewModel @Inject constructor(
     val coverPreviewMode: StateFlow<CoverPreviewMode> = settingsDataStore.coverPreviewMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), CoverPreviewMode.Disabled)
 
+    val pauseOnOutputDisconnect: StateFlow<Boolean> = settingsRepository.pauseOnOutputDisconnect
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    val resumeOnOutputConnect: StateFlow<Boolean> = settingsRepository.resumeOnOutputConnect
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    val pauseOnOtherAudio: StateFlow<Boolean> = settingsRepository.pauseOnOtherAudio
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    val playFadeInMs: StateFlow<Int> = settingsRepository.playFadeInMs
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 500)
+
+    val pauseFadeOutMs: StateFlow<Int> = settingsRepository.pauseFadeOutMs
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 500)
+
+    val sfwHideSystemControls: StateFlow<Boolean> = settingsRepository.sfwHideSystemControls
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    val showMiniPlayerBar: StateFlow<Boolean> = settingsRepository.showMiniPlayerBar
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
     private val updateClient = GitHubUpdateClient(okHttpClient)
     private val _updateState = MutableStateFlow<AppUpdateState>(AppUpdateState.Idle)
     val updateState = _updateState.asStateFlow()
@@ -119,6 +140,34 @@ class SettingsViewModel @Inject constructor(
 
     fun setCoverPreviewMode(mode: CoverPreviewMode) {
         viewModelScope.launch { settingsDataStore.setCoverPreviewMode(mode) }
+    }
+
+    fun setPauseOnOutputDisconnect(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setPauseOnOutputDisconnect(enabled) }
+    }
+
+    fun setResumeOnOutputConnect(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setResumeOnOutputConnect(enabled) }
+    }
+
+    fun setPauseOnOtherAudio(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setPauseOnOtherAudio(enabled) }
+    }
+
+    fun setPlayFadeInMs(durationMs: Int) {
+        viewModelScope.launch { settingsRepository.setPlayFadeInMs(durationMs) }
+    }
+
+    fun setPauseFadeOutMs(durationMs: Int) {
+        viewModelScope.launch { settingsRepository.setPauseFadeOutMs(durationMs) }
+    }
+
+    fun setSfwHideSystemControls(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setSfwHideSystemControls(enabled) }
+    }
+
+    fun setShowMiniPlayerBar(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setShowMiniPlayerBar(enabled) }
     }
 
     fun checkUpdate() {

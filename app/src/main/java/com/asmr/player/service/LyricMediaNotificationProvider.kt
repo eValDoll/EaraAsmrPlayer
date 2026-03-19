@@ -17,6 +17,7 @@ import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.unit.IntSize
 import com.asmr.player.cache.CachePolicy
 import com.asmr.player.cache.ImageCacheEntryPoint
+import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.R
 import com.google.common.collect.ImmutableList
 import dagger.hilt.android.EntryPointAccessors
@@ -30,7 +31,8 @@ import java.io.File
 
 @UnstableApi
 class LyricMediaNotificationProvider(
-    private val context: Context
+    private val context: Context,
+    private val settingsRepository: SettingsRepository
 ) : MediaNotification.Provider {
     private val appContext = context.applicationContext
     private val CHANNEL_ID = "playback"
@@ -42,6 +44,7 @@ class LyricMediaNotificationProvider(
     @Volatile private var lastRequest: LastRequest? = null
     @Volatile private var lastArtworkKeyRequested: String? = null
     @Volatile private var artworkJob: Job? = null
+    @Volatile private var hideSystemControls: Boolean = false
 
     private data class LastRequest(
         val mediaSession: MediaSession,
@@ -72,37 +75,8 @@ class LyricMediaNotificationProvider(
             }
         }
 
-        val prevAction = actionFactory.createMediaAction(
-            mediaSession,
-            IconCompat.createWithResource(appContext, R.drawable.ic_notif_prev),
-            "上一首",
-            Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM
-        )
-        val playPauseAction = actionFactory.createMediaAction(
-            mediaSession,
-            IconCompat.createWithResource(
-                appContext,
-                if (player.isPlaying) R.drawable.ic_notif_pause else R.drawable.ic_notif_play
-            ),
-            if (player.isPlaying) "暂停" else "播放",
-            Player.COMMAND_PLAY_PAUSE
-        )
-        val nextAction = actionFactory.createMediaAction(
-            mediaSession,
-            IconCompat.createWithResource(appContext, R.drawable.ic_notif_next),
-            "下一首",
-            Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM
-        )
-
-        val mediaStyle = MediaStyleNotificationHelper.MediaStyle(mediaSession)
-            .setShowActionsInCompactView(0, 1, 2)
-
         val builder = NotificationCompat.Builder(appContext, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_stat_playback)
-            .addAction(prevAction)
-            .addAction(playPauseAction)
-            .addAction(nextAction)
-            .setStyle(mediaStyle)
             .setContentTitle(contentTitle)
             .setContentText(contentText)
             .setSubText("")
@@ -110,14 +84,54 @@ class LyricMediaNotificationProvider(
             .setOngoing(player.isPlaying)
             .setOnlyAlertOnce(true)
             .setSilent(true)
-            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setVisibility(
+                if (hideSystemControls) NotificationCompat.VISIBILITY_SECRET
+                else NotificationCompat.VISIBILITY_PUBLIC
+            )
             .setContentIntent(mediaSession.sessionActivity)
             .setDeleteIntent(actionFactory.createMediaActionPendingIntent(mediaSession, Player.COMMAND_STOP.toLong()))
             .apply {
                 if (artworkBitmap != null) setLargeIcon(artworkBitmap)
             }
 
+        if (!hideSystemControls) {
+            val prevAction = actionFactory.createMediaAction(
+                mediaSession,
+                IconCompat.createWithResource(appContext, R.drawable.ic_notif_prev),
+                "上一首",
+                Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM
+            )
+            val playPauseAction = actionFactory.createMediaAction(
+                mediaSession,
+                IconCompat.createWithResource(
+                    appContext,
+                    if (player.isPlaying) R.drawable.ic_notif_pause else R.drawable.ic_notif_play
+                ),
+                if (player.isPlaying) "暂停" else "播放",
+                Player.COMMAND_PLAY_PAUSE
+            )
+            val nextAction = actionFactory.createMediaAction(
+                mediaSession,
+                IconCompat.createWithResource(appContext, R.drawable.ic_notif_next),
+                "下一首",
+                Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM
+            )
+            val mediaStyle = MediaStyleNotificationHelper.MediaStyle(mediaSession)
+                .setShowActionsInCompactView(0, 1, 2)
+            builder
+                .addAction(prevAction)
+                .addAction(playPauseAction)
+                .addAction(nextAction)
+                .setStyle(mediaStyle)
+        }
+
         return MediaNotification(1001, builder.build())
+    }
+
+    fun setHideSystemControls(hide: Boolean) {
+        if (hideSystemControls == hide) return
+        hideSystemControls = hide
+        refreshNotification()
     }
 
     private fun getCachedArtworkBitmap(uri: Uri?): android.graphics.Bitmap? {
@@ -185,5 +199,28 @@ class LyricMediaNotificationProvider(
 
     override fun handleCustomCommand(session: MediaSession, action: String, extras: Bundle): Boolean {
         return false
+    }
+
+    init {
+        scope.launch {
+            settingsRepository.sfwHideSystemControls.collect { hide ->
+                hideSystemControls = hide
+                withContext(Dispatchers.Main) {
+                    refreshNotification()
+                }
+            }
+        }
+    }
+
+    private fun refreshNotification() {
+        val latest = lastRequest ?: return
+        latest.callback.onNotificationChanged(
+            createNotification(
+                latest.mediaSession,
+                latest.customLayout,
+                latest.actionFactory,
+                latest.callback
+            )
+        )
     }
 }
