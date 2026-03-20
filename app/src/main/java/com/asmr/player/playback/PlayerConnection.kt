@@ -39,6 +39,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.suspendCancellableCoroutine
 import java.io.File
 import java.net.URLDecoder
@@ -78,6 +80,8 @@ class PlayerConnection @Inject constructor(
     private var didRestorePlaybackState: Boolean = false
     private val meteredWarnedMediaIds = LinkedHashSet<String>()
     private var lastMeteredWarnAtMs: Long = 0L
+    private val connectMutex = Mutex()
+    @Volatile private var reconnecting = false
 
     val appVolumePercent: StateFlow<Int> = settingsRepository.appVolumePercent
         .stateIn(scope, SharingStarted.Eagerly, AppVolume.DefaultPercent)
@@ -191,10 +195,25 @@ class PlayerConnection @Inject constructor(
     }
 
     private suspend fun connect() {
-        val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
-        val future = MediaController.Builder(context, token).buildAsync()
-        val c = awaitMediaController(context, future)
-        controller = c
+        connectMutex.withLock {
+            val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
+            val future = MediaController.Builder(context, token)
+                .setListener(
+                    object : MediaController.Listener {
+                        override fun onDisconnected(controller: MediaController) {
+                            this@PlayerConnection.controller = null
+                            _snapshot.value = _snapshot.value.copy(
+                                isConnected = false,
+                                isPlaying = false
+                            )
+                            _queue.value = emptyList()
+                            scheduleReconnect()
+                        }
+                    }
+                )
+                .buildAsync()
+            val c = awaitMediaController(context, future)
+            controller = c
         c.addListener(
             object : Player.Listener {
                 override fun onEvents(player: Player, events: Player.Events) {
@@ -248,26 +267,44 @@ class PlayerConnection @Inject constructor(
                 }
             }
         )
-        _snapshot.value = c.toSnapshot(isConnected = true, audioSessionId = _snapshot.value.audioSessionId)
-        updateQueue()
+            _snapshot.value = c.toSnapshot(isConnected = true, audioSessionId = _snapshot.value.audioSessionId)
+            updateQueue()
 
-        val restored = restorePlaybackStateIfNeeded(c)
-        if (!restored) {
-            val mode = runCatching { settingsRepository.playMode.first() }.getOrDefault(0)
-            applyPlayModeToController(c, mode)
-        }
-        
-        try {
-            val cmd = androidx.media3.session.SessionCommand("GET_AUDIO_SESSION_ID", android.os.Bundle.EMPTY)
-            val result = awaitSessionResult(context, c.sendCustomCommand(cmd, android.os.Bundle.EMPTY))
-            if (result.resultCode == androidx.media3.session.SessionResult.RESULT_SUCCESS) {
-                val sessionId = result.extras.getInt("AUDIO_SESSION_ID")
-                if (sessionId != 0) {
-                     _snapshot.value = _snapshot.value.copy(audioSessionId = sessionId)
-                }
+            val restored = restorePlaybackStateIfNeeded(c)
+            if (!restored) {
+                val mode = runCatching { settingsRepository.playMode.first() }.getOrDefault(0)
+                applyPlayModeToController(c, mode)
             }
-        } catch (e: Exception) {
-            e.printStackTrace()
+        
+            try {
+                val cmd = androidx.media3.session.SessionCommand("GET_AUDIO_SESSION_ID", android.os.Bundle.EMPTY)
+                val result = awaitSessionResult(context, c.sendCustomCommand(cmd, android.os.Bundle.EMPTY))
+                if (result.resultCode == androidx.media3.session.SessionResult.RESULT_SUCCESS) {
+                    val sessionId = result.extras.getInt("AUDIO_SESSION_ID")
+                    if (sessionId != 0) {
+                         _snapshot.value = _snapshot.value.copy(audioSessionId = sessionId)
+                    }
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private fun scheduleReconnect() {
+        if (reconnecting) return
+        reconnecting = true
+        scope.launch {
+            delay(150L)
+            runCatching { connect() }
+                .onFailure { e ->
+                    android.util.Log.w("PlayerConnection", "Failed to reconnect controller", e)
+                    reconnecting = false
+                    delay(1_000L)
+                    scheduleReconnect()
+                    return@launch
+                }
+            reconnecting = false
         }
     }
 

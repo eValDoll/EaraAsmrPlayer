@@ -5,46 +5,47 @@ import android.graphics.Bitmap
 import android.net.Uri
 import android.os.Bundle
 import android.util.LruCache
-import androidx.core.graphics.drawable.IconCompat
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.unit.IntSize
 import androidx.core.app.NotificationCompat
+import androidx.core.graphics.drawable.IconCompat
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.CommandButton
 import androidx.media3.session.MediaNotification
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaStyleNotificationHelper
-import androidx.compose.ui.graphics.asAndroidBitmap
-import androidx.compose.ui.unit.IntSize
+import com.asmr.player.R
 import com.asmr.player.cache.CachePolicy
 import com.asmr.player.cache.ImageCacheEntryPoint
-import com.asmr.player.data.settings.SettingsRepository
-import com.asmr.player.R
 import com.google.common.collect.ImmutableList
 import dagger.hilt.android.EntryPointAccessors
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 
 @UnstableApi
 class LyricMediaNotificationProvider(
     private val context: Context,
-    private val settingsRepository: SettingsRepository
+    initialHideSystemControls: Boolean = false
 ) : MediaNotification.Provider {
     private val appContext = context.applicationContext
-    private val CHANNEL_ID = "playback"
+    private val channelId = "playback"
     private val artworkCache = object : LruCache<String, Bitmap>(8 * 1024) {
         override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount / 1024
     }
-    private val cacheManager = EntryPointAccessors.fromApplication(appContext, ImageCacheEntryPoint::class.java).imageCacheManager()
+    private val cacheManager =
+        EntryPointAccessors.fromApplication(appContext, ImageCacheEntryPoint::class.java)
+            .imageCacheManager()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile private var lastRequest: LastRequest? = null
     @Volatile private var lastArtworkKeyRequested: String? = null
     @Volatile private var artworkJob: Job? = null
-    @Volatile private var hideSystemControls: Boolean = false
+    @Volatile private var hideSystemControls: Boolean = initialHideSystemControls
 
     private data class LastRequest(
         val mediaSession: MediaSession,
@@ -60,27 +61,32 @@ class LyricMediaNotificationProvider(
         onNotificationChangedCallback: MediaNotification.Provider.Callback
     ): MediaNotification {
         lastRequest = LastRequest(mediaSession, customLayout, actionFactory, onNotificationChangedCallback)
+
         val player = mediaSession.player
         val metadata = player.mediaMetadata
-        
         val trackTitle = metadata.title?.toString().orEmpty().ifBlank { "正在播放" }
         val artist = metadata.artist?.toString().orEmpty()
-        val contentTitle = trackTitle
-        val contentText = artist
-        
         val artworkUri = metadata.artworkUri
         val artworkBitmap = getCachedArtworkBitmap(artworkUri).also {
-            if (it == null) {
+            if (it == null && !hideSystemControls) {
                 requestArtworkLoad(artworkUri)
             }
         }
+        val plainForegroundNotification = hideSystemControls
 
-        val builder = NotificationCompat.Builder(appContext, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(appContext, channelId)
             .setSmallIcon(R.drawable.ic_stat_playback)
-            .setContentTitle(contentTitle)
-            .setContentText(contentText)
+            .setContentTitle(
+                if (plainForegroundNotification) appContext.getString(R.string.app_name) else trackTitle
+            )
+            .setContentText(
+                if (plainForegroundNotification) "后台播放中" else artist
+            )
             .setSubText("")
-            .setCategory(NotificationCompat.CATEGORY_TRANSPORT)
+            .setCategory(
+                if (plainForegroundNotification) NotificationCompat.CATEGORY_SERVICE
+                else NotificationCompat.CATEGORY_TRANSPORT
+            )
             .setOngoing(player.isPlaying)
             .setOnlyAlertOnce(true)
             .setSilent(true)
@@ -89,12 +95,19 @@ class LyricMediaNotificationProvider(
                 else NotificationCompat.VISIBILITY_PUBLIC
             )
             .setContentIntent(mediaSession.sessionActivity)
-            .setDeleteIntent(actionFactory.createMediaActionPendingIntent(mediaSession, Player.COMMAND_STOP.toLong()))
+            .setDeleteIntent(
+                actionFactory.createMediaActionPendingIntent(
+                    mediaSession,
+                    Player.COMMAND_STOP.toLong()
+                )
+            )
             .apply {
-                if (artworkBitmap != null) setLargeIcon(artworkBitmap)
+                if (!plainForegroundNotification && artworkBitmap != null) {
+                    setLargeIcon(artworkBitmap)
+                }
             }
 
-        if (!hideSystemControls) {
+        if (!plainForegroundNotification) {
             val prevAction = actionFactory.createMediaAction(
                 mediaSession,
                 IconCompat.createWithResource(appContext, R.drawable.ic_notif_prev),
@@ -129,17 +142,18 @@ class LyricMediaNotificationProvider(
     }
 
     fun setHideSystemControls(hide: Boolean) {
-        if (hideSystemControls == hide) return
         hideSystemControls = hide
-        refreshNotification()
     }
 
-    private fun getCachedArtworkBitmap(uri: Uri?): android.graphics.Bitmap? {
+    fun refreshNotification() {
+        refreshNotificationInternal()
+    }
+
+    private fun getCachedArtworkBitmap(uri: Uri?): Bitmap? {
         if (uri == null) return null
         val key = buildArtworkKey(uri)
         val cached = artworkCache.get(key)
-        if (cached != null && !cached.isRecycled) return cached
-        return null
+        return cached?.takeUnless { it.isRecycled }
     }
 
     private fun requestArtworkLoad(uri: Uri?) {
@@ -158,7 +172,12 @@ class LyricMediaNotificationProvider(
                 cacheManager.loadImageFromCache(
                     model = uri,
                     size = IntSize(targetSizePx, targetSizePx),
-                    cachePolicy = CachePolicy(readMemory = true, writeMemory = false, readDisk = true, writeDisk = false)
+                    cachePolicy = CachePolicy(
+                        readMemory = true,
+                        writeMemory = false,
+                        readDisk = true,
+                        writeDisk = false
+                    )
                 )?.asAndroidBitmap()
             }.getOrNull()
 
@@ -168,7 +187,7 @@ class LyricMediaNotificationProvider(
             withContext(Dispatchers.Main) {
                 val latest = lastRequest ?: return@withContext
                 val currentUri = latest.mediaSession.player.mediaMetadata.artworkUri
-                if (currentUri != uri) return@withContext
+                if (currentUri != uri || hideSystemControls) return@withContext
                 latest.callback.onNotificationChanged(
                     createNotification(
                         latest.mediaSession,
@@ -201,18 +220,7 @@ class LyricMediaNotificationProvider(
         return false
     }
 
-    init {
-        scope.launch {
-            settingsRepository.sfwHideSystemControls.collect { hide ->
-                hideSystemControls = hide
-                withContext(Dispatchers.Main) {
-                    refreshNotification()
-                }
-            }
-        }
-    }
-
-    private fun refreshNotification() {
+    private fun refreshNotificationInternal() {
         val latest = lastRequest ?: return
         latest.callback.onNotificationChanged(
             createNotification(
