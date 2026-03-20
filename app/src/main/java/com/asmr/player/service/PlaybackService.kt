@@ -136,16 +136,11 @@ class PlaybackService : MediaSessionService() {
         when (focusChange) {
             AudioManager.AUDIOFOCUS_GAIN -> hasAudioFocus = true
             AudioManager.AUDIOFOCUS_LOSS,
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
                 hasAudioFocus = false
-                if (pauseOnOtherAudioEnabled && exoPlayer.isPlaying) {
-                    autoPausedByAudioFocusLoss = true
-                    serviceScope.launch(Dispatchers.Main.immediate) {
-                        sessionPlayer.pause()
-                    }
-                }
+                handleAudioFocusLoss()
             }
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> Unit
         }
     }
 
@@ -407,7 +402,12 @@ class PlaybackService : MediaSessionService() {
         serviceScope.launch {
             settingsRepository.pauseOnOtherAudio.collectLatest { enabled ->
                 pauseOnOtherAudioEnabled = enabled
-                if (!enabled) autoPausedByAudioFocusLoss = false
+                if (!enabled) {
+                    autoPausedByAudioFocusLoss = false
+                    abandonPlaybackAudioFocus()
+                } else if (exoPlayer.isPlaying && !hasAudioFocus) {
+                    requestPlaybackAudioFocus()
+                }
             }
         }
         serviceScope.launch {
@@ -593,6 +593,7 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun requestPlaybackAudioFocus(): Boolean {
+        if (!pauseOnOtherAudioEnabled) return true
         val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
         val result = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val request = (audioFocusRequest ?: AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
@@ -603,6 +604,7 @@ class PlaybackService : MediaSessionService() {
                         .build()
                 )
                 .setAcceptsDelayedFocusGain(false)
+                .setWillPauseWhenDucked(true)
                 .setOnAudioFocusChangeListener(audioFocusChangeListener)
                 .build()
                 .also { audioFocusRequest = it })
@@ -617,6 +619,16 @@ class PlaybackService : MediaSessionService() {
         }
         hasAudioFocus = result == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
         return hasAudioFocus
+    }
+
+    private fun handleAudioFocusLoss() {
+        if (!pauseOnOtherAudioEnabled) return
+        if (!exoPlayer.isPlaying) return
+        autoPausedByAudioFocusLoss = true
+        Log.d("PlaybackService", "Auto pause due to audio focus loss")
+        serviceScope.launch(Dispatchers.Main.immediate) {
+            sessionPlayer.pause()
+        }
     }
 
     private fun abandonPlaybackAudioFocus() {
