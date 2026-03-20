@@ -3,10 +3,38 @@ package com.asmr.player.data.remote.dlsite
 import com.asmr.player.domain.model.Album
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DlsiteCloudSyncSupportTest {
+    private val leftBracket = "\u3010"
+    private val rightBracket = "\u3011"
+
+    @Test
+    fun sanitizeDlsiteCloudSyncKeyword_removesSingleBracketBlock() {
+        assertEquals(
+            "title rest",
+            sanitizeDlsiteCloudSyncKeyword("title ${leftBracket}tag${rightBracket} rest")
+        )
+    }
+
+    @Test
+    fun sanitizeDlsiteCloudSyncKeyword_removesMultipleBlocksAndCollapsesWhitespace() {
+        assertEquals(
+            "alpha beta gamma",
+            sanitizeDlsiteCloudSyncKeyword(" alpha ${leftBracket}first${rightBracket} beta  ${leftBracket}second${rightBracket}   gamma ")
+        )
+    }
+
+    @Test
+    fun sanitizeDlsiteCloudSyncKeyword_keepsOriginalWhenNoBracketBlock() {
+        assertEquals(
+            "plain title",
+            sanitizeDlsiteCloudSyncKeyword(" plain title ")
+        )
+    }
+
     @Test
     fun buildDlsiteCloudSyncAttempts_prefersHansThenHantThenJpn() {
         val attempts = buildDlsiteCloudSyncAttempts(
@@ -63,7 +91,10 @@ class DlsiteCloudSyncSupportTest {
 
     @Test
     fun searchDlsiteWorknoWithLocaleFallback_returnsTraditionalWhenSimplifiedEmpty() = runBlocking {
-        val result = searchDlsiteWorknoWithLocaleFallback("test") { _, locale ->
+        val keywords = mutableListOf<String>()
+
+        val result = searchDlsiteWorknoWithLocaleFallback("test") { keyword, locale ->
+            keywords += keyword
             when (locale) {
                 CLOUD_SYNC_LOCALE_ZH_CN -> emptyList()
                 CLOUD_SYNC_LOCALE_ZH_TW -> listOf(albumOf("RJ000222"))
@@ -75,6 +106,7 @@ class DlsiteCloudSyncSupportTest {
             DlsiteCloudSyncSearchResult.Unique(workno = "RJ000222", locale = CLOUD_SYNC_LOCALE_ZH_TW),
             result
         )
+        assertEquals(listOf("test", "test"), keywords)
     }
 
     @Test
@@ -106,6 +138,40 @@ class DlsiteCloudSyncSupportTest {
             DlsiteCloudSyncSearchResult.Ambiguous(locale = CLOUD_SYNC_LOCALE_ZH_CN, count = 2),
             result
         )
+    }
+
+    @Test
+    fun searchDlsiteWorknoWithLocaleFallback_removesMultipleBracketBlocksBeforeSearch() = runBlocking {
+        val keywords = mutableListOf<String>()
+
+        val result = searchDlsiteWorknoWithLocaleFallback(
+            "alpha ${leftBracket}first${rightBracket} beta ${leftBracket}second${rightBracket} gamma"
+        ) { keyword, locale ->
+            keywords += "$locale:$keyword"
+            when (locale) {
+                CLOUD_SYNC_LOCALE_ZH_CN -> listOf(albumOf("RJ000210"))
+                else -> emptyList()
+            }
+        }
+
+        assertEquals(
+            DlsiteCloudSyncSearchResult.Unique(workno = "RJ000210", locale = CLOUD_SYNC_LOCALE_ZH_CN),
+            result
+        )
+        assertEquals(listOf("$CLOUD_SYNC_LOCALE_ZH_CN:alpha beta gamma"), keywords)
+    }
+
+    @Test
+    fun searchDlsiteWorknoWithLocaleFallback_returnsNotFoundWithoutCallingSearchWhenSanitizedKeywordBlank() = runBlocking {
+        var called = false
+
+        val result = searchDlsiteWorknoWithLocaleFallback("${leftBracket}tag1${rightBracket} ${leftBracket}tag2${rightBracket}") { _, _ ->
+            called = true
+            emptyList()
+        }
+
+        assertEquals(DlsiteCloudSyncSearchResult.NotFound, result)
+        assertFalse(called)
     }
 
     @Test

@@ -11,6 +11,7 @@ private val CLOUD_SYNC_LANGUAGE_PRIORITY = listOf(
     "CHI_HANT" to CLOUD_SYNC_LOCALE_ZH_TW,
     "JPN" to CLOUD_SYNC_LOCALE_JA_JP
 )
+private val CLOUD_SYNC_TITLE_BLOCK_REGEX = Regex("\u3010[^\u3010\u3011]*\u3011")
 
 internal data class DlsiteCloudSyncAttempt(
     val workno: String,
@@ -38,6 +39,13 @@ internal sealed interface DlsiteCloudSyncResolveResult {
 
     data object Ambiguous : DlsiteCloudSyncResolveResult
     data object NotFound : DlsiteCloudSyncResolveResult
+}
+
+internal fun sanitizeDlsiteCloudSyncKeyword(raw: String): String {
+    return CLOUD_SYNC_TITLE_BLOCK_REGEX
+        .replace(raw, " ")
+        .replace(Regex("""\s+"""), " ")
+        .trim()
 }
 
 internal fun buildDlsiteCloudSyncAttempts(
@@ -72,7 +80,7 @@ internal suspend fun searchDlsiteWorknoWithLocaleFallback(
     keyword: String,
     search: suspend (keyword: String, locale: String) -> List<Album>
 ): DlsiteCloudSyncSearchResult {
-    val normalizedKeyword = keyword.trim()
+    val normalizedKeyword = sanitizeDlsiteCloudSyncKeyword(keyword)
     if (normalizedKeyword.isBlank()) return DlsiteCloudSyncSearchResult.NotFound
 
     for ((_, locale) in CLOUD_SYNC_LANGUAGE_PRIORITY) {
