@@ -350,7 +350,7 @@ internal fun AppleLyricsView(
             ) {
                 itemsIndexed(
                     items = lyrics,
-                    key = { _, entry -> entry.startMs },
+                    key = { index, entry -> lyricItemKey(index, entry) },
                     contentType = { _, _ -> "appleLyricLine" }
                 ) { index, entry ->
                     val isActive = index == activeIndex
