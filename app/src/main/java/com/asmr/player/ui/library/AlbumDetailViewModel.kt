@@ -11,6 +11,7 @@ import com.asmr.player.data.local.db.dao.TagWithCount
 import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.AlbumFtsEntity
+import com.asmr.player.data.local.db.entities.AlbumTagEntity
 import com.asmr.player.data.local.db.entities.RemoteSubtitleSourceEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.data.local.db.entities.TagEntity
@@ -18,10 +19,13 @@ import com.asmr.player.data.local.db.entities.TagSource
 import com.asmr.player.data.local.db.entities.TrackTagEntity
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.crawler.AsmrOneCrawler
+import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncResolveResult
 import com.asmr.player.data.remote.dlsite.DlsitePlayWorkClient
 import com.asmr.player.data.remote.dlsite.DlsitePlayTreeResult
 import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
 import com.asmr.player.data.remote.dlsite.DlsiteProductInfoClient
+import com.asmr.player.data.remote.dlsite.resolveCloudSyncWorkId
+import com.asmr.player.data.remote.dlsite.resolveDlsiteCloudSync
 import com.asmr.player.data.remote.download.DownloadManager
 import com.asmr.player.data.remote.scraper.DLSiteScraper
 import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
@@ -374,49 +378,72 @@ class AlbumDetailViewModel @Inject constructor(
                     return@launch
                 }
 
-                val trimmedWorkId = entity.workId.trim()
-                val updatedWorkId = when {
-                    trimmedWorkId.isBlank() -> normalized
-                    Regex("""RJ\d+""", RegexOption.IGNORE_CASE).matches(trimmedWorkId) -> normalized
-                    else -> entity.workId
-                }
+                val updatedWorkId = resolveCloudSyncWorkId(entity.workId, normalized)
                 withContext(Dispatchers.IO) {
                     albumDao.updateAlbum(entity.copy(workId = updatedWorkId, rjCode = normalized))
                 }
 
-                val lang = current.model.dlsiteSelectedLang.trim().uppercase().ifBlank { "JPN" }
-                val locale = dlsiteLocaleForLang(lang)
-                val details = withContext(Dispatchers.IO) { dlsiteScraper.getDetails(normalized, locale = locale) }
-                if (details == null) {
-                    messageManager.showError("同步失败：未找到专辑信息")
-                    loadAlbum(local.id, normalized, force = true)
-                    return@launch
-                }
-
-                val oldTitle = entity.title.trim()
-                val newTitle = details.title.trim()
-                val finalTitle = when {
-                    oldTitle.isNotBlank() && newTitle.isBlank() -> oldTitle
-                    oldTitle.isNotBlank() && newTitle.isNotBlank() && oldTitle.contains(newTitle) && oldTitle.length > newTitle.length -> oldTitle
-                    else -> newTitle.ifBlank { oldTitle }
-                }
-
-                withContext(Dispatchers.IO) {
-                    albumDao.updateAlbum(
-                        entity.copy(
+                when (
+                    val result = withContext(Dispatchers.IO) {
+                        resolveDlsiteCloudSync(
+                            keyword = entity.title.trim(),
+                            baseWorkno = normalized,
+                            search = { searchKeyword, locale ->
+                                dlsiteScraper.search(searchKeyword, page = 1, order = "trend", locale = locale)
+                            },
+                            fetchLanguageEditions = { productId ->
+                                dlsiteProductInfoClient.fetchLanguageEditions(productId)
+                            },
+                            fetchDetails = { workno, locale ->
+                                dlsiteScraper.getDetails(workno, locale = locale)
+                            }
+                        )
+                    }
+                ) {
+                    is DlsiteCloudSyncResolveResult.Success -> {
+                        val resolvedWorkno = result.workno
+                        val details = result.details
+                        val oldTitle = entity.title.trim()
+                        val newTitle = details.title.trim()
+                        val finalTitle = when {
+                            oldTitle.isNotBlank() && newTitle.isBlank() -> oldTitle
+                            oldTitle.isNotBlank() && newTitle.isNotBlank() && oldTitle.contains(newTitle) && oldTitle.length > newTitle.length -> oldTitle
+                            else -> newTitle.ifBlank { oldTitle }
+                        }
+                        val updated = entity.copy(
                             title = finalTitle,
                             circle = details.circle.ifBlank { entity.circle },
                             cv = details.cv.ifBlank { entity.cv },
                             tags = if (details.tags.isNotEmpty()) details.tags.joinToString(",") else entity.tags,
                             coverUrl = details.coverUrl.ifBlank { entity.coverUrl },
                             description = details.description.ifBlank { entity.description },
-                            workId = updatedWorkId,
-                            rjCode = normalized
+                            workId = resolveCloudSyncWorkId(updatedWorkId, resolvedWorkno),
+                            rjCode = resolvedWorkno
                         )
-                    )
+                        withContext(Dispatchers.IO) {
+                            albumDao.updateAlbum(updated)
+                            upsertAlbumFtsIndex(updated.id, updated)
+                            upsertAlbumTagsFromCsv(updated.id, updated.tags, TagSource.AUTO)
+                            if (updated.coverPath.trim().isBlank() && updated.coverThumbPath.trim().isBlank()) {
+                                runCatching {
+                                    ensureAlbumCoverSaved(updated.id, updated.coverPath, updated.coverUrl)
+                                }
+                            }
+                        }
+                        messageManager.showSuccess("已绑定 $resolvedWorkno 并完成云同步")
+                        loadAlbum(local.id, resolvedWorkno, force = true)
+                    }
+
+                    DlsiteCloudSyncResolveResult.Ambiguous -> {
+                        messageManager.showError("同步失败：搜索结果不唯一")
+                        loadAlbum(local.id, normalized, force = true)
+                    }
+
+                    DlsiteCloudSyncResolveResult.NotFound -> {
+                        messageManager.showError("同步失败：未找到专辑信息")
+                        loadAlbum(local.id, normalized, force = true)
+                    }
                 }
-                messageManager.showSuccess("已绑定 $normalized 并完成云同步")
-                loadAlbum(local.id, normalized, force = true)
             } catch (e: Exception) {
                 messageManager.showError("同步失败，请稍后重试")
                 loadAlbum(local.id, normalized, force = true)
@@ -457,6 +484,70 @@ class AlbumDetailViewModel @Inject constructor(
             .build()
         WorkManager.getInstance(context)
             .enqueueUniqueWork("album_cover_thumb_$albumId", ExistingWorkPolicy.REPLACE, request)
+    }
+
+    private fun buildTagsToken(tagsCsv: String): String {
+        return tagsCsv.split(",")
+            .map { TagNormalizer.normalize(it) }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .joinToString(" ")
+    }
+
+    private fun parseAlbumTags(tagsCsv: String): List<Pair<String, String>> {
+        return tagsCsv.split(",")
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .map { it to TagNormalizer.normalize(it) }
+            .filter { it.second.isNotBlank() }
+            .distinctBy { it.second }
+    }
+
+    private suspend fun upsertAlbumFtsIndex(albumId: Long, entity: AlbumEntity) {
+        val userTagsCsv = database.tagDao().getAlbumTagsCsvOnce(albumId, TagSource.USER).orEmpty()
+        val combinedTagsCsv = buildString {
+            append(entity.tags)
+            if (userTagsCsv.isNotBlank()) {
+                if (isNotEmpty() && last() != ',') append(',')
+                append(userTagsCsv)
+            }
+        }
+        val tagsToken = buildTagsToken(combinedTagsCsv)
+        database.albumFtsDao().upsert(
+            listOf(
+                AlbumFtsEntity(
+                    albumId = albumId,
+                    title = entity.title,
+                    circle = entity.circle,
+                    cv = entity.cv,
+                    rjCode = entity.rjCode,
+                    workId = entity.workId,
+                    tagsToken = tagsToken
+                )
+            )
+        )
+    }
+
+    private suspend fun upsertAlbumTagsFromCsv(albumId: Long, tagsCsv: String, source: Int) {
+        val tags = parseAlbumTags(tagsCsv)
+        if (tags.isEmpty()) return
+
+        val tagEntities = tags.map { (name, normalized) ->
+            TagEntity(name = name, nameNormalized = normalized)
+        }
+        val tagDao = database.tagDao()
+        tagDao.insertTags(tagEntities)
+
+        val normalizedList = tags.map { it.second }
+        val persisted = tagDao.getTagsByNormalized(normalizedList)
+        val idByNormalized = persisted.associateBy({ it.nameNormalized }, { it.id })
+
+        tagDao.deleteAlbumTagsByAlbumIdExceptSource(albumId, TagSource.USER)
+        val refs = normalizedList.mapNotNull { normalized ->
+            val tagId = idByNormalized[normalized] ?: return@mapNotNull null
+            AlbumTagEntity(albumId = albumId, tagId = tagId, source = source)
+        }
+        if (refs.isNotEmpty()) tagDao.insertAlbumTags(refs)
     }
 
     private fun defaultDlsiteEditions(rj: String): List<DlsiteLanguageEdition> {

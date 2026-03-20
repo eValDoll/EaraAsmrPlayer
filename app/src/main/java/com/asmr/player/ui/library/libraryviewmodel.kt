@@ -37,8 +37,11 @@ import com.asmr.player.data.local.db.entities.TagSource
 import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.data.local.db.entities.TrackTagEntity
 import com.asmr.player.data.remote.api.AsmrOneApi
-import com.asmr.player.data.remote.scraper.DLSiteScraper
+import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncResolveResult
 import com.asmr.player.data.remote.dlsite.DlsiteProductInfoClient
+import com.asmr.player.data.remote.dlsite.resolveCloudSyncWorkId
+import com.asmr.player.data.remote.dlsite.resolveDlsiteCloudSync
+import com.asmr.player.data.remote.scraper.DLSiteScraper
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
@@ -73,7 +76,6 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.util.concurrent.ConcurrentHashMap
-import java.util.Locale
 import javax.inject.Inject
 import javax.inject.Named
 import okhttp3.OkHttpClient
@@ -137,7 +139,6 @@ class LibraryViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), globalSyncState.value != null)
     private val scanMutex = Mutex()
     private val bulkStartMutex = Mutex()
-    private val dlsiteLocaleCache = ConcurrentHashMap<String, String>()
     private var bulkJob: Job? = null
     private val albumJobs = ConcurrentHashMap<Long, Job>()
     private var lastFileUpdateElapsedMs: Long = 0L
@@ -1074,66 +1075,57 @@ class LibraryViewModel @Inject constructor(
 
     private suspend fun syncAlbumMetadataInternal(entity: AlbumEntity, silent: Boolean = false) {
         val keyword = entity.title.trim()
-        var workno = entity.rjCode.ifBlank { entity.workId }.trim().uppercase()
-        if (workno.isBlank() && keyword.isNotBlank()) {
-            val results = runCatching { dlsiteScraper.search(keyword, page = 1, order = "trend") }.getOrDefault(emptyList())
-            if (results.size == 1) {
-                workno = results[0].rjCode.trim().uppercase()
-            } else {
-                if (!silent && results.isNotEmpty()) messageManager.showError("同步失败：搜索结果不唯一")
-                if (!silent && results.isEmpty()) messageManager.showError("同步失败：未找到专辑信息")
-                return
-            }
-        }
-        if (workno.isBlank()) return
+        val currentWorkno = entity.rjCode.ifBlank { entity.workId }.trim().uppercase()
+        if (currentWorkno.isBlank() && keyword.isBlank()) return
 
         _syncStatus.value += (entity.id to SyncStatus.Syncing)
         try {
-            val locale = resolveDlsiteLocaleForWork(workno)
-            val firstTry = runCatching { dlsiteScraper.getDetails(workno, locale = locale) }
-            var details = firstTry.getOrNull()
-            firstTry.exceptionOrNull()?.let { e ->
-                Log.e("LibraryViewModel", "getDetails failed: $workno ($locale)", e)
-                if (!silent) messageManager.showError("同步异常：${e.message}")
-            }
-            if (details == null && keyword.isNotBlank()) {
-                val results = runCatching { dlsiteScraper.search(keyword, page = 1, order = "trend") }.getOrDefault(emptyList())
-                if (results.size == 1) {
-                    val fallbackWorkno = results[0].rjCode.trim().uppercase()
-                    if (fallbackWorkno.isNotBlank() && fallbackWorkno != workno) {
-                        val fallbackLocale = resolveDlsiteLocaleForWork(fallbackWorkno)
-                        val fallbackTry = runCatching { dlsiteScraper.getDetails(fallbackWorkno, locale = fallbackLocale) }
-                        details = fallbackTry.getOrNull()
-                        fallbackTry.exceptionOrNull()?.let { e ->
-                            Log.e("LibraryViewModel", "getDetails fallback failed: $fallbackWorkno ($fallbackLocale)", e)
-                            if (!silent) messageManager.showError("同步异常：${e.message}")
-                        }
-                        if (details != null) workno = fallbackWorkno
-                    }
+            val result = resolveDlsiteCloudSync(
+                keyword = keyword,
+                baseWorkno = currentWorkno,
+                search = { searchKeyword, locale ->
+                    dlsiteScraper.search(searchKeyword, page = 1, order = "trend", locale = locale)
+                },
+                fetchLanguageEditions = { productId ->
+                    dlsiteProductInfoClient.fetchLanguageEditions(productId)
+                },
+                fetchDetails = { workno, locale ->
+                    dlsiteScraper.getDetails(workno, locale = locale)
                 }
-            }
+            )
             currentCoroutineContext().ensureActive()
-            if (details != null) {
-                val updated = entity.copy(
-                    title = details.title.ifBlank { entity.title },
-                    circle = details.circle.ifBlank { entity.circle },
-                    cv = details.cv.ifBlank { entity.cv },
-                    tags = if (details.tags.isNotEmpty()) details.tags.joinToString(",") else entity.tags,
-                    coverUrl = details.coverUrl.ifBlank { entity.coverUrl },
-                    description = details.description.ifBlank { entity.description },
-                    rjCode = workno
-                )
-                albumDao.updateAlbum(updated)
-                upsertAlbumFtsIndex(updated.id, updated)
-                upsertAlbumTagsFromCsv(updated.id, updated.tags, TagSource.AUTO)
-                if (updated.coverPath.trim().isBlank() && updated.coverThumbPath.trim().isBlank()) {
-                    runCatching {
-                        ensureAlbumCoverSaved(updated.id, updated.coverPath, updated.coverUrl)
+            when (result) {
+                is DlsiteCloudSyncResolveResult.Success -> {
+                    val resolvedWorkno = result.workno
+                    val details = result.details
+                    val updated = entity.copy(
+                        title = details.title.ifBlank { entity.title },
+                        circle = details.circle.ifBlank { entity.circle },
+                        cv = details.cv.ifBlank { entity.cv },
+                        tags = if (details.tags.isNotEmpty()) details.tags.joinToString(",") else entity.tags,
+                        coverUrl = details.coverUrl.ifBlank { entity.coverUrl },
+                        description = details.description.ifBlank { entity.description },
+                        workId = resolveCloudSyncWorkId(entity.workId, resolvedWorkno),
+                        rjCode = resolvedWorkno
+                    )
+                    albumDao.updateAlbum(updated)
+                    upsertAlbumFtsIndex(updated.id, updated)
+                    upsertAlbumTagsFromCsv(updated.id, updated.tags, TagSource.AUTO)
+                    if (updated.coverPath.trim().isBlank() && updated.coverThumbPath.trim().isBlank()) {
+                        runCatching {
+                            ensureAlbumCoverSaved(updated.id, updated.coverPath, updated.coverUrl)
+                        }
                     }
+                    if (!silent) messageManager.showSuccess("元数据同步成功：${details.title}")
                 }
-                if (!silent) messageManager.showSuccess("元数据同步成功：${details.title}")
-            } else if (!silent) {
-                messageManager.showError("同步失败：未找到专辑信息")
+
+                DlsiteCloudSyncResolveResult.Ambiguous -> {
+                    if (!silent) messageManager.showError("同步失败：搜索结果不唯一")
+                }
+
+                DlsiteCloudSyncResolveResult.NotFound -> {
+                    if (!silent) messageManager.showError("同步失败：未找到专辑信息")
+                }
             }
             _syncStatus.value -= entity.id
         } catch (e: CancellationException) {
@@ -1279,33 +1271,6 @@ class LibraryViewModel @Inject constructor(
             paint
         )
         return out
-    }
-
-    private suspend fun resolveDlsiteLocaleForWork(workno: String): String {
-        val normalized = workno.trim().uppercase()
-        if (normalized.isBlank()) return "ja_JP"
-        dlsiteLocaleCache[normalized]?.let { return it }
-
-        val preferred = preferredLocaleForSystem()
-        val editions = runCatching { dlsiteProductInfoClient.fetchLanguageEditions(normalized) }.getOrDefault(emptyList())
-        val out = when {
-            preferred == "zh_CN" && editions.any { it.lang == "CHI_HANS" } -> "zh_CN"
-            preferred == "zh_TW" && editions.any { it.lang == "CHI_HANT" } -> "zh_TW"
-            else -> "ja_JP"
-        }
-        dlsiteLocaleCache[normalized] = out
-        return out
-    }
-
-    private fun preferredLocaleForSystem(): String {
-        val locale = Locale.getDefault()
-        val language = locale.language.lowercase()
-        val country = locale.country.uppercase()
-        if (language != "zh") return "ja_JP"
-        return when (country) {
-            "TW", "HK", "MO" -> "zh_TW"
-            else -> "zh_CN"
-        }
     }
 
     fun rescanAlbum(album: Album) {
