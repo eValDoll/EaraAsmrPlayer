@@ -72,10 +72,13 @@ import androidx.media3.ui.PlayerView
 import com.asmr.player.R
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.ui.common.AsmrAsyncImage
+import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
 import com.asmr.player.ui.common.AppVolumeSlider
+import com.asmr.player.ui.common.AppVolumeWarningSessionState
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.ui.common.EqualizerPanel
+import com.asmr.player.ui.common.rememberProtectedAppVolumeChangeState
 import com.asmr.player.ui.common.rememberComputedDominantColorCenterWeighted
 import com.asmr.player.ui.common.rememberComputedVideoFrameDominantColorCenterWeighted
 import com.asmr.player.ui.common.DiscPlaceholder
@@ -107,6 +110,7 @@ fun NowPlayingScreen(
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
     coverPreviewMode: CoverPreviewMode,
+    warningSessionState: AppVolumeWarningSessionState,
     lyricsViewModel: LyricsViewModel = hiltViewModel()
 ) {
     val playback by viewModel.playback.collectAsState()
@@ -875,7 +879,8 @@ fun NowPlayingScreen(
                         modifier = Modifier.fillMaxWidth(),
                         accentColor = accentColor,
                         viewModel = viewModel,
-                        hardwareVolumeEventTick = hardwareVolumeEventTick
+                        hardwareVolumeEventTick = hardwareVolumeEventTick,
+                        warningSessionState = warningSessionState
                     )
                 }
             }
@@ -1694,7 +1699,8 @@ private fun VolumeControl(
     modifier: Modifier = Modifier,
     accentColor: Color,
     viewModel: PlayerViewModel,
-    hardwareVolumeEventTick: Long
+    hardwareVolumeEventTick: Long,
+    warningSessionState: AppVolumeWarningSessionState
 ) {
     var expanded by remember { mutableStateOf(false) }
     val volume by viewModel.appVolumePercent.collectAsState()
@@ -1702,6 +1708,13 @@ private fun VolumeControl(
     var lastInteractionAt by remember { mutableLongStateOf(0L) }
     var hasObservedInitialHardwareVolumeEventTick by remember { mutableStateOf(false) }
     var lastHandledHardwareVolumeEventTick by remember { mutableLongStateOf(0L) }
+    val protectedVolumeChangeState = rememberProtectedAppVolumeChangeState(
+        warningSessionState = warningSessionState,
+        onApplyVolumeChange = { next ->
+            if (next > 0) lastNonZeroVolume = next
+            viewModel.setAppVolumePercent(next)
+        }
+    )
 
     LaunchedEffect(volume) {
         if (volume > 0) lastNonZeroVolume = volume
@@ -1724,6 +1737,14 @@ private fun VolumeControl(
         val next = AppVolume.clampPercent(newVolume)
         if (next > 0) lastNonZeroVolume = next
         viewModel.setAppVolumePercent(next)
+    }
+
+    fun requestVolumeChange(newVolume: Int, source: com.asmr.player.playback.AppVolumeChangeSource) {
+        protectedVolumeChangeState.requestVolumeChange(
+            currentPercent = volume,
+            targetPercent = newVolume,
+            source = source
+        )
     }
 
     LaunchedEffect(expanded, lastInteractionAt) {
@@ -1826,9 +1847,9 @@ private fun VolumeControl(
 
                 AppVolumeSlider(
                     valuePercent = volume,
-                    onValueChange = { newVol ->
+                    onValueChange = { newVol, source ->
                         if (newVol != volume) {
-                            setVolume(newVol)
+                            requestVolumeChange(newVol, source)
                         }
                         lastInteractionAt = SystemClock.elapsedRealtime()
                     },
@@ -1841,6 +1862,7 @@ private fun VolumeControl(
             }
         }
     }
+    AppVolumeHearingWarningDialog(state = protectedVolumeChangeState)
 }
 
 // AdaptiveLyricsView has been replaced by AppleLyricsView

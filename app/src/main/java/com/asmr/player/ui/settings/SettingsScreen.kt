@@ -441,12 +441,12 @@ fun SettingsScreen(
                             onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
                         )
                         SettingsToggleRow(
-                            text = "打开蓝牙、有线/蓝牙耳机、扬声器时继续播放",
+                            text = "连接有线/蓝牙耳机或其他外接输出时继续播放",
                             checked = resumeOnOutputConnect,
                             onCheckedChange = viewModel::setResumeOnOutputConnect,
                             infoKey = "resume_on_output_connect",
                             infoTitle = "输出接入自动恢复",
-                            infoText = "检测到新的可用输出设备时，如果播放器当前处于暂停，会自动尝试恢复播放。",
+                            infoText = "检测到耳机、蓝牙耳机、USB 音频、HDMI 或 AUX 等外接输出接入时，如果播放器当前处于暂停，会自动尝试恢复播放；手机扬声器不触发。",
                             activeTipKey = activeTipKey,
                             onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
                         )
