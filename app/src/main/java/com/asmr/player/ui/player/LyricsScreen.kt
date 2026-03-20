@@ -58,7 +58,7 @@ fun LyricsScreen(
             ) {
                 itemsIndexed(
                     items = lyrics,
-                    key = { _, entry -> entry.startMs },
+                    key = { index, entry -> lyricItemKey(index, entry) },
                     contentType = { _, _ -> "lyricLine" }
                 ) { index, entry ->
                     val isActive = index == activeIndex
