@@ -11,7 +11,9 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
@@ -99,6 +101,7 @@ class SearchScreenChromeTest {
         }
 
         composeRule.onNodeWithTag(SEARCH_SCOPE_BUTTON_TAG).assertIsNotEnabled()
+        composeRule.onNodeWithTag(SEARCH_CLEAR_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_LANGUAGE_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_SUBMIT_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_SUBMIT_SPINNER_TAG).assert(
@@ -146,6 +149,41 @@ class SearchScreenChromeTest {
         composeRule.onNodeWithTag(SEARCH_PAGINATION_SPINNER_TAG).assert(
             SemanticsMatcher.expectValue(SemanticsProperties.TestTag, SEARCH_PAGINATION_SPINNER_TAG)
         )
+    }
+
+    @Test
+    fun clearButton_clearsKeywordWithoutSubmitting() {
+        var submitCount by mutableIntStateOf(0)
+        var latestKeyword = "RJ123456"
+
+        composeRule.setContent {
+            var keyword by remember { mutableStateOf("RJ123456") }
+            latestKeyword = keyword
+
+            AsmrPlayerTheme {
+                SearchToolbar(
+                    keyword = keyword,
+                    onKeywordChange = { keyword = it },
+                    selectedOrder = SearchSortOption.Trend,
+                    purchasedOnly = false,
+                    selectedLocale = "ja_JP",
+                    filterControlsLocked = false,
+                    searchSubmitLocked = false,
+                    showSearchSpinner = false,
+                    onSearchSubmit = { submitCount += 1 },
+                    onPurchasedOnlySelected = {},
+                    onOrderSelected = {},
+                    onLocaleSelected = {}
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(SEARCH_CLEAR_BUTTON_TAG).performClick()
+        composeRule.runOnIdle {
+            assertEquals("", latestKeyword)
+            assertEquals(0, submitCount)
+        }
+        composeRule.onAllNodesWithTag(SEARCH_CLEAR_BUTTON_TAG).assertCountEquals(0)
     }
 
     @Test

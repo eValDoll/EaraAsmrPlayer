@@ -42,6 +42,7 @@ import com.asmr.player.data.lyrics.LyricsLoader
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.data.settings.AudioEffectController
 import com.asmr.player.data.settings.EqualizerSettings
+import com.asmr.player.data.settings.PlaybackRuntimeSettings
 import com.asmr.player.data.repository.StatisticsRepository
 import com.asmr.player.playback.AsmrRenderersFactory
 import com.asmr.player.playback.BalanceAudioProcessor
@@ -210,9 +211,12 @@ class PlaybackService : MediaSessionService() {
         ensureNotificationChannel()
         appVolumeBoostController =
             AppVolumeBoostController(getSystemService(AUDIO_SERVICE) as AudioManager)
+        val runtimeSettings = runBlocking {
+            settingsRepository.loadPlaybackRuntimeSettings()
+        }
+        applyPlaybackRuntimeSettings(runtimeSettings)
         runBlocking {
             settingsRepository.setAppVolumePercent(appVolumeBoostController.currentVolumePercent())
-            sfwHideSystemControlsEnabled = settingsRepository.sfwHideSystemControls.first()
         }
         runCatching {
             val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
@@ -311,8 +315,8 @@ class PlaybackService : MediaSessionService() {
         sessionPlayer = FadingPlayer(
             delegate = exoPlayer,
             volumeFader = volumeFader,
-            playFadeMs = 500L,
-            pauseFadeMs = 500L,
+            playFadeMs = runtimeSettings.playFadeInMs.toLong(),
+            pauseFadeMs = runtimeSettings.pauseFadeOutMs.toLong(),
             switchFadeOutMs = 250L,
             switchFadeInMs = 250L,
             onPlayRequested = { requestPlaybackAudioFocus() }
@@ -337,6 +341,7 @@ class PlaybackService : MediaSessionService() {
                     abandonPlaybackAudioFocus()
                     serviceScope.launch { persistCurrentTrackProgressIfNeeded(force = true) }
                 }
+                refreshMediaNotification()
             }
 
             override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
@@ -352,6 +357,17 @@ class PlaybackService : MediaSessionService() {
                 currentTrackListenedMs = 0L
                 isCurrentTrackCounted = false
                 lastProgressPersistElapsedMs = 0L
+            }
+
+            override fun onEvents(player: Player, events: Player.Events) {
+                if (
+                    events.contains(Player.EVENT_AVAILABLE_COMMANDS_CHANGED) ||
+                    events.contains(Player.EVENT_TIMELINE_CHANGED) ||
+                    events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)
+                ) {
+                    syncMediaNotificationControllerState()
+                    refreshMediaNotification()
+                }
             }
         })
         StereoSpectrumBus.playbackActive = exoPlayer.isPlaying
@@ -428,8 +444,8 @@ class PlaybackService : MediaSessionService() {
                 val stateChanged = sfwHideSystemControlsEnabled != hide
                 sfwHideSystemControlsEnabled = hide
                 notificationProvider?.setHideSystemControls(hide)
-                if (stateChanged && exoPlayer.isPlaying) {
-                    recreateMediaSession()
+                if (stateChanged) {
+                    refreshMediaNotificationControllerRegistration()
                 }
                 syncMediaNotificationControllerState()
                 refreshMediaNotification()
@@ -698,12 +714,20 @@ class PlaybackService : MediaSessionService() {
             .any { it.isResumeEligibleOutputDevice() }
     }
 
+    private fun applyPlaybackRuntimeSettings(settings: PlaybackRuntimeSettings) {
+        floatingLyricsEnabled = settings.floatingLyricsEnabled
+        pauseOnOutputDisconnectEnabled = settings.pauseOnOutputDisconnect
+        resumeOnOutputConnectEnabled = settings.resumeOnOutputConnect
+        pauseOnOtherAudioEnabled = settings.pauseOnOtherAudio
+        sfwHideSystemControlsEnabled = settings.sfwHideSystemControls
+    }
+
     private fun refreshMediaNotification() {
         serviceScope.launch(Dispatchers.Main.immediate) {
             runCatching {
                 syncMediaNotificationControllerState()
-                notificationProvider?.refreshNotification()
                 mediaSession?.let { session ->
+                    notificationProvider?.refreshNotification()
                     onUpdateNotification(session, false)
                 }
             }.onFailure {
@@ -830,12 +854,20 @@ class PlaybackService : MediaSessionService() {
             .build()
     }
 
-    private fun recreateMediaSession() {
-        val oldSession = mediaSession
-        mediaSession = null
-        runCatching { oldSession?.release() }
-            .onFailure { Log.w("PlaybackService", "Failed to release old media session", it) }
-        mediaSession = buildMediaSession()
+    private fun refreshMediaNotificationControllerRegistration() {
+        val session = mediaSession ?: return
+        runCatching {
+            if (isSessionAdded(session)) {
+                removeSession(session)
+            }
+            addSession(session)
+        }.onFailure {
+            Log.w(
+                "PlaybackService",
+                "Failed to refresh media notification controller registration",
+                it
+            )
+        }
     }
 
     private fun syncMediaNotificationControllerState() {

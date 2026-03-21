@@ -146,7 +146,10 @@ import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
 import com.asmr.player.ui.common.AppVolumeWarningSessionState
 import com.asmr.player.ui.common.rememberAppVolumeWarningSessionState
+import com.asmr.player.ui.common.rememberCurrentAudioOutputRouteKind
 import com.asmr.player.ui.common.rememberProtectedAppVolumeChangeState
+import com.asmr.player.ui.common.volumeRouteIcon
+import com.asmr.player.service.AudioOutputRouteKind
 import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
@@ -489,6 +492,7 @@ fun MainContainer(
     var lastNonZeroAppVolumePercent by rememberSaveable { mutableIntStateOf(AppVolume.DefaultPercent) }
     var hardwareVolumeOverlayBounds by remember { mutableStateOf<Rect?>(null) }
     val appVolumeWarningSessionState = rememberAppVolumeWarningSessionState()
+    val audioOutputRouteKind = rememberCurrentAudioOutputRouteKind()
     
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -1271,6 +1275,7 @@ fun MainContainer(
                             coverBackgroundEnabled = coverBackgroundEnabled,
                             coverBackgroundClarity = coverBackgroundClarity,
                             coverPreviewMode = coverPreviewMode,
+                            audioOutputRouteKind = audioOutputRouteKind,
                             warningSessionState = appVolumeWarningSessionState
                         )
                     } else {
@@ -1298,6 +1303,7 @@ fun MainContainer(
                             coverBackgroundEnabled = coverBackgroundEnabled,
                             coverBackgroundClarity = coverBackgroundClarity,
                             coverPreviewMode = coverPreviewMode,
+                            audioOutputRouteKind = audioOutputRouteKind,
                             warningSessionState = appVolumeWarningSessionState
                         )
                     }
@@ -1545,6 +1551,7 @@ fun MainContainer(
                                 hardwareVolumeOverlayBounds = coordinates.boundsInRoot()
                             },
                             volumePercent = appVolumePercent,
+                            audioOutputRouteKind = audioOutputRouteKind,
                             onVolumeChange = {
                                 playerViewModel.setAppVolumePercent(it)
                                 hardwareVolumeOverlayHoldTick += 1L
@@ -1627,6 +1634,7 @@ fun MainContainer(
 @Composable
 private fun HardwareVolumeOverlay(
     volumePercent: Int,
+    audioOutputRouteKind: AudioOutputRouteKind,
     onVolumeChange: (Int) -> Unit,
     onToggleMute: () -> Unit,
     onInteractionActiveChanged: (Boolean) -> Unit,
@@ -1660,7 +1668,10 @@ private fun HardwareVolumeOverlay(
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Icon(
-                    imageVector = if (volumePercent == 0) Icons.Default.VolumeOff else Icons.Default.VolumeUp,
+                    imageVector = volumeRouteIcon(
+                        routeKind = audioOutputRouteKind,
+                        isMuted = volumePercent == 0
+                    ),
                     contentDescription = null,
                     tint = accentColor,
                     modifier = Modifier
