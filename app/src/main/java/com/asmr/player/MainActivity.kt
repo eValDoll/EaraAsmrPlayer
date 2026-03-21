@@ -55,6 +55,7 @@ import androidx.navigation.navArgument
 import com.asmr.player.ui.library.AlbumDetailScreen
 import com.asmr.player.ui.library.AlbumDetailUiState
 import com.asmr.player.ui.library.AlbumDetailViewModel
+import com.asmr.player.ui.library.CloudSyncSelectionDialog
 import com.asmr.player.ui.library.LibraryFilterScreen
 import com.asmr.player.ui.library.LibraryScreen
 import com.asmr.player.ui.library.LibraryViewModel
@@ -476,6 +477,7 @@ fun MainContainer(
     val drawerStatusViewModel: DrawerStatusViewModel = hiltViewModel()
     val statisticsViewModel: StatisticsViewModel = hiltViewModel()
     val bulkProgress by libraryViewModel.bulkProgress.collectAsState()
+    val cloudSyncSelectionDialogState by libraryViewModel.cloudSyncSelectionDialogState.collectAsState()
     val appVolumePercent by playerViewModel.appVolumePercent.collectAsState()
     var showManualRjDialog by remember { mutableStateOf(false) }
     var manualRjInput by remember { mutableStateOf("") }
@@ -1493,6 +1495,20 @@ fun MainContainer(
                     dismissButton = {
                         TextButton(onClick = { showManualRjDialog = false }) { Text("取消") }
                     }
+                )
+            }
+
+            cloudSyncSelectionDialogState?.let { dialogState ->
+                val ignoreAllHandler = if (bulkProgress != null) {
+                    { libraryViewModel.ignoreAllCloudSyncSelections() }
+                } else {
+                    null
+                }
+                CloudSyncSelectionDialog(
+                    state = dialogState,
+                    onSelect = libraryViewModel::confirmCloudSyncSelection,
+                    onCancel = libraryViewModel::cancelCloudSyncSelection,
+                    onIgnoreAll = ignoreAllHandler
                 )
             }
 

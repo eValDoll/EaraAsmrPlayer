@@ -19,6 +19,7 @@ import com.asmr.player.data.local.db.entities.TagSource
 import com.asmr.player.data.local.db.entities.TrackTagEntity
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.crawler.AsmrOneCrawler
+import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncResolveResult
 import com.asmr.player.data.remote.dlsite.DlsitePlayWorkClient
 import com.asmr.player.data.remote.dlsite.DlsitePlayTreeResult
@@ -26,6 +27,7 @@ import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
 import com.asmr.player.data.remote.dlsite.DlsiteProductInfoClient
 import com.asmr.player.data.remote.dlsite.resolveCloudSyncWorkId
 import com.asmr.player.data.remote.dlsite.resolveDlsiteCloudSync
+import com.asmr.player.data.remote.dlsite.resolveSelectedDlsiteCloudSync
 import com.asmr.player.data.remote.download.DownloadManager
 import com.asmr.player.data.remote.scraper.DLSiteScraper
 import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
@@ -41,6 +43,7 @@ import com.asmr.player.util.DlsiteWorkNo
 import com.asmr.player.data.remote.crawler.asmrOneWorkMatchesRj
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -97,6 +100,9 @@ class AlbumDetailViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow<AlbumDetailUiState>(AlbumDetailUiState.Loading)
     val uiState = _uiState.asStateFlow()
+    private val _cloudSyncSelectionDialogState = MutableStateFlow<CloudSyncSelectionDialogState?>(null)
+    internal val cloudSyncSelectionDialogState: StateFlow<CloudSyncSelectionDialogState?> = _cloudSyncSelectionDialogState.asStateFlow()
+    private var pendingCloudSyncSelection: CompletableDeferred<String?>? = null
 
     val availableTags: StateFlow<List<TagWithCount>> = database.tagDao()
         .getTagsWithCounts(TagSource.USER)
@@ -226,6 +232,119 @@ class AlbumDetailViewModel @Inject constructor(
     fun persistListScrollPosition(stateKey: String, index: Int, offset: Int) {
         if (stateKey.isBlank()) return
         listScrollByKey[stateKey] = (index.coerceAtLeast(0) to offset.coerceAtLeast(0))
+    }
+
+    fun confirmCloudSyncSelection(workno: String) {
+        val deferred = pendingCloudSyncSelection ?: return
+        if (deferred.isActive) {
+            deferred.complete(workno.trim().uppercase().ifBlank { null })
+        }
+        if (pendingCloudSyncSelection === deferred) {
+            pendingCloudSyncSelection = null
+            _cloudSyncSelectionDialogState.value = null
+        }
+    }
+
+    fun cancelCloudSyncSelection() {
+        val deferred = pendingCloudSyncSelection ?: return
+        if (deferred.isActive) {
+            deferred.complete(null)
+        }
+        if (pendingCloudSyncSelection === deferred) {
+            pendingCloudSyncSelection = null
+            _cloudSyncSelectionDialogState.value = null
+        }
+    }
+
+    private suspend fun awaitCloudSyncSelection(
+        albumTitle: String,
+        candidates: List<DlsiteCloudSyncCandidate>
+    ): String? {
+        cancelCloudSyncSelection()
+        val normalizedCandidates = candidates.distinctBy { it.workno }.filter { it.workno.isNotBlank() }
+        if (normalizedCandidates.isEmpty()) return null
+        val deferred = CompletableDeferred<String?>()
+        pendingCloudSyncSelection = deferred
+        _cloudSyncSelectionDialogState.value = CloudSyncSelectionDialogState(
+            albumTitle = albumTitle,
+            candidates = normalizedCandidates
+        )
+        return try {
+            deferred.await()
+        } finally {
+            if (pendingCloudSyncSelection === deferred) {
+                pendingCloudSyncSelection = null
+                _cloudSyncSelectionDialogState.value = null
+            }
+        }
+    }
+
+    private suspend fun resolveManualCloudSync(
+        entity: AlbumEntity,
+        baseWorkno: String
+    ): DlsiteCloudSyncResolveResult {
+        return resolveDlsiteCloudSync(
+            keyword = entity.title.trim(),
+            baseWorkno = baseWorkno,
+            search = { searchKeyword, locale ->
+                dlsiteScraper.search(searchKeyword, page = 1, order = "trend", locale = locale)
+            },
+            fetchLanguageEditions = { productId ->
+                dlsiteProductInfoClient.fetchLanguageEditions(productId)
+            },
+            fetchDetails = { workno, locale ->
+                dlsiteScraper.getDetails(workno, locale = locale)
+            }
+        )
+    }
+
+    private suspend fun resolveSelectedManualCloudSync(workno: String): DlsiteCloudSyncResolveResult {
+        return resolveSelectedDlsiteCloudSync(
+            workno = workno,
+            fetchLanguageEditions = { productId ->
+                dlsiteProductInfoClient.fetchLanguageEditions(productId)
+            },
+            fetchDetails = { selectedWorkno, locale ->
+                dlsiteScraper.getDetails(selectedWorkno, locale = locale)
+            }
+        )
+    }
+
+    private suspend fun applyManualCloudSyncSuccess(
+        entity: AlbumEntity,
+        updatedWorkId: String,
+        result: DlsiteCloudSyncResolveResult.Success
+    ): String {
+        val resolvedWorkno = result.workno
+        val details = result.details
+        val oldTitle = entity.title.trim()
+        val newTitle = details.title.trim()
+        val finalTitle = when {
+            oldTitle.isNotBlank() && newTitle.isBlank() -> oldTitle
+            oldTitle.isNotBlank() && newTitle.isNotBlank() && oldTitle.contains(newTitle) && oldTitle.length > newTitle.length -> oldTitle
+            else -> newTitle.ifBlank { oldTitle }
+        }
+        val updated = entity.copy(
+            title = finalTitle,
+            circle = details.circle.ifBlank { entity.circle },
+            cv = details.cv.ifBlank { entity.cv },
+            tags = if (details.tags.isNotEmpty()) details.tags.joinToString(",") else entity.tags,
+            coverUrl = details.coverUrl.ifBlank { entity.coverUrl },
+            description = details.description.ifBlank { entity.description },
+            workId = resolveCloudSyncWorkId(updatedWorkId, resolvedWorkno),
+            rjCode = resolvedWorkno
+        )
+        withContext(Dispatchers.IO) {
+            albumDao.updateAlbum(updated)
+            upsertAlbumFtsIndex(updated.id, updated)
+            upsertAlbumTagsFromCsv(updated.id, updated.tags, TagSource.AUTO)
+            if (updated.coverPath.trim().isBlank() && updated.coverThumbPath.trim().isBlank()) {
+                runCatching {
+                    ensureAlbumCoverSaved(updated.id, updated.coverPath, updated.coverUrl)
+                }
+            }
+        }
+        return resolvedWorkno
     }
 
     fun loadAlbum(albumId: Long?, rjCode: String?, force: Boolean = false) {
@@ -385,56 +504,50 @@ class AlbumDetailViewModel @Inject constructor(
 
                 when (
                     val result = withContext(Dispatchers.IO) {
-                        resolveDlsiteCloudSync(
-                            keyword = entity.title.trim(),
-                            baseWorkno = normalized,
-                            search = { searchKeyword, locale ->
-                                dlsiteScraper.search(searchKeyword, page = 1, order = "trend", locale = locale)
-                            },
-                            fetchLanguageEditions = { productId ->
-                                dlsiteProductInfoClient.fetchLanguageEditions(productId)
-                            },
-                            fetchDetails = { workno, locale ->
-                                dlsiteScraper.getDetails(workno, locale = locale)
-                            }
-                        )
+                        resolveManualCloudSync(entity, normalized)
                     }
                 ) {
                     is DlsiteCloudSyncResolveResult.Success -> {
-                        val resolvedWorkno = result.workno
-                        val details = result.details
-                        val oldTitle = entity.title.trim()
-                        val newTitle = details.title.trim()
-                        val finalTitle = when {
-                            oldTitle.isNotBlank() && newTitle.isBlank() -> oldTitle
-                            oldTitle.isNotBlank() && newTitle.isNotBlank() && oldTitle.contains(newTitle) && oldTitle.length > newTitle.length -> oldTitle
-                            else -> newTitle.ifBlank { oldTitle }
-                        }
-                        val updated = entity.copy(
-                            title = finalTitle,
-                            circle = details.circle.ifBlank { entity.circle },
-                            cv = details.cv.ifBlank { entity.cv },
-                            tags = if (details.tags.isNotEmpty()) details.tags.joinToString(",") else entity.tags,
-                            coverUrl = details.coverUrl.ifBlank { entity.coverUrl },
-                            description = details.description.ifBlank { entity.description },
-                            workId = resolveCloudSyncWorkId(updatedWorkId, resolvedWorkno),
-                            rjCode = resolvedWorkno
-                        )
-                        withContext(Dispatchers.IO) {
-                            albumDao.updateAlbum(updated)
-                            upsertAlbumFtsIndex(updated.id, updated)
-                            upsertAlbumTagsFromCsv(updated.id, updated.tags, TagSource.AUTO)
-                            if (updated.coverPath.trim().isBlank() && updated.coverThumbPath.trim().isBlank()) {
-                                runCatching {
-                                    ensureAlbumCoverSaved(updated.id, updated.coverPath, updated.coverUrl)
-                                }
-                            }
+                        val resolvedWorkno = withContext(Dispatchers.IO) {
+                            applyManualCloudSyncSuccess(entity, updatedWorkId, result)
                         }
                         messageManager.showSuccess("已绑定 $resolvedWorkno 并完成云同步")
                         loadAlbum(local.id, resolvedWorkno, force = true)
                     }
 
-                    DlsiteCloudSyncResolveResult.Ambiguous -> {
+                    is DlsiteCloudSyncResolveResult.Ambiguous -> {
+                        val selectedWorkno = awaitCloudSyncSelection(
+                            albumTitle = local.title,
+                            candidates = result.candidates
+                        )
+                        if (selectedWorkno == null) {
+                            loadAlbum(local.id, normalized, force = true)
+                            return@launch
+                        }
+                        when (val selectedResult = withContext(Dispatchers.IO) {
+                            resolveSelectedManualCloudSync(selectedWorkno)
+                        }) {
+                            is DlsiteCloudSyncResolveResult.Success -> {
+                                val resolvedWorkno = withContext(Dispatchers.IO) {
+                                    applyManualCloudSyncSuccess(entity, updatedWorkId, selectedResult)
+                                }
+                                messageManager.showSuccess("已绑定 $resolvedWorkno 并完成云同步")
+                                loadAlbum(local.id, resolvedWorkno, force = true)
+                                return@launch
+                            }
+
+                            is DlsiteCloudSyncResolveResult.Ambiguous -> {
+                                messageManager.showError("同步失败：搜索结果不唯一")
+                                loadAlbum(local.id, normalized, force = true)
+                                return@launch
+                            }
+
+                            DlsiteCloudSyncResolveResult.NotFound -> {
+                                messageManager.showError("同步失败：未找到专辑信息")
+                                loadAlbum(local.id, normalized, force = true)
+                                return@launch
+                            }
+                        }
                         messageManager.showError("同步失败：搜索结果不唯一")
                         loadAlbum(local.id, normalized, force = true)
                     }
@@ -2095,6 +2208,11 @@ class AlbumDetailViewModel @Inject constructor(
 
     private fun safeFileName(input: String): String {
         return input.trim().ifEmpty { "track" }.replace(Regex("""[\\/:*?"<>|]"""), "_")
+    }
+
+    override fun onCleared() {
+        cancelCloudSyncSelection()
+        super.onCleared()
     }
 }
 

@@ -37,10 +37,12 @@ import com.asmr.player.data.local.db.entities.TagSource
 import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.data.local.db.entities.TrackTagEntity
 import com.asmr.player.data.remote.api.AsmrOneApi
+import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncResolveResult
 import com.asmr.player.data.remote.dlsite.DlsiteProductInfoClient
 import com.asmr.player.data.remote.dlsite.resolveCloudSyncWorkId
 import com.asmr.player.data.remote.dlsite.resolveDlsiteCloudSync
+import com.asmr.player.data.remote.dlsite.resolveSelectedDlsiteCloudSync
 import com.asmr.player.data.remote.scraper.DLSiteScraper
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.domain.model.Album
@@ -61,9 +63,13 @@ import com.google.gson.Gson
 import com.asmr.player.BuildConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
@@ -132,7 +138,9 @@ class LibraryViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     private val _syncStatus = MutableStateFlow<Map<Long, SyncStatus>>(emptyMap())
     private val _bulkProgress = MutableStateFlow<BulkProgress?>(null)
+    private val cloudSyncSelectionQueue = CloudSyncSelectionRequestQueue()
     val bulkProgress: StateFlow<BulkProgress?> = _bulkProgress.asStateFlow()
+    internal val cloudSyncSelectionDialogState: StateFlow<CloudSyncSelectionDialogState?> = cloudSyncSelectionQueue.dialogState
     val globalSyncState: StateFlow<GlobalSyncState?> = syncCoordinator.state
     val isGlobalSyncRunning: StateFlow<Boolean> = globalSyncState
         .map { it != null }
@@ -518,6 +526,7 @@ class LibraryViewModel @Inject constructor(
         val job = bulkJob
         job?.cancel()
         bulkJob = null
+        cloudSyncSelectionQueue.cancelAll()
         _bulkProgress.value = null
     }
 
@@ -568,8 +577,22 @@ class LibraryViewModel @Inject constructor(
             return
         }
         job.cancel()
+        cloudSyncSelectionQueue.cancelForAlbum(albumId)
         _syncStatus.value -= albumId
         messageManager.showInfo("已取消任务")
+    }
+
+    fun confirmCloudSyncSelection(workno: String) {
+        cloudSyncSelectionQueue.resolveCurrent(workno)
+    }
+
+    fun cancelCloudSyncSelection() {
+        cloudSyncSelectionQueue.resolveCurrent(null)
+    }
+
+    fun ignoreAllCloudSyncSelections() {
+        cloudSyncSelectionQueue.ignoreAllRemainingInBatch()
+        messageManager.showInfo("已忽略本轮剩余待确认项")
     }
 
     private fun startBulkProgress(phase: BulkPhase, total: Int, current: Int = 0, currentAlbumTitle: String = "") {
@@ -976,16 +999,7 @@ class LibraryViewModel @Inject constructor(
                     bulkJob = currentCoroutineContext()[Job]
                     try {
                         val albums = withContext(Dispatchers.IO) { albumDao.getAllAlbumsOnce() }
-                        startBulkProgress(phase = BulkPhase.SyncingCloud, total = albums.size)
-                        var current = 0
-                        albums.forEach { entity ->
-                            currentCoroutineContext().ensureActive()
-                            current += 1
-                            updateBulkAlbumProgress(current = current, currentAlbumTitle = entity.title)
-                            withContext(Dispatchers.IO) {
-                                syncAlbumMetadataInternal(entity, silent = true)
-                            }
-                        }
+                        runBatchCloudSync(albums)
                         messageManager.showSuccess("全量同步完成")
                     } catch (e: CancellationException) {
                         messageManager.showInfo("已取消云同步")
@@ -1022,16 +1036,7 @@ class LibraryViewModel @Inject constructor(
                                     entity.path.startsWith(uriString) || (entity.localPath?.startsWith(uriString) == true)
                                 }
                         }
-                        startBulkProgress(phase = BulkPhase.SyncingCloud, total = albums.size)
-                        var current = 0
-                        albums.forEach { entity ->
-                            currentCoroutineContext().ensureActive()
-                            current += 1
-                            updateBulkAlbumProgress(current = current, currentAlbumTitle = entity.title)
-                            withContext(Dispatchers.IO) {
-                                syncAlbumMetadataInternal(entity, silent = true)
-                            }
-                        }
+                        runBatchCloudSync(albums)
                         messageManager.showSuccess("云同步完成")
                     } catch (e: CancellationException) {
                         messageManager.showInfo("已取消云同步")
@@ -1073,53 +1078,179 @@ class LibraryViewModel @Inject constructor(
         albumJobs[album.id] = job
     }
 
-    private suspend fun syncAlbumMetadataInternal(entity: AlbumEntity, silent: Boolean = false) {
+    private suspend fun runBatchCloudSync(albums: List<AlbumEntity>) = coroutineScope {
+        startBulkProgress(phase = BulkPhase.SyncingCloud, total = albums.size)
+        cloudSyncSelectionQueue.beginBatchSession()
+        try {
+        val pendingSelections = mutableListOf<Deferred<Unit>>()
+        var current = 0
+        albums.forEach { entity ->
+            currentCoroutineContext().ensureActive()
+            current += 1
+            updateBulkAlbumProgress(current = current, currentAlbumTitle = entity.title)
+            withContext(Dispatchers.IO) {
+                syncAlbumMetadataInternal(
+                    entity = entity,
+                    silent = true,
+                    onAmbiguous = { pendingEntity, result ->
+                        pendingSelections += this@coroutineScope.async(Dispatchers.IO) {
+                            continueSyncAlbumMetadataAfterSelection(
+                                entity = pendingEntity,
+                                candidates = result.candidates,
+                                silent = true
+                            )
+                        }
+                    }
+                )
+            }
+        }
+        val pendingCount = cloudSyncSelectionQueue.pendingCount()
+        if (pendingCount > 0) {
+            messageManager.showInfo("主流程已完成，剩余${pendingCount}项待确认")
+        }
+        pendingSelections.awaitAll()
+        } finally {
+            cloudSyncSelectionQueue.endBatchSession()
+        }
+    }
+
+    private suspend fun resolveAlbumCloudSync(entity: AlbumEntity): DlsiteCloudSyncResolveResult {
+        return resolveDlsiteCloudSync(
+            keyword = entity.title.trim(),
+            baseWorkno = entity.rjCode.ifBlank { entity.workId }.trim().uppercase(),
+            search = { searchKeyword, locale ->
+                dlsiteScraper.search(searchKeyword, page = 1, order = "trend", locale = locale)
+            },
+            fetchLanguageEditions = { productId ->
+                dlsiteProductInfoClient.fetchLanguageEditions(productId)
+            },
+            fetchDetails = { workno, locale ->
+                dlsiteScraper.getDetails(workno, locale = locale)
+            }
+        )
+    }
+
+    private suspend fun resolveSelectedAlbumCloudSync(workno: String): DlsiteCloudSyncResolveResult {
+        return resolveSelectedDlsiteCloudSync(
+            workno = workno,
+            fetchLanguageEditions = { productId ->
+                dlsiteProductInfoClient.fetchLanguageEditions(productId)
+            },
+            fetchDetails = { selectedWorkno, locale ->
+                dlsiteScraper.getDetails(selectedWorkno, locale = locale)
+            }
+        )
+    }
+
+    private suspend fun applyResolvedCloudSync(
+        entity: AlbumEntity,
+        result: DlsiteCloudSyncResolveResult.Success
+    ) {
+        val resolvedWorkno = result.workno
+        val details = result.details
+        val updated = entity.copy(
+            title = details.title.ifBlank { entity.title },
+            circle = details.circle.ifBlank { entity.circle },
+            cv = details.cv.ifBlank { entity.cv },
+            tags = if (details.tags.isNotEmpty()) details.tags.joinToString(",") else entity.tags,
+            coverUrl = details.coverUrl.ifBlank { entity.coverUrl },
+            description = details.description.ifBlank { entity.description },
+            workId = resolveCloudSyncWorkId(entity.workId, resolvedWorkno),
+            rjCode = resolvedWorkno
+        )
+        albumDao.updateAlbum(updated)
+        upsertAlbumFtsIndex(updated.id, updated)
+        upsertAlbumTagsFromCsv(updated.id, updated.tags, TagSource.AUTO)
+        if (updated.coverPath.trim().isBlank() && updated.coverThumbPath.trim().isBlank()) {
+            runCatching {
+                ensureAlbumCoverSaved(updated.id, updated.coverPath, updated.coverUrl)
+            }
+        }
+    }
+
+    private suspend fun continueSyncAlbumMetadataAfterSelection(
+        entity: AlbumEntity,
+        candidates: List<DlsiteCloudSyncCandidate>,
+        silent: Boolean
+    ) {
+        try {
+            val selectedWorkno = cloudSyncSelectionQueue.enqueue(
+                albumId = entity.id.takeIf { it > 0L },
+                albumTitle = entity.title,
+                candidates = candidates
+            ).await()
+            currentCoroutineContext().ensureActive()
+            if (selectedWorkno != null) {
+                when (val selectedResult = resolveSelectedAlbumCloudSync(selectedWorkno)) {
+                    is DlsiteCloudSyncResolveResult.Success -> {
+                        applyResolvedCloudSync(entity, selectedResult)
+                        if (!silent) {
+                            messageManager.showSuccess("元数据同步成功：${selectedResult.details.title}")
+                        }
+                    }
+
+                    is DlsiteCloudSyncResolveResult.Ambiguous -> {
+                        if (!silent) {
+                            messageManager.showError("同步失败：搜索结果不唯一")
+                        }
+                    }
+
+                    DlsiteCloudSyncResolveResult.NotFound -> {
+                        if (!silent) {
+                            messageManager.showError("同步失败：未找到专辑信息")
+                        }
+                    }
+                }
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            reportSyncAlbumMetadataFailure(entity.id, e, silent)
+            return
+        } finally {
+            _syncStatus.value -= entity.id
+        }
+    }
+
+    private suspend fun reportSyncAlbumMetadataFailure(entityId: Long, error: Exception, silent: Boolean) {
+        Log.e("LibraryViewModel", "syncAlbumMetadataInternal failed: $entityId", error)
+        _syncStatus.value += (entityId to SyncStatus.Error(error.message ?: "同步失败"))
+        if (!silent) {
+            messageManager.showError("同步异常：${error.message}")
+            delay(3000)
+        }
+        _syncStatus.value -= entityId
+    }
+
+    private suspend fun syncAlbumMetadataInternal(
+        entity: AlbumEntity,
+        silent: Boolean = false,
+        onAmbiguous: (suspend (AlbumEntity, DlsiteCloudSyncResolveResult.Ambiguous) -> Unit)? = null
+    ) {
         val keyword = entity.title.trim()
         val currentWorkno = entity.rjCode.ifBlank { entity.workId }.trim().uppercase()
         if (currentWorkno.isBlank() && keyword.isBlank()) return
 
         _syncStatus.value += (entity.id to SyncStatus.Syncing)
+        var clearSyncStatus = true
         try {
-            val result = resolveDlsiteCloudSync(
-                keyword = keyword,
-                baseWorkno = currentWorkno,
-                search = { searchKeyword, locale ->
-                    dlsiteScraper.search(searchKeyword, page = 1, order = "trend", locale = locale)
-                },
-                fetchLanguageEditions = { productId ->
-                    dlsiteProductInfoClient.fetchLanguageEditions(productId)
-                },
-                fetchDetails = { workno, locale ->
-                    dlsiteScraper.getDetails(workno, locale = locale)
-                }
-            )
+            val result = resolveAlbumCloudSync(entity)
             currentCoroutineContext().ensureActive()
             when (result) {
                 is DlsiteCloudSyncResolveResult.Success -> {
-                    val resolvedWorkno = result.workno
                     val details = result.details
-                    val updated = entity.copy(
-                        title = details.title.ifBlank { entity.title },
-                        circle = details.circle.ifBlank { entity.circle },
-                        cv = details.cv.ifBlank { entity.cv },
-                        tags = if (details.tags.isNotEmpty()) details.tags.joinToString(",") else entity.tags,
-                        coverUrl = details.coverUrl.ifBlank { entity.coverUrl },
-                        description = details.description.ifBlank { entity.description },
-                        workId = resolveCloudSyncWorkId(entity.workId, resolvedWorkno),
-                        rjCode = resolvedWorkno
-                    )
-                    albumDao.updateAlbum(updated)
-                    upsertAlbumFtsIndex(updated.id, updated)
-                    upsertAlbumTagsFromCsv(updated.id, updated.tags, TagSource.AUTO)
-                    if (updated.coverPath.trim().isBlank() && updated.coverThumbPath.trim().isBlank()) {
-                        runCatching {
-                            ensureAlbumCoverSaved(updated.id, updated.coverPath, updated.coverUrl)
-                        }
-                    }
+                    applyResolvedCloudSync(entity, result)
                     if (!silent) messageManager.showSuccess("元数据同步成功：${details.title}")
                 }
 
-                DlsiteCloudSyncResolveResult.Ambiguous -> {
+                is DlsiteCloudSyncResolveResult.Ambiguous -> {
+                    clearSyncStatus = false
+                    if (onAmbiguous != null) {
+                        onAmbiguous(entity, result)
+                    } else {
+                        continueSyncAlbumMetadataAfterSelection(entity, result.candidates, silent)
+                    }
+                    return
                     if (!silent) messageManager.showError("同步失败：搜索结果不唯一")
                 }
 
@@ -1127,9 +1258,13 @@ class LibraryViewModel @Inject constructor(
                     if (!silent) messageManager.showError("同步失败：未找到专辑信息")
                 }
             }
-            _syncStatus.value -= entity.id
+            if (clearSyncStatus) {
+                _syncStatus.value -= entity.id
+            }
         } catch (e: CancellationException) {
-            _syncStatus.value -= entity.id
+            if (clearSyncStatus) {
+                _syncStatus.value -= entity.id
+            }
             throw e
         } catch (e: Exception) {
             Log.e("LibraryViewModel", "syncAlbumMetadataInternal failed: ${entity.id}", e)
@@ -2523,5 +2658,10 @@ class LibraryViewModel @Inject constructor(
                 .thenBy { it.fileName.lowercase() }
         )
         return sorted.first().entries
+    }
+
+    override fun onCleared() {
+        cloudSyncSelectionQueue.cancelAll()
+        super.onCleared()
     }
 }
