@@ -75,6 +75,7 @@ import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
 import com.asmr.player.ui.common.AppVolumeSlider
 import com.asmr.player.ui.common.AppVolumeWarningSessionState
+import com.asmr.player.ui.common.volumeRouteIcon
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.ui.common.EqualizerPanel
@@ -84,6 +85,7 @@ import com.asmr.player.ui.common.rememberComputedVideoFrameDominantColorCenterWe
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.smoothScrollToIndex
 import com.asmr.player.ui.library.TagAssignDialog
+import com.asmr.player.service.AudioOutputRouteKind
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.util.Formatting
 import com.asmr.player.util.SubtitleEntry
@@ -110,6 +112,7 @@ fun NowPlayingScreen(
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
     coverPreviewMode: CoverPreviewMode,
+    audioOutputRouteKind: AudioOutputRouteKind,
     warningSessionState: AppVolumeWarningSessionState,
     lyricsViewModel: LyricsViewModel = hiltViewModel()
 ) {
@@ -880,6 +883,7 @@ fun NowPlayingScreen(
                         accentColor = accentColor,
                         viewModel = viewModel,
                         hardwareVolumeEventTick = hardwareVolumeEventTick,
+                        audioOutputRouteKind = audioOutputRouteKind,
                         warningSessionState = warningSessionState
                     )
                 }
@@ -1700,6 +1704,7 @@ private fun VolumeControl(
     accentColor: Color,
     viewModel: PlayerViewModel,
     hardwareVolumeEventTick: Long,
+    audioOutputRouteKind: AudioOutputRouteKind,
     warningSessionState: AppVolumeWarningSessionState
 ) {
     var expanded by remember { mutableStateOf(false) }
@@ -1758,7 +1763,10 @@ private fun VolumeControl(
 
     val colorScheme = AsmrTheme.colorScheme
     val isMuted = volume == 0
-    val icon = if (isMuted) Icons.Default.VolumeOff else Icons.Default.VolumeUp
+    val icon = volumeRouteIcon(
+        routeKind = audioOutputRouteKind,
+        isMuted = isMuted
+    )
 
     AnimatedContent(
         targetState = expanded,

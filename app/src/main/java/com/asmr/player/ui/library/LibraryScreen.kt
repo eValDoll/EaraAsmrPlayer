@@ -996,12 +996,13 @@ internal fun LibraryChrome(
                 {
                     IconButton(
                         onClick = onClearSearch,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(20.dp)
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
                             contentDescription = null,
-                            tint = colorScheme.onSurfaceVariant
+                            tint = colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(14.dp)
                         )
                     }
                 }

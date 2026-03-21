@@ -9,7 +9,18 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import androidx.datastore.preferences.core.edit
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+
+data class PlaybackRuntimeSettings(
+    val pauseOnOutputDisconnect: Boolean = true,
+    val resumeOnOutputConnect: Boolean = false,
+    val pauseOnOtherAudio: Boolean = true,
+    val playFadeInMs: Int = 500,
+    val pauseFadeOutMs: Int = 500,
+    val sfwHideSystemControls: Boolean = false,
+    val floatingLyricsEnabled: Boolean = false
+)
 
 @Singleton
 class SettingsRepository @Inject constructor(
@@ -147,6 +158,21 @@ class SettingsRepository @Inject constructor(
 
     val showMiniPlayerBar: Flow<Boolean> = context.settingsDataStore.data.map { prefs ->
         prefs[SettingsKeys.SHOW_MINI_PLAYER_BAR] ?: true
+    }
+
+    suspend fun loadPlaybackRuntimeSettings(): PlaybackRuntimeSettings {
+        return withContext(Dispatchers.IO) {
+            val prefs = context.settingsDataStore.data.first()
+            PlaybackRuntimeSettings(
+                pauseOnOutputDisconnect = prefs[SettingsKeys.PAUSE_ON_OUTPUT_DISCONNECT] ?: true,
+                resumeOnOutputConnect = prefs[SettingsKeys.RESUME_ON_OUTPUT_CONNECT] ?: false,
+                pauseOnOtherAudio = prefs[SettingsKeys.PAUSE_ON_OTHER_AUDIO] ?: true,
+                playFadeInMs = (prefs[SettingsKeys.PLAY_FADE_IN_MS] ?: 500).coerceIn(0, 3000),
+                pauseFadeOutMs = (prefs[SettingsKeys.PAUSE_FADE_OUT_MS] ?: 500).coerceIn(0, 3000),
+                sfwHideSystemControls = prefs[SettingsKeys.SFW_HIDE_SYSTEM_CONTROLS] ?: false,
+                floatingLyricsEnabled = prefs[SettingsKeys.FLOATING_LYRICS_ENABLED] ?: false
+            )
+        }
     }
 
     suspend fun setSleepTimerEndAtMs(endAtMs: Long) {

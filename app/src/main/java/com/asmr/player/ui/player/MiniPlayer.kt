@@ -5,6 +5,7 @@ import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -89,7 +90,7 @@ fun MiniPlayer(
         0f
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxWidth()
             .padding(top = 12.dp, bottom = 14.dp)
@@ -97,6 +98,11 @@ fun MiniPlayer(
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
+        val widthProgress = ((maxWidth.value - 360f) / 520f).coerceIn(0f, 1f)
+        val controlsEndPadding = (8f + 8f * widthProgress).dp
+        val controlsSpacing = (2f + 6f * widthProgress).dp
+        val controlsButtonSize = (36f + 8f * widthProgress).dp
+
         // 主卡片部分
         Box(
             modifier = Modifier
@@ -110,7 +116,7 @@ fun MiniPlayer(
                 Row(
                     modifier = Modifier
                         .weight(1f)
-                        .padding(start = 48.dp, end = 16.dp), // 增加左侧间距
+                        .padding(start = 48.dp, end = controlsEndPadding), // 增加左侧间距
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
@@ -132,8 +138,14 @@ fun MiniPlayer(
                         )
                     }
 
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { viewModel.toggleFavorite() }) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(controlsSpacing)
+                    ) {
+                        IconButton(
+                            onClick = { viewModel.toggleFavorite() },
+                            modifier = Modifier.size(controlsButtonSize)
+                        ) {
                             Icon(
                                 imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                                 contentDescription = null,
@@ -141,10 +153,13 @@ fun MiniPlayer(
                                 modifier = Modifier.size(22.dp)
                             )
                         }
-                        IconButton(onClick = {
-                            optimisticIsPlaying = !(optimisticIsPlaying ?: playback.isPlaying)
-                            viewModel.togglePlayPause()
-                        }) {
+                        IconButton(
+                            onClick = {
+                                optimisticIsPlaying = !(optimisticIsPlaying ?: playback.isPlaying)
+                                viewModel.togglePlayPause()
+                            },
+                            modifier = Modifier.size(controlsButtonSize)
+                        ) {
                             Icon(
                                 imageVector = if (isPlayingEffective) Icons.Default.Pause else Icons.Default.PlayArrow,
                                 contentDescription = null,
@@ -152,7 +167,10 @@ fun MiniPlayer(
                                 modifier = Modifier.size(28.dp)
                             )
                         }
-                        IconButton(onClick = onOpenQueue) {
+                        IconButton(
+                            onClick = onOpenQueue,
+                            modifier = Modifier.size(controlsButtonSize)
+                        ) {
                             Icon(
                                 Icons.Default.PlaylistPlay,
                                 contentDescription = null,

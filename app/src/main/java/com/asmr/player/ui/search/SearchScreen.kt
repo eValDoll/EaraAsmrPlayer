@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -33,6 +34,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.ButtonDefaults
@@ -96,6 +98,7 @@ import kotlin.math.absoluteValue
 internal const val SEARCH_INPUT_TAG = "search_input"
 internal const val SEARCH_SCOPE_BUTTON_TAG = "search_scope_button"
 internal const val SEARCH_LANGUAGE_BUTTON_TAG = "search_language_button"
+internal const val SEARCH_CLEAR_BUTTON_TAG = "search_clear_button"
 internal const val SEARCH_SUBMIT_BUTTON_TAG = "search_submit_button"
 internal const val SEARCH_SUBMIT_SPINNER_TAG = "search_submit_spinner"
 internal const val SEARCH_PREV_BUTTON_TAG = "search_prev_button"
@@ -630,7 +633,26 @@ internal fun SearchToolbar(
                 }
             },
             trailingIcon = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    if (keyword.isNotBlank()) {
+                        IconButton(
+                            onClick = { onKeywordChange("") },
+                            enabled = !searchSubmitLocked,
+                            modifier = Modifier
+                                .size(28.dp)
+                                .testTag(SEARCH_CLEAR_BUTTON_TAG)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Close,
+                                contentDescription = null,
+                                tint = colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    }
                     val languageLabel = when (selectedLocale.trim()) {
                         "zh_CN" -> "简中"
                         "zh_TW" -> "繁中"
@@ -641,9 +663,10 @@ internal fun SearchToolbar(
                             onClick = { languageMenuExpanded = true },
                             enabled = !filterControlsLocked,
                             modifier = Modifier
-                                .height(32.dp)
+                                .defaultMinSize(minWidth = 1.dp, minHeight = 30.dp)
+                                .height(30.dp)
                                 .testTag(SEARCH_LANGUAGE_BUTTON_TAG),
-                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
                             colors = ButtonDefaults.textButtonColors(
                                 contentColor = colorScheme.primary
                             )
@@ -681,13 +704,13 @@ internal fun SearchToolbar(
                         onClick = onSearchSubmit,
                         enabled = !searchSubmitLocked,
                         modifier = Modifier
-                            .size(32.dp)
+                            .size(28.dp)
                             .testTag(SEARCH_SUBMIT_BUTTON_TAG)
                     ) {
                         if (showSearchSpinner) {
                             CircularProgressIndicator(
                                 modifier = Modifier
-                                    .size(16.dp)
+                                    .size(14.dp)
                                     .testTag(SEARCH_SUBMIT_SPINNER_TAG),
                                 strokeWidth = 2.dp,
                                 color = colorScheme.primary
@@ -696,7 +719,8 @@ internal fun SearchToolbar(
                             Icon(
                                 imageVector = Icons.Default.Search,
                                 contentDescription = null,
-                                tint = colorScheme.primary
+                                tint = colorScheme.primary,
+                                modifier = Modifier.size(17.dp)
                             )
                         }
                     }
