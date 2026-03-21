@@ -11,6 +11,7 @@ private val CLOUD_SYNC_LANGUAGE_PRIORITY = listOf(
     "CHI_HANT" to CLOUD_SYNC_LOCALE_ZH_TW,
     "JPN" to CLOUD_SYNC_LOCALE_JA_JP
 )
+private val CLOUD_SYNC_TITLE_BLOCK_REGEX = Regex("\u3010[^\u3010\u3011]*\u3011")
 
 internal data class DlsiteCloudSyncAttempt(
     val workno: String,
@@ -23,9 +24,19 @@ internal data class DlsiteCloudSyncResolvedDetails(
     val details: Album
 )
 
+internal data class DlsiteCloudSyncCandidate(
+    val workno: String,
+    val title: String,
+    val cv: String,
+    val coverUrl: String
+)
+
 internal sealed interface DlsiteCloudSyncSearchResult {
     data class Unique(val workno: String, val locale: String) : DlsiteCloudSyncSearchResult
-    data class Ambiguous(val locale: String, val count: Int) : DlsiteCloudSyncSearchResult
+    data class Ambiguous(
+        val locale: String,
+        val candidates: List<DlsiteCloudSyncCandidate>
+    ) : DlsiteCloudSyncSearchResult
     data object NotFound : DlsiteCloudSyncSearchResult
 }
 
@@ -36,8 +47,18 @@ internal sealed interface DlsiteCloudSyncResolveResult {
         val details: Album
     ) : DlsiteCloudSyncResolveResult
 
-    data object Ambiguous : DlsiteCloudSyncResolveResult
+    data class Ambiguous(
+        val locale: String,
+        val candidates: List<DlsiteCloudSyncCandidate>
+    ) : DlsiteCloudSyncResolveResult
     data object NotFound : DlsiteCloudSyncResolveResult
+}
+
+internal fun sanitizeDlsiteCloudSyncKeyword(raw: String): String {
+    return CLOUD_SYNC_TITLE_BLOCK_REGEX
+        .replace(raw, " ")
+        .replace(Regex("""\s+"""), " ")
+        .trim()
 }
 
 internal fun buildDlsiteCloudSyncAttempts(
@@ -72,23 +93,46 @@ internal suspend fun searchDlsiteWorknoWithLocaleFallback(
     keyword: String,
     search: suspend (keyword: String, locale: String) -> List<Album>
 ): DlsiteCloudSyncSearchResult {
-    val normalizedKeyword = keyword.trim()
+    val normalizedKeyword = sanitizeDlsiteCloudSyncKeyword(keyword)
     if (normalizedKeyword.isBlank()) return DlsiteCloudSyncSearchResult.NotFound
 
     for ((_, locale) in CLOUD_SYNC_LANGUAGE_PRIORITY) {
         val results = runCatching { search(normalizedKeyword, locale) }.getOrNull() ?: continue
+        val candidates = results.toDlsiteCloudSyncCandidates()
         when {
-            results.size > 1 -> return DlsiteCloudSyncSearchResult.Ambiguous(locale = locale, count = results.size)
-            results.size == 1 -> {
-                val workno = results.first().rjCode.trim().uppercase()
-                if (workno.isNotBlank()) {
-                    return DlsiteCloudSyncSearchResult.Unique(workno = workno, locale = locale)
-                }
+            candidates.size > 1 -> {
+                return DlsiteCloudSyncSearchResult.Ambiguous(locale = locale, candidates = candidates)
+            }
+
+            candidates.size == 1 -> {
+                return DlsiteCloudSyncSearchResult.Unique(
+                    workno = candidates.first().workno,
+                    locale = locale
+                )
             }
         }
     }
 
     return DlsiteCloudSyncSearchResult.NotFound
+}
+
+private fun List<Album>.toDlsiteCloudSyncCandidates(): List<DlsiteCloudSyncCandidate> {
+    return asSequence()
+        .mapNotNull { album ->
+            val workno = album.rjCode
+                .trim()
+                .uppercase()
+                .ifBlank { album.workId.trim().uppercase() }
+            if (workno.isBlank()) return@mapNotNull null
+            DlsiteCloudSyncCandidate(
+                workno = workno,
+                title = album.title.trim().ifBlank { workno },
+                cv = album.cv.trim(),
+                coverUrl = album.coverUrl.trim()
+            )
+        }
+        .distinctBy { it.workno }
+        .toList()
 }
 
 internal suspend fun fetchDlsiteDetailsWithLocaleFallback(
@@ -127,17 +171,18 @@ internal suspend fun resolveDlsiteCloudSync(
     if (workno.isBlank()) {
         when (val searchResult = searchDlsiteWorknoWithLocaleFallback(normalizedKeyword, search)) {
             is DlsiteCloudSyncSearchResult.Unique -> workno = searchResult.workno
-            is DlsiteCloudSyncSearchResult.Ambiguous -> return DlsiteCloudSyncResolveResult.Ambiguous
+            is DlsiteCloudSyncSearchResult.Ambiguous -> {
+                return DlsiteCloudSyncResolveResult.Ambiguous(
+                    locale = searchResult.locale,
+                    candidates = searchResult.candidates
+                )
+            }
             DlsiteCloudSyncSearchResult.NotFound -> return DlsiteCloudSyncResolveResult.NotFound
         }
     }
 
-    fetchDlsiteDetailsWithLocaleFallback(workno, fetchLanguageEditions, fetchDetails)?.let { resolved ->
-        return DlsiteCloudSyncResolveResult.Success(
-            workno = resolved.workno,
-            locale = resolved.locale,
-            details = resolved.details
-        )
+    resolveSelectedDlsiteCloudSync(workno, fetchLanguageEditions, fetchDetails).let { resolved ->
+        if (resolved is DlsiteCloudSyncResolveResult.Success) return resolved
     }
 
     if (normalizedKeyword.isBlank()) return DlsiteCloudSyncResolveResult.NotFound
@@ -160,9 +205,27 @@ internal suspend fun resolveDlsiteCloudSync(
             }
         }
 
-        is DlsiteCloudSyncSearchResult.Ambiguous -> DlsiteCloudSyncResolveResult.Ambiguous
+        is DlsiteCloudSyncSearchResult.Ambiguous -> DlsiteCloudSyncResolveResult.Ambiguous(
+            locale = searchResult.locale,
+            candidates = searchResult.candidates
+        )
         DlsiteCloudSyncSearchResult.NotFound -> DlsiteCloudSyncResolveResult.NotFound
     }
+}
+
+internal suspend fun resolveSelectedDlsiteCloudSync(
+    workno: String,
+    fetchLanguageEditions: suspend (productId: String) -> List<DlsiteLanguageEdition>,
+    fetchDetails: suspend (workno: String, locale: String) -> Album?
+): DlsiteCloudSyncResolveResult {
+    fetchDlsiteDetailsWithLocaleFallback(workno, fetchLanguageEditions, fetchDetails)?.let { resolved ->
+        return DlsiteCloudSyncResolveResult.Success(
+            workno = resolved.workno,
+            locale = resolved.locale,
+            details = resolved.details
+        )
+    }
+    return DlsiteCloudSyncResolveResult.NotFound
 }
 
 internal fun resolveCloudSyncWorkId(existingWorkId: String, resolvedWorkno: String): String {

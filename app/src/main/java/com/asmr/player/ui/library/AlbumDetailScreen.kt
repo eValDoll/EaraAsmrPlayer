@@ -158,6 +158,7 @@ fun AlbumDetailScreen(
     viewModel: AlbumDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val cloudSyncSelectionDialogState by viewModel.cloudSyncSelectionDialogState.collectAsState()
     val colorScheme = AsmrTheme.colorScheme
     val screenKey = remember(albumId, rjCode) {
         val idPart = albumId?.takeIf { it > 0 }?.toString().orEmpty()
@@ -612,6 +613,14 @@ fun AlbumDetailScreen(
                     }
                 }
             }
+        }
+
+        cloudSyncSelectionDialogState?.let { dialogState ->
+            CloudSyncSelectionDialog(
+                state = dialogState,
+                onSelect = viewModel::confirmCloudSyncSelection,
+                onCancel = viewModel::cancelCloudSyncSelection
+            )
         }
     }
 }
@@ -1316,7 +1325,7 @@ private fun dlsiteCoverUrlForRj(rj: String): String {
     val clean = sanitizeRj(rj)
     val digits = clean.removePrefix("RJ")
     val num = digits.toLongOrNull() ?: return ""
-    val group = (num / 1000L) * 1000L
+    val group = ((num + 999L) / 1000L) * 1000L
     val padded = group.toString().padStart(digits.length, '0')
     val folder = "RJ$padded"
     return "https://img.dlsite.jp/modpub/images2/work/doujin/$folder/${clean}_img_main.jpg"
