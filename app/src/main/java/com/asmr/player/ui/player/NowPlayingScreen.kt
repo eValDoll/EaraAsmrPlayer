@@ -71,6 +71,7 @@ import androidx.media3.common.VideoSize
 import androidx.media3.ui.PlayerView
 import com.asmr.player.R
 import com.asmr.player.data.settings.CoverPreviewMode
+import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
 import com.asmr.player.ui.common.AppVolumeSlider
@@ -97,14 +98,62 @@ import kotlin.math.roundToLong
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+private enum class NowPlayingSurfaceMode {
+    PLAYER,
+    LYRICS
+}
+
+private fun AnimatedContentTransitionScope<NowPlayingSurfaceMode>.nowPlayingSurfaceTransform(): ContentTransform {
+    val enter = fadeIn(
+        animationSpec = tween(
+            durationMillis = NowPlayingMotionSpec.PlayerForegroundEnterDurationMs,
+            easing = LinearOutSlowInEasing
+        )
+    ) + slideInVertically(
+        initialOffsetY = {
+            (it * NowPlayingMotionSpec.PlayerForegroundFloatOffsetFraction).roundToInt()
+        },
+        animationSpec = tween(
+            durationMillis = NowPlayingMotionSpec.PlayerForegroundEnterDurationMs,
+            easing = LinearOutSlowInEasing
+        )
+    ) + scaleIn(
+        initialScale = NowPlayingMotionSpec.PlayerForegroundInitialScale,
+        animationSpec = tween(
+            durationMillis = NowPlayingMotionSpec.PlayerForegroundEnterDurationMs,
+            easing = LinearOutSlowInEasing
+        )
+    )
+    val exit = fadeOut(
+        animationSpec = tween(
+            durationMillis = NowPlayingMotionSpec.PlayerForegroundExitDurationMs,
+            easing = FastOutLinearInEasing
+        )
+    ) + slideOutVertically(
+        targetOffsetY = {
+            (it * NowPlayingMotionSpec.PlayerForegroundSinkOffsetFraction).roundToInt()
+        },
+        animationSpec = tween(
+            durationMillis = NowPlayingMotionSpec.PlayerForegroundExitDurationMs,
+            easing = FastOutLinearInEasing
+        )
+    ) + scaleOut(
+        targetScale = NowPlayingMotionSpec.PlayerForegroundTargetScale,
+        animationSpec = tween(
+            durationMillis = NowPlayingMotionSpec.PlayerForegroundExitDurationMs,
+            easing = FastOutLinearInEasing
+        )
+    )
+    return enter togetherWith exit using SizeTransform(clip = false)
+}
+
 @Composable
 @androidx.media3.common.util.UnstableApi
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
-fun NowPlayingScreen(
+internal fun AnimatedContentScope.NowPlayingScreen(
     windowSizeClass: WindowSizeClass,
     hardwareVolumeEventTick: Long,
     onBack: () -> Unit,
-    onOpenLyrics: () -> Unit,
     onShowQueue: () -> Unit,
     onShowSleepTimer: () -> Unit,
     onOpenPlaylistPicker: (mediaId: String, uri: String, title: String, artist: String, artworkUri: String, albumId: Long, trackId: Long, rjCode: String) -> Unit,
@@ -112,8 +161,13 @@ fun NowPlayingScreen(
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
     coverPreviewMode: CoverPreviewMode,
+    lyricsPageSettings: LyricsPageSettings,
     audioOutputRouteKind: AudioOutputRouteKind,
     warningSessionState: AppVolumeWarningSessionState,
+    renderBackdrop: Boolean = true,
+    sharedArtworkAlignment: Alignment? = null,
+    sharedCoverDragPreviewState: CoverDragPreviewState? = null,
+    enableStaggeredRouteEntry: Boolean = true,
     lyricsViewModel: LyricsViewModel = hiltViewModel()
 ) {
     val playback by viewModel.playback.collectAsState()
@@ -210,24 +264,94 @@ fun NowPlayingScreen(
     val videoAspectRatio = rememberPlayerVideoAspectRatio(player)
     val useDragPreview = coverPreviewMode == CoverPreviewMode.Drag && !isVideo
     val useMotionPreview = coverPreviewMode == CoverPreviewMode.Motion && !isVideo
-    val coverMotionState = rememberCoverMotionState(
-        enabled = useMotionPreview,
+    val ownsMotionPreview = sharedArtworkAlignment == null
+    val ownsDragPreview = sharedCoverDragPreviewState == null
+    val localCoverMotionState = rememberCoverMotionState(
+        enabled = ownsMotionPreview && useMotionPreview,
         resetKey = item?.mediaId
     )
-    val coverDragPreviewState = rememberCoverDragPreviewState(
-        enabled = useDragPreview,
+    val localCoverDragPreviewState = rememberCoverDragPreviewState(
+        enabled = ownsDragPreview && useDragPreview,
         resetKey = item?.mediaId
     )
-    val coverPreviewAlignment = when {
+    val coverDragPreviewState = sharedCoverDragPreviewState ?: localCoverDragPreviewState
+    val coverPreviewAlignment = sharedArtworkAlignment ?: when {
         useDragPreview -> coverDragPreviewState.toAlignment()
-        useMotionPreview -> coverMotionState.toAlignment()
+        useMotionPreview -> localCoverMotionState.toAlignment()
         else -> Alignment.Center
     }
+    var surfaceMode by rememberSaveable { mutableStateOf(NowPlayingSurfaceMode.PLAYER) }
+    val currentMotionLayout = when {
+        useSplitLayout -> NowPlayingMotionLayout.SPLIT_LANDSCAPE
+        isPhoneLandscape -> NowPlayingMotionLayout.PHONE_LANDSCAPE
+        else -> NowPlayingMotionLayout.PORTRAIT
+    }
+    var routeVisible by remember(enableStaggeredRouteEntry) { mutableStateOf(!enableStaggeredRouteEntry) }
+    var pendingRouteExit by remember { mutableStateOf(false) }
+    var exitMotionLayout by remember { mutableStateOf<NowPlayingMotionLayout?>(null) }
+    val latestOnBack by rememberUpdatedState(onBack)
+    val routeTransition = updateTransition(targetState = routeVisible, label = "nowPlayingRouteVisibility")
+    val requestClose = remember(pendingRouteExit, currentMotionLayout) {
+        {
+            if (!pendingRouteExit) {
+                exitMotionLayout = currentMotionLayout
+                pendingRouteExit = true
+                routeVisible = false
+            }
+        }
+    }
+
+    LaunchedEffect(enableStaggeredRouteEntry) {
+        routeVisible = true
+    }
+
+    LaunchedEffect(pendingRouteExit, exitMotionLayout) {
+        val layout = exitMotionLayout ?: return@LaunchedEffect
+        if (!pendingRouteExit) return@LaunchedEffect
+        delay(NowPlayingMotionSpec.totalExitDurationMs(layout).toLong())
+        latestOnBack()
+    }
+
+    val showLyricsSurface = remember(isVideo) {
+        {
+            if (!isVideo) {
+                surfaceMode = NowPlayingSurfaceMode.LYRICS
+            }
+        }
+    }
+    val handleNavigateUp = {
+        if (surfaceMode == NowPlayingSurfaceMode.LYRICS) {
+            surfaceMode = NowPlayingSurfaceMode.PLAYER
+        } else {
+            requestClose()
+        }
+    }
+
+    BackHandler(enabled = !pendingRouteExit) {
+        handleNavigateUp()
+    }
+    val playerHeaderTitle = metadata?.title?.toString().orEmpty().ifBlank {
+        lyricsState.title.ifBlank { "未播放" }
+    }
+    val lyricsHeaderTitle = lyricsState.title.ifBlank {
+        metadata?.title?.toString().orEmpty().ifBlank { "歌词" }
+    }
+
+    val sharedHeaderTitle = if (surfaceMode == NowPlayingSurfaceMode.LYRICS) {
+        lyricsHeaderTitle
+    } else {
+        playerHeaderTitle
+    }
+    val sharedHeaderMotion = routeTransition.nowPlayingMotionModifier(
+        currentMotionLayout,
+        NowPlayingMotionSlot.HEADER
+    )
+    val sharedHeaderHorizontalPadding = if (isLandscape) 4.dp else 12.dp
 
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        if (!isVideo) {
+        if (renderBackdrop && !isVideo) {
             val backgroundArtwork = remember(metadata?.artworkUri) {
                 metadata?.artworkUri?.takeUnless { u ->
                     val s = u.toString()
@@ -245,21 +369,56 @@ fun NowPlayingScreen(
                 isDark = colorScheme.isDark
             )
         }
+        Column(modifier = Modifier.fillMaxSize()) {
+            Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+            PlayerSurfaceHeader(
+                title = sharedHeaderTitle,
+                isLandscape = isLandscape,
+                onNavigateUp = handleNavigateUp,
+                onShowSleepTimer = onShowSleepTimer,
+                onShowQueue = onShowQueue,
+                navigationEnabled = !pendingRouteExit,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = sharedHeaderHorizontalPadding, vertical = 4.dp)
+                    .then(sharedHeaderMotion)
+            )
+            Box(modifier = Modifier.fillMaxSize()) {
+                AnimatedContent(
+                    targetState = surfaceMode,
+                    transitionSpec = { nowPlayingSurfaceTransform() },
+                    label = "nowPlayingSurfaceMode"
+                ) { activeSurfaceMode ->
+            if (activeSurfaceMode == NowPlayingSurfaceMode.PLAYER) {
+                val layoutState = remember(useSplitLayout, isPhoneLandscape) { useSplitLayout to isPhoneLandscape }
 
-        val layoutState = remember(useSplitLayout, isPhoneLandscape) { useSplitLayout to isPhoneLandscape }
+                AnimatedContent(
+                    targetState = layoutState,
+                    transitionSpec = {
+                        if (initialState == targetState) {
+                            EnterTransition.None togetherWith ExitTransition.None
+                        } else {
+                            val enter = fadeIn(animationSpec = tween(durationMillis = 220, delayMillis = 60)) +
+                                scaleIn(animationSpec = tween(durationMillis = 220, delayMillis = 60), initialScale = 0.98f)
+                            val exit = fadeOut(animationSpec = tween(durationMillis = 160)) +
+                                scaleOut(animationSpec = tween(durationMillis = 160), targetScale = 1.02f)
+                            enter togetherWith exit
+                        }
+                    },
+                    label = "nowPlayingLayout"
+                ) { (split, phoneLandscape) ->
+            val motionLayout = when {
+                split -> NowPlayingMotionLayout.SPLIT_LANDSCAPE
+                phoneLandscape -> NowPlayingMotionLayout.PHONE_LANDSCAPE
+                else -> NowPlayingMotionLayout.PORTRAIT
+            }
 
-        AnimatedContent(
-            targetState = layoutState,
-            transitionSpec = {
-                val enter = fadeIn(animationSpec = tween(durationMillis = 220, delayMillis = 60)) +
-                    scaleIn(animationSpec = tween(durationMillis = 220, delayMillis = 60), initialScale = 0.98f)
-                val exit = fadeOut(animationSpec = tween(durationMillis = 160)) +
-                    scaleOut(animationSpec = tween(durationMillis = 160), targetScale = 1.02f)
-                enter togetherWith exit
-            },
-            label = "nowPlayingLayout"
-        ) { (split, phoneLandscape) ->
-        if (split) {
+            if (split) {
+                val headerMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.HEADER)
+                val coverMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.COVER)
+                val progressMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.PROGRESS)
+                val infoMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.INFO_PANEL)
+                val controlsMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.CONTROLS)
             // --- 平板端横屏布局 (左右分栏) ---
             Column(
                 modifier = Modifier
@@ -269,12 +428,16 @@ fun NowPlayingScreen(
             ) {
                 // 顶部工具栏
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(headerMotion)
+                        .requiredHeight(0.dp)
+                        .alpha(0f),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                        IconButton(onClick = onBack) {
+                        IconButton(onClick = requestClose, enabled = !pendingRouteExit) {
                             Icon(
                                 Icons.Default.KeyboardArrowDown,
                                 contentDescription = null,
@@ -332,12 +495,13 @@ fun NowPlayingScreen(
                             modifier = Modifier
                                 .widthIn(max = 420.dp)
                                 .aspectRatio(if (isVideo) videoAspectRatio else 1f)
+                                .then(coverMotion)
                         ) {
                             ArtworkBox(
                                 isVideo = isVideo,
                                 metadata = metadata,
                                 viewModel = viewModel,
-                                onOpenLyrics = onOpenLyrics,
+                                onOpenLyrics = showLyricsSurface,
                                 edgeBlendEnabled = false,
                                 edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
                                 videoBackdropColor = videoBackdropColor,
@@ -348,24 +512,30 @@ fun NowPlayingScreen(
                         }
                         
                         key(item?.mediaId) {
-                            PlayerProgress(
-                                positionMs = playback.positionMs,
-                                durationMs = progressDurationMs,
-                                sliceUiState = sliceUiState,
-                                onSeekTo = { viewModel.seekTo(it) },
-                                onCutPressed = { viewModel.onCutPressed(progressDurationMs) },
-                                onScrubbingChanged = { viewModel.setUserScrubbing(it) },
-                                onSelectSlice = { viewModel.selectSlice(it) },
-                                onLongPressSlice = {
-                                    viewModel.selectSlice(it)
-                                    showSliceSheet = true
-                                },
-                                onUpdateSliceRange = { sliceId, startMs, endMs ->
-                                    viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
-                                },
-                                activeColor = accentColor,
-                                inactiveColor = accentColor.copy(alpha = 0.2f)
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(progressMotion)
+                            ) {
+                                PlayerProgress(
+                                    positionMs = playback.positionMs,
+                                    durationMs = progressDurationMs,
+                                    sliceUiState = sliceUiState,
+                                    onSeekTo = { viewModel.seekTo(it) },
+                                    onCutPressed = { viewModel.onCutPressed(progressDurationMs) },
+                                    onScrubbingChanged = { viewModel.setUserScrubbing(it) },
+                                    onSelectSlice = { viewModel.selectSlice(it) },
+                                    onLongPressSlice = {
+                                        viewModel.selectSlice(it)
+                                        showSliceSheet = true
+                                    },
+                                    onUpdateSliceRange = { sliceId, startMs, endMs ->
+                                        viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
+                                    },
+                                    activeColor = accentColor,
+                                    inactiveColor = accentColor.copy(alpha = 0.2f)
+                                )
+                            }
                         }
                     }
 
@@ -377,6 +547,7 @@ fun NowPlayingScreen(
                         // 艺术家 (标题已移动到 header)
                         Text(
                             text = metadata?.artist?.toString().orEmpty(),
+                            modifier = Modifier.then(infoMotion),
                             style = MaterialTheme.typography.titleMedium,
                             color = colorScheme.textSecondary,
                             maxLines = 1,
@@ -387,7 +558,8 @@ fun NowPlayingScreen(
                             Row(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .fillMaxWidth(),
+                                    .fillMaxWidth()
+                                    .then(infoMotion),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -412,7 +584,7 @@ fun NowPlayingScreen(
                                     lyrics = lyricsState.lyrics,
                                     currentPosition = playback.positionMs,
                                     onSeekTo = { viewModel.seekTo(it) },
-                                    onOpenLyrics = onOpenLyrics,
+                                    onOpenLyrics = showLyricsSurface,
                                     colors = lyricColors,
                                     modifier = Modifier
                                         .weight(0.70f)
@@ -438,7 +610,7 @@ fun NowPlayingScreen(
                                 )
                             }
                         } else {
-                            Spacer(modifier = Modifier.weight(1f))
+                            Spacer(modifier = Modifier.weight(1f).then(infoMotion))
                         }
 
                         PlaybackControls(
@@ -472,6 +644,7 @@ fun NowPlayingScreen(
                             sliceUiState = sliceUiState,
                             showActionRow = false,
                             bottomPadding = 40.dp,
+                            coreControlsModifier = controlsMotion,
                             primaryColor = accentColor,
                             onPrimaryColor = onAccentColor
                         )
@@ -479,6 +652,11 @@ fun NowPlayingScreen(
                 }
             }
         } else if (phoneLandscape) {
+            val headerMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.HEADER)
+            val coverMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.COVER)
+            val progressMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.PROGRESS)
+            val lyricsMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.LYRICS)
+            val controlsMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.CONTROLS)
             // --- 手机端横屏布局 (特殊适配) ---
             Column(
                 modifier = Modifier
@@ -488,12 +666,16 @@ fun NowPlayingScreen(
             ) {
                 // 顶部：返回、标题和队列按钮
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(headerMotion)
+                        .requiredHeight(0.dp)
+                        .alpha(0f),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                        IconButton(onClick = onBack) {
+                        IconButton(onClick = requestClose, enabled = !pendingRouteExit) {
                             Icon(
                                 Icons.Default.KeyboardArrowDown,
                                 contentDescription = null,
@@ -546,14 +728,15 @@ fun NowPlayingScreen(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .aspectRatio(if (isVideo) videoAspectRatio else 1f),
+                                .aspectRatio(if (isVideo) videoAspectRatio else 1f)
+                                .then(coverMotion),
                             contentAlignment = Alignment.Center
                         ) {
                             ArtworkBox(
                                 isVideo = isVideo,
                                 metadata = metadata,
                                 viewModel = viewModel,
-                                onOpenLyrics = onOpenLyrics,
+                                onOpenLyrics = showLyricsSurface,
                                 edgeBlendEnabled = false,
                                 edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
                                 videoBackdropColor = videoBackdropColor,
@@ -564,24 +747,30 @@ fun NowPlayingScreen(
                         }
 
                         key(item?.mediaId) {
-                            PlayerProgress(
-                                positionMs = playback.positionMs,
-                                durationMs = progressDurationMs,
-                                sliceUiState = sliceUiState,
-                                onSeekTo = { viewModel.seekTo(it) },
-                                onCutPressed = { viewModel.onCutPressed(progressDurationMs) },
-                                onScrubbingChanged = { viewModel.setUserScrubbing(it) },
-                                onSelectSlice = { viewModel.selectSlice(it) },
-                                onLongPressSlice = {
-                                    viewModel.selectSlice(it)
-                                    showSliceSheet = true
-                                },
-                                onUpdateSliceRange = { sliceId, startMs, endMs ->
-                                    viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
-                                },
-                                activeColor = accentColor,
-                                inactiveColor = accentColor.copy(alpha = 0.2f)
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(progressMotion)
+                            ) {
+                                PlayerProgress(
+                                    positionMs = playback.positionMs,
+                                    durationMs = progressDurationMs,
+                                    sliceUiState = sliceUiState,
+                                    onSeekTo = { viewModel.seekTo(it) },
+                                    onCutPressed = { viewModel.onCutPressed(progressDurationMs) },
+                                    onScrubbingChanged = { viewModel.setUserScrubbing(it) },
+                                    onSelectSlice = { viewModel.selectSlice(it) },
+                                    onLongPressSlice = {
+                                        viewModel.selectSlice(it)
+                                        showSliceSheet = true
+                                    },
+                                    onUpdateSliceRange = { sliceId, startMs, endMs ->
+                                        viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
+                                    },
+                                    activeColor = accentColor,
+                                    inactiveColor = accentColor.copy(alpha = 0.2f)
+                                )
+                            }
                         }
                     }
 
@@ -594,7 +783,8 @@ fun NowPlayingScreen(
                             Row(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .fillMaxWidth(),
+                                    .fillMaxWidth()
+                                    .then(lyricsMotion),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -619,7 +809,7 @@ fun NowPlayingScreen(
                                     lyrics = lyricsState.lyrics,
                                     currentPosition = playback.positionMs,
                                     onSeekTo = { viewModel.seekTo(it) },
-                                    onOpenLyrics = onOpenLyrics,
+                                    onOpenLyrics = showLyricsSurface,
                                     colors = lyricColors,
                                     modifier = Modifier
                                         .weight(0.72f)
@@ -645,7 +835,7 @@ fun NowPlayingScreen(
                                 )
                             }
                         } else {
-                            Spacer(modifier = Modifier.weight(1f))
+                            Spacer(modifier = Modifier.weight(1f).then(lyricsMotion))
                         }
 
                         PlaybackControls(
@@ -679,6 +869,7 @@ fun NowPlayingScreen(
                             sliceUiState = sliceUiState,
                             showActionRow = false,
                             bottomPadding = 28.dp,
+                            coreControlsModifier = controlsMotion,
                             primaryColor = accentColor,
                             onPrimaryColor = onAccentColor
                         )
@@ -686,6 +877,13 @@ fun NowPlayingScreen(
                 }
             }
         } else {
+            val headerMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.HEADER)
+            val coverMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.COVER)
+            val lyricsMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.LYRICS)
+            val progressMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.PROGRESS)
+            val actionRowMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.ACTION_ROW)
+            val controlsMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.CONTROLS)
+            val volumeMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.VOLUME)
             // --- 垂直布局 (手机 或 平板竖屏) ---
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -708,10 +906,13 @@ fun NowPlayingScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 8.dp),
+                            .padding(horizontal = 4.dp, vertical = 8.dp)
+                            .then(headerMotion)
+                            .requiredHeight(0.dp)
+                            .alpha(0f),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(onClick = onBack) {
+                        IconButton(onClick = requestClose, enabled = !pendingRouteExit) {
                             Icon(
                                 Icons.Default.KeyboardArrowDown,
                                 contentDescription = null,
@@ -771,7 +972,9 @@ fun NowPlayingScreen(
                         color = colorScheme.textSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(coverMotion),
                         textAlign = TextAlign.Center
                     )
 
@@ -780,7 +983,8 @@ fun NowPlayingScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f) // 让封面占据剩余可用空间，自动收缩
-                            .padding(vertical = if (widthClass == WindowWidthSizeClass.Compact) 16.dp else 32.dp),
+                            .padding(vertical = if (widthClass == WindowWidthSizeClass.Compact) 16.dp else 32.dp)
+                            .then(coverMotion),
                         contentAlignment = Alignment.Center
                     ) {
                         Box(
@@ -803,7 +1007,7 @@ fun NowPlayingScreen(
                                 isVideo = isVideo,
                                 metadata = metadata,
                                 viewModel = viewModel,
-                                onOpenLyrics = onOpenLyrics,
+                                onOpenLyrics = showLyricsSurface,
                                 edgeBlendEnabled = false,
                                 edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
                                 videoBackdropColor = videoBackdropColor,
@@ -818,31 +1022,39 @@ fun NowPlayingScreen(
                         SingleLineLyrics(
                             lyrics = lyricsState.lyrics,
                             currentPosition = playback.positionMs,
-                            onOpenLyrics = onOpenLyrics,
+                            onOpenLyrics = showLyricsSurface,
                             colors = lyricColors,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(lyricsMotion)
                         )
                     }
 
                     key(item?.mediaId) {
-                        PlayerProgress(
-                            positionMs = playback.positionMs,
-                            durationMs = progressDurationMs,
-                            sliceUiState = sliceUiState,
-                            onSeekTo = { viewModel.seekTo(it) },
-                            onCutPressed = { viewModel.onCutPressed(progressDurationMs) },
-                            onScrubbingChanged = { viewModel.setUserScrubbing(it) },
-                            onSelectSlice = { viewModel.selectSlice(it) },
-                            onLongPressSlice = {
-                                viewModel.selectSlice(it)
-                                showSliceSheet = true
-                            },
-                            onUpdateSliceRange = { sliceId, startMs, endMs ->
-                                viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
-                            },
-                            activeColor = accentColor,
-                            inactiveColor = accentColor.copy(alpha = 0.2f)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(progressMotion)
+                        ) {
+                            PlayerProgress(
+                                positionMs = playback.positionMs,
+                                durationMs = progressDurationMs,
+                                sliceUiState = sliceUiState,
+                                onSeekTo = { viewModel.seekTo(it) },
+                                onCutPressed = { viewModel.onCutPressed(progressDurationMs) },
+                                onScrubbingChanged = { viewModel.setUserScrubbing(it) },
+                                onSelectSlice = { viewModel.selectSlice(it) },
+                                onLongPressSlice = {
+                                    viewModel.selectSlice(it)
+                                    showSliceSheet = true
+                                },
+                                onUpdateSliceRange = { sliceId, startMs, endMs ->
+                                    viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
+                                },
+                                activeColor = accentColor,
+                                inactiveColor = accentColor.copy(alpha = 0.2f)
+                            )
+                        }
                     }
 
                     PlaybackControls(
@@ -874,12 +1086,16 @@ fun NowPlayingScreen(
                             tagViewModel.openForMediaId(mediaId, fallback)
                         },
                         sliceUiState = sliceUiState,
+                        actionRowModifier = actionRowMotion,
+                        coreControlsModifier = controlsMotion,
                         primaryColor = accentColor,
                         onPrimaryColor = onAccentColor
                     )
 
                     VolumeControl(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(volumeMotion),
                         accentColor = accentColor,
                         viewModel = viewModel,
                         hardwareVolumeEventTick = hardwareVolumeEventTick,
@@ -888,7 +1104,23 @@ fun NowPlayingScreen(
                     )
                 }
             }
-        }
+            }
+            }
+            } else {
+                NowPlayingLyricsSurface(
+                    isLandscape = isLandscape,
+                    playbackPositionMs = playback.positionMs,
+                    lyrics = lyricsState.lyrics,
+                    lyricColors = lyricColors,
+                    lyricsPageSettings = lyricsPageSettings,
+                    onSeekTo = { viewModel.seekTo(it) },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(routeTransition.nowPlayingMotionModifier(currentMotionLayout, NowPlayingMotionSlot.COVER))
+                )
+            }
+                }
+            }
         }
 
         val dialog = tagDialog
@@ -1093,6 +1325,90 @@ fun NowPlayingScreen(
 }
 
 @Composable
+private fun PlayerSurfaceHeader(
+    title: String,
+    isLandscape: Boolean,
+    onNavigateUp: () -> Unit,
+    onShowSleepTimer: () -> Unit,
+    onShowQueue: () -> Unit,
+    navigationEnabled: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val headerShadow = if (colorScheme.isDark) {
+        Shadow(color = Color.Black.copy(alpha = 0.5f), offset = Offset(0f, 2f), blurRadius = 4f)
+    } else {
+        Shadow(color = Color.Black.copy(alpha = 0.15f), offset = Offset(0f, 1f), blurRadius = 2f)
+    }
+
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        IconButton(onClick = onNavigateUp, enabled = navigationEnabled) {
+            Icon(
+                Icons.Default.KeyboardArrowDown,
+                contentDescription = null,
+                modifier = Modifier.size(if (isLandscape) 24.dp else 28.dp),
+                tint = colorScheme.onSurface
+            )
+        }
+        Text(
+            text = title.ifBlank { "未播放" },
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontSize = if (isLandscape) 14.sp else 16.sp,
+                shadow = headerShadow
+            ),
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            color = colorScheme.textPrimary
+        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onShowSleepTimer) {
+                Icon(
+                    Icons.Default.Timer,
+                    contentDescription = null,
+                    modifier = Modifier.size(if (isLandscape) 20.dp else 22.dp),
+                    tint = colorScheme.onSurface
+                )
+            }
+            IconButton(onClick = onShowQueue) {
+                Icon(
+                    Icons.Default.PlaylistPlay,
+                    contentDescription = null,
+                    modifier = Modifier.size(if (isLandscape) 22.dp else 24.dp),
+                    tint = colorScheme.onSurface
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun NowPlayingLyricsSurface(
+    isLandscape: Boolean,
+    playbackPositionMs: Long,
+    lyrics: List<SubtitleEntry>,
+    lyricColors: LyricReadableColors,
+    lyricsPageSettings: LyricsPageSettings,
+    onSeekTo: (Long) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(modifier = modifier) {
+        AppleLyricsView(
+            lyrics = lyrics,
+            currentPosition = playbackPositionMs,
+            onSeekTo = onSeekTo,
+            colors = lyricColors,
+            modifier = Modifier.fillMaxSize(),
+            isLandscape = isLandscape,
+            settings = lyricsPageSettings
+        )
+    }
+}
+
+@Composable
 private fun ArtworkBox(
     isVideo: Boolean,
     metadata: androidx.media3.common.MediaMetadata?,
@@ -1196,6 +1512,8 @@ private fun PlaybackControls(
     modifier: Modifier = Modifier,
     showActionRow: Boolean = true,
     bottomPadding: Dp = 0.dp,
+    actionRowModifier: Modifier = Modifier,
+    coreControlsModifier: Modifier = Modifier,
     primaryColor: Color = AsmrTheme.colorScheme.primary,
     onPrimaryColor: Color = AsmrTheme.colorScheme.onPrimary
 ) {
@@ -1231,7 +1549,8 @@ private fun PlaybackControls(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
+                    .padding(horizontal = 16.dp)
+                    .then(actionRowModifier),
                 horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1308,7 +1627,9 @@ private fun PlaybackControls(
 
         // 第二行：核心控制按钮
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(coreControlsModifier),
             horizontalArrangement = if (showActionRow) {
                 Arrangement.SpaceBetween
             } else {

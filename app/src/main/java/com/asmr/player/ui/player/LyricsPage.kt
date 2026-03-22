@@ -38,7 +38,7 @@ import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 
 @Composable
-fun LyricsPage(
+internal fun LyricsPage(
     onBack: () -> Unit,
     onSeekTo: (Long) -> Unit,
     playerViewModel: PlayerViewModel,
@@ -46,6 +46,9 @@ fun LyricsPage(
     coverBackgroundClarity: Float,
     coverPreviewMode: CoverPreviewMode,
     lyricsPageSettings: LyricsPageSettings,
+    renderBackdrop: Boolean = true,
+    sharedArtworkAlignment: Alignment? = null,
+    sharedCoverDragPreviewState: CoverDragPreviewState? = null,
     viewModel: LyricsViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -66,17 +69,20 @@ fun LyricsPage(
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     val useDragPreview = coverBackgroundEnabled && coverPreviewMode == CoverPreviewMode.Drag
     val useMotionPreview = coverBackgroundEnabled && coverPreviewMode == CoverPreviewMode.Motion
-    val coverMotionState = rememberCoverMotionState(
-        enabled = useMotionPreview,
+    val ownsMotionPreview = sharedArtworkAlignment == null
+    val ownsDragPreview = sharedCoverDragPreviewState == null
+    val localCoverMotionState = rememberCoverMotionState(
+        enabled = ownsMotionPreview && useMotionPreview,
         resetKey = playback.currentMediaItem?.mediaId
     )
-    val coverDragPreviewState = rememberCoverDragPreviewState(
-        enabled = useDragPreview,
+    val localCoverDragPreviewState = rememberCoverDragPreviewState(
+        enabled = ownsDragPreview && useDragPreview,
         resetKey = playback.currentMediaItem?.mediaId
     )
-    val artworkAlignment = when {
+    val coverDragPreviewState = sharedCoverDragPreviewState ?: localCoverDragPreviewState
+    val artworkAlignment = sharedArtworkAlignment ?: when {
         useDragPreview -> coverDragPreviewState.toAlignment()
-        useMotionPreview -> coverMotionState.toAlignment()
+        useMotionPreview -> localCoverMotionState.toAlignment()
         else -> Alignment.Center
     }
 
@@ -89,15 +95,17 @@ fun LyricsPage(
                 minPointers = 2
             )
     ) {
-        CoverArtworkBackground(
-            artworkModel = artwork,
-            enabled = coverBackgroundEnabled,
-            clarity = coverBackgroundClarity,
-            overlayBaseColor = colorScheme.background,
-            tintBaseColor = dominantColor,
-            artworkAlignment = artworkAlignment,
-            isDark = colorScheme.isDark
-        )
+        if (renderBackdrop) {
+            CoverArtworkBackground(
+                artworkModel = artwork,
+                enabled = coverBackgroundEnabled,
+                clarity = coverBackgroundClarity,
+                overlayBaseColor = colorScheme.background,
+                tintBaseColor = dominantColor,
+                artworkAlignment = artworkAlignment,
+                isDark = colorScheme.isDark
+            )
+        }
 
         Column(modifier = Modifier.fillMaxSize()) {
             Row(

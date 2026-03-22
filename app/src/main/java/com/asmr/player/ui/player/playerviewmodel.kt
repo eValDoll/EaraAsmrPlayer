@@ -493,6 +493,15 @@ class PlayerViewModel @Inject constructor(
         playTracks(album = album, tracks = tracks, startTrack = startTrack, startPositionMs = 0L)
     }
 
+    suspend fun playTracksPrepared(album: Album, tracks: List<Track>, startTrack: Track): Boolean {
+        return playTracksPrepared(
+            album = album,
+            tracks = tracks,
+            startTrack = startTrack,
+            startPositionMs = 0L
+        )
+    }
+
     fun playAlbumResume(album: Album, resumeMediaId: String?, startPositionMs: Long) {
         viewModelScope.launch {
             val trackEntities = runCatching { trackDao.getTracksForAlbumOnce(album.id) }.getOrNull().orEmpty()
@@ -577,6 +586,38 @@ class PlayerViewModel @Inject constructor(
         val items = tracks.map { MediaItemFactory.fromTrack(album, it) }
         val index = tracks.indexOfFirst { it.path == startTrack.path }.coerceAtLeast(0)
         playerConnection.setQueue(items = items, startIndex = index, startPositionMs = startPositionMs, playWhenReady = true)
+    }
+
+    suspend fun playTracksPrepared(
+        album: Album,
+        tracks: List<Track>,
+        startTrack: Track,
+        startPositionMs: Long
+    ): Boolean {
+        if (playerConnection.getControllerOrNull() == null) {
+            messageManager.showError("鎾斁鍣ㄦ湭杩炴帴")
+            return false
+        }
+        if (startTrack.path.contains(".m3u8", ignoreCase = true)) {
+            messageManager.showError("褰撳墠涓嶆敮鎸?m3u8 娴佸獟浣擄紝璇峰厛涓嬭浇闊抽鏂囦欢")
+            return false
+        }
+        val (items, index) = withContext(Dispatchers.Default) {
+            val preparedItems = tracks.map { MediaItemFactory.fromTrack(album, it) }
+            val preparedIndex = tracks.indexOfFirst { it.path == startTrack.path }.coerceAtLeast(0)
+            preparedItems to preparedIndex
+        }
+        if (playerConnection.getControllerOrNull() == null) {
+            messageManager.showError("鎾斁鍣ㄦ湭杩炴帴")
+            return false
+        }
+        playerConnection.setQueue(
+            items = items,
+            startIndex = index,
+            startPositionMs = startPositionMs,
+            playWhenReady = true
+        )
+        return true
     }
 
     fun playVideo(title: String, uriOrPath: String) {

@@ -125,6 +125,7 @@ import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.util.Formatting
 import com.asmr.player.util.MessageManager
+import com.asmr.player.util.RemoteSubtitleSource
 
 private enum class AlbumPrimaryAction {
     Download,
@@ -135,6 +136,17 @@ private enum class OnlineDownloadSource {
     AsmrOne,
     DlsitePlay
 }
+
+private data class PreparedTrackPlayback(
+    val tracks: List<Track>,
+    val startTrack: Track,
+    val onlineLyrics: Map<String, List<RemoteSubtitleSource>> = emptyMap()
+)
+
+private data class PreparedMediaPlayback(
+    val items: List<MediaItem>,
+    val startIndex: Int
+)
 
 private val AlbumDetailTabContentGap = 12.dp
 private val AlbumDetailTabCollapseOvershoot = 10.dp
@@ -1600,6 +1612,7 @@ private fun AlbumLocalTab(
     val queueTracks = remember(album.id, album.tracks) {
         album.tracks.sortedBy { it.path }
     }
+    val scope = rememberCoroutineScope()
     val queueTrackIds = remember(queueTracks) {
         queueTracks.asSequence().map { it.id }.filter { it > 0L }.distinct().toList()
     }
@@ -1761,48 +1774,60 @@ private fun AlbumLocalTab(
                                     showSubtitleStamp = showStamp,
                                     thumbnailModel = if (entry.fileType == TreeFileType.Image) entry.absolutePath else null,
                                     onPrimary = {
-                                        val artwork = album.coverPath.ifBlank { album.coverUrl }
-                                        val artist = album.cv.ifBlank { album.circle }
-                                        if ((entry.fileType == TreeFileType.Audio && t != null) || entry.fileType == TreeFileType.Video) {
-                                            val nodes = treeIndex?.let { siblingPlayableNodesForEntry(it, entry.path) }.orEmpty()
-                                            val siblingItems = nodes.mapNotNull { node ->
-                                                val abs = node.absolutePath ?: return@mapNotNull null
-                                                when (node.fileType) {
-                                                    TreeFileType.Audio -> node.track?.let { MediaItemFactory.fromTrack(album, it) }
-                                                    TreeFileType.Video -> buildVideoMediaItem(
-                                                        title = node.name,
-                                                        uriOrPath = abs,
-                                                        artworkUri = artwork,
-                                                        artist = artist
-                                                    )
-                                                    else -> null
+                                        scope.launch {
+                                            val prepared = withContext(Dispatchers.Default) {
+                                                val artwork = album.coverPath.ifBlank { album.coverUrl }
+                                                val artist = album.cv.ifBlank { album.circle }
+                                                if ((entry.fileType == TreeFileType.Audio && t != null) || entry.fileType == TreeFileType.Video) {
+                                                    val nodes = treeIndex?.let { siblingPlayableNodesForEntry(it, entry.path) }.orEmpty()
+                                                    val siblingItems = nodes.mapNotNull { node ->
+                                                        val abs = node.absolutePath ?: return@mapNotNull null
+                                                        when (node.fileType) {
+                                                            TreeFileType.Audio -> node.track?.let { MediaItemFactory.fromTrack(album, it) }
+                                                            TreeFileType.Video -> buildVideoMediaItem(
+                                                                title = node.name,
+                                                                uriOrPath = abs,
+                                                                artworkUri = artwork,
+                                                                artist = artist
+                                                            )
+                                                            else -> null
+                                                        }
+                                                    }
+                                                    val clickedId = when (entry.fileType) {
+                                                        TreeFileType.Audio -> t?.path?.trim().orEmpty()
+                                                        TreeFileType.Video -> entry.absolutePath.trim()
+                                                        else -> ""
+                                                    }
+                                                    val items = if (siblingItems.isNotEmpty()) {
+                                                        siblingItems
+                                                    } else {
+                                                        when (entry.fileType) {
+                                                            TreeFileType.Audio -> queueTracks.map { MediaItemFactory.fromTrack(album, it) }
+                                                            TreeFileType.Video -> listOfNotNull(
+                                                                buildVideoMediaItem(
+                                                                    title = entry.title,
+                                                                    uriOrPath = entry.absolutePath,
+                                                                    artworkUri = artwork,
+                                                                    artist = artist
+                                                                )
+                                                            )
+                                                            else -> emptyList()
+                                                        }
+                                                    }
+                                                    if (items.isNotEmpty()) {
+                                                        val startIndex = items.indexOfFirst { it.mediaId.trim() == clickedId }
+                                                            .takeIf { it >= 0 } ?: 0
+                                                        return@withContext PreparedMediaPlayback(items, startIndex)
+                                                    }
                                                 }
+                                                null
                                             }
-                                            val clickedId = when (entry.fileType) {
-                                                TreeFileType.Audio -> t?.path?.trim().orEmpty()
-                                                TreeFileType.Video -> entry.absolutePath.trim()
-                                                else -> ""
-                                            }
-                                            val items = if (siblingItems.isNotEmpty()) siblingItems else when (entry.fileType) {
-                                                TreeFileType.Audio -> queueTracks.map { MediaItemFactory.fromTrack(album, it) }
-                                                TreeFileType.Video -> listOfNotNull(
-                                                    buildVideoMediaItem(
-                                                        title = entry.title,
-                                                        uriOrPath = entry.absolutePath,
-                                                        artworkUri = artwork,
-                                                        artist = artist
-                                                    )
-                                                )
-                                                else -> emptyList()
-                                            }
-                                            val startIndex = items.indexOfFirst { it.mediaId.trim() == clickedId }
-                                                .takeIf { it >= 0 } ?: 0
-                                            if (items.isNotEmpty()) {
-                                                onPlayMediaItems(items, startIndex)
-                                                return@TreeFileRow
+                                            if (prepared != null) {
+                                                onPlayMediaItems(prepared.items, prepared.startIndex)
+                                            } else {
+                                                onPreviewFile(entry)
                                             }
                                         }
-                                        onPreviewFile(entry)
                                     },
                                     onSetAsCover = if (entry.fileType == TreeFileType.Image) ({ onSetCoverFromImage(entry.absolutePath) }) else null,
                                     onDownload = null,
@@ -1842,6 +1867,7 @@ private fun AlbumAsmrOneTab(
     val leafTracks = remember(trackTree) { flattenAsmrOneTracksForUi(trackTree) }
     val leafByRelPath = remember(leafTracks) { leafTracks.associateBy { it.relativePath } }
     val expanded = remember { mutableStateListOf<String>() }
+    val scope = rememberCoroutineScope()
     val treeResult = remember(trackTree, expanded.toList()) { flattenAsmrOneTreeForUi(trackTree, expanded.toSet()) }
 
     LazyColumn(
@@ -1917,15 +1943,23 @@ private fun AlbumAsmrOneTab(
                                     showSubtitleStamp = canPlay && (leafByRelPath[entry.path]?.subtitles?.isNotEmpty() == true),
                                     onPrimary = {
                                         if (!canPlay) return@TreeFileRow
-                                        val start = leafByRelPath[entry.path] ?: return@TreeFileRow
-                                        val folderPath = entry.path.substringBeforeLast('/', "")
-                                        val siblingLeaves = leafTracks.filter { it.relativePath.substringBeforeLast('/', "") == folderPath }
-                                        val queueLeaves = siblingLeaves.ifEmpty { leafTracks }
-                                        val tracks = queueLeaves.sortedBy { SmartSortKey.of(it.title) }.map { it.toTrack() }
-                                        com.asmr.player.util.OnlineLyricsStore.replaceAll(
-                                            queueLeaves.associate { it.url to it.subtitles }
-                                        )
-                                        onPlayTracks(album, tracks, start.toTrack())
+                                        scope.launch {
+                                            val prepared = withContext(Dispatchers.Default) {
+                                                val start = leafByRelPath[entry.path] ?: return@withContext null
+                                                val folderPath = entry.path.substringBeforeLast('/', "")
+                                                val siblingLeaves = leafTracks.filter {
+                                                    it.relativePath.substringBeforeLast('/', "") == folderPath
+                                                }
+                                                val queueLeaves = siblingLeaves.ifEmpty { leafTracks }
+                                                PreparedTrackPlayback(
+                                                    tracks = queueLeaves.sortedBy { SmartSortKey.of(it.title) }.map { it.toTrack() },
+                                                    startTrack = start.toTrack(),
+                                                    onlineLyrics = queueLeaves.associate { it.url to it.subtitles }
+                                                )
+                                            } ?: return@launch
+                                            com.asmr.player.util.OnlineLyricsStore.replaceAll(prepared.onlineLyrics)
+                                            onPlayTracks(album, prepared.tracks, prepared.startTrack)
+                                        }
                                     },
                                     onDownload = if (entry.fileType == TreeFileType.Audio) ({ onDownloadOne(entry.path) }) else null,
                                     onAddToQueue = null,
@@ -3553,6 +3587,7 @@ private fun AlbumDlsiteInfoTab(
 ) {
     val infoAlbum = dlsiteInfo ?: album
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var previewUrl by remember { mutableStateOf<String?>(null) }
     val videoTracks = remember(trialTracks) { trialTracks.filter { isVideoPreviewUrl(it.path) } }
     val audioTracks = remember(trialTracks) { trialTracks.filterNot { isVideoPreviewUrl(it.path) } }
@@ -3699,23 +3734,31 @@ private fun AlbumDlsiteInfoTab(
                                         title = entry.title,
                                         depth = entry.depth,
                                         fileType = entry.fileType,
-                                        isPlayable = canPlay,
-                                        showSubtitleStamp = canPlay && (asmrLeafByRelPath[entry.path]?.subtitles?.isNotEmpty() == true),
-                                        onPrimary = {
-                                            if (canPlay) {
-                                                val start = asmrLeafByRelPath[entry.path] ?: return@TreeFileRow
+                                    isPlayable = canPlay,
+                                    showSubtitleStamp = canPlay && (asmrLeafByRelPath[entry.path]?.subtitles?.isNotEmpty() == true),
+                                    onPrimary = {
+                                        if (!canPlay) {
+                                            onPreviewFile(entry)
+                                            return@TreeFileRow
+                                        }
+                                        scope.launch {
+                                            val prepared = withContext(Dispatchers.Default) {
+                                                val start = asmrLeafByRelPath[entry.path] ?: return@withContext null
                                                 val folderPath = entry.path.substringBeforeLast('/', "")
-                                                val siblingLeaves = asmrLeafTracks.filter { it.relativePath.substringBeforeLast('/', "") == folderPath }
+                                                val siblingLeaves = asmrLeafTracks.filter {
+                                                    it.relativePath.substringBeforeLast('/', "") == folderPath
+                                                }
                                                 val queueLeaves = siblingLeaves.ifEmpty { listOf(start) }
-                                                val tracks = queueLeaves.sortedBy { SmartSortKey.of(it.title) }.map { it.toTrack() }
-                                                com.asmr.player.util.OnlineLyricsStore.replaceAll(
-                                                    queueLeaves.associate { it.url to it.subtitles }
+                                                PreparedTrackPlayback(
+                                                    tracks = queueLeaves.sortedBy { SmartSortKey.of(it.title) }.map { it.toTrack() },
+                                                    startTrack = start.toTrack(),
+                                                    onlineLyrics = queueLeaves.associate { it.url to it.subtitles }
                                                 )
-                                                onPlayTracks(album, tracks, start.toTrack())
-                                            } else {
-                                                onPreviewFile(entry)
-                                            }
-                                        },
+                                            } ?: return@launch
+                                            com.asmr.player.util.OnlineLyricsStore.replaceAll(prepared.onlineLyrics)
+                                            onPlayTracks(album, prepared.tracks, prepared.startTrack)
+                                        }
+                                    },
                                         onDownload = if (entry.fileType == TreeFileType.Audio) ({ onDownloadOne(entry.path) }) else null,
                                         onAddToQueue = if (canPlay) ({
                                             val leaf = asmrLeafByRelPath[entry.path]
@@ -3934,6 +3977,7 @@ private fun AlbumDlsitePlayTreeTab(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val authStore = remember { DlsiteAuthStore(context) }
+    val scope = rememberCoroutineScope()
     var loggedIn by remember { mutableStateOf(authStore.isLoggedIn()) }
 
     DisposableEffect(lifecycleOwner) {
@@ -4087,54 +4131,67 @@ private fun AlbumDlsitePlayTreeTab(
                                             onPreviewFile(entry)
                                             return@TreeFileRow
                                         }
-                                        val artwork = album.coverPath.ifBlank { album.coverUrl }
-                                        val artist = album.cv.ifBlank { album.circle }
-                                        val folderPath = entry.path.substringBeforeLast('/', "")
-                                        val siblings = treeResult.entries
-                                            .asSequence()
-                                            .filterIsInstance<AsmrTreeUiEntry.File>()
-                                            .filter { it.path.substringBeforeLast('/', "") == folderPath }
-                                            .filter { file ->
-                                                val audioOk = file.fileType == TreeFileType.Audio && leafByRelPath.containsKey(file.path)
-                                                val videoOk = file.fileType == TreeFileType.Video && !file.url.isNullOrBlank()
-                                                audioOk || videoOk
-                                            }
-                                            .sortedBy { SmartSortKey.of(it.title) }
-                                            .toList()
+                                        scope.launch {
+                                            val prepared = withContext(Dispatchers.Default) {
+                                                val artwork = album.coverPath.ifBlank { album.coverUrl }
+                                                val artist = album.cv.ifBlank { album.circle }
+                                                val folderPath = entry.path.substringBeforeLast('/', "")
+                                                val siblings = treeResult.entries
+                                                    .asSequence()
+                                                    .filterIsInstance<AsmrTreeUiEntry.File>()
+                                                    .filter { it.path.substringBeforeLast('/', "") == folderPath }
+                                                    .filter { file ->
+                                                        val audioOk = file.fileType == TreeFileType.Audio &&
+                                                            leafByRelPath.containsKey(file.path)
+                                                        val videoOk = file.fileType == TreeFileType.Video &&
+                                                            !file.url.isNullOrBlank()
+                                                        audioOk || videoOk
+                                                    }
+                                                    .sortedBy { SmartSortKey.of(it.title) }
+                                                    .toList()
 
-                                        val paired = siblings.mapNotNull { file ->
-                                            when (file.fileType) {
-                                                TreeFileType.Audio -> {
-                                                    val leaf = leafByRelPath[file.path] ?: return@mapNotNull null
-                                                    val track = leaf.toTrack()
-                                                    val id = track.path.trim()
-                                                    id to MediaItemFactory.fromTrack(album, track)
-                                                }
-                                                TreeFileType.Video -> {
-                                                    val url = file.url?.trim().orEmpty()
-                                                    if (url.isBlank()) return@mapNotNull null
-                                                    url to buildVideoMediaItem(
-                                                        title = file.title,
-                                                        uriOrPath = url,
-                                                        artworkUri = artwork,
-                                                        artist = artist
-                                                    )
-                                                }
-                                                else -> null
-                                            }
-                                        }.mapNotNull { (id, item) -> item?.let { id to it } }
+                                                val paired = siblings.mapNotNull { file ->
+                                                    when (file.fileType) {
+                                                        TreeFileType.Audio -> {
+                                                            val leaf = leafByRelPath[file.path] ?: return@mapNotNull null
+                                                            val track = leaf.toTrack()
+                                                            val id = track.path.trim()
+                                                            id to MediaItemFactory.fromTrack(album, track)
+                                                        }
+                                                        TreeFileType.Video -> {
+                                                            val url = file.url?.trim().orEmpty()
+                                                            if (url.isBlank()) return@mapNotNull null
+                                                            url to buildVideoMediaItem(
+                                                                title = file.title,
+                                                                uriOrPath = url,
+                                                                artworkUri = artwork,
+                                                                artist = artist
+                                                            )
+                                                        }
+                                                        else -> null
+                                                    }
+                                                }.mapNotNull { (id, item) -> item?.let { id to it } }
 
-                                        if (paired.isEmpty()) {
-                                            onPreviewFile(entry)
-                                            return@TreeFileRow
+                                                if (paired.isEmpty()) return@withContext null
+
+                                                val clickedId = if (canPlay) {
+                                                    leafByRelPath[entry.path]?.url?.trim().orEmpty()
+                                                } else {
+                                                    entry.url?.trim().orEmpty()
+                                                }
+                                                val startIndex = paired.indexOfFirst { (id, _) -> id == clickedId }
+                                                    .takeIf { it >= 0 } ?: 0
+                                                PreparedMediaPlayback(
+                                                    items = paired.map { it.second },
+                                                    startIndex = startIndex
+                                                )
+                                            }
+                                            if (prepared != null) {
+                                                onPlayMediaItems(prepared.items, prepared.startIndex)
+                                            } else {
+                                                onPreviewFile(entry)
+                                            }
                                         }
-                                        val clickedId = if (canPlay) {
-                                            leafByRelPath[entry.path]?.url?.trim().orEmpty()
-                                        } else {
-                                            entry.url?.trim().orEmpty()
-                                        }
-                                        val startIndex = paired.indexOfFirst { (id, _) -> id == clickedId }.takeIf { it >= 0 } ?: 0
-                                        onPlayMediaItems(paired.map { it.second }, startIndex)
                                     },
                                     onDownload = if (entry.fileType == TreeFileType.Audio || entry.fileType == TreeFileType.Video) {
                                         ({ onDownloadOne(entry.path) })

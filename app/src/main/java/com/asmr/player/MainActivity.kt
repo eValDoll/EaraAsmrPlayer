@@ -38,6 +38,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -62,8 +63,11 @@ import com.asmr.player.ui.library.LibraryViewModel
 import com.asmr.player.ui.library.BulkPhase
 import com.asmr.player.ui.player.MiniPlayer
 import com.asmr.player.ui.player.NowPlayingScreen
+import com.asmr.player.ui.player.NowPlayingMotionSpec
+import com.asmr.player.ui.player.PlayerSharedBackdrop
 import com.asmr.player.ui.player.PlayerViewModel
-import com.asmr.player.ui.player.LyricsPage
+import com.asmr.player.ui.player.rememberCoverDragPreviewState
+import com.asmr.player.ui.player.rememberCoverMotionState
 import com.asmr.player.ui.sidepanel.LocalRightPanelExpandedState
 import com.asmr.player.ui.common.rememberDominantColorCenterWeighted
 import com.asmr.player.ui.downloads.DownloadsScreen
@@ -114,7 +118,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.animation.*
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.FastOutLinearInEasing
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.res.painterResource
@@ -139,6 +146,7 @@ import com.asmr.player.ui.theme.ThemeMode
 import com.asmr.player.ui.theme.DefaultBrandPrimaryDark
 import com.asmr.player.ui.theme.DefaultBrandPrimaryLight
 import com.asmr.player.ui.theme.deriveHuePalette
+import kotlin.math.roundToInt
 import com.asmr.player.ui.theme.neutralPaletteForMode
 import com.asmr.player.ui.theme.rememberDynamicHuePalette
 import com.asmr.player.ui.theme.rememberDynamicHuePaletteFromVideoFrame
@@ -477,6 +485,7 @@ fun MainContainer(
             .map { it.currentMediaItem != null }
             .distinctUntilChanged()
     }.collectAsState(initial = false)
+    val sharedPlayerPlayback by playerViewModel.playback.collectAsState()
     val drawerStatusViewModel: DrawerStatusViewModel = hiltViewModel()
     val statisticsViewModel: StatisticsViewModel = hiltViewModel()
     val bulkProgress by libraryViewModel.bulkProgress.collectAsState()
@@ -500,7 +509,69 @@ fun MainContainer(
     val isPhone = configuration.smallestScreenWidthDp < 600
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
-    val immersivePlayer = forceImmersive || currentRoute == "now_playing" || currentRoute == "lyrics"
+    val immersivePlayer = forceImmersive || currentRoute == "now_playing"
+    var nowPlayingRouteRevealActive by remember { mutableStateOf(false) }
+    var nowPlayingRouteRevealSeq by remember { mutableIntStateOf(0) }
+    val closeNowPlaying: () -> Unit = remember(navController, scope) {
+        {
+            val revealSeq = ++nowPlayingRouteRevealSeq
+            nowPlayingRouteRevealActive = true
+            navController.popBackStack()
+            scope.launch {
+                delay(NowPlayingMotionSpec.RouteFadeDurationMs.toLong())
+                if (nowPlayingRouteRevealSeq == revealSeq) {
+                    nowPlayingRouteRevealActive = false
+                }
+            }
+        }
+    }
+    val playerBackdropVisible = currentRoute == "now_playing" || nowPlayingRouteRevealActive
+    val sharedPlayerItem = sharedPlayerPlayback.currentMediaItem
+    val sharedPlayerUriText = sharedPlayerItem?.localConfiguration?.uri?.toString().orEmpty()
+    val sharedPlayerMimeType = sharedPlayerItem?.localConfiguration?.mimeType.orEmpty()
+    val sharedPlayerExt = sharedPlayerUriText
+        .substringBefore('#')
+        .substringBefore('?')
+        .substringAfterLast('.', "")
+        .lowercase()
+    val sharedPlayerIsVideo = sharedPlayerItem?.mediaMetadata?.extras?.getBoolean("is_video") == true ||
+        sharedPlayerMimeType.startsWith("video/") ||
+        sharedPlayerExt in setOf("mp4", "m4v", "webm", "mkv", "mov")
+    val sharedUseDragPreview = playerBackdropVisible &&
+        coverBackgroundEnabled &&
+        coverPreviewMode == CoverPreviewMode.Drag &&
+        !sharedPlayerIsVideo
+    val sharedUseMotionPreview = playerBackdropVisible &&
+        coverBackgroundEnabled &&
+        coverPreviewMode == CoverPreviewMode.Motion &&
+        !sharedPlayerIsVideo
+    val sharedCoverMotionState = rememberCoverMotionState(
+        enabled = sharedUseMotionPreview,
+        resetKey = sharedPlayerItem?.mediaId
+    )
+    val sharedCoverDragPreviewState = rememberCoverDragPreviewState(
+        enabled = sharedUseDragPreview,
+        resetKey = sharedPlayerItem?.mediaId
+    )
+    val sharedPlayerBackdropAlignment = when {
+        sharedUseDragPreview -> BiasAlignment(
+            horizontalBias = sharedCoverDragPreviewState.horizontalBias,
+            verticalBias = sharedCoverDragPreviewState.verticalBias
+        )
+        sharedUseMotionPreview -> BiasAlignment(
+            horizontalBias = sharedCoverMotionState.horizontalBias,
+            verticalBias = sharedCoverMotionState.verticalBias
+        )
+        else -> Alignment.Center
+    }
+    val playerBackdropAlpha by animateFloatAsState(
+        targetValue = if (nowPlayingRouteRevealActive) 0f else 1f,
+        animationSpec = tween(
+            durationMillis = NowPlayingMotionSpec.RouteFadeDurationMs,
+            easing = LinearOutSlowInEasing
+        ),
+        label = "playerBackdropAlpha"
+    )
 
     LaunchedEffect(currentRoute) {
         showHardwareVolumeOverlay = false
@@ -508,6 +579,7 @@ fun MainContainer(
         hardwareVolumeOverlayBounds = null
         if (currentRoute == "now_playing") {
             nowPlayingVolumeEventTick = 0L
+            nowPlayingRouteRevealActive = false
         }
         val last = lastRouteForTouchBlock
         val seq = ++touchBlockSeq
@@ -581,7 +653,7 @@ fun MainContainer(
     LaunchedEffect(currentRoute, isPhone) {
         activity?.let { act ->
             if (isPhone) {
-                if (currentRoute == "now_playing" || currentRoute == "lyrics") {
+                if (currentRoute == "now_playing") {
                     // 手机端在播放页和歌词页允许横屏（遵守系统自动旋转/旋转锁定设置）
                     act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_USER
                 } else {
@@ -644,7 +716,7 @@ fun MainContainer(
         scope.launch { drawerState.close() }
     }
 
-    val drawerGesturesEnabled = currentRoute != "now_playing" && currentRoute != "lyrics"
+    val drawerGesturesEnabled = currentRoute != "now_playing"
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -766,7 +838,9 @@ fun MainContainer(
             }
         }
     ) {
-        val miniPlayerVisible = showMiniPlayerBar && hasCurrentMediaItem && currentRoute != "now_playing" && currentRoute != "lyrics"
+        val miniPlayerVisible = showMiniPlayerBar &&
+            hasCurrentMediaItem &&
+            !playerBackdropVisible
         val rightPanelExpandedFromStore by settingsDataStore.recentAlbumsPanelExpanded.collectAsState(initial = recentAlbumsPanelExpandedInitial)
         val rightPanelExpandedState = remember(settingsDataStore, scope, recentAlbumsPanelExpandedInitial) {
             PersistedBooleanState(initial = recentAlbumsPanelExpandedInitial) { expanded ->
@@ -792,12 +866,26 @@ fun MainContainer(
                             .fillMaxSize()
                             .background(colorScheme.primarySoft.copy(alpha = 0.16f))
                     )
+                    if (playerBackdropVisible) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer { alpha = playerBackdropAlpha }
+                        ) {
+                            PlayerSharedBackdrop(
+                                playback = sharedPlayerPlayback,
+                                enabled = coverBackgroundEnabled,
+                                clarity = coverBackgroundClarity,
+                                artworkAlignment = sharedPlayerBackdropAlignment
+                            )
+                        }
+                    }
 
                     Scaffold(
                         containerColor = Color.Transparent,
                         contentColor = colorScheme.onBackground,
                         topBar = {
-                            if (currentRoute != "now_playing" && currentRoute != "lyrics") {
+                            if (!playerBackdropVisible) {
                                 Column {
                                     val compactTopBar =
                                         currentRoute == "library" ||
@@ -1026,6 +1114,10 @@ fun MainContainer(
                             NavHost(
                                 navController = navController,
                                 startDestination = initialDestination,
+                                enterTransition = { EnterTransition.None },
+                                exitTransition = { ExitTransition.None },
+                                popEnterTransition = { EnterTransition.None },
+                                popExitTransition = { ExitTransition.None },
                                 modifier = Modifier.fillMaxSize()
                             ) {
 
@@ -1039,8 +1131,11 @@ fun MainContainer(
                             )
                         },
                         onPlayTracks = { album, tracks, startTrack ->
-                            playerViewModel.playTracks(album, tracks, startTrack)
-                            navController.navigateSingleTop("now_playing")
+                            scope.launch {
+                                if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
+                                    navController.navigateSingleTop("now_playing")
+                                }
+                            }
                         },
                         onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode ->
                             navController.navigateSingleTop(
@@ -1091,8 +1186,11 @@ fun MainContainer(
                         refreshToken = refreshToken,
                         onConsumeRefreshToken = { backStackEntry.savedStateHandle["refreshToken"] = 0L },
                         onPlayTracks = { album, tracks, startTrack ->
-                            playerViewModel.playTracks(album, tracks, startTrack)
-                            navController.navigateSingleTop("now_playing")
+                            scope.launch {
+                                if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
+                                    navController.navigateSingleTop("now_playing")
+                                }
+                            }
                         },
                         onPlayMediaItems = { items, startIndex ->
                             playerViewModel.playMediaItems(items, startIndex)
@@ -1142,8 +1240,11 @@ fun MainContainer(
                         refreshToken = refreshToken,
                         onConsumeRefreshToken = { backStackEntry.savedStateHandle["refreshToken"] = 0L },
                         onPlayTracks = { album, tracks, startTrack ->
-                            playerViewModel.playTracks(album, tracks, startTrack)
-                            navController.navigateSingleTop("now_playing")
+                            scope.launch {
+                                if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
+                                    navController.navigateSingleTop("now_playing")
+                                }
+                            }
                         },
                         onPlayMediaItems = { items, startIndex ->
                             playerViewModel.playMediaItems(items, startIndex)
@@ -1188,8 +1289,11 @@ fun MainContainer(
                         refreshToken = refreshToken,
                         onConsumeRefreshToken = { backStackEntry.savedStateHandle["refreshToken"] = 0L },
                         onPlayTracks = { album, tracks, startTrack ->
-                            playerViewModel.playTracks(album, tracks, startTrack)
-                            navController.navigateSingleTop("now_playing")
+                            scope.launch {
+                                if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
+                                    navController.navigateSingleTop("now_playing")
+                                }
+                            }
                         },
                         onPlayMediaItems = { items, startIndex ->
                             playerViewModel.playMediaItems(items, startIndex)
@@ -1243,19 +1347,23 @@ fun MainContainer(
                 }
                 composable(
                     route = "now_playing",
-                    enterTransition = {
-                        slideInVertically(initialOffsetY = { it }, animationSpec = tween(400)) + fadeIn(animationSpec = tween(400))
-                    },
-                    exitTransition = {
-                        slideOutVertically(targetOffsetY = { it }, animationSpec = tween(400)) + fadeOut(animationSpec = tween(400))
+                    enterTransition = { EnterTransition.None },
+                    exitTransition = { ExitTransition.None },
+                    popEnterTransition = { EnterTransition.None },
+                    popExitTransition = {
+                        fadeOut(
+                            animationSpec = tween(
+                                durationMillis = NowPlayingMotionSpec.RouteFadeDurationMs,
+                                easing = LinearOutSlowInEasing
+                            )
+                        )
                     }
                 ) {
                     if (globalDynamicHueEnabled) {
                         NowPlayingScreen(
                             windowSizeClass = windowSizeClass,
                             hardwareVolumeEventTick = nowPlayingVolumeEventTick,
-                            onBack = { navController.popBackStack() },
-                            onOpenLyrics = { navController.navigateSingleTop("lyrics") },
+                            onBack = closeNowPlaying,
                             onShowQueue = onShowQueue,
                             onShowSleepTimer = onShowSleepTimer,
                             onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode ->
@@ -1275,15 +1383,18 @@ fun MainContainer(
                             coverBackgroundEnabled = coverBackgroundEnabled,
                             coverBackgroundClarity = coverBackgroundClarity,
                             coverPreviewMode = coverPreviewMode,
+                            lyricsPageSettings = lyricsPageSettings,
                             audioOutputRouteKind = audioOutputRouteKind,
-                            warningSessionState = appVolumeWarningSessionState
+                            warningSessionState = appVolumeWarningSessionState,
+                            renderBackdrop = false,
+                            sharedArtworkAlignment = sharedPlayerBackdropAlignment,
+                            sharedCoverDragPreviewState = sharedCoverDragPreviewState
                         )
                     } else {
                         NowPlayingScreen(
                             windowSizeClass = windowSizeClass,
                             hardwareVolumeEventTick = nowPlayingVolumeEventTick,
-                            onBack = { navController.popBackStack() },
-                            onOpenLyrics = { navController.navigateSingleTop("lyrics") },
+                            onBack = closeNowPlaying,
                             onShowQueue = onShowQueue,
                             onShowSleepTimer = onShowSleepTimer,
                             onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode ->
@@ -1303,31 +1414,12 @@ fun MainContainer(
                             coverBackgroundEnabled = coverBackgroundEnabled,
                             coverBackgroundClarity = coverBackgroundClarity,
                             coverPreviewMode = coverPreviewMode,
+                            lyricsPageSettings = lyricsPageSettings,
                             audioOutputRouteKind = audioOutputRouteKind,
-                            warningSessionState = appVolumeWarningSessionState
-                        )
-                    }
-                }
-                composable("lyrics") {
-                    if (globalDynamicHueEnabled) {
-                        LyricsPage(
-                            onBack = { navController.popBackStack() },
-                            onSeekTo = { pos -> playerViewModel.seekTo(pos) },
-                            playerViewModel = playerViewModel,
-                            coverBackgroundEnabled = coverBackgroundEnabled,
-                            coverBackgroundClarity = coverBackgroundClarity,
-                            coverPreviewMode = coverPreviewMode,
-                            lyricsPageSettings = lyricsPageSettings
-                        )
-                    } else {
-                        LyricsPage(
-                            onBack = { navController.popBackStack() },
-                            onSeekTo = { pos -> playerViewModel.seekTo(pos) },
-                            playerViewModel = playerViewModel,
-                            coverBackgroundEnabled = coverBackgroundEnabled,
-                            coverBackgroundClarity = coverBackgroundClarity,
-                            coverPreviewMode = coverPreviewMode,
-                            lyricsPageSettings = lyricsPageSettings
+                            warningSessionState = appVolumeWarningSessionState,
+                            renderBackdrop = false,
+                            sharedArtworkAlignment = sharedPlayerBackdropAlignment,
+                            sharedCoverDragPreviewState = sharedCoverDragPreviewState
                         )
                     }
                 }
