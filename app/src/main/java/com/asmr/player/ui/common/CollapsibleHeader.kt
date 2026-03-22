@@ -3,7 +3,8 @@ package com.asmr.player.ui.common
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -15,11 +16,20 @@ internal const val COLLAPSIBLE_HEADER_STATE_PARTIAL = "partial"
 internal const val COLLAPSIBLE_HEADER_STATE_COLLAPSED = "collapsed"
 
 @Stable
-class CollapsibleHeaderState {
-    var heightPx by mutableFloatStateOf(0f)
+class CollapsibleHeaderState internal constructor(
+    initialHeightPx: Float = 0f,
+    initialOffsetPx: Float = 0f
+) {
+    var heightPx by mutableFloatStateOf(initialHeightPx)
         private set
 
-    var offsetPx by mutableFloatStateOf(0f)
+    var offsetPx by mutableFloatStateOf(
+        if (initialHeightPx > 0f) {
+            initialOffsetPx.coerceIn(-initialHeightPx, 0f)
+        } else {
+            0f
+        }
+    )
         private set
 
     val nestedScrollConnection: NestedScrollConnection = object : NestedScrollConnection {
@@ -65,10 +75,23 @@ class CollapsibleHeaderState {
         if (heightPx <= 0f) return
         offsetPx = -heightPx
     }
+
+    companion object {
+        val Saver = listSaver<CollapsibleHeaderState, Float>(
+            save = { listOf(it.heightPx, it.offsetPx) },
+            restore = { restored ->
+                CollapsibleHeaderState(
+                    initialHeightPx = restored.getOrElse(0) { 0f },
+                    initialOffsetPx = restored.getOrElse(1) { 0f }
+                )
+            }
+        )
+    }
 }
 
 @androidx.compose.runtime.Composable
-fun rememberCollapsibleHeaderState(): CollapsibleHeaderState = remember { CollapsibleHeaderState() }
+fun rememberCollapsibleHeaderState(): CollapsibleHeaderState =
+    rememberSaveable(saver = CollapsibleHeaderState.Saver) { CollapsibleHeaderState() }
 
 internal fun collapsibleHeaderUiState(collapseFraction: Float): String = when {
     collapseFraction <= 0.01f -> COLLAPSIBLE_HEADER_STATE_EXPANDED

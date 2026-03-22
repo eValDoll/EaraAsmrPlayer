@@ -55,6 +55,7 @@ import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.CoverContentRow
 import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.common.CvChipsSingleLine
+import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.withAddedBottomPadding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
@@ -245,6 +246,7 @@ fun LibraryScreen(
     val mode = (viewMode ?: 0).coerceIn(0, 2)
     val isGrid = mode == 1
     val isTrackList = mode == 2
+    var lastChromeResetMode by rememberSaveable { mutableStateOf(mode) }
     val pagedAlbums = viewModel.pagedAlbums.collectAsLazyPagingItems()
     val pagedTrackAlbumHeaders = viewModel.pagedTrackAlbumHeaders.collectAsLazyPagingItems()
     val pagedAlbumSnapshot = pagedAlbums.itemSnapshotList
@@ -283,7 +285,10 @@ fun LibraryScreen(
         }
     }
     LaunchedEffect(mode) {
-        chromeState.expand()
+        if (lastChromeResetMode != mode) {
+            chromeState.expand()
+            lastChromeResetMode = mode
+        }
     }
     LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset, mode) {
         if ((mode == 0 || mode == 2) &&
@@ -303,7 +308,7 @@ fun LibraryScreen(
     }
 
     Scaffold(
-        contentWindowInsets = WindowInsets.navigationBars,
+        contentWindowInsets = StableWindowInsets.navigationBars,
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground,
         // TopAppBar is now handled by MainActivity for better consistency

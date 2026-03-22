@@ -51,6 +51,7 @@ import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.graphics.Color
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.withAddedBottomPadding
 
 @Composable
@@ -68,7 +69,7 @@ fun PlaylistsScreen(
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
 
     Scaffold(
-        contentWindowInsets = WindowInsets.navigationBars,
+        contentWindowInsets = StableWindowInsets.navigationBars,
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground
     ) { padding ->

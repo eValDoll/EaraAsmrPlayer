@@ -76,6 +76,7 @@ import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
 import com.asmr.player.ui.common.AppVolumeSlider
 import com.asmr.player.ui.common.AppVolumeWarningSessionState
+import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.volumeRouteIcon
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.playback.PlaybackSnapshot
@@ -150,10 +151,11 @@ private fun AnimatedContentTransitionScope<NowPlayingSurfaceMode>.nowPlayingSurf
 @Composable
 @androidx.media3.common.util.UnstableApi
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
-internal fun AnimatedContentScope.NowPlayingScreen(
+internal fun NowPlayingScreen(
     windowSizeClass: WindowSizeClass,
     hardwareVolumeEventTick: Long,
     onBack: () -> Unit,
+    onRouteExitStarted: (exitDurationMs: Int) -> Unit = {},
     onShowQueue: () -> Unit,
     onShowSleepTimer: () -> Unit,
     onOpenPlaylistPicker: (mediaId: String, uri: String, title: String, artist: String, artworkUri: String, albumId: Long, trackId: Long, rjCode: String) -> Unit,
@@ -289,13 +291,17 @@ internal fun AnimatedContentScope.NowPlayingScreen(
     var routeVisible by remember(enableStaggeredRouteEntry) { mutableStateOf(!enableStaggeredRouteEntry) }
     var pendingRouteExit by remember { mutableStateOf(false) }
     var exitMotionLayout by remember { mutableStateOf<NowPlayingMotionLayout?>(null) }
-    val latestOnBack by rememberUpdatedState(onBack)
+    val latestOnBack = rememberUpdatedState(onBack)
+    val latestOnRouteExitStarted = rememberUpdatedState(onRouteExitStarted)
     val routeTransition = updateTransition(targetState = routeVisible, label = "nowPlayingRouteVisibility")
     val requestClose = remember(pendingRouteExit, currentMotionLayout) {
         {
             if (!pendingRouteExit) {
                 exitMotionLayout = currentMotionLayout
                 pendingRouteExit = true
+                latestOnRouteExitStarted.value(
+                    NowPlayingMotionSpec.totalExitDurationMs(currentMotionLayout)
+                )
                 routeVisible = false
             }
         }
@@ -309,7 +315,7 @@ internal fun AnimatedContentScope.NowPlayingScreen(
         val layout = exitMotionLayout ?: return@LaunchedEffect
         if (!pendingRouteExit) return@LaunchedEffect
         delay(NowPlayingMotionSpec.totalExitDurationMs(layout).toLong())
-        latestOnBack()
+        latestOnBack.value()
     }
 
     val showLyricsSurface = remember(isVideo) {
@@ -370,7 +376,7 @@ internal fun AnimatedContentScope.NowPlayingScreen(
             )
         }
         Column(modifier = Modifier.fillMaxSize()) {
-            Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+            Spacer(modifier = Modifier.windowInsetsTopHeight(StableWindowInsets.statusBars))
             PlayerSurfaceHeader(
                 title = sharedHeaderTitle,
                 isLandscape = isLandscape,

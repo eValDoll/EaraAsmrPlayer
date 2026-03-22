@@ -84,6 +84,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.domain.model.Album
 import com.asmr.player.ui.common.CustomSearchBar
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.withAddedBottomPadding
@@ -139,6 +140,8 @@ fun SearchScreen(
     val keyboardController = LocalSoftwareKeyboardController.current
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
     val chromeState = rememberCollapsibleHeaderState()
+    val chromeResetKey = remember(currentPageKey, viewMode) { "$currentPageKey:$viewMode" }
+    var lastChromeResetKey by rememberSaveable { mutableStateOf(chromeResetKey) }
 
     var keywordSyncedFromState by rememberSaveable { mutableStateOf(false) }
     var optionsSyncedFromState by rememberSaveable { mutableStateOf(false) }
@@ -225,8 +228,11 @@ fun SearchScreen(
         }
         if (canEnd) pullToRefreshState.endRefresh()
     }
-    LaunchedEffect(currentPageKey, viewMode) {
-        chromeState.expand()
+    LaunchedEffect(chromeResetKey) {
+        if (lastChromeResetKey != chromeResetKey) {
+            chromeState.expand()
+            lastChromeResetKey = chromeResetKey
+        }
     }
     LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset, viewMode) {
         if (viewMode == 0 && listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
@@ -240,7 +246,7 @@ fun SearchScreen(
     }
 
     Scaffold(
-        contentWindowInsets = WindowInsets.navigationBars,
+        contentWindowInsets = StableWindowInsets.navigationBars,
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground
     ) { padding ->
