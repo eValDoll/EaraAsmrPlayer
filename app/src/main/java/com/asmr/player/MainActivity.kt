@@ -138,7 +138,6 @@ import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.util.MessageManager
-import com.asmr.player.util.NowPlayingLaunchTrace
 import com.asmr.player.ui.common.NonTouchableAppMessageOverlay
 import com.asmr.player.ui.common.VisibleAppMessage
 import com.asmr.player.ui.theme.HuePalette
@@ -516,7 +515,6 @@ fun MainContainer(
     val closeNowPlaying: () -> Unit = remember(navController, scope) {
         {
             val revealSeq = ++nowPlayingRouteRevealSeq
-            NowPlayingLaunchTrace.mark(stage = "main.close_now_playing", detail = "revealSeq=$revealSeq")
             nowPlayingRouteRevealActive = true
             navController.popBackStack()
             scope.launch {
@@ -528,12 +526,6 @@ fun MainContainer(
         }
     }
     val playerBackdropVisible = currentRoute == "now_playing" || nowPlayingRouteRevealActive
-    LaunchedEffect(currentRoute, playerBackdropVisible, nowPlayingRouteRevealActive) {
-        NowPlayingLaunchTrace.mark(
-            stage = "main.route_state",
-            detail = "route=$currentRoute backdrop=$playerBackdropVisible reveal=$nowPlayingRouteRevealActive"
-        )
-    }
     val sharedPlayerItem = sharedPlayerPlayback.currentMediaItem
     val sharedPlayerUriText = sharedPlayerItem?.localConfiguration?.uri?.toString().orEmpty()
     val sharedPlayerMimeType = sharedPlayerItem?.localConfiguration?.mimeType.orEmpty()
@@ -1140,12 +1132,7 @@ fun MainContainer(
                         },
                         onPlayTracks = { album, tracks, startTrack ->
                             scope.launch {
-                                NowPlayingLaunchTrace.mark(
-                                    stage = "main.onPlayTracks",
-                                    detail = "album=${album.id} tracks=${tracks.size} start=${startTrack.id}:${startTrack.title.take(48)}"
-                                )
                                 if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                    NowPlayingLaunchTrace.mark(stage = "main.navigate.now_playing", detail = "source=library")
                                     navController.navigateSingleTop("now_playing")
                                 }
                             }
@@ -1200,23 +1187,13 @@ fun MainContainer(
                         onConsumeRefreshToken = { backStackEntry.savedStateHandle["refreshToken"] = 0L },
                         onPlayTracks = { album, tracks, startTrack ->
                             scope.launch {
-                                NowPlayingLaunchTrace.mark(
-                                    stage = "main.onPlayTracks",
-                                    detail = "album=${album.id} tracks=${tracks.size} start=${startTrack.id}:${startTrack.title.take(48)}"
-                                )
                                 if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                    NowPlayingLaunchTrace.mark(stage = "main.navigate.now_playing", detail = "source=album_detail_rj")
                                     navController.navigateSingleTop("now_playing")
                                 }
                             }
                         },
                         onPlayMediaItems = { items, startIndex ->
-                            NowPlayingLaunchTrace.mark(
-                                stage = "main.onPlayMediaItems",
-                                detail = "items=${items.size} startIndex=$startIndex source=album_detail_rj"
-                            )
                             playerViewModel.playMediaItems(items, startIndex)
-                            NowPlayingLaunchTrace.mark(stage = "main.navigate.now_playing", detail = "source=album_detail_rj_media_items")
                             navController.navigateSingleTop("now_playing")
                         },
                         onAddToQueue = { album, track ->
@@ -1264,23 +1241,13 @@ fun MainContainer(
                         onConsumeRefreshToken = { backStackEntry.savedStateHandle["refreshToken"] = 0L },
                         onPlayTracks = { album, tracks, startTrack ->
                             scope.launch {
-                                NowPlayingLaunchTrace.mark(
-                                    stage = "main.onPlayTracks",
-                                    detail = "album=${album.id} tracks=${tracks.size} start=${startTrack.id}:${startTrack.title.take(48)}"
-                                )
                                 if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                    NowPlayingLaunchTrace.mark(stage = "main.navigate.now_playing", detail = "source=album_detail")
                                     navController.navigateSingleTop("now_playing")
                                 }
                             }
                         },
                         onPlayMediaItems = { items, startIndex ->
-                            NowPlayingLaunchTrace.mark(
-                                stage = "main.onPlayMediaItems",
-                                detail = "items=${items.size} startIndex=$startIndex source=album_detail"
-                            )
                             playerViewModel.playMediaItems(items, startIndex)
-                            NowPlayingLaunchTrace.mark(stage = "main.navigate.now_playing", detail = "source=album_detail_media_items")
                             navController.navigateSingleTop("now_playing")
                         },
                         onAddToQueue = { album, track ->
@@ -1323,23 +1290,13 @@ fun MainContainer(
                         onConsumeRefreshToken = { backStackEntry.savedStateHandle["refreshToken"] = 0L },
                         onPlayTracks = { album, tracks, startTrack ->
                             scope.launch {
-                                NowPlayingLaunchTrace.mark(
-                                    stage = "main.onPlayTracks",
-                                    detail = "album=${album.id} tracks=${tracks.size} start=${startTrack.id}:${startTrack.title.take(48)}"
-                                )
                                 if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                    NowPlayingLaunchTrace.mark(stage = "main.navigate.now_playing", detail = "source=album_detail_online")
                                     navController.navigateSingleTop("now_playing")
                                 }
                             }
                         },
                         onPlayMediaItems = { items, startIndex ->
-                            NowPlayingLaunchTrace.mark(
-                                stage = "main.onPlayMediaItems",
-                                detail = "items=${items.size} startIndex=$startIndex source=album_detail_online"
-                            )
                             playerViewModel.playMediaItems(items, startIndex)
-                            NowPlayingLaunchTrace.mark(stage = "main.navigate.now_playing", detail = "source=album_detail_online_media_items")
                             navController.navigateSingleTop("now_playing")
                         },
                         onAddToQueue = { album, track ->

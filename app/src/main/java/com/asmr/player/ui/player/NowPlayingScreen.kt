@@ -89,7 +89,6 @@ import com.asmr.player.ui.library.TagAssignDialog
 import com.asmr.player.service.AudioOutputRouteKind
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.util.Formatting
-import com.asmr.player.util.NowPlayingLaunchTrace
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.SubtitleIndexFinder
 import kotlin.math.abs
@@ -330,30 +329,6 @@ internal fun AnimatedContentScope.NowPlayingScreen(
 
     BackHandler(enabled = !pendingRouteExit) {
         handleNavigateUp()
-    }
-    DisposableEffect(Unit) {
-        NowPlayingLaunchTrace.mark(
-            stage = "now_playing.compose_enter",
-            detail = "surface=$surfaceMode isVideo=$isVideo renderBackdrop=$renderBackdrop"
-        )
-        onDispose {
-            NowPlayingLaunchTrace.mark(stage = "now_playing.compose_dispose")
-        }
-    }
-    LaunchedEffect(Unit) {
-        withFrameNanos { }
-        NowPlayingLaunchTrace.mark(
-            stage = "now_playing.first_frame",
-            detail = "mediaId=${item?.mediaId.orEmpty().takeLast(72)}"
-        )
-        withFrameNanos { }
-        NowPlayingLaunchTrace.mark(stage = "now_playing.second_frame")
-    }
-    LaunchedEffect(routeVisible, pendingRouteExit, surfaceMode) {
-        NowPlayingLaunchTrace.mark(
-            stage = "now_playing.route_state",
-            detail = "routeVisible=$routeVisible pendingExit=$pendingRouteExit surface=$surfaceMode"
-        )
     }
     val playerHeaderTitle = metadata?.title?.toString().orEmpty().ifBlank {
         lyricsState.title.ifBlank { "未播放" }

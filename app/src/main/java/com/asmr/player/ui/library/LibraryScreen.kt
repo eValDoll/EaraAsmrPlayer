@@ -49,7 +49,6 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.widthIn
 import com.asmr.player.util.Formatting
-import com.asmr.player.util.NowPlayingLaunchTrace
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
@@ -80,7 +79,6 @@ import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
@@ -229,12 +227,6 @@ fun LibraryScreen(
     val isGlobalSyncRunning by viewModel.isGlobalSyncRunning.collectAsState()
     val playerViewModel: PlayerViewModel = hiltViewModel()
     val scope = rememberCoroutineScope()
-    DisposableEffect(Unit) {
-        NowPlayingLaunchTrace.mark(stage = "library.compose_enter")
-        onDispose {
-            NowPlayingLaunchTrace.mark(stage = "library.compose_dispose")
-        }
-    }
     var searchText by rememberSaveable { mutableStateOf(querySpec.textQuery.orEmpty()) }
     var sortMenuExpanded by remember { mutableStateOf(false) }
     var showTagManager by remember { mutableStateOf(false) }
@@ -593,10 +585,6 @@ fun LibraryScreen(
                                                             showSubtitleStamp = row.hasSubtitles,
                                                             onClick = {
                                                                 scope.launch {
-                                                                    NowPlayingLaunchTrace.begin(
-                                                                        source = "library.track_list",
-                                                                        detail = "album=${album.id} rows=${rows.size} track=${track.id}:${track.title.take(48)}"
-                                                                    )
                                                                     val tracksForAlbum = withContext(Dispatchers.Default) {
                                                                         rows.map { r ->
                                                                             Track(

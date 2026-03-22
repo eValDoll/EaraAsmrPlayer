@@ -125,7 +125,6 @@ import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.util.Formatting
 import com.asmr.player.util.MessageManager
-import com.asmr.player.util.NowPlayingLaunchTrace
 import com.asmr.player.util.RemoteSubtitleSource
 
 private enum class AlbumPrimaryAction {
@@ -187,12 +186,6 @@ fun AlbumDetailScreen(
     var pendingOnlineSaveSelection by remember { mutableStateOf<Set<String>?>(null) }
     var downloadSource by remember { mutableStateOf(OnlineDownloadSource.AsmrOne) }
     val scope = rememberCoroutineScope()
-    DisposableEffect(screenKey) {
-        NowPlayingLaunchTrace.mark(stage = "album_detail.compose_enter", detail = "screenKey=$screenKey")
-        onDispose {
-            NowPlayingLaunchTrace.mark(stage = "album_detail.compose_dispose", detail = "screenKey=$screenKey")
-        }
-    }
 
     LaunchedEffect(albumId, rjCode) {
         viewModel.loadAlbum(albumId, rjCode, force = false)
@@ -1782,10 +1775,6 @@ private fun AlbumLocalTab(
                                     thumbnailModel = if (entry.fileType == TreeFileType.Image) entry.absolutePath else null,
                                     onPrimary = {
                                         scope.launch {
-                                            NowPlayingLaunchTrace.begin(
-                                                source = "album.local_tree.${entry.fileType.name.lowercase()}",
-                                                detail = "album=${album.id} path=${entry.absolutePath.takeLast(96)}"
-                                            )
                                             val prepared = withContext(Dispatchers.Default) {
                                                 val artwork = album.coverPath.ifBlank { album.coverUrl }
                                                 val artist = album.cv.ifBlank { album.circle }
@@ -1955,10 +1944,6 @@ private fun AlbumAsmrOneTab(
                                     onPrimary = {
                                         if (!canPlay) return@TreeFileRow
                                         scope.launch {
-                                            NowPlayingLaunchTrace.begin(
-                                                source = "album.asmr_one_tree.audio",
-                                                detail = "album=${album.id} path=${entry.path.takeLast(96)}"
-                                            )
                                             val prepared = withContext(Dispatchers.Default) {
                                                 val start = leafByRelPath[entry.path] ?: return@withContext null
                                                 val folderPath = entry.path.substringBeforeLast('/', "")
@@ -3757,10 +3742,6 @@ private fun AlbumDlsiteInfoTab(
                                             return@TreeFileRow
                                         }
                                         scope.launch {
-                                            NowPlayingLaunchTrace.begin(
-                                                source = "album.dlsite_trial_tree.audio",
-                                                detail = "album=${album.id} path=${entry.path.takeLast(96)}"
-                                            )
                                             val prepared = withContext(Dispatchers.Default) {
                                                 val start = asmrLeafByRelPath[entry.path] ?: return@withContext null
                                                 val folderPath = entry.path.substringBeforeLast('/', "")
@@ -3902,13 +3883,7 @@ private fun AlbumDlsiteInfoTab(
             ) { track ->
                 TrackItem(
                     track = track,
-                    onClick = {
-                        NowPlayingLaunchTrace.begin(
-                            source = "album.dlsite_trial_list.audio",
-                            detail = "album=${album.id} tracks=${audioTracks.size} track=${track.id}:${track.title.take(48)}"
-                        )
-                        onPlayTracks(album, audioTracks, track)
-                    },
+                    onClick = { onPlayTracks(album, audioTracks, track) },
                     onAddToPlaylist = { onAddToPlaylist(track) }
                 )
             }
@@ -4157,10 +4132,6 @@ private fun AlbumDlsitePlayTreeTab(
                                             return@TreeFileRow
                                         }
                                         scope.launch {
-                                            NowPlayingLaunchTrace.begin(
-                                                source = "album.dlsite_play_tree.${entry.fileType.name.lowercase()}",
-                                                detail = "album=${album.id} path=${entry.path.takeLast(96)}"
-                                            )
                                             val prepared = withContext(Dispatchers.Default) {
                                                 val artwork = album.coverPath.ifBlank { album.coverUrl }
                                                 val artist = album.cv.ifBlank { album.circle }
