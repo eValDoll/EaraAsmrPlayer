@@ -23,6 +23,7 @@ import com.asmr.player.util.MessageManager
 import com.asmr.player.playback.AppVolume
 import dagger.hilt.android.qualifiers.ApplicationContext
 import com.asmr.player.util.NetworkMeteredChecker
+import com.asmr.player.util.NowPlayingLaunchTrace
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -560,10 +561,18 @@ class PlayerConnection @Inject constructor(
         playWhenReady: Boolean
     ) {
         val c = controller ?: return
+        val startMs = SystemClock.elapsedRealtime()
         c.setMediaItems(items, startIndex.coerceAtLeast(0), startPositionMs.coerceAtLeast(0L))
+        val afterSetMediaItemsMs = SystemClock.elapsedRealtime()
         c.prepare()
+        val afterPrepareMs = SystemClock.elapsedRealtime()
         if (playWhenReady) c.play()
+        val afterPlayMs = SystemClock.elapsedRealtime()
         _queue.value = items
+        NowPlayingLaunchTrace.mark(
+            stage = "playerConnection.setQueue.done",
+            detail = "items=${items.size} setMediaItems=${afterSetMediaItemsMs - startMs}ms prepare=${afterPrepareMs - afterSetMediaItemsMs}ms play=${afterPlayMs - afterPrepareMs}ms"
+        )
     }
 
     fun addMediaItem(item: androidx.media3.common.MediaItem): Boolean {

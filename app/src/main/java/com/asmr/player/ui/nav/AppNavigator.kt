@@ -7,7 +7,6 @@ object Routes {
     const val Library = "library"
     const val Search = "search"
     const val NowPlaying = "now_playing"
-    const val Lyrics = "lyrics"
 
     const val AlbumDetailByIdPattern = "album_detail/{albumId}?rjCode={rjCode}"
     const val AlbumDetailOnlineByRjPattern = "album_detail_online/{rj}"

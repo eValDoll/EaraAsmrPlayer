@@ -44,6 +44,7 @@ import com.asmr.player.playback.SlicePlaybackController
 import com.asmr.player.playback.AppVolume
 
 import com.asmr.player.util.MessageManager
+import com.asmr.player.util.NowPlayingLaunchTrace
 import kotlin.math.roundToLong
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -493,6 +494,15 @@ class PlayerViewModel @Inject constructor(
         playTracks(album = album, tracks = tracks, startTrack = startTrack, startPositionMs = 0L)
     }
 
+    suspend fun playTracksPrepared(album: Album, tracks: List<Track>, startTrack: Track): Boolean {
+        return playTracksPrepared(
+            album = album,
+            tracks = tracks,
+            startTrack = startTrack,
+            startPositionMs = 0L
+        )
+    }
+
     fun playAlbumResume(album: Album, resumeMediaId: String?, startPositionMs: Long) {
         viewModelScope.launch {
             val trackEntities = runCatching { trackDao.getTracksForAlbumOnce(album.id) }.getOrNull().orEmpty()
@@ -579,6 +589,53 @@ class PlayerViewModel @Inject constructor(
         playerConnection.setQueue(items = items, startIndex = index, startPositionMs = startPositionMs, playWhenReady = true)
     }
 
+    suspend fun playTracksPrepared(
+        album: Album,
+        tracks: List<Track>,
+        startTrack: Track,
+        startPositionMs: Long
+    ): Boolean {
+        NowPlayingLaunchTrace.mark(
+            stage = "player.playTracksPrepared.start",
+            detail = "album=${album.id} tracks=${tracks.size} start=${startTrack.id}:${startTrack.title.take(48)}"
+        )
+        if (playerConnection.getControllerOrNull() == null) {
+            NowPlayingLaunchTrace.mark(stage = "player.playTracksPrepared.no_controller")
+            messageManager.showError("鎾斁鍣ㄦ湭杩炴帴")
+            return false
+        }
+        if (startTrack.path.contains(".m3u8", ignoreCase = true)) {
+            NowPlayingLaunchTrace.mark(stage = "player.playTracksPrepared.reject_m3u8")
+            messageManager.showError("褰撳墠涓嶆敮鎸?m3u8 娴佸獟浣擄紝璇峰厛涓嬭浇闊抽鏂囦欢")
+            return false
+        }
+        val (items, index) = withContext(Dispatchers.Default) {
+            val preparedItems = tracks.map { MediaItemFactory.fromTrack(album, it) }
+            val preparedIndex = tracks.indexOfFirst { it.path == startTrack.path }.coerceAtLeast(0)
+            preparedItems to preparedIndex
+        }
+        NowPlayingLaunchTrace.mark(
+            stage = "player.playTracksPrepared.items_ready",
+            detail = "items=${items.size} index=$index"
+        )
+        if (playerConnection.getControllerOrNull() == null) {
+            messageManager.showError("鎾斁鍣ㄦ湭杩炴帴")
+            return false
+        }
+        NowPlayingLaunchTrace.mark(
+            stage = "player.playTracksPrepared.set_queue",
+            detail = "items=${items.size} index=$index startPositionMs=$startPositionMs"
+        )
+        playerConnection.setQueue(
+            items = items,
+            startIndex = index,
+            startPositionMs = startPositionMs,
+            playWhenReady = true
+        )
+        NowPlayingLaunchTrace.mark(stage = "player.playTracksPrepared.done")
+        return true
+    }
+
     fun playVideo(title: String, uriOrPath: String) {
         playVideo(title = title, uriOrPath = uriOrPath, artworkUri = "", artist = "")
     }
@@ -586,6 +643,10 @@ class PlayerViewModel @Inject constructor(
     fun playVideo(title: String, uriOrPath: String, artworkUri: String, artist: String) {
         val trimmed = uriOrPath.trim()
         if (trimmed.isBlank()) return
+        NowPlayingLaunchTrace.mark(
+            stage = "player.playVideo.start",
+            detail = "title=${title.take(48)} uri=${trimmed.takeLast(96)}"
+        )
         val uri = if (
             trimmed.startsWith("http", ignoreCase = true) ||
             trimmed.startsWith("content://", ignoreCase = true) ||
@@ -618,9 +679,14 @@ class PlayerViewModel @Inject constructor(
             .setMediaMetadata(metadata)
             .build()
         playerConnection.setQueue(listOf(item), 0, playWhenReady = true)
+        NowPlayingLaunchTrace.mark(stage = "player.playVideo.done")
     }
 
     fun playMediaItems(items: List<MediaItem>, startIndex: Int) {
+        NowPlayingLaunchTrace.mark(
+            stage = "player.playMediaItems.start",
+            detail = "items=${items.size} startIndex=$startIndex"
+        )
         if (playerConnection.getControllerOrNull() == null) {
             messageManager.showError("播放器未连接")
             return
@@ -628,6 +694,10 @@ class PlayerViewModel @Inject constructor(
         if (items.isEmpty()) return
         val safeIndex = startIndex.coerceIn(0, items.lastIndex)
         playerConnection.setQueue(items, safeIndex, playWhenReady = true)
+        NowPlayingLaunchTrace.mark(
+            stage = "player.playMediaItems.done",
+            detail = "safeIndex=$safeIndex"
+        )
     }
 
     fun playPlaylistItems(items: List<PlaylistItemEntity>, startItem: PlaylistItemEntity) {
