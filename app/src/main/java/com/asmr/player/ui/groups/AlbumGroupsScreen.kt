@@ -54,6 +54,7 @@ import com.asmr.player.data.local.db.dao.AlbumGroupStatsRow
 import com.asmr.player.data.local.db.entities.AlbumGroupEntity
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.theme.AsmrTheme
 
@@ -69,7 +70,7 @@ fun AlbumGroupsScreen(
 
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
     Scaffold(
-        contentWindowInsets = WindowInsets.navigationBars,
+        contentWindowInsets = StableWindowInsets.navigationBars,
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground
     ) { padding ->

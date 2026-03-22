@@ -46,6 +46,7 @@ import com.asmr.player.ui.common.SubtitleStamp
 
 import androidx.compose.foundation.lazy.itemsIndexed
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 
 @Composable
@@ -80,7 +81,7 @@ fun PlaylistDetailScreen(
 
     val colorScheme = com.asmr.player.ui.theme.AsmrTheme.colorScheme
     Scaffold(
-        contentWindowInsets = WindowInsets.navigationBars,
+        contentWindowInsets = StableWindowInsets.navigationBars,
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground
     ) { padding ->

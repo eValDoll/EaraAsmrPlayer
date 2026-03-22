@@ -180,6 +180,9 @@ fun AlbumDetailScreen(
     var selectedTab by rememberSaveable(screenKey) {
         mutableIntStateOf(if (albumId != null && albumId > 0) 0 else 1)
     }
+    var lastChromeResetTab by rememberSaveable(screenKey) {
+        mutableIntStateOf(selectedTab)
+    }
     var userSelectedTab by rememberSaveable(screenKey) { mutableStateOf(false) }
     var showAsmrDownloadDialog by remember { mutableStateOf(false) }
     var showOnlineSaveDialog by remember { mutableStateOf(false) }
@@ -280,7 +283,10 @@ fun AlbumDetailScreen(
                         }
                     }
                     LaunchedEffect(selectedTab) {
-                        tabChromeState.expand()
+                        if (lastChromeResetTab != selectedTab) {
+                            tabChromeState.expand()
+                            lastChromeResetTab = selectedTab
+                        }
                     }
     
                     Column(modifier = Modifier.fillMaxSize()) {

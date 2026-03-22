@@ -62,8 +62,9 @@ import com.asmr.player.ui.library.LibraryScreen
 import com.asmr.player.ui.library.LibraryViewModel
 import com.asmr.player.ui.library.BulkPhase
 import com.asmr.player.ui.player.MiniPlayer
-import com.asmr.player.ui.player.NowPlayingScreen
+import com.asmr.player.ui.player.NowPlayingMotionLayout
 import com.asmr.player.ui.player.NowPlayingMotionSpec
+import com.asmr.player.ui.player.NowPlayingScreen
 import com.asmr.player.ui.player.PlayerSharedBackdrop
 import com.asmr.player.ui.player.PlayerViewModel
 import com.asmr.player.ui.player.rememberCoverDragPreviewState
@@ -105,9 +106,7 @@ import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.PrewarmDominantColorCenterWeighted
 import com.asmr.player.ui.common.PrewarmVideoFrameDominantColorCenterWeighted
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.draw.blur
-import androidx.compose.ui.graphics.graphicsLayer
 import android.os.Build
 import android.graphics.RenderEffect
 import android.graphics.Shader
@@ -118,10 +117,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.animation.*
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.FastOutLinearInEasing
-import androidx.compose.animation.core.LinearOutSlowInEasing
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.tween
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.res.painterResource
@@ -139,6 +139,7 @@ import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.util.MessageManager
 import com.asmr.player.ui.common.NonTouchableAppMessageOverlay
+import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.VisibleAppMessage
 import com.asmr.player.ui.theme.HuePalette
 import com.asmr.player.ui.theme.PlayerTheme
@@ -356,15 +357,12 @@ class MainActivity : ComponentActivity() {
                         onShowSleepTimer = { overlaySheet = OverlaySheet.SleepTimer },
                         onContentReady = { contentReady = true },
                         visibleMessages = visibleMessagesSnapshot,
-                        mode = mode,
                         showMiniPlayerBar = showMiniPlayerBar,
-                        globalDynamicHueEnabled = globalDynamicHueEnabled,
                         coverBackgroundEnabled = coverBackgroundEnabled,
                         coverBackgroundClarity = coverBackgroundClarity,
                         coverPreviewMode = coverPreviewMode,
                         lyricsPageSettings = lyricsPageSettings,
                         forceImmersive = showSplash,
-                        baseStaticHue = baseStaticHue,
                         volumeKeyEventTick = volumeKeyTick
                     )
 
@@ -452,15 +450,12 @@ fun MainContainer(
     onShowSleepTimer: () -> Unit,
     onContentReady: () -> Unit,
     visibleMessages: List<VisibleAppMessage>,
-    mode: ThemeMode,
     showMiniPlayerBar: Boolean,
-    globalDynamicHueEnabled: Boolean,
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
     coverPreviewMode: CoverPreviewMode,
     lyricsPageSettings: LyricsPageSettings,
     forceImmersive: Boolean,
-    baseStaticHue: HuePalette,
     volumeKeyEventTick: Long
 ) {
     val navController = rememberNavController()
@@ -509,23 +504,22 @@ fun MainContainer(
     val isPhone = configuration.smallestScreenWidthDp < 600
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
-    val immersivePlayer = forceImmersive || currentRoute == "now_playing"
-    var nowPlayingRouteRevealActive by remember { mutableStateOf(false) }
-    var nowPlayingRouteRevealSeq by remember { mutableIntStateOf(0) }
-    val closeNowPlaying: () -> Unit = remember(navController, scope) {
-        {
-            val revealSeq = ++nowPlayingRouteRevealSeq
-            nowPlayingRouteRevealActive = true
-            navController.popBackStack()
-            scope.launch {
-                delay(NowPlayingMotionSpec.RouteFadeDurationMs.toLong())
-                if (nowPlayingRouteRevealSeq == revealSeq) {
-                    nowPlayingRouteRevealActive = false
-                }
-            }
-        }
+    var nowPlayingVisible by rememberSaveable { mutableStateOf(false) }
+    var nowPlayingBackdropActive by rememberSaveable { mutableStateOf(false) }
+    var nowPlayingBackdropExitDurationMs by rememberSaveable {
+        mutableIntStateOf(NowPlayingMotionSpec.totalExitDurationMs(NowPlayingMotionLayout.PORTRAIT))
     }
-    val playerBackdropVisible = currentRoute == "now_playing" || nowPlayingRouteRevealActive
+    val playerImmersive = nowPlayingVisible
+    val openNowPlaying = openNowPlaying@{
+        if (nowPlayingVisible) return@openNowPlaying
+        nowPlayingBackdropActive = true
+        nowPlayingVisible = true
+    }
+    val closeNowPlaying: () -> Unit = {
+        nowPlayingBackdropActive = false
+        nowPlayingVisible = false
+    }
+    val playerBackdropVisible = nowPlayingVisible
     val sharedPlayerItem = sharedPlayerPlayback.currentMediaItem
     val sharedPlayerUriText = sharedPlayerItem?.localConfiguration?.uri?.toString().orEmpty()
     val sharedPlayerMimeType = sharedPlayerItem?.localConfiguration?.mimeType.orEmpty()
@@ -564,23 +558,45 @@ fun MainContainer(
         )
         else -> Alignment.Center
     }
-    val playerBackdropAlpha by animateFloatAsState(
-        targetValue = if (nowPlayingRouteRevealActive) 0f else 1f,
-        animationSpec = tween(
-            durationMillis = NowPlayingMotionSpec.RouteFadeDurationMs,
-            easing = LinearOutSlowInEasing
-        ),
-        label = "playerBackdropAlpha"
+    val nowPlayingBackdropAlpha by animateFloatAsState(
+        targetValue = if (nowPlayingBackdropActive) 1f else 0f,
+        animationSpec = if (nowPlayingBackdropActive) {
+            tween(
+                durationMillis = 360,
+                easing = LinearOutSlowInEasing
+            )
+        } else {
+            keyframes {
+                durationMillis = nowPlayingBackdropExitDurationMs
+                1f at 0
+                1f at (nowPlayingBackdropExitDurationMs * 0.58f).toInt()
+                0f at nowPlayingBackdropExitDurationMs using FastOutLinearInEasing
+            }
+        },
+        label = "nowPlayingBackdropAlpha"
+    )
+    val nowPlayingBottomScrimAlpha by animateFloatAsState(
+        targetValue = if (nowPlayingBackdropActive) 1f else 0f,
+        animationSpec = if (nowPlayingBackdropActive) {
+            tween(
+                durationMillis = 440,
+                easing = LinearOutSlowInEasing
+            )
+        } else {
+            keyframes {
+                durationMillis = nowPlayingBackdropExitDurationMs
+                1f at 0
+                1f at (nowPlayingBackdropExitDurationMs * 0.7f).toInt()
+                0f at nowPlayingBackdropExitDurationMs using FastOutLinearInEasing
+            }
+        },
+        label = "nowPlayingBottomScrimAlpha"
     )
 
     LaunchedEffect(currentRoute) {
         showHardwareVolumeOverlay = false
         hardwareVolumeOverlayInteracting = false
         hardwareVolumeOverlayBounds = null
-        if (currentRoute == "now_playing") {
-            nowPlayingVolumeEventTick = 0L
-            nowPlayingRouteRevealActive = false
-        }
         val last = lastRouteForTouchBlock
         val seq = ++touchBlockSeq
         if (last != null && currentRoute != null && last != currentRoute) {
@@ -598,6 +614,23 @@ fun MainContainer(
         lastRouteForTouchBlock = currentRoute
     }
 
+    LaunchedEffect(nowPlayingVisible) {
+        if (!nowPlayingVisible) return@LaunchedEffect
+        showHardwareVolumeOverlay = false
+        hardwareVolumeOverlayInteracting = false
+        hardwareVolumeOverlayBounds = null
+        nowPlayingVolumeEventTick = 0L
+        if (drawerState.isOpen) {
+            drawerState.close()
+        }
+    }
+
+    val colorScheme = AsmrTheme.colorScheme
+    val materialColorScheme = MaterialTheme.colorScheme
+    val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
+    val topBarContentColor = colorScheme.onSurface
+    val drawerContainerColor = if (colorScheme.isDark) Color(0xFF121212) else Color.White
+
     val defaultSystemUi = remember(activity) {
         activity?.let { act ->
             val controller = WindowInsetsControllerCompat(act.window, act.window.decorView)
@@ -605,37 +638,56 @@ fun MainContainer(
                 statusBarColor = act.window.statusBarColor,
                 navigationBarColor = act.window.navigationBarColor,
                 lightStatusBars = controller.isAppearanceLightStatusBars,
-                lightNavigationBars = controller.isAppearanceLightNavigationBars
+                lightNavigationBars = controller.isAppearanceLightNavigationBars,
+                statusBarContrastEnforced = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    act.window.isStatusBarContrastEnforced
+                } else {
+                    null
+                },
+                navigationBarContrastEnforced = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    act.window.isNavigationBarContrastEnforced
+                } else {
+                    null
+                }
             )
         }
     }
 
-    DisposableEffect(activity, immersivePlayer) {
+    DisposableEffect(activity, forceImmersive, playerImmersive, colorScheme.isDark) {
         val act = activity ?: return@DisposableEffect onDispose { }
         val window = act.window
         val controller = WindowInsetsControllerCompat(window, window.decorView)
         // 始终由应用控制系统栏区域绘制，避免 fitsSystemWindows 切换导致的布局跳动
         WindowCompat.setDecorFitsSystemWindows(window, false)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isStatusBarContrastEnforced = false
+            window.isNavigationBarContrastEnforced = false
+        }
 
-        if (immersivePlayer) {
+        if (forceImmersive) {
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.systemBars())
             window.statusBarColor = android.graphics.Color.TRANSPARENT
             window.navigationBarColor = android.graphics.Color.TRANSPARENT
             controller.isAppearanceLightStatusBars = false
             controller.isAppearanceLightNavigationBars = false
+        } else if (playerImmersive) {
+            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller.show(WindowInsetsCompat.Type.statusBars())
+            controller.hide(WindowInsetsCompat.Type.navigationBars())
+            window.statusBarColor = android.graphics.Color.TRANSPARENT
+            window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            controller.isAppearanceLightStatusBars = false
+            controller.isAppearanceLightNavigationBars = false
         } else {
             controller.show(WindowInsetsCompat.Type.systemBars())
-            defaultSystemUi?.let { ui ->
-                window.statusBarColor = ui.statusBarColor
-                window.navigationBarColor = ui.navigationBarColor
-                controller.isAppearanceLightStatusBars = ui.lightStatusBars
-                controller.isAppearanceLightNavigationBars = ui.lightNavigationBars
-            }
+            window.statusBarColor = android.graphics.Color.TRANSPARENT
+            window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            controller.isAppearanceLightStatusBars = !colorScheme.isDark
+            controller.isAppearanceLightNavigationBars = !colorScheme.isDark
         }
         onDispose {
-            val act2 = activity ?: return@onDispose
-            val window2 = act2.window
+            val window2 = act.window
             val controller2 = WindowInsetsControllerCompat(window2, window2.decorView)
             // 退出时保持 false，交给 Compose 处理 padding
             WindowCompat.setDecorFitsSystemWindows(window2, false)
@@ -645,15 +697,19 @@ fun MainContainer(
                 window2.navigationBarColor = ui.navigationBarColor
                 controller2.isAppearanceLightStatusBars = ui.lightStatusBars
                 controller2.isAppearanceLightNavigationBars = ui.lightNavigationBars
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    ui.statusBarContrastEnforced?.let { window2.isStatusBarContrastEnforced = it }
+                    ui.navigationBarContrastEnforced?.let { window2.isNavigationBarContrastEnforced = it }
+                }
             }
         }
     }
 
     // 屏幕旋转管理逻辑
-    LaunchedEffect(currentRoute, isPhone) {
+    LaunchedEffect(nowPlayingVisible, isPhone) {
         activity?.let { act ->
             if (isPhone) {
-                if (currentRoute == "now_playing") {
+                if (nowPlayingVisible) {
                     // 手机端在播放页和歌词页允许横屏（遵守系统自动旋转/旋转锁定设置）
                     act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_USER
                 } else {
@@ -666,17 +722,6 @@ fun MainContainer(
             }
         }
     }
-
-    val colorScheme = AsmrTheme.colorScheme
-    val materialColorScheme = MaterialTheme.colorScheme
-    val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
-    val surfaceColor = colorScheme.surface
-    
-    val topBarContainerColor = Color.Transparent
-    val topBarContentColor = colorScheme.onSurface
-    
-    val drawerContainerColor = if (colorScheme.isDark) Color(0xFF121212) else Color.White
-
     LaunchedEffect(appVolumePercent) {
         if (appVolumePercent > 0) {
             lastNonZeroAppVolumePercent = appVolumePercent
@@ -687,7 +732,7 @@ fun MainContainer(
         if (volumeKeyEventTick <= 0L) return@LaunchedEffect
         if (volumeKeyEventTick == lastHandledVolumeKeyTick) return@LaunchedEffect
         lastHandledVolumeKeyTick = volumeKeyEventTick
-        if (currentRoute == "now_playing") {
+        if (nowPlayingVisible) {
             showHardwareVolumeOverlay = false
             nowPlayingVolumeEventTick = volumeKeyEventTick
             return@LaunchedEffect
@@ -696,9 +741,9 @@ fun MainContainer(
         hardwareVolumeOverlayHoldTick = volumeKeyEventTick
     }
 
-    LaunchedEffect(showHardwareVolumeOverlay, hardwareVolumeOverlayHoldTick, hardwareVolumeOverlayInteracting, currentRoute) {
+    LaunchedEffect(showHardwareVolumeOverlay, hardwareVolumeOverlayHoldTick, hardwareVolumeOverlayInteracting, nowPlayingVisible) {
         if (!showHardwareVolumeOverlay) return@LaunchedEffect
-        if (currentRoute == "now_playing") {
+        if (nowPlayingVisible) {
             showHardwareVolumeOverlay = false
             hardwareVolumeOverlayBounds = null
             return@LaunchedEffect
@@ -716,7 +761,7 @@ fun MainContainer(
         scope.launch { drawerState.close() }
     }
 
-    val drawerGesturesEnabled = currentRoute != "now_playing"
+    val drawerGesturesEnabled = !nowPlayingVisible
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -838,9 +883,10 @@ fun MainContainer(
             }
         }
     ) {
-        val miniPlayerVisible = showMiniPlayerBar &&
-            hasCurrentMediaItem &&
-            !playerBackdropVisible
+        val miniPlayerSpaceReserved = showMiniPlayerBar &&
+            hasCurrentMediaItem
+        val miniPlayerVisible = miniPlayerSpaceReserved &&
+            !nowPlayingVisible
         val rightPanelExpandedFromStore by settingsDataStore.recentAlbumsPanelExpanded.collectAsState(initial = recentAlbumsPanelExpandedInitial)
         val rightPanelExpandedState = remember(settingsDataStore, scope, recentAlbumsPanelExpandedInitial) {
             PersistedBooleanState(initial = recentAlbumsPanelExpandedInitial) { expanded ->
@@ -851,7 +897,7 @@ fun MainContainer(
             rightPanelExpandedState.updateFromStore(rightPanelExpandedFromStore)
         }
         CompositionLocalProvider(
-            LocalBottomOverlayPadding provides (if (miniPlayerVisible) MiniPlayerOverlayHeight else 0.dp),
+            LocalBottomOverlayPadding provides (if (miniPlayerSpaceReserved) MiniPlayerOverlayHeight else 0.dp),
             LocalRightPanelExpandedState provides rightPanelExpandedState
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
@@ -866,27 +912,12 @@ fun MainContainer(
                             .fillMaxSize()
                             .background(colorScheme.primarySoft.copy(alpha = 0.16f))
                     )
-                    if (playerBackdropVisible) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .graphicsLayer { alpha = playerBackdropAlpha }
-                        ) {
-                            PlayerSharedBackdrop(
-                                playback = sharedPlayerPlayback,
-                                enabled = coverBackgroundEnabled,
-                                clarity = coverBackgroundClarity,
-                                artworkAlignment = sharedPlayerBackdropAlignment
-                            )
-                        }
-                    }
-
                     Scaffold(
+                        contentWindowInsets = WindowInsets(0, 0, 0, 0),
                         containerColor = Color.Transparent,
                         contentColor = colorScheme.onBackground,
                         topBar = {
-                            if (!playerBackdropVisible) {
-                                Column {
+                            Column {
                                     val compactTopBar =
                                         currentRoute == "library" ||
                                             currentRoute == "library_filter" ||
@@ -900,7 +931,7 @@ fun MainContainer(
                                             currentRoute == "downloads" ||
                                             currentRoute == "dlsite_login" ||
                                             currentRoute?.startsWith("album_detail") == true
-                                    Spacer(modifier = Modifier.windowInsetsTopHeight(WindowInsets.statusBars))
+                                    Spacer(modifier = Modifier.windowInsetsTopHeight(StableWindowInsets.statusBars))
                                     CenterAlignedTopAppBar(
                                         modifier = Modifier.height(if (compactTopBar) 48.dp else 64.dp),
                                         title = {
@@ -1102,7 +1133,6 @@ fun MainContainer(
                                             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                                         }
                                     }
-                                }
                             }
                         }
                     ) { padding ->
@@ -1133,7 +1163,7 @@ fun MainContainer(
                         onPlayTracks = { album, tracks, startTrack ->
                             scope.launch {
                                 if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                    navController.navigateSingleTop("now_playing")
+                                    openNowPlaying()
                                 }
                             }
                         },
@@ -1188,13 +1218,13 @@ fun MainContainer(
                         onPlayTracks = { album, tracks, startTrack ->
                             scope.launch {
                                 if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                    navController.navigateSingleTop("now_playing")
+                                    openNowPlaying()
                                 }
                             }
                         },
                         onPlayMediaItems = { items, startIndex ->
                             playerViewModel.playMediaItems(items, startIndex)
-                            navController.navigateSingleTop("now_playing")
+                            openNowPlaying()
                         },
                         onAddToQueue = { album, track ->
                             playerViewModel.addTrackToQueue(album, track)
@@ -1217,7 +1247,7 @@ fun MainContainer(
                         },
                         onPlayVideo = { title, uriOrPath, artwork, artist ->
                             playerViewModel.playVideo(title, uriOrPath, artwork, artist)
-                            navController.navigateSingleTop("now_playing")
+                            openNowPlaying()
                         },
                         onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
                         onOpenAlbumByRj = { navigator.openAlbumDetailByRjStacked(it) }
@@ -1242,13 +1272,13 @@ fun MainContainer(
                         onPlayTracks = { album, tracks, startTrack ->
                             scope.launch {
                                 if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                    navController.navigateSingleTop("now_playing")
+                                    openNowPlaying()
                                 }
                             }
                         },
                         onPlayMediaItems = { items, startIndex ->
                             playerViewModel.playMediaItems(items, startIndex)
-                            navController.navigateSingleTop("now_playing")
+                            openNowPlaying()
                         },
                         onAddToQueue = { album, track ->
                             playerViewModel.addTrackToQueue(album, track)
@@ -1271,7 +1301,7 @@ fun MainContainer(
                         },
                         onPlayVideo = { title, uriOrPath, artwork, artist ->
                             playerViewModel.playVideo(title, uriOrPath, artwork, artist)
-                            navController.navigateSingleTop("now_playing")
+                            openNowPlaying()
                         },
                         onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
                         onOpenAlbumByRj = { navigator.openAlbumDetailByRjStacked(it) }
@@ -1291,13 +1321,13 @@ fun MainContainer(
                         onPlayTracks = { album, tracks, startTrack ->
                             scope.launch {
                                 if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                    navController.navigateSingleTop("now_playing")
+                                    openNowPlaying()
                                 }
                             }
                         },
                         onPlayMediaItems = { items, startIndex ->
                             playerViewModel.playMediaItems(items, startIndex)
-                            navController.navigateSingleTop("now_playing")
+                            openNowPlaying()
                         },
                         onAddToQueue = { album, track ->
                             playerViewModel.addTrackToQueue(album, track)
@@ -1320,7 +1350,7 @@ fun MainContainer(
                         },
                         onPlayVideo = { title, uriOrPath, artwork, artist ->
                             playerViewModel.playVideo(title, uriOrPath, artwork, artist)
-                            navController.navigateSingleTop("now_playing")
+                            openNowPlaying()
                         },
                         onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
                         onOpenAlbumByRj = { navigator.openAlbumDetailByRjStacked(it) }
@@ -1343,84 +1373,6 @@ fun MainContainer(
                         } else {
                             navController.popBackStack()
                         }
-                    }
-                }
-                composable(
-                    route = "now_playing",
-                    enterTransition = { EnterTransition.None },
-                    exitTransition = { ExitTransition.None },
-                    popEnterTransition = { EnterTransition.None },
-                    popExitTransition = {
-                        fadeOut(
-                            animationSpec = tween(
-                                durationMillis = NowPlayingMotionSpec.RouteFadeDurationMs,
-                                easing = LinearOutSlowInEasing
-                            )
-                        )
-                    }
-                ) {
-                    if (globalDynamicHueEnabled) {
-                        NowPlayingScreen(
-                            windowSizeClass = windowSizeClass,
-                            hardwareVolumeEventTick = nowPlayingVolumeEventTick,
-                            onBack = closeNowPlaying,
-                            onShowQueue = onShowQueue,
-                            onShowSleepTimer = onShowSleepTimer,
-                            onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode ->
-                                navController.navigateSingleTop(
-                                    "playlist_picker" +
-                                        "?mediaId=${encodeRouteArg(mediaId)}" +
-                                        "&uri=${encodeRouteArg(uri)}" +
-                                        "&title=${encodeRouteArg(title)}" +
-                                        "&artist=${encodeRouteArg(artist)}" +
-                                        "&artworkUri=${encodeRouteArg(artworkUri)}" +
-                                        "&albumId=$albumId" +
-                                        "&trackId=$trackId" +
-                                        "&rjCode=${encodeRouteArg(rjCode)}"
-                                )
-                            },
-                            viewModel = playerViewModel,
-                            coverBackgroundEnabled = coverBackgroundEnabled,
-                            coverBackgroundClarity = coverBackgroundClarity,
-                            coverPreviewMode = coverPreviewMode,
-                            lyricsPageSettings = lyricsPageSettings,
-                            audioOutputRouteKind = audioOutputRouteKind,
-                            warningSessionState = appVolumeWarningSessionState,
-                            renderBackdrop = false,
-                            sharedArtworkAlignment = sharedPlayerBackdropAlignment,
-                            sharedCoverDragPreviewState = sharedCoverDragPreviewState
-                        )
-                    } else {
-                        NowPlayingScreen(
-                            windowSizeClass = windowSizeClass,
-                            hardwareVolumeEventTick = nowPlayingVolumeEventTick,
-                            onBack = closeNowPlaying,
-                            onShowQueue = onShowQueue,
-                            onShowSleepTimer = onShowSleepTimer,
-                            onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode ->
-                                navController.navigateSingleTop(
-                                    "playlist_picker" +
-                                        "?mediaId=${encodeRouteArg(mediaId)}" +
-                                        "&uri=${encodeRouteArg(uri)}" +
-                                        "&title=${encodeRouteArg(title)}" +
-                                        "&artist=${encodeRouteArg(artist)}" +
-                                        "&artworkUri=${encodeRouteArg(artworkUri)}" +
-                                        "&albumId=$albumId" +
-                                        "&trackId=$trackId" +
-                                        "&rjCode=${encodeRouteArg(rjCode)}"
-                                )
-                            },
-                            viewModel = playerViewModel,
-                            coverBackgroundEnabled = coverBackgroundEnabled,
-                            coverBackgroundClarity = coverBackgroundClarity,
-                            coverPreviewMode = coverPreviewMode,
-                            lyricsPageSettings = lyricsPageSettings,
-                            audioOutputRouteKind = audioOutputRouteKind,
-                            warningSessionState = appVolumeWarningSessionState,
-                            renderBackdrop = false,
-                            sharedArtworkAlignment = sharedPlayerBackdropAlignment,
-                            sharedCoverDragPreviewState = sharedCoverDragPreviewState
-                        )
                     }
                 }
                 composable("playlists") {
@@ -1456,7 +1408,7 @@ fun MainContainer(
                         title = groupName,
                         onPlayMediaItems = { items, startIndex ->
                             playerViewModel.playMediaItems(items, startIndex)
-                            navController.navigateSingleTop("now_playing")
+                            openNowPlaying()
                         }
                     )
                 }
@@ -1488,7 +1440,7 @@ fun MainContainer(
                         title = playlistName,
                         onPlayAll = { items, startItem ->
                             playerViewModel.playPlaylistItems(items, startItem)
-                            navController.navigateSingleTop("now_playing")
+                            openNowPlaying()
                         }
                     )
                 }
@@ -1499,7 +1451,7 @@ fun MainContainer(
                         type = type,
                         onPlayAll = { items, startItem ->
                             playerViewModel.playPlaylistItems(items, startItem)
-                            navController.navigateSingleTop("now_playing")
+                            openNowPlaying()
                         }
                     )
                 }
@@ -1707,13 +1659,96 @@ fun MainContainer(
                 ) {
                     MiniPlayer(
                         onClick = {
-                            if (currentRoute != "now_playing") {
-                                navController.navigateSingleTop("now_playing")
+                            if (!nowPlayingVisible) {
+                                openNowPlaying()
                             }
                         },
                         onOpenQueue = onShowQueue
                     )
                 }
+            }
+        }
+
+        if (nowPlayingVisible) {
+            Box(
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .pointerInteropFilter { true }
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(colorScheme.background.copy(alpha = 0.92f * nowPlayingBackdropAlpha))
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(colorScheme.primarySoft.copy(alpha = 0.22f * nowPlayingBackdropAlpha))
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = nowPlayingBackdropAlpha }
+                ) {
+                    PlayerSharedBackdrop(
+                        playback = sharedPlayerPlayback,
+                        enabled = coverBackgroundEnabled,
+                        clarity = coverBackgroundClarity,
+                        artworkAlignment = sharedPlayerBackdropAlignment
+                    )
+                }
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = nowPlayingBottomScrimAlpha }
+                        .background(
+                            Brush.verticalGradient(
+                                colorStops = arrayOf(
+                                    0f to Color.Transparent,
+                                    0.48f to Color.Transparent,
+                                    0.78f to colorScheme.background.copy(alpha = 0.24f),
+                                    1f to colorScheme.background.copy(alpha = if (colorScheme.isDark) 0.74f else 0.66f)
+                                )
+                            )
+                        )
+                )
+                NowPlayingScreen(
+                    windowSizeClass = windowSizeClass,
+                    hardwareVolumeEventTick = nowPlayingVolumeEventTick,
+                    onBack = closeNowPlaying,
+                    onRouteExitStarted = { exitDurationMs ->
+                        nowPlayingBackdropExitDurationMs = exitDurationMs
+                        nowPlayingBackdropActive = false
+                    },
+                    onShowQueue = onShowQueue,
+                    onShowSleepTimer = onShowSleepTimer,
+                    onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode ->
+                        navController.navigateSingleTop(
+                            "playlist_picker" +
+                                "?mediaId=${encodeRouteArg(mediaId)}" +
+                                "&uri=${encodeRouteArg(uri)}" +
+                                "&title=${encodeRouteArg(title)}" +
+                                "&artist=${encodeRouteArg(artist)}" +
+                                "&artworkUri=${encodeRouteArg(artworkUri)}" +
+                                "&albumId=$albumId" +
+                                "&trackId=$trackId" +
+                                "&rjCode=${encodeRouteArg(rjCode)}"
+                        )
+                    },
+                    viewModel = playerViewModel,
+                    coverBackgroundEnabled = coverBackgroundEnabled,
+                    coverBackgroundClarity = coverBackgroundClarity,
+                    coverPreviewMode = coverPreviewMode,
+                    lyricsPageSettings = lyricsPageSettings,
+                    audioOutputRouteKind = audioOutputRouteKind,
+                    warningSessionState = appVolumeWarningSessionState,
+                    renderBackdrop = false,
+                    sharedArtworkAlignment = sharedPlayerBackdropAlignment,
+                    sharedCoverDragPreviewState = sharedCoverDragPreviewState
+                )
             }
         }
     }
@@ -2227,7 +2262,9 @@ private data class DefaultSystemUiState(
     val statusBarColor: Int,
     val navigationBarColor: Int,
     val lightStatusBars: Boolean,
-    val lightNavigationBars: Boolean
+    val lightNavigationBars: Boolean,
+    val statusBarContrastEnforced: Boolean? = null,
+    val navigationBarContrastEnforced: Boolean? = null
 )
 
 private data class ThemeMediaSource(
