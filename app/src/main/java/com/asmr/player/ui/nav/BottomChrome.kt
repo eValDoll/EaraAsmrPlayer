@@ -53,6 +53,7 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.boundsInRoot
@@ -277,6 +278,27 @@ fun resolvePrimaryRoute(
     }
 }
 
+fun resolvePrimaryPagerRoutes(
+    navItems: List<BottomChromeNavItem>,
+    activeRoute: String,
+    preferredPinnedRoute: String? = null
+): List<String> {
+    if (navItems.isEmpty()) return emptyList()
+
+    val metrics = bottomChromeMetrics(largeLayout = false)
+    val layout = computeVisibleNavItems(
+        allItems = navItems,
+        activeRoute = activeRoute,
+        availableWidth = metrics.preferredExpandedWidth,
+        metrics = metrics,
+        preferredPinnedRoute = preferredPinnedRoute,
+        maxVisibleItems = BottomNavExpandedSlotCount - 1
+    )
+    return (layout.visibleItems + layout.overflowItems)
+        .map { it.route }
+        .distinct()
+}
+
 private fun computeVisibleNavItems(
     allItems: List<BottomChromeNavItem>,
     activeRoute: String,
@@ -477,6 +499,7 @@ private fun computeBottomNavEntryVisibility(
 @Composable
 fun BottomChrome(
     activeRoute: String,
+    selectionProgresses: Map<String, Float> = mapOf(activeRoute to 1f),
     preferredPinnedRoute: String? = null,
     miniPlayerVisible: Boolean,
     miniPlayerDisplayMode: MiniPlayerDisplayMode,
@@ -544,6 +567,7 @@ fun BottomChrome(
             BottomNavigationPill(
                 navItems = navItems,
                 activeRoute = activeRoute,
+                selectionProgresses = selectionProgresses,
                 preferredPinnedRoute = preferredPinnedRoute,
                 expanded = navExpanded,
                 availableWidth = navWidthTarget,
@@ -576,6 +600,7 @@ fun BottomChrome(
 private fun BottomNavigationPill(
     navItems: List<BottomChromeNavItem>,
     activeRoute: String,
+    selectionProgresses: Map<String, Float>,
     preferredPinnedRoute: String? = null,
     expanded: Boolean,
     availableWidth: Dp,
@@ -598,6 +623,7 @@ private fun BottomNavigationPill(
     BottomNavigationPillSurface(
         navItems = navItems,
         activeRoute = activeRoute,
+        selectionProgresses = selectionProgresses,
         preferredPinnedRoute = preferredPinnedRoute,
         expanded = expanded,
         availableWidth = availableWidth,
@@ -617,6 +643,7 @@ private fun BottomNavigationPill(
 private fun BottomNavigationPillSurface(
     navItems: List<BottomChromeNavItem>,
     activeRoute: String,
+    selectionProgresses: Map<String, Float>,
     preferredPinnedRoute: String?,
     expanded: Boolean,
     availableWidth: Dp,
@@ -632,6 +659,25 @@ private fun BottomNavigationPillSurface(
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val density = LocalDensity.current
+    val resolvedSelectionProgresses = remember(activeRoute, selectionProgresses) {
+        if (selectionProgresses.isEmpty()) {
+            mapOf(activeRoute to 1f)
+        } else {
+            selectionProgresses.mapValues { (_, value) -> value.coerceIn(0f, 1f) }
+        }
+    }
+    val layoutFocusRoute = remember(expanded, activeRoute, resolvedSelectionProgresses) {
+        if (expanded) {
+            activeRoute
+        } else {
+            resolvedSelectionProgresses
+                .maxByOrNull { (_, progress) -> progress }
+                ?.takeIf { it.value > 0.001f }
+                ?.key
+                ?: activeRoute
+        }
+    }
+    val layoutPreferredPinnedRoute = if (expanded) preferredPinnedRoute else layoutFocusRoute
     val containerColor = colorScheme.primarySoft
         .copy(alpha = if (colorScheme.isDark) 0.10f else 0.14f)
         .compositeOver(colorScheme.surface)
@@ -640,7 +686,7 @@ private fun BottomNavigationPillSurface(
     } else {
         colorScheme.primaryStrong.copy(alpha = 0.14f)
     }
-    val activeItem = navItems.firstOrNull { it.route == activeRoute } ?: navItems.firstOrNull()
+    val activeItem = navItems.firstOrNull { it.route == layoutFocusRoute } ?: navItems.firstOrNull()
     var lastExpandedWidth by remember(navItems, metrics) {
         mutableStateOf(metrics.preferredExpandedWidth)
     }
@@ -657,17 +703,17 @@ private fun BottomNavigationPillSurface(
     val expandedReferenceMaxVisibleItems = if (expanded) maxVisibleItems else lastExpandedMaxVisibleItems
     val expandedLayout = remember(
         navItems,
-        activeRoute,
-        preferredPinnedRoute,
+        layoutFocusRoute,
+        layoutPreferredPinnedRoute,
         expandedReferenceWidth,
         expandedReferenceMaxVisibleItems
     ) {
         computeVisibleNavItems(
             allItems = navItems,
-            activeRoute = activeRoute,
+            activeRoute = layoutFocusRoute,
             availableWidth = expandedReferenceWidth,
             metrics = metrics,
-            preferredPinnedRoute = preferredPinnedRoute,
+            preferredPinnedRoute = layoutPreferredPinnedRoute,
             maxVisibleItems = expandedReferenceMaxVisibleItems
         )
     }
@@ -677,12 +723,15 @@ private fun BottomNavigationPillSurface(
             overflowItems = emptyList(),
             showsOverflow = false
         )
+    val overflowSelectionProgress = expandedLayout.overflowItems
+        .maxOfOrNull { item -> resolvedSelectionProgresses[item.route] ?: 0f }
+        ?: 0f
     val motionEntries = buildBottomNavRailEntries(motionLayout, metrics)
     val motionOffsets = computeBottomNavRailOffsets(motionEntries, metrics)
     val railShift = computeBottomNavRailShift(
         entries = motionEntries,
         offsets = motionOffsets,
-        activeRoute = activeRoute,
+        activeRoute = layoutFocusRoute,
         currentWidth = currentWidth,
         metrics = metrics
     )
@@ -777,12 +826,16 @@ private fun BottomNavigationPillSurface(
         ) {
             motionEntries.forEachIndexed { index, entry ->
                 val itemOffset = motionOffsets.getOrNull(index)?.minus(railShift) ?: 0.dp
-                val isActiveEntry = !entry.isOverflow && entry.item.route == activeRoute
+                val selectedProgress = if (entry.isOverflow) {
+                    maxOf(overflowSelectionProgress, overflowRevealProgress)
+                } else {
+                    resolvedSelectionProgresses[entry.item.route] ?: 0f
+                }
                 val entryVisibility = computeBottomNavEntryVisibility(
                     entryLeft = itemOffset,
                     entryWidth = entry.width,
                     currentWidth = currentWidth,
-                    keepVisible = isActiveEntry
+                    keepVisible = selectedProgress > 0.001f
                 )
                 val isFullyVisible =
                     itemOffset.value >= -0.5f &&
@@ -809,17 +862,13 @@ private fun BottomNavigationPillSurface(
                 ) {
                     BottomNavItemChip(
                         item = entry.item,
-                        selected = if (entry.isOverflow) {
-                            overflowRevealProgress > 0.45f
-                        } else {
-                            isActiveEntry
-                        },
+                        selectedProgress = selectedProgress,
                         collapsed = !expanded,
                         metrics = metrics,
                         enabled = if (entry.isOverflow) {
                             canShowOverflow && isFullyVisible
                         } else {
-                            isActiveEntry || isFullyVisible
+                            selectedProgress > 0.001f || isFullyVisible
                         },
                         modifier = if (entry.isOverflow) {
                             Modifier.testTag(BottomNavOverflowTag)
@@ -870,12 +919,12 @@ private fun BottomNavigationPillSurface(
                 verticalArrangement = Arrangement.spacedBy(metrics.overflowItemSpacing)
             ) {
                 expandedLayout.overflowItems.forEach { item ->
-                    val selected = item.route == activeRoute
-                    val entryColor = if (selected) {
-                        colorScheme.primarySoft.copy(alpha = if (colorScheme.isDark) 0.44f else 0.76f)
-                    } else {
-                        colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.28f else 0.68f)
-                    }
+                    val selectedProgress = resolvedSelectionProgresses[item.route] ?: 0f
+                    val entryColor = lerp(
+                        colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.28f else 0.68f),
+                        colorScheme.primarySoft.copy(alpha = if (colorScheme.isDark) 0.44f else 0.76f),
+                        selectedProgress
+                    )
                     Box(
                         modifier = Modifier
                             .size(metrics.overflowItemSize)
@@ -891,7 +940,7 @@ private fun BottomNavigationPillSurface(
                             imageVector = item.icon,
                             contentDescription = item.label,
                             modifier = Modifier.size(metrics.iconSize),
-                            tint = if (selected) colorScheme.primaryStrong else colorScheme.textSecondary
+                            tint = lerp(colorScheme.textSecondary, colorScheme.primaryStrong, selectedProgress)
                         )
                     }
                 }
@@ -1061,7 +1110,7 @@ private fun buildBottomNavContainerPath(
 @Composable
 private fun BottomNavItemChip(
     item: BottomChromeNavItem,
-    selected: Boolean,
+    selectedProgress: Float,
     collapsed: Boolean,
     metrics: BottomChromeMetrics,
     enabled: Boolean = true,
@@ -1069,29 +1118,17 @@ private fun BottomNavItemChip(
     modifier: Modifier = Modifier
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val resolvedSelectedProgress = selectedProgress.coerceIn(0f, 1f)
     val activeContainer = colorScheme.primarySoft.copy(alpha = if (colorScheme.isDark) 0.52f else 0.95f)
     val inactiveContainer = if (colorScheme.isDark) {
         colorScheme.surfaceVariant.copy(alpha = 0.52f)
     } else {
         colorScheme.surfaceVariant.copy(alpha = 0.82f)
     }
-    val contentColor = if (selected) colorScheme.primaryStrong else colorScheme.textSecondary
-    val scale by animateFloatAsState(
-        targetValue = if (selected) 1.04f else 1f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "bottomNavItemScale"
-    )
-    val glowAlpha by animateFloatAsState(
-        targetValue = if (selected) 1f else 0f,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "bottomNavItemGlowAlpha"
-    )
+    val contentColor = lerp(colorScheme.textSecondary, colorScheme.primaryStrong, resolvedSelectedProgress)
+    val containerColor = lerp(inactiveContainer, activeContainer, resolvedSelectedProgress)
+    val scale = 1f + (0.04f * resolvedSelectedProgress)
+    val glowAlpha = resolvedSelectedProgress
     val glowSize by animateDpAsState(
         targetValue = if (collapsed) metrics.glowCollapsedSize else metrics.glowExpandedSize,
         animationSpec = spring(
@@ -1108,7 +1145,7 @@ private fun BottomNavItemChip(
             .testTag("bottomNavItem:${item.route}"),
         contentAlignment = Alignment.Center
     ) {
-        if (glowAlpha > 0f) {
+        if (glowAlpha > 0.001f) {
             Box(
                 modifier = Modifier
                     .size(glowSize)
@@ -1127,7 +1164,7 @@ private fun BottomNavItemChip(
                 },
             shape = CircleShape,
             colors = CardDefaults.elevatedCardColors(
-                containerColor = if (selected) activeContainer else inactiveContainer,
+                containerColor = containerColor,
                 contentColor = contentColor
             ),
             elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp)
