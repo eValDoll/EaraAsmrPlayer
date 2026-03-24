@@ -141,7 +141,7 @@ private data class BottomNavRailEntry(
     val isOverflow: Boolean = false
 )
 
-private data class BottomChromeMetrics(
+internal data class BottomChromeMetrics(
     val overlayHeight: Dp,
     val barHeight: Dp,
     val barCornerRadius: Dp,
