@@ -59,6 +59,7 @@ import com.asmr.player.data.settings.FloatingLyricsSettings
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.ui.library.BulkPhase
 import com.asmr.player.ui.library.LibraryViewModel
+import com.asmr.player.ui.common.AppSupportStatusSection
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
@@ -762,6 +763,12 @@ fun SettingsScreen(
                             }
                             else -> {}
                         }
+                    }
+                }
+
+                item(key = "group:support_status") {
+                    SettingsGroup(title = "支持与状态") {
+                        AppSupportStatusSection()
                     }
                 }
 

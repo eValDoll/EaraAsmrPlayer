@@ -89,8 +89,12 @@ import com.asmr.player.ui.drawer.StatisticsViewModel
 import com.asmr.player.ui.drawer.SiteStatus
 import com.asmr.player.ui.drawer.SiteStatusType
 import com.asmr.player.ui.nav.AppNavigator
+import com.asmr.player.ui.nav.BottomChrome
+import com.asmr.player.ui.nav.bottomChromeNavItems
+import com.asmr.player.ui.nav.bottomChromeOverlayHeight
+import com.asmr.player.ui.nav.isPrimaryRoute
+import com.asmr.player.ui.nav.resolvePrimaryRoute
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
-import com.asmr.player.ui.player.MiniPlayerOverlayHeight
 import com.asmr.player.ui.splash.EaraSplashOverlay
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -133,6 +137,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import com.asmr.player.ui.player.QueueSheetContent
 import com.asmr.player.ui.player.SleepTimerSheetContent
+import com.asmr.player.ui.player.MiniPlayerDisplayMode
 
 import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.data.settings.CoverPreviewMode
@@ -465,6 +470,23 @@ fun MainContainer(
     val initialDestination = remember(startRouteFromIntent) {
         if (startRouteFromIntent == "search") "search" else "library"
     }
+    var lastPrimaryRoute by rememberSaveable { mutableStateOf(initialDestination) }
+    val activePrimaryRoute = resolvePrimaryRoute(
+        currentRoute = currentRoute,
+        lastPrimaryRoute = lastPrimaryRoute,
+        playlistSystemType = navBackStackEntry?.arguments?.getString("type")
+    )
+    val bottomNavItems = remember { bottomChromeNavItems() }
+    val fixedBottomNavRoutes = remember(bottomNavItems) {
+        bottomNavItems.take(3).map { it.route }.toSet()
+    }
+    val bottomNavRoutes = remember(bottomNavItems) { bottomNavItems.map { it.route }.toSet() }
+    val storedMiniPlayerDisplayMode by settingsDataStore.miniPlayerDisplayMode.collectAsState(
+        initial = MiniPlayerDisplayMode.CoverOnly.name
+    )
+    val storedBottomChromePinnedRoute by settingsDataStore.bottomChromePinnedRoute.collectAsState(initial = null)
+    var miniPlayerDisplayMode by rememberSaveable { mutableStateOf(MiniPlayerDisplayMode.CoverOnly) }
+    var bottomChromePinnedRoute by rememberSaveable { mutableStateOf<String?>(null) }
     LaunchedEffect(Unit) {
         withFrameNanos { }
         withFrameNanos { }
@@ -614,15 +636,30 @@ fun MainContainer(
         lastRouteForTouchBlock = currentRoute
     }
 
+    LaunchedEffect(activePrimaryRoute) {
+        if (isPrimaryRoute(activePrimaryRoute)) {
+            lastPrimaryRoute = activePrimaryRoute
+        }
+    }
+
+    LaunchedEffect(storedMiniPlayerDisplayMode) {
+        miniPlayerDisplayMode = runCatching {
+            MiniPlayerDisplayMode.valueOf(storedMiniPlayerDisplayMode)
+        }.getOrElse {
+            MiniPlayerDisplayMode.CoverOnly
+        }
+    }
+
+    LaunchedEffect(storedBottomChromePinnedRoute) {
+        bottomChromePinnedRoute = storedBottomChromePinnedRoute
+    }
+
     LaunchedEffect(nowPlayingVisible) {
         if (!nowPlayingVisible) return@LaunchedEffect
         showHardwareVolumeOverlay = false
         hardwareVolumeOverlayInteracting = false
         hardwareVolumeOverlayBounds = null
         nowPlayingVolumeEventTick = 0L
-        if (drawerState.isOpen) {
-            drawerState.close()
-        }
     }
 
     val colorScheme = AsmrTheme.colorScheme
@@ -761,7 +798,7 @@ fun MainContainer(
         scope.launch { drawerState.close() }
     }
 
-    val drawerGesturesEnabled = !nowPlayingVisible
+    val drawerGesturesEnabled = false
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -883,10 +920,10 @@ fun MainContainer(
             }
         }
     ) {
-        val miniPlayerSpaceReserved = showMiniPlayerBar &&
-            hasCurrentMediaItem
-        val miniPlayerVisible = miniPlayerSpaceReserved &&
+        val miniPlayerVisible = showMiniPlayerBar &&
+            hasCurrentMediaItem &&
             !nowPlayingVisible
+        val bottomChromeVisible = !nowPlayingVisible
         val rightPanelExpandedFromStore by settingsDataStore.recentAlbumsPanelExpanded.collectAsState(initial = recentAlbumsPanelExpandedInitial)
         val rightPanelExpandedState = remember(settingsDataStore, scope, recentAlbumsPanelExpandedInitial) {
             PersistedBooleanState(initial = recentAlbumsPanelExpandedInitial) { expanded ->
@@ -896,8 +933,22 @@ fun MainContainer(
         LaunchedEffect(rightPanelExpandedFromStore) {
             rightPanelExpandedState.updateFromStore(rightPanelExpandedFromStore)
         }
+        val currentScreenIsPrimary = when {
+            currentRoute == "library" -> true
+            currentRoute == "search" -> true
+            currentRoute == "playlists" -> true
+            currentRoute == "groups" -> true
+            currentRoute == "settings" -> true
+            currentRoute == "downloads" -> true
+            currentRoute == "dlsite_login" -> true
+            currentRoute == "playlist_system/{type}" &&
+                navBackStackEntry?.arguments?.getString("type") == "favorites" -> true
+            else -> false
+        }
+        val showBackButton = !currentScreenIsPrimary
+        val useLargeBottomChrome = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && !isPhone
         CompositionLocalProvider(
-            LocalBottomOverlayPadding provides (if (miniPlayerSpaceReserved) MiniPlayerOverlayHeight else 0.dp),
+            LocalBottomOverlayPadding provides (if (bottomChromeVisible) bottomChromeOverlayHeight(useLargeBottomChrome) else 0.dp),
             LocalRightPanelExpandedState provides rightPanelExpandedState
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
@@ -985,13 +1036,9 @@ fun MainContainer(
                                             actionIconContentColor = topBarContentColor
                                         ),
                                         navigationIcon = {
-                                            if (currentRoute == "library_filter" || currentRoute?.startsWith("playlist_picker") == true) {
+                                            if (showBackButton && navController.previousBackStackEntry != null) {
                                                 IconButton(onClick = { navController.popBackStack() }) {
                                                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-                                                }
-                                            } else {
-                                                IconButton(onClick = { scope.launch { drawerState.open() } }) {
-                                                    Icon(Icons.Default.Menu, contentDescription = null)
                                                 }
                                             }
                                         },
@@ -1627,7 +1674,7 @@ fun MainContainer(
 
         }
 
-        if (miniPlayerVisible) {
+        if (bottomChromeVisible) {
             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                 val isCompactWidth = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
                 val canUseRightPanel = !isCompactWidth &&
@@ -1649,21 +1696,38 @@ fun MainContainer(
                     animationSpec = tween(durationMillis = if (rightPanelExpanded) 220 else 180),
                     label = "miniPlayerReservedRight"
                 )
-                val miniWidth = (maxWidth - reservedRight).coerceAtLeast(0.dp)
-                val miniAlignment = Alignment.BottomStart
+                val chromeWidth = (maxWidth - reservedRight - 48.dp).coerceAtLeast(0.dp)
                 Box(
                     modifier = Modifier
-                        .align(miniAlignment)
-                        .padding(start = 24.dp) // 增加左侧外边距
-                        .width(miniWidth - 24.dp) // 宽度相应减小
+                        .align(Alignment.BottomStart)
+                        .graphicsLayer { clip = false }
+                        .padding(start = 22.dp, bottom = 24.dp)
+                        .width(chromeWidth)
                 ) {
-                    MiniPlayer(
-                        onClick = {
+                    BottomChrome(
+                        activeRoute = activePrimaryRoute,
+                        preferredPinnedRoute = bottomChromePinnedRoute,
+                        miniPlayerVisible = miniPlayerVisible,
+                        miniPlayerDisplayMode = miniPlayerDisplayMode,
+                        largeLayout = useLargeBottomChrome,
+                        navItems = bottomNavItems,
+                        onMiniPlayerDisplayModeChange = { nextMode ->
+                            miniPlayerDisplayMode = nextMode
+                            scope.launch { settingsDataStore.setMiniPlayerDisplayMode(nextMode.name) }
+                        },
+                        onOpenNowPlaying = {
                             if (!nowPlayingVisible) {
                                 openNowPlaying()
                             }
                         },
-                        onOpenQueue = onShowQueue
+                        onOpenQueue = onShowQueue,
+                        onNavigate = { route ->
+                            if (route in bottomNavRoutes && route !in fixedBottomNavRoutes) {
+                                bottomChromePinnedRoute = route
+                                scope.launch { settingsDataStore.setBottomChromePinnedRoute(route) }
+                            }
+                            navController.navigateSingleTop(route, popUpToRoute = "library")
+                        }
                     )
                 }
             }
