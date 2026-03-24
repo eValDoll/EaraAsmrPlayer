@@ -30,6 +30,7 @@ import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
@@ -38,6 +39,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -50,6 +52,8 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -73,11 +77,12 @@ import com.asmr.player.R
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.ui.common.AsmrAsyncImage
+import com.asmr.player.ui.common.AudioOutputRouteIcon
+import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
 import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
 import com.asmr.player.ui.common.AppVolumeSlider
 import com.asmr.player.ui.common.AppVolumeWarningSessionState
 import com.asmr.player.ui.common.StableWindowInsets
-import com.asmr.player.ui.common.volumeRouteIcon
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.ui.common.EqualizerPanel
@@ -150,7 +155,7 @@ private fun AnimatedContentTransitionScope<NowPlayingSurfaceMode>.nowPlayingSurf
 
 @Composable
 @androidx.media3.common.util.UnstableApi
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 internal fun NowPlayingScreen(
     windowSizeClass: WindowSizeClass,
     hardwareVolumeEventTick: Long,
@@ -181,6 +186,9 @@ internal fun NowPlayingScreen(
     val metadata = item?.mediaMetadata
     val colorScheme = AsmrTheme.colorScheme
     val uriText = item?.localConfiguration?.uri?.toString().orEmpty()
+    val artworkModel = remember(metadata?.artworkUri) {
+        sanitizeBackdropArtworkModel(metadata?.artworkUri)
+    }
     val videoUri = item?.localConfiguration?.uri
     val mimeType = item?.localConfiguration?.mimeType.orEmpty()
     val ext = uriText.substringBefore('#').substringBefore('?').substringAfterLast('.', "").lowercase()
@@ -195,10 +203,10 @@ internal fun NowPlayingScreen(
     val dominantColorResult by if (isVideo) {
         rememberComputedVideoFrameDominantColorCenterWeighted(videoUri = videoUri, defaultColor = colorScheme.background)
     } else {
-        rememberComputedDominantColorCenterWeighted(model = metadata?.artworkUri, defaultColor = colorScheme.background)
+        rememberComputedDominantColorCenterWeighted(model = artworkModel, defaultColor = colorScheme.background)
     }
     val targetAccentColor = if (coverBackgroundEnabled) {
-        dominantColorResult.color ?: colorScheme.primary
+        dominantColorResult.color ?: colorScheme.primarySoft
     } else {
         colorScheme.primary
     }
@@ -353,20 +361,15 @@ internal fun NowPlayingScreen(
         NowPlayingMotionSlot.HEADER
     )
     val sharedHeaderHorizontalPadding = if (isLandscape) 4.dp else 12.dp
+    var volumeControlExpanded by remember { mutableStateOf(false) }
+    var volumeControlBounds by remember { mutableStateOf<Rect?>(null) }
 
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
         if (renderBackdrop && !isVideo) {
-            val backgroundArtwork = remember(metadata?.artworkUri) {
-                metadata?.artworkUri?.takeUnless { u ->
-                    val s = u.toString()
-                    u.scheme.equals("android.resource", ignoreCase = true) ||
-                        s.contains("ic_placeholder", ignoreCase = true)
-                }
-            }
             CoverArtworkBackground(
-                artworkModel = backgroundArtwork,
+                artworkModel = artworkModel,
                 enabled = coverBackgroundEnabled,
                 clarity = coverBackgroundClarity,
                 overlayBaseColor = colorScheme.background,
@@ -1101,12 +1104,17 @@ internal fun NowPlayingScreen(
                     VolumeControl(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .then(volumeMotion),
+                            .then(volumeMotion)
+                            .onGloballyPositioned { coordinates ->
+                                volumeControlBounds = coordinates.boundsInRoot()
+                            },
                         accentColor = accentColor,
                         viewModel = viewModel,
                         hardwareVolumeEventTick = hardwareVolumeEventTick,
                         audioOutputRouteKind = audioOutputRouteKind,
-                        warningSessionState = warningSessionState
+                        warningSessionState = warningSessionState,
+                        expanded = volumeControlExpanded,
+                        onExpandedChange = { volumeControlExpanded = it }
                     )
                 }
             }
@@ -1327,10 +1335,18 @@ internal fun NowPlayingScreen(
                 }
             }
         }
+
+        if (volumeControlExpanded) {
+            DismissOutsideBoundsOverlay(
+                targetBoundsInRoot = volumeControlBounds,
+                onDismiss = { volumeControlExpanded = false }
+            )
+        }
     }
 }
 
 @Composable
+@OptIn(ExperimentalFoundationApi::class)
 private fun PlayerSurfaceHeader(
     title: String,
     isLandscape: Boolean,
@@ -1365,7 +1381,9 @@ private fun PlayerSurfaceHeader(
                 fontSize = if (isLandscape) 14.sp else 16.sp,
                 shadow = headerShadow
             ),
-            modifier = Modifier.weight(1f),
+            modifier = Modifier
+                .weight(1f)
+                .basicMarquee(),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             color = colorScheme.textPrimary
@@ -1498,6 +1516,8 @@ private fun ArtworkBox(
                         contentScale = ContentScale.Crop,
                         alignment = artworkAlignment,
                         placeholderCornerRadius = 28,
+                        retainPainterDuringReload = true,
+                        loadWhenSizeStableForMillis = 120L,
                         modifier = Modifier.fillMaxSize(),
                     )
                 }
@@ -2032,9 +2052,10 @@ private fun VolumeControl(
     viewModel: PlayerViewModel,
     hardwareVolumeEventTick: Long,
     audioOutputRouteKind: AudioOutputRouteKind,
-    warningSessionState: AppVolumeWarningSessionState
+    warningSessionState: AppVolumeWarningSessionState,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
     val volume by viewModel.appVolumePercent.collectAsState()
     var lastNonZeroVolume by remember { mutableIntStateOf(AppVolume.DefaultPercent) }
     var lastInteractionAt by remember { mutableLongStateOf(0L) }
@@ -2061,7 +2082,7 @@ private fun VolumeControl(
         if (hardwareVolumeEventTick <= 0L) return@LaunchedEffect
         if (hardwareVolumeEventTick == lastHandledHardwareVolumeEventTick) return@LaunchedEffect
         lastHandledHardwareVolumeEventTick = hardwareVolumeEventTick
-        expanded = true
+        onExpandedChange(true)
         lastInteractionAt = SystemClock.elapsedRealtime()
     }
 
@@ -2084,16 +2105,12 @@ private fun VolumeControl(
         val snapshot = lastInteractionAt
         delay(3_000)
         if (expanded && lastInteractionAt == snapshot) {
-            expanded = false
+            onExpandedChange(false)
         }
     }
 
     val colorScheme = AsmrTheme.colorScheme
     val isMuted = volume == 0
-    val icon = volumeRouteIcon(
-        routeKind = audioOutputRouteKind,
-        isMuted = isMuted
-    )
 
     AnimatedContent(
         targetState = expanded,
@@ -2116,16 +2133,16 @@ private fun VolumeControl(
                             }
                         },
                         onLongClick = {
-                            expanded = true
+                            onExpandedChange(true)
                             lastInteractionAt = SystemClock.elapsedRealtime()
                         }
                     ),
                 horizontalArrangement = Arrangement.Center,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
+                AudioOutputRouteIcon(
+                    routeKind = audioOutputRouteKind,
+                    isMuted = isMuted,
                     tint = accentColor,
                     modifier = Modifier.size(22.dp)
                 )
@@ -2148,10 +2165,10 @@ private fun VolumeControl(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                    tint = accentColor,
+                    AudioOutputRouteIcon(
+                        routeKind = audioOutputRouteKind,
+                        isMuted = isMuted,
+                        tint = accentColor,
                         modifier = Modifier
                             .size(20.dp)
                             .combinedClickable(

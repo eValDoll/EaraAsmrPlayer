@@ -162,7 +162,8 @@ import com.asmr.player.ui.common.AppVolumeWarningSessionState
 import com.asmr.player.ui.common.rememberAppVolumeWarningSessionState
 import com.asmr.player.ui.common.rememberCurrentAudioOutputRouteKind
 import com.asmr.player.ui.common.rememberProtectedAppVolumeChangeState
-import com.asmr.player.ui.common.volumeRouteIcon
+import com.asmr.player.ui.common.AudioOutputRouteIcon
+import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
 import com.asmr.player.service.AudioOutputRouteKind
 import javax.inject.Inject
 import kotlinx.coroutines.delay
@@ -517,6 +518,8 @@ fun MainContainer(
     var nowPlayingVolumeEventTick by remember { mutableLongStateOf(0L) }
     var lastNonZeroAppVolumePercent by rememberSaveable { mutableIntStateOf(AppVolume.DefaultPercent) }
     var hardwareVolumeOverlayBounds by remember { mutableStateOf<Rect?>(null) }
+    var bottomChromeOverflowExpanded by remember { mutableStateOf(false) }
+    var bottomChromeOverflowBounds by remember { mutableStateOf<Rect?>(null) }
     val appVolumeWarningSessionState = rememberAppVolumeWarningSessionState()
     val audioOutputRouteKind = rememberCurrentAudioOutputRouteKind()
     
@@ -597,28 +600,12 @@ fun MainContainer(
         },
         label = "nowPlayingBackdropAlpha"
     )
-    val nowPlayingBottomScrimAlpha by animateFloatAsState(
-        targetValue = if (nowPlayingBackdropActive) 1f else 0f,
-        animationSpec = if (nowPlayingBackdropActive) {
-            tween(
-                durationMillis = 440,
-                easing = LinearOutSlowInEasing
-            )
-        } else {
-            keyframes {
-                durationMillis = nowPlayingBackdropExitDurationMs
-                1f at 0
-                1f at (nowPlayingBackdropExitDurationMs * 0.7f).toInt()
-                0f at nowPlayingBackdropExitDurationMs using FastOutLinearInEasing
-            }
-        },
-        label = "nowPlayingBottomScrimAlpha"
-    )
-
     LaunchedEffect(currentRoute) {
         showHardwareVolumeOverlay = false
         hardwareVolumeOverlayInteracting = false
         hardwareVolumeOverlayBounds = null
+        bottomChromeOverflowExpanded = false
+        bottomChromeOverflowBounds = null
         val last = lastRouteForTouchBlock
         val seq = ++touchBlockSeq
         if (last != null && currentRoute != null && last != currentRoute) {
@@ -659,6 +646,8 @@ fun MainContainer(
         showHardwareVolumeOverlay = false
         hardwareVolumeOverlayInteracting = false
         hardwareVolumeOverlayBounds = null
+        bottomChromeOverflowExpanded = false
+        bottomChromeOverflowBounds = null
         nowPlayingVolumeEventTick = 0L
     }
 
@@ -1611,21 +1600,18 @@ fun MainContainer(
 
             Box(
                 modifier = Modifier
-                    .fillMaxSize()
-                    .pointerInteropFilter { event ->
-                        if (!showHardwareVolumeOverlay || event.action != android.view.MotionEvent.ACTION_DOWN) {
-                            return@pointerInteropFilter false
-                        }
-                        val bounds = hardwareVolumeOverlayBounds
-                        if (bounds != null && bounds.contains(androidx.compose.ui.geometry.Offset(event.x, event.y))) {
-                            return@pointerInteropFilter false
-                        }
-                        showHardwareVolumeOverlay = false
-                        hardwareVolumeOverlayBounds = null
-                        false
-                    },
+                    .fillMaxSize(),
                 contentAlignment = Alignment.CenterEnd
             ) {
+                if (showHardwareVolumeOverlay) {
+                    DismissOutsideBoundsOverlay(
+                        targetBoundsInRoot = hardwareVolumeOverlayBounds,
+                        onDismiss = {
+                            showHardwareVolumeOverlay = false
+                            hardwareVolumeOverlayBounds = null
+                        }
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -1675,7 +1661,9 @@ fun MainContainer(
         }
 
         if (bottomChromeVisible) {
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            BoxWithConstraints(
+                modifier = Modifier.fillMaxSize()
+            ) {
                 val isCompactWidth = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
                 val canUseRightPanel = !isCompactWidth &&
                     !isPhone &&
@@ -1697,6 +1685,12 @@ fun MainContainer(
                     label = "miniPlayerReservedRight"
                 )
                 val chromeWidth = (maxWidth - reservedRight - 48.dp).coerceAtLeast(0.dp)
+                if (bottomChromeOverflowExpanded) {
+                    DismissOutsideBoundsOverlay(
+                        targetBoundsInRoot = bottomChromeOverflowBounds,
+                        onDismiss = { bottomChromeOverflowExpanded = false }
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
@@ -1711,6 +1705,9 @@ fun MainContainer(
                         miniPlayerDisplayMode = miniPlayerDisplayMode,
                         largeLayout = useLargeBottomChrome,
                         navItems = bottomNavItems,
+                        overflowExpanded = bottomChromeOverflowExpanded,
+                        onOverflowExpandedChange = { bottomChromeOverflowExpanded = it },
+                        onOverflowBoundsChange = { bottomChromeOverflowBounds = it },
                         onMiniPlayerDisplayModeChange = { nextMode ->
                             miniPlayerDisplayMode = nextMode
                             scope.launch { settingsDataStore.setMiniPlayerDisplayMode(nextMode.name) }
@@ -1764,21 +1761,6 @@ fun MainContainer(
                         artworkAlignment = sharedPlayerBackdropAlignment
                     )
                 }
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .graphicsLayer { alpha = nowPlayingBottomScrimAlpha }
-                        .background(
-                            Brush.verticalGradient(
-                                colorStops = arrayOf(
-                                    0f to Color.Transparent,
-                                    0.48f to Color.Transparent,
-                                    0.78f to colorScheme.background.copy(alpha = 0.24f),
-                                    1f to colorScheme.background.copy(alpha = if (colorScheme.isDark) 0.74f else 0.66f)
-                                )
-                            )
-                        )
-                )
                 NowPlayingScreen(
                     windowSizeClass = windowSizeClass,
                     hardwareVolumeEventTick = nowPlayingVolumeEventTick,
@@ -1858,12 +1840,9 @@ private fun HardwareVolumeOverlay(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Icon(
-                    imageVector = volumeRouteIcon(
-                        routeKind = audioOutputRouteKind,
-                        isMuted = volumePercent == 0
-                    ),
-                    contentDescription = null,
+                AudioOutputRouteIcon(
+                    routeKind = audioOutputRouteKind,
+                    isMuted = volumePercent == 0,
                     tint = accentColor,
                     modifier = Modifier
                         .size(20.dp)
