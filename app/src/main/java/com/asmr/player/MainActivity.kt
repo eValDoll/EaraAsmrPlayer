@@ -8,6 +8,9 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -75,14 +78,18 @@ import com.asmr.player.ui.downloads.DownloadsScreen
 import com.asmr.player.ui.downloads.DownloadsViewModel
 import com.asmr.player.ui.downloads.DownloadItemState
 import com.asmr.player.ui.dlsite.DlsiteLoginScreen
+import com.asmr.player.ui.dlsite.DlsiteLoginViewModel
+import com.asmr.player.ui.groups.AlbumGroupsViewModel
 import com.asmr.player.ui.playlists.PlaylistDetailScreen
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.playlists.PlaylistsScreen
+import com.asmr.player.ui.playlists.PlaylistsViewModel
 import com.asmr.player.ui.playlists.SystemPlaylistScreen
 import com.asmr.player.ui.search.SearchScreen
 import com.asmr.player.ui.search.SearchViewModel
 import com.asmr.player.domain.model.SearchSource
 import com.asmr.player.ui.settings.SettingsScreen
+import com.asmr.player.ui.settings.SettingsViewModel
 import com.asmr.player.ui.common.glassMenu
 import com.asmr.player.ui.drawer.DrawerStatusViewModel
 import com.asmr.player.ui.drawer.StatisticsViewModel
@@ -90,9 +97,11 @@ import com.asmr.player.ui.drawer.SiteStatus
 import com.asmr.player.ui.drawer.SiteStatusType
 import com.asmr.player.ui.nav.AppNavigator
 import com.asmr.player.ui.nav.BottomChrome
+import com.asmr.player.ui.nav.Routes
 import com.asmr.player.ui.nav.bottomChromeNavItems
 import com.asmr.player.ui.nav.bottomChromeOverlayHeight
 import com.asmr.player.ui.nav.isPrimaryRoute
+import com.asmr.player.ui.nav.resolvePrimaryPagerRoutes
 import com.asmr.player.ui.nav.resolvePrimaryRoute
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.splash.EaraSplashOverlay
@@ -169,6 +178,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
 
 import androidx.compose.foundation.border
@@ -443,7 +453,7 @@ class MainActivity : ComponentActivity() {
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @androidx.annotation.OptIn(UnstableApi::class)
 fun MainContainer(
     windowSizeClass: WindowSizeClass,
@@ -468,14 +478,19 @@ fun MainContainer(
     val navigator = remember(navController) { AppNavigator(navController) }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val currentPlaylistSystemType = navBackStackEntry?.arguments?.getString("type")
     val initialDestination = remember(startRouteFromIntent) {
         if (startRouteFromIntent == "search") "search" else "library"
     }
     var lastPrimaryRoute by rememberSaveable { mutableStateOf(initialDestination) }
+    val currentPrimaryRoute = resolveCurrentPrimaryDestinationRoute(
+        currentRoute = currentRoute,
+        playlistSystemType = currentPlaylistSystemType
+    )
     val activePrimaryRoute = resolvePrimaryRoute(
         currentRoute = currentRoute,
         lastPrimaryRoute = lastPrimaryRoute,
-        playlistSystemType = navBackStackEntry?.arguments?.getString("type")
+        playlistSystemType = currentPlaylistSystemType
     )
     val bottomNavItems = remember { bottomChromeNavItems() }
     val fixedBottomNavRoutes = remember(bottomNavItems) {
@@ -488,16 +503,50 @@ fun MainContainer(
     val storedBottomChromePinnedRoute by settingsDataStore.bottomChromePinnedRoute.collectAsState(initial = null)
     var miniPlayerDisplayMode by rememberSaveable { mutableStateOf(MiniPlayerDisplayMode.CoverOnly) }
     var bottomChromePinnedRoute by rememberSaveable { mutableStateOf<String?>(null) }
+    val primaryPagerRoutes = remember(bottomNavItems, activePrimaryRoute, bottomChromePinnedRoute) {
+        resolvePrimaryPagerRoutes(
+            navItems = bottomNavItems,
+            activeRoute = activePrimaryRoute,
+            preferredPinnedRoute = bottomChromePinnedRoute
+        )
+    }
+    val initialPrimaryPage = remember(initialDestination, primaryPagerRoutes) {
+        primaryPagerRoutes.indexOf(initialDestination).takeIf { it >= 0 } ?: 0
+    }
+    val primaryPagerState = rememberPagerState(
+        initialPage = initialPrimaryPage,
+        pageCount = { primaryPagerRoutes.size }
+    )
+    val primaryNavSelectionProgresses by remember(
+        primaryPagerState,
+        primaryPagerRoutes,
+        activePrimaryRoute
+    ) {
+        derivedStateOf {
+            computePrimaryNavSelectionProgresses(
+                pagerRoutes = primaryPagerRoutes,
+                currentPage = primaryPagerState.currentPage,
+                currentPageOffsetFraction = primaryPagerState.currentPageOffsetFraction,
+                fallbackRoute = activePrimaryRoute
+            )
+        }
+    }
     LaunchedEffect(Unit) {
         withFrameNanos { }
         withFrameNanos { }
         onContentReady()
     }
     var blockNavTouches by remember { mutableStateOf(false) }
-    var lastRouteForTouchBlock by remember { mutableStateOf(currentRoute) }
+    var lastRouteForTouchBlock by remember { mutableStateOf(currentPrimaryRoute ?: currentRoute) }
     var touchBlockSeq by remember { mutableIntStateOf(0) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
+    val searchViewModel: SearchViewModel = hiltViewModel()
+    val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
+    val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
+    val downloadsViewModel: DownloadsViewModel = hiltViewModel()
+    val settingsViewModel: SettingsViewModel = hiltViewModel()
+    val dlsiteLoginViewModel: DlsiteLoginViewModel = hiltViewModel()
     val hasCurrentMediaItem by remember(playerViewModel) {
         playerViewModel.playback
             .map { it.currentMediaItem != null }
@@ -520,6 +569,7 @@ fun MainContainer(
     var hardwareVolumeOverlayBounds by remember { mutableStateOf<Rect?>(null) }
     var bottomChromeOverflowExpanded by remember { mutableStateOf(false) }
     var bottomChromeOverflowBounds by remember { mutableStateOf<Rect?>(null) }
+    var pendingPrimaryNavigationRoute by remember { mutableStateOf<String?>(null) }
     val appVolumeWarningSessionState = rememberAppVolumeWarningSessionState()
     val audioOutputRouteKind = rememberCurrentAudioOutputRouteKind()
     
@@ -600,15 +650,66 @@ fun MainContainer(
         },
         label = "nowPlayingBackdropAlpha"
     )
-    LaunchedEffect(currentRoute) {
+    val currentPrimaryRouteState = rememberUpdatedState(currentPrimaryRoute)
+    fun openPrimaryRoute(route: String, pagerRoutes: List<String> = primaryPagerRoutes) {
+        val targetPage = pagerRoutes.indexOf(route)
+        if (targetPage >= 0 && currentPrimaryRoute != null) {
+            scope.launch {
+                pendingPrimaryNavigationRoute = route
+                primaryPagerState.animateScrollToPage(targetPage)
+                if (currentPrimaryRouteState.value != route) {
+                    navController.navigateSingleTop(route, popUpToRoute = Routes.Library)
+                }
+            }
+        } else {
+            pendingPrimaryNavigationRoute = null
+            navController.navigateSingleTop(route, popUpToRoute = Routes.Library)
+        }
+    }
+
+    LaunchedEffect(currentPrimaryRoute, primaryPagerRoutes, pendingPrimaryNavigationRoute) {
+        val route = currentPrimaryRoute ?: return@LaunchedEffect
+        val pendingRoute = pendingPrimaryNavigationRoute
+        if (pendingRoute != null && route != pendingRoute) return@LaunchedEffect
+        val targetPage = primaryPagerRoutes.indexOf(route)
+        if (targetPage >= 0 && primaryPagerState.currentPage != targetPage) {
+            primaryPagerState.scrollToPage(targetPage)
+        }
+        if (pendingRoute == route) {
+            pendingPrimaryNavigationRoute = null
+        }
+    }
+
+    LaunchedEffect(primaryPagerState, primaryPagerRoutes) {
+        snapshotFlow { primaryPagerState.isScrollInProgress }
+            .filter { !it }
+            .map { primaryPagerState.currentPage }
+            .distinctUntilChanged()
+            .collect { page ->
+                val currentPrimary = currentPrimaryRouteState.value ?: return@collect
+                val targetRoute = primaryPagerRoutes.getOrNull(page) ?: return@collect
+                if (targetRoute != currentPrimary) {
+                    navController.navigateSingleTop(targetRoute, popUpToRoute = Routes.Library)
+                }
+            }
+    }
+
+    LaunchedEffect(currentRoute, currentPrimaryRoute) {
         showHardwareVolumeOverlay = false
         hardwareVolumeOverlayInteracting = false
         hardwareVolumeOverlayBounds = null
         bottomChromeOverflowExpanded = false
         bottomChromeOverflowBounds = null
+        val normalizedCurrentRoute = currentPrimaryRoute ?: currentRoute
         val last = lastRouteForTouchBlock
         val seq = ++touchBlockSeq
-        if (last != null && currentRoute != null && last != currentRoute) {
+        val isPrimaryPagerSwitch =
+            last != null &&
+                normalizedCurrentRoute != null &&
+                last != normalizedCurrentRoute &&
+                last in primaryPagerRoutes &&
+                normalizedCurrentRoute in primaryPagerRoutes
+        if (last != null && normalizedCurrentRoute != null && last != normalizedCurrentRoute && !isPrimaryPagerSwitch) {
             blockNavTouches = true
             try {
                 delay(320)
@@ -620,7 +721,7 @@ fun MainContainer(
         } else {
             blockNavTouches = false
         }
-        lastRouteForTouchBlock = currentRoute
+        lastRouteForTouchBlock = normalizedCurrentRoute
     }
 
     LaunchedEffect(activePrimaryRoute) {
@@ -870,7 +971,7 @@ fun MainContainer(
                                         label = label,
                                         selected = isSelected,
                                         modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                                        onClick = { navController.navigateSingleTop(route, popUpToRoute = "library") }
+                                        onClick = { openPrimaryRoute(route) }
                                     )
                                 }
                             }
@@ -922,18 +1023,7 @@ fun MainContainer(
         LaunchedEffect(rightPanelExpandedFromStore) {
             rightPanelExpandedState.updateFromStore(rightPanelExpandedFromStore)
         }
-        val currentScreenIsPrimary = when {
-            currentRoute == "library" -> true
-            currentRoute == "search" -> true
-            currentRoute == "playlists" -> true
-            currentRoute == "groups" -> true
-            currentRoute == "settings" -> true
-            currentRoute == "downloads" -> true
-            currentRoute == "dlsite_login" -> true
-            currentRoute == "playlist_system/{type}" &&
-                navBackStackEntry?.arguments?.getString("type") == "favorites" -> true
-            else -> false
-        }
+        val currentScreenIsPrimary = currentPrimaryRoute != null
         val showBackButton = !currentScreenIsPrimary
         val showPrimaryBrand = currentScreenIsPrimary
         val topBarDividerColor = colorScheme.onSurface.copy(
@@ -1102,8 +1192,7 @@ fun MainContainer(
                                                         }
                                                     }
                                                 }
-                                            } else if (entry != null && currentRoute == "search") {
-                                                val searchViewModel: SearchViewModel = hiltViewModel(entry)
+                                            } else if (currentRoute == "search") {
                                                 val viewMode by searchViewModel.viewMode.collectAsState()
                                                 IconButton(onClick = { searchViewModel.setViewMode(if (viewMode == 1) 0 else 1) }) {
                                                     Icon(
@@ -1111,8 +1200,7 @@ fun MainContainer(
                                                         contentDescription = null
                                                     )
                                                 }
-                                            } else if (entry != null && currentRoute == "downloads") {
-                                                val downloadsViewModel: DownloadsViewModel = hiltViewModel(entry)
+                                            } else if (currentRoute == "downloads") {
                                                 val tasks by downloadsViewModel.tasks.collectAsState()
                                                 val hasActiveDownloads = remember(tasks) {
                                                     tasks.any { task ->
@@ -1191,6 +1279,123 @@ fun MainContainer(
                                 .fillMaxSize()
                                 .padding(top = padding.calculateTopPadding())
                         ) {
+                            if (currentPrimaryRoute != null) {
+                                HorizontalPager(
+                                    state = primaryPagerState,
+                                    modifier = Modifier.fillMaxSize(),
+                                    key = { primaryPagerRoutes[it] }
+                                ) { page ->
+                                    when (primaryPagerRoutes[page]) {
+                                        Routes.Library -> {
+                                            LibraryScreen(
+                                                windowSizeClass = windowSizeClass,
+                                                onAlbumClick = { album ->
+                                                    navigator.openAlbumDetail(
+                                                        albumId = album.id,
+                                                        rj = null
+                                                    )
+                                                },
+                                                onPlayTracks = { album, tracks, startTrack ->
+                                                    scope.launch {
+                                                        if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
+                                                            openNowPlaying()
+                                                        }
+                                                    }
+                                                },
+                                                onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode ->
+                                                    navController.navigateSingleTop(
+                                                        "playlist_picker" +
+                                                            "?mediaId=${encodeRouteArg(mediaId)}" +
+                                                            "&uri=${encodeRouteArg(uri)}" +
+                                                            "&title=${encodeRouteArg(title)}" +
+                                                            "&artist=${encodeRouteArg(artist)}" +
+                                                            "&artworkUri=${encodeRouteArg(artworkUri)}" +
+                                                            "&albumId=$albumId" +
+                                                            "&trackId=$trackId" +
+                                                            "&rjCode=${encodeRouteArg(rjCode)}"
+                                                    )
+                                                },
+                                                onOpenGroupPicker = { albumId ->
+                                                    navController.navigateSingleTop("group_picker?albumId=$albumId")
+                                                },
+                                                onOpenFilterScreen = { navController.navigateSingleTop("library_filter") },
+                                                viewModel = libraryViewModel
+                                            )
+                                        }
+
+                                        Routes.Search -> {
+                                            SearchScreen(
+                                                windowSizeClass = windowSizeClass,
+                                                onAlbumClick = { album ->
+                                                    navigator.openAlbumDetail(
+                                                        albumId = album.id,
+                                                        rj = album.rjCode.ifBlank { album.workId }
+                                                    )
+                                                },
+                                                viewModel = searchViewModel
+                                            )
+                                        }
+
+                                        "playlist_system/favorites" -> {
+                                            SystemPlaylistScreen(
+                                                windowSizeClass = windowSizeClass,
+                                                type = "favorites",
+                                                onPlayAll = { items, startItem ->
+                                                    playerViewModel.playPlaylistItems(items, startItem)
+                                                    openNowPlaying()
+                                                },
+                                                viewModel = playlistsViewModel
+                                            )
+                                        }
+
+                                        "playlists" -> {
+                                            PlaylistsScreen(
+                                                windowSizeClass = windowSizeClass,
+                                                onPlaylistClick = { playlist ->
+                                                    val encoded = URLEncoder.encode(playlist.name, "UTF-8")
+                                                    navController.navigateSingleTop("playlist/${playlist.id}/$encoded")
+                                                },
+                                                viewModel = playlistsViewModel
+                                            )
+                                        }
+
+                                        "groups" -> {
+                                            com.asmr.player.ui.groups.AlbumGroupsScreen(
+                                                windowSizeClass = windowSizeClass,
+                                                onGroupClick = { group ->
+                                                    val encoded = encodeRouteArg(group.name)
+                                                    navController.navigateSingleTop("group/${group.id}/$encoded")
+                                                },
+                                                viewModel = albumGroupsViewModel
+                                            )
+                                        }
+
+                                        "downloads" -> {
+                                            DownloadsScreen(
+                                                windowSizeClass = windowSizeClass,
+                                                viewModel = downloadsViewModel
+                                            )
+                                        }
+
+                                        "settings" -> {
+                                            SettingsScreen(
+                                                windowSizeClass = windowSizeClass,
+                                                viewModel = settingsViewModel,
+                                                libraryViewModel = libraryViewModel
+                                            )
+                                        }
+
+                                        "dlsite_login" -> {
+                                            DlsiteLoginScreen(
+                                                windowSizeClass = windowSizeClass,
+                                                onDone = { navController.popBackStack() },
+                                                viewModel = dlsiteLoginViewModel
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
                             NavHost(
                                 navController = navController,
                                 startDestination = initialDestination,
@@ -1202,40 +1407,7 @@ fun MainContainer(
                             ) {
 
                 composable("library") {
-                    LibraryScreen(
-                        windowSizeClass = windowSizeClass,
-                        onAlbumClick = { album ->
-                            navigator.openAlbumDetail(
-                                albumId = album.id,
-                                rj = null
-                            )
-                        },
-                        onPlayTracks = { album, tracks, startTrack ->
-                            scope.launch {
-                                if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                    openNowPlaying()
-                                }
-                            }
-                        },
-                        onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode ->
-                            navController.navigateSingleTop(
-                                "playlist_picker" +
-                                    "?mediaId=${encodeRouteArg(mediaId)}" +
-                                    "&uri=${encodeRouteArg(uri)}" +
-                                    "&title=${encodeRouteArg(title)}" +
-                                    "&artist=${encodeRouteArg(artist)}" +
-                                    "&artworkUri=${encodeRouteArg(artworkUri)}" +
-                                    "&albumId=$albumId" +
-                                    "&trackId=$trackId" +
-                                    "&rjCode=${encodeRouteArg(rjCode)}"
-                            )
-                        },
-                        onOpenGroupPicker = { albumId ->
-                            navController.navigateSingleTop("group_picker?albumId=$albumId")
-                        },
-                        onOpenFilterScreen = { navController.navigateSingleTop("library_filter") },
-                        viewModel = libraryViewModel
-                    )
+                    Box(modifier = Modifier.fillMaxSize())
                 }
                                 composable("library_filter") {
                     LibraryFilterScreen(
@@ -1244,15 +1416,7 @@ fun MainContainer(
                     )
                 }
                                 composable("search") {
-                    SearchScreen(
-                        windowSizeClass = windowSizeClass,
-                        onAlbumClick = { album ->
-                            navigator.openAlbumDetail(
-                                albumId = album.id,
-                                rj = album.rjCode.ifBlank { album.workId }
-                            )
-                        }
-                    )
+                    Box(modifier = Modifier.fillMaxSize())
                 }
                                 composable(
                     route = "album_detail_rj/{rj}",
@@ -1426,22 +1590,10 @@ fun MainContainer(
                     }
                 }
                 composable("playlists") {
-                    PlaylistsScreen(
-                        windowSizeClass = windowSizeClass,
-                        onPlaylistClick = { playlist ->
-                            val encoded = URLEncoder.encode(playlist.name, "UTF-8")
-                            navController.navigateSingleTop("playlist/${playlist.id}/$encoded")
-                        }
-                    )
+                    Box(modifier = Modifier.fillMaxSize())
                 }
                 composable("groups") {
-                    com.asmr.player.ui.groups.AlbumGroupsScreen(
-                        windowSizeClass = windowSizeClass,
-                        onGroupClick = { group ->
-                            val encoded = encodeRouteArg(group.name)
-                            navController.navigateSingleTop("group/${group.id}/$encoded")
-                        }
-                    )
+                    Box(modifier = Modifier.fillMaxSize())
                 }
                 composable(
                     route = "group/{groupId}/{groupName}",
@@ -1496,14 +1648,19 @@ fun MainContainer(
                 }
                 composable("playlist_system/{type}") { backStackEntry ->
                     val type = backStackEntry.arguments?.getString("type").orEmpty()
-                    SystemPlaylistScreen(
-                        windowSizeClass = windowSizeClass,
-                        type = type,
-                        onPlayAll = { items, startItem ->
-                            playerViewModel.playPlaylistItems(items, startItem)
-                            openNowPlaying()
-                        }
-                    )
+                    if (type == "favorites") {
+                        Box(modifier = Modifier.fillMaxSize())
+                    } else {
+                        SystemPlaylistScreen(
+                            windowSizeClass = windowSizeClass,
+                            type = type,
+                            onPlayAll = { items, startItem ->
+                                playerViewModel.playPlaylistItems(items, startItem)
+                                openNowPlaying()
+                            },
+                            viewModel = playlistsViewModel
+                        )
+                    }
                 }
                 composable(
                     route = "playlist_picker?mediaId={mediaId}&uri={uri}&title={title}&artist={artist}&artworkUri={artworkUri}&albumId={albumId}&trackId={trackId}&rjCode={rjCode}",
@@ -1540,19 +1697,13 @@ fun MainContainer(
                     )
                 }
                 composable("settings") {
-                    SettingsScreen(
-                        windowSizeClass = windowSizeClass,
-                        libraryViewModel = libraryViewModel
-                    )
+                    Box(modifier = Modifier.fillMaxSize())
                 }
                 composable("downloads") {
-                    DownloadsScreen(windowSizeClass = windowSizeClass)
+                    Box(modifier = Modifier.fillMaxSize())
                 }
                 composable("dlsite_login") {
-                    DlsiteLoginScreen(
-                        windowSizeClass = windowSizeClass,
-                        onDone = { navController.popBackStack() }
-                    )
+                    Box(modifier = Modifier.fillMaxSize())
                 }
             }
 
@@ -1714,6 +1865,7 @@ fun MainContainer(
                 ) {
                     BottomChrome(
                         activeRoute = activePrimaryRoute,
+                        selectionProgresses = primaryNavSelectionProgresses,
                         preferredPinnedRoute = bottomChromePinnedRoute,
                         miniPlayerVisible = miniPlayerVisible,
                         miniPlayerDisplayMode = miniPlayerDisplayMode,
@@ -1733,11 +1885,20 @@ fun MainContainer(
                         },
                         onOpenQueue = onShowQueue,
                         onNavigate = { route ->
+                            val projectedPagerRoutes = if (route in bottomNavRoutes && route !in fixedBottomNavRoutes) {
+                                resolvePrimaryPagerRoutes(
+                                    navItems = bottomNavItems,
+                                    activeRoute = activePrimaryRoute,
+                                    preferredPinnedRoute = route
+                                )
+                            } else {
+                                primaryPagerRoutes
+                            }
                             if (route in bottomNavRoutes && route !in fixedBottomNavRoutes) {
                                 bottomChromePinnedRoute = route
                                 scope.launch { settingsDataStore.setBottomChromePinnedRoute(route) }
                             }
-                            navController.navigateSingleTop(route, popUpToRoute = "library")
+                            openPrimaryRoute(route, projectedPagerRoutes)
                         }
                     )
                 }
@@ -2290,6 +2451,50 @@ private fun encodeRouteArg(value: String): String = URLEncoder.encode(value, "UT
 
 private fun decodeRouteArg(value: String): String = runCatching { URLDecoder.decode(value, "UTF-8") }
     .getOrDefault(value)
+
+private fun computePrimaryNavSelectionProgresses(
+    pagerRoutes: List<String>,
+    currentPage: Int,
+    currentPageOffsetFraction: Float,
+    fallbackRoute: String
+): Map<String, Float> {
+    if (pagerRoutes.isEmpty()) {
+        return mapOf(fallbackRoute to 1f)
+    }
+
+    val selectionProgresses = LinkedHashMap<String, Float>(pagerRoutes.size)
+    pagerRoutes.forEachIndexed { page, route ->
+        val pageOffset = kotlin.math.abs((currentPage - page) + currentPageOffsetFraction)
+        val progress = (1f - pageOffset.coerceIn(0f, 1f)).coerceIn(0f, 1f)
+        if (progress > 0f) {
+            val existing = selectionProgresses[route] ?: 0f
+            selectionProgresses[route] = maxOf(existing, progress)
+        }
+    }
+
+    if (selectionProgresses.isEmpty()) {
+        selectionProgresses[fallbackRoute] = 1f
+    }
+
+    return selectionProgresses
+}
+
+private fun resolveCurrentPrimaryDestinationRoute(
+    currentRoute: String?,
+    playlistSystemType: String? = null
+): String? {
+    return when {
+        currentRoute == Routes.Library -> Routes.Library
+        currentRoute == Routes.Search -> Routes.Search
+        currentRoute == "playlists" -> "playlists"
+        currentRoute == "groups" -> "groups"
+        currentRoute == "downloads" -> "downloads"
+        currentRoute == "settings" -> "settings"
+        currentRoute == "dlsite_login" -> "dlsite_login"
+        currentRoute == "playlist_system/{type}" && playlistSystemType == "favorites" -> "playlist_system/favorites"
+        else -> null
+    }
+}
 
 private fun NavHostController.navigateSingleTop(route: String, popUpToRoute: String? = null) {
     navigate(route) {
