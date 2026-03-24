@@ -39,6 +39,7 @@ class AudioOutputDevicePolicyTest {
     @Test
     fun speakerRoutesMapToSpeakerIconState() {
         assertEquals(AudioOutputRouteKind.Speaker, audioOutputRouteKindForDeviceType(AudioDeviceInfo.TYPE_BUILTIN_SPEAKER))
+        assertEquals(AudioOutputRouteKind.Speaker, audioOutputRouteKindForDeviceType(AudioDeviceInfo.TYPE_BUILTIN_EARPIECE))
         assertEquals(AudioOutputRouteKind.Speaker, audioOutputRouteKindForDeviceType(AudioDeviceInfo.TYPE_BLE_SPEAKER))
         assertEquals(AudioOutputRouteKind.Speaker, audioOutputRouteKindForDeviceType(AudioDeviceInfo.TYPE_HDMI))
         assertEquals(AudioOutputRouteKind.Speaker, audioOutputRouteKindForDeviceType(AudioDeviceInfo.TYPE_LINE_ANALOG))
@@ -52,6 +53,19 @@ class AudioOutputDevicePolicyTest {
                 listOf(
                     AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
                     AudioDeviceInfo.TYPE_WIRED_HEADPHONES
+                )
+            )
+        )
+    }
+
+    @Test
+    fun routeResolutionDoesNotTreatBuiltInEarpieceAsHeadphones() {
+        assertEquals(
+            AudioOutputRouteKind.Speaker,
+            resolveAudioOutputRouteKind(
+                listOf(
+                    AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,
+                    AudioDeviceInfo.TYPE_BUILTIN_EARPIECE
                 )
             )
         )

@@ -6,7 +6,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -56,6 +55,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.layout.boundsInParent
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -485,12 +486,14 @@ fun BottomChrome(
     onNavigate: (String) -> Unit,
     largeLayout: Boolean = false,
     modifier: Modifier = Modifier,
-    navItems: List<BottomChromeNavItem> = bottomChromeNavItems()
+    navItems: List<BottomChromeNavItem> = bottomChromeNavItems(),
+    overflowExpanded: Boolean = false,
+    onOverflowExpandedChange: (Boolean) -> Unit = {},
+    onOverflowBoundsChange: (Rect?) -> Unit = {}
 ) {
     BoxWithConstraints(modifier = modifier) {
         val metrics = remember(largeLayout) { bottomChromeMetrics(largeLayout) }
         val navExpanded = !miniPlayerVisible || miniPlayerDisplayMode == MiniPlayerDisplayMode.CoverOnly
-        var overflowExpanded by remember { mutableStateOf(false) }
         val miniCollapsedWidth = if (largeLayout) 76.dp else 64.dp
         val expandedNavWidthLimit = maxWidth.coerceAtMost(metrics.preferredExpandedWidth)
         val miniWidthTarget = when {
@@ -548,9 +551,10 @@ fun BottomChrome(
                 metrics = metrics,
                 maxVisibleItems = maxVisibleItems,
                 overflowExpanded = overflowExpanded,
-                onOverflowExpandedChange = { overflowExpanded = it },
+                onOverflowExpandedChange = onOverflowExpandedChange,
                 onExpandRequest = { onMiniPlayerDisplayModeChange(MiniPlayerDisplayMode.CoverOnly) },
                 onNavigate = onNavigate,
+                onOverflowBoundsChange = onOverflowBoundsChange,
                 modifier = Modifier.width(navWidth)
             )
 
@@ -582,6 +586,7 @@ private fun BottomNavigationPill(
     onOverflowExpandedChange: (Boolean) -> Unit = {},
     onExpandRequest: () -> Unit = {},
     onNavigate: (String) -> Unit,
+    onOverflowBoundsChange: (Rect?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     LaunchedEffect(expanded) {
@@ -603,6 +608,7 @@ private fun BottomNavigationPill(
         onOverflowExpandedChange = onOverflowExpandedChange,
         onExpandRequest = onExpandRequest,
         onNavigate = onNavigate,
+        onOverflowBoundsChange = onOverflowBoundsChange,
         modifier = modifier
     )
 }
@@ -621,11 +627,11 @@ private fun BottomNavigationPillSurface(
     onOverflowExpandedChange: (Boolean) -> Unit = {},
     onExpandRequest: () -> Unit,
     onNavigate: (String) -> Unit,
+    onOverflowBoundsChange: (Rect?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val density = LocalDensity.current
-    val consumeClicksInteractionSource = remember { MutableInteractionSource() }
     val containerColor = colorScheme.primarySoft
         .copy(alpha = if (colorScheme.isDark) 0.10f else 0.14f)
         .compositeOver(colorScheme.surface)
@@ -686,11 +692,14 @@ private fun BottomNavigationPillSurface(
     } else {
         0.dp
     }
-    val overflowHeadroom = if (canShowOverflow && overflowExpanded) {
-        reservedOverflowHeadroom
-    } else {
-        0.dp
-    }
+    val overflowHeadroom by animateDpAsState(
+        targetValue = if (canShowOverflow && overflowExpanded) reservedOverflowHeadroom else 0.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "bottomNavOverflowHeadroom"
+    )
     val overflowRevealProgress by animateFloatAsState(
         targetValue = if (canShowOverflow && overflowExpanded) 1f else 0f,
         animationSpec = spring(
@@ -723,20 +732,14 @@ private fun BottomNavigationPillSurface(
     Box(
         modifier = modifier
             .defaultMinSize(minHeight = metrics.barHeight)
-            .height(metrics.barHeight + reservedOverflowHeadroom)
+            .height(metrics.barHeight + overflowHeadroom)
+            .onGloballyPositioned { coordinates ->
+                onOverflowBoundsChange(coordinates.boundsInRoot())
+            }
             .testTag(BottomNavBarTag)
             .semantics {
                 stateDescription = if (expanded) "expanded" else "collapsed"
             }
-            .clickable(
-                interactionSource = consumeClicksInteractionSource,
-                indication = null,
-                onClick = {
-                    if (canShowOverflow && overflowExpanded) {
-                        onOverflowExpandedChange(false)
-                    }
-                }
-            )
             .graphicsLayer { clip = false }
             .drawBehind {
                 val outline = buildBottomNavContainerPath(

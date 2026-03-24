@@ -25,6 +25,7 @@ import com.asmr.player.cache.ImageCacheEntryPoint
 import dagger.hilt.android.EntryPointAccessors
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 
@@ -45,8 +46,10 @@ fun AsmrAsyncImage(
     loading: @Composable (Modifier) -> Unit = { m ->
         AsmrShimmerPlaceholder(modifier = m, cornerRadius = placeholderCornerRadius)
     },
+    retainPainterDuringReload: Boolean = false,
+    loadWhenSizeStableForMillis: Long = 0L,
     fadeIn: Boolean = true,
-    fadeInMillis: Int = 1024,
+    fadeInMillis: Int = 500,
 ) {
     val normalizedModel = remember(model) { normalizeImageModel(model) }
     if (normalizedModel == null) {
@@ -62,23 +65,39 @@ fun AsmrAsyncImage(
     val painter: MutableState<Painter?> = remember(normalizedModel) { mutableStateOf(null) }
     val state: MutableState<AsmrAsyncImageState> =
         remember(normalizedModel) { mutableStateOf(AsmrAsyncImageState.Loading) }
+    val loadedSize: MutableState<IntSize?> = remember(normalizedModel) { mutableStateOf(null) }
     val crossfade = remember(normalizedModel) { Animatable(0f) }
     val sizedModifier = modifier.onSizeChanged { sz ->
         if (sz.width > 0 && sz.height > 0) measuredSize.value = IntSize(sz.width, sz.height)
     }
 
     LaunchedEffect(normalizedModel, measuredSize.value) {
-        val sz = measuredSize.value ?: return@LaunchedEffect
+        val initialSize = measuredSize.value ?: return@LaunchedEffect
+        if (loadWhenSizeStableForMillis > 0L) {
+            delay(loadWhenSizeStableForMillis)
+        }
+        val sz = measuredSize.value ?: initialSize
+        if (retainPainterDuringReload && loadedSize.value == sz && painter.value != null) {
+            return@LaunchedEffect
+        }
         try {
-            state.value = AsmrAsyncImageState.Loading
-            painter.value = null
-            crossfade.snapTo(0f)
+            val hasExistingPainter = painter.value != null
+            val shouldRetainPainter = retainPainterDuringReload && hasExistingPainter
+            if (!shouldRetainPainter) {
+                state.value = AsmrAsyncImageState.Loading
+                painter.value = null
+                crossfade.snapTo(0f)
+            } else {
+                state.value = AsmrAsyncImageState.Success
+                crossfade.snapTo(1f)
+            }
             val img = withTimeoutOrNull(15_000) {
                 manager.loadImage(model = normalizedModel, size = sz, cachePolicy = CachePolicy.DEFAULT)
             } ?: throw IllegalStateException("Image load timeout")
             painter.value = BitmapPainter(img)
+            loadedSize.value = sz
             state.value = AsmrAsyncImageState.Success
-            if (fadeIn) {
+            if (fadeIn && !shouldRetainPainter) {
                 crossfade.animateTo(1f, tween(durationMillis = fadeInMillis))
             } else {
                 crossfade.snapTo(1f)
@@ -86,8 +105,11 @@ fun AsmrAsyncImage(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
-            state.value = AsmrAsyncImageState.Error
-            painter.value = null
+            if (painter.value == null) {
+                state.value = AsmrAsyncImageState.Error
+                painter.value = null
+                loadedSize.value = null
+            }
         }
     }
 

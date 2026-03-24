@@ -1,5 +1,6 @@
 package com.asmr.player.ui.player
 
+import android.net.Uri
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -29,25 +30,29 @@ internal fun PlayerSharedBackdrop(
 
     if (isVideo) return
 
+    val artworkModel = remember(metadata?.artworkUri) {
+        sanitizeBackdropArtworkModel(metadata?.artworkUri)
+    }
     val dominantColorResult by rememberComputedDominantColorCenterWeighted(
-        model = metadata?.artworkUri,
+        model = artworkModel,
         defaultColor = colorScheme.background
     )
-    val backgroundArtwork = remember(metadata?.artworkUri) {
-        metadata?.artworkUri?.takeUnless { uri ->
-            val uriTextValue = uri.toString()
-            uri.scheme.equals("android.resource", ignoreCase = true) ||
-                uriTextValue.contains("ic_placeholder", ignoreCase = true)
-        }
-    }
 
     CoverArtworkBackground(
-        artworkModel = backgroundArtwork,
+        artworkModel = artworkModel,
         enabled = enabled,
         clarity = clarity,
         overlayBaseColor = colorScheme.background,
-        tintBaseColor = dominantColorResult.color ?: colorScheme.primary,
+        tintBaseColor = dominantColorResult.color ?: colorScheme.primarySoft,
         artworkAlignment = artworkAlignment,
         isDark = colorScheme.isDark
     )
+}
+
+internal fun sanitizeBackdropArtworkModel(artworkUri: Uri?): Uri? {
+    return artworkUri?.takeUnless { uri ->
+        val uriTextValue = uri.toString()
+        uri.scheme.equals("android.resource", ignoreCase = true) ||
+            uriTextValue.contains("ic_placeholder", ignoreCase = true)
+    }
 }
