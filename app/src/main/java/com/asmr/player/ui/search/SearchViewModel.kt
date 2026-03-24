@@ -90,10 +90,9 @@ class SearchViewModel @Inject constructor(
         if (!bootstrapped.compareAndSet(false, true)) return
         viewModelScope.launch {
             val cached = runCatching { searchCacheStore.readLast() }.getOrNull()
-            if (cached != null && cached.results.isNotEmpty()) {
+            if (cached != null) {
                 applyCachedState(cached)
                 lastRequestedKeyword = cached.keyword
-                requestPage(cached.keyword, cached.page, SearchPendingRequestKind.Page)
             } else {
                 purchasedOnly = initialPurchasedOnly
                 currentLocale = initialLocale

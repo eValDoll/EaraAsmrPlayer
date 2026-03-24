@@ -2,6 +2,7 @@ package com.asmr.player.ui.search
 
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -104,9 +105,10 @@ internal const val SEARCH_SUBMIT_BUTTON_TAG = "search_submit_button"
 internal const val SEARCH_SUBMIT_SPINNER_TAG = "search_submit_spinner"
 internal const val SEARCH_PREV_BUTTON_TAG = "search_prev_button"
 internal const val SEARCH_NEXT_BUTTON_TAG = "search_next_button"
-internal const val SEARCH_PAGINATION_SPINNER_TAG = "search_pagination_spinner"
 internal const val SEARCH_CHROME_TAG = "search_chrome"
 private val SearchChromeContentGap = 16.dp
+private const val SearchPullRefreshContentShiftRatio = 1f
+private val SearchPullRefreshIndicatorSize = 40.dp
 
 private fun stableAlbumKey(album: Album): String {
     val id = album.rjCode.ifBlank { album.workId }.trim()
@@ -172,7 +174,6 @@ fun SearchScreen(
     val filterControlsLocked = success == null || interactionLocked
     val searchSubmitLocked = uiState is SearchUiState.Loading || interactionLocked
     val showSearchSpinner = success?.isSearching == true
-    val showPaginationSpinner = success?.isPaging == true
     val highlightedPage = success?.page ?: 1
     val canGoPrev = success?.canGoPrev == true && success?.isSearching != true
     val canGoNext = success?.canGoNext == true && success?.isSearching != true
@@ -203,6 +204,36 @@ fun SearchScreen(
     }
 
     val pullToRefreshState = rememberPullToRefreshState()
+    val topPaddingPx = with(androidx.compose.ui.platform.LocalDensity.current) { topPadding.toPx() }
+    val refreshIndicatorSizePx = with(androidx.compose.ui.platform.LocalDensity.current) {
+        SearchPullRefreshIndicatorSize.toPx()
+    }
+    val refreshIndicatorHalfSizePx = with(androidx.compose.ui.platform.LocalDensity.current) {
+        refreshIndicatorSizePx / 2f
+    }
+    val pullContentOffsetTargetPx = (
+        pullToRefreshState.verticalOffset * SearchPullRefreshContentShiftRatio
+        ).coerceIn(
+        minimumValue = 0f,
+        maximumValue = pullToRefreshState.positionalThreshold * SearchPullRefreshContentShiftRatio
+    )
+    val pullContentOffsetPx by animateFloatAsState(
+        targetValue = pullContentOffsetTargetPx,
+        animationSpec = if (pullToRefreshState.progress > 0f && !pullToRefreshState.isRefreshing) {
+            snap()
+        } else {
+            tween(durationMillis = 220, easing = FastOutSlowInEasing)
+        },
+        label = "searchPullContentOffset"
+    )
+    val pullIndicatorTopOffsetPx = minOf(
+        pullContentOffsetPx / 2f - refreshIndicatorHalfSizePx,
+        pullContentOffsetPx - refreshIndicatorSizePx
+    )
+    val pullIndicatorBaseOffsetPx = topPaddingPx +
+        pullIndicatorTopOffsetPx -
+        pullToRefreshState.verticalOffset +
+        refreshIndicatorSizePx
     val latestKeyword by rememberUpdatedState(keyword)
     LaunchedEffect(pullToRefreshState.isRefreshing) {
         if (!pullToRefreshState.isRefreshing) return@LaunchedEffect
@@ -301,7 +332,12 @@ fun SearchScreen(
                             .nestedScroll(pullToRefreshState.nestedScrollConnection)
                             .clipToBounds()
                     ) {
-                        when (val state = uiState) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .graphicsLayer { translationY = pullContentOffsetPx }
+                        ) {
+                            when (val state = uiState) {
                             is SearchUiState.Loading -> Column(
                                 modifier = Modifier
                                     .fillMaxSize()
@@ -400,13 +436,14 @@ fun SearchScreen(
                                     .fillMaxSize()
                                     .verticalScroll(rememberScrollState())
                             ) {}
+                            }
                         }
 
                         PullToRefreshContainer(
                             state = pullToRefreshState,
                             modifier = Modifier
                                 .align(Alignment.TopCenter)
-                                .padding(top = topPadding)
+                                .graphicsLayer { translationY = pullIndicatorBaseOffsetPx }
                                 .then(
                                     if (pullToRefreshState.progress > 0 || pullToRefreshState.isRefreshing) {
                                         Modifier
@@ -432,7 +469,6 @@ fun SearchScreen(
                         canGoPrev = canGoPrev,
                         canGoNext = canGoNext,
                         controlsLocked = interactionLocked,
-                        showPagingSpinner = showPaginationSpinner,
                         rightPanelToggle = rightPanelToggle,
                         animatedOffsetPx = animatedChromeOffsetPx,
                         collapseFraction = chromeState.collapseFraction,
@@ -495,7 +531,6 @@ internal fun SearchChrome(
     canGoPrev: Boolean,
     canGoNext: Boolean,
     controlsLocked: Boolean,
-    showPagingSpinner: Boolean,
     rightPanelToggle: (@Composable (Modifier) -> Unit)?,
     animatedOffsetPx: Float,
     collapseFraction: Float,
@@ -538,7 +573,6 @@ internal fun SearchChrome(
                 canGoPrev = canGoPrev,
                 canGoNext = canGoNext,
                 controlsLocked = controlsLocked,
-                showPagingSpinner = showPagingSpinner,
                 onPrev = onPrev,
                 onNext = onNext
             )
@@ -752,7 +786,6 @@ internal fun SearchPaginationHeader(
     canGoPrev: Boolean,
     canGoNext: Boolean,
     controlsLocked: Boolean,
-    showPagingSpinner: Boolean,
     onPrev: () -> Unit,
     onNext: () -> Unit
 ) {
@@ -820,15 +853,6 @@ internal fun SearchPaginationHeader(
                     style = MaterialTheme.typography.bodySmall,
                     color = if (isDark) colorScheme.textPrimary else Color.Black
                 )
-                if (showPagingSpinner) {
-                    CircularProgressIndicator(
-                        modifier = Modifier
-                            .size(16.dp)
-                            .testTag(SEARCH_PAGINATION_SPINNER_TAG),
-                        strokeWidth = 2.dp,
-                        color = colorScheme.primary
-                    )
-                }
             }
 
             Spacer(modifier = Modifier.weight(1f))
