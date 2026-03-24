@@ -141,7 +141,7 @@ private data class BottomNavRailEntry(
     val isOverflow: Boolean = false
 )
 
-internal data class BottomChromeMetrics(
+private data class BottomChromeMetrics(
     val overlayHeight: Dp,
     val barHeight: Dp,
     val barCornerRadius: Dp,
@@ -276,7 +276,7 @@ fun resolvePrimaryRoute(
     }
 }
 
-internal fun computeVisibleNavItems(
+private fun computeVisibleNavItems(
     allItems: List<BottomChromeNavItem>,
     activeRoute: String,
     availableWidth: Dp,
@@ -569,7 +569,7 @@ fun BottomChrome(
 }
 
 @Composable
-internal fun BottomNavigationPill(
+private fun BottomNavigationPill(
     navItems: List<BottomChromeNavItem>,
     activeRoute: String,
     preferredPinnedRoute: String? = null,
