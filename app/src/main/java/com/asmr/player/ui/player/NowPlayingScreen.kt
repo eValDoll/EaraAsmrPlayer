@@ -1362,11 +1362,15 @@ private fun PlayerSurfaceHeader(
     } else {
         Shadow(color = Color.Black.copy(alpha = 0.15f), offset = Offset(0f, 1f), blurRadius = 2f)
     }
+    val dividerColor = colorScheme.onSurface.copy(
+        alpha = if (colorScheme.isDark) 0.16f else 0.10f
+    )
 
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
+    Column(modifier = modifier) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
         IconButton(onClick = onNavigateUp, enabled = navigationEnabled) {
             Icon(
                 Icons.Default.KeyboardArrowDown,
@@ -1406,6 +1410,14 @@ private fun PlayerSurfaceHeader(
                 )
             }
         }
+        }
+        HorizontalDivider(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = 4.dp),
+            thickness = 0.5.dp,
+            color = dividerColor
+        )
     }
 }
 

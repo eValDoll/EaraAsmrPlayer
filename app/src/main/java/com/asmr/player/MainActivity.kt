@@ -935,6 +935,10 @@ fun MainContainer(
             else -> false
         }
         val showBackButton = !currentScreenIsPrimary
+        val showPrimaryBrand = currentScreenIsPrimary
+        val topBarDividerColor = colorScheme.onSurface.copy(
+            alpha = if (colorScheme.isDark) 0.16f else 0.10f
+        )
         val useLargeBottomChrome = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && !isPhone
         CompositionLocalProvider(
             LocalBottomOverlayPadding provides (if (bottomChromeVisible) bottomChromeOverlayHeight(useLargeBottomChrome) else 0.dp),
@@ -1029,6 +1033,11 @@ fun MainContainer(
                                                 IconButton(onClick = { navController.popBackStack() }) {
                                                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                                                 }
+                                            } else if (showPrimaryBrand) {
+                                                PrimaryTopBarBrand(
+                                                    appName = stringResource(R.string.app_name),
+                                                    tint = topBarContentColor
+                                                )
                                             }
                                         },
                                         actions = {
@@ -1156,6 +1165,11 @@ fun MainContainer(
                                                 }
                                             }
                                         }
+                                    )
+                                    HorizontalDivider(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        thickness = 0.5.dp,
+                                        color = topBarDividerColor
                                     )
 
                                     val p = bulkProgress
@@ -2286,6 +2300,36 @@ private fun NavHostController.navigateSingleTop(route: String, popUpToRoute: Str
                 saveState = true
             }
         }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PrimaryTopBarBrand(
+    appName: String,
+    tint: Color,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier
+            .fillMaxHeight()
+            .padding(start = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        Icon(
+            painter = painterResource(R.drawable.ic_launcher_foreground),
+            contentDescription = null,
+            tint = tint,
+            modifier = Modifier.size(42.dp)
+        )
+        Text(
+            text = appName,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+            color = tint,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 

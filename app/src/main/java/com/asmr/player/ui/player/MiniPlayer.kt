@@ -315,7 +315,7 @@ private fun MiniPlayerCoverOnly(
             )
             MiniPlayerActivityBars(
                 isPlaying = isPlaying,
-                modifier = Modifier.align(Alignment.BottomCenter),
+                modifier = Modifier.align(Alignment.Center),
                 tint = Color.White
             )
         }
@@ -331,8 +331,8 @@ private fun MiniPlayerActivityBars(
     val transition = rememberInfiniteTransition(label = "miniPlayerBars")
     val heights = listOf(0, 60, 120, 180, 240, 300).map { delayMs ->
         transition.animateFloat(
-            initialValue = 0.14f,
-            targetValue = 0.92f,
+            initialValue = 0.18f,
+            targetValue = 1f,
             animationSpec = infiniteRepeatable(
                 animation = tween(
                     durationMillis = 520,
@@ -346,18 +346,17 @@ private fun MiniPlayerActivityBars(
     }
 
     Row(
-        modifier = modifier
-            .padding(bottom = 6.dp),
-        horizontalArrangement = Arrangement.spacedBy(1.5.dp),
-        verticalAlignment = Alignment.Bottom
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(1.8.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
         heights.forEachIndexed { index, height ->
-            val maxHeight = 4.2f + (index % 3) * 0.9f + index * 0.15f
+            val maxHeight = 8.2f + (index % 3) * 1.8f + index * 0.35f
             Box(
                 modifier = Modifier
                     .size(
-                        width = 1.8.dp,
-                        height = (if (isPlaying) 3f + height.value * maxHeight else 3f).dp
+                        width = 2.6.dp,
+                        height = (if (isPlaying) 4f + height.value * maxHeight else 4f).dp
                     )
                     .clip(RoundedCornerShape(99.dp))
                     .background(tint)
