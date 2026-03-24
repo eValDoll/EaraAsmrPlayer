@@ -276,11 +276,11 @@ fun resolvePrimaryRoute(
     }
 }
 
-private fun computeVisibleNavItems(
+internal fun computeVisibleNavItems(
     allItems: List<BottomChromeNavItem>,
     activeRoute: String,
     availableWidth: Dp,
-    metrics: BottomChromeMetrics,
+    metrics: BottomChromeMetrics = bottomChromeMetrics(largeLayout = false),
     preferredPinnedRoute: String? = null,
     maxVisibleItems: Int? = null
 ): BottomChromeNavLayout {
@@ -569,7 +569,7 @@ fun BottomChrome(
 }
 
 @Composable
-private fun BottomNavigationPill(
+internal fun BottomNavigationPill(
     navItems: List<BottomChromeNavItem>,
     activeRoute: String,
     preferredPinnedRoute: String? = null,
