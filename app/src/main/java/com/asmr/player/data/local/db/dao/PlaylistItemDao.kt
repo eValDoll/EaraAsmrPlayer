@@ -14,6 +14,9 @@ interface PlaylistItemDao {
     @Query("SELECT * FROM playlist_items WHERE playlistId = :playlistId ORDER BY itemOrder ASC, rowid ASC")
     fun observeItems(playlistId: Long): Flow<List<PlaylistItemEntity>>
 
+    @Query("SELECT * FROM playlist_items WHERE playlistId = :playlistId ORDER BY itemOrder ASC, rowid ASC")
+    suspend fun getItemsOnce(playlistId: Long): List<PlaylistItemEntity>
+
     @Query(
         """
         SELECT
@@ -62,6 +65,9 @@ interface PlaylistItemDao {
 
     @Query("DELETE FROM playlist_items WHERE playlistId = :playlistId")
     suspend fun clearPlaylist(playlistId: Long)
+
+    @Query("SELECT COALESCE(MAX(itemOrder), -1) FROM playlist_items WHERE playlistId = :playlistId")
+    suspend fun getMaxItemOrder(playlistId: Long): Int
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertItems(items: List<PlaylistItemEntity>)

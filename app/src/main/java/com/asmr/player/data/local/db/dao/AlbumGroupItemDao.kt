@@ -41,6 +41,29 @@ interface AlbumGroupItemDao {
     )
     fun observeGroupTracks(groupId: Long): Flow<List<AlbumGroupTrackRow>>
 
+    @Query(
+        """
+        SELECT i.*
+        FROM album_group_items i
+        INNER JOIN tracks t ON t.path = i.mediaId
+        WHERE i.groupId = :groupId
+          AND t.albumId = :albumId
+        ORDER BY i.itemOrder ASC, i.rowid ASC
+        """
+    )
+    suspend fun getAlbumItemsOnce(groupId: Long, albumId: Long): List<AlbumGroupItemEntity>
+
+    @Query(
+        """
+        SELECT COALESCE(MAX(i.itemOrder), -1)
+        FROM album_group_items i
+        INNER JOIN tracks t ON t.path = i.mediaId
+        WHERE i.groupId = :groupId
+          AND t.albumId = :albumId
+        """
+    )
+    suspend fun getMaxItemOrderInAlbum(groupId: Long, albumId: Long): Int
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertItems(items: List<AlbumGroupItemEntity>)
 

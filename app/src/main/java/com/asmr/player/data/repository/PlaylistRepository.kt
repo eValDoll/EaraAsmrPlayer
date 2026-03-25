@@ -11,9 +11,10 @@ import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.PlaylistEntity
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
 import com.asmr.player.data.local.db.entities.PlaylistItemWithSubtitles
+import com.asmr.player.util.ManualItemOrder
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -96,6 +97,7 @@ class PlaylistRepository @Inject constructor(
         if (mediaId.isNotBlank() && playlistItemDao.isItemInPlaylist(playlistId, mediaId)) {
             return false
         }
+        val nextOrder = playlistItemDao.getMaxItemOrder(playlistId) + 1
         val entity = PlaylistItemEntity(
             playlistId = playlistId,
             mediaId = mediaId,
@@ -103,10 +105,34 @@ class PlaylistRepository @Inject constructor(
             artist = item.mediaMetadata.artist?.toString().orEmpty(),
             uri = item.localConfiguration?.uri.toString(),
             artworkUri = resolvePlaylistItemArtwork(item),
-            itemOrder = Int.MAX_VALUE
+            itemOrder = nextOrder
         )
         playlistItemDao.upsertItems(listOf(entity))
         return true
+    }
+
+    suspend fun reorderPlaylistItems(playlistId: Long, orderedMediaIds: List<String>): Boolean {
+        if (playlistId <= 0L) return false
+        val current = playlistItemDao.getItemsOnce(playlistId)
+        if (current.size < 2) return false
+        val reordered = ManualItemOrder.reorderByKeys(current, orderedMediaIds) { it.mediaId }
+        return persistPlaylistOrder(current = current, ordered = reordered)
+    }
+
+    suspend fun movePlaylistItemToTop(playlistId: Long, mediaId: String): Boolean {
+        if (playlistId <= 0L || mediaId.isBlank()) return false
+        val current = playlistItemDao.getItemsOnce(playlistId)
+        if (current.size < 2) return false
+        val reordered = ManualItemOrder.moveKeyToStart(current, mediaId) { it.mediaId }
+        return persistPlaylistOrder(current = current, ordered = reordered)
+    }
+
+    suspend fun movePlaylistItemToBottom(playlistId: Long, mediaId: String): Boolean {
+        if (playlistId <= 0L || mediaId.isBlank()) return false
+        val current = playlistItemDao.getItemsOnce(playlistId)
+        if (current.size < 2) return false
+        val reordered = ManualItemOrder.moveKeyToEnd(current, mediaId) { it.mediaId }
+        return persistPlaylistOrder(current = current, ordered = reordered)
     }
 
     suspend fun removeItemFromPlaylist(playlistId: Long, mediaId: String) {
@@ -184,6 +210,18 @@ class PlaylistRepository @Inject constructor(
         if (local.isNotBlank()) return local
         val url = album.coverUrl.trim()
         return url.takeIf { it.isNotBlank() }
+    }
+
+    private suspend fun persistPlaylistOrder(
+        current: List<PlaylistItemEntity>,
+        ordered: List<PlaylistItemEntity>
+    ): Boolean {
+        val updated = ManualItemOrder.reindex(ordered) { item, index ->
+            item.copy(itemOrder = index)
+        }
+        if (current == updated) return false
+        playlistItemDao.upsertItems(updated)
+        return true
     }
 }
 
