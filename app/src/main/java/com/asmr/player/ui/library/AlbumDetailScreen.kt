@@ -118,6 +118,7 @@ import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
 import com.asmr.player.ui.common.CvChipsFlow
+import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.theme.AsmrTheme
@@ -228,7 +229,7 @@ fun AlbumDetailScreen(
             when (val state = uiState) {
                 is AlbumDetailUiState.Loading -> {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+                        EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
                     }
                 }
                 is AlbumDetailUiState.Success -> {
@@ -1897,7 +1898,7 @@ private fun AlbumAsmrOneTab(
                     contentAlignment = Alignment.Center
                 ) {
                     if (isLoading) {
-                        CircularProgressIndicator()
+                        EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
                     } else {
                         Text("暂无在线音频")
                     }
@@ -3653,7 +3654,7 @@ private fun AlbumDlsiteInfoTab(
                         .height(160.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator()
+                    EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
                 }
             }
             return@LazyColumn
@@ -3810,7 +3811,7 @@ private fun AlbumDlsiteInfoTab(
                         .height(120.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator()
+                    EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
                 }
             } else {
                 Box(
@@ -3853,7 +3854,7 @@ private fun AlbumDlsiteInfoTab(
                     contentAlignment = Alignment.Center
                 ) {
                     if (isLoadingTrial) {
-                        CircularProgressIndicator()
+                        EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
                     } else {
                         Text("暂无试听")
                     }
@@ -3868,7 +3869,7 @@ private fun AlbumDlsiteInfoTab(
                             .height(120.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        CircularProgressIndicator()
+                        EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
                     }
                 }
             }
@@ -4107,7 +4108,7 @@ private fun AlbumDlsitePlayTreeTab(
                     contentAlignment = Alignment.Center
                 ) {
                     if (isLoading) {
-                        CircularProgressIndicator()
+                        EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
                     } else {
                         Text("暂无可播放资源")
                     }

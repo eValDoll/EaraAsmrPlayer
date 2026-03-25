@@ -61,6 +61,7 @@ import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.ui.library.BulkPhase
 import com.asmr.player.ui.library.LibraryViewModel
 import com.asmr.player.ui.common.AppSupportStatusSection
+import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
@@ -663,7 +664,7 @@ fun SettingsScreen(
                             enabled = !busy
                         ) {
                             if (updateState is AppUpdateState.Checking) {
-                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                EaraLogoLoadingIndicator(size = 18.dp)
                                 Spacer(modifier = Modifier.width(10.dp))
                                 Text("检查中…")
                             } else {

@@ -55,6 +55,7 @@ import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.CoverContentRow
 import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.common.CvChipsSingleLine
+import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.withAddedBottomPadding
 import androidx.compose.material3.HorizontalDivider
@@ -71,7 +72,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -366,7 +366,7 @@ fun LibraryScreen(
                     when (val state = uiState) {
                     is LibraryUiState.Loading -> {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
+                            EaraLogoLoadingIndicator(tint = colorScheme.primary)
                         }
                     }
                     is LibraryUiState.BulkInProgress -> {
@@ -428,7 +428,7 @@ fun LibraryScreen(
                     is LibraryUiState.Success -> {
                         if (viewMode == null) {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator()
+                                EaraLogoLoadingIndicator(tint = colorScheme.primary)
                             }
                         } else {
                             // Main content area
@@ -447,7 +447,7 @@ fun LibraryScreen(
                                 }
                                 if (isLoading) {
                                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                        CircularProgressIndicator(color = colorScheme.primary)
+                                        EaraLogoLoadingIndicator(tint = colorScheme.primary)
                                     }
                                 } else if (isEmpty) {
                                     val hasAnyQuery =
@@ -1284,10 +1284,11 @@ private fun AlbumGridItem(
                         .blur(4.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp
+                    EaraLogoLoadingIndicator(
+                        size = 24.dp,
+                        tint = Color.White,
+                        glowColor = Color.White,
+                        showGlow = false
                     )
                 }
             } else if (syncStatus is SyncStatus.Error) {
@@ -1458,10 +1459,11 @@ private fun AlbumItem(
                                 .blur(2.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
+                            EaraLogoLoadingIndicator(
+                                size = 16.dp,
+                                tint = Color.White,
+                                glowColor = Color.White,
+                                showGlow = false
                             )
                         }
                     } else if (syncStatus is SyncStatus.Error) {
