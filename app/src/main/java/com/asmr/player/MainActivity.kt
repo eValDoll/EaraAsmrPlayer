@@ -188,6 +188,8 @@ import androidx.lifecycle.lifecycleScope
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.ui.common.AppVolumeVerticalSlider
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -195,6 +197,17 @@ private enum class OverlaySheet {
     Queue,
     SleepTimer
 }
+
+private data class PlaylistPickerRequest(
+    val mediaId: String,
+    val uri: String,
+    val title: String,
+    val artist: String,
+    val artworkUri: String,
+    val albumId: Long,
+    val trackId: Long,
+    val rjCode: String
+)
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
@@ -584,6 +597,7 @@ fun MainContainer(
     var nowPlayingBackdropExitDurationMs by rememberSaveable {
         mutableIntStateOf(NowPlayingMotionSpec.totalExitDurationMs(NowPlayingMotionLayout.PORTRAIT))
     }
+    var nowPlayingPlaylistPickerRequest by remember { mutableStateOf<PlaylistPickerRequest?>(null) }
     val playerImmersive = nowPlayingVisible
     val openNowPlaying = openNowPlaying@{
         if (nowPlayingVisible) return@openNowPlaying
@@ -591,6 +605,7 @@ fun MainContainer(
         nowPlayingVisible = true
     }
     val closeNowPlaying: () -> Unit = {
+        nowPlayingPlaylistPickerRequest = null
         nowPlayingBackdropActive = false
         nowPlayingVisible = false
     }
@@ -1947,16 +1962,15 @@ fun MainContainer(
                     onShowQueue = onShowQueue,
                     onShowSleepTimer = onShowSleepTimer,
                     onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode ->
-                        navController.navigateSingleTop(
-                            "playlist_picker" +
-                                "?mediaId=${encodeRouteArg(mediaId)}" +
-                                "&uri=${encodeRouteArg(uri)}" +
-                                "&title=${encodeRouteArg(title)}" +
-                                "&artist=${encodeRouteArg(artist)}" +
-                                "&artworkUri=${encodeRouteArg(artworkUri)}" +
-                                "&albumId=$albumId" +
-                                "&trackId=$trackId" +
-                                "&rjCode=${encodeRouteArg(rjCode)}"
+                        nowPlayingPlaylistPickerRequest = PlaylistPickerRequest(
+                            mediaId = mediaId,
+                            uri = uri,
+                            title = title,
+                            artist = artist,
+                            artworkUri = artworkUri,
+                            albumId = albumId,
+                            trackId = trackId,
+                            rjCode = rjCode
                         )
                     },
                     viewModel = playerViewModel,
@@ -1970,6 +1984,39 @@ fun MainContainer(
                     sharedArtworkAlignment = sharedPlayerBackdropAlignment,
                     sharedCoverDragPreviewState = sharedCoverDragPreviewState
                 )
+                nowPlayingPlaylistPickerRequest?.let { request ->
+                    Dialog(
+                        onDismissRequest = { nowPlayingPlaylistPickerRequest = null },
+                        properties = DialogProperties(usePlatformDefaultWidth = false)
+                    ) {
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = colorScheme.background.copy(alpha = 0.96f),
+                            contentColor = colorScheme.onBackground
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .windowInsetsPadding(StableWindowInsets.statusBars)
+                                    .windowInsetsPadding(StableWindowInsets.navigationBars)
+                            ) {
+                                PlaylistPickerScreen(
+                                    windowSizeClass = windowSizeClass,
+                                    mediaId = request.mediaId,
+                                    uri = request.uri,
+                                    title = request.title,
+                                    artist = request.artist,
+                                    artworkUri = request.artworkUri,
+                                    albumId = request.albumId,
+                                    trackId = request.trackId,
+                                    rjCode = request.rjCode,
+                                    onBack = { nowPlayingPlaylistPickerRequest = null },
+                                    embeddedInDialog = true
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }

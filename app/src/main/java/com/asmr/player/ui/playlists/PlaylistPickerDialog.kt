@@ -29,9 +29,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,8 +42,8 @@ import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.ui.theme.AsmrTheme
-import kotlinx.coroutines.launch
 import java.io.File
+import kotlinx.coroutines.launch
 
 @Composable
 fun PlaylistPickerScreen(
@@ -57,6 +57,7 @@ fun PlaylistPickerScreen(
     trackId: Long = 0L,
     rjCode: String = "",
     onBack: () -> Unit,
+    embeddedInDialog: Boolean = false,
     viewModel: PlaylistsViewModel = hiltViewModel()
 ) {
     val playlists by viewModel.playlists.collectAsState()
@@ -108,6 +109,20 @@ fun PlaylistPickerScreen(
                     color = colorScheme.textPrimary
                 )
 
+                if (embeddedInDialog) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(
+                            onClick = onBack,
+                            colors = ButtonDefaults.textButtonColors(contentColor = colorScheme.primary)
+                        ) {
+                            Text("关闭")
+                        }
+                    }
+                }
+
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     OutlinedTextField(
                         value = createName,
@@ -143,7 +158,10 @@ fun PlaylistPickerScreen(
             } else {
                 LazyColumn(
                     modifier = Modifier.fillMaxSize(),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(
+                        horizontal = 16.dp,
+                        vertical = 8.dp
+                    ),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     items(userPlaylists, key = { it.id }) { playlist ->
@@ -186,8 +204,11 @@ private fun buildPlaylistAddMediaItem(
     trackId: Long = 0L,
     rjCode: String = ""
 ): androidx.media3.common.MediaItem {
-    android.util.Log.d("PlaylistPicker", "buildPlaylistAddMediaItem - mediaId: $mediaId, uri: $uri, title: $title, artist: $artist, artworkUri: $artworkUri, albumId: $albumId, trackId: $trackId, rjCode: $rjCode")
-    
+    android.util.Log.d(
+        "PlaylistPicker",
+        "buildPlaylistAddMediaItem - mediaId: $mediaId, uri: $uri, title: $title, artist: $artist, artworkUri: $artworkUri, albumId: $albumId, trackId: $trackId, rjCode: $rjCode"
+    )
+
     val metadata = androidx.media3.common.MediaMetadata.Builder()
         .setTitle(title)
         .setArtist(artist)
@@ -200,7 +221,7 @@ private fun buildPlaylistAddMediaItem(
             }
         )
         .build()
-    
+
     val mimeType = guessMimeType(uri)
     val mediaItem = androidx.media3.common.MediaItem.Builder()
         .setMediaId(mediaId)
@@ -208,9 +229,12 @@ private fun buildPlaylistAddMediaItem(
         .setMimeType(mimeType)
         .setMediaMetadata(metadata)
         .build()
-    
-    android.util.Log.d("PlaylistPicker", "buildPlaylistAddMediaItem - created MediaItem with extras: ${mediaItem.mediaMetadata.extras}, artworkUri: ${mediaItem.mediaMetadata.artworkUri}")
-    
+
+    android.util.Log.d(
+        "PlaylistPicker",
+        "buildPlaylistAddMediaItem - created MediaItem with extras: ${mediaItem.mediaMetadata.extras}, artworkUri: ${mediaItem.mediaMetadata.artworkUri}"
+    )
+
     return mediaItem
 }
 
