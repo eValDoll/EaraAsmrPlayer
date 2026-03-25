@@ -2,22 +2,23 @@ package com.asmr.player.ui.groups
 
 import android.net.Uri
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.only
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,7 +48,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
@@ -57,11 +58,29 @@ import androidx.media3.common.MediaMetadata
 import com.asmr.player.data.local.db.dao.AlbumGroupTrackRow
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.ManualReorderDialog
+import com.asmr.player.ui.common.ManualReorderListItem
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.util.Formatting
 import kotlin.math.roundToLong
+
+internal const val GROUP_DETAIL_SECTION_HEADER_TAG_PREFIX = "groupDetailSectionHeader"
+internal const val GROUP_DETAIL_TRACK_TAG_PREFIX = "groupDetailTrack"
+internal const val GROUP_DETAIL_TRACK_MENU_BUTTON_TAG_PREFIX = "groupDetailTrackMenu"
+internal const val GROUP_DETAIL_MOVE_TOP_MENU_ITEM_TAG = "groupDetailMoveTopMenuItem"
+internal const val GROUP_DETAIL_MOVE_BOTTOM_MENU_ITEM_TAG = "groupDetailMoveBottomMenuItem"
+internal const val GROUP_DETAIL_REORDER_DIALOG_TAG = "groupDetailReorderDialog"
+internal const val GROUP_DETAIL_REORDER_ROW_TAG_PREFIX = "groupDetailReorderRow"
+
+private data class GroupReorderSession(
+    val albumId: Long,
+    val albumTitle: String,
+    val coverModel: String,
+    val initialMediaId: String,
+    val items: List<AlbumGroupTrackRow>
+)
 
 @Composable
 fun AlbumGroupDetailScreen(
@@ -75,16 +94,39 @@ fun AlbumGroupDetailScreen(
         viewModel.setGroupId(groupId)
     }
     val tracks by viewModel.tracks.collectAsState()
+    AlbumGroupDetailContent(
+        windowSizeClass = windowSizeClass,
+        title = title,
+        tracks = tracks,
+        onPlayMediaItems = onPlayMediaItems,
+        onRemoveTrack = viewModel::removeTrack,
+        onRemoveAlbum = viewModel::removeAlbum,
+        onMoveTrackToTop = viewModel::moveTrackToTop,
+        onMoveTrackToBottom = viewModel::moveTrackToBottom,
+        onSaveAlbumTrackOrder = viewModel::saveAlbumTrackOrder
+    )
+}
+
+@Composable
+internal fun AlbumGroupDetailContent(
+    windowSizeClass: WindowSizeClass,
+    title: String,
+    tracks: List<AlbumGroupTrackRow>,
+    onPlayMediaItems: (List<MediaItem>, Int) -> Unit,
+    onRemoveTrack: (String) -> Unit,
+    onRemoveAlbum: (Long) -> Unit,
+    onMoveTrackToTop: (Long, String) -> Unit,
+    onMoveTrackToBottom: (Long, String) -> Unit,
+    onSaveAlbumTrackOrder: (Long, List<String>) -> Unit
+) {
     val colorScheme = AsmrTheme.colorScheme
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
-    val expandedAlbumIds = rememberSaveable(groupId) { mutableStateOf(setOf<Long>()) }
-
+    val expandedAlbumIds = rememberSaveable { mutableStateOf(setOf<Long>()) }
     var pendingRemoveTrack by remember { mutableStateOf<AlbumGroupTrackRow?>(null) }
     var pendingRemoveAlbum by remember { mutableStateOf<Pair<Long, String>?>(null) }
+    var reorderSession by remember { mutableStateOf<GroupReorderSession?>(null) }
 
-    val sections = remember(tracks) {
-        tracks.groupBy { it.albumId }
-    }
+    val sections = remember(tracks) { tracks.groupBy { it.albumId } }
 
     Box(
         modifier = Modifier
@@ -109,7 +151,7 @@ fun AlbumGroupDetailScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    title,
+                    text = title,
                     style = MaterialTheme.typography.titleLarge,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -131,11 +173,11 @@ fun AlbumGroupDetailScreen(
                         .ifBlank { first?.albumCoverPath.orEmpty() }
                         .ifBlank { first?.albumCoverUrl.orEmpty() }
                         .trim()
-                        .ifBlank { "" }
-
                     val expanded = expandedAlbumIds.value.contains(albumId)
+
                     item(key = "header:$albumId") {
                         AlbumSectionHeader(
+                            albumId = albumId,
                             albumTitle = sectionTitle,
                             rjCode = rj,
                             coverModel = coverModel,
@@ -147,25 +189,37 @@ fun AlbumGroupDetailScreen(
                                     expandedAlbumIds.value + albumId
                                 }
                             },
-                            onRemoveAlbum = {
-                                pendingRemoveAlbum = albumId to sectionTitle
-                            }
+                            onRemoveAlbum = { pendingRemoveAlbum = albumId to sectionTitle }
                         )
                     }
 
                     if (expanded) {
-                        itemsIndexed(list, key = { idx, item -> "${item.mediaId}#$idx" }) { index, item ->
+                        itemsIndexed(list, key = { _, item -> item.mediaId }) { index, item ->
                             GroupTrackRow(
                                 item = item,
                                 coverModel = coverModel,
                                 onPlay = {
-                                    val mediaItems = list.map { it.toMediaItem() }
-                                    val startIndex = list.indexOfFirst { it.mediaId == item.mediaId }.coerceAtLeast(0)
+                                    val mediaItems = list.map { track -> track.toMediaItem() }
+                                    val startIndex = list.indexOfFirst { track -> track.mediaId == item.mediaId }
+                                        .coerceAtLeast(0)
                                     onPlayMediaItems(mediaItems, startIndex)
                                 },
+                                onLongPress = {
+                                    if (list.size > 1) {
+                                        reorderSession = GroupReorderSession(
+                                            albumId = albumId,
+                                            albumTitle = sectionTitle,
+                                            coverModel = coverModel,
+                                            initialMediaId = item.mediaId,
+                                            items = list
+                                        )
+                                    }
+                                },
+                                onMoveToTop = { onMoveTrackToTop(albumId, item.mediaId) },
+                                onMoveToBottom = { onMoveTrackToBottom(albumId, item.mediaId) },
                                 onRemove = { pendingRemoveTrack = item }
                             )
-                            if (index < list.size - 1) {
+                            if (index < list.lastIndex) {
                                 HorizontalDivider(
                                     modifier = Modifier.padding(horizontal = 16.dp),
                                     thickness = 0.5.dp,
@@ -179,8 +233,7 @@ fun AlbumGroupDetailScreen(
         }
     }
 
-    val track = pendingRemoveTrack
-    if (track != null) {
+    pendingRemoveTrack?.let { track ->
         AlertDialog(
             onDismissRequest = { pendingRemoveTrack = null },
             title = { Text("确认移除") },
@@ -189,7 +242,7 @@ fun AlbumGroupDetailScreen(
                 TextButton(
                     onClick = {
                         pendingRemoveTrack = null
-                        viewModel.removeTrack(track.mediaId)
+                        onRemoveTrack(track.mediaId)
                     }
                 ) { Text("移除") }
             },
@@ -199,8 +252,7 @@ fun AlbumGroupDetailScreen(
         )
     }
 
-    val album = pendingRemoveAlbum
-    if (album != null) {
+    pendingRemoveAlbum?.let { album ->
         AlertDialog(
             onDismissRequest = { pendingRemoveAlbum = null },
             title = { Text("确认移除") },
@@ -209,7 +261,7 @@ fun AlbumGroupDetailScreen(
                 TextButton(
                     onClick = {
                         pendingRemoveAlbum = null
-                        viewModel.removeAlbum(album.first)
+                        onRemoveAlbum(album.first)
                     }
                 ) { Text("移除") }
             },
@@ -218,10 +270,35 @@ fun AlbumGroupDetailScreen(
             }
         )
     }
+
+    reorderSession?.let { session ->
+        ManualReorderDialog(
+            title = "手动排序",
+            items = session.items.map { track ->
+                val durationMs = (track.trackDuration * 1000.0).roundToLong().coerceAtLeast(0L)
+                ManualReorderListItem(
+                    key = track.mediaId,
+                    title = track.trackTitle.ifBlank { "未命名" },
+                    subtitle = Formatting.formatTrackTime(durationMs),
+                    artworkModel = session.coverModel,
+                    supportingText = session.albumTitle
+                )
+            },
+            initialKey = session.initialMediaId,
+            dialogTag = GROUP_DETAIL_REORDER_DIALOG_TAG,
+            rowTagPrefix = GROUP_DETAIL_REORDER_ROW_TAG_PREFIX,
+            onDismiss = { reorderSession = null },
+            onOrderCommitted = { orderedMediaIds ->
+                onSaveAlbumTrackOrder(session.albumId, orderedMediaIds)
+            }
+        )
+    }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AlbumSectionHeader(
+    albumId: Long,
     albumTitle: String,
     rjCode: String,
     coverModel: Any?,
@@ -233,8 +310,9 @@ private fun AlbumSectionHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .testTag("$GROUP_DETAIL_SECTION_HEADER_TAG_PREFIX:$albumId")
             .background(colorScheme.surface)
-            .clickable { onToggle() }
+            .combinedClickable(onClick = onToggle, onLongClick = onToggle)
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -248,25 +326,27 @@ private fun AlbumSectionHeader(
                 .clip(RoundedCornerShape(8.dp))
         )
         Spacer(modifier = Modifier.width(10.dp))
-        Text(
-            text = albumTitle.ifBlank { rjCode.ifBlank { "专辑" } },
-            style = MaterialTheme.typography.titleMedium,
-            color = colorScheme.textPrimary,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        if (rjCode.isNotBlank()) {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = rjCode,
-                style = MaterialTheme.typography.labelSmall,
-                color = colorScheme.textTertiary,
-                modifier = Modifier.padding(start = 6.dp)
+                text = albumTitle.ifBlank { rjCode.ifBlank { "专辑" } },
+                style = MaterialTheme.typography.titleMedium,
+                color = colorScheme.textPrimary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
+            if (rjCode.isNotBlank()) {
+                Text(
+                    text = if (expanded) "$rjCode · 已展开" else "$rjCode · 已折叠",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colorScheme.textTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
         IconButton(onClick = onRemoveAlbum) {
             Icon(
-                Icons.Default.Delete,
+                imageVector = Icons.Default.Delete,
                 contentDescription = null,
                 tint = colorScheme.danger.copy(alpha = 0.7f)
             )
@@ -274,11 +354,15 @@ private fun AlbumSectionHeader(
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun GroupTrackRow(
     item: AlbumGroupTrackRow,
     coverModel: Any?,
     onPlay: () -> Unit,
+    onLongPress: () -> Unit,
+    onMoveToTop: () -> Unit,
+    onMoveToBottom: () -> Unit,
     onRemove: () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
@@ -291,7 +375,11 @@ private fun GroupTrackRow(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onPlay() }
+            .testTag("$GROUP_DETAIL_TRACK_TAG_PREFIX:${item.mediaId}")
+            .combinedClickable(
+                onClick = onPlay,
+                onLongClick = onLongPress
+            )
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -320,7 +408,10 @@ private fun GroupTrackRow(
             )
         }
         Box {
-            IconButton(onClick = { expanded = true }) {
+            IconButton(
+                onClick = { expanded = true },
+                modifier = Modifier.testTag("$GROUP_DETAIL_TRACK_MENU_BUTTON_TAG_PREFIX:${item.mediaId}")
+            ) {
                 Icon(imageVector = Icons.Default.MoreVert, contentDescription = null)
             }
             MaterialTheme(
@@ -339,6 +430,22 @@ private fun GroupTrackRow(
                         onClick = {
                             expanded = false
                             onPlay()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("移至顶部") },
+                        modifier = Modifier.testTag(GROUP_DETAIL_MOVE_TOP_MENU_ITEM_TAG),
+                        onClick = {
+                            expanded = false
+                            onMoveToTop()
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("移至末尾") },
+                        modifier = Modifier.testTag(GROUP_DETAIL_MOVE_BOTTOM_MENU_ITEM_TAG),
+                        onClick = {
+                            expanded = false
+                            onMoveToBottom()
                         }
                     )
                     HorizontalDivider(
@@ -393,13 +500,14 @@ private fun toPlayableUri(path: String): Uri {
 private fun String.toArtworkUriOrNull(): Uri? {
     val trimmed = trim()
     if (trimmed.isBlank()) return null
-    return if (trimmed.startsWith("http", ignoreCase = true) ||
+    return if (
+        trimmed.startsWith("http", ignoreCase = true) ||
         trimmed.startsWith("content://", ignoreCase = true) ||
         trimmed.startsWith("file://", ignoreCase = true)
     ) {
         trimmed.toUri()
     } else {
-        val f = java.io.File(trimmed)
-        if (f.exists()) Uri.fromFile(f) else null
+        val file = java.io.File(trimmed)
+        if (file.exists()) Uri.fromFile(file) else null
     }
 }
