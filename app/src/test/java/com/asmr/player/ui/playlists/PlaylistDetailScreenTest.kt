@@ -3,7 +3,9 @@ package com.asmr.player.ui.playlists
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -19,7 +21,7 @@ class PlaylistDetailScreenTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun longPressItem_opensManualReorderDialog() {
+    fun longPressItem_keepsReorderInlineInsteadOfOpeningDialog() {
         composeRule.setContent {
             AsmrPlayerTheme {
                 PlaylistDetailContent(
@@ -42,8 +44,12 @@ class PlaylistDetailScreenTest {
                 up()
             }
 
-        composeRule.onNodeWithTag(PLAYLIST_DETAIL_REORDER_DIALOG_TAG).assert(
-            SemanticsMatcher.expectValue(SemanticsProperties.TestTag, PLAYLIST_DETAIL_REORDER_DIALOG_TAG)
+        composeRule.onAllNodesWithTag(PLAYLIST_DETAIL_REORDER_DIALOG_TAG).assertCountEquals(0)
+        composeRule.onNodeWithTag("$PLAYLIST_DETAIL_ITEM_TAG_PREFIX:b").assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.TestTag,
+                "$PLAYLIST_DETAIL_ITEM_TAG_PREFIX:b"
+            )
         )
     }
 

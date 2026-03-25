@@ -21,7 +21,7 @@ class AlbumGroupDetailScreenTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun longPressTrack_opensReorderDialogForCurrentAlbumOnly() {
+    fun longPressTrack_keepsReorderInlineInsteadOfOpeningDialog() {
         composeRule.setContent {
             AsmrPlayerTheme {
                 AlbumGroupDetailContent(
@@ -47,22 +47,20 @@ class AlbumGroupDetailScreenTest {
                 up()
             }
 
-        composeRule.onNodeWithTag(GROUP_DETAIL_REORDER_DIALOG_TAG).assert(
-            SemanticsMatcher.expectValue(SemanticsProperties.TestTag, GROUP_DETAIL_REORDER_DIALOG_TAG)
-        )
-        composeRule.onNodeWithTag("$GROUP_DETAIL_REORDER_ROW_TAG_PREFIX:/albums/a/1.mp3").assert(
+        composeRule.onAllNodesWithTag(GROUP_DETAIL_REORDER_DIALOG_TAG).assertCountEquals(0)
+        composeRule.onNodeWithTag("$GROUP_DETAIL_TRACK_TAG_PREFIX:/albums/a/1.mp3").assert(
             SemanticsMatcher.expectValue(
                 SemanticsProperties.TestTag,
-                "$GROUP_DETAIL_REORDER_ROW_TAG_PREFIX:/albums/a/1.mp3"
+                "$GROUP_DETAIL_TRACK_TAG_PREFIX:/albums/a/1.mp3"
             )
         )
-        composeRule.onNodeWithTag("$GROUP_DETAIL_REORDER_ROW_TAG_PREFIX:/albums/a/2.mp3").assert(
+        composeRule.onNodeWithTag("$GROUP_DETAIL_TRACK_TAG_PREFIX:/albums/a/2.mp3").assert(
             SemanticsMatcher.expectValue(
                 SemanticsProperties.TestTag,
-                "$GROUP_DETAIL_REORDER_ROW_TAG_PREFIX:/albums/a/2.mp3"
+                "$GROUP_DETAIL_TRACK_TAG_PREFIX:/albums/a/2.mp3"
             )
         )
-        composeRule.onAllNodesWithTag("$GROUP_DETAIL_REORDER_ROW_TAG_PREFIX:/albums/b/1.mp3")
+        composeRule.onAllNodesWithTag("$GROUP_DETAIL_TRACK_TAG_PREFIX:/albums/b/1.mp3")
             .assertCountEquals(0)
     }
 

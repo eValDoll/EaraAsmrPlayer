@@ -1,24 +1,25 @@
 package com.asmr.player.ui.playlists
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.combinedClickable
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
@@ -38,12 +39,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
@@ -54,10 +58,13 @@ import com.asmr.player.data.local.db.entities.PlaylistItemEntity
 import com.asmr.player.data.local.db.entities.PlaylistItemWithSubtitles
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
-import com.asmr.player.ui.common.ManualReorderDialog
-import com.asmr.player.ui.common.ManualReorderListItem
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.SubtitleStamp
+import com.asmr.player.ui.common.reorderable.ItemPosition
+import com.asmr.player.ui.common.reorderable.ReorderableItem
+import com.asmr.player.ui.common.reorderable.detectReorderAfterLongPress
+import com.asmr.player.ui.common.reorderable.rememberReorderableLazyListState
+import com.asmr.player.ui.common.reorderable.reorderable
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 
@@ -68,10 +75,7 @@ internal const val PLAYLIST_DETAIL_MOVE_BOTTOM_MENU_ITEM_TAG = "playlistDetailMo
 internal const val PLAYLIST_DETAIL_REORDER_DIALOG_TAG = "playlistDetailReorderDialog"
 internal const val PLAYLIST_DETAIL_REORDER_ROW_TAG_PREFIX = "playlistDetailReorderRow"
 
-private data class PlaylistReorderSession(
-    val initialMediaId: String,
-    val items: List<PlaylistItemWithSubtitles>
-)
+private const val PLAYLIST_DETAIL_REORDER_SENTINEL_KEY = "__playlist_detail_reorder_sentinel__"
 
 @Composable
 fun PlaylistDetailScreen(
@@ -108,24 +112,35 @@ internal fun PlaylistDetailContent(
     onMoveItemToBottom: (String) -> Unit,
     onSaveManualOrder: (List<String>) -> Unit
 ) {
-    val playItems = remember(items) {
-        items.map {
-            PlaylistItemEntity(
-                playlistId = it.playlistId,
-                mediaId = it.mediaId,
-                title = it.title,
-                artist = it.artist,
-                uri = it.uri,
-                artworkUri = it.playbackArtworkUri.ifBlank { it.artworkUri },
-                itemOrder = it.itemOrder
-            )
+    val listState = rememberLazyListState()
+    val localItems = remember { mutableStateListOf<PlaylistItemWithSubtitles>() }
+    var pendingRemoveItem by remember { mutableStateOf<PlaylistItemWithSubtitles?>(null) }
+
+    val reorderState = rememberReorderableLazyListState(
+        listState = listState,
+        maxScrollPerFrame = 28.dp,
+        scrollTriggerPadding = 112.dp,
+        onMove = { from, to ->
+            localItems.movePlaylistItems(from, to)
+        },
+        canDragOver = { draggedOver, _ ->
+            localItems.any { item -> item.mediaId == draggedOver.key }
+        },
+        onDragEnd = { _, _ ->
+            onSaveManualOrder(localItems.map { it.mediaId })
+        }
+    )
+
+    LaunchedEffect(items) {
+        if (reorderState.draggingItemIndex == null) {
+            localItems.sync(items)
         }
     }
-    var pendingRemoveItem by remember { mutableStateOf<PlaylistItemWithSubtitles?>(null) }
-    var reorderSession by remember { mutableStateOf<PlaylistReorderSession?>(null) }
 
+    val playItems = localItems.map { item -> item.toPlaybackEntity() }
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
     val colorScheme = AsmrTheme.colorScheme
+
     Scaffold(
         contentWindowInsets = StableWindowInsets.navigationBars,
         containerColor = Color.Transparent,
@@ -146,40 +161,32 @@ internal fun PlaylistDetailContent(
                     .fillMaxWidth()
             }
             LazyColumn(
-                modifier = contentModifier,
+                state = listState,
+                modifier = contentModifier.reorderable(reorderState),
                 contentPadding = PaddingValues(top = 6.dp, bottom = LocalBottomOverlayPadding.current)
             ) {
-                itemsIndexed(items, key = { _, item -> item.mediaId }) { index, item ->
-                    val startItem = PlaylistItemEntity(
-                        playlistId = item.playlistId,
-                        mediaId = item.mediaId,
-                        title = item.title,
-                        artist = item.artist,
-                        uri = item.uri,
-                        artworkUri = item.playbackArtworkUri.ifBlank { item.artworkUri },
-                        itemOrder = item.itemOrder
-                    )
-                    PlaylistItemRow(
-                        item = item,
-                        showSubtitleStamp = item.hasSubtitles,
-                        onPlay = { onPlayAll(playItems, startItem) },
-                        onLongPress = {
-                            if (items.size > 1) {
-                                reorderSession = PlaylistReorderSession(
-                                    initialMediaId = item.mediaId,
-                                    items = items
-                                )
-                            }
-                        },
-                        onMoveToTop = { onMoveItemToTop(item.mediaId) },
-                        onMoveToBottom = { onMoveItemToBottom(item.mediaId) },
-                        onRemove = { pendingRemoveItem = item }
-                    )
-                    if (index < items.lastIndex) {
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 16.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                item(key = PLAYLIST_DETAIL_REORDER_SENTINEL_KEY) {
+                    Spacer(modifier = Modifier.height(1.dp))
+                }
+                itemsIndexed(localItems, key = { _, item -> item.mediaId }) { index, item ->
+                    ReorderableItem(
+                        reorderableState = reorderState,
+                        key = item.mediaId
+                    ) { isDragging ->
+                        PlaylistItemRow(
+                            item = item,
+                            showSubtitleStamp = item.hasSubtitles,
+                            showTopDivider = index > 0,
+                            isDragging = isDragging,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("$PLAYLIST_DETAIL_ITEM_TAG_PREFIX:${item.mediaId}")
+                                .detectReorderAfterLongPress(reorderState)
+                                .clickable { onPlayAll(playItems, item.toPlaybackEntity()) },
+                            onPlay = { onPlayAll(playItems, item.toPlaybackEntity()) },
+                            onMoveToTop = { onMoveItemToTop(item.mediaId) },
+                            onMoveToBottom = { onMoveItemToBottom(item.mediaId) },
+                            onRemove = { pendingRemoveItem = item }
                         )
                     }
                 }
@@ -214,26 +221,6 @@ internal fun PlaylistDetailContent(
             }
         )
     }
-
-    reorderSession?.let { session ->
-        ManualReorderDialog(
-            title = "手动排序",
-            items = session.items.map { item ->
-                ManualReorderListItem(
-                    key = item.mediaId,
-                    title = item.title.ifBlank { "未命名" },
-                    subtitle = item.artist,
-                    artworkModel = item.playbackArtworkUri.ifBlank { item.artworkUri },
-                    supportingText = if (item.hasSubtitles) "含字幕" else ""
-                )
-            },
-            initialKey = session.initialMediaId,
-            dialogTag = PLAYLIST_DETAIL_REORDER_DIALOG_TAG,
-            rowTagPrefix = PLAYLIST_DETAIL_REORDER_ROW_TAG_PREFIX,
-            onDismiss = { reorderSession = null },
-            onOrderCommitted = onSaveManualOrder
-        )
-    }
 }
 
 @OptIn(ExperimentalFoundationApi::class)
@@ -241,8 +228,10 @@ internal fun PlaylistDetailContent(
 private fun PlaylistItemRow(
     item: PlaylistItemWithSubtitles,
     showSubtitleStamp: Boolean,
+    showTopDivider: Boolean,
+    isDragging: Boolean,
+    modifier: Modifier = Modifier,
     onPlay: () -> Unit,
-    onLongPress: () -> Unit,
     onMoveToTop: () -> Unit,
     onMoveToBottom: () -> Unit,
     onRemove: () -> Unit
@@ -251,106 +240,147 @@ private fun PlaylistItemRow(
     val materialColorScheme = MaterialTheme.colorScheme
     val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
     var expanded by remember { mutableStateOf(false) }
+    val elevation by animateDpAsState(
+        targetValue = if (isDragging) 18.dp else 0.dp,
+        label = "playlistItemElevation"
+    )
 
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag("$PLAYLIST_DETAIL_ITEM_TAG_PREFIX:${item.mediaId}")
-            .combinedClickable(
-                onClick = onPlay,
-                onLongClick = onLongPress
-            )
-            .padding(horizontal = 16.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+    Box(
+        modifier = modifier.shadow(elevation, RoundedCornerShape(18.dp))
     ) {
-        AsmrAsyncImage(
-            model = item.artworkUri,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            placeholderCornerRadius = 6,
-            modifier = Modifier
-                .size(40.dp)
-                .clip(RoundedCornerShape(6.dp))
-        )
-        Spacer(modifier = Modifier.width(12.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = item.title.ifBlank { "未命名" },
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyMedium,
-                color = colorScheme.textPrimary
+        if (showTopDivider) {
+            HorizontalDivider(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp)
+                    .align(Alignment.TopCenter),
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
             )
-            if (item.artist.isNotBlank()) {
+        }
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AsmrAsyncImage(
+                model = item.artworkUri,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                placeholderCornerRadius = 6,
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(6.dp))
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = item.artist,
-                    maxLines = 1,
+                    text = item.title.ifBlank { "未命名" },
+                    maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colorScheme.textTertiary,
-                    modifier = Modifier.padding(top = 2.dp)
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colorScheme.textPrimary
                 )
+                if (item.artist.isNotBlank()) {
+                    Text(
+                        text = item.artist,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colorScheme.textTertiary,
+                        modifier = Modifier.padding(top = 2.dp)
+                    )
+                }
             }
-        }
-        Spacer(modifier = Modifier.width(8.dp))
-        if (showSubtitleStamp) {
-            SubtitleStamp(modifier = Modifier.padding(end = 8.dp))
-        }
-        Box {
-            IconButton(
-                onClick = { expanded = true },
-                modifier = Modifier.testTag("$PLAYLIST_DETAIL_ITEM_MENU_BUTTON_TAG_PREFIX:${item.mediaId}")
-            ) {
-                Icon(imageVector = Icons.Default.MoreVert, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            if (showSubtitleStamp) {
+                SubtitleStamp(modifier = Modifier.padding(end = 8.dp))
             }
-            MaterialTheme(
-                colorScheme = materialColorScheme.copy(
-                    surface = dynamicContainerColor,
-                    surfaceContainer = dynamicContainerColor
-                )
-            ) {
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false },
-                    modifier = Modifier.background(dynamicContainerColor)
+            Box {
+                IconButton(
+                    onClick = { expanded = true },
+                    modifier = Modifier.testTag("$PLAYLIST_DETAIL_ITEM_MENU_BUTTON_TAG_PREFIX:${item.mediaId}")
                 ) {
-                    DropdownMenuItem(
-                        text = { Text("播放") },
-                        onClick = {
-                            expanded = false
-                            onPlay()
-                        }
+                    Icon(imageVector = Icons.Default.MoreVert, contentDescription = null)
+                }
+                MaterialTheme(
+                    colorScheme = materialColorScheme.copy(
+                        surface = dynamicContainerColor,
+                        surfaceContainer = dynamicContainerColor
                     )
-                    DropdownMenuItem(
-                        text = { Text("移至顶部") },
-                        modifier = Modifier.testTag(PLAYLIST_DETAIL_MOVE_TOP_MENU_ITEM_TAG),
-                        onClick = {
-                            expanded = false
-                            onMoveToTop()
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("移至末尾") },
-                        modifier = Modifier.testTag(PLAYLIST_DETAIL_MOVE_BOTTOM_MENU_ITEM_TAG),
-                        onClick = {
-                            expanded = false
-                            onMoveToBottom()
-                        }
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                        thickness = 0.5.dp,
-                        color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
-                    )
-                    DropdownMenuItem(
-                        text = { Text("移除") },
-                        onClick = {
-                            expanded = false
-                            onRemove()
-                        }
-                    )
+                ) {
+                    DropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false },
+                        modifier = Modifier.background(dynamicContainerColor)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("播放") },
+                            onClick = {
+                                expanded = false
+                                onPlay()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("移至顶部") },
+                            modifier = Modifier.testTag(PLAYLIST_DETAIL_MOVE_TOP_MENU_ITEM_TAG),
+                            onClick = {
+                                expanded = false
+                                onMoveToTop()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("移至末尾") },
+                            modifier = Modifier.testTag(PLAYLIST_DETAIL_MOVE_BOTTOM_MENU_ITEM_TAG),
+                            onClick = {
+                                expanded = false
+                                onMoveToBottom()
+                            }
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(horizontal = 8.dp),
+                            thickness = 0.5.dp,
+                            color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                        )
+                        DropdownMenuItem(
+                            text = { Text("移除") },
+                            onClick = {
+                                expanded = false
+                                onRemove()
+                            }
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+private fun PlaylistItemWithSubtitles.toPlaybackEntity(): PlaylistItemEntity {
+    return PlaylistItemEntity(
+        playlistId = playlistId,
+        mediaId = mediaId,
+        title = title,
+        artist = artist,
+        uri = uri,
+        artworkUri = playbackArtworkUri.ifBlank { artworkUri },
+        itemOrder = itemOrder
+    )
+}
+
+private fun SnapshotStateList<PlaylistItemWithSubtitles>.sync(
+    items: List<PlaylistItemWithSubtitles>
+) {
+    clear()
+    addAll(items)
+}
+
+private fun SnapshotStateList<PlaylistItemWithSubtitles>.movePlaylistItems(
+    from: ItemPosition,
+    to: ItemPosition
+) {
+    if (isEmpty()) return
+    val fromIndex = from.index - 1
+    val toIndex = to.index - 1
+    if (fromIndex !in indices || toIndex !in indices || fromIndex == toIndex) return
+    add(toIndex, removeAt(fromIndex))
 }
