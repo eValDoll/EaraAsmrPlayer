@@ -168,7 +168,8 @@ internal fun ManualReorderDialog(
                     modifier = Modifier
                         .fillMaxSize()
                         .reorderable(reorderState)
-                        .detectReorderAfterLongPress(reorderState),
+                        .detectReorderAfterLongPress(reorderState)
+                        .thinScrollbar(listState),
                     contentPadding = PaddingValues(
                         start = 16.dp,
                         top = 12.dp,

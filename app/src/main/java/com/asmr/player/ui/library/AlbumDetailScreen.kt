@@ -29,6 +29,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -121,6 +122,7 @@ import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.util.Formatting
@@ -1353,6 +1355,7 @@ private fun dlsiteCoverUrlForRj(rj: String): String {
 fun AlbumTracks(album: Album, onTrackClick: (Track) -> Unit) {
     val groupedTracks = album.getGroupedTracks()
     val context = LocalContext.current
+    val listState = rememberLazyListState()
     val ids = remember(album.tracks) { album.tracks.map { it.id }.filter { it > 0L }.distinct() }
     val subtitleTrackIds by produceState(
         initialValue = emptySet<Long>(),
@@ -1379,7 +1382,8 @@ fun AlbumTracks(album: Album, onTrackClick: (Track) -> Unit) {
         }
     } else {
         LazyColumn(
-            modifier = Modifier.fillMaxSize(),
+            state = listState,
+            modifier = Modifier.fillMaxSize().thinScrollbar(listState),
             contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
         ) {
             groupedTracks.forEach { (group, tracks) ->
@@ -1707,7 +1711,8 @@ private fun AlbumLocalTab(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .nestedScroll(chromeState.nestedScrollConnection),
+            .nestedScroll(chromeState.nestedScrollConnection)
+            .thinScrollbar(listState),
         state = listState,
         contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
     ) {
@@ -1874,10 +1879,12 @@ private fun AlbumAsmrOneTab(
     val leafByRelPath = remember(leafTracks) { leafTracks.associateBy { it.relativePath } }
     val expanded = remember { mutableStateListOf<String>() }
     val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
     val treeResult = remember(trackTree, expanded.toList()) { flattenAsmrOneTreeForUi(trackTree, expanded.toSet()) }
 
     LazyColumn(
-        modifier = Modifier.fillMaxSize(),
+        state = listState,
+        modifier = Modifier.fillMaxSize().thinScrollbar(listState),
         contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
     ) {
         item { header() }
@@ -3088,6 +3095,7 @@ private fun AsmrOneDownloadDialog(
     val leafPathsByFolder = remember(trackTree) { buildLeafPathIndex(trackTree) }
     val expanded = remember { mutableStateListOf<String>() }
     val selected = remember(trackTree) { mutableStateListOf<String>().apply { addAll(leaves.map { it.relativePath }) } }
+    val listState = rememberLazyListState()
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -3141,7 +3149,10 @@ private fun AsmrOneDownloadDialog(
                         }
                     } else {
                         val entries = flattenAsmrOneTreeForUi(trackTree, expanded.toSet()).entries
-                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize().thinScrollbar(listState)
+                        ) {
                             itemsIndexed(items = entries, key = { _, it -> it.path }) { index, entry ->
                                 when (entry) {
                                     is AsmrTreeUiEntry.Folder -> {
@@ -3345,6 +3356,7 @@ private fun OnlineSaveDialog(
     val leafPathsByFolder = remember(trackTree) { buildMediaLeafPathIndex(trackTree) }
     val expanded = remember { mutableStateListOf<String>() }
     val selected = remember(trackTree) { mutableStateListOf<String>().apply { addAll(leaves.map { it.relativePath }) } }
+    val listState = rememberLazyListState()
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -3398,7 +3410,10 @@ private fun OnlineSaveDialog(
                         }
                     } else {
                         val entries = flattenAsmrOneMediaTreeForUi(trackTree, expanded.toSet()).entries
-                        LazyColumn(modifier = Modifier.fillMaxSize()) {
+                        LazyColumn(
+                            state = listState,
+                            modifier = Modifier.fillMaxSize().thinScrollbar(listState)
+                        ) {
                             itemsIndexed(items = entries, key = { _, it -> it.path }) { index, entry ->
                                 when (entry) {
                                     is AsmrTreeUiEntry.Folder -> {
@@ -3624,7 +3639,8 @@ private fun AlbumDlsiteInfoTab(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .nestedScroll(chromeState.nestedScrollConnection),
+            .nestedScroll(chromeState.nestedScrollConnection)
+            .thinScrollbar(listState),
         state = listState,
         contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
     ) {
@@ -4044,7 +4060,8 @@ private fun AlbumDlsitePlayTreeTab(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .nestedScroll(chromeState.nestedScrollConnection),
+            .nestedScroll(chromeState.nestedScrollConnection)
+            .thinScrollbar(listState),
         state = listState,
         contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
     ) {

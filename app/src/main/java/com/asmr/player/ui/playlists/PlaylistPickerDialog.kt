@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +42,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrTheme
 import java.io.File
 import kotlinx.coroutines.launch
@@ -64,6 +66,7 @@ fun PlaylistPickerScreen(
     val userPlaylists = remember(playlists) { playlists.filter { it.category == "user" } }
     val colorScheme = AsmrTheme.colorScheme
     val scope = rememberCoroutineScope()
+    val listState = rememberLazyListState()
     var createName by rememberSaveable { mutableStateOf("") }
     val canCreate = remember(createName) { createName.trim().isNotBlank() }
 
@@ -157,7 +160,8 @@ fun PlaylistPickerScreen(
                 }
             } else {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    state = listState,
+                    modifier = Modifier.fillMaxSize().thinScrollbar(listState),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(
                         horizontal = 16.dp,
                         vertical = 8.dp

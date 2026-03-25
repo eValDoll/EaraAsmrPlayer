@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -55,6 +56,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.asmr.player.data.local.db.dao.TagWithCount
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
@@ -163,6 +165,7 @@ fun LibraryFilterSheet(
     var tagSearch by rememberSaveable { mutableStateOf("") }
     var showSavePreset by remember { mutableStateOf(false) }
     var presetName by rememberSaveable { mutableStateOf("") }
+    val listState = rememberLazyListState()
 
     Column(modifier = modifier.fillMaxWidth()) {
         if (showHeader) {
@@ -190,7 +193,8 @@ fun LibraryFilterSheet(
         }
 
         LazyColumn(
-            modifier = Modifier.fillMaxWidth(),
+            state = listState,
+            modifier = Modifier.fillMaxWidth().thinScrollbar(listState),
             contentPadding = PaddingValues(bottom = 16.dp).withAddedBottomPadding(LocalBottomOverlayPadding.current),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -246,6 +250,7 @@ fun LibraryFilterSheet(
                                 .fillMaxWidth()
                                 .height(300.dp)
                                 .verticalScroll(scrollState)
+                                .thinScrollbar(scrollState)
                                 .padding(12.dp)
                         ) {
                             FlowRow(

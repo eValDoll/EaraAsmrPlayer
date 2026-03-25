@@ -16,6 +16,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -63,6 +64,7 @@ import com.asmr.player.ui.common.AppSupportStatusSection
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
+import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import java.io.File
 import kotlin.math.abs
@@ -100,6 +102,7 @@ fun SettingsScreen(
     val density = LocalDensity.current
     val context = LocalContext.current
     val colorScheme = AsmrTheme.colorScheme
+    val listState = rememberLazyListState()
     val segmentedButtonColors = SegmentedButtonDefaults.colors(
         activeContainerColor = colorScheme.primarySoft,
         activeContentColor = if (colorScheme.isDark) colorScheme.onPrimaryContainer else colorScheme.primaryStrong,
@@ -155,7 +158,8 @@ fun SettingsScreen(
             }
 
             LazyColumn(
-                modifier = contentModifier,
+                state = listState,
+                modifier = contentModifier.thinScrollbar(listState),
                 contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
                     .withAddedBottomPadding(LocalBottomOverlayPadding.current),
                 verticalArrangement = Arrangement.spacedBy(16.dp)

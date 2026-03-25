@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -61,6 +62,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.asmr.player.ui.common.thinScrollbar
 import java.io.File
 
 @Composable
@@ -76,6 +78,7 @@ fun DownloadsScreen(
     val downloadRoot = remember {
         File(context.getExternalFilesDir(null), "albums").absolutePath
     }
+    val listState = rememberLazyListState()
 
     // 屏幕尺寸判断
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
@@ -135,6 +138,8 @@ fun DownloadsScreen(
                 }
             } else {
                 LazyColumn(
+                    state = listState,
+                    modifier = Modifier.thinScrollbar(listState),
                     verticalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(
                         top = 4.dp,
