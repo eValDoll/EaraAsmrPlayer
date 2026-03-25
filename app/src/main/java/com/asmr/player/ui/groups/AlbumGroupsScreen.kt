@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -55,6 +56,7 @@ import com.asmr.player.data.local.db.entities.AlbumGroupEntity
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
+import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.theme.AsmrTheme
 
@@ -66,6 +68,7 @@ fun AlbumGroupsScreen(
 ) {
     val groups by viewModel.groups.collectAsState()
     val colorScheme = AsmrTheme.colorScheme
+    val listState = rememberLazyListState()
     var showCreate by remember { mutableStateOf(false) }
 
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
@@ -90,7 +93,8 @@ fun AlbumGroupsScreen(
             }
             Box(modifier = contentModifier) {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    state = listState,
+                    modifier = Modifier.fillMaxSize().thinScrollbar(listState),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                         .withAddedBottomPadding(LocalBottomOverlayPadding.current + 72.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)

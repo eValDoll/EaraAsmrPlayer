@@ -60,6 +60,7 @@ import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.SubtitleStamp
+import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.reorderable.ItemPosition
 import com.asmr.player.ui.common.reorderable.ReorderableItem
 import com.asmr.player.ui.common.reorderable.detectReorderAfterLongPress
@@ -162,7 +163,9 @@ internal fun PlaylistDetailContent(
             }
             LazyColumn(
                 state = listState,
-                modifier = contentModifier.reorderable(reorderState),
+                modifier = contentModifier
+                    .reorderable(reorderState)
+                    .thinScrollbar(listState),
                 contentPadding = PaddingValues(top = 6.dp, bottom = LocalBottomOverlayPadding.current)
             ) {
                 item(key = PLAYLIST_DETAIL_REORDER_SENTINEL_KEY) {

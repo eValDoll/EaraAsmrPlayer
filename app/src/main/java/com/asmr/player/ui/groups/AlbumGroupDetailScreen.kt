@@ -65,6 +65,7 @@ import com.asmr.player.data.local.db.dao.AlbumGroupTrackRow
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
+import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.reorderable.ItemPosition
 import com.asmr.player.ui.common.reorderable.ReorderableItem
 import com.asmr.player.ui.common.reorderable.detectReorderAfterLongPress
@@ -211,7 +212,8 @@ internal fun AlbumGroupDetailContent(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .reorderable(reorderState),
+                    .reorderable(reorderState)
+                    .thinScrollbar(listState),
                 contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
             ) {
                 item(key = GROUP_DETAIL_REORDER_SENTINEL_KEY) {

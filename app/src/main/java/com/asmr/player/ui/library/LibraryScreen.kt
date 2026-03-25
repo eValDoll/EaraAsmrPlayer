@@ -155,6 +155,7 @@ import com.asmr.player.ui.common.CustomSearchBar
 import com.asmr.player.ui.common.ActionButton
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
+import com.asmr.player.ui.common.thinScrollbar
 
 internal const val LIBRARY_CHROME_TAG = "library_chrome"
 internal const val LIBRARY_SEARCH_INPUT_TAG = "library_search_input"
@@ -498,7 +499,8 @@ fun LibraryScreen(
                                         state = listState,
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .nestedScroll(chromeState.nestedScrollConnection),
+                                            .nestedScroll(chromeState.nestedScrollConnection)
+                                            .thinScrollbar(listState),
                                         contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                                     ) {
@@ -666,7 +668,8 @@ fun LibraryScreen(
                                         state = gridState,
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .nestedScroll(chromeState.nestedScrollConnection),
+                                            .nestedScroll(chromeState.nestedScrollConnection)
+                                            .thinScrollbar(gridState),
                                         contentPadding = PaddingValues(top = topPadding, start = 16.dp, end = 16.dp, bottom = 16.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current),
                                         verticalItemSpacing = 16.dp,
@@ -720,7 +723,8 @@ fun LibraryScreen(
                                         state = listState,
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .nestedScroll(chromeState.nestedScrollConnection),
+                                            .nestedScroll(chromeState.nestedScrollConnection)
+                                            .thinScrollbar(listState),
                                         contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                                     ) {

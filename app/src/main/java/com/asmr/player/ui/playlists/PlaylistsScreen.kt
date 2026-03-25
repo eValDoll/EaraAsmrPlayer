@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -52,6 +53,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.graphics.Color
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
+import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 
 @Composable
@@ -62,6 +64,7 @@ fun PlaylistsScreen(
 ) {
     val playlists by viewModel.playlists.collectAsState()
     val colorScheme = AsmrTheme.colorScheme
+    val listState = rememberLazyListState()
     var showCreate by remember { mutableStateOf(false) }
     val userPlaylists = remember(playlists) { playlists.filter { it.category == "user" } }
 
@@ -89,7 +92,8 @@ fun PlaylistsScreen(
             }
             Box(modifier = contentModifier) {
                 LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
+                    state = listState,
+                    modifier = Modifier.fillMaxSize().thinScrollbar(listState),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                         .withAddedBottomPadding(LocalBottomOverlayPadding.current + 72.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)

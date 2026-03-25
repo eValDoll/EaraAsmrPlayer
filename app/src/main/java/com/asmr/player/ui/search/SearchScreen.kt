@@ -88,6 +88,7 @@ import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
+import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.library.AlbumGridItem
 import com.asmr.player.ui.library.AlbumItem
@@ -355,7 +356,8 @@ fun SearchScreen(
                                         state = listState,
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .nestedScroll(chromeState.nestedScrollConnection),
+                                            .nestedScroll(chromeState.nestedScrollConnection)
+                                            .thinScrollbar(listState),
                                         contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                                     ) {
@@ -377,7 +379,8 @@ fun SearchScreen(
                                         state = gridState,
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .nestedScroll(chromeState.nestedScrollConnection),
+                                            .nestedScroll(chromeState.nestedScrollConnection)
+                                            .thinScrollbar(gridState),
                                         contentPadding = PaddingValues(
                                             top = topPadding,
                                             start = 16.dp,
