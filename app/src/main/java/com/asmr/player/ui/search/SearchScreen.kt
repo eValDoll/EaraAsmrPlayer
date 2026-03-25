@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -39,7 +40,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -51,7 +51,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
@@ -84,6 +83,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.domain.model.Album
 import com.asmr.player.ui.common.CustomSearchBar
+import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.collapsibleHeaderUiState
@@ -205,15 +205,17 @@ fun SearchScreen(
     }
 
     val pullToRefreshState = rememberPullToRefreshState()
+    val refreshGestureEnabled = !pullToRefreshState.isRefreshing
     val topPaddingPx = with(androidx.compose.ui.platform.LocalDensity.current) { topPadding.toPx() }
-    val refreshIndicatorSizePx = with(androidx.compose.ui.platform.LocalDensity.current) {
-        SearchPullRefreshIndicatorSize.toPx()
-    }
-    val refreshIndicatorHalfSizePx = with(androidx.compose.ui.platform.LocalDensity.current) {
-        refreshIndicatorSizePx / 2f
+    val refreshIndicatorHoverOffsetPx = with(androidx.compose.ui.platform.LocalDensity.current) {
+        16.dp.toPx()
     }
     val pullContentOffsetTargetPx = (
-        pullToRefreshState.verticalOffset * SearchPullRefreshContentShiftRatio
+        if (pullToRefreshState.isRefreshing) {
+            0f
+        } else {
+            pullToRefreshState.verticalOffset * SearchPullRefreshContentShiftRatio
+        }
         ).coerceIn(
         minimumValue = 0f,
         maximumValue = pullToRefreshState.positionalThreshold * SearchPullRefreshContentShiftRatio
@@ -227,14 +229,10 @@ fun SearchScreen(
         },
         label = "searchPullContentOffset"
     )
-    val pullIndicatorTopOffsetPx = minOf(
-        pullContentOffsetPx / 2f - refreshIndicatorHalfSizePx,
-        pullContentOffsetPx - refreshIndicatorSizePx
-    )
-    val pullIndicatorBaseOffsetPx = topPaddingPx +
-        pullIndicatorTopOffsetPx -
-        pullToRefreshState.verticalOffset +
-        refreshIndicatorSizePx
+    val pullIndicatorBaseOffsetPx =
+        topPaddingPx +
+            refreshIndicatorHoverOffsetPx +
+            (pullContentOffsetPx / 2f)
     val latestKeyword by rememberUpdatedState(keyword)
     LaunchedEffect(pullToRefreshState.isRefreshing) {
         if (!pullToRefreshState.isRefreshing) return@LaunchedEffect
@@ -330,13 +328,18 @@ fun SearchScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .nestedScroll(pullToRefreshState.nestedScrollConnection)
+                            .then(
+                                if (refreshGestureEnabled) {
+                                    Modifier.nestedScroll(pullToRefreshState.nestedScrollConnection)
+                                } else {
+                                    Modifier
+                                }
+                            )
                             .clipToBounds()
                     ) {
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .graphicsLayer { translationY = pullContentOffsetPx }
                         ) {
                             when (val state = uiState) {
                             is SearchUiState.Loading -> Column(
@@ -347,7 +350,7 @@ fun SearchScreen(
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
                             ) {
-                                CircularProgressIndicator(color = colorScheme.primary)
+                                EaraLogoLoadingIndicator(tint = colorScheme.primary)
                             }
 
                             is SearchUiState.Success -> {
@@ -442,8 +445,9 @@ fun SearchScreen(
                             }
                         }
 
-                        PullToRefreshContainer(
-                            state = pullToRefreshState,
+                        SearchPullRefreshIndicator(
+                            progress = pullToRefreshState.progress,
+                            isRefreshing = pullToRefreshState.isRefreshing,
                             modifier = Modifier
                                 .align(Alignment.TopCenter)
                                 .graphicsLayer { translationY = pullIndicatorBaseOffsetPx }
@@ -515,6 +519,59 @@ fun SearchScreen(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SearchPullRefreshIndicator(
+    progress: Float,
+    isRefreshing: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val resolvedProgress = if (isRefreshing) 1f else progress.coerceIn(0f, 1f)
+    val indicatorScale by animateFloatAsState(
+        targetValue = 0.82f + resolvedProgress * 0.18f,
+        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+        label = "search_pull_refresh_scale"
+    )
+    val indicatorAlpha by animateFloatAsState(
+        targetValue = 0.48f + resolvedProgress * 0.52f,
+        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+        label = "search_pull_refresh_alpha"
+    )
+    val containerColor = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.92f else 0.98f)
+    val borderColor = if (colorScheme.isDark) {
+        Color.White.copy(alpha = 0.14f)
+    } else {
+        colorScheme.primary.copy(alpha = 0.16f)
+    }
+
+    Box(
+        modifier = modifier
+            .size(SearchPullRefreshIndicatorSize)
+            .graphicsLayer(
+                alpha = indicatorAlpha,
+                scaleX = indicatorScale,
+                scaleY = indicatorScale
+            )
+            .shadow(
+                elevation = if (colorScheme.isDark) 12.dp else 8.dp,
+                shape = CircleShape,
+                spotColor = if (colorScheme.isDark) Color.Black.copy(alpha = 0.6f) else Color.Black.copy(alpha = 0.18f),
+                ambientColor = if (colorScheme.isDark) Color.Black.copy(alpha = 0.6f) else Color.Black.copy(alpha = 0.18f)
+            )
+            .clip(CircleShape)
+            .background(containerColor)
+            .border(width = 1.dp, color = borderColor, shape = CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        EaraLogoLoadingIndicator(
+            size = 20.dp,
+            tint = colorScheme.primary,
+            glowColor = colorScheme.primarySoft,
+            showGlow = isRefreshing || resolvedProgress > 0.45f
+        )
     }
 }
 
@@ -751,12 +808,11 @@ internal fun SearchToolbar(
                             .testTag(SEARCH_SUBMIT_BUTTON_TAG)
                     ) {
                         if (showSearchSpinner) {
-                            CircularProgressIndicator(
+                            EaraLogoLoadingIndicator(
+                                size = 14.dp,
+                                tint = colorScheme.primary,
                                 modifier = Modifier
-                                    .size(14.dp)
-                                    .testTag(SEARCH_SUBMIT_SPINNER_TAG),
-                                strokeWidth = 2.dp,
-                                color = colorScheme.primary
+                                    .testTag(SEARCH_SUBMIT_SPINNER_TAG)
                             )
                         } else {
                             Icon(
