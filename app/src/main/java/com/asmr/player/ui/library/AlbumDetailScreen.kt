@@ -7,6 +7,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -157,6 +158,17 @@ private data class PreparedMediaPlayback(
 
 private val AlbumDetailTabContentGap = 12.dp
 private val AlbumDetailTabCollapseOvershoot = 10.dp
+
+private val DlsiteElasticResizeSpring = spring<IntSize>(
+    dampingRatio = Spring.DampingRatioLowBouncy,
+    stiffness = Spring.StiffnessLow
+)
+
+private fun dlsiteElasticItemModifier(
+    modifier: Modifier = Modifier
+): Modifier {
+    return modifier.animateContentSize(animationSpec = DlsiteElasticResizeSpring)
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -2372,7 +2384,6 @@ private fun AlbumLocalBreadcrumbTabV2(
         }
     }
 }
-
 @Composable
 private fun AlbumAsmrOneTab(
     album: Album,
@@ -7038,6 +7049,212 @@ private fun AlbumDlsiteInfoBreadcrumbTab(
 }
 
 @Composable
+private fun DlsiteGalleryLoadingRow() {
+    val placeholders = remember { listOf(0, 1, 2, 3) }
+    LazyRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        contentPadding = PaddingValues(vertical = 10.dp)
+    ) {
+        items(placeholders, key = { it }, contentType = { "galleryLoadingThumb" }) {
+            AsmrShimmerPlaceholder(
+                modifier = Modifier.size(width = 140.dp, height = 100.dp),
+                cornerRadius = 12
+            )
+        }
+    }
+}
+
+@Composable
+private fun DlsiteSectionPlaceholderLine(
+    widthFraction: Float,
+    modifier: Modifier = Modifier,
+    height: Dp = 14.dp,
+    cornerRadius: Int = 8
+) {
+    AsmrShimmerPlaceholder(
+        modifier = modifier
+            .fillMaxWidth(widthFraction)
+            .height(height),
+        cornerRadius = cornerRadius
+    )
+}
+
+@Composable
+private fun DlsiteDirectoryLoadingPanel() {
+    val screenHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
+    val fixedHeight = remember(screenHeight) {
+        (screenHeight * 0.48f).coerceIn(240.dp, 460.dp)
+    }
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        tonalElevation = 1.dp,
+        color = AsmrTheme.colorScheme.surface.copy(alpha = 0.44f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                DlsiteSectionPlaceholderLine(widthFraction = 0.56f, height = 16.dp)
+                DlsiteSectionPlaceholderLine(widthFraction = 0.32f, height = 12.dp)
+            }
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 12.dp),
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                AsmrShimmerPlaceholder(
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(40.dp),
+                    cornerRadius = 12
+                )
+                AsmrShimmerPlaceholder(
+                    modifier = Modifier.size(width = 92.dp, height = 34.dp),
+                    cornerRadius = 16
+                )
+            }
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 12.dp),
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(fixedHeight)
+                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                repeat(5) { index ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(start = if (index % 3 == 0) 0.dp else 14.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        val iconSize = if (index % 3 == 0) 18.dp else 14.dp
+                        AsmrShimmerPlaceholder(
+                            modifier = Modifier.size(iconSize),
+                            cornerRadius = 999
+                        )
+                        DlsiteSectionPlaceholderLine(
+                            widthFraction = if (index % 3 == 0) 0.72f else 0.54f,
+                            modifier = Modifier.weight(1f),
+                            height = 14.dp
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DlsiteTrialLoadingList() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        repeat(3) { index ->
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                tonalElevation = 1.dp,
+                color = AsmrTheme.colorScheme.surface.copy(alpha = 0.36f)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    DlsiteSectionPlaceholderLine(
+                        widthFraction = if (index == 0) 0.62f else 0.48f,
+                        height = 15.dp
+                    )
+                    DlsiteSectionPlaceholderLine(
+                        widthFraction = if (index == 2) 0.26f else 0.18f,
+                        height = 11.dp
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DlsiteRecommendationsLoadingBlocks() {
+    val placeholders = remember { listOf(0, 1, 2) }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
+    ) {
+        placeholders.forEach { sectionIndex ->
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                DlsiteSectionPlaceholderLine(
+                    widthFraction = when (sectionIndex) {
+                        0 -> 0.34f
+                        1 -> 0.28f
+                        else -> 0.52f
+                    },
+                    height = 18.dp
+                )
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    items(listOf(0, 1, 2, 3), key = { it }, contentType = { "dlsiteRecommendationLoadingCard" }) {
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            tonalElevation = 1.dp,
+                            color = AsmrTheme.colorScheme.surface.copy(alpha = 0.35f),
+                            modifier = Modifier.width(132.dp)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(bottom = 10.dp),
+                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                AsmrShimmerPlaceholder(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .aspectRatio(1f),
+                                    cornerRadius = 14
+                                )
+                                Column(
+                                    modifier = Modifier.padding(horizontal = 10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    DlsiteSectionPlaceholderLine(widthFraction = 0.88f, height = 12.dp)
+                                    DlsiteSectionPlaceholderLine(widthFraction = 0.46f, height = 10.dp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
 private fun AlbumDlsiteInfoBreadcrumbTabV2(
     album: Album,
     header: @Composable () -> Unit,
@@ -7098,6 +7315,7 @@ private fun AlbumDlsiteInfoBreadcrumbTabV2(
     LaunchedEffect(currentPath, treeStateKey) {
         onPersistCurrentPath(currentPath)
     }
+    val isInitialDlsiteLoading = dlsiteInfo == null && isLoading
 
     LazyColumn(
         modifier = Modifier
@@ -7107,19 +7325,66 @@ private fun AlbumDlsiteInfoBreadcrumbTabV2(
         state = listState,
         contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
     ) {
-        item { header() }
-        if (dlsiteInfo == null && isLoading) {
-            item {
-                Box(
-                    modifier = Modifier.fillMaxWidth().height(160.dp),
-                    contentAlignment = Alignment.Center
+        item(key = "dlsite-header") { header() }
+        if (isInitialDlsiteLoading) {
+            item(key = "dlsite-gallery-section") {
+                Column(modifier = dlsiteElasticItemModifier(Modifier.fillMaxWidth())) {
+                    Text(
+                        text = "Gallery",
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    DlsiteGalleryLoadingRow()
+                }
+            }
+            item(key = "dlsite-one-header") {
+                Row(
+                    modifier = dlsiteElasticItemModifier(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                    ),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
+                    Text(
+                        text = "ONE",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            item(key = "dlsite-one-content") {
+                Box(modifier = dlsiteElasticItemModifier(Modifier.fillMaxWidth())) {
+                    DlsiteDirectoryLoadingPanel()
+                }
+            }
+            item(key = "dlsite-trial-loading") {
+                Column(modifier = dlsiteElasticItemModifier(Modifier.fillMaxWidth())) {
+                Row(
+                    modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "试听 / 试看",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+                DlsiteTrialLoadingList()
+                }
+            }
+            item(key = "dlsite-recommendations") {
+                Box(modifier = dlsiteElasticItemModifier(Modifier.fillMaxWidth())) {
+                    DlsiteRecommendationsLoadingBlocks()
                 }
             }
             return@LazyColumn
         }
-        item {
+        item(key = "dlsite-gallery-section") {
+            Column(modifier = dlsiteElasticItemModifier(Modifier.fillMaxWidth())) {
             Text(
                 text = "Gallery",
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -7158,10 +7423,13 @@ private fun AlbumDlsiteInfoBreadcrumbTabV2(
                     }
                 }
             }
+            }
         }
-        item {
+        item(key = "dlsite-one-header") {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                modifier = dlsiteElasticItemModifier(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)
+                ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
@@ -7176,8 +7444,9 @@ private fun AlbumDlsiteInfoBreadcrumbTabV2(
             }
         }
         if (asmrOneTree.isNotEmpty()) {
-            item {
-                DirectoryBrowserPanelV4(
+            item(key = "dlsite-one-content") {
+                Box(modifier = dlsiteElasticItemModifier(Modifier.fillMaxWidth())) {
+                    DirectoryBrowserPanelV4(
                     panelKey = treeStateKey,
                     currentPath = currentPath,
                     breadcrumbs = browser.breadcrumbs,
@@ -7257,24 +7526,32 @@ private fun AlbumDlsiteInfoBreadcrumbTabV2(
                             onAddToPlaylist = if (file.fileType == TreeFileType.Audio) ({ onAddToPlaylistOne(file.path) }) else null
                         )
                     }
-                )
+                    )
+                }
             }
         } else if (isLoadingAsmrOne) {
-            item {
-                Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
-                    EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
+            item(key = "dlsite-one-content") {
+                Box(modifier = dlsiteElasticItemModifier(Modifier.fillMaxWidth())) {
+                    DlsiteDirectoryLoadingPanel()
                 }
             }
         } else {
-            item {
-                Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+            item(key = "dlsite-one-content") {
+                Box(
+                    modifier = dlsiteElasticItemModifier(
+                        Modifier.fillMaxWidth().height(120.dp)
+                    ),
+                    contentAlignment = Alignment.Center
+                ) {
                     Text("未收录")
                 }
             }
         }
-        item {
+        item(key = "dlsite-trial-header") {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                modifier = dlsiteElasticItemModifier(
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)
+                ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
@@ -7289,10 +7566,13 @@ private fun AlbumDlsiteInfoBreadcrumbTabV2(
             }
         }
         if (trialTracks.isEmpty()) {
-            item {
-                Box(modifier = Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
+            item(key = "dlsite-trial-content") {
+                Box(
+                    modifier = dlsiteElasticItemModifier(Modifier.fillMaxWidth()),
+                    contentAlignment = Alignment.Center
+                ) {
                     if (isLoadingTrial) {
-                        EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
+                        DlsiteTrialLoadingList()
                     } else {
                         Text("暂无试听")
                     }
@@ -7300,15 +7580,21 @@ private fun AlbumDlsiteInfoBreadcrumbTabV2(
             }
         } else {
             if (isLoadingTrial) {
-                item {
-                    Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
-                        EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
-                    }
+                item(key = "dlsite-trial-progress") {
+                    LinearProgressIndicator(
+                        modifier = dlsiteElasticItemModifier(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                        )
+                    )
                 }
             }
             items(items = videoTracks, key = { track -> if (track.id > 0L) track.id else track.path }, contentType = { "trialVideo" }) { track ->
                 Column(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                    modifier = dlsiteElasticItemModifier(
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
                 ) {
                     Text(
                         text = track.title,
@@ -7325,18 +7611,22 @@ private fun AlbumDlsiteInfoBreadcrumbTabV2(
                 }
             }
             items(items = audioTracks, key = { track -> if (track.id > 0L) track.id else track.path }, contentType = { "trialAudioTrack" }) { track ->
-                TrackItem(
-                    track = track,
-                    onClick = { onPlayTracks(album, audioTracks, track) },
-                    onAddToPlaylist = { onAddToPlaylist(track) }
-                )
+                Box(modifier = dlsiteElasticItemModifier(Modifier.fillMaxWidth())) {
+                    TrackItem(
+                        track = track,
+                        onClick = { onPlayTracks(album, audioTracks, track) },
+                        onAddToPlaylist = { onAddToPlaylist(track) }
+                    )
+                }
             }
         }
-        item {
-            DlsiteRecommendationsBlocks(
-                recommendations = dlsiteRecommendations,
-                onOpenAlbumByRj = onOpenAlbumByRj
-            )
+        item(key = "dlsite-recommendations") {
+            Box(modifier = dlsiteElasticItemModifier(Modifier.fillMaxWidth())) {
+                DlsiteRecommendationsBlocks(
+                    recommendations = dlsiteRecommendations,
+                    onOpenAlbumByRj = onOpenAlbumByRj
+                )
+            }
         }
     }
 
