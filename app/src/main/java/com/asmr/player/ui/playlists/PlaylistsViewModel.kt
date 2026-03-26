@@ -5,16 +5,16 @@ import androidx.lifecycle.viewModelScope
 import androidx.media3.common.MediaItem
 import com.asmr.player.data.local.db.dao.PlaylistStatsRow
 import com.asmr.player.data.local.db.entities.PlaylistEntity
+import com.asmr.player.data.repository.PlaylistAddSummary
 import com.asmr.player.data.repository.PlaylistRepository
 import com.asmr.player.data.repository.RenamePlaylistResult
+import com.asmr.player.util.MessageManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
-
-import com.asmr.player.util.MessageManager
 
 @HiltViewModel
 class PlaylistsViewModel @Inject constructor(
@@ -63,14 +63,32 @@ class PlaylistsViewModel @Inject constructor(
     }
 
     suspend fun addItemToPlaylist(playlistId: Long, item: MediaItem): Boolean {
-        val added = playlistRepository.addItemToPlaylist(playlistId, item)
-        val playlist = playlistRepository.getPlaylistById(playlistId)
-        val name = playlist?.name ?: ""
-        if (added) {
-            messageManager.showSuccess("已添加到播放列表：$name")
-        } else {
-            messageManager.showInfo("已在播放列表：$name")
+        return addItemsToPlaylist(playlistId, listOf(item)).addedCount > 0
+    }
+
+    suspend fun addItemsToFavorites(items: List<MediaItem>): PlaylistAddSummary {
+        val favoritesId = playlistRepository.getOrCreateFavoritesPlaylistId()
+        val summary = playlistRepository.addItemsToPlaylist(favoritesId, items)
+        showAddSummary(PlaylistRepository.PLAYLIST_FAVORITES, summary)
+        return summary
+    }
+
+    suspend fun addItemsToPlaylist(playlistId: Long, items: List<MediaItem>): PlaylistAddSummary {
+        val summary = playlistRepository.addItemsToPlaylist(playlistId, items)
+        val name = playlistRepository.getPlaylistById(playlistId)?.name.orEmpty()
+        showAddSummary(name, summary)
+        return summary
+    }
+
+    private fun showAddSummary(playlistName: String, summary: PlaylistAddSummary) {
+        when {
+            summary.addedCount > 0 && summary.skippedCount > 0 ->
+                messageManager.showSuccess("已添加 ${summary.addedCount} 项到$playlistName，跳过 ${summary.skippedCount} 项")
+            summary.addedCount > 0 ->
+                messageManager.showSuccess("已添加 ${summary.addedCount} 项到$playlistName")
+            summary.totalCount > 0 ->
+                messageManager.showInfo("所选项目已在$playlistName")
+            else -> Unit
         }
-        return added
     }
 }

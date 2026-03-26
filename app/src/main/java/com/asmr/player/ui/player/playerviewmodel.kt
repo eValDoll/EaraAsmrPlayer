@@ -266,6 +266,8 @@ class PlayerViewModel @Inject constructor(
 
     fun addToQueue() {
         val item = playback.value.currentMediaItem ?: return
+        showQueueAddSummary(playerConnection.addMediaItems(listOf(item)))
+        return
         val added = playerConnection.addMediaItem(item)
         if (added) {
             messageManager.showSuccess("已加入播放队列")
@@ -276,6 +278,9 @@ class PlayerViewModel @Inject constructor(
 
     fun addTrackToQueue(album: Album, track: Track): Boolean {
         val item = MediaItemFactory.fromTrack(album, track)
+        val summary = playerConnection.addMediaItems(listOf(item))
+        showQueueAddSummary(summary)
+        return summary.addedCount > 0
         val added = playerConnection.addMediaItem(item)
         if (added) {
             messageManager.showSuccess("已加入播放队列")
@@ -283,6 +288,10 @@ class PlayerViewModel @Inject constructor(
             messageManager.showInfo("已在播放队列中")
         }
         return added
+    }
+
+    fun addMediaItemsToQueue(items: List<MediaItem>) {
+        showQueueAddSummary(playerConnection.addMediaItems(items))
     }
 
     suspend fun addToPlaylist(playlistId: Long): Boolean {
@@ -294,6 +303,18 @@ class PlayerViewModel @Inject constructor(
             messageManager.showInfo("已在播放列表中")
         }
         return added
+    }
+
+    private fun showQueueAddSummary(summary: com.asmr.player.playback.QueueAddSummary) {
+        when {
+            summary.addedCount > 0 && summary.skippedCount > 0 ->
+                messageManager.showSuccess("已加入队列 ${summary.addedCount} 项，跳过 ${summary.skippedCount} 项")
+            summary.addedCount > 0 ->
+                messageManager.showSuccess("已加入播放队列 ${summary.addedCount} 项")
+            summary.totalCount > 0 ->
+                messageManager.showInfo("所选项目已在播放队列中")
+            else -> Unit
+        }
     }
 
     fun play() = playerConnection.play()

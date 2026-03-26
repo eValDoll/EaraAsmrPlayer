@@ -19,7 +19,9 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -45,6 +47,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.graphics.graphicsLayer
@@ -121,6 +124,7 @@ import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
+import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.thinScrollbar
@@ -165,7 +169,10 @@ fun AlbumDetailScreen(
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
     onPlayMediaItems: (List<MediaItem>, Int) -> Unit = { _, _ -> },
     onAddToQueue: (Album, Track) -> Boolean = { _, _ -> false },
+    onAddMediaItemsToQueue: (List<MediaItem>) -> Unit = {},
+    onAddMediaItemsToFavorites: (List<MediaItem>) -> Unit = {},
     onOpenPlaylistPicker: (mediaId: String, uri: String, title: String, artist: String, artworkUri: String, albumId: Long, trackId: Long, rjCode: String) -> Unit = { _, _, _, _, _, _, _, _ -> },
+    onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit = {},
     onOpenGroupPicker: (albumId: Long) -> Unit = { _ -> },
     onPlayVideo: (String, String, String, String) -> Unit = { _, _, _, _ -> },
     onOpenDlsiteLogin: () -> Unit = {},
@@ -190,6 +197,7 @@ fun AlbumDetailScreen(
     var showAsmrDownloadDialog by remember { mutableStateOf(false) }
     var showOnlineSaveDialog by remember { mutableStateOf(false) }
     var pendingOnlineSaveSelection by remember { mutableStateOf<Set<String>?>(null) }
+    var batchPlaylistItems by remember { mutableStateOf<List<MediaItem>?>(null) }
     var downloadSource by remember { mutableStateOf(OnlineDownloadSource.AsmrOne) }
     val scope = rememberCoroutineScope()
 
@@ -375,12 +383,12 @@ fun AlbumDetailScreen(
                                                     else -> "localTree:localId:${local.id}"
                                                 }
                                             }
-                                            AlbumLocalTab(
+                                            AlbumLocalBreadcrumbTabV2(
                                                 stateKey = localTreeStateKey,
-                                                initialExpanded = viewModel.getTreeExpanded(localTreeStateKey),
-                                                wasInitialized = viewModel.isTreeInitialized(localTreeStateKey),
-                                                onPersistTreeState = { expanded ->
-                                                    viewModel.persistTreeState(localTreeStateKey, expanded)
+                                                initialCurrentPath = viewModel.getPreferredTreeCurrentPath(localTreeStateKey)
+                                                    .ifBlank { viewModel.getTreeCurrentPath(localTreeStateKey) },
+                                                onPersistCurrentPath = { path ->
+                                                    viewModel.persistTreeCurrentPath(localTreeStateKey, path)
                                                 },
                                                 initialScroll = viewModel.getListScrollPosition("scroll:$localTreeStateKey"),
                                                 onPersistScroll = { index, offset ->
@@ -395,6 +403,18 @@ fun AlbumDetailScreen(
                                                 onPlayVideo = onPlayVideo,
                                                 onAddToQueue = { track ->
                                                     onAddToQueue(local, track)
+                                                },
+                                                onAddMediaItemsToQueue = onAddMediaItemsToQueue,
+                                                onAddMediaItemsToFavorites = onAddMediaItemsToFavorites,
+                                                onOpenBatchPlaylistPicker = { items -> batchPlaylistItems = items },
+                                                preferredCurrentPath = viewModel.getPreferredTreeCurrentPath(localTreeStateKey),
+                                                onTogglePreferredCurrentPath = { path, enabled ->
+                                                    if (enabled) {
+                                                        viewModel.persistPreferredTreeCurrentPath(localTreeStateKey, path)
+                                                        viewModel.messageManager.showSuccess("已设为默认打开目录")
+                                                    } else {
+                                                        viewModel.clearPreferredTreeCurrentPath(localTreeStateKey)
+                                                    }
                                                 },
                                                 onAddToPlaylist = { track ->
                                                     val target = PlaylistAddTarget.fromTrack(local, track)
@@ -426,7 +446,7 @@ fun AlbumDetailScreen(
                                             }
                                         }
                                     }
-                                    1 -> AlbumDlsiteInfoTab(
+                                    1 -> AlbumDlsiteInfoBreadcrumbTabV2(
                                         album = album,
                                         header = headerContent,
                                         dlsiteInfo = model.dlsiteInfo,
@@ -439,14 +459,18 @@ fun AlbumDetailScreen(
                                         onRefreshAsmrOne = { viewModel.refreshAsmrOneSection() },
                                         onRefreshTrial = { viewModel.refreshDlsiteTrialSection() },
                                         onPlayTracks = onPlayTracks,
+                                        onPlayMediaItems = onPlayMediaItems,
                                         onAddToQueue = { track ->
                                             onAddToQueue(album, track)
                                         },
+                                        onAddMediaItemsToQueue = onAddMediaItemsToQueue,
+                                        onAddMediaItemsToFavorites = onAddMediaItemsToFavorites,
+                                        onOpenBatchPlaylistPicker = { items -> batchPlaylistItems = items },
                                         onDownloadOne = { relPath ->
                                             viewModel.downloadAsmrOneSelected(setOf(relPath))
                                         },
                                         onAddToPlaylistOne = { relPath ->
-                                            val target = PlaylistAddTarget.fromAsmrOne(album, asmrOneTree, relPath) ?: return@AlbumDlsiteInfoTab
+                                            val target = PlaylistAddTarget.fromAsmrOne(album, asmrOneTree, relPath) ?: return@AlbumDlsiteInfoBreadcrumbTabV2
                                             onOpenPlaylistPicker(
                                                 target.mediaId,
                                                 target.uri,
@@ -473,22 +497,22 @@ fun AlbumDetailScreen(
                                         },
                                         onPreviewFile = { onlinePreviewFile = it },
                                         treeStateKey = "tree:asmrOne:${model.rjCode.trim().uppercase()}",
-                                        treeInitialExpanded = viewModel.getTreeExpanded("tree:asmrOne:${model.rjCode.trim().uppercase()}"),
-                                        treeWasInitialized = viewModel.isTreeInitialized("tree:asmrOne:${model.rjCode.trim().uppercase()}"),
+                                        initialCurrentPath = viewModel.getTreeCurrentPath("tree:asmrOne:${model.rjCode.trim().uppercase()}"),
                                         topContentPadding = tabContentTopPadding,
                                         chromeState = tabChromeState,
-                                        onPersistTreeState = { expanded ->
+                                        onPersistCurrentPath = { path ->
                                             val rj = model.rjCode.trim().uppercase()
-                                            viewModel.persistTreeState("tree:asmrOne:$rj", expanded)
+                                            viewModel.persistTreeCurrentPath("tree:asmrOne:$rj", path)
                                         },
                                         initialScroll = viewModel.getListScrollPosition("scroll:tree:asmrOne:${model.rjCode.trim().uppercase()}"),
                                         onPersistScroll = { index, offset ->
                                             viewModel.persistListScrollPosition("scroll:tree:asmrOne:${model.rjCode.trim().uppercase()}", index, offset)
                                         },
                                         dlsiteRecommendations = model.dlsiteRecommendations,
-                                        onOpenAlbumByRj = onOpenAlbumByRj
+                                        onOpenAlbumByRj = onOpenAlbumByRj,
+                                        loadRemoteFileSize = { viewModel.loadRemoteFileSize(it) }
                                     )
-                                    else -> AlbumDlsitePlayTreeTab(
+                                    else -> AlbumDlsitePlayBreadcrumbTabV2(
                                         header = headerContent,
                                         album = album,
                                         rjCode = model.rjCode,
@@ -502,23 +526,26 @@ fun AlbumDetailScreen(
                                         onAddToQueue = { track ->
                                             onAddToQueue(album, track)
                                         },
+                                        onAddMediaItemsToQueue = onAddMediaItemsToQueue,
+                                        onAddMediaItemsToFavorites = onAddMediaItemsToFavorites,
+                                        onOpenBatchPlaylistPicker = { items -> batchPlaylistItems = items },
                                         onDownloadOne = { relPath ->
                                             viewModel.downloadDlsitePlaySelected(setOf(relPath))
                                         },
                                         onPreviewFile = { onlinePreviewFile = it },
                                         treeStateKey = "tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}",
-                                        treeInitialExpanded = viewModel.getTreeExpanded("tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}"),
-                                        treeWasInitialized = viewModel.isTreeInitialized("tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}"),
+                                        initialCurrentPath = viewModel.getTreeCurrentPath("tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}"),
                                         topContentPadding = tabContentTopPadding,
                                         chromeState = tabChromeState,
-                                        onPersistTreeState = { expanded ->
+                                        onPersistCurrentPath = { path ->
                                             val rj = model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()
-                                            viewModel.persistTreeState("tree:dlsitePlay:$rj", expanded)
+                                            viewModel.persistTreeCurrentPath("tree:dlsitePlay:$rj", path)
                                         },
                                         initialScroll = viewModel.getListScrollPosition("scroll:tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}"),
                                         onPersistScroll = { index, offset ->
                                             viewModel.persistListScrollPosition("scroll:tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}", index, offset)
                                         },
+                                        loadRemoteFileSize = { viewModel.loadRemoteFileSize(it) }
                                     )
                                 }
                             }
@@ -569,6 +596,32 @@ fun AlbumDetailScreen(
                             showOnlineSaveDialog = false
                         }
                     )
+                }
+
+                batchPlaylistItems?.let { items ->
+                    Dialog(
+                        onDismissRequest = { batchPlaylistItems = null },
+                        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+                    ) {
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = colorScheme.background.copy(alpha = 0.96f),
+                            contentColor = colorScheme.textPrimary
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(horizontal = 12.dp)
+                            ) {
+                                PlaylistPickerScreen(
+                                    windowSizeClass = windowSizeClass,
+                                    items = items,
+                                    onBack = { batchPlaylistItems = null },
+                                    embeddedInDialog = true
+                                )
+                            }
+                        }
+                    }
                 }
 
                 if (localPreviewFile != null) {
@@ -1447,7 +1500,7 @@ fun TrackItem(
         },
         supportingContent = { 
             val isOnline = remember(track.path) { track.path.trim().startsWith("http", ignoreCase = true) }
-            val durationText = if (track.duration > 0) Formatting.formatTrackTime(track.duration.toLong()) else ""
+            val durationText = Formatting.formatTrackSeconds(track.duration)
             Text(
                 when {
                     isOnline && durationText.isNotBlank() -> "在线 · $durationText"
@@ -1867,6 +1920,460 @@ private fun AlbumLocalTab(
 
 
 @Composable
+private fun AlbumLocalBreadcrumbTab(
+    stateKey: String,
+    initialCurrentPath: String,
+    onPersistCurrentPath: (String) -> Unit,
+    initialScroll: Pair<Int, Int>,
+    onPersistScroll: (Int, Int) -> Unit,
+    topContentPadding: Dp,
+    chromeState: com.asmr.player.ui.common.CollapsibleHeaderState,
+    album: Album,
+    header: @Composable () -> Unit,
+    onPlayTracks: (Album, List<Track>, Track) -> Unit,
+    onPlayMediaItems: (List<MediaItem>, Int) -> Unit,
+    onPlayVideo: (String, String, String, String) -> Unit,
+    onAddToQueue: (Track) -> Boolean,
+    onAddMediaItemsToQueue: (List<MediaItem>) -> Unit,
+    onAddMediaItemsToFavorites: (List<MediaItem>) -> Unit,
+    onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
+    preferredCurrentPath: String,
+    onTogglePreferredCurrentPath: (String, Boolean) -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
+    onManageTrackTags: (Track) -> Unit,
+    onRemoveTrack: (Track) -> Unit,
+    onSetCoverFromImage: (String) -> Unit,
+    onPreviewFile: (LocalTreeUiEntry.File) -> Unit,
+) {
+    val queueTracks = remember(album.id, album.tracks) {
+        album.tracks.sortedBy { it.path }
+    }
+    val queueTrackIds = remember(queueTracks) {
+        queueTracks.asSequence().map { it.id }.filter { it > 0L }.distinct().toList()
+    }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val allPaths = remember(album) { album.getAllLocalPaths() }
+    var currentPath by rememberSaveable(stateKey) {
+        mutableStateOf(initialCurrentPath.trim().trim('/'))
+    }
+
+    val listState = rememberSaveable("scroll:$stateKey", saver = LazyListState.Saver) {
+        LazyListState(initialScroll.first, initialScroll.second)
+    }
+    LaunchedEffect(listState, stateKey) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .distinctUntilChanged()
+            .collect { (idx, off) -> onPersistScroll(idx, off) }
+    }
+    LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
+        if (listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
+            chromeState.expand()
+        }
+    }
+    LaunchedEffect(currentPath, stateKey) {
+        onPersistCurrentPath(currentPath)
+    }
+
+    val subtitleTrackIds by produceState(
+        initialValue = emptySet<Long>(),
+        key1 = queueTrackIds
+    ) {
+        value = withContext(Dispatchers.IO) {
+            if (queueTrackIds.isEmpty()) emptySet()
+            else AppDatabaseProvider.get(context).trackDao().getTrackIdsWithSubtitles(queueTrackIds).toSet()
+        }
+    }
+    val remoteSubtitleTrackIds by produceState(
+        initialValue = emptySet<Long>(),
+        key1 = queueTrackIds
+    ) {
+        value = withContext(Dispatchers.IO) {
+            if (queueTrackIds.isEmpty()) emptySet()
+            else AppDatabaseProvider.get(context).remoteSubtitleSourceDao()
+                .getTrackIdsWithRemoteSources(queueTrackIds)
+                .toSet()
+        }
+    }
+    val treeIndex by produceState<LocalTreeIndex?>(
+        initialValue = null,
+        key1 = allPaths,
+        key2 = queueTracks
+    ) {
+        value = withContext(Dispatchers.IO) {
+            loadOrBuildLocalTreeIndex(
+                context = context,
+                albumId = album.id,
+                albumPaths = allPaths,
+                tracks = queueTracks
+            )
+        }
+    }
+    val browser = remember(treeIndex, currentPath, subtitleTrackIds, remoteSubtitleTrackIds, album) {
+        treeIndex?.let { index ->
+            buildLocalDirectoryBrowser(
+                index = index,
+                currentPath = currentPath,
+                album = album,
+                shouldShowSubtitleStamp = { track ->
+                    track?.let { subtitleTrackIds.contains(it.id) || remoteSubtitleTrackIds.contains(it.id) } == true
+                }
+            )
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(chromeState.nestedScrollConnection)
+            .thinScrollbar(listState),
+        state = listState,
+        contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
+    ) {
+        item { header() }
+        item {
+            DirectoryBreadcrumbBar(
+                currentPath = currentPath,
+                breadcrumbs = browser?.breadcrumbs.orEmpty(),
+                onNavigate = { path -> currentPath = path }
+            )
+        }
+
+        val browserValue = browser
+        if (browserValue == null || (browserValue.folders.isEmpty() && browserValue.files.isEmpty())) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("当前目录暂无文件")
+                }
+            }
+        } else {
+            item {
+                DirectoryBatchBar(
+                    targets = browserValue.batchTargets,
+                    onAddToFavorites = onAddMediaItemsToFavorites,
+                    onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
+                    onAddMediaItemsToQueue = onAddMediaItemsToQueue
+                )
+            }
+            items(
+                items = browserValue.folders,
+                key = { folder -> "folder:${folder.path}" },
+                contentType = { "folder" }
+            ) { folder ->
+                DirectoryFolderRow(
+                    title = folder.title,
+                    onClick = { currentPath = folder.path }
+                )
+            }
+            items(
+                items = browserValue.files,
+                key = { file -> "file:${file.path}" },
+                contentType = { "file" }
+            ) { file ->
+                val track = file.track
+                DirectoryFileRow(
+                    file = file,
+                    loadRemoteFileSize = { null },
+                    onPrimary = {
+                        scope.launch {
+                            val prepared = withContext(Dispatchers.Default) {
+                                val artwork = albumArtworkLabel(album)
+                                val artist = albumArtistLabel(album)
+                                if ((file.fileType == TreeFileType.Audio && track != null) || file.fileType == TreeFileType.Video) {
+                                    val nodes = treeIndex?.let { siblingPlayableNodesForEntry(it, file.path) }.orEmpty()
+                                    val siblingItems = nodes.mapNotNull { node ->
+                                        val abs = node.absolutePath ?: return@mapNotNull null
+                                        when (node.fileType) {
+                                            TreeFileType.Audio -> node.track?.let { MediaItemFactory.fromTrack(album, it) }
+                                            TreeFileType.Video -> buildVideoMediaItem(
+                                                title = node.name,
+                                                uriOrPath = abs,
+                                                artworkUri = artwork,
+                                                artist = artist
+                                            )
+                                            else -> null
+                                        }
+                                    }
+                                    val clickedId = when (file.fileType) {
+                                        TreeFileType.Audio -> track?.path?.trim().orEmpty()
+                                        TreeFileType.Video -> file.absolutePath.trim()
+                                        else -> ""
+                                    }
+                                    val items = if (siblingItems.isNotEmpty()) {
+                                        siblingItems
+                                    } else {
+                                        when (file.fileType) {
+                                            TreeFileType.Audio -> queueTracks.map { MediaItemFactory.fromTrack(album, it) }
+                                            TreeFileType.Video -> listOfNotNull(
+                                                buildVideoMediaItem(
+                                                    title = file.title,
+                                                    uriOrPath = file.absolutePath,
+                                                    artworkUri = artwork,
+                                                    artist = artist
+                                                )
+                                            )
+                                            else -> emptyList()
+                                        }
+                                    }
+                                    if (items.isNotEmpty()) {
+                                        val startIndex = items.indexOfFirst { it.mediaId.trim() == clickedId }
+                                            .takeIf { it >= 0 } ?: 0
+                                        return@withContext PreparedMediaPlayback(items, startIndex)
+                                    }
+                                }
+                                null
+                            }
+                            if (prepared != null) {
+                                onPlayMediaItems(prepared.items, prepared.startIndex)
+                            } else {
+                                onPreviewFile(
+                                    LocalTreeUiEntry.File(
+                                        path = file.path,
+                                        title = file.title,
+                                        depth = 0,
+                                        absolutePath = file.absolutePath,
+                                        fileType = file.fileType,
+                                        track = file.track
+                                    )
+                                )
+                            }
+                        }
+                    },
+                    onSetAsCover = if (file.fileType == TreeFileType.Image) ({ onSetCoverFromImage(file.absolutePath) }) else null,
+                    onDownload = null,
+                    onAddToQueue = track?.let { { onAddToQueue(it); Unit } },
+                    onAddToPlaylist = track?.let { { onAddToPlaylist(it) } },
+                    onManageTags = track?.let { { onManageTrackTags(it) } },
+                    onRemoveFromAlbum = track?.let { { onRemoveTrack(it) } }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlbumLocalBreadcrumbTabV2(
+    stateKey: String,
+    initialCurrentPath: String,
+    onPersistCurrentPath: (String) -> Unit,
+    initialScroll: Pair<Int, Int>,
+    onPersistScroll: (Int, Int) -> Unit,
+    topContentPadding: Dp,
+    chromeState: com.asmr.player.ui.common.CollapsibleHeaderState,
+    album: Album,
+    header: @Composable () -> Unit,
+    onPlayTracks: (Album, List<Track>, Track) -> Unit,
+    onPlayMediaItems: (List<MediaItem>, Int) -> Unit,
+    onPlayVideo: (String, String, String, String) -> Unit,
+    onAddToQueue: (Track) -> Boolean,
+    onAddMediaItemsToQueue: (List<MediaItem>) -> Unit,
+    onAddMediaItemsToFavorites: (List<MediaItem>) -> Unit,
+    onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
+    preferredCurrentPath: String,
+    onTogglePreferredCurrentPath: (String, Boolean) -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
+    onManageTrackTags: (Track) -> Unit,
+    onRemoveTrack: (Track) -> Unit,
+    onSetCoverFromImage: (String) -> Unit,
+    onPreviewFile: (LocalTreeUiEntry.File) -> Unit,
+) {
+    val queueTracks = remember(album.id, album.tracks) { album.tracks.sortedBy { it.path } }
+    val queueTrackIds = remember(queueTracks) {
+        queueTracks.asSequence().map { it.id }.filter { it > 0L }.distinct().toList()
+    }
+    val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val allPaths = remember(album) { album.getAllLocalPaths() }
+    var currentPath by rememberSaveable(stateKey) { mutableStateOf(initialCurrentPath.trim().trim('/')) }
+
+    val listState = rememberSaveable("scroll:$stateKey", saver = LazyListState.Saver) {
+        LazyListState(initialScroll.first, initialScroll.second)
+    }
+    LaunchedEffect(listState, stateKey) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .distinctUntilChanged()
+            .collect { (idx, off) -> onPersistScroll(idx, off) }
+    }
+    LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
+        if (listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
+            chromeState.expand()
+        }
+    }
+    LaunchedEffect(currentPath, stateKey) {
+        onPersistCurrentPath(currentPath)
+    }
+
+    val subtitleTrackIds by produceState(initialValue = emptySet<Long>(), key1 = queueTrackIds) {
+        value = withContext(Dispatchers.IO) {
+            if (queueTrackIds.isEmpty()) emptySet()
+            else AppDatabaseProvider.get(context).trackDao().getTrackIdsWithSubtitles(queueTrackIds).toSet()
+        }
+    }
+    val remoteSubtitleTrackIds by produceState(initialValue = emptySet<Long>(), key1 = queueTrackIds) {
+        value = withContext(Dispatchers.IO) {
+            if (queueTrackIds.isEmpty()) emptySet()
+            else AppDatabaseProvider.get(context).remoteSubtitleSourceDao()
+                .getTrackIdsWithRemoteSources(queueTrackIds)
+                .toSet()
+        }
+    }
+    val treeIndex by produceState<LocalTreeIndex?>(initialValue = null, key1 = allPaths, key2 = queueTracks) {
+        value = withContext(Dispatchers.IO) {
+            loadOrBuildLocalTreeIndex(
+                context = context,
+                albumId = album.id,
+                albumPaths = allPaths,
+                tracks = queueTracks
+            )
+        }
+    }
+    val browser = remember(treeIndex, currentPath, subtitleTrackIds, remoteSubtitleTrackIds, album) {
+        treeIndex?.let { index ->
+            buildLocalDirectoryBrowser(
+                index = index,
+                currentPath = currentPath,
+                album = album,
+                shouldShowSubtitleStamp = { track ->
+                    track?.let { subtitleTrackIds.contains(it.id) || remoteSubtitleTrackIds.contains(it.id) } == true
+                }
+            )
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(chromeState.nestedScrollConnection)
+            .thinScrollbar(listState),
+        state = listState,
+        contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
+    ) {
+        item { header() }
+        val browserValue = browser
+        if (browserValue == null) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("当前目录暂无文件")
+                }
+            }
+        } else {
+            item {
+                DirectoryBrowserPanelV4(
+                    panelKey = stateKey,
+                    currentPath = currentPath,
+                    breadcrumbs = browserValue.breadcrumbs,
+                    batchTargets = browserValue.batchTargets,
+                    folders = browserValue.folders,
+                    files = browserValue.files,
+                    onNavigate = { path -> currentPath = path },
+                    onAddToFavorites = onAddMediaItemsToFavorites,
+                    onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
+                    onAddMediaItemsToQueue = onAddMediaItemsToQueue,
+                    preferredPath = preferredCurrentPath,
+                    onTogglePreferredPath = { enabled ->
+                        onTogglePreferredCurrentPath(currentPath, enabled)
+                    },
+                    folderKeyPrefix = "folder",
+                    fileKeyPrefix = "file",
+                    fileContent = { file, selectionMode, selected, enterSelectionMode, onSelectedChange ->
+                        val track = file.track
+                        DirectoryFileRow(
+                            file = file,
+                            loadRemoteFileSize = { null },
+                            onPrimary = {
+                                scope.launch {
+                                    val prepared = withContext(Dispatchers.Default) {
+                                        val artwork = albumArtworkLabel(album)
+                                        val artist = albumArtistLabel(album)
+                                        if ((file.fileType == TreeFileType.Audio && track != null) || file.fileType == TreeFileType.Video) {
+                                            val nodes = treeIndex?.let { siblingPlayableNodesForEntry(it, file.path) }.orEmpty()
+                                            val siblingItems = nodes.mapNotNull { node ->
+                                                val abs = node.absolutePath ?: return@mapNotNull null
+                                                when (node.fileType) {
+                                                    TreeFileType.Audio -> node.track?.let { MediaItemFactory.fromTrack(album, it) }
+                                                    TreeFileType.Video -> buildVideoMediaItem(
+                                                        title = node.name,
+                                                        uriOrPath = abs,
+                                                        artworkUri = artwork,
+                                                        artist = artist
+                                                    )
+                                                    else -> null
+                                                }
+                                            }
+                                            val clickedId = when (file.fileType) {
+                                                TreeFileType.Audio -> track?.path?.trim().orEmpty()
+                                                TreeFileType.Video -> file.absolutePath.trim()
+                                                else -> ""
+                                            }
+                                            val items = if (siblingItems.isNotEmpty()) {
+                                                siblingItems
+                                            } else {
+                                                when (file.fileType) {
+                                                    TreeFileType.Audio -> queueTracks.map { MediaItemFactory.fromTrack(album, it) }
+                                                    TreeFileType.Video -> listOfNotNull(
+                                                        buildVideoMediaItem(
+                                                            title = file.title,
+                                                            uriOrPath = file.absolutePath,
+                                                            artworkUri = artwork,
+                                                            artist = artist
+                                                        )
+                                                    )
+                                                    else -> emptyList()
+                                                }
+                                            }
+                                            if (items.isNotEmpty()) {
+                                                val startIndex = items.indexOfFirst { it.mediaId.trim() == clickedId }
+                                                    .takeIf { it >= 0 } ?: 0
+                                                return@withContext PreparedMediaPlayback(items, startIndex)
+                                            }
+                                        }
+                                        null
+                                    }
+                                    if (prepared != null) {
+                                        onPlayMediaItems(prepared.items, prepared.startIndex)
+                                    } else {
+                                        onPreviewFile(
+                                            LocalTreeUiEntry.File(
+                                                path = file.path,
+                                                title = file.title,
+                                                depth = 0,
+                                                absolutePath = file.absolutePath,
+                                                fileType = file.fileType,
+                                                track = file.track
+                                            )
+                                        )
+                                    }
+                                }
+                            },
+                            selectionMode = selectionMode,
+                            selected = selected,
+                            onEnterSelectionMode = enterSelectionMode,
+                            onSelectedChange = onSelectedChange,
+                            onSetAsCover = if (file.fileType == TreeFileType.Image) ({ onSetCoverFromImage(file.absolutePath) }) else null,
+                            onDownload = null,
+                            onAddToQueue = track?.let { { onAddToQueue(it); Unit } },
+                            onAddToPlaylist = track?.let { { onAddToPlaylist(it) } },
+                            onManageTags = track?.let { { onManageTrackTags(it) } },
+                            onRemoveFromAlbum = track?.let { { onRemoveTrack(it) } }
+                        )
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun AlbumAsmrOneTab(
     album: Album,
     header: @Composable () -> Unit,
@@ -2121,6 +2628,80 @@ private fun buildVideoMediaItem(
         .build()
 }
 
+private sealed class FileSizeSource {
+    data object None : FileSizeSource()
+    data class Local(val path: String) : FileSizeSource()
+    data class Remote(val url: String) : FileSizeSource()
+}
+
+private data class DirectoryBreadcrumbSegment(
+    val label: String,
+    val path: String
+)
+
+private data class DirectoryFolderItem(
+    val path: String,
+    val title: String
+)
+
+private data class DirectoryFileItem(
+    val path: String,
+    val title: String,
+    val fileType: TreeFileType,
+    val isPlayable: Boolean,
+    val durationSeconds: Double? = null,
+    val sizeSource: FileSizeSource = FileSizeSource.None,
+    val absolutePath: String = "",
+    val url: String = "",
+    val track: Track? = null,
+    val thumbnailModel: Any? = null,
+    val playlistTarget: PlaylistAddTarget? = null,
+    val subtitleSources: List<RemoteSubtitleSource> = emptyList(),
+    val showSubtitleStamp: Boolean = false
+)
+
+private data class DirectoryBrowserResult(
+    val currentPath: String,
+    val breadcrumbs: List<DirectoryBreadcrumbSegment>,
+    val folders: List<DirectoryFolderItem>,
+    val files: List<DirectoryFileItem>
+) {
+    val batchTargets: List<PlaylistAddTarget>
+        get() = files.mapNotNull { file ->
+            when (file.fileType) {
+                TreeFileType.Audio, TreeFileType.Video -> file.playlistTarget
+                else -> null
+            }
+        }
+}
+
+private fun buildBreadcrumbSegments(currentPath: String): List<DirectoryBreadcrumbSegment> {
+    val normalized = currentPath.trim().trim('/')
+    if (normalized.isBlank()) return emptyList()
+    val segments = normalized.split('/').filter { it.isNotBlank() }
+    val out = mutableListOf<DirectoryBreadcrumbSegment>()
+    var path = ""
+    segments.forEach { segment ->
+        path = if (path.isBlank()) segment else "$path/$segment"
+        out += DirectoryBreadcrumbSegment(label = segment, path = path)
+    }
+    return out
+}
+
+private fun albumArtistLabel(album: Album): String {
+    return when {
+        album.cv.isNotBlank() && album.circle.isNotBlank() -> "${album.circle} / ${album.cv}"
+        album.cv.isNotBlank() -> album.cv
+        album.circle.isNotBlank() -> album.circle
+        album.rjCode.isNotBlank() -> album.rjCode
+        else -> album.workId
+    }.trim()
+}
+
+private fun albumArtworkLabel(album: Album): String {
+    return album.coverPath.ifBlank { album.coverUrl }
+}
+
 private data class LocalTreeUiResult(
     val entries: List<LocalTreeUiEntry>
 )
@@ -2194,6 +2775,259 @@ private fun siblingPlayableNodesForEntry(index: LocalTreeIndex, entryPath: Strin
         .filter { it.fileType != TreeFileType.Audio || it.track != null }
         .sortedBy { SmartSortKey.of(it.name) }
         .toList()
+}
+
+private fun buildLocalDirectoryBrowser(
+    index: LocalTreeIndex,
+    currentPath: String,
+    album: Album,
+    shouldShowSubtitleStamp: (Track?) -> Boolean
+): DirectoryBrowserResult {
+    val normalizedPath = currentPath.trim().trim('/')
+    val currentNode = findLocalTreeNode(index.root, normalizedPath) ?: index.root
+    val folders = currentNode.children.values
+        .asSequence()
+        .filter { it.children.isNotEmpty() }
+        .sortedBy { SmartSortKey.of(it.name) }
+        .map { child ->
+            DirectoryFolderItem(
+                path = child.path,
+                title = child.name
+            )
+        }
+        .toList()
+    val files = currentNode.children.values
+        .asSequence()
+        .filter { it.children.isEmpty() && it.absolutePath != null }
+        .sortedBy { SmartSortKey.of(it.name) }
+        .mapNotNull { child ->
+            val absolutePath = child.absolutePath ?: return@mapNotNull null
+            val displayTitle = child.track?.title?.ifBlank { child.name.substringBeforeLast('.') }
+                ?: child.name.substringBeforeLast('.')
+            val playlistTarget = when (child.fileType) {
+                TreeFileType.Audio -> child.track?.let { PlaylistAddTarget.fromTrack(album, it) }
+                TreeFileType.Video -> PlaylistAddTarget.fromVideo(album, displayTitle, absolutePath)
+                else -> null
+            }
+            DirectoryFileItem(
+                path = child.path,
+                title = displayTitle,
+                fileType = child.fileType,
+                isPlayable = child.track != null || child.fileType == TreeFileType.Video,
+                durationSeconds = child.track?.duration?.takeIf { it > 0.0 },
+                sizeSource = FileSizeSource.Local(absolutePath),
+                absolutePath = absolutePath,
+                url = absolutePath,
+                track = child.track,
+                thumbnailModel = if (child.fileType == TreeFileType.Image) absolutePath else null,
+                playlistTarget = playlistTarget,
+                showSubtitleStamp = shouldShowSubtitleStamp(child.track)
+            )
+        }
+        .toList()
+    return DirectoryBrowserResult(
+        currentPath = normalizedPath,
+        breadcrumbs = buildBreadcrumbSegments(normalizedPath),
+        folders = folders,
+        files = files
+    )
+}
+
+private class RemoteTreeNode(
+    val name: String,
+    val path: String,
+    val children: MutableMap<String, RemoteTreeNode> = linkedMapOf(),
+    var fileType: TreeFileType = TreeFileType.Other,
+    var url: String = "",
+    var durationSeconds: Double? = null,
+    var subtitleSources: List<RemoteSubtitleSource> = emptyList(),
+    var playlistTarget: PlaylistAddTarget? = null
+)
+
+private data class RemoteTreeIndex(
+    val root: RemoteTreeNode
+)
+
+private fun findRemoteTreeNode(root: RemoteTreeNode, folderPath: String): RemoteTreeNode? {
+    val normalized = folderPath.trim().trim('/')
+    if (normalized.isBlank()) return root
+    var current = root
+    normalized.split('/').filter { it.isNotBlank() }.forEach { segment ->
+        current = current.children[segment] ?: return null
+    }
+    return current
+}
+
+private fun buildRemoteTreeIndex(
+    tree: List<AsmrOneTrackNodeResponse>,
+    album: Album
+): RemoteTreeIndex {
+    val root = RemoteTreeNode(name = "", path = "")
+    val subtitleExts = setOf("lrc", "srt", "vtt")
+    val mediaExts = setOf("mp3", "wav", "flac", "m4a", "ogg", "aac", "opus", "mp4", "mkv", "webm", "mov", "m4v")
+
+    fun sanitize(name: String): String {
+        return name.trim().ifEmpty { "item" }.replace(Regex("""[\\/:*?"<>|]"""), "_")
+    }
+
+    data class LeafFile(
+        val rawTitle: String,
+        val safeTitle: String,
+        val url: String,
+        val duration: Double?,
+        val fileType: TreeFileType
+    ) {
+        val ext: String = rawTitle.substringAfterLast('.', "").lowercase()
+        val baseName: String = rawTitle.substringBeforeLast('.')
+        val displayTitle: String = sanitize(baseName).ifBlank { safeTitle.substringBeforeLast('.') }
+    }
+
+    fun buildSubtitlesForMedia(media: LeafFile, siblings: List<LeafFile>): List<RemoteSubtitleSource> {
+        val base = media.baseName
+        if (base.isBlank()) return emptyList()
+        return siblings.filter { subtitleExts.contains(it.ext) }.mapNotNull { sibling ->
+            val siblingBase = sibling.baseName
+            val language = when {
+                siblingBase == base -> "default"
+                siblingBase.startsWith("$base.") -> {
+                    val suffix = siblingBase.substring(base.length + 1)
+                    val parts = suffix.split('.').filter { it.isNotBlank() }
+                    val valid = parts.filter { !mediaExts.contains(it.lowercase()) }
+                    when {
+                        valid.isEmpty() -> "zh"
+                        valid.size == 1 -> valid[0]
+                        else -> valid.last()
+                    }
+                }
+                else -> return@mapNotNull null
+            }
+            RemoteSubtitleSource(
+                url = sibling.url,
+                language = language,
+                ext = sibling.ext.ifBlank { "vtt" }
+            )
+        }.sortedWith(
+            compareBy<RemoteSubtitleSource> { source ->
+                val preferred = listOf("default", "zh", "cn", "chs", "ja", "jp", "jpn")
+                val index = preferred.indexOf(source.language.lowercase())
+                if (index >= 0) index else Int.MAX_VALUE
+            }.thenBy { it.url }
+        )
+    }
+
+    fun walk(
+        nodes: List<AsmrOneTrackNodeResponse>,
+        parentNode: RemoteTreeNode,
+        parentPath: String
+    ) {
+        val leafFiles = nodes.mapNotNull { node ->
+            val children = node.children.orEmpty()
+            val url = node.mediaDownloadUrl ?: node.streamUrl
+            if (!url.isNullOrBlank() && children.isEmpty()) {
+                val rawTitle = node.title?.trim().orEmpty().ifBlank { "item" }
+                val safeTitle = sanitize(rawTitle)
+                LeafFile(
+                    rawTitle = rawTitle,
+                    safeTitle = safeTitle,
+                    url = url,
+                    duration = node.duration,
+                    fileType = treeFileTypeForNode(rawTitle, url)
+                )
+            } else {
+                null
+            }
+        }
+
+        leafFiles.forEach { leaf ->
+            if (leaf.fileType == TreeFileType.Other || leaf.fileType == TreeFileType.Subtitle) return@forEach
+            val path = if (parentPath.isBlank()) leaf.safeTitle else "$parentPath/${leaf.safeTitle}"
+            val child = parentNode.children.getOrPut(leaf.safeTitle) {
+                RemoteTreeNode(name = leaf.safeTitle, path = path)
+            }
+            val subtitleSources = when (leaf.fileType) {
+                TreeFileType.Audio, TreeFileType.Video -> buildSubtitlesForMedia(leaf, leafFiles)
+                else -> emptyList()
+            }
+            val playlistTarget = when (leaf.fileType) {
+                TreeFileType.Audio -> PlaylistAddTarget.fromTrack(
+                    album = album,
+                    track = Track(
+                        albumId = album.id,
+                        title = leaf.displayTitle,
+                        path = leaf.url,
+                        duration = leaf.duration ?: 0.0
+                    )
+                )
+                TreeFileType.Video -> PlaylistAddTarget.fromVideo(album, leaf.displayTitle, leaf.url)
+                else -> null
+            }
+            child.fileType = leaf.fileType
+            child.url = leaf.url
+            child.durationSeconds = leaf.duration
+            child.subtitleSources = subtitleSources
+            child.playlistTarget = playlistTarget
+        }
+
+        nodes.forEach { node ->
+            val children = node.children.orEmpty()
+            if (children.isEmpty()) return@forEach
+            val rawTitle = node.title?.trim().orEmpty().ifBlank { "item" }
+            val safeTitle = sanitize(rawTitle)
+            val path = if (parentPath.isBlank()) safeTitle else "$parentPath/$safeTitle"
+            val childNode = parentNode.children.getOrPut(safeTitle) {
+                RemoteTreeNode(name = safeTitle, path = path)
+            }
+            walk(children, childNode, path)
+        }
+    }
+
+    walk(tree, root, "")
+    return RemoteTreeIndex(root = root)
+}
+
+private fun buildRemoteDirectoryBrowser(
+    index: RemoteTreeIndex,
+    currentPath: String
+): DirectoryBrowserResult {
+    val normalizedPath = currentPath.trim().trim('/')
+    val currentNode = findRemoteTreeNode(index.root, normalizedPath) ?: index.root
+    val folders = currentNode.children.values
+        .asSequence()
+        .filter { it.children.isNotEmpty() }
+        .sortedBy { SmartSortKey.of(it.name) }
+        .map { child ->
+            DirectoryFolderItem(
+                path = child.path,
+                title = child.name
+            )
+        }
+        .toList()
+    val files = currentNode.children.values
+        .asSequence()
+        .filter { it.children.isEmpty() && it.url.isNotBlank() && it.fileType != TreeFileType.Subtitle && it.fileType != TreeFileType.Other }
+        .sortedBy { SmartSortKey.of(it.name) }
+        .map { child ->
+            DirectoryFileItem(
+                path = child.path,
+                title = child.name.substringBeforeLast('.'),
+                fileType = child.fileType,
+                isPlayable = child.fileType == TreeFileType.Audio || child.fileType == TreeFileType.Video,
+                durationSeconds = child.durationSeconds,
+                sizeSource = if (child.url.isNotBlank()) FileSizeSource.Remote(child.url) else FileSizeSource.None,
+                absolutePath = child.url,
+                url = child.url,
+                playlistTarget = child.playlistTarget,
+                subtitleSources = child.subtitleSources,
+                showSubtitleStamp = child.subtitleSources.isNotEmpty()
+            )
+        }
+        .toList()
+    return DirectoryBrowserResult(
+        currentPath = normalizedPath,
+        breadcrumbs = buildBreadcrumbSegments(normalizedPath),
+        folders = folders,
+        files = files
+    )
 }
 
 private data class LocalTreeLeafCacheEntry(
@@ -2783,6 +3617,1807 @@ private fun flattenAsmrOneTreeForUi(
     collectFolderStatsFromFullTree()
     walk(tree, "", 0)
     return AsmrTreeUiResult(entries = out)
+}
+
+private fun fileTypeLabel(fileType: TreeFileType): String = when (fileType) {
+    TreeFileType.Audio -> "音频"
+    TreeFileType.Video -> "视频"
+    TreeFileType.Image -> "图片"
+    TreeFileType.Subtitle -> "字幕"
+    TreeFileType.Text -> "文本"
+    TreeFileType.Pdf -> "PDF"
+    TreeFileType.Other -> "文件"
+}
+
+private fun queryLocalFileSize(context: android.content.Context, path: String): Long? {
+    val trimmed = path.trim()
+    if (trimmed.isBlank()) return null
+    return when {
+        trimmed.startsWith("content://", ignoreCase = true) -> {
+            runCatching {
+                context.contentResolver.query(
+                    Uri.parse(trimmed),
+                    arrayOf(DocumentsContract.Document.COLUMN_SIZE),
+                    null,
+                    null,
+                    null
+                )?.use { cursor ->
+                    val index = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
+                    if (index < 0 || !cursor.moveToFirst()) null else cursor.getLong(index)
+                }
+            }.getOrNull()
+        }
+        else -> runCatching { File(trimmed).takeIf { it.exists() }?.length() }.getOrNull()
+    }?.takeIf { it > 0L }
+}
+
+@Composable
+private fun DirectoryBreadcrumbBar(
+    currentPath: String,
+    breadcrumbs: List<DirectoryBreadcrumbSegment>,
+    onNavigate: (String) -> Unit
+) {
+    LazyRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        item {
+            FilterChip(
+                selected = currentPath.isBlank(),
+                onClick = { onNavigate("") },
+                label = { Text("根目录") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Default.Home,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            )
+        }
+        items(
+            items = breadcrumbs,
+            key = { it.path },
+            contentType = { "breadcrumb" }
+        ) { crumb ->
+            FilterChip(
+                selected = crumb.path == currentPath,
+                onClick = { onNavigate(crumb.path) },
+                label = {
+                    Text(
+                        text = crumb.label,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompactDirectoryBreadcrumbBar(
+    currentPath: String,
+    breadcrumbs: List<DirectoryBreadcrumbSegment>,
+    onNavigate: (String) -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val displayedCrumbs = remember(breadcrumbs) {
+        when {
+            breadcrumbs.size <= 3 -> breadcrumbs
+            else -> listOf(
+                DirectoryBreadcrumbSegment(label = "...", path = ""),
+                breadcrumbs[breadcrumbs.lastIndex - 1],
+                breadcrumbs.last()
+            )
+        }
+    }
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = colorScheme.surface.copy(alpha = 0.58f),
+        tonalElevation = 1.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            CompactBreadcrumbNode(
+                text = "根目录",
+                selected = currentPath.isBlank(),
+                icon = Icons.Default.Home,
+                onClick = { onNavigate("") }
+            )
+            displayedCrumbs.forEach { crumb ->
+                Text(
+                    text = "/",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colorScheme.textTertiary
+                )
+                if (crumb.label == "..." && crumb.path.isBlank()) {
+                    Text(
+                        text = "...",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colorScheme.textTertiary,
+                        maxLines = 1
+                    )
+                } else {
+                    CompactBreadcrumbNode(
+                        text = crumb.label,
+                        selected = crumb.path == currentPath,
+                        onClick = { onNavigate(crumb.path) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactBreadcrumbNode(
+    text: String,
+    selected: Boolean,
+    icon: ImageVector? = null,
+    onClick: () -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 2.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = if (selected) colorScheme.primary else colorScheme.textSecondary,
+                modifier = Modifier.size(16.dp)
+            )
+        }
+        Text(
+            text = text,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = if (selected) {
+                MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold)
+            } else {
+                MaterialTheme.typography.labelLarge
+            },
+            color = if (selected) colorScheme.primary else colorScheme.textSecondary,
+            modifier = Modifier.widthIn(max = 112.dp)
+        )
+    }
+}
+
+@Composable
+private fun CompactDirectoryBreadcrumbContent(
+    currentPath: String,
+    breadcrumbs: List<DirectoryBreadcrumbSegment>,
+    onNavigate: (String) -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val displayedCrumbs = remember(breadcrumbs) {
+        when {
+            breadcrumbs.size <= 3 -> breadcrumbs
+            else -> listOf(
+                DirectoryBreadcrumbSegment(label = "...", path = ""),
+                breadcrumbs[breadcrumbs.lastIndex - 1],
+                breadcrumbs.last()
+            )
+        }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        CompactBreadcrumbNode(
+            text = "根目录",
+            selected = currentPath.isBlank(),
+            icon = Icons.Default.Home,
+            onClick = { onNavigate("") }
+        )
+        displayedCrumbs.forEach { crumb ->
+            Text(
+                text = "/",
+                style = MaterialTheme.typography.labelMedium,
+                color = colorScheme.textTertiary
+            )
+            if (crumb.label == "..." && crumb.path.isBlank()) {
+                Text(
+                    text = "...",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colorScheme.textTertiary,
+                    maxLines = 1
+                )
+            } else {
+                CompactBreadcrumbNode(
+                    text = crumb.label,
+                    selected = crumb.path == currentPath,
+                    onClick = { onNavigate(crumb.path) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DirectoryBrowserPanel(
+    panelKey: String,
+    currentPath: String,
+    breadcrumbs: List<DirectoryBreadcrumbSegment>,
+    batchTargets: List<PlaylistAddTarget>,
+    folders: List<DirectoryFolderItem>,
+    files: List<DirectoryFileItem>,
+    onNavigate: (String) -> Unit,
+    onAddToFavorites: (List<MediaItem>) -> Unit,
+    onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
+    onAddMediaItemsToQueue: (List<MediaItem>) -> Unit,
+    folderKeyPrefix: String,
+    fileKeyPrefix: String,
+    emptyText: String = "当前目录暂无文件",
+    fileContent: @Composable (
+        file: DirectoryFileItem,
+        selectionMode: Boolean,
+        selected: Boolean,
+        enterSelectionMode: () -> Unit,
+        onSelectedChange: (Boolean) -> Unit
+    ) -> Unit
+) {
+    val browserListState = rememberSaveable("dir-panel:$panelKey", saver = LazyListState.Saver) {
+        LazyListState()
+    }
+    var selectionMode by remember(panelKey, currentPath) { mutableStateOf(false) }
+    val selectedPaths = remember(panelKey, currentPath) { mutableStateListOf<String>() }
+    val selectedFiles = remember(files, selectedPaths.toList()) {
+        val selectedSet = selectedPaths.toSet()
+        files.filter { selectedSet.contains(it.path) }
+    }
+    val activeTargets = remember(selectionMode, batchTargets, selectedFiles) {
+        if (selectionMode) selectedFiles.mapNotNull { it.playlistTarget } else batchTargets
+    }
+    val batchSummaryText = remember(selectionMode, selectedPaths.size, batchTargets.size) {
+        if (selectionMode) "已选 ${selectedPaths.size} 项" else "媒体 ${batchTargets.size} 项"
+    }
+    val screenHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
+    val maxHeight = remember(screenHeight) {
+        (screenHeight * 0.48f).coerceIn(240.dp, 460.dp)
+    }
+
+    LaunchedEffect(panelKey, currentPath) {
+        browserListState.scrollToItem(0)
+    }
+
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        tonalElevation = 1.dp,
+        color = AsmrTheme.colorScheme.surface.copy(alpha = 0.44f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            CompactDirectoryBreadcrumbContent(
+                currentPath = currentPath,
+                breadcrumbs = breadcrumbs,
+                onNavigate = onNavigate
+            )
+            HorizontalDivider(
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+            )
+            DirectoryBatchBarEmbeddedV2(
+                targets = activeTargets,
+                summaryText = batchSummaryText,
+                onAddToFavorites = onAddToFavorites,
+                onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
+                onAddMediaItemsToQueue = onAddMediaItemsToQueue
+            )
+            HorizontalDivider(
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+            )
+            LazyColumn(
+                state = browserListState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = maxHeight)
+                    .thinScrollbar(browserListState),
+                contentPadding = PaddingValues(vertical = 6.dp)
+            ) {
+                if (folders.isEmpty() && files.isEmpty()) {
+                    item(key = "empty") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(180.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = emptyText,
+                                color = AsmrTheme.colorScheme.textSecondary
+                            )
+                        }
+                    }
+                } else {
+                    items(
+                        items = folders,
+                        key = { folder -> "$folderKeyPrefix:${folder.path}" },
+                        contentType = { "folder" }
+                    ) { folder ->
+                        DirectoryFolderRow(
+                            title = folder.title,
+                            onClick = { onNavigate(folder.path) }
+                        )
+                    }
+                    items(
+                        items = files,
+                        key = { file -> "$fileKeyPrefix:${file.path}" },
+                        contentType = { "file" }
+                    ) { file ->
+                        val isSelected = selectedPaths.contains(file.path)
+                        fileContent(
+                            file,
+                            selectionMode,
+                            isSelected,
+                            {
+                                selectionMode = true
+                                if (!selectedPaths.contains(file.path)) {
+                                    selectedPaths.add(file.path)
+                                }
+                            },
+                            { checked ->
+                                if (checked) {
+                                    if (!selectedPaths.contains(file.path)) {
+                                        selectedPaths.add(file.path)
+                                    }
+                                    selectionMode = true
+                                } else {
+                                    selectedPaths.remove(file.path)
+                                    if (selectedPaths.isEmpty()) {
+                                        selectionMode = false
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DirectoryBatchBarEmbedded(
+    targets: List<PlaylistAddTarget>,
+    summaryText: String,
+    onAddToFavorites: (List<MediaItem>) -> Unit,
+    onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
+    onAddMediaItemsToQueue: (List<MediaItem>) -> Unit
+) {
+    val mediaItems = remember(targets) { targets.map { it.toMediaItem() } }
+    val hasMediaItems = mediaItems.isNotEmpty()
+    val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "当前目录 ${mediaItems.size} 个音频/视频文件",
+            style = MaterialTheme.typography.bodySmall,
+            color = AsmrTheme.colorScheme.textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            FilledTonalButton(
+                onClick = { onAddToFavorites(mediaItems) },
+                enabled = hasMediaItems,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                modifier = Modifier.height(30.dp)
+            ) {
+                Icon(Icons.Default.FavoriteBorder, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("收藏", style = MaterialTheme.typography.labelMedium)
+            }
+            OutlinedButton(
+                onClick = { onOpenBatchPlaylistPicker(mediaItems) },
+                enabled = hasMediaItems,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                modifier = Modifier.height(30.dp)
+            ) {
+                Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("列表", style = MaterialTheme.typography.labelMedium)
+            }
+            OutlinedButton(
+                onClick = { onAddMediaItemsToQueue(mediaItems) },
+                enabled = hasMediaItems,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                modifier = Modifier.height(30.dp)
+            ) {
+                Icon(Icons.AutoMirrored.Filled.PlaylistPlay, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("队列", style = MaterialTheme.typography.labelMedium)
+            }
+        }
+    }
+}
+
+@Composable
+private fun DirectoryBatchBar(
+    targets: List<PlaylistAddTarget>,
+    onAddToFavorites: (List<MediaItem>) -> Unit,
+    onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
+    onAddMediaItemsToQueue: (List<MediaItem>) -> Unit,
+    embedded: Boolean = false
+) {
+    val mediaItems = remember(targets) { targets.map { it.toMediaItem() } }
+    val hasMediaItems = mediaItems.isNotEmpty()
+
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        color = AsmrTheme.colorScheme.surface.copy(alpha = 0.72f),
+        tonalElevation = 1.dp,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = "当前目录 ${mediaItems.size} 个音频/视频文件",
+                style = MaterialTheme.typography.titleSmall,
+                color = AsmrTheme.colorScheme.textPrimary
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                FilledTonalButton(
+                    onClick = { onAddToFavorites(mediaItems) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.Default.FavoriteBorder, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("收藏")
+                }
+                OutlinedButton(
+                    onClick = { onOpenBatchPlaylistPicker(mediaItems) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("列表")
+                }
+                OutlinedButton(
+                    onClick = { onAddMediaItemsToQueue(mediaItems) },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Icon(Icons.AutoMirrored.Filled.PlaylistPlay, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("队列")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DirectoryBatchBarEmbeddedV2(
+    targets: List<PlaylistAddTarget>,
+    summaryText: String,
+    onAddToFavorites: (List<MediaItem>) -> Unit,
+    onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
+    onAddMediaItemsToQueue: (List<MediaItem>) -> Unit
+) {
+    val mediaItems = remember(targets) { targets.map { it.toMediaItem() } }
+    val hasMediaItems = mediaItems.isNotEmpty()
+    val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = summaryText,
+            style = MaterialTheme.typography.bodySmall,
+            color = AsmrTheme.colorScheme.textPrimary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            OutlinedButton(
+                onClick = { onAddToFavorites(mediaItems) },
+                enabled = hasMediaItems,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                modifier = Modifier.height(30.dp)
+            ) {
+                Icon(Icons.Default.FavoriteBorder, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("收藏", style = MaterialTheme.typography.labelMedium)
+            }
+            OutlinedButton(
+                onClick = { onOpenBatchPlaylistPicker(mediaItems) },
+                enabled = hasMediaItems,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                modifier = Modifier.height(30.dp)
+            ) {
+                Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("列表", style = MaterialTheme.typography.labelMedium)
+            }
+            OutlinedButton(
+                onClick = { onAddMediaItemsToQueue(mediaItems) },
+                enabled = hasMediaItems,
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                modifier = Modifier.height(30.dp)
+            ) {
+                Icon(Icons.AutoMirrored.Filled.PlaylistPlay, contentDescription = null, modifier = Modifier.size(14.dp))
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("队列", style = MaterialTheme.typography.labelMedium)
+            }
+        }
+    }
+}
+
+@Composable
+private fun CompactDirectoryBreadcrumbContentV2(
+    currentPath: String,
+    breadcrumbs: List<DirectoryBreadcrumbSegment>,
+    onNavigate: (String) -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val displayedCrumbs = remember(breadcrumbs) {
+        when {
+            breadcrumbs.size <= 2 -> breadcrumbs
+            else -> listOf(
+                DirectoryBreadcrumbSegment(label = "...", path = ""),
+                breadcrumbs[breadcrumbs.lastIndex - 1],
+                breadcrumbs.last()
+            )
+        }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        CompactBreadcrumbNode(
+            text = "根目录",
+            selected = currentPath.isBlank(),
+            icon = Icons.Default.Home,
+            onClick = { onNavigate("") }
+        )
+        displayedCrumbs.forEach { crumb ->
+            Text(
+                text = "/",
+                style = MaterialTheme.typography.labelLarge,
+                color = colorScheme.textTertiary
+            )
+            if (crumb.label == "..." && crumb.path.isBlank()) {
+                Text(
+                    text = "...",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colorScheme.textTertiary,
+                    maxLines = 1
+                )
+            } else {
+                CompactBreadcrumbNode(
+                    text = crumb.label,
+                    selected = crumb.path == currentPath,
+                    onClick = { onNavigate(crumb.path) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DirectoryFolderRowV2(
+    title: String,
+    onClick: () -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colorScheme.primary.copy(alpha = 0.08f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.Folder,
+            contentDescription = null,
+            tint = colorScheme.primary,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodyLarge,
+            color = colorScheme.textPrimary
+        )
+        Icon(
+            imageVector = Icons.Default.KeyboardArrowRight,
+            contentDescription = null,
+            tint = colorScheme.textSecondary,
+            modifier = Modifier.size(18.dp)
+        )
+    }
+}
+
+@Composable
+private fun DirectoryActionGroupButton(
+    text: String,
+    icon: ImageVector,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    TextButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier = modifier.height(34.dp),
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+    ) {
+        Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp))
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(text, style = MaterialTheme.typography.labelMedium)
+    }
+}
+
+@Composable
+private fun DirectoryBatchBarEmbeddedV3(
+    targets: List<PlaylistAddTarget>,
+    summaryText: String,
+    hintText: String,
+    showActions: Boolean,
+    onAddToFavorites: (List<MediaItem>) -> Unit,
+    onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
+    onAddMediaItemsToQueue: (List<MediaItem>) -> Unit
+) {
+    val mediaItems = remember(targets) { targets.map { it.toMediaItem() } }
+    val hasMediaItems = mediaItems.isNotEmpty()
+    val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = summaryText,
+                style = MaterialTheme.typography.titleSmall,
+                color = AsmrTheme.colorScheme.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = hintText,
+                style = MaterialTheme.typography.labelSmall,
+                color = AsmrTheme.colorScheme.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (showActions) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                DirectoryActionGroupButton(
+                    text = "收藏",
+                    icon = Icons.Default.FavoriteBorder,
+                    enabled = hasMediaItems,
+                    onClick = { onAddToFavorites(mediaItems) }
+                )
+                VerticalDivider(
+                    color = dividerColor,
+                    modifier = Modifier.height(18.dp),
+                    thickness = 0.5.dp
+                )
+                DirectoryActionGroupButton(
+                    text = "列表",
+                    icon = Icons.AutoMirrored.Filled.PlaylistAdd,
+                    enabled = hasMediaItems,
+                    onClick = { onOpenBatchPlaylistPicker(mediaItems) }
+                )
+                VerticalDivider(
+                    color = dividerColor,
+                    modifier = Modifier.height(18.dp),
+                    thickness = 0.5.dp
+                )
+                DirectoryActionGroupButton(
+                    text = "队列",
+                    icon = Icons.AutoMirrored.Filled.PlaylistPlay,
+                    enabled = hasMediaItems,
+                    onClick = { onAddMediaItemsToQueue(mediaItems) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DirectoryBrowserPanelV2(
+    panelKey: String,
+    currentPath: String,
+    breadcrumbs: List<DirectoryBreadcrumbSegment>,
+    batchTargets: List<PlaylistAddTarget>,
+    folders: List<DirectoryFolderItem>,
+    files: List<DirectoryFileItem>,
+    onNavigate: (String) -> Unit,
+    onAddToFavorites: (List<MediaItem>) -> Unit,
+    onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
+    onAddMediaItemsToQueue: (List<MediaItem>) -> Unit,
+    folderKeyPrefix: String,
+    fileKeyPrefix: String,
+    emptyText: String = "当前目录暂无文件",
+    fileContent: @Composable (
+        file: DirectoryFileItem,
+        selectionMode: Boolean,
+        selected: Boolean,
+        enterSelectionMode: () -> Unit,
+        onSelectedChange: (Boolean) -> Unit
+    ) -> Unit
+) {
+    val browserListState = rememberSaveable("dir-panel-v2:$panelKey", saver = LazyListState.Saver) {
+        LazyListState()
+    }
+    var selectionMode by remember(panelKey, currentPath) { mutableStateOf(false) }
+    val selectedPaths = remember(panelKey, currentPath) { mutableStateListOf<String>() }
+    val selectedFiles = remember(files, selectedPaths.toList()) {
+        val selectedSet = selectedPaths.toSet()
+        files.filter { selectedSet.contains(it.path) }
+    }
+    val activeTargets = remember(selectionMode, batchTargets, selectedFiles) {
+        if (selectionMode) selectedFiles.mapNotNull { it.playlistTarget } else batchTargets
+    }
+    val batchSummaryText = remember(selectionMode, selectedPaths.size, batchTargets.size) {
+        if (selectionMode) "已选 ${selectedPaths.size} 项" else "媒体 ${batchTargets.size} 项"
+    }
+    val batchHintText = remember(selectionMode) {
+        if (selectionMode) "点击文件可增减选择" else "长按可批量操作"
+    }
+    val screenHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
+    val maxHeight = remember(screenHeight) {
+        (screenHeight * 0.48f).coerceIn(240.dp, 460.dp)
+    }
+
+    LaunchedEffect(panelKey, currentPath) {
+        browserListState.scrollToItem(0)
+    }
+
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        tonalElevation = 1.dp,
+        color = AsmrTheme.colorScheme.surface.copy(alpha = 0.44f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            CompactDirectoryBreadcrumbContentV2(
+                currentPath = currentPath,
+                breadcrumbs = breadcrumbs,
+                onNavigate = onNavigate
+            )
+            HorizontalDivider(
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+            )
+            DirectoryBatchBarEmbeddedV3(
+                targets = activeTargets,
+                summaryText = batchSummaryText,
+                hintText = batchHintText,
+                showActions = selectionMode,
+                onAddToFavorites = onAddToFavorites,
+                onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
+                onAddMediaItemsToQueue = onAddMediaItemsToQueue
+            )
+            HorizontalDivider(
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+            )
+            LazyColumn(
+                state = browserListState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = maxHeight)
+                    .thinScrollbar(browserListState),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                if (folders.isEmpty() && files.isEmpty()) {
+                    item(key = "empty") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(180.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = emptyText,
+                                color = AsmrTheme.colorScheme.textSecondary
+                            )
+                        }
+                    }
+                } else {
+                    items(
+                        items = folders,
+                        key = { folder -> "$folderKeyPrefix:${folder.path}" },
+                        contentType = { "folder" }
+                    ) { folder ->
+                        DirectoryFolderRowV2(
+                            title = folder.title,
+                            onClick = { onNavigate(folder.path) }
+                        )
+                    }
+                    items(
+                        items = files,
+                        key = { file -> "$fileKeyPrefix:${file.path}" },
+                        contentType = { "file" }
+                    ) { file ->
+                        val isSelected = selectedPaths.contains(file.path)
+                        fileContent(
+                            file,
+                            selectionMode,
+                            isSelected,
+                            {
+                                selectionMode = true
+                                if (!selectedPaths.contains(file.path)) {
+                                    selectedPaths.add(file.path)
+                                }
+                            },
+                            { checked ->
+                                if (checked) {
+                                    if (!selectedPaths.contains(file.path)) {
+                                        selectedPaths.add(file.path)
+                                    }
+                                    selectionMode = true
+                                } else {
+                                    selectedPaths.remove(file.path)
+                                    if (selectedPaths.isEmpty()) {
+                                        selectionMode = false
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DirectoryFolderRow(
+    title: String,
+    onClick: () -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    Surface(
+        color = colorScheme.surface.copy(alpha = 0.54f),
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .clickable(onClick = onClick)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.Folder,
+                contentDescription = null,
+                tint = colorScheme.primary,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = title,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyLarge,
+                color = colorScheme.textPrimary
+            )
+            Icon(
+                imageVector = Icons.Default.KeyboardArrowRight,
+                contentDescription = null,
+                tint = colorScheme.textSecondary
+            )
+        }
+    }
+}
+
+@Composable
+private fun CompactDirectoryBreadcrumbContentV3(
+    currentPath: String,
+    breadcrumbs: List<DirectoryBreadcrumbSegment>,
+    onNavigate: (String) -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val displayedCrumbs = remember(breadcrumbs) {
+        when {
+            breadcrumbs.size <= 2 -> breadcrumbs
+            else -> listOf(
+                DirectoryBreadcrumbSegment(label = "...", path = ""),
+                breadcrumbs[breadcrumbs.lastIndex - 1],
+                breadcrumbs.last()
+            )
+        }
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        CompactBreadcrumbNode(
+            text = "根目录",
+            selected = currentPath.isBlank(),
+            icon = Icons.Default.Home,
+            onClick = { onNavigate("") }
+        )
+        displayedCrumbs.forEach { crumb ->
+            Text(
+                text = "/",
+                style = MaterialTheme.typography.labelLarge,
+                color = colorScheme.textTertiary
+            )
+            if (crumb.label == "..." && crumb.path.isBlank()) {
+                Text(
+                    text = "...",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = colorScheme.textTertiary,
+                    maxLines = 1
+                )
+            } else {
+                CompactBreadcrumbNode(
+                    text = crumb.label,
+                    selected = crumb.path == currentPath,
+                    onClick = { onNavigate(crumb.path) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DirectoryFolderRowV3(
+    title: String,
+    onClick: () -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(colorScheme.primary.copy(alpha = 0.08f))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.Folder,
+            contentDescription = null,
+            tint = colorScheme.primary,
+            modifier = Modifier.size(18.dp)
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodyLarge,
+            color = colorScheme.textPrimary
+        )
+        Icon(
+            imageVector = Icons.Default.KeyboardArrowRight,
+            contentDescription = null,
+            tint = colorScheme.textSecondary,
+            modifier = Modifier.size(18.dp)
+        )
+    }
+}
+
+@Composable
+private fun DirectoryBatchBarEmbeddedV4(
+    targets: List<PlaylistAddTarget>,
+    summaryText: String,
+    hintText: String,
+    showActions: Boolean,
+    onAddToFavorites: (List<MediaItem>) -> Unit,
+    onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
+    onAddMediaItemsToQueue: (List<MediaItem>) -> Unit
+) {
+    val mediaItems = remember(targets) { targets.map { it.toMediaItem() } }
+    val hasMediaItems = mediaItems.isNotEmpty()
+    val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = summaryText,
+                style = MaterialTheme.typography.titleSmall,
+                color = AsmrTheme.colorScheme.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = hintText,
+                style = MaterialTheme.typography.labelSmall,
+                color = AsmrTheme.colorScheme.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (showActions) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                DirectoryActionGroupButton(
+                    text = "收藏",
+                    icon = Icons.Default.FavoriteBorder,
+                    enabled = hasMediaItems,
+                    onClick = { onAddToFavorites(mediaItems) }
+                )
+                Text("|", color = AsmrTheme.colorScheme.textTertiary, style = MaterialTheme.typography.labelMedium)
+                DirectoryActionGroupButton(
+                    text = "列表",
+                    icon = Icons.AutoMirrored.Filled.PlaylistAdd,
+                    enabled = hasMediaItems,
+                    onClick = { onOpenBatchPlaylistPicker(mediaItems) }
+                )
+                Text("|", color = AsmrTheme.colorScheme.textTertiary, style = MaterialTheme.typography.labelMedium)
+                DirectoryActionGroupButton(
+                    text = "队列",
+                    icon = Icons.AutoMirrored.Filled.PlaylistPlay,
+                    enabled = hasMediaItems,
+                    onClick = { onAddMediaItemsToQueue(mediaItems) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DirectoryBatchBarEmbeddedV5(
+    targets: List<PlaylistAddTarget>,
+    summaryText: String,
+    hintText: String,
+    showActions: Boolean,
+    modifier: Modifier = Modifier,
+    onAddToFavorites: (List<MediaItem>) -> Unit,
+    onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
+    onAddMediaItemsToQueue: (List<MediaItem>) -> Unit
+) {
+    val mediaItems = remember(targets) { targets.map { it.toMediaItem() } }
+    val hasMediaItems = mediaItems.isNotEmpty()
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            Text(
+                text = summaryText,
+                style = MaterialTheme.typography.titleSmall,
+                color = AsmrTheme.colorScheme.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = hintText,
+                style = MaterialTheme.typography.labelSmall,
+                color = AsmrTheme.colorScheme.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        if (showActions) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                DirectoryActionGroupButton(
+                    text = "收藏",
+                    icon = Icons.Default.FavoriteBorder,
+                    enabled = hasMediaItems,
+                    onClick = { onAddToFavorites(mediaItems) }
+                )
+                Text("|", color = AsmrTheme.colorScheme.textTertiary, style = MaterialTheme.typography.labelMedium)
+                DirectoryActionGroupButton(
+                    text = "列表",
+                    icon = Icons.AutoMirrored.Filled.PlaylistAdd,
+                    enabled = hasMediaItems,
+                    onClick = {
+                        if (hasMediaItems) {
+                            onOpenBatchPlaylistPicker(mediaItems.toList())
+                        }
+                    }
+                )
+                Text("|", color = AsmrTheme.colorScheme.textTertiary, style = MaterialTheme.typography.labelMedium)
+                DirectoryActionGroupButton(
+                    text = "队列",
+                    icon = Icons.AutoMirrored.Filled.PlaylistPlay,
+                    enabled = hasMediaItems,
+                    onClick = { onAddMediaItemsToQueue(mediaItems) }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun DirectoryBrowserPanelV4(
+    panelKey: String,
+    currentPath: String,
+    breadcrumbs: List<DirectoryBreadcrumbSegment>,
+    batchTargets: List<PlaylistAddTarget>,
+    folders: List<DirectoryFolderItem>,
+    files: List<DirectoryFileItem>,
+    onNavigate: (String) -> Unit,
+    onAddToFavorites: (List<MediaItem>) -> Unit,
+    onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
+    onAddMediaItemsToQueue: (List<MediaItem>) -> Unit,
+    preferredPath: String = "",
+    onTogglePreferredPath: ((Boolean) -> Unit)? = null,
+    folderKeyPrefix: String,
+    fileKeyPrefix: String,
+    emptyText: String = "当前目录暂无文件",
+    fileContent: @Composable (
+        file: DirectoryFileItem,
+        selectionMode: Boolean,
+        selected: Boolean,
+        enterSelectionMode: () -> Unit,
+        onSelectedChange: (Boolean) -> Unit
+    ) -> Unit
+) {
+    val browserListState = rememberSaveable("dir-panel-v4:$panelKey", saver = LazyListState.Saver) {
+        LazyListState()
+    }
+    var selectionMode by remember(panelKey, currentPath) { mutableStateOf(false) }
+    var preferredPathState by rememberSaveable(panelKey) { mutableStateOf(preferredPath.trim().trim('/')) }
+    val selectedPaths = remember(panelKey, currentPath) { mutableStateListOf<String>() }
+    val selectedFiles = remember(files, selectedPaths.toList()) {
+        val selectedSet = selectedPaths.toSet()
+        files.filter { selectedSet.contains(it.path) }
+    }
+    val activeTargets = remember(selectionMode, batchTargets, selectedFiles) {
+        if (selectionMode) selectedFiles.mapNotNull { it.playlistTarget } else batchTargets
+    }
+    val batchSummaryText = remember(selectionMode, selectedPaths.size, batchTargets.size) {
+        if (selectionMode) "已选 ${selectedPaths.size} 项" else "媒体 ${batchTargets.size} 项"
+    }
+    val batchHintText = remember(selectionMode) {
+        if (selectionMode) "点击文件可增减选择" else "长按可批量操作"
+    }
+    LaunchedEffect(preferredPath) {
+        preferredPathState = preferredPath.trim().trim('/')
+    }
+    val normalizedCurrentPath = remember(currentPath) { currentPath.trim().trim('/') }
+    val isPreferredPath = remember(preferredPathState, normalizedCurrentPath) {
+        preferredPathState == normalizedCurrentPath
+    }
+    val screenHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
+    val fixedHeight = remember(screenHeight) {
+        (screenHeight * 0.48f).coerceIn(240.dp, 460.dp)
+    }
+
+    LaunchedEffect(panelKey, currentPath) {
+        browserListState.scrollToItem(0)
+    }
+
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        tonalElevation = 1.dp,
+        color = AsmrTheme.colorScheme.surface.copy(alpha = 0.44f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            CompactDirectoryBreadcrumbContentV3(
+                currentPath = currentPath,
+                breadcrumbs = breadcrumbs,
+                onNavigate = onNavigate
+            )
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 12.dp),
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                DirectoryBatchBarEmbeddedV5(
+                    targets = activeTargets,
+                    summaryText = batchSummaryText,
+                    hintText = batchHintText,
+                    showActions = selectionMode,
+                    modifier = Modifier.weight(1f),
+                    onAddToFavorites = onAddToFavorites,
+                    onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
+                    onAddMediaItemsToQueue = onAddMediaItemsToQueue
+                )
+                if (onTogglePreferredPath != null && !selectionMode) {
+                    val preferredIcon = if (isPreferredPath) Icons.Default.Bookmark else Icons.Default.BookmarkBorder
+                    val preferredTextColor = if (isPreferredPath) AsmrTheme.colorScheme.primary else AsmrTheme.colorScheme.textSecondary
+                    val preferredContainerColor = AsmrTheme.colorScheme.primary.copy(alpha = if (AsmrTheme.colorScheme.isDark) 0.24f else 0.14f)
+                    val preferredButton: @Composable (@Composable () -> Unit) -> Unit = { content ->
+                        if (isPreferredPath) {
+                            FilledTonalButton(
+                                onClick = {
+                                    preferredPathState = ""
+                                    onTogglePreferredPath(false)
+                                },
+                                colors = ButtonDefaults.filledTonalButtonColors(
+                                    containerColor = preferredContainerColor,
+                                    contentColor = preferredTextColor
+                                ),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                modifier = Modifier.height(34.dp)
+                            ) { content() }
+                        } else {
+                            TextButton(
+                                onClick = {
+                                    preferredPathState = normalizedCurrentPath
+                                    onTogglePreferredPath(true)
+                                },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = preferredTextColor
+                                ),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
+                                modifier = Modifier.height(34.dp)
+                            ) { content() }
+                        }
+                    }
+                    preferredButton {
+                        Icon(
+                            imageVector = preferredIcon,
+                            contentDescription = null,
+                            tint = preferredTextColor,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "默认打开",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = preferredTextColor
+                        )
+                    }
+                }
+            }
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 12.dp),
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+            )
+            LazyColumn(
+                state = browserListState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(fixedHeight)
+                    .thinScrollbar(browserListState),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                if (folders.isEmpty() && files.isEmpty()) {
+                    item(key = "empty") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(fixedHeight - 24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = emptyText,
+                                color = AsmrTheme.colorScheme.textSecondary
+                            )
+                        }
+                    }
+                } else {
+                    items(
+                        items = folders,
+                        key = { folder -> "$folderKeyPrefix:${folder.path}" },
+                        contentType = { "folder" }
+                    ) { folder ->
+                        DirectoryFolderRowV3(
+                            title = folder.title,
+                            onClick = { onNavigate(folder.path) }
+                        )
+                    }
+                    items(
+                        items = files,
+                        key = { file -> "$fileKeyPrefix:${file.path}" },
+                        contentType = { "file" }
+                    ) { file ->
+                        val isSelected = selectedPaths.contains(file.path)
+                        fileContent(
+                            file,
+                            selectionMode,
+                            isSelected,
+                            {
+                                selectionMode = true
+                                if (!selectedPaths.contains(file.path)) {
+                                    selectedPaths.add(file.path)
+                                }
+                            },
+                            { checked ->
+                                if (checked) {
+                                    if (!selectedPaths.contains(file.path)) {
+                                        selectedPaths.add(file.path)
+                                    }
+                                    selectionMode = true
+                                } else {
+                                    selectedPaths.remove(file.path)
+                                    if (selectedPaths.isEmpty()) {
+                                        selectionMode = false
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DirectoryBrowserPanelV3(
+    panelKey: String,
+    currentPath: String,
+    breadcrumbs: List<DirectoryBreadcrumbSegment>,
+    batchTargets: List<PlaylistAddTarget>,
+    folders: List<DirectoryFolderItem>,
+    files: List<DirectoryFileItem>,
+    onNavigate: (String) -> Unit,
+    onAddToFavorites: (List<MediaItem>) -> Unit,
+    onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
+    onAddMediaItemsToQueue: (List<MediaItem>) -> Unit,
+    preferredPath: String = "",
+    onTogglePreferredPath: ((Boolean) -> Unit)? = null,
+    folderKeyPrefix: String,
+    fileKeyPrefix: String,
+    emptyText: String = "当前目录暂无文件",
+    fileContent: @Composable (
+        file: DirectoryFileItem,
+        selectionMode: Boolean,
+        selected: Boolean,
+        enterSelectionMode: () -> Unit,
+        onSelectedChange: (Boolean) -> Unit
+    ) -> Unit
+) {
+    val browserListState = rememberSaveable("dir-panel-v3:$panelKey", saver = LazyListState.Saver) {
+        LazyListState()
+    }
+    var selectionMode by remember(panelKey, currentPath) { mutableStateOf(false) }
+    val selectedPaths = remember(panelKey, currentPath) { mutableStateListOf<String>() }
+    val selectedFiles = remember(files, selectedPaths.toList()) {
+        val selectedSet = selectedPaths.toSet()
+        files.filter { selectedSet.contains(it.path) }
+    }
+    val activeTargets = remember(selectionMode, batchTargets, selectedFiles) {
+        if (selectionMode) selectedFiles.mapNotNull { it.playlistTarget } else batchTargets
+    }
+    val batchSummaryText = remember(selectionMode, selectedPaths.size, batchTargets.size) {
+        if (selectionMode) "已选 ${selectedPaths.size} 项" else "媒体 ${batchTargets.size} 项"
+    }
+    val batchHintText = remember(selectionMode) {
+        if (selectionMode) "点击文件可增减选择" else "长按可批量操作"
+    }
+    val screenHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
+    val fixedHeight = remember(screenHeight) {
+        (screenHeight * 0.48f).coerceIn(240.dp, 460.dp)
+    }
+
+    LaunchedEffect(panelKey, currentPath) {
+        browserListState.scrollToItem(0)
+    }
+
+    Surface(
+        shape = RoundedCornerShape(18.dp),
+        tonalElevation = 1.dp,
+        color = AsmrTheme.colorScheme.surface.copy(alpha = 0.44f),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            CompactDirectoryBreadcrumbContentV3(
+                currentPath = currentPath,
+                breadcrumbs = breadcrumbs,
+                onNavigate = onNavigate
+            )
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 12.dp),
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+            )
+            DirectoryBatchBarEmbeddedV4(
+                targets = activeTargets,
+                summaryText = batchSummaryText,
+                hintText = batchHintText,
+                showActions = selectionMode,
+                onAddToFavorites = onAddToFavorites,
+                onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
+                onAddMediaItemsToQueue = onAddMediaItemsToQueue
+            )
+            HorizontalDivider(
+                modifier = Modifier.padding(horizontal = 12.dp),
+                thickness = 0.5.dp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+            )
+            LazyColumn(
+                state = browserListState,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(fixedHeight)
+                    .thinScrollbar(browserListState),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                if (folders.isEmpty() && files.isEmpty()) {
+                    item(key = "empty") {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(fixedHeight - 24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = emptyText,
+                                color = AsmrTheme.colorScheme.textSecondary
+                            )
+                        }
+                    }
+                } else {
+                    items(
+                        items = folders,
+                        key = { folder -> "$folderKeyPrefix:${folder.path}" },
+                        contentType = { "folder" }
+                    ) { folder ->
+                        DirectoryFolderRowV3(
+                            title = folder.title,
+                            onClick = { onNavigate(folder.path) }
+                        )
+                    }
+                    items(
+                        items = files,
+                        key = { file -> "$fileKeyPrefix:${file.path}" },
+                        contentType = { "file" }
+                    ) { file ->
+                        val isSelected = selectedPaths.contains(file.path)
+                        fileContent(
+                            file,
+                            selectionMode,
+                            isSelected,
+                            {
+                                selectionMode = true
+                                if (!selectedPaths.contains(file.path)) {
+                                    selectedPaths.add(file.path)
+                                }
+                            },
+                            { checked ->
+                                if (checked) {
+                                    if (!selectedPaths.contains(file.path)) {
+                                        selectedPaths.add(file.path)
+                                    }
+                                    selectionMode = true
+                                } else {
+                                    selectedPaths.remove(file.path)
+                                    if (selectedPaths.isEmpty()) {
+                                        selectionMode = false
+                                    }
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun DirectoryFileRow(
+    file: DirectoryFileItem,
+    loadRemoteFileSize: suspend (String) -> Long?,
+    onPrimary: () -> Unit,
+    selectionMode: Boolean = false,
+    selected: Boolean = false,
+    onEnterSelectionMode: (() -> Unit)? = null,
+    onSelectedChange: ((Boolean) -> Unit)? = null,
+    onSetAsCover: (() -> Unit)? = null,
+    onDownload: (() -> Unit)? = null,
+    onAddToQueue: (() -> Unit)? = null,
+    onAddToPlaylist: (() -> Unit)? = null,
+    onManageTags: (() -> Unit)? = null,
+    onRemoveFromAlbum: (() -> Unit)? = null
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val materialColorScheme = MaterialTheme.colorScheme
+    val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
+    val context = LocalContext.current
+    val icon = when (file.fileType) {
+        TreeFileType.Audio -> Icons.Default.Audiotrack
+        TreeFileType.Video -> Icons.Default.Movie
+        TreeFileType.Image -> Icons.Default.Image
+        TreeFileType.Subtitle -> Icons.Default.Subtitles
+        TreeFileType.Text -> Icons.Default.Description
+        TreeFileType.Pdf -> Icons.Default.PictureAsPdf
+        TreeFileType.Other -> Icons.Default.InsertDriveFile
+    }
+    val iconTint = when (file.fileType) {
+        TreeFileType.Audio -> colorScheme.primary
+        TreeFileType.Video -> colorScheme.accent
+        TreeFileType.Image -> colorScheme.textSecondary
+        TreeFileType.Subtitle -> colorScheme.textSecondary
+        TreeFileType.Text -> colorScheme.textTertiary
+        TreeFileType.Pdf -> colorScheme.danger
+        TreeFileType.Other -> colorScheme.textTertiary
+    }
+    val sizeText by produceState<String?>(initialValue = null, file.sizeSource) {
+        value = when (val sizeSource = file.sizeSource) {
+            FileSizeSource.None -> null
+            is FileSizeSource.Local -> withContext(Dispatchers.IO) {
+                queryLocalFileSize(context, sizeSource.path)
+            }?.let(Formatting::formatFileSize)
+            is FileSizeSource.Remote -> loadRemoteFileSize(sizeSource.url)?.let(Formatting::formatFileSize)
+        }
+    }
+    val metaLine = remember(file.fileType, file.durationSeconds, sizeText) {
+        listOf(
+            fileTypeLabel(file.fileType),
+            Formatting.formatTrackSeconds(file.durationSeconds).takeIf { it.isNotBlank() },
+            sizeText
+        ).filterNotNull().joinToString(" · ")
+    }
+
+    val showPrimaryAction = file.isPlayable
+    val showMenu = showPrimaryAction || onDownload != null || onAddToQueue != null || onAddToPlaylist != null || onManageTags != null || onRemoveFromAlbum != null
+    val showTrailing = selectionMode || onSetAsCover != null || file.showSubtitleStamp || showMenu
+
+    Surface(
+        color = Color.Transparent,
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = {
+                    if (selectionMode && onSelectedChange != null) {
+                        onSelectedChange(!selected)
+                    } else {
+                        onPrimary()
+                    }
+                },
+                onLongClick = {
+                    if (!selectionMode && onEnterSelectionMode != null && onSelectedChange != null) {
+                        onEnterSelectionMode()
+                        onSelectedChange(true)
+                    }
+                }
+            )
+    ) {
+        ListItem(
+            headlineContent = {
+                Text(
+                    text = file.title,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    color = colorScheme.textPrimary,
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium)
+                )
+            },
+            supportingContent = {
+                if (metaLine.isNotBlank()) {
+                    Text(
+                        text = metaLine,
+                        color = colorScheme.textSecondary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            },
+            leadingContent = {
+                if (file.fileType == TreeFileType.Image && file.thumbnailModel != null) {
+                    AsmrAsyncImage(
+                        model = file.thumbnailModel,
+                        contentDescription = null,
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(RoundedCornerShape(8.dp)),
+                        contentScale = ContentScale.Crop,
+                        placeholderCornerRadius = 8
+                    )
+                } else {
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = iconTint,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            },
+            trailingContent = if (showTrailing) {
+                {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (file.showSubtitleStamp) {
+                            SubtitleStamp(modifier = Modifier.padding(end = 8.dp))
+                        }
+                        if (selectionMode && onSelectedChange != null) {
+                            Checkbox(
+                                checked = selected,
+                                onCheckedChange = { checked -> onSelectedChange(checked) }
+                            )
+                        } else if (onSetAsCover != null) {
+                            IconButton(
+                                onClick = onSetAsCover,
+                                modifier = Modifier.size(32.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Photo,
+                                    contentDescription = "设为封面",
+                                    tint = colorScheme.textSecondary,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+                        if (!selectionMode && showMenu) {
+                            var showMenuExpanded by rememberSaveable(file.path) { mutableStateOf(false) }
+                            Box {
+                                IconButton(
+                                    onClick = { showMenuExpanded = true },
+                                    modifier = Modifier.size(32.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.MoreVert,
+                                        contentDescription = "更多操作",
+                                        tint = colorScheme.textSecondary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                                MaterialTheme(
+                                    colorScheme = materialColorScheme.copy(
+                                        surface = dynamicContainerColor,
+                                        surfaceContainer = dynamicContainerColor
+                                    )
+                                ) {
+                                    DropdownMenu(
+                                        expanded = showMenuExpanded,
+                                        onDismissRequest = { showMenuExpanded = false },
+                                        modifier = Modifier.background(dynamicContainerColor)
+                                    ) {
+                                        if (showPrimaryAction) {
+                                            DropdownMenuItem(
+                                                text = { Text("播放") },
+                                                onClick = {
+                                                    onPrimary()
+                                                    showMenuExpanded = false
+                                                },
+                                                leadingIcon = {
+                                                    Icon(Icons.Default.PlayArrow, contentDescription = null, tint = colorScheme.primary)
+                                                }
+                                            )
+                                        }
+                                        if (onDownload != null) {
+                                            DropdownMenuItem(
+                                                text = { Text("下载") },
+                                                onClick = {
+                                                    onDownload()
+                                                    showMenuExpanded = false
+                                                },
+                                                leadingIcon = {
+                                                    Icon(Icons.Default.Download, contentDescription = null, tint = colorScheme.textSecondary)
+                                                }
+                                            )
+                                        }
+                                        if (onAddToQueue != null) {
+                                            DropdownMenuItem(
+                                                text = { Text("添加到播放队列") },
+                                                onClick = {
+                                                    onAddToQueue()
+                                                    showMenuExpanded = false
+                                                },
+                                                leadingIcon = {
+                                                    Icon(Icons.AutoMirrored.Filled.PlaylistPlay, contentDescription = null, tint = colorScheme.textSecondary)
+                                                }
+                                            )
+                                        }
+                                        if (onAddToPlaylist != null) {
+                                            DropdownMenuItem(
+                                                text = { Text("添加到我的列表") },
+                                                onClick = {
+                                                    onAddToPlaylist()
+                                                    showMenuExpanded = false
+                                                },
+                                                leadingIcon = {
+                                                    Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, tint = colorScheme.textSecondary)
+                                                }
+                                            )
+                                        }
+                                        if (onManageTags != null) {
+                                            DropdownMenuItem(
+                                                text = { Text("标签管理") },
+                                                onClick = {
+                                                    onManageTags()
+                                                    showMenuExpanded = false
+                                                },
+                                                leadingIcon = {
+                                                    Icon(Icons.AutoMirrored.Filled.Label, contentDescription = null, tint = colorScheme.textSecondary)
+                                                }
+                                            )
+                                        }
+                                        if (onRemoveFromAlbum != null) {
+                                            DropdownMenuItem(
+                                                text = { Text("从专辑移除") },
+                                                onClick = {
+                                                    onRemoveFromAlbum()
+                                                    showMenuExpanded = false
+                                                },
+                                                leadingIcon = {
+                                                    Icon(Icons.Default.Delete, contentDescription = null, tint = colorScheme.textSecondary)
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else null,
+            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
+        )
+    }
 }
 
 @Composable
@@ -3974,6 +6609,1258 @@ private fun AlbumDlsiteInfoTab(
 }
 
 @Composable
+private fun AlbumDlsiteInfoBreadcrumbTab(
+    album: Album,
+    header: @Composable () -> Unit,
+    dlsiteInfo: Album?,
+    galleryUrls: List<String>,
+    trialTracks: List<Track>,
+    isLoading: Boolean,
+    asmrOneTree: List<AsmrOneTrackNodeResponse>,
+    isLoadingAsmrOne: Boolean,
+    isLoadingTrial: Boolean,
+    onRefreshAsmrOne: () -> Unit,
+    onRefreshTrial: () -> Unit,
+    onPlayTracks: (Album, List<Track>, Track) -> Unit,
+    onPlayMediaItems: (List<MediaItem>, Int) -> Unit,
+    onAddToQueue: (Track) -> Boolean,
+    onAddMediaItemsToQueue: (List<MediaItem>) -> Unit,
+    onAddMediaItemsToFavorites: (List<MediaItem>) -> Unit,
+    onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
+    onDownloadOne: (String) -> Unit,
+    onAddToPlaylistOne: (String) -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
+    onPreviewFile: (AsmrTreeUiEntry.File) -> Unit,
+    treeStateKey: String,
+    initialCurrentPath: String,
+    topContentPadding: Dp,
+    chromeState: com.asmr.player.ui.common.CollapsibleHeaderState,
+    onPersistCurrentPath: (String) -> Unit,
+    initialScroll: Pair<Int, Int>,
+    onPersistScroll: (Int, Int) -> Unit,
+    dlsiteRecommendations: DlsiteRecommendations,
+    onOpenAlbumByRj: (String) -> Unit,
+    loadRemoteFileSize: suspend (String) -> Long?
+) {
+    val infoAlbum = dlsiteInfo ?: album
+    val scope = rememberCoroutineScope()
+    var previewUrl by remember { mutableStateOf<String?>(null) }
+    val videoTracks = remember(trialTracks) { trialTracks.filter { isVideoPreviewUrl(it.path) } }
+    val audioTracks = remember(trialTracks) { trialTracks.filterNot { isVideoPreviewUrl(it.path) } }
+    val asmrLeafTracks = remember(asmrOneTree) { flattenAsmrOneTracksForUi(asmrOneTree) }
+    val asmrLeafByRelPath = remember(asmrLeafTracks) { asmrLeafTracks.associateBy { it.relativePath } }
+    val remoteIndex = remember(asmrOneTree, album.id, album.coverPath, album.coverUrl) {
+        buildRemoteTreeIndex(asmrOneTree, album)
+    }
+    var currentPath by rememberSaveable(treeStateKey) {
+        mutableStateOf(initialCurrentPath.trim().trim('/'))
+    }
+    val browser = remember(remoteIndex, currentPath) {
+        buildRemoteDirectoryBrowser(remoteIndex, currentPath)
+    }
+    val listState = rememberSaveable("scroll:$treeStateKey", saver = LazyListState.Saver) {
+        LazyListState(initialScroll.first, initialScroll.second)
+    }
+    LaunchedEffect(listState, treeStateKey) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .distinctUntilChanged()
+            .collect { (idx, off) -> onPersistScroll(idx, off) }
+    }
+    LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
+        if (listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
+            chromeState.expand()
+        }
+    }
+    LaunchedEffect(currentPath, treeStateKey) {
+        onPersistCurrentPath(currentPath)
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(chromeState.nestedScrollConnection)
+            .thinScrollbar(listState),
+        state = listState,
+        contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
+    ) {
+        item { header() }
+        if (dlsiteInfo == null && isLoading) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
+                }
+            }
+            return@LazyColumn
+        }
+        item {
+            Text(
+                text = "Gallery",
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            if (galleryUrls.isEmpty()) {
+                Text(
+                    text = "暂无样图",
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                LazyRow(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(vertical = 10.dp)
+                ) {
+                    items(
+                        items = galleryUrls,
+                        key = { it },
+                        contentType = { "galleryThumb" }
+                    ) { url ->
+                        val model = remember(url) {
+                            val headers = DlsiteAntiHotlink.headersForImageUrl(url)
+                            if (headers.isEmpty()) url else CacheImageModel(data = url, headers = headers, keyTag = "dlsite")
+                        }
+                        Card(
+                            modifier = Modifier
+                                .size(width = 140.dp, height = 100.dp)
+                                .clickable { previewUrl = url },
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            AsmrAsyncImage(
+                                model = model,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                placeholderCornerRadius = 12,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (asmrOneTree.isNotEmpty()) "ONE（已收录）" else "ONE",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                IconButton(
+                    onClick = onRefreshAsmrOne,
+                    enabled = !isLoadingAsmrOne
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                }
+            }
+        }
+        if (asmrOneTree.isNotEmpty()) {
+            item {
+                DirectoryBreadcrumbBar(
+                    currentPath = currentPath,
+                    breadcrumbs = browser.breadcrumbs,
+                    onNavigate = { path -> currentPath = path }
+                )
+            }
+            item {
+                DirectoryBatchBar(
+                    targets = browser.batchTargets,
+                    onAddToFavorites = onAddMediaItemsToFavorites,
+                    onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
+                    onAddMediaItemsToQueue = onAddMediaItemsToQueue
+                )
+            }
+            items(
+                items = browser.folders,
+                key = { folder -> "asmr-folder:${folder.path}" },
+                contentType = { "folder" }
+            ) { folder ->
+                DirectoryFolderRow(
+                    title = folder.title,
+                    onClick = { currentPath = folder.path }
+                )
+            }
+            items(
+                items = browser.files,
+                key = { file -> "asmr-file:${file.path}" },
+                contentType = { "file" }
+            ) { file ->
+                val leaf = asmrLeafByRelPath[file.path]
+                DirectoryFileRow(
+                    file = file.copy(
+                        showSubtitleStamp = file.subtitleSources.isNotEmpty()
+                    ),
+                    loadRemoteFileSize = loadRemoteFileSize,
+                    onPrimary = {
+                        when (file.fileType) {
+                            TreeFileType.Audio -> {
+                                scope.launch {
+                                    val prepared = withContext(Dispatchers.Default) {
+                                        val start = asmrLeafByRelPath[file.path] ?: return@withContext null
+                                        val folderPath = file.path.substringBeforeLast('/', "")
+                                        val siblingLeaves = asmrLeafTracks.filter {
+                                            it.relativePath.substringBeforeLast('/', "") == folderPath
+                                        }
+                                        val queueLeaves = siblingLeaves.ifEmpty { listOf(start) }
+                                        PreparedTrackPlayback(
+                                            tracks = queueLeaves.sortedBy { SmartSortKey.of(it.title) }.map { it.toTrack() },
+                                            startTrack = start.toTrack(),
+                                            onlineLyrics = queueLeaves.associate { it.url to it.subtitles }
+                                        )
+                                    } ?: return@launch
+                                    com.asmr.player.util.OnlineLyricsStore.replaceAll(prepared.onlineLyrics)
+                                    onPlayTracks(album, prepared.tracks, prepared.startTrack)
+                                }
+                            }
+                            TreeFileType.Video -> {
+                                val item = file.playlistTarget?.toMediaItem()
+                                if (item != null) {
+                                    onPlayMediaItems(listOf(item), 0)
+                                } else {
+                                    onPreviewFile(
+                                        AsmrTreeUiEntry.File(
+                                            path = file.path,
+                                            title = file.title,
+                                            depth = 0,
+                                            fileType = file.fileType,
+                                            isPlayable = false,
+                                            url = file.url
+                                        )
+                                    )
+                                }
+                            }
+                            else -> onPreviewFile(
+                                AsmrTreeUiEntry.File(
+                                    path = file.path,
+                                    title = file.title,
+                                    depth = 0,
+                                    fileType = file.fileType,
+                                    isPlayable = false,
+                                    url = file.url
+                                )
+                            )
+                        }
+                    },
+                    onDownload = if (file.fileType == TreeFileType.Audio || file.fileType == TreeFileType.Video) ({
+                        onDownloadOne(file.path)
+                    }) else null,
+                    onAddToQueue = if (leaf != null) ({
+                        com.asmr.player.util.OnlineLyricsStore.set(leaf.url, leaf.subtitles)
+                        onAddToQueue(leaf.toTrack())
+                    }) else null,
+                    onAddToPlaylist = if (file.fileType == TreeFileType.Audio) ({
+                        onAddToPlaylistOne(file.path)
+                    }) else null
+                )
+            }
+        } else if (isLoadingAsmrOne) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
+                }
+            }
+        } else {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(120.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("未收录")
+                }
+            }
+        }
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "试听 / 试看",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                IconButton(
+                    onClick = onRefreshTrial,
+                    enabled = !isLoading && !isLoadingTrial
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                }
+            }
+        }
+        if (trialTracks.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(160.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isLoadingTrial) {
+                        EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
+                    } else {
+                        Text("暂无试听")
+                    }
+                }
+            }
+        } else {
+            if (isLoadingTrial) {
+                item {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(120.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
+                    }
+                }
+            }
+            items(
+                items = videoTracks,
+                key = { track -> if (track.id > 0L) track.id else track.path },
+                contentType = { "trialVideo" }
+            ) { track ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = track.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    InlineVideoPlayer(
+                        url = track.path,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(16f / 9f)
+                    )
+                }
+            }
+            items(
+                items = audioTracks,
+                key = { track -> if (track.id > 0L) track.id else track.path },
+                contentType = { "trialAudioTrack" }
+            ) { track ->
+                TrackItem(
+                    track = track,
+                    onClick = { onPlayTracks(album, audioTracks, track) },
+                    onAddToPlaylist = { onAddToPlaylist(track) }
+                )
+            }
+        }
+        item {
+            DlsiteRecommendationsBlocks(
+                recommendations = dlsiteRecommendations,
+                onOpenAlbumByRj = onOpenAlbumByRj
+            )
+        }
+    }
+
+    if (previewUrl != null) {
+        Dialog(onDismissRequest = { previewUrl = null }) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable { previewUrl = null },
+                contentAlignment = Alignment.Center
+            ) {
+                var scale by remember { mutableStateOf(1f) }
+                var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth(0.95f)
+                        .wrapContentHeight()
+                        .pointerInput(Unit) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                scale = (scale * zoom).coerceIn(1f, 5f)
+                                if (scale > 1f) {
+                                    offset += pan
+                                } else {
+                                    offset = androidx.compose.ui.geometry.Offset.Zero
+                                }
+                            }
+                        }
+                        .graphicsLayer(
+                            scaleX = scale,
+                            scaleY = scale,
+                            translationX = offset.x,
+                            translationY = offset.y
+                        ),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                ) {
+                    val url = previewUrl.orEmpty()
+                    val model = remember(url) {
+                        val headers = DlsiteAntiHotlink.headersForImageUrl(url)
+                        if (headers.isEmpty()) url else CacheImageModel(data = url, headers = headers, keyTag = "dlsite")
+                    }
+                    AsmrAsyncImage(
+                        model = model,
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(8.dp),
+                        placeholderCornerRadius = 16,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlbumDlsiteInfoBreadcrumbTabV2(
+    album: Album,
+    header: @Composable () -> Unit,
+    dlsiteInfo: Album?,
+    galleryUrls: List<String>,
+    trialTracks: List<Track>,
+    isLoading: Boolean,
+    asmrOneTree: List<AsmrOneTrackNodeResponse>,
+    isLoadingAsmrOne: Boolean,
+    isLoadingTrial: Boolean,
+    onRefreshAsmrOne: () -> Unit,
+    onRefreshTrial: () -> Unit,
+    onPlayTracks: (Album, List<Track>, Track) -> Unit,
+    onPlayMediaItems: (List<MediaItem>, Int) -> Unit,
+    onAddToQueue: (Track) -> Boolean,
+    onAddMediaItemsToQueue: (List<MediaItem>) -> Unit,
+    onAddMediaItemsToFavorites: (List<MediaItem>) -> Unit,
+    onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
+    onDownloadOne: (String) -> Unit,
+    onAddToPlaylistOne: (String) -> Unit,
+    onAddToPlaylist: (Track) -> Unit,
+    onPreviewFile: (AsmrTreeUiEntry.File) -> Unit,
+    treeStateKey: String,
+    initialCurrentPath: String,
+    topContentPadding: Dp,
+    chromeState: com.asmr.player.ui.common.CollapsibleHeaderState,
+    onPersistCurrentPath: (String) -> Unit,
+    initialScroll: Pair<Int, Int>,
+    onPersistScroll: (Int, Int) -> Unit,
+    dlsiteRecommendations: DlsiteRecommendations,
+    onOpenAlbumByRj: (String) -> Unit,
+    loadRemoteFileSize: suspend (String) -> Long?
+) {
+    val scope = rememberCoroutineScope()
+    var previewUrl by remember { mutableStateOf<String?>(null) }
+    val videoTracks = remember(trialTracks) { trialTracks.filter { isVideoPreviewUrl(it.path) } }
+    val audioTracks = remember(trialTracks) { trialTracks.filterNot { isVideoPreviewUrl(it.path) } }
+    val asmrLeafTracks = remember(asmrOneTree) { flattenAsmrOneTracksForUi(asmrOneTree) }
+    val asmrLeafByRelPath = remember(asmrLeafTracks) { asmrLeafTracks.associateBy { it.relativePath } }
+    val remoteIndex = remember(asmrOneTree, album.id, album.coverPath, album.coverUrl) {
+        buildRemoteTreeIndex(asmrOneTree, album)
+    }
+    var currentPath by rememberSaveable(treeStateKey) { mutableStateOf(initialCurrentPath.trim().trim('/')) }
+    val browser = remember(remoteIndex, currentPath) { buildRemoteDirectoryBrowser(remoteIndex, currentPath) }
+    val listState = rememberSaveable("scroll:$treeStateKey", saver = LazyListState.Saver) {
+        LazyListState(initialScroll.first, initialScroll.second)
+    }
+    LaunchedEffect(listState, treeStateKey) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .distinctUntilChanged()
+            .collect { (idx, off) -> onPersistScroll(idx, off) }
+    }
+    LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
+        if (listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
+            chromeState.expand()
+        }
+    }
+    LaunchedEffect(currentPath, treeStateKey) {
+        onPersistCurrentPath(currentPath)
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(chromeState.nestedScrollConnection)
+            .thinScrollbar(listState),
+        state = listState,
+        contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
+    ) {
+        item { header() }
+        if (dlsiteInfo == null && isLoading) {
+            item {
+                Box(
+                    modifier = Modifier.fillMaxWidth().height(160.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
+                }
+            }
+            return@LazyColumn
+        }
+        item {
+            Text(
+                text = "Gallery",
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold
+            )
+            if (galleryUrls.isEmpty()) {
+                Text(
+                    text = "暂无样图",
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            } else {
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    contentPadding = PaddingValues(vertical = 10.dp)
+                ) {
+                    items(items = galleryUrls, key = { it }, contentType = { "galleryThumb" }) { url ->
+                        val model = remember(url) {
+                            val headers = DlsiteAntiHotlink.headersForImageUrl(url)
+                            if (headers.isEmpty()) url else CacheImageModel(data = url, headers = headers, keyTag = "dlsite")
+                        }
+                        Card(
+                            modifier = Modifier.size(width = 140.dp, height = 100.dp).clickable { previewUrl = url },
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            AsmrAsyncImage(
+                                model = model,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                placeholderCornerRadius = 12,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = if (asmrOneTree.isNotEmpty()) "ONE（已收录）" else "ONE",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                IconButton(onClick = onRefreshAsmrOne, enabled = !isLoadingAsmrOne) {
+                    Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                }
+            }
+        }
+        if (asmrOneTree.isNotEmpty()) {
+            item {
+                DirectoryBrowserPanelV4(
+                    panelKey = treeStateKey,
+                    currentPath = currentPath,
+                    breadcrumbs = browser.breadcrumbs,
+                    batchTargets = browser.batchTargets,
+                    folders = browser.folders,
+                    files = browser.files,
+                    onNavigate = { path -> currentPath = path },
+                    onAddToFavorites = onAddMediaItemsToFavorites,
+                    onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
+                    onAddMediaItemsToQueue = onAddMediaItemsToQueue,
+                    folderKeyPrefix = "asmr-folder",
+                    fileKeyPrefix = "asmr-file",
+                    fileContent = { file, selectionMode, selected, enterSelectionMode, onSelectedChange ->
+                        val leaf = asmrLeafByRelPath[file.path]
+                        DirectoryFileRow(
+                            file = file.copy(showSubtitleStamp = file.subtitleSources.isNotEmpty()),
+                            loadRemoteFileSize = loadRemoteFileSize,
+                            onPrimary = {
+                                when (file.fileType) {
+                                    TreeFileType.Audio -> {
+                                        scope.launch {
+                                            val prepared = withContext(Dispatchers.Default) {
+                                                val start = asmrLeafByRelPath[file.path] ?: return@withContext null
+                                                val folderPath = file.path.substringBeforeLast('/', "")
+                                                val siblingLeaves = asmrLeafTracks.filter {
+                                                    it.relativePath.substringBeforeLast('/', "") == folderPath
+                                                }
+                                                val queueLeaves = siblingLeaves.ifEmpty { listOf(start) }
+                                                PreparedTrackPlayback(
+                                                    tracks = queueLeaves.sortedBy { SmartSortKey.of(it.title) }.map { it.toTrack() },
+                                                    startTrack = start.toTrack(),
+                                                    onlineLyrics = queueLeaves.associate { it.url to it.subtitles }
+                                                )
+                                            } ?: return@launch
+                                            com.asmr.player.util.OnlineLyricsStore.replaceAll(prepared.onlineLyrics)
+                                            onPlayTracks(album, prepared.tracks, prepared.startTrack)
+                                        }
+                                    }
+                                    TreeFileType.Video -> {
+                                        val item = file.playlistTarget?.toMediaItem()
+                                        if (item != null) {
+                                            onPlayMediaItems(listOf(item), 0)
+                                        } else {
+                                            onPreviewFile(
+                                                AsmrTreeUiEntry.File(
+                                                    path = file.path,
+                                                    title = file.title,
+                                                    depth = 0,
+                                                    fileType = file.fileType,
+                                                    isPlayable = false,
+                                                    url = file.url
+                                                )
+                                            )
+                                        }
+                                    }
+                                    else -> onPreviewFile(
+                                        AsmrTreeUiEntry.File(
+                                            path = file.path,
+                                            title = file.title,
+                                            depth = 0,
+                                            fileType = file.fileType,
+                                            isPlayable = false,
+                                            url = file.url
+                                        )
+                                    )
+                                }
+                            },
+                            selectionMode = selectionMode,
+                            selected = selected,
+                            onEnterSelectionMode = enterSelectionMode,
+                            onSelectedChange = onSelectedChange,
+                            onDownload = if (file.fileType == TreeFileType.Audio || file.fileType == TreeFileType.Video) ({ onDownloadOne(file.path) }) else null,
+                            onAddToQueue = if (leaf != null) ({
+                                com.asmr.player.util.OnlineLyricsStore.set(leaf.url, leaf.subtitles)
+                                onAddToQueue(leaf.toTrack())
+                            }) else null,
+                            onAddToPlaylist = if (file.fileType == TreeFileType.Audio) ({ onAddToPlaylistOne(file.path) }) else null
+                        )
+                    }
+                )
+            }
+        } else if (isLoadingAsmrOne) {
+            item {
+                Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+                    EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
+                }
+            }
+        } else {
+            item {
+                Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+                    Text("未收录")
+                }
+            }
+        }
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "试听 / 试看",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                IconButton(onClick = onRefreshTrial, enabled = !isLoading && !isLoadingTrial) {
+                    Icon(Icons.Default.Refresh, contentDescription = "刷新")
+                }
+            }
+        }
+        if (trialTracks.isEmpty()) {
+            item {
+                Box(modifier = Modifier.fillMaxWidth().height(160.dp), contentAlignment = Alignment.Center) {
+                    if (isLoadingTrial) {
+                        EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
+                    } else {
+                        Text("暂无试听")
+                    }
+                }
+            }
+        } else {
+            if (isLoadingTrial) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+                        EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
+                    }
+                }
+            }
+            items(items = videoTracks, key = { track -> if (track.id > 0L) track.id else track.path }, contentType = { "trialVideo" }) { track ->
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        text = track.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        fontWeight = FontWeight.Bold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    InlineVideoPlayer(
+                        url = track.path,
+                        modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+                    )
+                }
+            }
+            items(items = audioTracks, key = { track -> if (track.id > 0L) track.id else track.path }, contentType = { "trialAudioTrack" }) { track ->
+                TrackItem(
+                    track = track,
+                    onClick = { onPlayTracks(album, audioTracks, track) },
+                    onAddToPlaylist = { onAddToPlaylist(track) }
+                )
+            }
+        }
+        item {
+            DlsiteRecommendationsBlocks(
+                recommendations = dlsiteRecommendations,
+                onOpenAlbumByRj = onOpenAlbumByRj
+            )
+        }
+    }
+
+    if (previewUrl != null) {
+        Dialog(onDismissRequest = { previewUrl = null }) {
+            Box(
+                modifier = Modifier.fillMaxSize().clickable { previewUrl = null },
+                contentAlignment = Alignment.Center
+            ) {
+                var scale by remember { mutableStateOf(1f) }
+                var offset by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth(0.95f)
+                        .wrapContentHeight()
+                        .pointerInput(Unit) {
+                            detectTransformGestures { _, pan, zoom, _ ->
+                                scale = (scale * zoom).coerceIn(1f, 5f)
+                                if (scale > 1f) offset += pan else offset = androidx.compose.ui.geometry.Offset.Zero
+                            }
+                        }
+                        .graphicsLayer(
+                            scaleX = scale,
+                            scaleY = scale,
+                            translationX = offset.x,
+                            translationY = offset.y
+                        ),
+                    shape = RoundedCornerShape(16.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                ) {
+                    val url = previewUrl.orEmpty()
+                    val model = remember(url) {
+                        val headers = DlsiteAntiHotlink.headersForImageUrl(url)
+                        if (headers.isEmpty()) url else CacheImageModel(data = url, headers = headers, keyTag = "dlsite")
+                    }
+                    AsmrAsyncImage(
+                        model = model,
+                        contentDescription = null,
+                        contentScale = ContentScale.Fit,
+                        modifier = Modifier.fillMaxWidth().padding(8.dp),
+                        placeholderCornerRadius = 16
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlbumDlsitePlayBreadcrumbTab(
+    header: @Composable () -> Unit,
+    album: Album,
+    rjCode: String,
+    tree: List<AsmrOneTrackNodeResponse>,
+    isLoading: Boolean,
+    onOpenLogin: () -> Unit,
+    onEnsureLoaded: () -> Unit,
+    onPlayTracks: (Album, List<Track>, Track) -> Unit,
+    onPlayMediaItems: (List<MediaItem>, Int) -> Unit,
+    onPlayVideo: (String, String, String, String) -> Unit,
+    onAddToQueue: (Track) -> Boolean,
+    onAddMediaItemsToQueue: (List<MediaItem>) -> Unit,
+    onAddMediaItemsToFavorites: (List<MediaItem>) -> Unit,
+    onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
+    onDownloadOne: (String) -> Unit,
+    onPreviewFile: (AsmrTreeUiEntry.File) -> Unit,
+    treeStateKey: String,
+    initialCurrentPath: String,
+    topContentPadding: Dp,
+    chromeState: com.asmr.player.ui.common.CollapsibleHeaderState,
+    onPersistCurrentPath: (String) -> Unit,
+    initialScroll: Pair<Int, Int>,
+    onPersistScroll: (Int, Int) -> Unit,
+    loadRemoteFileSize: suspend (String) -> Long?
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val authStore = remember { DlsiteAuthStore(context) }
+    val scope = rememberCoroutineScope()
+    var loggedIn by remember { mutableStateOf(authStore.isLoggedIn()) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                loggedIn = authStore.isLoggedIn()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    if (!loggedIn) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("需要先登录 DLsite 才能使用已购播放/下载")
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(onClick = onOpenLogin) { Text("去登录") }
+            }
+        }
+        return
+    }
+
+    LaunchedEffect(loggedIn, rjCode) {
+        if (loggedIn) onEnsureLoaded()
+    }
+
+    val headerItemCount = 4
+    val restoredIndex = if (initialScroll.first <= 0) 0 else initialScroll.first + headerItemCount
+    val listState = rememberSaveable("scroll:$treeStateKey", saver = LazyListState.Saver) {
+        LazyListState(restoredIndex, initialScroll.second)
+    }
+    LaunchedEffect(listState, treeStateKey) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .distinctUntilChanged()
+            .collect { (idx, off) ->
+                val persistedIndex = (idx - headerItemCount).coerceAtLeast(0)
+                onPersistScroll(persistedIndex, off)
+            }
+    }
+    LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
+        if (listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
+            chromeState.expand()
+        }
+    }
+
+    val rj = rjCode.trim().uppercase()
+    val leafTracks = remember(tree) { flattenAsmrOneTracksForUi(tree) }
+    val leafByRelPath = remember(leafTracks) { leafTracks.associateBy { it.relativePath } }
+    val remoteIndex = remember(tree, album.id, album.coverPath, album.coverUrl) {
+        buildRemoteTreeIndex(tree, album)
+    }
+    var currentPath by rememberSaveable(treeStateKey) {
+        mutableStateOf(initialCurrentPath.trim().trim('/'))
+    }
+    val browser = remember(remoteIndex, currentPath) {
+        buildRemoteDirectoryBrowser(remoteIndex, currentPath)
+    }
+    LaunchedEffect(currentPath, treeStateKey) {
+        onPersistCurrentPath(currentPath)
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(chromeState.nestedScrollConnection)
+            .thinScrollbar(listState),
+        state = listState,
+        contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
+    ) {
+        item { header() }
+        item {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "已购内容",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                OutlinedButton(onClick = onOpenLogin) { Text("登录 / 切换账号") }
+            }
+        }
+
+        if (rj.isBlank()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("缺少 RJ 编号，无法加载")
+                }
+            }
+            return@LazyColumn
+        }
+
+        if (tree.isEmpty()) {
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (isLoading) {
+                        EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
+                    } else {
+                        Text("暂无可播放资源")
+                    }
+                }
+            }
+            return@LazyColumn
+        }
+
+        item {
+            DirectoryBreadcrumbBar(
+                currentPath = currentPath,
+                breadcrumbs = browser.breadcrumbs,
+                onNavigate = { path -> currentPath = path }
+            )
+        }
+        item {
+            DirectoryBatchBar(
+                targets = browser.batchTargets,
+                onAddToFavorites = onAddMediaItemsToFavorites,
+                onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
+                onAddMediaItemsToQueue = onAddMediaItemsToQueue
+            )
+        }
+        items(
+            items = browser.folders,
+            key = { folder -> "dlplay-folder:${folder.path}" },
+            contentType = { "folder" }
+        ) { folder ->
+            DirectoryFolderRow(
+                title = folder.title,
+                onClick = { currentPath = folder.path }
+            )
+        }
+        items(
+            items = browser.files,
+            key = { file -> "dlplay-file:${file.path}" },
+            contentType = { "file" }
+        ) { file ->
+            val leaf = leafByRelPath[file.path]
+            DirectoryFileRow(
+                file = file.copy(
+                    showSubtitleStamp = file.subtitleSources.isNotEmpty()
+                ),
+                loadRemoteFileSize = loadRemoteFileSize,
+                onPrimary = {
+                    when (file.fileType) {
+                        TreeFileType.Audio, TreeFileType.Video -> {
+                            scope.launch {
+                                val prepared = withContext(Dispatchers.Default) {
+                                    val folderPath = file.path.substringBeforeLast('/', "")
+                                    val siblings = browser.files
+                                        .filter { sibling ->
+                                            sibling.path.substringBeforeLast('/', "") == folderPath &&
+                                                (sibling.fileType == TreeFileType.Audio || sibling.fileType == TreeFileType.Video) &&
+                                                sibling.playlistTarget != null
+                                        }
+                                        .sortedBy { SmartSortKey.of(it.title) }
+                                    val items = siblings.mapNotNull { it.playlistTarget?.toMediaItem() }
+                                    if (items.isEmpty()) return@withContext null
+                                    val clickedId = file.playlistTarget?.mediaId.orEmpty()
+                                    val startIndex = items.indexOfFirst { it.mediaId == clickedId }
+                                        .takeIf { it >= 0 } ?: 0
+                                    PreparedMediaPlayback(items, startIndex)
+                                }
+                                if (prepared != null) {
+                                    if (leaf != null) {
+                                        com.asmr.player.util.OnlineLyricsStore.set(leaf.url, leaf.subtitles)
+                                    }
+                                    onPlayMediaItems(prepared.items, prepared.startIndex)
+                                } else {
+                                    onPreviewFile(
+                                        AsmrTreeUiEntry.File(
+                                            path = file.path,
+                                            title = file.title,
+                                            depth = 0,
+                                            fileType = file.fileType,
+                                            isPlayable = false,
+                                            url = file.url
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                        else -> onPreviewFile(
+                            AsmrTreeUiEntry.File(
+                                path = file.path,
+                                title = file.title,
+                                depth = 0,
+                                fileType = file.fileType,
+                                isPlayable = false,
+                                url = file.url
+                            )
+                        )
+                    }
+                },
+                onDownload = if (file.fileType == TreeFileType.Audio || file.fileType == TreeFileType.Video) ({
+                    onDownloadOne(file.path)
+                }) else null,
+                onAddToQueue = if (leaf != null) ({
+                    com.asmr.player.util.OnlineLyricsStore.set(leaf.url, leaf.subtitles)
+                    onAddToQueue(leaf.toTrack())
+                }) else null,
+                onAddToPlaylist = null
+            )
+        }
+    }
+}
+
+@Composable
+private fun AlbumDlsitePlayBreadcrumbTabV2(
+    header: @Composable () -> Unit,
+    album: Album,
+    rjCode: String,
+    tree: List<AsmrOneTrackNodeResponse>,
+    isLoading: Boolean,
+    onOpenLogin: () -> Unit,
+    onEnsureLoaded: () -> Unit,
+    onPlayTracks: (Album, List<Track>, Track) -> Unit,
+    onPlayMediaItems: (List<MediaItem>, Int) -> Unit,
+    onPlayVideo: (String, String, String, String) -> Unit,
+    onAddToQueue: (Track) -> Boolean,
+    onAddMediaItemsToQueue: (List<MediaItem>) -> Unit,
+    onAddMediaItemsToFavorites: (List<MediaItem>) -> Unit,
+    onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
+    onDownloadOne: (String) -> Unit,
+    onPreviewFile: (AsmrTreeUiEntry.File) -> Unit,
+    treeStateKey: String,
+    initialCurrentPath: String,
+    topContentPadding: Dp,
+    chromeState: com.asmr.player.ui.common.CollapsibleHeaderState,
+    onPersistCurrentPath: (String) -> Unit,
+    initialScroll: Pair<Int, Int>,
+    onPersistScroll: (Int, Int) -> Unit,
+    loadRemoteFileSize: suspend (String) -> Long?
+) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val authStore = remember { DlsiteAuthStore(context) }
+    val scope = rememberCoroutineScope()
+    var loggedIn by remember { mutableStateOf(authStore.isLoggedIn()) }
+
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                loggedIn = authStore.isLoggedIn()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    if (!loggedIn) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("需要先登录 DLsite 才能使用已购播放/下载")
+                Spacer(modifier = Modifier.height(12.dp))
+                Button(onClick = onOpenLogin) { Text("去登录") }
+            }
+        }
+        return
+    }
+
+    LaunchedEffect(loggedIn, rjCode) {
+        if (loggedIn) onEnsureLoaded()
+    }
+
+    val headerItemCount = 2
+    val restoredIndex = if (initialScroll.first <= 0) 0 else initialScroll.first + headerItemCount
+    val listState = rememberSaveable("scroll:$treeStateKey", saver = LazyListState.Saver) {
+        LazyListState(restoredIndex, initialScroll.second)
+    }
+    LaunchedEffect(listState, treeStateKey) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .distinctUntilChanged()
+            .collect { (idx, off) ->
+                val persistedIndex = (idx - headerItemCount).coerceAtLeast(0)
+                onPersistScroll(persistedIndex, off)
+            }
+    }
+    LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset) {
+        if (listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0) {
+            chromeState.expand()
+        }
+    }
+
+    val rj = rjCode.trim().uppercase()
+    val leafTracks = remember(tree) { flattenAsmrOneTracksForUi(tree) }
+    val leafByRelPath = remember(leafTracks) { leafTracks.associateBy { it.relativePath } }
+    val remoteIndex = remember(tree, album.id, album.coverPath, album.coverUrl) {
+        buildRemoteTreeIndex(tree, album)
+    }
+    var currentPath by rememberSaveable(treeStateKey) { mutableStateOf(initialCurrentPath.trim().trim('/')) }
+    val browser = remember(remoteIndex, currentPath) { buildRemoteDirectoryBrowser(remoteIndex, currentPath) }
+    LaunchedEffect(currentPath, treeStateKey) {
+        onPersistCurrentPath(currentPath)
+    }
+
+    LazyColumn(
+        modifier = Modifier
+            .fillMaxSize()
+            .nestedScroll(chromeState.nestedScrollConnection)
+            .thinScrollbar(listState),
+        state = listState,
+        contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
+    ) {
+        item { header() }
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "已购内容",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.weight(1f))
+                OutlinedButton(onClick = onOpenLogin) { Text("登录 / 切换账号") }
+            }
+        }
+
+        if (rj.isBlank()) {
+            item {
+                Box(modifier = Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
+                    Text("缺少 RJ 编号，无法加载")
+                }
+            }
+            return@LazyColumn
+        }
+
+        if (tree.isEmpty()) {
+            item {
+                Box(modifier = Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
+                    if (isLoading) {
+                        EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
+                    } else {
+                        Text("暂无可播放资源")
+                    }
+                }
+            }
+            return@LazyColumn
+        }
+
+        item {
+            DirectoryBrowserPanelV4(
+                panelKey = treeStateKey,
+                currentPath = currentPath,
+                breadcrumbs = browser.breadcrumbs,
+                batchTargets = browser.batchTargets,
+                folders = browser.folders,
+                files = browser.files,
+                onNavigate = { path -> currentPath = path },
+                onAddToFavorites = onAddMediaItemsToFavorites,
+                onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
+                onAddMediaItemsToQueue = onAddMediaItemsToQueue,
+                folderKeyPrefix = "dlplay-folder",
+                fileKeyPrefix = "dlplay-file",
+                fileContent = { file, selectionMode, selected, enterSelectionMode, onSelectedChange ->
+                    val leaf = leafByRelPath[file.path]
+                    DirectoryFileRow(
+                        file = file.copy(showSubtitleStamp = file.subtitleSources.isNotEmpty()),
+                        loadRemoteFileSize = loadRemoteFileSize,
+                        onPrimary = {
+                            when (file.fileType) {
+                                TreeFileType.Audio, TreeFileType.Video -> {
+                                    scope.launch {
+                                        val prepared = withContext(Dispatchers.Default) {
+                                            val folderPath = file.path.substringBeforeLast('/', "")
+                                            val siblings = browser.files
+                                                .filter { sibling ->
+                                                    sibling.path.substringBeforeLast('/', "") == folderPath &&
+                                                        (sibling.fileType == TreeFileType.Audio || sibling.fileType == TreeFileType.Video) &&
+                                                        sibling.playlistTarget != null
+                                                }
+                                                .sortedBy { SmartSortKey.of(it.title) }
+                                            val items = siblings.mapNotNull { it.playlistTarget?.toMediaItem() }
+                                            if (items.isEmpty()) return@withContext null
+                                            val clickedId = file.playlistTarget?.mediaId.orEmpty()
+                                            val startIndex = items.indexOfFirst { it.mediaId == clickedId }
+                                                .takeIf { it >= 0 } ?: 0
+                                            PreparedMediaPlayback(items, startIndex)
+                                        }
+                                        if (prepared != null) {
+                                            if (leaf != null) {
+                                                com.asmr.player.util.OnlineLyricsStore.set(leaf.url, leaf.subtitles)
+                                            }
+                                            onPlayMediaItems(prepared.items, prepared.startIndex)
+                                        } else {
+                                            onPreviewFile(
+                                                AsmrTreeUiEntry.File(
+                                                    path = file.path,
+                                                    title = file.title,
+                                                    depth = 0,
+                                                    fileType = file.fileType,
+                                                    isPlayable = false,
+                                                    url = file.url
+                                                )
+                                            )
+                                        }
+                                    }
+                                }
+                                else -> onPreviewFile(
+                                    AsmrTreeUiEntry.File(
+                                        path = file.path,
+                                        title = file.title,
+                                        depth = 0,
+                                        fileType = file.fileType,
+                                        isPlayable = false,
+                                        url = file.url
+                                    )
+                                )
+                            }
+                        },
+                        selectionMode = selectionMode,
+                        selected = selected,
+                        onEnterSelectionMode = enterSelectionMode,
+                        onSelectedChange = onSelectedChange,
+                        onDownload = if (file.fileType == TreeFileType.Audio || file.fileType == TreeFileType.Video) ({ onDownloadOne(file.path) }) else null,
+                        onAddToQueue = if (leaf != null) ({
+                            com.asmr.player.util.OnlineLyricsStore.set(leaf.url, leaf.subtitles)
+                            onAddToQueue(leaf.toTrack())
+                        }) else null,
+                        onAddToPlaylist = null
+                    )
+                }
+            )
+        }
+    }
+}
+
+@Composable
 private fun AlbumDlsitePlayTreeTab(
     header: @Composable () -> Unit,
     album: Album,
@@ -4288,39 +8175,34 @@ private data class PlaylistAddTarget(
     val title: String,
     val artist: String,
     val artworkUri: String,
+    val albumTitle: String = "",
     val albumId: Long = 0L,
     val trackId: Long = 0L,
-    val rjCode: String = ""
+    val rjCode: String = "",
+    val mimeType: String? = null,
+    val isVideo: Boolean = false
 ) {
     fun toMediaItem(): MediaItem {
-        val metadata = androidx.media3.common.MediaMetadata.Builder()
-            .setTitle(title)
-            .setArtist(artist)
-            .setArtworkUri(artworkUri.takeIf { it.isNotBlank() }?.toUri())
-            .setExtras(
-                android.os.Bundle().apply {
-                    if (albumId > 0L) putLong("album_id", albumId)
-                    if (trackId > 0L) putLong("track_id", trackId)
-                    if (rjCode.isNotBlank()) putString("rj_code", rjCode)
-                }
-            )
-            .build()
-        return MediaItem.Builder()
-            .setMediaId(mediaId)
-            .setUri(uri.toUri())
-            .setMediaMetadata(metadata)
-            .build()
+        return MediaItemFactory.fromDetails(
+            mediaId = mediaId,
+            uri = uri,
+            title = title,
+            artist = artist,
+            albumTitle = albumTitle,
+            artworkUri = artworkUri,
+            albumId = albumId,
+            trackId = trackId,
+            rjCode = rjCode,
+            mimeType = mimeType,
+            isVideo = isVideo
+        )
     }
 
     companion object {
         fun fromTrack(album: Album, track: Track): PlaylistAddTarget {
             val rj = album.rjCode.ifBlank { album.workId }
-            val artist = when {
-                album.cv.isNotBlank() -> album.cv
-                album.circle.isNotBlank() -> album.circle
-                else -> rj
-            }
-            val artwork = album.coverPath.ifBlank { album.coverUrl }
+            val artist = albumArtistLabel(album).ifBlank { rj }
+            val artwork = albumArtworkLabel(album)
             val title = track.title.ifBlank { track.path.substringAfterLast('/').substringAfterLast('\\') }
             return PlaylistAddTarget(
                 mediaId = track.path,
@@ -4328,9 +8210,31 @@ private data class PlaylistAddTarget(
                 title = title,
                 artist = artist.orEmpty(),
                 artworkUri = artwork,
+                albumTitle = album.title,
                 albumId = album.id,
                 trackId = track.id,
                 rjCode = rj
+            )
+        }
+
+        fun fromVideo(
+            album: Album,
+            title: String,
+            uriOrPath: String
+        ): PlaylistAddTarget? {
+            val trimmed = uriOrPath.trim()
+            if (trimmed.isBlank()) return null
+            return PlaylistAddTarget(
+                mediaId = trimmed,
+                uri = trimmed,
+                title = title.ifBlank { trimmed.substringAfterLast('/').substringAfterLast('\\') },
+                artist = albumArtistLabel(album),
+                artworkUri = albumArtworkLabel(album),
+                albumTitle = album.title,
+                albumId = album.id,
+                rjCode = album.rjCode.ifBlank { album.workId },
+                mimeType = MediaItemFactory.guessMimeType(trimmed),
+                isVideo = true
             )
         }
 

@@ -23,6 +23,20 @@ object Formatting {
         return String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
     }
 
+    fun formatTrackSeconds(seconds: Double?): String {
+        val safeSeconds = seconds ?: return ""
+        if (safeSeconds <= 0.0) return ""
+        val totalSeconds = safeSeconds.toLong().coerceAtLeast(0L)
+        val hours = totalSeconds / 3600
+        val minutes = (totalSeconds % 3600) / 60
+        val remainingSeconds = totalSeconds % 60
+        return if (hours > 0) {
+            String.format(Locale.getDefault(), "%02d:%02d:%02d", hours, minutes, remainingSeconds)
+        } else {
+            String.format(Locale.getDefault(), "%02d:%02d", minutes, remainingSeconds)
+        }
+    }
+
     fun formatFileSize(bytes: Long): String {
         if (bytes <= 0) return "0 B"
         val units = arrayOf("B", "KB", "MB", "GB", "TB")
