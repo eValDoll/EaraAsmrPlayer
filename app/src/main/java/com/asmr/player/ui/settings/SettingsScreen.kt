@@ -11,6 +11,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -76,6 +77,7 @@ fun SettingsScreen(
     windowSizeClass: WindowSizeClass,
     viewModel: SettingsViewModel = hiltViewModel(),
     libraryViewModel: LibraryViewModel = hiltViewModel(),
+    onHorizontalControlInteractionChanged: (Boolean) -> Unit = {},
 ) {
     val floatingLyricsEnabled by viewModel.floatingLyricsEnabled.collectAsState()
     val floatingSettings by viewModel.floatingLyricsSettings.collectAsState()
@@ -115,6 +117,9 @@ fun SettingsScreen(
     
     var overlayGranted by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
     var activeTipKey by remember { mutableStateOf<String?>(null) }
+    DisposableEffect(onHorizontalControlInteractionChanged) {
+        onDispose { onHorizontalControlInteractionChanged(false) }
+    }
     val overlayLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         overlayGranted = Settings.canDrawOverlays(context)
     }
@@ -427,7 +432,8 @@ fun SettingsScreen(
                             textForValue = { value ->
                                 "封面背景清晰度：${(value.coerceIn(0f, 1f) * 100).toInt()}%"
                             },
-                            onValueCommitted = viewModel::setCoverBackgroundClarity
+                            onValueCommitted = viewModel::setCoverBackgroundClarity,
+                            onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
                         )
                     }
                 }
@@ -477,7 +483,8 @@ fun SettingsScreen(
                             infoTitle = "播放淡入",
                             infoText = "点击播放时，音量会在设定时长内从低到高平滑升到正常值。",
                             activeTipKey = activeTipKey,
-                            onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
+                            onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key },
+                            onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
                         )
                         DeferredCommitSettingsSliderRow(
                             committedValue = pauseFadeOutMs.toFloat(),
@@ -489,7 +496,8 @@ fun SettingsScreen(
                             infoTitle = "暂停淡出",
                             infoText = "点击暂停时，音量会在设定时长内逐渐降到 0，然后再真正暂停。",
                             activeTipKey = activeTipKey,
-                            onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
+                            onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key },
+                            onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
                         )
                         SettingsToggleRow(
                             text = "SFW开关",
@@ -520,7 +528,8 @@ fun SettingsScreen(
                         LyricsPageSettingsSection(
                             settings = lyricsPageSettings,
                             segmentedButtonColors = segmentedButtonColors,
-                            onSettingsChange = { next -> viewModel.updateLyricsPageSettings(next) }
+                            onSettingsChange = { next -> viewModel.updateLyricsPageSettings(next) },
+                            onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
                         )
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
@@ -553,21 +562,24 @@ fun SettingsScreen(
                                 text = "字体大小: ${floatingSettings.size.toInt()}",
                                 value = floatingSettings.size,
                                 range = 12f..32f,
-                                onValueChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(size = it)) }
+                                onValueChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(size = it)) },
+                                onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
                             )
 
                             SettingsSliderRow(
                                 text = "背景透明度: ${(floatingSettings.opacity * 100).toInt()}%",
                                 value = floatingSettings.opacity,
                                 range = 0f..1f,
-                                onValueChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(opacity = it)) }
+                                onValueChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(opacity = it)) },
+                                onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
                             )
 
                             SettingsSliderRow(
                                 text = "垂直位置 (Y轴)",
                                 value = floatingSettings.yOffset.toFloat(),
                                 range = 0f..2000f,
-                                onValueChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(yOffset = it.toInt())) }
+                                onValueChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(yOffset = it.toInt())) },
+                                onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
                             )
 
                             Row(
@@ -819,7 +831,8 @@ fun SettingsScreen(
 private fun LyricsPageSettingsSection(
     settings: LyricsPageSettings,
     segmentedButtonColors: SegmentedButtonColors,
-    onSettingsChange: (LyricsPageSettings) -> Unit
+    onSettingsChange: (LyricsPageSettings) -> Unit,
+    onHorizontalControlInteractionChanged: (Boolean) -> Unit = {}
 ) {
     Text("歌词页", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
     SettingsSliderRow(
@@ -827,21 +840,24 @@ private fun LyricsPageSettingsSection(
         value = settings.fontSizeSp,
         range = 18f..36f,
         stepSize = 1f,
-        onValueChange = { onSettingsChange(settings.copy(fontSizeSp = it)) }
+        onValueChange = { onSettingsChange(settings.copy(fontSizeSp = it)) },
+        onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
     )
     SettingsSliderRow(
         text = "字体阴影: ${"%.1f".format(settings.strokeWidthSp)}sp",
         value = settings.strokeWidthSp,
         range = 0f..3f,
         stepSize = 0.1f,
-        onValueChange = { onSettingsChange(settings.copy(strokeWidthSp = it)) }
+        onValueChange = { onSettingsChange(settings.copy(strokeWidthSp = it)) },
+        onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
     )
     SettingsSliderRow(
         text = "行间距: ${"%.2f".format(settings.lineHeightMultiplier)}x",
         value = settings.lineHeightMultiplier,
         range = 0.1f..3.0f,
         stepSize = 0.1f,
-        onValueChange = { onSettingsChange(settings.copy(lineHeightMultiplier = it)) }
+        onValueChange = { onSettingsChange(settings.copy(lineHeightMultiplier = it)) },
+        onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
     )
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -993,14 +1009,21 @@ private fun SettingsSliderRow(
     onToggleTip: ((String) -> Unit)? = null,
     onValueChange: (Float) -> Unit,
     onValueChangeFinished: (() -> Unit)? = null,
-    interactionSource: MutableInteractionSource? = null
+    interactionSource: MutableInteractionSource? = null,
+    onHorizontalControlInteractionChanged: (Boolean) -> Unit = {}
 ) {
     val sliderInteractionSource = interactionSource ?: remember { MutableInteractionSource() }
+    val isDragging by sliderInteractionSource.collectIsDraggedAsState()
+    val isPressed by sliderInteractionSource.collectIsPressedAsState()
+    val isInteracting = isDragging || isPressed
     val steps = stepSize
         ?.takeIf { it > 0f }
         ?.let { ((range.endInclusive - range.start) / it).toInt() - 1 }
         ?.coerceAtLeast(0)
         ?: 0
+    LaunchedEffect(isInteracting, onHorizontalControlInteractionChanged) {
+        onHorizontalControlInteractionChanged(isInteracting)
+    }
     Column(modifier = Modifier.fillMaxWidth()) {
         SettingsRowLabel(
             text = text,
@@ -1033,62 +1056,21 @@ private fun DeferredCommitSettingsSliderRow(
     infoTitle: String = "",
     infoText: String? = null,
     activeTipKey: String? = null,
-    onToggleTip: ((String) -> Unit)? = null
+    onToggleTip: ((String) -> Unit)? = null,
+    onHorizontalControlInteractionChanged: (Boolean) -> Unit = {}
 ) {
-    val coercedCommittedValue = committedValue.coerceIn(range.start, range.endInclusive)
-    val snap: (Float) -> Float = remember(range.start, range.endInclusive, stepSize) {
-        { raw ->
-            val bounded = raw.coerceIn(range.start, range.endInclusive)
-            val step = stepSize
-            if (step == null || step <= 0f) {
-                bounded
-            } else {
-                val snapped = ((bounded - range.start) / step).toInt().toFloat() * step + range.start
-                snapped.coerceIn(range.start, range.endInclusive)
-            }
-        }
-    }
-    var draftValue by rememberSaveable(range.start, range.endInclusive, stepSize) {
-        mutableStateOf(snap(coercedCommittedValue))
-    }
-    var pendingCommit by rememberSaveable { mutableStateOf<Float?>(null) }
-    val interactionSource = remember { MutableInteractionSource() }
-    val isDragging by interactionSource.collectIsDraggedAsState()
-
-    LaunchedEffect(coercedCommittedValue, isDragging, pendingCommit) {
-        when {
-            isDragging -> Unit
-            pendingCommit != null -> {
-                if (abs(coercedCommittedValue - pendingCommit!!) <= 0.001f) {
-                    draftValue = coercedCommittedValue
-                    pendingCommit = null
-                }
-            }
-            abs(draftValue - coercedCommittedValue) > 0.001f -> {
-                draftValue = snap(coercedCommittedValue)
-            }
-        }
-    }
-
     SettingsSliderRow(
-        text = textForValue(draftValue),
-        value = draftValue,
+        text = textForValue(committedValue),
+        value = committedValue.coerceIn(range.start, range.endInclusive),
         range = range,
         stepSize = stepSize,
         infoKey = infoKey,
-        infoTitle = infoTitle.ifBlank { textForValue(draftValue) },
+        infoTitle = infoTitle.ifBlank { textForValue(committedValue) },
         infoText = infoText,
         activeTipKey = activeTipKey,
         onToggleTip = onToggleTip,
-        onValueChange = { newValue ->
-            draftValue = snap(newValue)
-        },
-        onValueChangeFinished = {
-            val valueToCommit = snap(draftValue)
-            pendingCommit = valueToCommit
-            onValueCommitted(valueToCommit)
-        },
-        interactionSource = interactionSource
+        onValueChange = onValueCommitted,
+        onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
     )
 }
 

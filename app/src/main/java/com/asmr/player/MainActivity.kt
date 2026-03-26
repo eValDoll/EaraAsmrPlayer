@@ -534,6 +534,7 @@ fun MainContainer(
         initialPage = initialPrimaryPage,
         pageCount = { primaryPagerRoutes.size }
     )
+    var primaryPagerScrollLocked by remember { mutableStateOf(false) }
     val primaryNavSelectionProgresses by remember(
         primaryPagerState,
         primaryPagerRoutes,
@@ -1304,6 +1305,7 @@ fun MainContainer(
                                 HorizontalPager(
                                     state = primaryPagerState,
                                     modifier = Modifier.fillMaxSize(),
+                                    userScrollEnabled = !primaryPagerScrollLocked,
                                     key = { primaryPagerRoutes[it] }
                                 ) { page ->
                                     when (primaryPagerRoutes[page]) {
@@ -1402,7 +1404,10 @@ fun MainContainer(
                                             SettingsScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 viewModel = settingsViewModel,
-                                                libraryViewModel = libraryViewModel
+                                                libraryViewModel = libraryViewModel,
+                                                onHorizontalControlInteractionChanged = { active ->
+                                                    primaryPagerScrollLocked = active
+                                                }
                                             )
                                         }
 
