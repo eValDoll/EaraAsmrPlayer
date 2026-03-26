@@ -1,6 +1,5 @@
 package com.asmr.player.baselineprofile
 
-import android.content.Intent
 import androidx.benchmark.macro.junit4.BaselineProfileRule
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
@@ -13,53 +12,52 @@ class BaselineProfileGenerator {
     val baselineProfileRule = BaselineProfileRule()
 
     @Test
-    fun startup() = baselineProfileRule.collect(
-        packageName = "com.asmr.player",
-        includeInStartupProfile = true,
-    ) {
-        pressHome()
-        val intent = Intent().apply {
-            setClassName("com.asmr.player", "com.asmr.player.MainActivity")
-            putExtra("start_route", "search")
-        }
-        startActivityAndWait(intent)
-        device.waitForIdle()
+    fun startup() = baselineProfileRule.collectStartupProfile {
+        startMainActivity()
     }
 
     @Test
-    fun searchScrollFlingAndImages() = baselineProfileRule.collect(
-        packageName = "com.asmr.player",
-        includeInStartupProfile = false,
-    ) {
-        pressHome()
-        val intent = Intent().apply {
-            setClassName("com.asmr.player", "com.asmr.player.MainActivity")
-            putExtra("start_route", "search")
-        }
-        startActivityAndWait(intent)
-        device.waitForIdle()
-        device.waitForIdle()
+    fun libraryAndPlaylistLongLists() = baselineProfileRule.collectBaselineProfile {
+        startHarnessScenario(BenchmarkScenarioValue.LibraryAlbums)
+        device.performLongListScrollProfile()
 
-        val x = device.displayWidth / 2
-        val y1 = (device.displayHeight * 0.85f).toInt()
-        val y2 = (device.displayHeight * 0.25f).toInt()
+        startHarnessScenario(BenchmarkScenarioValue.LibraryTracks)
+        device.performLongListScrollProfile()
 
-        repeat(3) {
-            device.swipe(x, y1, x, y2, 20)
-            device.waitForIdle()
-        }
-        repeat(2) {
-            device.swipe(x, y2, x, y1, 20)
-            device.waitForIdle()
-        }
+        startHarnessScenario(BenchmarkScenarioValue.FavoritesDetail)
+        device.performLongListScrollProfile()
 
-        repeat(3) {
-            device.swipe(x, y1, x, y2, 5)
-            device.waitForIdle()
-        }
-        repeat(2) {
-            device.swipe(x, y2, x, y1, 5)
-            device.waitForIdle()
-        }
+        startHarnessScenario(BenchmarkScenarioValue.PlaylistsList)
+        device.performLongListScrollProfile()
+
+        startHarnessScenario(BenchmarkScenarioValue.PlaylistDetail)
+        device.performLongListScrollProfile()
+    }
+
+    @Test
+    fun groupsQueueAndPickers() = baselineProfileRule.collectBaselineProfile {
+        startHarnessScenario(BenchmarkScenarioValue.GroupsList)
+        device.performLongListScrollProfile()
+
+        startHarnessScenario(BenchmarkScenarioValue.GroupDetail)
+        device.performLongListScrollProfile()
+
+        startHarnessScenario(BenchmarkScenarioValue.Queue)
+        device.performLongListScrollProfile()
+
+        startHarnessScenario(BenchmarkScenarioValue.PlaylistPicker)
+        device.performLongListScrollProfile()
+
+        startHarnessScenario(BenchmarkScenarioValue.GroupPicker)
+        device.performLongListScrollProfile()
+    }
+
+    @Test
+    fun searchNetworkRefreshAndScroll() = baselineProfileRule.collectBaselineProfile {
+        startMainActivity(startRoute = "search")
+        waitForSearchNetworkLoad()
+        device.pullToRefreshSearch()
+        waitForSearchRefresh()
+        device.performLongListScrollProfile()
     }
 }
