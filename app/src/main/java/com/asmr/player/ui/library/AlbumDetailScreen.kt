@@ -893,6 +893,14 @@ private fun AlbumHeader(
     }
 
     val rj = album.rjCode.ifBlank { album.workId }
+    val headerAnimationScopeKey = remember(album.id, rj) { "albumHeader:${album.id}:$rj" }
+    var headerIntroPlayed by rememberSaveable(headerAnimationScopeKey) { mutableStateOf(false) }
+    LaunchedEffect(headerAnimationScopeKey) {
+        if (!headerIntroPlayed) {
+            delay(700)
+            headerIntroPlayed = true
+        }
+    }
     fun copy(label: String, value: String) {
         val v = value.trim()
         if (v.isBlank()) return
@@ -900,14 +908,18 @@ private fun AlbumHeader(
         messageManager.showSuccess("$label 已复制")
     }
 
+    val headerContainerModifier = Modifier
+        .fillMaxWidth()
+        .padding(16.dp)
+        .clip(RoundedCornerShape(24.dp))
+        .background(colorScheme.surface.copy(alpha = 0.5f))
+
     Column(
-        modifier = dlsiteElasticItemModifier(
-            Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-                .clip(RoundedCornerShape(24.dp))
-                .background(colorScheme.surface.copy(alpha = 0.5f))
-        )
+        modifier = if (headerIntroPlayed) {
+            headerContainerModifier
+        } else {
+            dlsiteElasticItemModifier(headerContainerModifier)
+        }
     ) {
         Column {
             Box(
@@ -956,7 +968,7 @@ private fun AlbumHeader(
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     AlbumHeaderInfoReveal(
-                        revealKey = "title:${album.rjCode}:${album.title}",
+                        revealKey = "$headerAnimationScopeKey:title",
                         delayMillis = 0
                     ) {
                     Text(
@@ -971,7 +983,7 @@ private fun AlbumHeader(
                     val circle = album.circle.trim()
                     if (rj.isNotBlank() || circle.isNotBlank()) {
                         AlbumHeaderInfoReveal(
-                            revealKey = "meta:${album.rjCode}:$circle",
+                            revealKey = "$headerAnimationScopeKey:meta",
                             delayMillis = 40
                         ) {
                     Row(
@@ -1009,7 +1021,7 @@ private fun AlbumHeader(
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (album.cv.isNotBlank()) {
                     AlbumHeaderInfoReveal(
-                        revealKey = "cv:${album.rjCode}:${album.cv}",
+                        revealKey = "$headerAnimationScopeKey:cv",
                         delayMillis = 80
                     ) {
                         CvChipsFlow(
@@ -1062,7 +1074,7 @@ private fun AlbumHeader(
 
                 if (album.tags.isNotEmpty()) {
                     AlbumHeaderInfoReveal(
-                        revealKey = "tags:${album.rjCode}:${album.tags.joinToString(separator = "|")}",
+                        revealKey = "$headerAnimationScopeKey:tags",
                         delayMillis = 120
                     ) {
                     FlowRow(
@@ -1085,7 +1097,7 @@ private fun AlbumHeader(
                 }
 
                 AlbumHeaderInfoReveal(
-                    revealKey = "actions:${album.rjCode}:$canSaveOnline:$downloadEnabled:$saveEnabled:$showGroupButton:$dlsiteUrl:$asmrOneUrl",
+                    revealKey = "$headerAnimationScopeKey:actions",
                     delayMillis = 160
                 ) {
                 Row(
@@ -1194,14 +1206,25 @@ private fun AlbumHeaderInfoReveal(
     delayMillis: Int = 0,
     content: @Composable () -> Unit
 ) {
-    var visible by remember(revealKey) { mutableStateOf(false) }
+    var hasPlayed by rememberSaveable(revealKey) { mutableStateOf(false) }
+    var visible by remember(revealKey, hasPlayed) { mutableStateOf(hasPlayed) }
     LaunchedEffect(revealKey) {
+        if (hasPlayed) {
+            visible = true
+            return@LaunchedEffect
+        }
         visible = false
         if (delayMillis > 0) {
             delay(delayMillis.toLong())
         }
         withFrameNanos { }
         visible = true
+        delay(420)
+        hasPlayed = true
+    }
+    if (hasPlayed) {
+        content()
+        return
     }
     val alpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,

@@ -875,7 +875,7 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
         state = listState,
         contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
     ) {
-        item { header() }
+        item(key = "dlplay-header:$treeStateKey") { header() }
         item {
             Row(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
