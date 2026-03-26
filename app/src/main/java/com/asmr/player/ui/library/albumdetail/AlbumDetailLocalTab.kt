@@ -232,7 +232,7 @@ internal fun AlbumLocalBreadcrumbTabV2(
         state = listState,
         contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
     ) {
-        item { header() }
+        item(key = "local-header:$stateKey") { header() }
         val browserValue = browser
         if (browserValue == null) {
             item {

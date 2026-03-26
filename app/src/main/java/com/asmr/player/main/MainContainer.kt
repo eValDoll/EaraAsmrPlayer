@@ -38,6 +38,7 @@ import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Alignment
@@ -273,6 +274,7 @@ fun MainContainer(
         initialPage = initialPrimaryPage,
         pageCount = { primaryPagerRoutes.size }
     )
+    val primaryContentStateHolder = rememberSaveableStateHolder()
     var primaryPagerScrollLocked by remember { mutableStateOf(false) }
     val primaryNavSelectionProgresses by remember(
         primaryPagerState,
@@ -1040,14 +1042,17 @@ fun MainContainer(
                                 .fillMaxSize()
                                 .padding(top = padding.calculateTopPadding())
                         ) {
-                            if (currentPrimaryRoute != null) {
-                                HorizontalPager(
-                                    state = primaryPagerState,
-                                    modifier = Modifier.fillMaxSize(),
-                                    userScrollEnabled = !primaryPagerScrollLocked,
-                                    key = { primaryPagerRoutes[it] }
-                                ) { page ->
-                                    when (primaryPagerRoutes[page]) {
+                            primaryContentStateHolder.SaveableStateProvider("primary_pager") {
+                                if (currentPrimaryRoute != null) {
+                                    HorizontalPager(
+                                        state = primaryPagerState,
+                                        modifier = Modifier.fillMaxSize(),
+                                        userScrollEnabled = !primaryPagerScrollLocked,
+                                        key = { primaryPagerRoutes[it] }
+                                    ) { page ->
+                                        val route = primaryPagerRoutes[page]
+                                        primaryContentStateHolder.SaveableStateProvider("primary_route:$route") {
+                                            when (route) {
                                         Routes.Library -> {
                                             LibraryScreen(
                                                 windowSizeClass = windowSizeClass,
@@ -1158,7 +1163,9 @@ fun MainContainer(
                                             )
                                         }
                                     }
+                                    }
                                 }
+                            }
                             }
 
                             NavHost(

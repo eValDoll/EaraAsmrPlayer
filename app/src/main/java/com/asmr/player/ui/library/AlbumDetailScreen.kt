@@ -7,13 +7,17 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
@@ -108,6 +112,7 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
@@ -300,11 +305,6 @@ fun AlbumDetailScreen(
                     }
                     val tabContentTopPadding = tabChromeVisibleHeight + AlbumDetailTabContentGap
     
-                    LaunchedEffect(model.rjCode, model.dlsiteWorkno, model.localAlbum?.id, selectedTab) {
-                        if (selectedTab != 0 && model.dlsiteInfo == null && model.dlsiteWorkno.isNotBlank()) {
-                            viewModel.ensureDlsiteLoaded()
-                        }
-                    }
                     LaunchedEffect(selectedTab) {
                         if (lastChromeResetTab != selectedTab) {
                             tabChromeState.expand()
@@ -349,7 +349,12 @@ fun AlbumDetailScreen(
                     }
                     
                     val tabTitles = remember { listOf("本地", "DL", "DL Play") }
-                    LaunchedEffect(selectedTab, model.rjCode, model.dlsiteWorkno) {
+                    LaunchedEffect(
+                        selectedTab,
+                        model.rjCode,
+                        model.dlsiteWorkno,
+                        model.hasResolvedInitialDlsiteTarget
+                    ) {
                         when (selectedTab) {
                             1 -> {
                                 viewModel.ensureDlsiteLoaded()
@@ -888,6 +893,14 @@ private fun AlbumHeader(
     }
 
     val rj = album.rjCode.ifBlank { album.workId }
+    val headerAnimationScopeKey = remember(album.id, rj) { "albumHeader:${album.id}:$rj" }
+    var headerIntroPlayed by rememberSaveable(headerAnimationScopeKey) { mutableStateOf(false) }
+    LaunchedEffect(headerAnimationScopeKey) {
+        if (!headerIntroPlayed) {
+            delay(700)
+            headerIntroPlayed = true
+        }
+    }
     fun copy(label: String, value: String) {
         val v = value.trim()
         if (v.isBlank()) return
@@ -895,12 +908,18 @@ private fun AlbumHeader(
         messageManager.showSuccess("$label 已复制")
     }
 
+    val headerContainerModifier = Modifier
+        .fillMaxWidth()
+        .padding(16.dp)
+        .clip(RoundedCornerShape(24.dp))
+        .background(colorScheme.surface.copy(alpha = 0.5f))
+
     Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(16.dp)
-            .clip(RoundedCornerShape(24.dp))
-            .background(colorScheme.surface.copy(alpha = 0.5f))
+        modifier = if (headerIntroPlayed) {
+            headerContainerModifier
+        } else {
+            dlsiteElasticItemModifier(headerContainerModifier)
+        }
     ) {
         Column {
             Box(
@@ -948,6 +967,10 @@ private fun AlbumHeader(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
+                    AlbumHeaderInfoReveal(
+                        revealKey = "$headerAnimationScopeKey:title",
+                        delayMillis = 0
+                    ) {
                     Text(
                         text = album.title,
                         modifier = Modifier.clickable { copy("标题", album.title) },
@@ -956,6 +979,13 @@ private fun AlbumHeader(
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis
                     )
+                    }
+                    val circle = album.circle.trim()
+                    if (rj.isNotBlank() || circle.isNotBlank()) {
+                        AlbumHeaderInfoReveal(
+                            revealKey = "$headerAnimationScopeKey:meta",
+                            delayMillis = 40
+                        ) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
@@ -972,7 +1002,6 @@ private fun AlbumHeader(
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             )
                         }
-                        val circle = album.circle.trim()
                         if (circle.isNotBlank()) {
                             Text(
                                 text = circle,
@@ -984,16 +1013,25 @@ private fun AlbumHeader(
                             )
                         }
                     }
+                        }
+                    }
                 }
             }
 
             Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                CvChipsFlow(
-                    cvText = album.cv,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                    onCvClick = { cv -> copy("CV", cv) },
-                )
+                if (album.cv.isNotBlank()) {
+                    AlbumHeaderInfoReveal(
+                        revealKey = "$headerAnimationScopeKey:cv",
+                        delayMillis = 80
+                    ) {
+                        CvChipsFlow(
+                            cvText = album.cv,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            onCvClick = { cv -> copy("CV", cv) },
+                        )
+                    }
+                }
 
                 val langCandidates = remember(dlsiteEditions) {
                     dlsiteEditions
@@ -1035,6 +1073,10 @@ private fun AlbumHeader(
                 }
 
                 if (album.tags.isNotEmpty()) {
+                    AlbumHeaderInfoReveal(
+                        revealKey = "$headerAnimationScopeKey:tags",
+                        delayMillis = 120
+                    ) {
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -1051,8 +1093,13 @@ private fun AlbumHeader(
                             )
                         }
                     }
+                    }
                 }
 
+                AlbumHeaderInfoReveal(
+                    revealKey = "$headerAnimationScopeKey:actions",
+                    delayMillis = 160
+                ) {
                 Row(
                     modifier = Modifier.padding(top = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -1147,7 +1194,79 @@ private fun AlbumHeader(
                         }
                     }
                 }
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun AlbumHeaderInfoReveal(
+    revealKey: String,
+    delayMillis: Int = 0,
+    content: @Composable () -> Unit
+) {
+    var hasPlayed by rememberSaveable(revealKey) { mutableStateOf(false) }
+    var visible by remember(revealKey, hasPlayed) { mutableStateOf(hasPlayed) }
+    LaunchedEffect(revealKey) {
+        if (hasPlayed) {
+            visible = true
+            return@LaunchedEffect
+        }
+        visible = false
+        if (delayMillis > 0) {
+            delay(delayMillis.toLong())
+        }
+        withFrameNanos { }
+        visible = true
+        delay(420)
+        hasPlayed = true
+    }
+    if (hasPlayed) {
+        content()
+        return
+    }
+    val alpha by animateFloatAsState(
+        targetValue = if (visible) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "albumHeaderInfoAlpha"
+    )
+    val offsetY by animateDpAsState(
+        targetValue = if (visible) 0.dp else 10.dp,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBouncy,
+            stiffness = Spring.StiffnessMediumLow
+        ),
+        label = "albumHeaderInfoOffsetY"
+    )
+    val density = LocalDensity.current
+    AnimatedVisibility(
+        visible = visible,
+        enter = fadeIn(animationSpec = tween(durationMillis = 220)) + expandVertically(
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioLowBouncy,
+                stiffness = Spring.StiffnessLow
+            ),
+            expandFrom = Alignment.Top
+        ),
+        exit = fadeOut(animationSpec = tween(durationMillis = 120)) + shrinkVertically(
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessMediumLow
+            ),
+            shrinkTowards = Alignment.Top
+        )
+    ) {
+        Box(
+            modifier = Modifier.graphicsLayer {
+                this.alpha = alpha
+                translationY = with(density) { offsetY.toPx() }
+            }
+        ) {
+            content()
         }
     }
 }
