@@ -16,9 +16,11 @@ private const val BenchmarkReadyPrefix = "benchmark-ready:"
 private const val BenchmarkWaitTimeoutMs = 45_000L
 private const val SearchNetworkLoadWaitMs = 3_500L
 private const val SearchRefreshWaitMs = 2_500L
+private const val AlbumDetailDlLoadWaitMs = 6_500L
 private const val SceneSettleWaitMs = 600L
 private const val BaselineProfileMaxIterations = 3
 private const val BaselineProfileStableIterations = 1
+internal const val AlbumDetailDlExampleRj = "RJ01554925"
 
 internal object BenchmarkScenarioValue {
     const val LibraryAlbums = "library_albums"
@@ -77,6 +79,13 @@ internal fun MacrobenchmarkScope.startMainActivity(
     waitForSceneToSettle()
 }
 
+internal fun MacrobenchmarkScope.startAlbumDetailDlTabExample(
+    rjCode: String = AlbumDetailDlExampleRj
+) {
+    startMainActivity(startRoute = "album_detail_online/$rjCode")
+    waitForAlbumDetailDlLoad()
+}
+
 internal fun MacrobenchmarkScope.startHarnessScenario(
     scenario: String
 ) {
@@ -124,6 +133,10 @@ internal fun waitForSearchNetworkLoad() {
 
 internal fun waitForSearchRefresh() {
     SystemClock.sleep(SearchRefreshWaitMs)
+}
+
+internal fun waitForAlbumDetailDlLoad() {
+    SystemClock.sleep(AlbumDetailDlLoadWaitMs)
 }
 
 internal fun UiDevice.performLongListScrollProfile() {

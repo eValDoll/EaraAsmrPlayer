@@ -236,8 +236,11 @@ fun MainContainer(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val currentPlaylistSystemType = navBackStackEntry?.arguments?.getString("type")
-    val initialDestination = remember(startRouteFromIntent) {
-        if (startRouteFromIntent == "search") "search" else "library"
+    val startRoute = remember(startRouteFromIntent) {
+        startRouteFromIntent?.trim().orEmpty()
+    }
+    val initialDestination = remember(startRoute) {
+        if (startRoute == Routes.Search) Routes.Search else Routes.Library
     }
     var lastPrimaryRoute by rememberSaveable { mutableStateOf(initialDestination) }
     val currentPrimaryRoute = resolveCurrentPrimaryDestinationRoute(
@@ -294,6 +297,12 @@ fun MainContainer(
         withFrameNanos { }
         withFrameNanos { }
         onContentReady()
+    }
+    LaunchedEffect(navController, startRoute, initialDestination) {
+        if (startRoute.isBlank() || startRoute == initialDestination) return@LaunchedEffect
+        withFrameNanos { }
+        withFrameNanos { }
+        navController.navigateSingleTop(startRoute)
     }
     var blockNavTouches by remember { mutableStateOf(false) }
     var lastRouteForTouchBlock by remember { mutableStateOf(currentPrimaryRoute ?: currentRoute) }

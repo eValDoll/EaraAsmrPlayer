@@ -77,6 +77,21 @@ class LongListPerformanceBenchmark {
         }
     }
 
+    @Test
+    fun albumDetailDlTabFrameTiming() {
+        benchmarkRule.measureRepeated(
+            packageName = PackageName,
+            metrics = listOf(FrameTimingMetric()),
+            compilationMode = CompilationMode.Partial(BaselineProfileMode.Require),
+            startupMode = defaultFrameTimingStartupMode(),
+            iterations = 1
+        ) {
+            device.pressHome()
+            startAlbumDetailDlTabExample()
+            device.performSlowDragAndFling()
+        }
+    }
+
     private fun measureScenarioFrameTiming(
         scenario: String
     ) {
