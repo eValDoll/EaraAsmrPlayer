@@ -28,6 +28,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -341,6 +342,20 @@ private fun DlsiteRecommendationsLoadingBlocks() {
     }
 }
 
+private val DlsiteSectionPlacementSpring = spring<IntOffset>(
+    dampingRatio = Spring.DampingRatioLowBouncy,
+    stiffness = Spring.StiffnessLow
+)
+
+@OptIn(ExperimentalFoundationApi::class)
+private fun LazyItemScope.dlsiteAnimatedSectionModifier(
+    modifier: Modifier = Modifier
+): Modifier {
+    return dlsiteElasticItemModifier(
+        modifier.animateItemPlacement(animationSpec = DlsiteSectionPlacementSpring)
+    )
+}
+
 @Composable
 internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     album: Album,
@@ -415,7 +430,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         item(key = "dlsite-header") { header() }
         if (isInitialDlsiteLoading) {
             item(key = "dlsite-gallery-section") {
-                Column(modifier = dlsiteElasticItemModifier(Modifier.fillMaxWidth())) {
+                Column(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth())) {
                     Text(
                         text = "Gallery",
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -427,7 +442,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             }
             item(key = "dlsite-one-header") {
                 Row(
-                    modifier = dlsiteElasticItemModifier(
+                    modifier = dlsiteAnimatedSectionModifier(
                         Modifier
                             .fillMaxWidth()
                             .padding(horizontal = 16.dp, vertical = 10.dp)
@@ -442,12 +457,12 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                 }
             }
             item(key = "dlsite-one-content") {
-                Box(modifier = dlsiteElasticItemModifier(Modifier.fillMaxWidth())) {
+                Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth())) {
                     DlsiteDirectoryLoadingPanel()
                 }
             }
             item(key = "dlsite-trial-loading") {
-                Column(modifier = dlsiteElasticItemModifier(Modifier.fillMaxWidth())) {
+                Column(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth())) {
                 Row(
                     modifier = Modifier
                             .fillMaxWidth()
@@ -464,14 +479,14 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                 }
             }
             item(key = "dlsite-recommendations") {
-                Box(modifier = dlsiteElasticItemModifier(Modifier.fillMaxWidth())) {
+                Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth())) {
                     DlsiteRecommendationsLoadingBlocks()
                 }
             }
             return@LazyColumn
         }
         item(key = "dlsite-gallery-section") {
-            Column(modifier = dlsiteElasticItemModifier(Modifier.fillMaxWidth())) {
+            Column(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth())) {
             Text(
                 text = "Gallery",
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -514,7 +529,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         }
         item(key = "dlsite-one-header") {
             Row(
-                modifier = dlsiteElasticItemModifier(
+                modifier = dlsiteAnimatedSectionModifier(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)
                 ),
                 verticalAlignment = Alignment.CenterVertically
@@ -532,7 +547,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         }
         if (asmrOneTree.isNotEmpty()) {
             item(key = "dlsite-one-content") {
-                Box(modifier = dlsiteElasticItemModifier(Modifier.fillMaxWidth())) {
+                Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth())) {
                     DirectoryBrowserPanelV4(
                     panelKey = treeStateKey,
                     currentPath = currentPath,
@@ -618,14 +633,14 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             }
         } else if (isLoadingAsmrOne) {
             item(key = "dlsite-one-content") {
-                Box(modifier = dlsiteElasticItemModifier(Modifier.fillMaxWidth())) {
+                Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth())) {
                     DlsiteDirectoryLoadingPanel()
                 }
             }
         } else {
             item(key = "dlsite-one-content") {
                 Box(
-                    modifier = dlsiteElasticItemModifier(
+                    modifier = dlsiteAnimatedSectionModifier(
                         Modifier.fillMaxWidth().height(120.dp)
                     ),
                     contentAlignment = Alignment.Center
@@ -636,7 +651,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         }
         item(key = "dlsite-trial-header") {
             Row(
-                modifier = dlsiteElasticItemModifier(
+                modifier = dlsiteAnimatedSectionModifier(
                     Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)
                 ),
                 verticalAlignment = Alignment.CenterVertically
@@ -655,7 +670,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         if (trialTracks.isEmpty()) {
             item(key = "dlsite-trial-content") {
                 Box(
-                    modifier = dlsiteElasticItemModifier(Modifier.fillMaxWidth()),
+                    modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth()),
                     contentAlignment = Alignment.Center
                 ) {
                     if (isLoadingTrial) {
@@ -669,7 +684,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             if (isLoadingTrial) {
                 item(key = "dlsite-trial-progress") {
                     LinearProgressIndicator(
-                        modifier = dlsiteElasticItemModifier(
+                        modifier = dlsiteAnimatedSectionModifier(
                             Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp)
@@ -679,7 +694,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             }
             items(items = videoTracks, key = { track -> if (track.id > 0L) track.id else track.path }, contentType = { "trialVideo" }) { track ->
                 Column(
-                    modifier = dlsiteElasticItemModifier(
+                    modifier = dlsiteAnimatedSectionModifier(
                         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
                     )
                 ) {
@@ -698,7 +713,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                 }
             }
             items(items = audioTracks, key = { track -> if (track.id > 0L) track.id else track.path }, contentType = { "trialAudioTrack" }) { track ->
-                Box(modifier = dlsiteElasticItemModifier(Modifier.fillMaxWidth())) {
+                Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth())) {
                     TrackItem(
                         track = track,
                         onClick = { onPlayTracks(album, audioTracks, track) },
@@ -708,7 +723,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             }
         }
         item(key = "dlsite-recommendations") {
-            Box(modifier = dlsiteElasticItemModifier(Modifier.fillMaxWidth())) {
+            Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth())) {
                 DlsiteRecommendationsBlocks(
                     recommendations = dlsiteRecommendations,
                     onOpenAlbumByRj = onOpenAlbumByRj

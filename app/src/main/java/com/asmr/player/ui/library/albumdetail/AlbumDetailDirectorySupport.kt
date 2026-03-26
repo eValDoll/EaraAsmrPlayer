@@ -1537,9 +1537,11 @@ internal fun DirectoryBrowserPanel(
         shape = RoundedCornerShape(18.dp),
         tonalElevation = 1.dp,
         color = AsmrTheme.colorScheme.surface.copy(alpha = 0.44f),
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+        modifier = dlsiteElasticItemModifier(
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        )
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             CompactDirectoryBreadcrumbContent(
@@ -2506,9 +2508,11 @@ internal fun DirectoryBrowserPanelV4(
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
             )
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                modifier = dlsiteElasticItemModifier(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                ),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
             ) {

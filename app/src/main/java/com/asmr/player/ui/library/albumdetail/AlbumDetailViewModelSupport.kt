@@ -156,6 +156,8 @@ data class AlbumDetailModel(
     val dlsitePlayWorkno: String,
     val dlsiteEditions: List<DlsiteLanguageEdition>,
     val dlsiteSelectedLang: String,
+    val hasResolvedInitialDlsiteTarget: Boolean,
+    val isDlsiteLanguageUserSelected: Boolean,
     val asmrOneWorkId: String?,
     val asmrOneSite: Int?,
     val asmrOneTree: List<AsmrOneTrackNodeResponse>,
@@ -165,6 +167,90 @@ data class AlbumDetailModel(
     val isLoadingAsmrOne: Boolean,
     val isLoadingDlsitePlay: Boolean
 )
+
+internal enum class DlsiteChinesePreference {
+    None,
+    Hans,
+    Hant
+}
+
+internal data class ResolvedDlsiteLoadTarget(
+    val editions: List<DlsiteLanguageEdition>,
+    val selectedLang: String,
+    val workno: String
+)
+
+internal fun defaultDlsiteEditions(baseRj: String): List<DlsiteLanguageEdition> {
+    val clean = baseRj.trim().uppercase()
+    if (clean.isBlank()) return emptyList()
+    return listOf(
+        DlsiteLanguageEdition(
+            workno = clean,
+            lang = "JPN",
+            label = "日本語",
+            displayOrder = 1
+        )
+    )
+}
+
+internal fun mergeDlsiteEditions(
+    baseRj: String,
+    editions: List<DlsiteLanguageEdition>
+): List<DlsiteLanguageEdition> {
+    val clean = baseRj.trim().uppercase()
+    if (clean.isBlank()) return emptyList()
+    return buildList {
+        val hasJpn = editions.any { it.lang.equals("JPN", ignoreCase = true) }
+        if (!hasJpn) addAll(defaultDlsiteEditions(clean))
+        addAll(editions)
+    }.distinctBy { it.lang.trim().uppercase() }
+        .sortedWith(compareBy({ it.displayOrder }, { it.lang }))
+}
+
+internal fun resolveInitialDlsiteLoadTarget(
+    baseRj: String,
+    editions: List<DlsiteLanguageEdition>,
+    currentSelectedLang: String = "JPN",
+    preserveCurrentSelection: Boolean = false,
+    chinesePreference: DlsiteChinesePreference = DlsiteChinesePreference.None
+): ResolvedDlsiteLoadTarget {
+    val clean = baseRj.trim().uppercase()
+    if (clean.isBlank()) {
+        return ResolvedDlsiteLoadTarget(
+            editions = emptyList(),
+            selectedLang = "JPN",
+            workno = ""
+        )
+    }
+    val merged = mergeDlsiteEditions(clean, editions)
+    val normalizedCurrentLang = currentSelectedLang.trim().uppercase().ifBlank { "JPN" }
+    val hasHans = merged.any { it.lang.equals("CHI_HANS", ignoreCase = true) }
+    val hasHant = merged.any { it.lang.equals("CHI_HANT", ignoreCase = true) }
+    val preservedTarget = if (preserveCurrentSelection) {
+        merged.firstOrNull { it.lang.equals(normalizedCurrentLang, ignoreCase = true) }
+    } else {
+        null
+    }
+    val preferredLang = when {
+        preservedTarget != null -> preservedTarget.lang
+        chinesePreference == DlsiteChinesePreference.Hans && hasHans -> "CHI_HANS"
+        chinesePreference == DlsiteChinesePreference.Hant && hasHant -> "CHI_HANT"
+        hasHans -> "CHI_HANS"
+        hasHant -> "CHI_HANT"
+        else -> "JPN"
+    }
+    val selected = preservedTarget
+        ?: merged.firstOrNull { it.lang.equals(preferredLang, ignoreCase = true) }
+        ?: merged.firstOrNull { it.lang.equals("JPN", ignoreCase = true) }
+        ?: merged.firstOrNull()
+    val selectedLang = selected?.lang?.trim().orEmpty().ifBlank { preferredLang }
+    val selectedWorkno = selected?.workno?.trim()?.uppercase().orEmpty().ifBlank { clean }
+    return ResolvedDlsiteLoadTarget(
+        editions = merged,
+        selectedLang = selectedLang,
+        workno = selectedWorkno
+    )
+}
 
 internal data class AsmrOneLeafDownload(
     val url: String,
