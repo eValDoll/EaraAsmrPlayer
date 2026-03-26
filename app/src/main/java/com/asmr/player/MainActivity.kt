@@ -209,6 +209,10 @@ private data class PlaylistPickerRequest(
     val rjCode: String
 )
 
+private data class BatchPlaylistPickerRequest(
+    val items: List<MediaItem>
+)
+
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
     @Inject
@@ -598,6 +602,7 @@ fun MainContainer(
         mutableIntStateOf(NowPlayingMotionSpec.totalExitDurationMs(NowPlayingMotionLayout.PORTRAIT))
     }
     var nowPlayingPlaylistPickerRequest by remember { mutableStateOf<PlaylistPickerRequest?>(null) }
+    var albumBatchPlaylistPickerRequest by remember { mutableStateOf<BatchPlaylistPickerRequest?>(null) }
     val playerImmersive = nowPlayingVisible
     val openNowPlaying = openNowPlaying@{
         if (nowPlayingVisible) return@openNowPlaying
@@ -606,6 +611,7 @@ fun MainContainer(
     }
     val closeNowPlaying: () -> Unit = {
         nowPlayingPlaylistPickerRequest = null
+        albumBatchPlaylistPickerRequest = null
         nowPlayingBackdropActive = false
         nowPlayingVisible = false
     }
@@ -1458,6 +1464,14 @@ fun MainContainer(
                         onAddToQueue = { album, track ->
                             playerViewModel.addTrackToQueue(album, track)
                         },
+                        onAddMediaItemsToQueue = { items ->
+                            playerViewModel.addMediaItemsToQueue(items)
+                        },
+                        onAddMediaItemsToFavorites = { items ->
+                            scope.launch {
+                                playlistsViewModel.addItemsToFavorites(items)
+                            }
+                        },
                         onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode ->
                             navController.navigateSingleTop(
                                 "playlist_picker" +
@@ -1470,6 +1484,9 @@ fun MainContainer(
                                     "&trackId=$trackId" +
                                     "&rjCode=${encodeRouteArg(rjCode)}"
                             )
+                        },
+                        onOpenBatchPlaylistPicker = { items ->
+                            albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(items)
                         },
                         onOpenGroupPicker = { albumId ->
                             navController.navigateSingleTop("group_picker?albumId=$albumId")
@@ -1512,6 +1529,14 @@ fun MainContainer(
                         onAddToQueue = { album, track ->
                             playerViewModel.addTrackToQueue(album, track)
                         },
+                        onAddMediaItemsToQueue = { items ->
+                            playerViewModel.addMediaItemsToQueue(items)
+                        },
+                        onAddMediaItemsToFavorites = { items ->
+                            scope.launch {
+                                playlistsViewModel.addItemsToFavorites(items)
+                            }
+                        },
                         onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode ->
                             navController.navigateSingleTop(
                                 "playlist_picker" +
@@ -1524,6 +1549,9 @@ fun MainContainer(
                                     "&trackId=$trackId" +
                                     "&rjCode=${encodeRouteArg(rjCode)}"
                             )
+                        },
+                        onOpenBatchPlaylistPicker = { items ->
+                            albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(items)
                         },
                         onOpenGroupPicker = { albumId ->
                             navController.navigateSingleTop("group_picker?albumId=$albumId")
@@ -2011,6 +2039,60 @@ fun MainContainer(
                                     trackId = request.trackId,
                                     rjCode = request.rjCode,
                                     onBack = { nowPlayingPlaylistPickerRequest = null },
+                                    embeddedInDialog = true
+                                )
+                            }
+                        }
+                    }
+                }
+                albumBatchPlaylistPickerRequest?.let { request ->
+                    Dialog(
+                        onDismissRequest = { albumBatchPlaylistPickerRequest = null },
+                        properties = DialogProperties(usePlatformDefaultWidth = false)
+                    ) {
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = colorScheme.background.copy(alpha = 0.96f),
+                            contentColor = colorScheme.onBackground
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .windowInsetsPadding(StableWindowInsets.statusBars)
+                                    .windowInsetsPadding(StableWindowInsets.navigationBars)
+                            ) {
+                                PlaylistPickerScreen(
+                                    windowSizeClass = windowSizeClass,
+                                    items = request.items,
+                                    onBack = { albumBatchPlaylistPickerRequest = null },
+                                    embeddedInDialog = true
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            if (!nowPlayingVisible) {
+                albumBatchPlaylistPickerRequest?.let { request ->
+                    Dialog(
+                        onDismissRequest = { albumBatchPlaylistPickerRequest = null },
+                        properties = DialogProperties(usePlatformDefaultWidth = false)
+                    ) {
+                        Surface(
+                            modifier = Modifier.fillMaxSize(),
+                            color = colorScheme.background.copy(alpha = 0.96f),
+                            contentColor = colorScheme.onBackground
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .windowInsetsPadding(StableWindowInsets.statusBars)
+                                    .windowInsetsPadding(StableWindowInsets.navigationBars)
+                            ) {
+                                PlaylistPickerScreen(
+                                    windowSizeClass = windowSizeClass,
+                                    items = request.items,
+                                    onBack = { albumBatchPlaylistPickerRequest = null },
                                     embeddedInDialog = true
                                 )
                             }

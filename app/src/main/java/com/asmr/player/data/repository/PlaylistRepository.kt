@@ -18,6 +18,13 @@ import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
 
+data class PlaylistAddSummary(
+    val addedCount: Int,
+    val skippedCount: Int
+) {
+    val totalCount: Int get() = addedCount + skippedCount
+}
+
 @Singleton
 class PlaylistRepository @Inject constructor(
     private val playlistDao: PlaylistDao,
@@ -93,22 +100,44 @@ class PlaylistRepository @Inject constructor(
     }
 
     suspend fun addItemToPlaylist(playlistId: Long, item: MediaItem): Boolean {
-        val mediaId = item.mediaId.ifBlank { item.localConfiguration?.uri.toString() }
-        if (mediaId.isNotBlank() && playlistItemDao.isItemInPlaylist(playlistId, mediaId)) {
-            return false
+        return addItemsToPlaylist(playlistId, listOf(item)).addedCount > 0
+    }
+
+    suspend fun addItemsToPlaylist(playlistId: Long, items: List<MediaItem>): PlaylistAddSummary {
+        if (playlistId <= 0L || items.isEmpty()) {
+            return PlaylistAddSummary(addedCount = 0, skippedCount = items.size)
         }
-        val nextOrder = playlistItemDao.getMaxItemOrder(playlistId) + 1
-        val entity = PlaylistItemEntity(
-            playlistId = playlistId,
-            mediaId = mediaId,
-            title = item.mediaMetadata.title?.toString().orEmpty(),
-            artist = item.mediaMetadata.artist?.toString().orEmpty(),
-            uri = item.localConfiguration?.uri.toString(),
-            artworkUri = resolvePlaylistItemArtwork(item),
-            itemOrder = nextOrder
+        val currentItems = playlistItemDao.getItemsOnce(playlistId)
+        val existingIds = currentItems.map { it.mediaId }.toHashSet()
+        val stagedIds = linkedSetOf<String>()
+        val toInsert = mutableListOf<PlaylistItemEntity>()
+        var nextOrder = (currentItems.maxOfOrNull { it.itemOrder } ?: -1) + 1
+        var skipped = 0
+
+        items.forEach { item ->
+            val mediaId = item.mediaId.ifBlank { item.localConfiguration?.uri.toString().orEmpty() }.trim()
+            if (mediaId.isBlank() || !existingIds.add(mediaId) || !stagedIds.add(mediaId)) {
+                skipped += 1
+                return@forEach
+            }
+            toInsert += PlaylistItemEntity(
+                playlistId = playlistId,
+                mediaId = mediaId,
+                title = item.mediaMetadata.title?.toString().orEmpty(),
+                artist = item.mediaMetadata.artist?.toString().orEmpty(),
+                uri = item.localConfiguration?.uri.toString(),
+                artworkUri = resolvePlaylistItemArtwork(item),
+                itemOrder = nextOrder++
+            )
+        }
+
+        if (toInsert.isNotEmpty()) {
+            playlistItemDao.upsertItems(toInsert)
+        }
+        return PlaylistAddSummary(
+            addedCount = toInsert.size,
+            skippedCount = skipped
         )
-        playlistItemDao.upsertItems(listOf(entity))
-        return true
     }
 
     suspend fun reorderPlaylistItems(playlistId: Long, orderedMediaIds: List<String>): Boolean {

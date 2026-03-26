@@ -32,6 +32,7 @@ import com.asmr.player.data.remote.download.DownloadManager
 import com.asmr.player.data.remote.scraper.DLSiteScraper
 import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
 import com.asmr.player.data.remote.scraper.DlsiteRecommendations
+import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.lyrics.LyricsLoader
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
@@ -77,6 +78,7 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import javax.inject.Named
 import com.asmr.player.BuildConfig
 import com.asmr.player.work.AlbumCoverThumbWorker
@@ -136,6 +138,11 @@ class AlbumDetailViewModel @Inject constructor(
     private val treeExpandedByKey = linkedMapOf<String, List<String>>()
     private val treeInitializedKeys = linkedSetOf<String>()
     private val listScrollByKey = linkedMapOf<String, Pair<Int, Int>>()
+    private val treeCurrentPathByKey = linkedMapOf<String, String>()
+    private val remoteFileSizeCache = linkedMapOf<String, Long?>()
+    private val preferredTreePathPrefs by lazy {
+        context.getSharedPreferences("album_detail_tree_prefs", Context.MODE_PRIVATE)
+    }
 
     private suspend fun isAsmrOneCollected(rj: String, timeoutMs: Long = 1_200L): Boolean? {
         val key = rj.trim().uppercase()
@@ -217,6 +224,32 @@ class AlbumDetailViewModel @Inject constructor(
     fun clearTreeState(stateKey: String) {
         treeExpandedByKey.remove(stateKey)
         treeInitializedKeys.remove(stateKey)
+        treeCurrentPathByKey.remove(stateKey)
+    }
+
+    fun getTreeCurrentPath(stateKey: String): String {
+        return treeCurrentPathByKey[stateKey].orEmpty()
+    }
+
+    fun persistTreeCurrentPath(stateKey: String, currentPath: String) {
+        if (stateKey.isBlank()) return
+        treeCurrentPathByKey[stateKey] = currentPath.trim().trim('/')
+    }
+
+    fun getPreferredTreeCurrentPath(stateKey: String): String {
+        if (stateKey.isBlank()) return ""
+        return preferredTreePathPrefs.getString("preferred_path:$stateKey", "").orEmpty().trim().trim('/')
+    }
+
+    fun persistPreferredTreeCurrentPath(stateKey: String, currentPath: String) {
+        if (stateKey.isBlank()) return
+        val normalized = currentPath.trim().trim('/')
+        preferredTreePathPrefs.edit().putString("preferred_path:$stateKey", normalized).apply()
+    }
+
+    fun clearPreferredTreeCurrentPath(stateKey: String) {
+        if (stateKey.isBlank()) return
+        preferredTreePathPrefs.edit().remove("preferred_path:$stateKey").apply()
     }
 
     suspend fun loadOnlineTextPreview(url: String): String? {
@@ -232,6 +265,22 @@ class AlbumDetailViewModel @Inject constructor(
     fun persistListScrollPosition(stateKey: String, index: Int, offset: Int) {
         if (stateKey.isBlank()) return
         listScrollByKey[stateKey] = (index.coerceAtLeast(0) to offset.coerceAtLeast(0))
+    }
+
+    suspend fun loadRemoteFileSize(url: String): Long? {
+        val trimmed = url.trim()
+        if (trimmed.isBlank()) return null
+        remoteFileSizeCache[trimmed]?.let { return it }
+
+        val resolved = withContext(Dispatchers.IO) {
+            requestRemoteFileSize(trimmed, imageOkHttpClient)
+        }
+        remoteFileSizeCache[trimmed] = resolved
+        while (remoteFileSizeCache.size > 512) {
+            val firstKey = remoteFileSizeCache.entries.firstOrNull()?.key ?: break
+            remoteFileSizeCache.remove(firstKey)
+        }
+        return resolved
     }
 
     fun confirmCloudSyncSelection(workno: String) {
@@ -2220,6 +2269,41 @@ sealed class AlbumDetailUiState {
     object Loading : AlbumDetailUiState()
     data class Success(val model: AlbumDetailModel) : AlbumDetailUiState()
     data class Error(val message: String) : AlbumDetailUiState()
+}
+
+private fun requestRemoteFileSize(url: String, client: OkHttpClient? = null): Long? {
+    if (client == null) return null
+    fun execute(request: Request): Long? {
+        return runCatching {
+            client.newCall(request).execute().use(::extractRemoteFileSize)
+        }.getOrNull()
+    }
+
+    val headRequest = Request.Builder()
+        .url(url)
+        .head()
+        .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
+        .build()
+    execute(headRequest)?.let { return it }
+
+    val rangeRequest = Request.Builder()
+        .url(url)
+        .get()
+        .header("Range", "bytes=0-0")
+        .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
+        .build()
+    return execute(rangeRequest)
+}
+
+private fun extractRemoteFileSize(response: Response): Long? {
+    if (!response.isSuccessful) return null
+    val contentRange = response.header("Content-Range").orEmpty()
+    val totalFromRange = contentRange.substringAfterLast('/', "").toLongOrNull()
+    if (totalFromRange != null && totalFromRange > 0L) return totalFromRange
+    val contentLength = response.header("Content-Length")?.toLongOrNull()
+    if (contentLength != null && contentLength > 0L) return contentLength
+    val bodyLength = response.body?.contentLength()
+    return bodyLength?.takeIf { it > 0L }
 }
 
 data class AlbumDetailModel(
