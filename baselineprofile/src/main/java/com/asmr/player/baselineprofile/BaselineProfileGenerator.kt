@@ -60,4 +60,10 @@ class BaselineProfileGenerator {
         waitForSearchRefresh()
         device.performLongListScrollProfile()
     }
+
+    @Test
+    fun albumDetailDlTabLongScroll() = baselineProfileRule.collectBaselineProfile {
+        startAlbumDetailDlTabExample()
+        device.performLongListScrollProfile()
+    }
 }
