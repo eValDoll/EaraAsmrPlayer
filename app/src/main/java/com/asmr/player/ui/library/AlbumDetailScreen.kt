@@ -141,6 +141,7 @@ import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.util.Formatting
 import com.asmr.player.util.MessageManager
 import com.asmr.player.util.RemoteSubtitleSource
+import java.util.UUID
 
 private enum class AlbumPrimaryAction {
     Download,
@@ -212,6 +213,7 @@ fun AlbumDetailScreen(
         val rjPart = rjCode?.trim().orEmpty().uppercase()
         if (rjPart.isNotBlank()) "album:$rjPart" else "albumId:$idPart"
     }
+    val introSessionKey = remember(screenKey) { "intro:${UUID.randomUUID()}" }
     var selectedTab by rememberSaveable(screenKey) {
         mutableIntStateOf(if (albumId != null && albumId > 0) 0 else 1)
     }
@@ -360,6 +362,7 @@ fun AlbumDetailScreen(
                                 onPickLocalCover = if (selectedTab == 0 && model.localAlbum != null) {
                                     { coverPicker.launch(arrayOf("image/*")) }
                                 } else null,
+                                introSessionKey = introSessionKey,
                                 animateIntro = shouldAnimateHeaderIntro,
                                 messageManager = viewModel.messageManager
                         )
@@ -903,6 +906,7 @@ private fun AlbumHeader(
     showGroupButton: Boolean,
     onOpenGroupPicker: (albumId: Long) -> Unit,
     onPickLocalCover: (() -> Unit)? = null,
+    introSessionKey: String,
     animateIntro: Boolean,
     messageManager: MessageManager
 ) {
@@ -919,8 +923,8 @@ private fun AlbumHeader(
     val normalizedTitle = album.title.trim()
     val isPlaceholderTitle = normalizedTitle.isBlank() ||
         (normalizedTitle.equals(rj, ignoreCase = true) && album.id <= 0L && album.path.isBlank())
-    val headerAnimationScopeKey = remember(album.id, rj) { "albumHeader:${album.id}:$rj" }
-    var headerIntroPlayed by remember(headerAnimationScopeKey) { mutableStateOf(false) }
+    val headerAnimationScopeKey = remember(introSessionKey) { "albumHeader:$introSessionKey" }
+    var headerIntroPlayed by rememberSaveable(headerAnimationScopeKey) { mutableStateOf(false) }
     LaunchedEffect(headerAnimationScopeKey, animateIntro) {
         if (headerIntroPlayed) return@LaunchedEffect
         if (!animateIntro) {
@@ -1242,7 +1246,7 @@ private fun AlbumHeaderInfoReveal(
     ready: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    var hasPlayed by remember(revealKey) { mutableStateOf(false) }
+    var hasPlayed by rememberSaveable(revealKey) { mutableStateOf(false) }
     LaunchedEffect(revealKey, enabled, ready) {
         if (!enabled && !hasPlayed) {
             hasPlayed = true
