@@ -144,6 +144,7 @@ internal fun AlbumLocalBreadcrumbTabV2(
     onPersistScroll: (Int, Int) -> Unit,
     topContentPadding: Dp,
     chromeState: com.asmr.player.ui.common.CollapsibleHeaderState,
+    animateIntro: Boolean,
     album: Album,
     header: @Composable () -> Unit,
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
@@ -258,6 +259,7 @@ internal fun AlbumLocalBreadcrumbTabV2(
                     onAddToFavorites = onAddMediaItemsToFavorites,
                     onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
                     onAddMediaItemsToQueue = onAddMediaItemsToQueue,
+                    animateIntro = animateIntro,
                     preferredPath = preferredCurrentPath,
                     onTogglePreferredPath = { enabled ->
                         onTogglePreferredCurrentPath(currentPath, enabled)
