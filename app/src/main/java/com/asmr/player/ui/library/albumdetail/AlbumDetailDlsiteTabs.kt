@@ -349,10 +349,13 @@ private val DlsiteSectionPlacementSpring = spring<IntOffset>(
 
 @OptIn(ExperimentalFoundationApi::class)
 private fun LazyItemScope.dlsiteAnimatedSectionModifier(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    animateIntro: Boolean = true
 ): Modifier {
+    if (!animateIntro) return modifier
     return dlsiteElasticItemModifier(
-        modifier.animateItemPlacement(animationSpec = DlsiteSectionPlacementSpring)
+        modifier = modifier.animateItemPlacement(animationSpec = DlsiteSectionPlacementSpring),
+        enabled = true
     )
 }
 
@@ -383,6 +386,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     initialCurrentPath: String,
     topContentPadding: Dp,
     chromeState: com.asmr.player.ui.common.CollapsibleHeaderState,
+    animateIntro: Boolean,
     onPersistCurrentPath: (String) -> Unit,
     initialScroll: Pair<Int, Int>,
     onPersistScroll: (Int, Int) -> Unit,
@@ -430,7 +434,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         item(key = "dlsite-header") { header() }
         if (isInitialDlsiteLoading) {
             item(key = "dlsite-gallery-section") {
-                Column(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth())) {
+                Column(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
                     Text(
                         text = "Gallery",
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -445,7 +449,8 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                     modifier = dlsiteAnimatedSectionModifier(
                         Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                        animateIntro = animateIntro
                     ),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -457,12 +462,12 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                 }
             }
             item(key = "dlsite-one-content") {
-                Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth())) {
+                Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
                     DlsiteDirectoryLoadingPanel()
                 }
             }
             item(key = "dlsite-trial-loading") {
-                Column(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth())) {
+                Column(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
                 Row(
                     modifier = Modifier
                             .fillMaxWidth()
@@ -479,14 +484,14 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                 }
             }
             item(key = "dlsite-recommendations") {
-                Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth())) {
+                Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
                     DlsiteRecommendationsLoadingBlocks()
                 }
             }
             return@LazyColumn
         }
         item(key = "dlsite-gallery-section") {
-            Column(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth())) {
+            Column(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
             Text(
                 text = "Gallery",
                 modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
@@ -530,7 +535,8 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         item(key = "dlsite-one-header") {
             Row(
                 modifier = dlsiteAnimatedSectionModifier(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                    animateIntro = animateIntro
                 ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -547,7 +553,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         }
         if (asmrOneTree.isNotEmpty()) {
             item(key = "dlsite-one-content") {
-                Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth())) {
+                Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
                     DirectoryBrowserPanelV4(
                     panelKey = treeStateKey,
                     currentPath = currentPath,
@@ -557,10 +563,11 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                     files = browser.files,
                     onNavigate = { path -> currentPath = path },
                     onAddToFavorites = onAddMediaItemsToFavorites,
-                    onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
-                    onAddMediaItemsToQueue = onAddMediaItemsToQueue,
-                    folderKeyPrefix = "asmr-folder",
-                    fileKeyPrefix = "asmr-file",
+                        onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
+                        onAddMediaItemsToQueue = onAddMediaItemsToQueue,
+                        animateIntro = animateIntro,
+                        folderKeyPrefix = "asmr-folder",
+                        fileKeyPrefix = "asmr-file",
                     fileContent = { file, selectionMode, selected, enterSelectionMode, onSelectedChange ->
                         val leaf = asmrLeafByRelPath[file.path]
                         DirectoryFileRow(
@@ -633,7 +640,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             }
         } else if (isLoadingAsmrOne) {
             item(key = "dlsite-one-content") {
-                Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth())) {
+                Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
                     DlsiteDirectoryLoadingPanel()
                 }
             }
@@ -641,7 +648,8 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             item(key = "dlsite-one-content") {
                 Box(
                     modifier = dlsiteAnimatedSectionModifier(
-                        Modifier.fillMaxWidth().height(120.dp)
+                        Modifier.fillMaxWidth().height(120.dp),
+                        animateIntro = animateIntro
                     ),
                     contentAlignment = Alignment.Center
                 ) {
@@ -652,7 +660,8 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         item(key = "dlsite-trial-header") {
             Row(
                 modifier = dlsiteAnimatedSectionModifier(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp)
+                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                    animateIntro = animateIntro
                 ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -670,7 +679,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         if (trialTracks.isEmpty()) {
             item(key = "dlsite-trial-content") {
                 Box(
-                    modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth()),
+                    modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro),
                     contentAlignment = Alignment.Center
                 ) {
                     if (isLoadingTrial) {
@@ -687,7 +696,8 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                         modifier = dlsiteAnimatedSectionModifier(
                             Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp)
+                                .padding(horizontal = 16.dp),
+                            animateIntro = animateIntro
                         )
                     )
                 }
@@ -695,7 +705,8 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             items(items = videoTracks, key = { track -> if (track.id > 0L) track.id else track.path }, contentType = { "trialVideo" }) { track ->
                 Column(
                     modifier = dlsiteAnimatedSectionModifier(
-                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        animateIntro = animateIntro
                     )
                 ) {
                     Text(
@@ -713,7 +724,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                 }
             }
             items(items = audioTracks, key = { track -> if (track.id > 0L) track.id else track.path }, contentType = { "trialAudioTrack" }) { track ->
-                Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth())) {
+                Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
                     TrackItem(
                         track = track,
                         onClick = { onPlayTracks(album, audioTracks, track) },
@@ -723,7 +734,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             }
         }
         item(key = "dlsite-recommendations") {
-            Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth())) {
+            Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
                 DlsiteRecommendationsBlocks(
                     recommendations = dlsiteRecommendations,
                     onOpenAlbumByRj = onOpenAlbumByRj
@@ -800,6 +811,7 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
     initialCurrentPath: String,
     topContentPadding: Dp,
     chromeState: com.asmr.player.ui.common.CollapsibleHeaderState,
+    animateIntro: Boolean,
     onPersistCurrentPath: (String) -> Unit,
     initialScroll: Pair<Int, Int>,
     onPersistScroll: (Int, Int) -> Unit,
@@ -926,6 +938,7 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
                 onAddToFavorites = onAddMediaItemsToFavorites,
                 onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
                 onAddMediaItemsToQueue = onAddMediaItemsToQueue,
+                animateIntro = animateIntro,
                 folderKeyPrefix = "dlplay-folder",
                 fileKeyPrefix = "dlplay-file",
                 fileContent = { file, selectionMode, selected, enterSelectionMode, onSelectedChange ->

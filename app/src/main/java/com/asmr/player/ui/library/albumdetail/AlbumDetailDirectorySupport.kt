@@ -1957,7 +1957,7 @@ internal fun DirectoryBatchBarEmbeddedV3(
         ) {
             Text(
                 text = summaryText,
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleSmall.copy(lineHeight = 18.sp),
                 color = AsmrTheme.colorScheme.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -2263,9 +2263,10 @@ internal fun DirectoryFolderRowV3(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .defaultMinSize(minHeight = 56.dp)
             .background(colorScheme.primary.copy(alpha = 0.08f))
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 10.dp),
+            .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
@@ -2318,7 +2319,7 @@ internal fun DirectoryBatchBarEmbeddedV4(
         ) {
             Text(
                 text = summaryText,
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleSmall.copy(lineHeight = 18.sp),
                 color = AsmrTheme.colorScheme.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -2384,7 +2385,7 @@ internal fun DirectoryBatchBarEmbeddedV5(
         ) {
             Text(
                 text = summaryText,
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleSmall.copy(lineHeight = 18.sp),
                 color = AsmrTheme.colorScheme.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -2440,6 +2441,7 @@ internal fun DirectoryBrowserPanelV4(
     onAddToFavorites: (List<MediaItem>) -> Unit,
     onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
     onAddMediaItemsToQueue: (List<MediaItem>) -> Unit,
+    animateIntro: Boolean = true,
     preferredPath: String = "",
     onTogglePreferredPath: ((Boolean) -> Unit)? = null,
     folderKeyPrefix: String,
@@ -2509,9 +2511,10 @@ internal fun DirectoryBrowserPanelV4(
             )
             Row(
                 modifier = dlsiteElasticItemModifier(
-                    Modifier
+                    modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp)
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    enabled = animateIntro
                 ),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -2891,7 +2894,7 @@ internal fun DirectoryFileRow(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     color = colorScheme.textPrimary,
-                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium)
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
                 )
             },
             supportingContent = {
@@ -3158,7 +3161,7 @@ internal fun TreeFileRow(
                     maxLines = 1, 
                     overflow = TextOverflow.Ellipsis,
                     color = colorScheme.textSecondary,
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
                 ) 
             },
             leadingContent = {

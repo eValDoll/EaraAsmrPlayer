@@ -21,6 +21,8 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -163,6 +165,7 @@ internal data class PreparedMediaPlayback(
 
 private val AlbumDetailTabContentGap = 12.dp
 private val AlbumDetailTabCollapseOvershoot = 10.dp
+private const val AlbumDetailInitialIntroDurationMs = 1200L
 
 private val DlsiteElasticResizeSpring = spring<IntSize>(
     dampingRatio = Spring.DampingRatioLowBouncy,
@@ -170,9 +173,14 @@ private val DlsiteElasticResizeSpring = spring<IntSize>(
 )
 
 internal fun dlsiteElasticItemModifier(
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ): Modifier {
-    return modifier.animateContentSize(animationSpec = DlsiteElasticResizeSpring)
+    return if (enabled) {
+        modifier.animateContentSize(animationSpec = DlsiteElasticResizeSpring)
+    } else {
+        modifier
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -210,7 +218,8 @@ fun AlbumDetailScreen(
     var lastChromeResetTab by rememberSaveable(screenKey) {
         mutableIntStateOf(selectedTab)
     }
-    var userSelectedTab by rememberSaveable(screenKey) { mutableStateOf(false) }
+    var userSelectedTab by remember(screenKey) { mutableStateOf(false) }
+    var initialIntroSettled by remember(screenKey) { mutableStateOf(false) }
     var showAsmrDownloadDialog by remember { mutableStateOf(false) }
     var showOnlineSaveDialog by remember { mutableStateOf(false) }
     var pendingOnlineSaveSelection by remember { mutableStateOf<Set<String>?>(null) }
@@ -258,9 +267,16 @@ fun AlbumDetailScreen(
                     }
                 }
                 is AlbumDetailUiState.Success -> {
+                    LaunchedEffect(screenKey, initialIntroSettled) {
+                        if (initialIntroSettled) return@LaunchedEffect
+                        delay(AlbumDetailInitialIntroDurationMs)
+                        initialIntroSettled = true
+                    }
                     val model = state.model
                     val album = model.displayAlbum
                     val asmrOneTree = model.asmrOneTree
+                    val shouldPlayInitialAnimations = !initialIntroSettled && !userSelectedTab
+                    val shouldAnimateHeaderIntro = !userSelectedTab
                     val canSaveOnline = selectedTab == 1 && asmrOneTree.isNotEmpty()
                     val showGroupButton = selectedTab == 0 && model.localAlbum != null
                     val availableTags by viewModel.availableTags.collectAsState()
@@ -344,6 +360,7 @@ fun AlbumDetailScreen(
                                 onPickLocalCover = if (selectedTab == 0 && model.localAlbum != null) {
                                     { coverPicker.launch(arrayOf("image/*")) }
                                 } else null,
+                                animateIntro = shouldAnimateHeaderIntro,
                                 messageManager = viewModel.messageManager
                         )
                     }
@@ -380,7 +397,9 @@ fun AlbumDetailScreen(
                             AnimatedContent(
                                 targetState = selectedTab,
                                 transitionSpec = {
-                                    if (targetState > initialState) {
+                                    if (!shouldPlayInitialAnimations) {
+                                        EnterTransition.None.togetherWith(ExitTransition.None)
+                                    } else if (targetState > initialState) {
                                         (slideInHorizontally { it } + fadeIn()).togetherWith(slideOutHorizontally { -it } + fadeOut())
                                     } else {
                                         (slideInHorizontally { -it } + fadeIn()).togetherWith(slideOutHorizontally { it } + fadeOut())
@@ -455,7 +474,8 @@ fun AlbumDetailScreen(
                                                 onSetCoverFromImage = { pathOrUri ->
                                                     viewModel.setLocalCoverPath(pathOrUri)
                                                 },
-                                                onPreviewFile = { localPreviewFile = it }
+                                                onPreviewFile = { localPreviewFile = it },
+                                                animateIntro = shouldPlayInitialAnimations
                                             )
                                         } else {
                                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -517,6 +537,7 @@ fun AlbumDetailScreen(
                                         initialCurrentPath = viewModel.getTreeCurrentPath("tree:asmrOne:${model.rjCode.trim().uppercase()}"),
                                         topContentPadding = tabContentTopPadding,
                                         chromeState = tabChromeState,
+                                        animateIntro = shouldPlayInitialAnimations,
                                         onPersistCurrentPath = { path ->
                                             val rj = model.rjCode.trim().uppercase()
                                             viewModel.persistTreeCurrentPath("tree:asmrOne:$rj", path)
@@ -554,6 +575,7 @@ fun AlbumDetailScreen(
                                         initialCurrentPath = viewModel.getTreeCurrentPath("tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}"),
                                         topContentPadding = tabContentTopPadding,
                                         chromeState = tabChromeState,
+                                        animateIntro = shouldPlayInitialAnimations,
                                         onPersistCurrentPath = { path ->
                                             val rj = model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()
                                             viewModel.persistTreeCurrentPath("tree:dlsitePlay:$rj", path)
@@ -881,6 +903,7 @@ private fun AlbumHeader(
     showGroupButton: Boolean,
     onOpenGroupPicker: (albumId: Long) -> Unit,
     onPickLocalCover: (() -> Unit)? = null,
+    animateIntro: Boolean,
     messageManager: MessageManager
 ) {
     val context = LocalContext.current
@@ -893,13 +916,19 @@ private fun AlbumHeader(
     }
 
     val rj = album.rjCode.ifBlank { album.workId }
+    val normalizedTitle = album.title.trim()
+    val isPlaceholderTitle = normalizedTitle.isBlank() ||
+        (normalizedTitle.equals(rj, ignoreCase = true) && album.id <= 0L && album.path.isBlank())
     val headerAnimationScopeKey = remember(album.id, rj) { "albumHeader:${album.id}:$rj" }
-    var headerIntroPlayed by rememberSaveable(headerAnimationScopeKey) { mutableStateOf(false) }
-    LaunchedEffect(headerAnimationScopeKey) {
-        if (!headerIntroPlayed) {
-            delay(700)
+    var headerIntroPlayed by remember(headerAnimationScopeKey) { mutableStateOf(false) }
+    LaunchedEffect(headerAnimationScopeKey, animateIntro) {
+        if (headerIntroPlayed) return@LaunchedEffect
+        if (!animateIntro) {
             headerIntroPlayed = true
+            return@LaunchedEffect
         }
+        delay(700)
+        headerIntroPlayed = true
     }
     fun copy(label: String, value: String) {
         val v = value.trim()
@@ -915,11 +944,10 @@ private fun AlbumHeader(
         .background(colorScheme.surface.copy(alpha = 0.5f))
 
     Column(
-        modifier = if (headerIntroPlayed) {
-            headerContainerModifier
-        } else {
-            dlsiteElasticItemModifier(headerContainerModifier)
-        }
+        modifier = dlsiteElasticItemModifier(
+            modifier = headerContainerModifier,
+            enabled = animateIntro && !headerIntroPlayed
+        )
     ) {
         Column {
             Box(
@@ -969,7 +997,9 @@ private fun AlbumHeader(
                 ) {
                     AlbumHeaderInfoReveal(
                         revealKey = "$headerAnimationScopeKey:title",
-                        delayMillis = 0
+                        delayMillis = 0,
+                        enabled = animateIntro,
+                        ready = !isPlaceholderTitle
                     ) {
                     Text(
                         text = album.title,
@@ -984,7 +1014,8 @@ private fun AlbumHeader(
                     if (rj.isNotBlank() || circle.isNotBlank()) {
                         AlbumHeaderInfoReveal(
                             revealKey = "$headerAnimationScopeKey:meta",
-                            delayMillis = 40
+                            delayMillis = 40,
+                            enabled = animateIntro
                         ) {
                     Row(
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
@@ -1022,7 +1053,8 @@ private fun AlbumHeader(
                 if (album.cv.isNotBlank()) {
                     AlbumHeaderInfoReveal(
                         revealKey = "$headerAnimationScopeKey:cv",
-                        delayMillis = 80
+                        delayMillis = 80,
+                        enabled = animateIntro
                     ) {
                         CvChipsFlow(
                             cvText = album.cv,
@@ -1075,7 +1107,8 @@ private fun AlbumHeader(
                 if (album.tags.isNotEmpty()) {
                     AlbumHeaderInfoReveal(
                         revealKey = "$headerAnimationScopeKey:tags",
-                        delayMillis = 120
+                        delayMillis = 120,
+                        enabled = animateIntro
                     ) {
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1098,7 +1131,8 @@ private fun AlbumHeader(
 
                 AlbumHeaderInfoReveal(
                     revealKey = "$headerAnimationScopeKey:actions",
-                    delayMillis = 160
+                    delayMillis = 160,
+                    enabled = animateIntro
                 ) {
                 Row(
                     modifier = Modifier.padding(top = 4.dp),
@@ -1204,15 +1238,26 @@ private fun AlbumHeader(
 private fun AlbumHeaderInfoReveal(
     revealKey: String,
     delayMillis: Int = 0,
+    enabled: Boolean = true,
+    ready: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    var hasPlayed by rememberSaveable(revealKey) { mutableStateOf(false) }
-    var visible by remember(revealKey, hasPlayed) { mutableStateOf(hasPlayed) }
-    LaunchedEffect(revealKey) {
-        if (hasPlayed) {
-            visible = true
-            return@LaunchedEffect
+    var hasPlayed by remember(revealKey) { mutableStateOf(false) }
+    LaunchedEffect(revealKey, enabled, ready) {
+        if (!enabled && !hasPlayed) {
+            hasPlayed = true
         }
+    }
+    if (!enabled || hasPlayed) {
+        content()
+        return
+    }
+    if (!ready) {
+        content()
+        return
+    }
+    var visible by remember(revealKey) { mutableStateOf(false) }
+    LaunchedEffect(revealKey, ready, enabled) {
         visible = false
         if (delayMillis > 0) {
             delay(delayMillis.toLong())
@@ -1221,10 +1266,6 @@ private fun AlbumHeaderInfoReveal(
         visible = true
         delay(420)
         hasPlayed = true
-    }
-    if (hasPlayed) {
-        content()
-        return
     }
     val alpha by animateFloatAsState(
         targetValue = if (visible) 1f else 0f,
