@@ -130,6 +130,7 @@ class DlsitePlayLibraryClient @Inject constructor(
             .header("Accept", "application/json, text/plain, */*")
             .header("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
             .header("User-Agent", NetworkHeaders.USER_AGENT)
+            .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
             .header("Cache-Control", "no-cache")
             .header("Pragma", "no-cache")
             .get()
@@ -165,6 +166,7 @@ class DlsitePlayLibraryClient @Inject constructor(
             "Accept" to "application/json, text/plain, */*",
             "Accept-Language" to NetworkHeaders.ACCEPT_LANGUAGE,
             "User-Agent" to NetworkHeaders.USER_AGENT,
+            NetworkHeaders.HEADER_SILENT_IO_ERROR to NetworkHeaders.SILENT_IO_ERROR_ON,
             "Cache-Control" to "no-cache",
             "Pragma" to "no-cache",
             "Content-Type" to "application/json"
@@ -266,6 +268,7 @@ class DlsitePlayLibraryClient @Inject constructor(
             .header("Accept", "application/json, text/plain, */*")
             .header("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
             .header("User-Agent", NetworkHeaders.USER_AGENT)
+            .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
             .header("Cache-Control", "no-cache")
             .header("Pragma", "no-cache")
             .get()
@@ -285,6 +288,7 @@ class DlsitePlayLibraryClient @Inject constructor(
             .header("Referer", "https://play.dlsite.com/")
             .header("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
             .header("User-Agent", NetworkHeaders.USER_AGENT)
+            .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
             .get()
             .build()
         okHttpClient.newCall(request).execute().use { resp ->
