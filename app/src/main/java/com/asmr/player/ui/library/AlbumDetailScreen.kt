@@ -6,7 +6,6 @@ import android.provider.DocumentsContract
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
@@ -18,17 +17,14 @@ import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.shrinkVertically
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.togetherWith
-import androidx.compose.animation.EnterTransition
-import androidx.compose.animation.ExitTransition
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -184,7 +180,7 @@ internal fun dlsiteElasticItemModifier(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AlbumDetailScreen(
     windowSizeClass: WindowSizeClass,
@@ -279,8 +275,6 @@ fun AlbumDetailScreen(
                     val asmrOneTree = model.asmrOneTree
                     val shouldPlayInitialAnimations = !initialIntroSettled && !userSelectedTab
                     val shouldAnimateHeaderIntro = !userSelectedTab
-                    val canSaveOnline = selectedTab == 1 && asmrOneTree.isNotEmpty()
-                    val showGroupButton = selectedTab == 0 && model.localAlbum != null
                     val availableTags by viewModel.availableTags.collectAsState()
                     val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsState()
                     val libraryViewModel: LibraryViewModel = hiltViewModel()
@@ -322,6 +316,11 @@ fun AlbumDetailScreen(
                         56.dp
                     }
                     val tabContentTopPadding = tabChromeVisibleHeight + AlbumDetailTabContentGap
+                    val tabTitles = remember { listOf("本地", "DL", "DL Play") }
+                    val tabPagerState = rememberPagerState(
+                        initialPage = selectedTab,
+                        pageCount = { tabTitles.size }
+                    )
     
                     LaunchedEffect(selectedTab) {
                         if (lastChromeResetTab != selectedTab) {
@@ -329,19 +328,34 @@ fun AlbumDetailScreen(
                             lastChromeResetTab = selectedTab
                         }
                     }
+
+                    LaunchedEffect(tabPagerState) {
+                        snapshotFlow { tabPagerState.isScrollInProgress }
+                            .collect { scrolling ->
+                                if (!scrolling) {
+                                    val page = tabPagerState.currentPage
+                                    if (selectedTab != page) {
+                                        selectedTab = page
+                                        userSelectedTab = true
+                                    }
+                                }
+                            }
+                    }
     
                     Column(modifier = Modifier.fillMaxSize()) {
-                        val headerContent: @Composable () -> Unit = {
+                        val headerContent: @Composable (Int) -> Unit = { tab ->
+                            val isLocalTab = tab == 0
+                            val canSaveOnlineForTab = tab == 1 && asmrOneTree.isNotEmpty()
                             AlbumHeader(
-                                album = if (selectedTab == 0) (model.localAlbum ?: album) else album,
+                                album = if (isLocalTab) (model.localAlbum ?: album) else album,
                                 dlsiteUrl = model.dlsiteWorkno.takeIf { it.isNotBlank() }?.let { "https://www.dlsite.com/maniax/work/=/product_id/$it.html" }.orEmpty(),
                                 asmrOneUrl = model.asmrOneWorkId?.takeIf { it.isNotBlank() }?.let { "https://asmr.one/work/$it" }.orEmpty(),
-                                dlsiteEditions = if (selectedTab == 0) emptyList() else model.dlsiteEditions,
+                                dlsiteEditions = if (isLocalTab) emptyList() else model.dlsiteEditions,
                                 dlsiteSelectedLang = model.dlsiteSelectedLang,
                                 onDlsiteLangSelected = { viewModel.selectDlsiteLanguage(it) },
-                                canSaveOnline = canSaveOnline,
+                                canSaveOnline = canSaveOnlineForTab,
                                 onDownloadClick = {
-                                    downloadSource = if (selectedTab == 2) {
+                                    downloadSource = if (tab == 2) {
                                         OnlineDownloadSource.DlsitePlay
                                     } else {
                                         OnlineDownloadSource.AsmrOne
@@ -351,15 +365,15 @@ fun AlbumDetailScreen(
                                 onSaveClick = {
                                     showOnlineSaveDialog = true
                                 },
-                                downloadEnabled = when (selectedTab) {
+                                downloadEnabled = when (tab) {
                                     1 -> asmrOneTree.isNotEmpty()
                                     2 -> model.dlsitePlayTree.isNotEmpty()
                                     else -> false
                                 },
-                                saveEnabled = canSaveOnline,
-                                showGroupButton = showGroupButton,
+                                saveEnabled = canSaveOnlineForTab,
+                                showGroupButton = isLocalTab && model.localAlbum != null,
                                 onOpenGroupPicker = onOpenGroupPicker,
-                                onPickLocalCover = if (selectedTab == 0 && model.localAlbum != null) {
+                                onPickLocalCover = if (isLocalTab && model.localAlbum != null) {
                                     { coverPicker.launch(arrayOf("image/*")) }
                                 } else null,
                                 introSessionKey = introSessionKey,
@@ -368,7 +382,6 @@ fun AlbumDetailScreen(
                         )
                     }
                     
-                    val tabTitles = remember { listOf("本地", "DL", "DL Play") }
                     LaunchedEffect(
                         selectedTab,
                         model.rjCode,
@@ -397,18 +410,9 @@ fun AlbumDetailScreen(
                             tonalElevation = 0.dp,
                             shadowElevation = 0.dp
                         ) {
-                            AnimatedContent(
-                                targetState = selectedTab,
-                                transitionSpec = {
-                                    if (!shouldPlayInitialAnimations) {
-                                        EnterTransition.None.togetherWith(ExitTransition.None)
-                                    } else if (targetState > initialState) {
-                                        (slideInHorizontally { it } + fadeIn()).togetherWith(slideOutHorizontally { -it } + fadeOut())
-                                    } else {
-                                        (slideInHorizontally { -it } + fadeIn()).togetherWith(slideOutHorizontally { it } + fadeOut())
-                                    }
-                                },
-                                label = "albumDetailTabContent"
+                            HorizontalPager(
+                                state = tabPagerState,
+                                modifier = Modifier.fillMaxSize()
                             ) { tab ->
                                 when (tab) {
                                     0 -> {
@@ -436,7 +440,7 @@ fun AlbumDetailScreen(
                                                 topContentPadding = tabContentTopPadding,
                                                 chromeState = tabChromeState,
                                                 album = local,
-                                                header = headerContent,
+                                                header = { headerContent(tab) },
                                                 onPlayTracks = onPlayTracks,
                                                 onPlayMediaItems = onPlayMediaItems,
                                                 onPlayVideo = onPlayVideo,
@@ -488,7 +492,7 @@ fun AlbumDetailScreen(
                                     }
                                     1 -> AlbumDlsiteInfoBreadcrumbTabV2(
                                         album = album,
-                                        header = headerContent,
+                                        header = { headerContent(tab) },
                                         dlsiteInfo = model.dlsiteInfo,
                                         galleryUrls = model.dlsiteGalleryUrls,
                                         trialTracks = model.dlsiteTrialTracks,
@@ -554,7 +558,7 @@ fun AlbumDetailScreen(
                                         loadRemoteFileSize = { viewModel.loadRemoteFileSize(it) }
                                     )
                                     else -> AlbumDlsitePlayBreadcrumbTabV2(
-                                        header = headerContent,
+                                        header = { headerContent(tab) },
                                         album = album,
                                         rjCode = model.rjCode,
                                         tree = model.dlsitePlayTree,
@@ -600,13 +604,21 @@ fun AlbumDetailScreen(
                             collapseFraction = tabChromeState.collapseFraction,
                             onMeasured = { tabChromeState.updateHeight(it.height.toFloat()) },
                             onTabSelected = { index ->
-                                selectedTab = index
                                 userSelectedTab = true
+                                if (selectedTab != index) {
+                                    selectedTab = index
+                                }
+                                if (tabPagerState.currentPage != index) {
+                                    scope.launch {
+                                        tabPagerState.animateScrollToPage(index)
+                                    }
+                                }
                             }
                         )
                     }
                 }
 
+                val canSaveOnline = selectedTab == 1 && asmrOneTree.isNotEmpty()
                 if (showAsmrDownloadDialog) {
                     val downloadTree = if (downloadSource == OnlineDownloadSource.DlsitePlay) {
                         model.dlsitePlayTree

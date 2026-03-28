@@ -3,6 +3,7 @@ package com.asmr.player.ui.library
 import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
+import android.provider.OpenableColumns
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -262,7 +263,7 @@ internal fun buildVideoMediaItem(
 
 internal sealed class FileSizeSource {
     data object None : FileSizeSource()
-    data class Local(val path: String) : FileSizeSource()
+    data class Local(val path: String, val sizeBytes: Long? = null) : FileSizeSource()
     data class Remote(val url: String) : FileSizeSource()
 }
 
@@ -360,7 +361,8 @@ internal class LocalTreeNode(
     val children: MutableMap<String, LocalTreeNode> = linkedMapOf(),
     var absolutePath: String? = null,
     var fileType: TreeFileType = TreeFileType.Other,
-    var track: Track? = null
+    var track: Track? = null,
+    var sizeBytes: Long? = null
 )
 
 internal data class LocalFolderStats(
@@ -447,7 +449,7 @@ internal fun buildLocalDirectoryBrowser(
                 fileType = child.fileType,
                 isPlayable = child.track != null || child.fileType == TreeFileType.Video,
                 durationSeconds = child.track?.duration?.takeIf { it > 0.0 },
-                sizeSource = FileSizeSource.Local(absolutePath),
+                sizeSource = FileSizeSource.Local(path = absolutePath, sizeBytes = child.sizeBytes),
                 absolutePath = absolutePath,
                 url = absolutePath,
                 track = child.track,
@@ -665,7 +667,8 @@ internal fun buildRemoteDirectoryBrowser(
 internal data class LocalTreeLeafCacheEntry(
     val relativePath: String,
     val absolutePath: String,
-    val fileType: TreeFileType
+    val fileType: TreeFileType,
+    val sizeBytes: Long? = null
 )
 
 internal data class LocalTreeIndexBuildResult(
@@ -751,7 +754,13 @@ internal suspend fun loadOrBuildLocalTreeIndex(
         val leaves = runCatching { gson.fromJson<List<LocalTreeLeafCacheEntry>>(cached.payloadJson, type) }
             .getOrDefault(emptyList())
         val merged = mergeLeaves(localLeaves = leaves, onlineLeaves = onlineLeaves)
-        if (merged.isNotEmpty()) {
+        val missingLocalSizeMetadata = leaves.any { leaf ->
+            val abs = leaf.absolutePath.trim()
+            abs.isNotBlank() &&
+                !abs.startsWith("http", ignoreCase = true) &&
+                leaf.sizeBytes == null
+        }
+        if (merged.isNotEmpty() && !missingLocalSizeMetadata) {
             return buildLocalTreeIndexFromLeaves(leaves = merged, tracks = tracks)
         }
     }
@@ -844,15 +853,18 @@ internal fun buildLocalTreeIndexByScanning(
                 context.contentResolver.query(childrenUri, arrayOf(
                     DocumentsContract.Document.COLUMN_DOCUMENT_ID,
                     DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                    DocumentsContract.Document.COLUMN_MIME_TYPE
+                    DocumentsContract.Document.COLUMN_MIME_TYPE,
+                    DocumentsContract.Document.COLUMN_SIZE
                 ), null, null, null)?.use { cursor ->
                     val idIdx = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
                     val nameIdx = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
                     val mimeIdx = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
+                    val sizeIdx = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
                     while (cursor.moveToNext()) {
                         val id = cursor.getString(idIdx)
                         val name = cursor.getString(nameIdx)
                         val mime = cursor.getString(mimeIdx)
+                        val sizeBytes = if (sizeIdx >= 0 && !cursor.isNull(sizeIdx)) cursor.getLong(sizeIdx) else 0L
                         val rel = if (parentRel.isEmpty()) name else "$parentRel/$name"
                         
                         val segments = rel.split('/').filter { it.isNotBlank() }
@@ -869,9 +881,11 @@ internal fun buildLocalTreeIndexByScanning(
                                     if (ft == TreeFileType.Audio && track == null) {
                                         child.absolutePath = null
                                         child.track = null
+                                        child.sizeBytes = null
                                     } else {
                                         child.absolutePath = fileUri
                                         child.track = track
+                                        child.sizeBytes = sizeBytes.takeIf { it > 0L }
                                     }
                                     if (ft == TreeFileType.Video || (ft == TreeFileType.Audio && track != null)) {
                                         updateFolderStats(segments, ft, name.substringAfterLast('.', "").lowercase())
@@ -879,6 +893,7 @@ internal fun buildLocalTreeIndexByScanning(
                                 } else {
                                     child.absolutePath = null
                                     child.track = null
+                                    child.sizeBytes = null
                                 }
                             }
                             cur = child
@@ -915,6 +930,7 @@ internal fun buildLocalTreeIndexByScanning(
                             child.absolutePath = file.absolutePath
                             child.fileType = type
                             child.track = track
+                            child.sizeBytes = file.length().takeIf { it > 0L }
                             if (type == TreeFileType.Audio || type == TreeFileType.Video) {
                                 updateFolderStats(segments, type, file.extension.lowercase())
                             }
@@ -932,7 +948,8 @@ internal fun buildLocalTreeIndexByScanning(
                 LocalTreeLeafCacheEntry(
                     relativePath = node.path,
                     absolutePath = node.absolutePath ?: return,
-                    fileType = node.fileType
+                    fileType = node.fileType,
+                    sizeBytes = node.sizeBytes
                 )
             )
             return
@@ -971,6 +988,7 @@ internal fun buildLocalTreeIndexFromLeaves(
                 child.absolutePath = leaf.absolutePath
                 child.fileType = leaf.fileType
                 child.track = track
+                child.sizeBytes = leaf.sizeBytes
             }
             cur = child
         }
@@ -1269,13 +1287,22 @@ internal fun queryLocalFileSize(context: android.content.Context, path: String):
             runCatching {
                 context.contentResolver.query(
                     Uri.parse(trimmed),
-                    arrayOf(DocumentsContract.Document.COLUMN_SIZE),
+                    arrayOf(DocumentsContract.Document.COLUMN_SIZE, OpenableColumns.SIZE),
                     null,
                     null,
                     null
                 )?.use { cursor ->
-                    val index = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
-                    if (index < 0 || !cursor.moveToFirst()) null else cursor.getLong(index)
+                    if (!cursor.moveToFirst()) {
+                        null
+                    } else {
+                        val documentIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
+                        val openableIndex = cursor.getColumnIndex(OpenableColumns.SIZE)
+                        when {
+                            documentIndex >= 0 && !cursor.isNull(documentIndex) -> cursor.getLong(documentIndex)
+                            openableIndex >= 0 && !cursor.isNull(openableIndex) -> cursor.getLong(openableIndex)
+                            else -> null
+                        }
+                    }
                 }
             }.getOrNull()
         }
@@ -2849,9 +2876,9 @@ internal fun DirectoryFileRow(
     val sizeText by produceState<String?>(initialValue = null, file.sizeSource) {
         value = when (val sizeSource = file.sizeSource) {
             FileSizeSource.None -> null
-            is FileSizeSource.Local -> withContext(Dispatchers.IO) {
+            is FileSizeSource.Local -> (sizeSource.sizeBytes ?: withContext(Dispatchers.IO) {
                 queryLocalFileSize(context, sizeSource.path)
-            }?.let(Formatting::formatFileSize)
+            })?.let(Formatting::formatFileSize)
             is FileSizeSource.Remote -> loadRemoteFileSize(sizeSource.url)?.let(Formatting::formatFileSize)
         }
     }
