@@ -11,6 +11,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.media3.common.MediaItem
 import com.asmr.player.data.local.db.dao.AlbumGroupTrackRow
+import com.asmr.player.ui.common.EARA_EMPTY_STATE_TAG
 import com.asmr.player.ui.testWindowSizeClass
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import org.junit.Rule
@@ -92,6 +93,32 @@ class AlbumGroupDetailScreenTest {
         )
         composeRule.onNodeWithTag(GROUP_DETAIL_MOVE_BOTTOM_MENU_ITEM_TAG).assert(
             SemanticsMatcher.expectValue(SemanticsProperties.TestTag, GROUP_DETAIL_MOVE_BOTTOM_MENU_ITEM_TAG)
+        )
+    }
+
+    @Test
+    fun emptyGroup_showsBrandedEmptyState() {
+        composeRule.setContent {
+            AsmrPlayerTheme {
+                AlbumGroupDetailContent(
+                    windowSizeClass = testWindowSizeClass(),
+                    title = "我的分组",
+                    tracks = emptyList(),
+                    onPlayMediaItems = { _: List<MediaItem>, _: Int -> },
+                    onRemoveTrack = {},
+                    onRemoveAlbum = {},
+                    onMoveTrackToTop = { _, _ -> },
+                    onMoveTrackToBottom = { _, _ -> },
+                    onSaveAlbumTrackOrder = { _, _ -> }
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(EARA_EMPTY_STATE_TAG).assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.TestTag,
+                EARA_EMPTY_STATE_TAG
+            )
         )
     }
 

@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -63,6 +64,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import com.asmr.player.data.local.db.dao.AlbumGroupTrackRow
 import com.asmr.player.ui.common.AsmrAsyncImage
+import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.thinScrollbar
@@ -193,87 +195,100 @@ internal fun AlbumGroupDetailContent(
                     .fillMaxWidth()
             }
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.titleLarge,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = colorScheme.textPrimary
-                )
+            if (tracks.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = colorScheme.textPrimary
+                    )
+                }
             }
 
-            LazyColumn(
-                state = listState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .reorderable(reorderState)
-                    .thinScrollbar(listState),
-                contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
-            ) {
-                item(key = GROUP_DETAIL_REORDER_SENTINEL_KEY) {
-                    Spacer(modifier = Modifier.height(1.dp))
-                }
-                itemsIndexed(localRows, key = { _, row -> row.key }) { index, row ->
-                    when (row) {
-                        is GroupDetailHeaderRow -> {
-                            AlbumSectionHeader(
-                                albumId = row.albumId,
-                                albumTitle = row.albumTitle,
-                                rjCode = row.rjCode,
-                                coverModel = row.coverModel,
-                                expanded = row.expanded,
-                                onToggle = {
-                                    expandedAlbumIds.value = if (row.expanded) {
-                                        expandedAlbumIds.value - row.albumId
-                                    } else {
-                                        expandedAlbumIds.value + row.albumId
-                                    }
-                                },
-                                onRemoveAlbum = {
-                                    pendingRemoveAlbum = row.albumId to row.albumTitle
-                                }
-                            )
-                        }
-
-                        is GroupDetailTrackRow -> {
-                            ReorderableItem(
-                                reorderableState = reorderState,
-                                key = row.track.mediaId
-                            ) { isDragging ->
-                                val albumTracks = localRows.tracksForAlbum(row.albumId)
-                                val startIndex = albumTracks.indexOfFirst { it.mediaId == row.track.mediaId }
-                                    .coerceAtLeast(0)
-                                GroupTrackRow(
-                                    item = row.track,
+            if (tracks.isEmpty()) {
+                EaraBrandedEmptyState(
+                    sectionTitle = title.ifBlank { "我的分组" },
+                    headline = "这个分组还没有内容",
+                    description = "把专辑加入分组后，它们会按专辑整理展示在这里。",
+                    sectionIcon = Icons.Default.Folder,
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current + 88.dp)
+                )
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .reorderable(reorderState)
+                        .thinScrollbar(listState),
+                    contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
+                ) {
+                    item(key = GROUP_DETAIL_REORDER_SENTINEL_KEY) {
+                        Spacer(modifier = Modifier.height(1.dp))
+                    }
+                    itemsIndexed(localRows, key = { _, row -> row.key }) { index, row ->
+                        when (row) {
+                            is GroupDetailHeaderRow -> {
+                                AlbumSectionHeader(
+                                    albumId = row.albumId,
+                                    albumTitle = row.albumTitle,
+                                    rjCode = row.rjCode,
                                     coverModel = row.coverModel,
-                                    showTopDivider = index > 0 && localRows[index - 1] is GroupDetailTrackRow,
-                                    isDragging = isDragging,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .testTag("$GROUP_DETAIL_TRACK_TAG_PREFIX:${row.track.mediaId}")
-                                        .detectReorderAfterLongPress(reorderState)
-                                        .clickable {
+                                    expanded = row.expanded,
+                                    onToggle = {
+                                        expandedAlbumIds.value = if (row.expanded) {
+                                            expandedAlbumIds.value - row.albumId
+                                        } else {
+                                            expandedAlbumIds.value + row.albumId
+                                        }
+                                    },
+                                    onRemoveAlbum = {
+                                        pendingRemoveAlbum = row.albumId to row.albumTitle
+                                    }
+                                )
+                            }
+
+                            is GroupDetailTrackRow -> {
+                                ReorderableItem(
+                                    reorderableState = reorderState,
+                                    key = row.track.mediaId
+                                ) { isDragging ->
+                                    val albumTracks = localRows.tracksForAlbum(row.albumId)
+                                    val startIndex = albumTracks.indexOfFirst { it.mediaId == row.track.mediaId }
+                                        .coerceAtLeast(0)
+                                    GroupTrackRow(
+                                        item = row.track,
+                                        coverModel = row.coverModel,
+                                        showTopDivider = index > 0 && localRows[index - 1] is GroupDetailTrackRow,
+                                        isDragging = isDragging,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .testTag("$GROUP_DETAIL_TRACK_TAG_PREFIX:${row.track.mediaId}")
+                                            .detectReorderAfterLongPress(reorderState)
+                                            .clickable {
+                                                onPlayMediaItems(
+                                                    albumTracks.map { it.toMediaItem() },
+                                                    startIndex
+                                                )
+                                            },
+                                        onPlay = {
                                             onPlayMediaItems(
                                                 albumTracks.map { it.toMediaItem() },
                                                 startIndex
                                             )
                                         },
-                                    onPlay = {
-                                        onPlayMediaItems(
-                                            albumTracks.map { it.toMediaItem() },
-                                            startIndex
-                                        )
-                                    },
-                                    onMoveToTop = { onMoveTrackToTop(row.albumId, row.track.mediaId) },
-                                    onMoveToBottom = { onMoveTrackToBottom(row.albumId, row.track.mediaId) },
-                                    onRemove = { pendingRemoveTrack = row.track }
-                                )
+                                        onMoveToTop = { onMoveTrackToTop(row.albumId, row.track.mediaId) },
+                                        onMoveToBottom = { onMoveTrackToBottom(row.albumId, row.track.mediaId) },
+                                        onRemove = { pendingRemoveTrack = row.track }
+                                    )
+                                }
                             }
                         }
                     }
