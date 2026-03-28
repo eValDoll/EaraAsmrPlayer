@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.asmr.player.BuildConfig
 import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.data.remote.update.GitHubUpdateClient
+import com.asmr.player.data.settings.BackgroundEffectType
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.remote.update.UpdateRelease
 import com.asmr.player.data.settings.FloatingLyricsSettings
@@ -71,6 +72,12 @@ class SettingsViewModel @Inject constructor(
     val staticHueArgbDark: StateFlow<Int?> = settingsDataStore.staticHueArgbDark
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    val backgroundEffectEnabled: StateFlow<Boolean> = settingsDataStore.backgroundEffectEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    val backgroundEffectType: StateFlow<BackgroundEffectType> = settingsDataStore.backgroundEffectType
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), BackgroundEffectType.Flow)
+
     val coverBackgroundEnabled: StateFlow<Boolean> = settingsDataStore.coverBackgroundEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
@@ -128,6 +135,14 @@ class SettingsViewModel @Inject constructor(
 
     fun setStaticHueArgb(argb: Int?) {
         viewModelScope.launch { settingsDataStore.setStaticHueArgb(argb) }
+    }
+
+    fun setBackgroundEffectEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setBackgroundEffectEnabled(enabled) }
+    }
+
+    fun setBackgroundEffectType(type: BackgroundEffectType) {
+        viewModelScope.launch { settingsDataStore.setBackgroundEffectType(type) }
     }
 
     fun setCoverBackgroundEnabled(enabled: Boolean) {

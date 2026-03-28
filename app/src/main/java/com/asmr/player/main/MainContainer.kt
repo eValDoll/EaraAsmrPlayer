@@ -150,6 +150,7 @@ import com.asmr.player.ui.player.SleepTimerSheetContent
 import com.asmr.player.ui.player.MiniPlayerDisplayMode
 
 import com.asmr.player.data.local.datastore.SettingsDataStore
+import com.asmr.player.data.settings.BackgroundEffectType
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.util.MessageManager
@@ -163,7 +164,10 @@ import com.asmr.player.ui.theme.DefaultBrandPrimaryDark
 import com.asmr.player.ui.theme.DefaultBrandPrimaryLight
 import com.asmr.player.ui.theme.deriveHuePalette
 import kotlin.math.roundToInt
+import com.asmr.player.ui.theme.AppBackgroundLayer
+import com.asmr.player.ui.theme.BackgroundEffectSurface
 import com.asmr.player.ui.theme.neutralPaletteForMode
+import com.asmr.player.ui.theme.shouldRenderBackgroundEffect
 import com.asmr.player.ui.theme.rememberDynamicHuePalette
 import com.asmr.player.ui.theme.rememberDynamicHuePaletteFromVideoFrame
 import com.asmr.player.ui.theme.dynamicPageContainerColor
@@ -224,6 +228,8 @@ fun MainContainer(
     onContentReady: () -> Unit,
     visibleMessages: List<VisibleAppMessage>,
     showMiniPlayerBar: Boolean,
+    backgroundEffectEnabled: Boolean,
+    backgroundEffectType: BackgroundEffectType,
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
     coverPreviewMode: CoverPreviewMode,
@@ -527,6 +533,16 @@ fun MainContainer(
     val colorScheme = AsmrTheme.colorScheme
     val materialColorScheme = MaterialTheme.colorScheme
     val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
+    val showAppBackgroundEffect = shouldRenderBackgroundEffect(
+        surface = BackgroundEffectSurface.AppPage,
+        effectEnabled = backgroundEffectEnabled,
+        coverBackgroundEnabled = coverBackgroundEnabled
+    )
+    val showNowPlayingBackgroundEffect = shouldRenderBackgroundEffect(
+        surface = BackgroundEffectSurface.NowPlayingPlayer,
+        effectEnabled = backgroundEffectEnabled,
+        coverBackgroundEnabled = coverBackgroundEnabled
+    )
     val topBarContentColor = colorScheme.onSurface
     val drawerContainerColor = if (colorScheme.isDark) Color(0xFF121212) else Color.White
 
@@ -808,15 +824,10 @@ fun MainContainer(
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(colorScheme.background.copy(alpha = 0.88f))
-                    )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(colorScheme.primarySoft.copy(alpha = 0.16f))
+                    AppBackgroundLayer(
+                        effectEnabled = showAppBackgroundEffect,
+                        effectType = backgroundEffectType,
+                        modifier = Modifier.fillMaxSize()
                     )
                     Scaffold(
                         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -1720,13 +1731,16 @@ fun MainContainer(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(colorScheme.background.copy(alpha = 0.92f * nowPlayingBackdropAlpha))
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(colorScheme.primarySoft.copy(alpha = 0.22f * nowPlayingBackdropAlpha))
-                )
+                        .graphicsLayer { alpha = nowPlayingBackdropAlpha }
+                ) {
+                    AppBackgroundLayer(
+                        effectEnabled = showNowPlayingBackgroundEffect,
+                        effectType = backgroundEffectType,
+                        baseBackgroundAlpha = 1f,
+                        tintAlpha = if (colorScheme.isDark) 0.18f else 0.14f,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxSize()

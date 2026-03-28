@@ -11,7 +11,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -30,7 +29,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.asmr.player.ui.theme.AsmrTheme
 
@@ -62,25 +60,6 @@ fun EaraBrandedEmptyState(
             .testTag(EARA_EMPTY_STATE_TAG),
         contentAlignment = Alignment.Center
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            DecorativeOrb(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .offset(x = (-28).dp, y = 28.dp),
-                size = 196.dp,
-                color = colorScheme.primarySoft,
-                alpha = if (colorScheme.isDark) 0.22f else 0.16f
-            )
-            DecorativeOrb(
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .offset(x = 36.dp, y = (-12).dp),
-                size = 220.dp,
-                color = colorScheme.primary,
-                alpha = if (colorScheme.isDark) 0.18f else 0.12f
-            )
-        }
-
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -175,26 +154,4 @@ fun EaraBrandedEmptyState(
             }
         }
     }
-}
-
-@Composable
-private fun DecorativeOrb(
-    modifier: Modifier,
-    size: Dp,
-    color: Color,
-    alpha: Float
-) {
-    Box(
-        modifier = modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(
-                brush = Brush.radialGradient(
-                    colors = listOf(
-                        color.copy(alpha = alpha),
-                        color.copy(alpha = 0f)
-                    )
-                )
-            )
-    )
 }
