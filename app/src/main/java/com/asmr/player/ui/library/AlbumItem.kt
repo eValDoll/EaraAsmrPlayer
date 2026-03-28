@@ -133,7 +133,7 @@ fun AlbumItem(
                     modifier = Modifier
                         .fillMaxHeight()
                         .padding(top = 4.dp, bottom = 4.dp, end = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.Bottom)
+                    verticalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterVertically)
                 ) {
                     val rj = album.rjCode.ifBlank { album.workId }
                     Text(
