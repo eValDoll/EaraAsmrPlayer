@@ -51,6 +51,13 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import com.asmr.player.domain.model.Slice
 
+data class QueueAddSummary(
+    val addedCount: Int,
+    val skippedCount: Int
+) {
+    val totalCount: Int get() = addedCount + skippedCount
+}
+
 @Singleton
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
@@ -567,16 +574,37 @@ class PlayerConnection @Inject constructor(
     }
 
     fun addMediaItem(item: androidx.media3.common.MediaItem): Boolean {
-        val c = controller ?: return false
-        val count = c.mediaItemCount
-        for (i in 0 until count) {
-            if (c.getMediaItemAt(i).mediaId == item.mediaId) {
-                // Already exists, do not add
-                return false
+        return addMediaItems(listOf(item)).addedCount > 0
+    }
+
+    fun addMediaItems(items: List<androidx.media3.common.MediaItem>): QueueAddSummary {
+        val c = controller ?: return QueueAddSummary(addedCount = 0, skippedCount = items.size)
+        if (items.isEmpty()) return QueueAddSummary(addedCount = 0, skippedCount = 0)
+
+        val existingIds = mutableSetOf<String>()
+        for (i in 0 until c.mediaItemCount) {
+            existingIds += c.getMediaItemAt(i).mediaId
+        }
+
+        val seenIds = linkedSetOf<String>()
+        val toAdd = mutableListOf<androidx.media3.common.MediaItem>()
+        var skipped = 0
+        items.forEach { item ->
+            val mediaId = item.mediaId
+            if (mediaId.isBlank() || !existingIds.add(mediaId) || !seenIds.add(mediaId)) {
+                skipped += 1
+            } else {
+                toAdd += item
             }
         }
-        c.addMediaItem(item)
-        return true
+
+        if (toAdd.isNotEmpty()) {
+            c.addMediaItems(toAdd)
+        }
+        return QueueAddSummary(
+            addedCount = toAdd.size,
+            skippedCount = skipped
+        )
     }
 
     fun removeMediaItem(index: Int) {

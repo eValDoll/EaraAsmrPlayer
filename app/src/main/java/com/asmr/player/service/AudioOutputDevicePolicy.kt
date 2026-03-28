@@ -72,9 +72,9 @@ internal fun audioOutputRouteKindForDeviceType(type: Int): AudioOutputRouteKind?
         AudioDeviceInfo.TYPE_BLUETOOTH_A2DP,
         AudioDeviceInfo.TYPE_BLUETOOTH_SCO,
         AudioDeviceInfo.TYPE_BLE_HEADSET,
-        AudioDeviceInfo.TYPE_USB_HEADSET,
-        AudioDeviceInfo.TYPE_BUILTIN_EARPIECE -> AudioOutputRouteKind.Headphones
+        AudioDeviceInfo.TYPE_USB_HEADSET -> AudioOutputRouteKind.Headphones
 
+        AudioDeviceInfo.TYPE_BUILTIN_EARPIECE,
         AudioDeviceInfo.TYPE_BLE_SPEAKER,
         AudioDeviceInfo.TYPE_BLE_BROADCAST,
         AudioDeviceInfo.TYPE_BUILTIN_SPEAKER,

@@ -138,7 +138,7 @@ fun ActionButton(
                     )
                 } else Modifier
             )
-            .background(if (isDark) colorScheme.surface.copy(alpha = 0.3f) else Color.White, CircleShape)
+            .background(if (isDark) colorScheme.surface else Color.White, CircleShape)
             .clip(CircleShape)
             .clickable(onClick = onClick),
         contentAlignment = Alignment.Center

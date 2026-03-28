@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -60,6 +61,7 @@ import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
 import com.asmr.player.ui.common.CvChipsSingleLine
 import com.asmr.player.ui.common.DiscPlaceholder
+import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.util.DlsiteAntiHotlink
 import dagger.hilt.android.EntryPointAccessors
@@ -115,6 +117,7 @@ internal fun CloudSyncSelectionDialog(
     onIgnoreAll: (() -> Unit)? = null
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val listState = rememberLazyListState()
     Dialog(
         onDismissRequest = onCancel,
         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -179,10 +182,12 @@ internal fun CloudSyncSelectionDialog(
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.34f))
                 Spacer(modifier = Modifier.height(CLOUD_SYNC_SELECTION_SECTION_SPACING))
                 LazyColumn(
+                    state = listState,
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(CLOUD_SYNC_SELECTION_LIST_HEIGHT)
-                        .testTag(CLOUD_SYNC_SELECTION_LIST_TAG),
+                        .testTag(CLOUD_SYNC_SELECTION_LIST_TAG)
+                        .thinScrollbar(listState),
                     verticalArrangement = Arrangement.spacedBy(CLOUD_SYNC_SELECTION_ROW_SPACING)
                 ) {
                     items(state.candidates, key = { it.workno }) { candidate ->

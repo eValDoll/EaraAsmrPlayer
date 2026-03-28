@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import com.asmr.player.data.local.db.dao.TagWithCount
+import com.asmr.player.ui.common.thinScrollbar
 
 @Composable
 fun TagManagerSheet(
@@ -41,6 +43,7 @@ fun TagManagerSheet(
     var filter by rememberSaveable { mutableStateOf("") }
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
+    val listState = rememberLazyListState()
 
     val visibleTags = remember(tags, filter) {
         val q = filter.trim().lowercase()
@@ -69,9 +72,11 @@ fun TagManagerSheet(
         )
 
         LazyColumn(
+            state = listState,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f, fill = true)
+                .thinScrollbar(listState)
         ) {
             items(visibleTags, key = { it.id }) { tag ->
                 ListItem(

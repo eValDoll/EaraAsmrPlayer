@@ -102,7 +102,8 @@ fun AppSnackbar(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(bottom = 3.dp)
+                    .padding(bottom = 3.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier

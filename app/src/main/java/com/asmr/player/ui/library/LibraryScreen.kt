@@ -55,6 +55,8 @@ import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.CoverContentRow
 import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.common.CvChipsSingleLine
+import com.asmr.player.ui.common.EaraLogoLoadingIndicator
+import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.withAddedBottomPadding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
@@ -70,7 +72,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -154,6 +155,7 @@ import com.asmr.player.ui.common.CustomSearchBar
 import com.asmr.player.ui.common.ActionButton
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
+import com.asmr.player.ui.common.thinScrollbar
 
 internal const val LIBRARY_CHROME_TAG = "library_chrome"
 internal const val LIBRARY_SEARCH_INPUT_TAG = "library_search_input"
@@ -245,6 +247,7 @@ fun LibraryScreen(
     val mode = (viewMode ?: 0).coerceIn(0, 2)
     val isGrid = mode == 1
     val isTrackList = mode == 2
+    var lastChromeResetMode by rememberSaveable { mutableStateOf(mode) }
     val pagedAlbums = viewModel.pagedAlbums.collectAsLazyPagingItems()
     val pagedTrackAlbumHeaders = viewModel.pagedTrackAlbumHeaders.collectAsLazyPagingItems()
     val pagedAlbumSnapshot = pagedAlbums.itemSnapshotList
@@ -283,7 +286,10 @@ fun LibraryScreen(
         }
     }
     LaunchedEffect(mode) {
-        chromeState.expand()
+        if (lastChromeResetMode != mode) {
+            chromeState.expand()
+            lastChromeResetMode = mode
+        }
     }
     LaunchedEffect(listState.firstVisibleItemIndex, listState.firstVisibleItemScrollOffset, mode) {
         if ((mode == 0 || mode == 2) &&
@@ -303,7 +309,7 @@ fun LibraryScreen(
     }
 
     Scaffold(
-        contentWindowInsets = WindowInsets.navigationBars,
+        contentWindowInsets = StableWindowInsets.navigationBars,
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground,
         // TopAppBar is now handled by MainActivity for better consistency
@@ -360,7 +366,7 @@ fun LibraryScreen(
                     when (val state = uiState) {
                     is LibraryUiState.Loading -> {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator()
+                            EaraLogoLoadingIndicator(tint = colorScheme.primary)
                         }
                     }
                     is LibraryUiState.BulkInProgress -> {
@@ -422,7 +428,7 @@ fun LibraryScreen(
                     is LibraryUiState.Success -> {
                         if (viewMode == null) {
                             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator()
+                                EaraLogoLoadingIndicator(tint = colorScheme.primary)
                             }
                         } else {
                             // Main content area
@@ -441,7 +447,7 @@ fun LibraryScreen(
                                 }
                                 if (isLoading) {
                                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                        CircularProgressIndicator(color = colorScheme.primary)
+                                        EaraLogoLoadingIndicator(tint = colorScheme.primary)
                                     }
                                 } else if (isEmpty) {
                                     val hasAnyQuery =
@@ -493,7 +499,8 @@ fun LibraryScreen(
                                         state = listState,
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .nestedScroll(chromeState.nestedScrollConnection),
+                                            .nestedScroll(chromeState.nestedScrollConnection)
+                                            .thinScrollbar(listState),
                                         contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                                     ) {
@@ -661,7 +668,8 @@ fun LibraryScreen(
                                         state = gridState,
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .nestedScroll(chromeState.nestedScrollConnection),
+                                            .nestedScroll(chromeState.nestedScrollConnection)
+                                            .thinScrollbar(gridState),
                                         contentPadding = PaddingValues(top = topPadding, start = 16.dp, end = 16.dp, bottom = 16.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current),
                                         verticalItemSpacing = 16.dp,
@@ -715,7 +723,8 @@ fun LibraryScreen(
                                         state = listState,
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .nestedScroll(chromeState.nestedScrollConnection),
+                                            .nestedScroll(chromeState.nestedScrollConnection)
+                                            .thinScrollbar(listState),
                                         contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                                     ) {
@@ -1029,7 +1038,7 @@ internal fun LibraryChrome(
                     modifier = Modifier.background(dynamicContainerColor)
                 ) {
                     DropdownMenuItem(
-                        text = { Text("最近") },
+                        text = { Text("最近播放") },
                         onClick = {
                             onSortMenuExpandedChange(false)
                             onSortLastPlayed()
@@ -1053,7 +1062,7 @@ internal fun LibraryChrome(
                         color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
                     )
                     DropdownMenuItem(
-                        text = { Text("标题") },
+                        text = { Text("专辑标题") },
                         onClick = {
                             onSortMenuExpandedChange(false)
                             onSortTitle()
@@ -1275,10 +1284,11 @@ private fun AlbumGridItem(
                         .blur(4.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(24.dp),
-                        color = Color.White,
-                        strokeWidth = 2.dp
+                    EaraLogoLoadingIndicator(
+                        size = 24.dp,
+                        tint = Color.White,
+                        glowColor = Color.White,
+                        showGlow = false
                     )
                 }
             } else if (syncStatus is SyncStatus.Error) {
@@ -1449,10 +1459,11 @@ private fun AlbumItem(
                                 .blur(2.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(16.dp),
-                                color = Color.White,
-                                strokeWidth = 2.dp
+                            EaraLogoLoadingIndicator(
+                                size = 16.dp,
+                                tint = Color.White,
+                                glowColor = Color.White,
+                                showGlow = false
                             )
                         }
                     } else if (syncStatus is SyncStatus.Error) {

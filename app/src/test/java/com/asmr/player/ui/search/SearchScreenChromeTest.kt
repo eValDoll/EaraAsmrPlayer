@@ -92,7 +92,6 @@ class SearchScreenChromeTest {
                         canGoPrev = false,
                         canGoNext = false,
                         controlsLocked = true,
-                        showPagingSpinner = false,
                         onPrev = {},
                         onNext = {}
                     )
@@ -133,7 +132,6 @@ class SearchScreenChromeTest {
                         canGoPrev = true,
                         canGoNext = true,
                         controlsLocked = true,
-                        showPagingSpinner = true,
                         onPrev = {},
                         onNext = {}
                     )
@@ -146,9 +144,6 @@ class SearchScreenChromeTest {
         composeRule.onNodeWithTag(SEARCH_SUBMIT_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_PREV_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_NEXT_BUTTON_TAG).assertIsNotEnabled()
-        composeRule.onNodeWithTag(SEARCH_PAGINATION_SPINNER_TAG).assert(
-            SemanticsMatcher.expectValue(SemanticsProperties.TestTag, SEARCH_PAGINATION_SPINNER_TAG)
-        )
     }
 
     @Test
@@ -210,7 +205,6 @@ class SearchScreenChromeTest {
                     canGoPrev = true,
                     canGoNext = true,
                     controlsLocked = false,
-                    showPagingSpinner = false,
                     rightPanelToggle = null,
                     animatedOffsetPx = chromeState.offsetPx,
                     collapseFraction = chromeState.collapseFraction,

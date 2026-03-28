@@ -30,6 +30,7 @@ import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
@@ -38,6 +39,7 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -50,6 +52,8 @@ import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
@@ -71,11 +75,15 @@ import androidx.media3.common.VideoSize
 import androidx.media3.ui.PlayerView
 import com.asmr.player.R
 import com.asmr.player.data.settings.CoverPreviewMode
+import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.ui.common.AsmrAsyncImage
+import com.asmr.player.ui.common.AudioOutputRouteIcon
+import com.asmr.player.ui.common.thinScrollbar
+import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
 import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
 import com.asmr.player.ui.common.AppVolumeSlider
 import com.asmr.player.ui.common.AppVolumeWarningSessionState
-import com.asmr.player.ui.common.volumeRouteIcon
+import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.ui.common.EqualizerPanel
@@ -97,14 +105,63 @@ import kotlin.math.roundToLong
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
+private enum class NowPlayingSurfaceMode {
+    PLAYER,
+    LYRICS
+}
+
+private fun AnimatedContentTransitionScope<NowPlayingSurfaceMode>.nowPlayingSurfaceTransform(): ContentTransform {
+    val enter = fadeIn(
+        animationSpec = tween(
+            durationMillis = NowPlayingMotionSpec.PlayerForegroundEnterDurationMs,
+            easing = LinearOutSlowInEasing
+        )
+    ) + slideInVertically(
+        initialOffsetY = {
+            (it * NowPlayingMotionSpec.PlayerForegroundFloatOffsetFraction).roundToInt()
+        },
+        animationSpec = tween(
+            durationMillis = NowPlayingMotionSpec.PlayerForegroundEnterDurationMs,
+            easing = LinearOutSlowInEasing
+        )
+    ) + scaleIn(
+        initialScale = NowPlayingMotionSpec.PlayerForegroundInitialScale,
+        animationSpec = tween(
+            durationMillis = NowPlayingMotionSpec.PlayerForegroundEnterDurationMs,
+            easing = LinearOutSlowInEasing
+        )
+    )
+    val exit = fadeOut(
+        animationSpec = tween(
+            durationMillis = NowPlayingMotionSpec.PlayerForegroundExitDurationMs,
+            easing = FastOutLinearInEasing
+        )
+    ) + slideOutVertically(
+        targetOffsetY = {
+            (it * NowPlayingMotionSpec.PlayerForegroundSinkOffsetFraction).roundToInt()
+        },
+        animationSpec = tween(
+            durationMillis = NowPlayingMotionSpec.PlayerForegroundExitDurationMs,
+            easing = FastOutLinearInEasing
+        )
+    ) + scaleOut(
+        targetScale = NowPlayingMotionSpec.PlayerForegroundTargetScale,
+        animationSpec = tween(
+            durationMillis = NowPlayingMotionSpec.PlayerForegroundExitDurationMs,
+            easing = FastOutLinearInEasing
+        )
+    )
+    return enter togetherWith exit using SizeTransform(clip = false)
+}
+
 @Composable
 @androidx.media3.common.util.UnstableApi
-@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
-fun NowPlayingScreen(
+@OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
+internal fun NowPlayingScreen(
     windowSizeClass: WindowSizeClass,
     hardwareVolumeEventTick: Long,
     onBack: () -> Unit,
-    onOpenLyrics: () -> Unit,
+    onRouteExitStarted: (exitDurationMs: Int) -> Unit = {},
     onShowQueue: () -> Unit,
     onShowSleepTimer: () -> Unit,
     onOpenPlaylistPicker: (mediaId: String, uri: String, title: String, artist: String, artworkUri: String, albumId: Long, trackId: Long, rjCode: String) -> Unit,
@@ -112,8 +169,13 @@ fun NowPlayingScreen(
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
     coverPreviewMode: CoverPreviewMode,
+    lyricsPageSettings: LyricsPageSettings,
     audioOutputRouteKind: AudioOutputRouteKind,
     warningSessionState: AppVolumeWarningSessionState,
+    renderBackdrop: Boolean = true,
+    sharedArtworkAlignment: Alignment? = null,
+    sharedCoverDragPreviewState: CoverDragPreviewState? = null,
+    enableStaggeredRouteEntry: Boolean = true,
     lyricsViewModel: LyricsViewModel = hiltViewModel()
 ) {
     val playback by viewModel.playback.collectAsState()
@@ -125,6 +187,9 @@ fun NowPlayingScreen(
     val metadata = item?.mediaMetadata
     val colorScheme = AsmrTheme.colorScheme
     val uriText = item?.localConfiguration?.uri?.toString().orEmpty()
+    val artworkModel = remember(metadata?.artworkUri) {
+        sanitizeBackdropArtworkModel(metadata?.artworkUri)
+    }
     val videoUri = item?.localConfiguration?.uri
     val mimeType = item?.localConfiguration?.mimeType.orEmpty()
     val ext = uriText.substringBefore('#').substringBefore('?').substringAfterLast('.', "").lowercase()
@@ -139,10 +204,10 @@ fun NowPlayingScreen(
     val dominantColorResult by if (isVideo) {
         rememberComputedVideoFrameDominantColorCenterWeighted(videoUri = videoUri, defaultColor = colorScheme.background)
     } else {
-        rememberComputedDominantColorCenterWeighted(model = metadata?.artworkUri, defaultColor = colorScheme.background)
+        rememberComputedDominantColorCenterWeighted(model = artworkModel, defaultColor = colorScheme.background)
     }
     val targetAccentColor = if (coverBackgroundEnabled) {
-        dominantColorResult.color ?: colorScheme.primary
+        dominantColorResult.color ?: colorScheme.primarySoft
     } else {
         colorScheme.primary
     }
@@ -210,33 +275,102 @@ fun NowPlayingScreen(
     val videoAspectRatio = rememberPlayerVideoAspectRatio(player)
     val useDragPreview = coverPreviewMode == CoverPreviewMode.Drag && !isVideo
     val useMotionPreview = coverPreviewMode == CoverPreviewMode.Motion && !isVideo
-    val coverMotionState = rememberCoverMotionState(
-        enabled = useMotionPreview,
+    val ownsMotionPreview = sharedArtworkAlignment == null
+    val ownsDragPreview = sharedCoverDragPreviewState == null
+    val localCoverMotionState = rememberCoverMotionState(
+        enabled = ownsMotionPreview && useMotionPreview,
         resetKey = item?.mediaId
     )
-    val coverDragPreviewState = rememberCoverDragPreviewState(
-        enabled = useDragPreview,
+    val localCoverDragPreviewState = rememberCoverDragPreviewState(
+        enabled = ownsDragPreview && useDragPreview,
         resetKey = item?.mediaId
     )
-    val coverPreviewAlignment = when {
+    val coverDragPreviewState = sharedCoverDragPreviewState ?: localCoverDragPreviewState
+    val coverPreviewAlignment = sharedArtworkAlignment ?: when {
         useDragPreview -> coverDragPreviewState.toAlignment()
-        useMotionPreview -> coverMotionState.toAlignment()
+        useMotionPreview -> localCoverMotionState.toAlignment()
         else -> Alignment.Center
     }
+    var surfaceMode by rememberSaveable { mutableStateOf(NowPlayingSurfaceMode.PLAYER) }
+    val currentMotionLayout = when {
+        useSplitLayout -> NowPlayingMotionLayout.SPLIT_LANDSCAPE
+        isPhoneLandscape -> NowPlayingMotionLayout.PHONE_LANDSCAPE
+        else -> NowPlayingMotionLayout.PORTRAIT
+    }
+    var routeVisible by remember(enableStaggeredRouteEntry) { mutableStateOf(!enableStaggeredRouteEntry) }
+    var pendingRouteExit by remember { mutableStateOf(false) }
+    var exitMotionLayout by remember { mutableStateOf<NowPlayingMotionLayout?>(null) }
+    val latestOnBack = rememberUpdatedState(onBack)
+    val latestOnRouteExitStarted = rememberUpdatedState(onRouteExitStarted)
+    val routeTransition = updateTransition(targetState = routeVisible, label = "nowPlayingRouteVisibility")
+    val requestClose = remember(pendingRouteExit, currentMotionLayout) {
+        {
+            if (!pendingRouteExit) {
+                exitMotionLayout = currentMotionLayout
+                pendingRouteExit = true
+                latestOnRouteExitStarted.value(
+                    NowPlayingMotionSpec.totalExitDurationMs(currentMotionLayout)
+                )
+                routeVisible = false
+            }
+        }
+    }
+
+    LaunchedEffect(enableStaggeredRouteEntry) {
+        routeVisible = true
+    }
+
+    LaunchedEffect(pendingRouteExit, exitMotionLayout) {
+        val layout = exitMotionLayout ?: return@LaunchedEffect
+        if (!pendingRouteExit) return@LaunchedEffect
+        delay(NowPlayingMotionSpec.totalExitDurationMs(layout).toLong())
+        latestOnBack.value()
+    }
+
+    val showLyricsSurface = remember(isVideo) {
+        {
+            if (!isVideo) {
+                surfaceMode = NowPlayingSurfaceMode.LYRICS
+            }
+        }
+    }
+    val handleNavigateUp = {
+        if (surfaceMode == NowPlayingSurfaceMode.LYRICS) {
+            surfaceMode = NowPlayingSurfaceMode.PLAYER
+        } else {
+            requestClose()
+        }
+    }
+
+    BackHandler(enabled = !pendingRouteExit) {
+        handleNavigateUp()
+    }
+    val playerHeaderTitle = metadata?.title?.toString().orEmpty().ifBlank {
+        lyricsState.title.ifBlank { "未播放" }
+    }
+    val lyricsHeaderTitle = lyricsState.title.ifBlank {
+        metadata?.title?.toString().orEmpty().ifBlank { "歌词" }
+    }
+
+    val sharedHeaderTitle = if (surfaceMode == NowPlayingSurfaceMode.LYRICS) {
+        lyricsHeaderTitle
+    } else {
+        playerHeaderTitle
+    }
+    val sharedHeaderMotion = routeTransition.nowPlayingMotionModifier(
+        currentMotionLayout,
+        NowPlayingMotionSlot.HEADER
+    )
+    val sharedHeaderHorizontalPadding = if (isLandscape) 4.dp else 12.dp
+    var volumeControlExpanded by remember { mutableStateOf(false) }
+    var volumeControlBounds by remember { mutableStateOf<Rect?>(null) }
 
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        if (!isVideo) {
-            val backgroundArtwork = remember(metadata?.artworkUri) {
-                metadata?.artworkUri?.takeUnless { u ->
-                    val s = u.toString()
-                    u.scheme.equals("android.resource", ignoreCase = true) ||
-                        s.contains("ic_placeholder", ignoreCase = true)
-                }
-            }
+        if (renderBackdrop && !isVideo) {
             CoverArtworkBackground(
-                artworkModel = backgroundArtwork,
+                artworkModel = artworkModel,
                 enabled = coverBackgroundEnabled,
                 clarity = coverBackgroundClarity,
                 overlayBaseColor = colorScheme.background,
@@ -245,21 +379,56 @@ fun NowPlayingScreen(
                 isDark = colorScheme.isDark
             )
         }
+        Column(modifier = Modifier.fillMaxSize()) {
+            Spacer(modifier = Modifier.windowInsetsTopHeight(StableWindowInsets.statusBars))
+            PlayerSurfaceHeader(
+                title = sharedHeaderTitle,
+                isLandscape = isLandscape,
+                onNavigateUp = handleNavigateUp,
+                onShowSleepTimer = onShowSleepTimer,
+                onShowQueue = onShowQueue,
+                navigationEnabled = !pendingRouteExit,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = sharedHeaderHorizontalPadding, vertical = 4.dp)
+                    .then(sharedHeaderMotion)
+            )
+            Box(modifier = Modifier.fillMaxSize()) {
+                AnimatedContent(
+                    targetState = surfaceMode,
+                    transitionSpec = { nowPlayingSurfaceTransform() },
+                    label = "nowPlayingSurfaceMode"
+                ) { activeSurfaceMode ->
+            if (activeSurfaceMode == NowPlayingSurfaceMode.PLAYER) {
+                val layoutState = remember(useSplitLayout, isPhoneLandscape) { useSplitLayout to isPhoneLandscape }
 
-        val layoutState = remember(useSplitLayout, isPhoneLandscape) { useSplitLayout to isPhoneLandscape }
+                AnimatedContent(
+                    targetState = layoutState,
+                    transitionSpec = {
+                        if (initialState == targetState) {
+                            EnterTransition.None togetherWith ExitTransition.None
+                        } else {
+                            val enter = fadeIn(animationSpec = tween(durationMillis = 220, delayMillis = 60)) +
+                                scaleIn(animationSpec = tween(durationMillis = 220, delayMillis = 60), initialScale = 0.98f)
+                            val exit = fadeOut(animationSpec = tween(durationMillis = 160)) +
+                                scaleOut(animationSpec = tween(durationMillis = 160), targetScale = 1.02f)
+                            enter togetherWith exit
+                        }
+                    },
+                    label = "nowPlayingLayout"
+                ) { (split, phoneLandscape) ->
+            val motionLayout = when {
+                split -> NowPlayingMotionLayout.SPLIT_LANDSCAPE
+                phoneLandscape -> NowPlayingMotionLayout.PHONE_LANDSCAPE
+                else -> NowPlayingMotionLayout.PORTRAIT
+            }
 
-        AnimatedContent(
-            targetState = layoutState,
-            transitionSpec = {
-                val enter = fadeIn(animationSpec = tween(durationMillis = 220, delayMillis = 60)) +
-                    scaleIn(animationSpec = tween(durationMillis = 220, delayMillis = 60), initialScale = 0.98f)
-                val exit = fadeOut(animationSpec = tween(durationMillis = 160)) +
-                    scaleOut(animationSpec = tween(durationMillis = 160), targetScale = 1.02f)
-                enter togetherWith exit
-            },
-            label = "nowPlayingLayout"
-        ) { (split, phoneLandscape) ->
-        if (split) {
+            if (split) {
+                val headerMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.HEADER)
+                val coverMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.COVER)
+                val progressMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.PROGRESS)
+                val infoMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.INFO_PANEL)
+                val controlsMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.CONTROLS)
             // --- 平板端横屏布局 (左右分栏) ---
             Column(
                 modifier = Modifier
@@ -269,12 +438,16 @@ fun NowPlayingScreen(
             ) {
                 // 顶部工具栏
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(headerMotion)
+                        .requiredHeight(0.dp)
+                        .alpha(0f),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                        IconButton(onClick = onBack) {
+                        IconButton(onClick = requestClose, enabled = !pendingRouteExit) {
                             Icon(
                                 Icons.Default.KeyboardArrowDown,
                                 contentDescription = null,
@@ -332,12 +505,13 @@ fun NowPlayingScreen(
                             modifier = Modifier
                                 .widthIn(max = 420.dp)
                                 .aspectRatio(if (isVideo) videoAspectRatio else 1f)
+                                .then(coverMotion)
                         ) {
                             ArtworkBox(
                                 isVideo = isVideo,
                                 metadata = metadata,
                                 viewModel = viewModel,
-                                onOpenLyrics = onOpenLyrics,
+                                onOpenLyrics = showLyricsSurface,
                                 edgeBlendEnabled = false,
                                 edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
                                 videoBackdropColor = videoBackdropColor,
@@ -348,24 +522,30 @@ fun NowPlayingScreen(
                         }
                         
                         key(item?.mediaId) {
-                            PlayerProgress(
-                                positionMs = playback.positionMs,
-                                durationMs = progressDurationMs,
-                                sliceUiState = sliceUiState,
-                                onSeekTo = { viewModel.seekTo(it) },
-                                onCutPressed = { viewModel.onCutPressed(progressDurationMs) },
-                                onScrubbingChanged = { viewModel.setUserScrubbing(it) },
-                                onSelectSlice = { viewModel.selectSlice(it) },
-                                onLongPressSlice = {
-                                    viewModel.selectSlice(it)
-                                    showSliceSheet = true
-                                },
-                                onUpdateSliceRange = { sliceId, startMs, endMs ->
-                                    viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
-                                },
-                                activeColor = accentColor,
-                                inactiveColor = accentColor.copy(alpha = 0.2f)
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(progressMotion)
+                            ) {
+                                PlayerProgress(
+                                    positionMs = playback.positionMs,
+                                    durationMs = progressDurationMs,
+                                    sliceUiState = sliceUiState,
+                                    onSeekTo = { viewModel.seekTo(it) },
+                                    onCutPressed = { viewModel.onCutPressed(progressDurationMs) },
+                                    onScrubbingChanged = { viewModel.setUserScrubbing(it) },
+                                    onSelectSlice = { viewModel.selectSlice(it) },
+                                    onLongPressSlice = {
+                                        viewModel.selectSlice(it)
+                                        showSliceSheet = true
+                                    },
+                                    onUpdateSliceRange = { sliceId, startMs, endMs ->
+                                        viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
+                                    },
+                                    activeColor = accentColor,
+                                    inactiveColor = accentColor.copy(alpha = 0.2f)
+                                )
+                            }
                         }
                     }
 
@@ -377,6 +557,7 @@ fun NowPlayingScreen(
                         // 艺术家 (标题已移动到 header)
                         Text(
                             text = metadata?.artist?.toString().orEmpty(),
+                            modifier = Modifier.then(infoMotion),
                             style = MaterialTheme.typography.titleMedium,
                             color = colorScheme.textSecondary,
                             maxLines = 1,
@@ -387,7 +568,8 @@ fun NowPlayingScreen(
                             Row(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .fillMaxWidth(),
+                                    .fillMaxWidth()
+                                    .then(infoMotion),
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -412,7 +594,7 @@ fun NowPlayingScreen(
                                     lyrics = lyricsState.lyrics,
                                     currentPosition = playback.positionMs,
                                     onSeekTo = { viewModel.seekTo(it) },
-                                    onOpenLyrics = onOpenLyrics,
+                                    onOpenLyrics = showLyricsSurface,
                                     colors = lyricColors,
                                     modifier = Modifier
                                         .weight(0.70f)
@@ -438,7 +620,7 @@ fun NowPlayingScreen(
                                 )
                             }
                         } else {
-                            Spacer(modifier = Modifier.weight(1f))
+                            Spacer(modifier = Modifier.weight(1f).then(infoMotion))
                         }
 
                         PlaybackControls(
@@ -472,6 +654,7 @@ fun NowPlayingScreen(
                             sliceUiState = sliceUiState,
                             showActionRow = false,
                             bottomPadding = 40.dp,
+                            coreControlsModifier = controlsMotion,
                             primaryColor = accentColor,
                             onPrimaryColor = onAccentColor
                         )
@@ -479,6 +662,11 @@ fun NowPlayingScreen(
                 }
             }
         } else if (phoneLandscape) {
+            val headerMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.HEADER)
+            val coverMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.COVER)
+            val progressMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.PROGRESS)
+            val lyricsMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.LYRICS)
+            val controlsMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.CONTROLS)
             // --- 手机端横屏布局 (特殊适配) ---
             Column(
                 modifier = Modifier
@@ -488,12 +676,16 @@ fun NowPlayingScreen(
             ) {
                 // 顶部：返回、标题和队列按钮
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .then(headerMotion)
+                        .requiredHeight(0.dp)
+                        .alpha(0f),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                        IconButton(onClick = onBack) {
+                        IconButton(onClick = requestClose, enabled = !pendingRouteExit) {
                             Icon(
                                 Icons.Default.KeyboardArrowDown,
                                 contentDescription = null,
@@ -546,14 +738,15 @@ fun NowPlayingScreen(
                         Box(
                             modifier = Modifier
                                 .weight(1f)
-                                .aspectRatio(if (isVideo) videoAspectRatio else 1f),
+                                .aspectRatio(if (isVideo) videoAspectRatio else 1f)
+                                .then(coverMotion),
                             contentAlignment = Alignment.Center
                         ) {
                             ArtworkBox(
                                 isVideo = isVideo,
                                 metadata = metadata,
                                 viewModel = viewModel,
-                                onOpenLyrics = onOpenLyrics,
+                                onOpenLyrics = showLyricsSurface,
                                 edgeBlendEnabled = false,
                                 edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
                                 videoBackdropColor = videoBackdropColor,
@@ -564,24 +757,30 @@ fun NowPlayingScreen(
                         }
 
                         key(item?.mediaId) {
-                            PlayerProgress(
-                                positionMs = playback.positionMs,
-                                durationMs = progressDurationMs,
-                                sliceUiState = sliceUiState,
-                                onSeekTo = { viewModel.seekTo(it) },
-                                onCutPressed = { viewModel.onCutPressed(progressDurationMs) },
-                                onScrubbingChanged = { viewModel.setUserScrubbing(it) },
-                                onSelectSlice = { viewModel.selectSlice(it) },
-                                onLongPressSlice = {
-                                    viewModel.selectSlice(it)
-                                    showSliceSheet = true
-                                },
-                                onUpdateSliceRange = { sliceId, startMs, endMs ->
-                                    viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
-                                },
-                                activeColor = accentColor,
-                                inactiveColor = accentColor.copy(alpha = 0.2f)
-                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .then(progressMotion)
+                            ) {
+                                PlayerProgress(
+                                    positionMs = playback.positionMs,
+                                    durationMs = progressDurationMs,
+                                    sliceUiState = sliceUiState,
+                                    onSeekTo = { viewModel.seekTo(it) },
+                                    onCutPressed = { viewModel.onCutPressed(progressDurationMs) },
+                                    onScrubbingChanged = { viewModel.setUserScrubbing(it) },
+                                    onSelectSlice = { viewModel.selectSlice(it) },
+                                    onLongPressSlice = {
+                                        viewModel.selectSlice(it)
+                                        showSliceSheet = true
+                                    },
+                                    onUpdateSliceRange = { sliceId, startMs, endMs ->
+                                        viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
+                                    },
+                                    activeColor = accentColor,
+                                    inactiveColor = accentColor.copy(alpha = 0.2f)
+                                )
+                            }
                         }
                     }
 
@@ -594,7 +793,8 @@ fun NowPlayingScreen(
                             Row(
                                 modifier = Modifier
                                     .weight(1f)
-                                    .fillMaxWidth(),
+                                    .fillMaxWidth()
+                                    .then(lyricsMotion),
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
@@ -619,7 +819,7 @@ fun NowPlayingScreen(
                                     lyrics = lyricsState.lyrics,
                                     currentPosition = playback.positionMs,
                                     onSeekTo = { viewModel.seekTo(it) },
-                                    onOpenLyrics = onOpenLyrics,
+                                    onOpenLyrics = showLyricsSurface,
                                     colors = lyricColors,
                                     modifier = Modifier
                                         .weight(0.72f)
@@ -645,7 +845,7 @@ fun NowPlayingScreen(
                                 )
                             }
                         } else {
-                            Spacer(modifier = Modifier.weight(1f))
+                            Spacer(modifier = Modifier.weight(1f).then(lyricsMotion))
                         }
 
                         PlaybackControls(
@@ -679,6 +879,7 @@ fun NowPlayingScreen(
                             sliceUiState = sliceUiState,
                             showActionRow = false,
                             bottomPadding = 28.dp,
+                            coreControlsModifier = controlsMotion,
                             primaryColor = accentColor,
                             onPrimaryColor = onAccentColor
                         )
@@ -686,6 +887,13 @@ fun NowPlayingScreen(
                 }
             }
         } else {
+            val headerMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.HEADER)
+            val coverMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.COVER)
+            val lyricsMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.LYRICS)
+            val progressMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.PROGRESS)
+            val actionRowMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.ACTION_ROW)
+            val controlsMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.CONTROLS)
+            val volumeMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.VOLUME)
             // --- 垂直布局 (手机 或 平板竖屏) ---
             Box(
                 modifier = Modifier.fillMaxSize(),
@@ -708,10 +916,13 @@ fun NowPlayingScreen(
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 8.dp),
+                            .padding(horizontal = 4.dp, vertical = 8.dp)
+                            .then(headerMotion)
+                            .requiredHeight(0.dp)
+                            .alpha(0f),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        IconButton(onClick = onBack) {
+                        IconButton(onClick = requestClose, enabled = !pendingRouteExit) {
                             Icon(
                                 Icons.Default.KeyboardArrowDown,
                                 contentDescription = null,
@@ -771,7 +982,9 @@ fun NowPlayingScreen(
                         color = colorScheme.textSecondary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(coverMotion),
                         textAlign = TextAlign.Center
                     )
 
@@ -780,7 +993,8 @@ fun NowPlayingScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f) // 让封面占据剩余可用空间，自动收缩
-                            .padding(vertical = if (widthClass == WindowWidthSizeClass.Compact) 16.dp else 32.dp),
+                            .padding(vertical = if (widthClass == WindowWidthSizeClass.Compact) 16.dp else 32.dp)
+                            .then(coverMotion),
                         contentAlignment = Alignment.Center
                     ) {
                         Box(
@@ -803,7 +1017,7 @@ fun NowPlayingScreen(
                                 isVideo = isVideo,
                                 metadata = metadata,
                                 viewModel = viewModel,
-                                onOpenLyrics = onOpenLyrics,
+                                onOpenLyrics = showLyricsSurface,
                                 edgeBlendEnabled = false,
                                 edgeBlendColor = if (coverBackgroundEnabled) accentColor else colorScheme.background,
                                 videoBackdropColor = videoBackdropColor,
@@ -818,31 +1032,39 @@ fun NowPlayingScreen(
                         SingleLineLyrics(
                             lyrics = lyricsState.lyrics,
                             currentPosition = playback.positionMs,
-                            onOpenLyrics = onOpenLyrics,
+                            onOpenLyrics = showLyricsSurface,
                             colors = lyricColors,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(lyricsMotion)
                         )
                     }
 
                     key(item?.mediaId) {
-                        PlayerProgress(
-                            positionMs = playback.positionMs,
-                            durationMs = progressDurationMs,
-                            sliceUiState = sliceUiState,
-                            onSeekTo = { viewModel.seekTo(it) },
-                            onCutPressed = { viewModel.onCutPressed(progressDurationMs) },
-                            onScrubbingChanged = { viewModel.setUserScrubbing(it) },
-                            onSelectSlice = { viewModel.selectSlice(it) },
-                            onLongPressSlice = {
-                                viewModel.selectSlice(it)
-                                showSliceSheet = true
-                            },
-                            onUpdateSliceRange = { sliceId, startMs, endMs ->
-                                viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
-                            },
-                            activeColor = accentColor,
-                            inactiveColor = accentColor.copy(alpha = 0.2f)
-                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .then(progressMotion)
+                        ) {
+                            PlayerProgress(
+                                positionMs = playback.positionMs,
+                                durationMs = progressDurationMs,
+                                sliceUiState = sliceUiState,
+                                onSeekTo = { viewModel.seekTo(it) },
+                                onCutPressed = { viewModel.onCutPressed(progressDurationMs) },
+                                onScrubbingChanged = { viewModel.setUserScrubbing(it) },
+                                onSelectSlice = { viewModel.selectSlice(it) },
+                                onLongPressSlice = {
+                                    viewModel.selectSlice(it)
+                                    showSliceSheet = true
+                                },
+                                onUpdateSliceRange = { sliceId, startMs, endMs ->
+                                    viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
+                                },
+                                activeColor = accentColor,
+                                inactiveColor = accentColor.copy(alpha = 0.2f)
+                            )
+                        }
                     }
 
                     PlaybackControls(
@@ -874,21 +1096,46 @@ fun NowPlayingScreen(
                             tagViewModel.openForMediaId(mediaId, fallback)
                         },
                         sliceUiState = sliceUiState,
+                        actionRowModifier = actionRowMotion,
+                        coreControlsModifier = controlsMotion,
                         primaryColor = accentColor,
                         onPrimaryColor = onAccentColor
                     )
 
                     VolumeControl(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .then(volumeMotion)
+                            .onGloballyPositioned { coordinates ->
+                                volumeControlBounds = coordinates.boundsInRoot()
+                            },
                         accentColor = accentColor,
                         viewModel = viewModel,
                         hardwareVolumeEventTick = hardwareVolumeEventTick,
                         audioOutputRouteKind = audioOutputRouteKind,
-                        warningSessionState = warningSessionState
+                        warningSessionState = warningSessionState,
+                        expanded = volumeControlExpanded,
+                        onExpandedChange = { volumeControlExpanded = it }
                     )
                 }
             }
-        }
+            }
+            }
+            } else {
+                NowPlayingLyricsSurface(
+                    isLandscape = isLandscape,
+                    playbackPositionMs = playback.positionMs,
+                    lyrics = lyricsState.lyrics,
+                    lyricColors = lyricColors,
+                    lyricsPageSettings = lyricsPageSettings,
+                    onSeekTo = { viewModel.seekTo(it) },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .then(routeTransition.nowPlayingMotionModifier(currentMotionLayout, NowPlayingMotionSlot.COVER))
+                )
+            }
+                }
+            }
         }
 
         val dialog = tagDialog
@@ -961,8 +1208,13 @@ fun NowPlayingScreen(
                             modifier = Modifier.padding(vertical = 18.dp)
                         )
                     } else {
+                        val sliceListState = rememberLazyListState()
                         LazyColumn(
-                            modifier = Modifier.fillMaxWidth().weight(1f, fill = true),
+                            state = sliceListState,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f, fill = true)
+                                .thinScrollbar(sliceListState),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             itemsIndexed(sliceUiState.slices, key = { _, s -> s.id }) { index, slice ->
@@ -1089,1485 +1341,12 @@ fun NowPlayingScreen(
                 }
             }
         }
-    }
-}
 
-@Composable
-private fun ArtworkBox(
-    isVideo: Boolean,
-    metadata: androidx.media3.common.MediaMetadata?,
-    viewModel: PlayerViewModel,
-    onOpenLyrics: () -> Unit,
-    edgeBlendEnabled: Boolean,
-    edgeBlendColor: Color,
-    videoBackdropColor: Color,
-    artworkAlignment: Alignment = Alignment.Center,
-    dragPreviewEnabled: Boolean = false,
-    dragPreviewState: CoverDragPreviewState? = null,
-    modifier: Modifier = Modifier
-) {
-    val shape = RoundedCornerShape(28.dp)
-    val hasArtwork = metadata?.artworkUri != null
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .coverDragPreviewGesture(
-                enabled = dragPreviewEnabled && dragPreviewState != null,
-                state = dragPreviewState ?: CoverDragPreviewState(),
-                minPointers = 2
-            )
-            .clip(shape)
-            .background(if (isVideo) videoBackdropColor else Color.Transparent)
-            .then(if (hasArtwork && !edgeBlendEnabled) Modifier.shadow(12.dp, shape) else Modifier)
-    ) {
-        if (isVideo) {
-            var fullscreen by rememberSaveable { mutableStateOf(false) }
-            val player = viewModel.playerOrNull()
-            if (!fullscreen) {
-                NowPlayingVideoPlayer(
-                    player = player,
-                    fullscreen = false,
-                    onToggleFullscreen = { fullscreen = true },
-                    viewKey = "inline",
-                    backdropColor = videoBackdropColor,
-                    modifier = Modifier.fillMaxSize().clipToBounds()
-                )
-            } else {
-                Box(modifier = Modifier.fillMaxSize().background(videoBackdropColor))
-            }
-            if (fullscreen) {
-                BackHandler { fullscreen = false }
-                Dialog(
-                    onDismissRequest = { fullscreen = false },
-                    properties = DialogProperties(usePlatformDefaultWidth = false)
-                ) {
-                    NowPlayingVideoPlayer(
-                        player = player,
-                        fullscreen = true,
-                        onToggleFullscreen = { fullscreen = false },
-                        viewKey = "fullscreen",
-                        backdropColor = videoBackdropColor,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            }
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable { onOpenLyrics() }
-            ) {
-                if (edgeBlendEnabled) {
-                    val artwork = metadata?.artworkUri
-                    if (artwork != null) {
-                        CoverArtworkEdgeBlend(
-                            artworkModel = artwork,
-                            blendColor = edgeBlendColor,
-                            modifier = Modifier.fillMaxSize(),
-                            artworkAlignment = artworkAlignment
-                        )
-                    } else {
-                        DiscPlaceholder(modifier = Modifier.fillMaxSize(), cornerRadius = 28)
-                    }
-                } else {
-                    AsmrAsyncImage(
-                        model = metadata?.artworkUri,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        alignment = artworkAlignment,
-                        placeholderCornerRadius = 28,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PlaybackControls(
-    playback: PlaybackSnapshot,
-    isFavorite: Boolean,
-    viewModel: PlayerViewModel,
-    onShowPlaylistPicker: () -> Unit,
-    onShowEqualizer: () -> Unit,
-    onManageTags: () -> Unit,
-    sliceUiState: SliceUiState,
-    modifier: Modifier = Modifier,
-    showActionRow: Boolean = true,
-    bottomPadding: Dp = 0.dp,
-    primaryColor: Color = AsmrTheme.colorScheme.primary,
-    onPrimaryColor: Color = AsmrTheme.colorScheme.onPrimary
-) {
-    val colorScheme = AsmrTheme.colorScheme
-    val currentMediaId = playback.currentMediaItem?.mediaId
-    var optimisticIsPlaying by remember { mutableStateOf<Boolean?>(null) }
-    var stableMediaId by remember { mutableStateOf<String?>(currentMediaId) }
-    val isPlayingEffective = optimisticIsPlaying ?: playback.isPlaying
-
-    LaunchedEffect(currentMediaId) {
-        if (currentMediaId != null && currentMediaId != stableMediaId) {
-            stableMediaId = currentMediaId
-            optimisticIsPlaying = null
-        } else if (stableMediaId == null && currentMediaId != null) {
-            stableMediaId = currentMediaId
-        }
-    }
-
-    LaunchedEffect(optimisticIsPlaying) {
-        if (optimisticIsPlaying != null) {
-            delay(1_500)
-            optimisticIsPlaying = null
-        }
-    }
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(if (showActionRow) 20.dp else 12.dp)
-    ) {
-        if (showActionRow) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(onClick = { viewModel.toggleFavorite() }) {
-                    Icon(
-                        imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = "喜欢",
-                        tint = if (isFavorite) Color.Red else colorScheme.onSurface.copy(alpha = 0.8f),
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                IconButton(onClick = onShowPlaylistPicker) {
-                    Icon(
-                        Icons.Outlined.PlaylistAdd,
-                        contentDescription = "添加到播放列表",
-                        tint = colorScheme.onSurface.copy(alpha = 0.8f),
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                val floatingEnabled by viewModel.floatingLyricsEnabled.collectAsState()
-                IconButton(onClick = { viewModel.toggleFloatingLyrics() }) {
-                    Icon(
-                        imageVector = Icons.Default.Subtitles,
-                        contentDescription = "悬浮歌词",
-                        tint = if (floatingEnabled) primaryColor else colorScheme.onSurface.copy(alpha = 0.8f),
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                IconButton(onClick = onManageTags) {
-                    Icon(
-                        imageVector = Icons.Default.Label,
-                        contentDescription = "标签管理",
-                        tint = colorScheme.onSurface.copy(alpha = 0.8f),
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                IconButton(onClick = onShowEqualizer) {
-                    Icon(
-                        imageVector = Icons.Default.Tune,
-                        contentDescription = "均衡器",
-                        tint = colorScheme.onSurface.copy(alpha = 0.8f),
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                val sliceEnabled = sliceUiState.sliceModeEnabled
-                val targetBg = if (sliceEnabled) primaryColor.copy(alpha = 0.18f) else Color.Transparent
-                val bg by animateColorAsState(targetValue = targetBg, animationSpec = tween(240, easing = FastOutSlowInEasing), label = "sliceModeBg")
-                val baseTint = colorScheme.onSurface.copy(alpha = 0.8f)
-                val tint by animateColorAsState(
-                    targetValue = if (sliceEnabled) primaryColor else baseTint,
-                    animationSpec = tween(240, easing = FastOutSlowInEasing),
-                    label = "sliceModeTint"
-                )
-                Surface(
-                    color = bg,
-                    contentColor = tint,
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    IconButton(onClick = { viewModel.toggleSliceMode() }) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_segment),
-                            contentDescription = "切片播放",
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                }
-            }
-        }
-
-        // 第二行：核心控制按钮
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = if (showActionRow) {
-                Arrangement.SpaceBetween
-            } else {
-                Arrangement.spacedBy(25.dp, Alignment.CenterHorizontally)
-            },
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = { viewModel.cyclePlayMode() }) {
-                val icon = when {
-                    playback.shuffleEnabled -> Icons.Default.Shuffle
-                    playback.repeatMode == Player.REPEAT_MODE_ONE -> Icons.Default.RepeatOne
-                    else -> Icons.Default.Repeat
-                }
-                Icon(
-                    icon,
-                    contentDescription = "播放模式",
-                    tint = colorScheme.onSurface,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-
-            IconButton(onClick = { viewModel.previous() }) {
-                Icon(
-                    Icons.Default.SkipPrevious,
-                    contentDescription = "上一首",
-                    tint = colorScheme.onSurface,
-                    modifier = Modifier.size(36.dp)
-                )
-            }
-
-            val playButtonCorner by animateDpAsState(
-                targetValue = if (isPlayingEffective) 24.dp else 36.dp,
-                animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-                label = "playButtonCorner"
-            )
-            val playButtonInteractionSource = remember { MutableInteractionSource() }
-            Surface(
-                modifier = Modifier.size(72.dp),
-                shape = RoundedCornerShape(playButtonCorner),
-                color = primaryColor,
-                contentColor = onPrimaryColor
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clickable(
-                            interactionSource = playButtonInteractionSource,
-                            indication = null
-                        ) {
-                            optimisticIsPlaying = !(optimisticIsPlaying ?: playback.isPlaying)
-                            viewModel.togglePlayPause()
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    AnimatedContent(
-                        targetState = isPlayingEffective,
-                        transitionSpec = {
-                            (fadeIn(tween(durationMillis = 120)) + scaleIn(tween(durationMillis = 120), initialScale = 0.9f)) togetherWith
-                                (fadeOut(tween(durationMillis = 90)) + scaleOut(tween(durationMillis = 90), targetScale = 1.05f))
-                        },
-                        label = "play_pause_icon"
-                    ) { playing ->
-                        Icon(
-                            imageVector = if (playing) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = "播放/暂停",
-                            modifier = Modifier.size(36.dp)
-                        )
-                    }
-                }
-            }
-
-            IconButton(onClick = { viewModel.next() }) {
-                Icon(
-                    Icons.Default.SkipNext,
-                    contentDescription = "下一首",
-                    tint = colorScheme.onSurface,
-                    modifier = Modifier.size(36.dp)
-                )
-            }
-
-            IconButton(onClick = { viewModel.seekForward10s() }) {
-                Icon(
-                    Icons.Default.FastForward,
-                    contentDescription = "快进10秒",
-                    tint = colorScheme.onSurface,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-        }
-    }
-}
-
-@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-@Composable
-private fun NowPlayingVideoPlayer(
-    player: Player?,
-    fullscreen: Boolean,
-    onToggleFullscreen: () -> Unit,
-    viewKey: String,
-    backdropColor: Color,
-    modifier: Modifier = Modifier
-) {
-    var playerView by remember { mutableStateOf<PlayerView?>(null) }
-    DisposableEffect(viewKey) {
-        onDispose {
-            playerView?.player = null
-            playerView = null
-        }
-    }
-
-    Box(
-        modifier = modifier
-            .background(if (fullscreen) backdropColor else Color.Transparent)
-    ) {
-        key(viewKey) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { context ->
-                    val pv = LayoutInflater.from(context)
-                        .inflate(R.layout.view_now_playing_video_player, null, false) as PlayerView
-                    pv.also {
-                        pv.useController = false
-                        pv.player = player
-                        pv.resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        pv.setShutterBackgroundColor(backdropColor.toArgb())
-                        playerView = pv
-                    }
-                },
-                update = { view ->
-                    if (view.player !== player) view.player = player
-                }
-            )
-        }
-
-        IconButton(
-            onClick = onToggleFullscreen,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(10.dp)
-                .background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(10.dp))
-        ) {
-            Icon(
-                imageVector = if (fullscreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
-                contentDescription = if (fullscreen) "退出全屏" else "全屏",
-                tint = Color.White
+        if (volumeControlExpanded) {
+            DismissOutsideBoundsOverlay(
+                targetBoundsInRoot = volumeControlBounds,
+                onDismiss = { volumeControlExpanded = false }
             )
         }
     }
-}
-
-@Composable
-private fun rememberPlayerVideoAspectRatio(player: Player?, default: Float = 16f / 9f): Float {
-    var ratio by remember(player) { mutableFloatStateOf(default) }
-
-    DisposableEffect(player) {
-        if (player == null) return@DisposableEffect onDispose { }
-
-        fun update(videoSize: VideoSize) {
-            val w = videoSize.width
-            val h = videoSize.height
-            val pixelRatio = videoSize.pixelWidthHeightRatio.takeIf { it > 0f } ?: 1f
-            val computed = if (w > 0 && h > 0) (w.toFloat() * pixelRatio) / h.toFloat() else default
-            ratio = computed.coerceIn(0.5f, 3.0f)
-        }
-
-        val listener = object : Player.Listener {
-            override fun onVideoSizeChanged(videoSize: VideoSize) {
-                update(videoSize)
-            }
-        }
-
-        update(player.videoSize)
-        player.addListener(listener)
-        onDispose { player.removeListener(listener) }
-    }
-
-    return ratio
-}
-
-private tailrec fun Context.findActivity(): Activity? {
-    return when (this) {
-        is Activity -> this
-        is ContextWrapper -> baseContext.findActivity()
-        else -> null
-    }
-}
-
-@Composable
-private fun SingleLineLyrics(
-    lyrics: List<SubtitleEntry>,
-    currentPosition: Long,
-    onOpenLyrics: () -> Unit,
-    colors: LyricReadableColors,
-    modifier: Modifier = Modifier,
-) {
-    val sortedLyrics = remember(lyrics) {
-        var last = Long.MIN_VALUE
-        var sorted = true
-        for (i in lyrics.indices) {
-            val v = lyrics[i].startMs
-            if (v < last) {
-                sorted = false
-                break
-            }
-            last = v
-        }
-        if (sorted) lyrics else lyrics.sortedBy { it.startMs }
-    }
-    val indexFinder = remember(sortedLyrics) { SubtitleIndexFinder(sortedLyrics) }
-    val activeIndex = remember(currentPosition, indexFinder, sortedLyrics) {
-        if (sortedLyrics.isEmpty()) return@remember -1
-        val idx = indexFinder.findActiveIndex(currentPosition)
-        if (idx >= 0) idx else 0
-    }
-    val currentLine = remember(sortedLyrics, activeIndex) {
-        sortedLyrics.getOrNull(activeIndex)
-    }
-    val currentText = remember(currentLine) {
-        val raw = currentLine?.text
-        if (raw == null) {
-            "暂无歌词"
-        } else {
-            normalizeSingleLineText(raw).ifBlank { " " }
-        }
-    }
-    val lineDuration = remember(currentLine) {
-        if (currentLine != null) (currentLine.endMs - currentLine.startMs).coerceAtLeast(0L) else 0L
-    }
-
-    Column(
-        modifier = modifier
-            .clickable { onOpenLyrics() }
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        AnimatedLyricLine(
-            text = currentText,
-            durationMs = lineDuration,
-            colors = colors,
-            fontWeight = FontWeight.ExtraBold,
-            modifier = Modifier.fillMaxWidth()
-        )
-        Box(
-            modifier = Modifier
-                .width(52.dp)
-                .height(2.dp)
-                .clip(RoundedCornerShape(percent = 50))
-                .background(colors.accentEmphasis.copy(alpha = if (AsmrTheme.colorScheme.isDark) 0.72f else 0.56f))
-        )
-    }
-}
-
-@OptIn(ExperimentalAnimationApi::class, ExperimentalFoundationApi::class)
-@Composable
-private fun AnimatedLyricLine(
-    text: String,
-    durationMs: Long,
-    colors: LyricReadableColors,
-    fontWeight: FontWeight,
-    modifier: Modifier = Modifier
-) {
-    AnimatedContent(
-        targetState = text,
-        transitionSpec = {
-            ContentTransform(
-                targetContentEnter = slideInVertically(animationSpec = tween(600)) { it } + fadeIn(animationSpec = tween(600)),
-                initialContentExit = slideOutVertically(animationSpec = tween(600)) { -it } + fadeOut(animationSpec = tween(600)),
-                sizeTransform = null
-            )
-        },
-        label = "lyricLine"
-    ) { target ->
-        SlowMarqueeText(
-            text = target,
-            durationMs = durationMs,
-            style = MaterialTheme.typography.titleMedium,
-            colors = colors,
-            fontWeight = fontWeight,
-            modifier = modifier
-        )
-    }
-}
-
-@Composable
-@OptIn(ExperimentalFoundationApi::class)
-private fun SlowMarqueeText(
-    text: String,
-    durationMs: Long,
-    style: androidx.compose.ui.text.TextStyle,
-    colors: LyricReadableColors,
-    fontWeight: FontWeight,
-    modifier: Modifier = Modifier
-) {
-    val singleLine = remember(text) { normalizeSingleLineText(text) }
-    val content = singleLine.ifBlank { " " }
-    val colorScheme = AsmrTheme.colorScheme
-    val shadow = Shadow(
-        color = colors.accentEmphasis.copy(alpha = if (colorScheme.isDark) 0.28f else 0.18f),
-        offset = Offset.Zero,
-        blurRadius = if (colorScheme.isDark) 14f else 10f
-    )
-    
-    val textMeasurer = androidx.compose.ui.text.rememberTextMeasurer()
-    val textLayoutResult = remember(content, style, fontWeight) {
-        textMeasurer.measure(
-            text = androidx.compose.ui.text.AnnotatedString(content),
-            style = style.copy(fontWeight = fontWeight)
-        )
-    }
-    val textWidth = remember(textLayoutResult) { textLayoutResult.size.width }
-
-    BoxWithConstraints(
-        modifier = modifier.fillMaxWidth().clipToBounds(),
-        contentAlignment = Alignment.Center
-    ) {
-        val containerWidth = constraints.maxWidth
-        val velocity = remember(textWidth, containerWidth, durationMs) {
-            if (textWidth <= containerWidth) {
-                30.dp // Default slow velocity if no scroll needed
-            } else {
-                val distancePx = (textWidth - containerWidth).toFloat()
-                // Target time: Duration - 1s (buffer)
-                val targetTimeSeconds = (durationMs - 1000).coerceAtLeast(2000) / 1000f
-                // Velocity = Distance / Time. basicMarquee expects Dp (implicitly Dp/s).
-                // We need to convert px/s to dp/s.
-                // 1 dp = density * px. 1 px = 1/density dp.
-                // Wait, velocity in basicMarquee is Dp. It means Dp per second.
-                // So: velocityDp = (distancePx / density) / timeSeconds
-                // Actually we can't easily access density here inside remember block without LocalDensity
-                // But we can do it outside.
-                null // Return null to signal calculation needed
-            }
-        }
-        
-        val density = LocalDensity.current
-        val finalVelocity = remember(velocity, density, textWidth, containerWidth, durationMs) {
-             velocity ?: run {
-                 val distancePx = (textWidth - containerWidth).toFloat()
-                 val targetTimeSeconds = (durationMs - 1000).coerceAtLeast(2000) / 1000f
-                 val distanceDp = with(density) { distancePx.toDp() }
-                 // BasicMarquee velocity is in Dp/s.
-                 // We want to cover 'distanceDp' in 'targetTimeSeconds'.
-                 // BUT basicMarquee scrolls the WHOLE content width + gap?
-                 // No, basicMarquee scrolls until the end is visible, then repeats.
-                 // The distance it travels is (ContentWidth - ContainerWidth) per cycle?
-                 // Actually basicMarquee behavior:
-                 // It scrolls the content.
-                 // If velocity is 50.dp, it moves 50dp per second.
-                 // We want to finish the scroll in `targetTimeSeconds`.
-                 // So velocity = distanceDp / targetTimeSeconds.
-                 // We add a small buffer to velocity to ensure it finishes.
-                 (distanceDp / targetTimeSeconds)
-             }
-        }
-
-        Text(
-            text = content,
-            style = style.copy(
-                fontWeight = fontWeight,
-                shadow = shadow
-            ),
-            color = colors.activeText,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Clip,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 2.dp)
-                .basicMarquee(
-                    iterations = Int.MAX_VALUE,
-                    velocity = finalVelocity.coerceAtLeast(10.dp)
-                )
-        )
-    }
-}
-
-private fun normalizeSingleLineText(text: String): String {
-    return text
-        .replace('\uFEFF', ' ')
-        .replace('\r', ' ')
-        .replace('\n', ' ')
-        .replace('\t', ' ')
-        .replace(Regex("""\s+"""), " ")
-        .trim()
-}
-
-@Composable
-@OptIn(ExperimentalFoundationApi::class)
-private fun VolumeControl(
-    modifier: Modifier = Modifier,
-    accentColor: Color,
-    viewModel: PlayerViewModel,
-    hardwareVolumeEventTick: Long,
-    audioOutputRouteKind: AudioOutputRouteKind,
-    warningSessionState: AppVolumeWarningSessionState
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val volume by viewModel.appVolumePercent.collectAsState()
-    var lastNonZeroVolume by remember { mutableIntStateOf(AppVolume.DefaultPercent) }
-    var lastInteractionAt by remember { mutableLongStateOf(0L) }
-    var hasObservedInitialHardwareVolumeEventTick by remember { mutableStateOf(false) }
-    var lastHandledHardwareVolumeEventTick by remember { mutableLongStateOf(0L) }
-    val protectedVolumeChangeState = rememberProtectedAppVolumeChangeState(
-        warningSessionState = warningSessionState,
-        onApplyVolumeChange = { next ->
-            if (next > 0) lastNonZeroVolume = next
-            viewModel.setAppVolumePercent(next)
-        }
-    )
-
-    LaunchedEffect(volume) {
-        if (volume > 0) lastNonZeroVolume = volume
-    }
-
-    LaunchedEffect(hardwareVolumeEventTick) {
-        if (!hasObservedInitialHardwareVolumeEventTick) {
-            lastHandledHardwareVolumeEventTick = hardwareVolumeEventTick
-            hasObservedInitialHardwareVolumeEventTick = true
-            return@LaunchedEffect
-        }
-        if (hardwareVolumeEventTick <= 0L) return@LaunchedEffect
-        if (hardwareVolumeEventTick == lastHandledHardwareVolumeEventTick) return@LaunchedEffect
-        lastHandledHardwareVolumeEventTick = hardwareVolumeEventTick
-        expanded = true
-        lastInteractionAt = SystemClock.elapsedRealtime()
-    }
-
-    fun setVolume(newVolume: Int) {
-        val next = AppVolume.clampPercent(newVolume)
-        if (next > 0) lastNonZeroVolume = next
-        viewModel.setAppVolumePercent(next)
-    }
-
-    fun requestVolumeChange(newVolume: Int, source: com.asmr.player.playback.AppVolumeChangeSource) {
-        protectedVolumeChangeState.requestVolumeChange(
-            currentPercent = volume,
-            targetPercent = newVolume,
-            source = source
-        )
-    }
-
-    LaunchedEffect(expanded, lastInteractionAt) {
-        if (!expanded) return@LaunchedEffect
-        val snapshot = lastInteractionAt
-        delay(3_000)
-        if (expanded && lastInteractionAt == snapshot) {
-            expanded = false
-        }
-    }
-
-    val colorScheme = AsmrTheme.colorScheme
-    val isMuted = volume == 0
-    val icon = volumeRouteIcon(
-        routeKind = audioOutputRouteKind,
-        isMuted = isMuted
-    )
-
-    AnimatedContent(
-        targetState = expanded,
-        transitionSpec = {
-            fadeIn(animationSpec = tween(180)) togetherWith fadeOut(animationSpec = tween(120))
-        },
-        label = "volume_control"
-    ) { isExpanded ->
-        if (!isExpanded) {
-            Row(
-                modifier = modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 6.dp)
-                    .combinedClickable(
-                        onClick = {
-                            if (volume > 0) {
-                                setVolume(0)
-                            } else {
-                                setVolume(lastNonZeroVolume.coerceAtLeast(AppVolume.StepPercent))
-                            }
-                        },
-                        onLongClick = {
-                            expanded = true
-                            lastInteractionAt = SystemClock.elapsedRealtime()
-                        }
-                    ),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = accentColor,
-                    modifier = Modifier.size(22.dp)
-                )
-                Spacer(modifier = Modifier.width(10.dp))
-                Text(
-                    text = "长按调整音量",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colorScheme.textTertiary
-                )
-            }
-        } else {
-            Column(
-                modifier = modifier
-                    .fillMaxWidth()
-                    .padding(top = 6.dp, bottom = 2.dp)
-                    .animateContentSize(),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                    tint = accentColor,
-                        modifier = Modifier
-                            .size(20.dp)
-                            .combinedClickable(
-                                onClick = {
-                                    if (volume > 0) {
-                                        setVolume(0)
-                                    } else {
-                                        setVolume(lastNonZeroVolume.coerceAtLeast(AppVolume.StepPercent))
-                                    }
-                                    lastInteractionAt = SystemClock.elapsedRealtime()
-                                },
-                                onLongClick = {}
-                            )
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "音量",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colorScheme.textTertiary
-                    )
-                    Spacer(modifier = Modifier.weight(1f))
-                    Text(
-                        text = "${AppVolume.clampPercent(volume)}%",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colorScheme.textTertiary
-                    )
-                }
-
-                AppVolumeSlider(
-                    valuePercent = volume,
-                    onValueChange = { newVol, source ->
-                        if (newVol != volume) {
-                            requestVolumeChange(newVol, source)
-                        }
-                        lastInteractionAt = SystemClock.elapsedRealtime()
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    accentColor = accentColor,
-                    onInteractionActiveChanged = {
-                        lastInteractionAt = SystemClock.elapsedRealtime()
-                    }
-                )
-            }
-        }
-    }
-    AppVolumeHearingWarningDialog(state = protectedVolumeChangeState)
-}
-
-// AdaptiveLyricsView has been replaced by AppleLyricsView
-
-@Composable
-private fun PlayerProgress(
-    positionMs: Long,
-    durationMs: Long,
-    sliceUiState: SliceUiState,
-    onSeekTo: (Long) -> Unit,
-    onCutPressed: () -> Unit,
-    onScrubbingChanged: (Boolean) -> Unit,
-    onSelectSlice: (Long?) -> Unit,
-    onLongPressSlice: (Long) -> Unit,
-    onUpdateSliceRange: (sliceId: Long, startMs: Long, endMs: Long) -> Unit,
-    activeColor: Color,
-    inactiveColor: Color
-) {
-    val colorScheme = AsmrTheme.colorScheme
-    val safeDuration = durationMs.coerceAtLeast(0L)
-    val safePosition = positionMs.coerceIn(0L, safeDuration.takeIf { it > 0 } ?: Long.MAX_VALUE)
-    var isDragging by remember { mutableStateOf(false) }
-    var dragFraction by remember { mutableFloatStateOf(0f) }
-    var pendingSeekMs by remember { mutableLongStateOf(-1L) }
-
-    LaunchedEffect(safePosition, pendingSeekMs) {
-        if (pendingSeekMs >= 0L && abs(safePosition - pendingSeekMs) <= 500L) {
-            pendingSeekMs = -1L
-        }
-    }
-
-    val effectivePosition = if (!isDragging && pendingSeekMs >= 0L && safeDuration > 0L) {
-        pendingSeekMs.coerceIn(0L, safeDuration)
-    } else {
-        safePosition
-    }
-    val safeFraction = remember(effectivePosition, safeDuration) {
-        if (safeDuration > 0L) (effectivePosition.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f) else 0f
-    }
-    val rangeDuration = safeDuration
-    val highlightedSliceId = currentSliceIdForPosition(
-        positionMs = effectivePosition,
-        slices = sliceUiState.slices,
-        sliceModeEnabled = sliceUiState.sliceModeEnabled
-    )
-    val sliderValue = if (isDragging) dragFraction else safeFraction
-    val displayPosition = if (isDragging && rangeDuration > 0L) {
-        (sliderValue.toDouble() * rangeDuration.toDouble()).roundToLong().coerceIn(0L, rangeDuration)
-    } else {
-        effectivePosition
-    }
-
-    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            SliceScrubbableSeekBar(
-                enabled = rangeDuration > 0L,
-                fraction = sliderValue.coerceIn(0f, 1f),
-                rangeDurationMs = rangeDuration,
-                activeColor = activeColor,
-                inactiveColor = inactiveColor,
-                slices = sliceUiState.slices,
-                tempStartMs = sliceUiState.tempStartMs,
-                highlightedSliceId = highlightedSliceId,
-                selectedSliceId = sliceUiState.selectedSliceId,
-                onSelectSlice = onSelectSlice,
-                onLongPressSlice = onLongPressSlice,
-                onEditCommit = onUpdateSliceRange,
-                onGestureActiveChanged = onScrubbingChanged,
-                modifier = Modifier.weight(1f),
-                onScrubStart = { f ->
-                    onScrubbingChanged(true)
-                    isDragging = true
-                    dragFraction = f
-                },
-                onScrub = { f ->
-                    isDragging = true
-                    dragFraction = f
-                },
-                onScrubStop = { f ->
-                    if (rangeDuration > 0L) {
-                        val seekMs = (f.toDouble() * rangeDuration.toDouble()).roundToLong().coerceIn(0L, rangeDuration)
-                        pendingSeekMs = seekMs
-                        onSeekTo(seekMs)
-                    }
-                    isDragging = false
-                    onScrubbingChanged(false)
-                }
-            )
-            IconButton(onClick = onCutPressed, enabled = rangeDuration > 0L) {
-                Icon(
-                    imageVector = Icons.Outlined.ContentCut,
-                    contentDescription = "Cut",
-                    tint = if (sliceUiState.tempStartMs != null) activeColor else colorScheme.onSurface.copy(alpha = 0.85f),
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-        }
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                Formatting.formatTrackTime(displayPosition),
-                modifier = Modifier.widthIn(min = 45.dp),
-                style = MaterialTheme.typography.labelSmall,
-                color = colorScheme.textTertiary,
-                textAlign = TextAlign.Start
-            )
-            Spacer(modifier = Modifier.weight(1f))
-            Text(
-                Formatting.formatTrackTime(rangeDuration),
-                modifier = Modifier.widthIn(min = 45.dp),
-                style = MaterialTheme.typography.labelSmall,
-                color = colorScheme.textTertiary,
-                textAlign = TextAlign.End
-            )
-        }
-    }
-}
-
-@Composable
-private fun SliceScrubbableSeekBar(
-    enabled: Boolean,
-    fraction: Float,
-    rangeDurationMs: Long,
-    activeColor: Color,
-    inactiveColor: Color,
-    slices: List<com.asmr.player.domain.model.Slice>,
-    tempStartMs: Long?,
-    highlightedSliceId: Long?,
-    selectedSliceId: Long?,
-    onSelectSlice: (Long?) -> Unit,
-    onLongPressSlice: (Long) -> Unit,
-    onEditCommit: (sliceId: Long, startMs: Long, endMs: Long) -> Unit,
-    onGestureActiveChanged: (Boolean) -> Unit,
-    modifier: Modifier = Modifier,
-    onScrubStart: (Float) -> Unit,
-    onScrub: (Float) -> Unit,
-    onScrubStop: (Float) -> Unit
-) {
-    val f = fraction.coerceIn(0f, 1f)
-    var lastFraction by remember(f) { mutableFloatStateOf(f) }
-
-    val thumbRadius = 8.dp
-    val trackHeight = 4.dp
-    val density = LocalDensity.current
-    val tooltipTextSizePx = remember(density) { with(density) { 12.sp.toPx() } }
-    val tooltipPadX = remember(density) { with(density) { 8.dp.toPx() } }
-    val tooltipPadY = remember(density) { with(density) { 6.dp.toPx() } }
-    val tooltipRadius = remember(density) { with(density) { 10.dp.toPx() } }
-    val tooltipTextPaint = remember(tooltipTextSizePx) {
-        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-            textSize = tooltipTextSizePx
-        }
-    }
-
-    val sliceBorderPx = remember(density) { with(density) { 0.9.dp.toPx() } }
-    val selectedSliceExtraHeightPx = remember(density) { with(density) { 3.dp.toPx() } }
-    val selectedSliceBorderPx = remember(density) { with(density) { 1.25.dp.toPx() } }
-    val tempMarkerWidthPx = remember(density) { with(density) { 3.dp.toPx() } }
-    val tempMarkerHeightPx = remember(density) { with(density) { 16.dp.toPx() } }
-
-    val selectedSlice = remember(selectedSliceId, slices) {
-        val id = selectedSliceId ?: return@remember null
-        slices.firstOrNull { it.id == id }
-    }
-    var editStartMs by remember(selectedSlice?.id, selectedSlice?.startMs) {
-        mutableLongStateOf(selectedSlice?.startMs ?: 0L)
-    }
-    var editEndMs by remember(selectedSlice?.id, selectedSlice?.endMs) {
-        mutableLongStateOf(selectedSlice?.endMs ?: 0L)
-    }
-    var tooltipMs by remember { mutableLongStateOf(-1L) }
-    var tooltipX by remember { mutableFloatStateOf(0f) }
-    var tooltipY by remember { mutableFloatStateOf(0f) }
-
-    val inHighlightedSlice = highlightedSliceId != null
-
-    Canvas(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(32.dp)
-            .pointerInput(enabled, rangeDurationMs, slices, selectedSliceId) {
-                if (!enabled) return@pointerInput
-                val thumbRadiusPx = thumbRadius.toPx()
-                detectTapGestures(
-                    onTap = { offset ->
-                        val w = size.width.toFloat()
-                        val startX = thumbRadiusPx
-                        val endX = (w - thumbRadiusPx).coerceAtLeast(startX)
-                        val nf = if (endX > startX) {
-                            ((offset.x - startX) / (endX - startX)).coerceIn(0f, 1f)
-                        } else 0f
-                        onScrubStart(nf)
-                        onScrubStop(nf)
-                    },
-                    onLongPress = { offset ->
-                        val w = size.width.toFloat()
-                        val startX = thumbRadiusPx
-                        val endX = (w - thumbRadiusPx).coerceAtLeast(startX)
-                        val nf = if (endX > startX) {
-                            ((offset.x - startX) / (endX - startX)).coerceIn(0f, 1f)
-                        } else 0f
-                        if (rangeDurationMs <= 0L) return@detectTapGestures
-                        val ms = (nf.toDouble() * rangeDurationMs.toDouble()).roundToLong().coerceIn(0L, rangeDurationMs)
-                        val hit = slices
-                            .asSequence()
-                            .filter { s -> ms >= s.startMs && ms <= s.endMs }
-                            .maxByOrNull { it.id }
-                        if (hit != null) {
-                            onSelectSlice(hit.id)
-                            onLongPressSlice(hit.id)
-                        }
-                    }
-                )
-            }
-            .pointerInput(enabled, rangeDurationMs, slices, selectedSliceId) {
-                if (!enabled) return@pointerInput
-                val thumbRadiusPx = thumbRadius.toPx()
-                val hitRadiusPx = 16.dp.toPx()
-                var mode = 0
-                detectDragGestures(
-                    onDragStart = { offset ->
-                        val w = size.width.toFloat()
-                        val startX = thumbRadiusPx
-                        val endX = (w - thumbRadiusPx).coerceAtLeast(startX)
-                        fun toFraction(x: Float): Float {
-                            return if (endX > startX) ((x - startX) / (endX - startX)).coerceIn(0f, 1f) else 0f
-                        }
-                        val nf = toFraction(offset.x)
-                        val sel = selectedSlice
-                        mode = 0
-                        if (sel != null && rangeDurationMs > 0L) {
-                            val selStartX = startX + (endX - startX) * (sel.startMs.toFloat() / rangeDurationMs.toFloat()).coerceIn(0f, 1f)
-                            val selEndX = startX + (endX - startX) * (sel.endMs.toFloat() / rangeDurationMs.toFloat()).coerceIn(0f, 1f)
-                            mode = when {
-                                kotlin.math.abs(offset.x - selStartX) <= hitRadiusPx -> 1
-                                kotlin.math.abs(offset.x - selEndX) <= hitRadiusPx -> 2
-                                else -> 0
-                            }
-                        }
-                        onGestureActiveChanged(true)
-                        if (mode == 0) {
-                            lastFraction = nf
-                            onScrubStart(nf)
-                        } else {
-                            tooltipMs = if (mode == 1) editStartMs else editEndMs
-                            tooltipX = offset.x
-                            tooltipY = offset.y
-                        }
-                    },
-                    onDrag = { change, _ ->
-                        val w = size.width.toFloat()
-                        val startX = thumbRadiusPx
-                        val endX = (w - thumbRadiusPx).coerceAtLeast(startX)
-                        val nf = if (endX > startX) {
-                            ((change.position.x - startX) / (endX - startX)).coerceIn(0f, 1f)
-                        } else 0f
-                        lastFraction = nf
-                        if (mode == 0) {
-                            onScrub(nf)
-                        } else if (rangeDurationMs > 0L) {
-                            val ms = (nf.toDouble() * rangeDurationMs.toDouble()).roundToLong().coerceIn(0L, rangeDurationMs)
-                            if (mode == 1) {
-                                editStartMs = ms
-                            } else {
-                                editEndMs = ms
-                            }
-                            tooltipMs = ms
-                            tooltipX = change.position.x
-                            tooltipY = change.position.y
-                        }
-                    },
-                    onDragCancel = {
-                        tooltipMs = -1L
-                        mode = 0
-                        onGestureActiveChanged(false)
-                        onScrubStop(lastFraction)
-                    },
-                    onDragEnd = {
-                        val sel = selectedSlice
-                        if (mode == 0) {
-                            onScrubStop(lastFraction)
-                        } else if (sel != null) {
-                            val start = editStartMs
-                            val end = editEndMs
-                            if (end > start) {
-                                onEditCommit(sel.id, start, end)
-                            } else {
-                                editStartMs = sel.startMs
-                                editEndMs = sel.endMs
-                            }
-                        }
-                        tooltipMs = -1L
-                        mode = 0
-                        onGestureActiveChanged(false)
-                    }
-                )
-            }
-    ) {
-        val width = size.width
-        val height = size.height
-        if (width <= 0f || height <= 0f) return@Canvas
-
-        val trackHeightPx = trackHeight.toPx()
-        val thumbRadiusPx = thumbRadius.toPx()
-        val centerY = height / 2f
-        val startX = thumbRadiusPx
-        val endX = (width - thumbRadiusPx).coerceAtLeast(startX)
-        val x = if (endX > startX) {
-            startX + (endX - startX) * f
-        } else {
-            startX
-        }
-
-        val sliceHeightPx = (trackHeightPx * 2.35f).coerceAtLeast(trackHeightPx + 3.dp.toPx())
-        val tooltipAnchorHeightPx = sliceHeightPx + selectedSliceExtraHeightPx
-
-        drawLine(
-            color = inactiveColor,
-            start = Offset(startX, centerY),
-            end = Offset(endX, centerY),
-            strokeWidth = trackHeightPx,
-            cap = androidx.compose.ui.graphics.StrokeCap.Round
-        )
-
-        if (rangeDurationMs > 0L) {
-            val span = (endX - startX).coerceAtLeast(1f)
-            for (s in slices) {
-                val sf = (s.startMs.toFloat() / rangeDurationMs.toFloat()).coerceIn(0f, 1f)
-                val ef = (s.endMs.toFloat() / rangeDurationMs.toFloat()).coerceIn(0f, 1f)
-                val sx = startX + span * sf
-                val ex = startX + span * ef
-                val w = (ex - sx).coerceAtLeast(1f)
-                val isSelected = s.id == selectedSliceId
-                val isHighlighted = s.id == highlightedSliceId
-                val visualHeightPx = if (isSelected) sliceHeightPx + selectedSliceExtraHeightPx else sliceHeightPx
-                val sliceTop = centerY - visualHeightPx / 2f
-                val sliceCorner = visualHeightPx / 2f
-                val fillAlpha = when {
-                    isSelected -> 0.42f
-                    isHighlighted -> 0.28f
-                    else -> 0.16f
-                }
-                val borderAlpha = when {
-                    isSelected -> 0.82f
-                    isHighlighted -> 0.40f
-                    else -> 0.22f
-                }
-                val borderWidthPx = if (isSelected) selectedSliceBorderPx else sliceBorderPx
-                drawRoundRect(
-                    color = activeColor.copy(alpha = fillAlpha),
-                    topLeft = Offset(sx, sliceTop),
-                    size = Size(w, visualHeightPx),
-                    cornerRadius = CornerRadius(sliceCorner, sliceCorner)
-                )
-                drawRoundRect(
-                    color = activeColor.copy(alpha = borderAlpha),
-                    topLeft = Offset(sx, sliceTop),
-                    size = Size(w, visualHeightPx),
-                    cornerRadius = CornerRadius(sliceCorner, sliceCorner),
-                    style = Stroke(width = borderWidthPx)
-                )
-            }
-
-            val tmp = tempStartMs
-            if (tmp != null) {
-                val tf = (tmp.toFloat() / rangeDurationMs.toFloat()).coerceIn(0f, 1f)
-                val tx = startX + span * tf
-                drawRoundRect(
-                    color = activeColor.copy(alpha = 0.92f),
-                    topLeft = Offset(tx - tempMarkerWidthPx / 2f, centerY - tempMarkerHeightPx / 2f),
-                    size = Size(tempMarkerWidthPx, tempMarkerHeightPx),
-                    cornerRadius = CornerRadius(tempMarkerWidthPx, tempMarkerWidthPx)
-                )
-            }
-        }
-        drawLine(
-            color = if (inHighlightedSlice) activeColor else activeColor.copy(alpha = 0.85f),
-            start = Offset(startX, centerY),
-            end = Offset(x, centerY),
-            strokeWidth = trackHeightPx,
-            cap = androidx.compose.ui.graphics.StrokeCap.Round
-        )
-        drawCircle(
-            color = activeColor,
-            radius = thumbRadiusPx,
-            center = Offset(x, centerY)
-        )
-        drawCircle(
-            color = Color.White.copy(alpha = 0.85f),
-            radius = (thumbRadiusPx * 0.45f).coerceAtLeast(1f),
-            center = Offset(x, centerY)
-        )
-
-        if (tooltipMs >= 0L) {
-            val t = Formatting.formatTrackTime(tooltipMs)
-            val textWidth = tooltipTextPaint.measureText(t).coerceAtLeast(1f)
-            val boxW = textWidth + tooltipPadX * 2f
-            val boxH = tooltipTextSizePx + tooltipPadY * 2f
-            val bx = (tooltipX - boxW / 2f).coerceIn(0f, width - boxW)
-            val by = (centerY - tooltipAnchorHeightPx / 2f - boxH - 6.dp.toPx()).coerceAtLeast(0f)
-            drawRoundRect(
-                color = Color.Black.copy(alpha = 0.55f),
-                topLeft = Offset(bx, by),
-                size = Size(boxW, boxH),
-                cornerRadius = CornerRadius(tooltipRadius, tooltipRadius)
-            )
-            drawIntoCanvas { canvas ->
-                tooltipTextPaint.color = android.graphics.Color.WHITE
-                canvas.nativeCanvas.drawText(
-                    t,
-                    bx + tooltipPadX,
-                    by + tooltipPadY + tooltipTextSizePx * 0.82f,
-                    tooltipTextPaint
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun SliceOverviewBar(
-    positionMs: Long,
-    durationMs: Long,
-    slices: List<com.asmr.player.domain.model.Slice>,
-    highlightedSliceId: Long?,
-    selectedSliceId: Long?,
-    activeColor: Color,
-    inactiveColor: Color,
-    onSeekTo: (Long) -> Unit,
-    onSelectSlice: (Long?) -> Unit,
-    onLongPressSlice: (Long) -> Unit
-) {
-    val safeDuration = durationMs.coerceAtLeast(0L)
-    val safePosition = positionMs.coerceIn(0L, safeDuration.takeIf { it > 0 } ?: Long.MAX_VALUE)
-    val fraction = remember(safePosition, safeDuration) {
-        if (safeDuration > 0L) (safePosition.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f) else 0f
-    }
-    val thumbRadius = 7.dp
-    val trackHeight = 3.dp
-
-    Canvas(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(28.dp)
-            .pointerInput(safeDuration, slices) {
-                if (safeDuration <= 0L) return@pointerInput
-                val thumbRadiusPx = thumbRadius.toPx()
-                detectTapGestures(
-                    onTap = { offset ->
-                        val w = size.width.toFloat()
-                        val startX = thumbRadiusPx
-                        val endX = (w - thumbRadiusPx).coerceAtLeast(startX)
-                        val nf = if (endX > startX) ((offset.x - startX) / (endX - startX)).coerceIn(0f, 1f) else 0f
-                        val ms = (nf.toDouble() * safeDuration.toDouble()).roundToLong().coerceIn(0L, safeDuration)
-                        onSeekTo(ms)
-                    },
-                    onLongPress = { offset ->
-                        val w = size.width.toFloat()
-                        val startX = thumbRadiusPx
-                        val endX = (w - thumbRadiusPx).coerceAtLeast(startX)
-                        val nf = if (endX > startX) ((offset.x - startX) / (endX - startX)).coerceIn(0f, 1f) else 0f
-                        val ms = (nf.toDouble() * safeDuration.toDouble()).roundToLong().coerceIn(0L, safeDuration)
-                        val hit = slices
-                            .asSequence()
-                            .filter { s -> ms >= s.startMs && ms <= s.endMs }
-                            .maxByOrNull { it.id }
-                        if (hit != null) {
-                            onSelectSlice(hit.id)
-                            onLongPressSlice(hit.id)
-                        }
-                    }
-                )
-            }
-    ) {
-        val width = size.width
-        val height = size.height
-        if (width <= 0f || height <= 0f) return@Canvas
-
-        val trackHeightPx = trackHeight.toPx()
-        val thumbRadiusPx = thumbRadius.toPx()
-        val centerY = height / 2f
-        val startX = thumbRadiusPx
-        val endX = (width - thumbRadiusPx).coerceAtLeast(startX)
-        val span = (endX - startX).coerceAtLeast(1f)
-        val x = startX + span * fraction
-
-        drawLine(
-            color = inactiveColor,
-            start = Offset(startX, centerY),
-            end = Offset(endX, centerY),
-            strokeWidth = trackHeightPx,
-            cap = androidx.compose.ui.graphics.StrokeCap.Round
-        )
-        if (safeDuration > 0L) {
-            val sliceHeightPx = (trackHeightPx * 2.4f).coerceAtLeast(trackHeightPx + 3.dp.toPx())
-            val sliceBorderPx = 0.85.dp.toPx()
-            val selectedSliceExtraHeightPx = 2.dp.toPx()
-            val selectedSliceBorderPx = 1.dp.toPx()
-            for (s in slices) {
-                val sf = (s.startMs.toFloat() / safeDuration.toFloat()).coerceIn(0f, 1f)
-                val ef = (s.endMs.toFloat() / safeDuration.toFloat()).coerceIn(0f, 1f)
-                val sx = startX + span * sf
-                val ex = startX + span * ef
-                val w = (ex - sx).coerceAtLeast(1f)
-                val selected = s.id == selectedSliceId
-                val highlighted = s.id == highlightedSliceId
-                val visualHeightPx = if (selected) sliceHeightPx + selectedSliceExtraHeightPx else sliceHeightPx
-                val top = centerY - visualHeightPx / 2f
-                val corner = visualHeightPx / 2f
-                val fillAlpha = when {
-                    selected -> 0.34f
-                    highlighted -> 0.24f
-                    else -> 0.14f
-                }
-                val borderAlpha = when {
-                    selected -> 0.72f
-                    highlighted -> 0.34f
-                    else -> 0.20f
-                }
-                val borderWidthPx = if (selected) selectedSliceBorderPx else sliceBorderPx
-
-                drawRoundRect(
-                    color = activeColor.copy(alpha = fillAlpha),
-                    topLeft = Offset(sx, top),
-                    size = Size(w, visualHeightPx),
-                    cornerRadius = CornerRadius(corner, corner)
-                )
-                drawRoundRect(
-                    color = activeColor.copy(alpha = borderAlpha),
-                    topLeft = Offset(sx, top),
-                    size = Size(w, visualHeightPx),
-                    cornerRadius = CornerRadius(corner, corner),
-                    style = Stroke(width = borderWidthPx)
-                )
-            }
-        }
-        drawLine(
-            color = activeColor,
-            start = Offset(startX, centerY),
-            end = Offset(x, centerY),
-            strokeWidth = trackHeightPx,
-            cap = androidx.compose.ui.graphics.StrokeCap.Round
-        )
-        drawCircle(
-            color = activeColor,
-            radius = thumbRadiusPx,
-            center = Offset(x, centerY)
-        )
-        drawCircle(
-            color = Color.White.copy(alpha = 0.85f),
-            radius = (thumbRadiusPx * 0.45f).coerceAtLeast(1f),
-            center = Offset(x, centerY)
-        )
-    }
-}
-
-private fun currentSliceIdForPosition(
-    positionMs: Long,
-    slices: List<com.asmr.player.domain.model.Slice>,
-    sliceModeEnabled: Boolean
-): Long? {
-    if (!sliceModeEnabled) return null
-    return slices.firstOrNull { positionMs >= it.startMs && positionMs < it.endMs }?.id
-}
-
-@Composable
-private fun SliceTimeEditDialog(
-    title: String,
-    durationMs: Long,
-    currentMs: Long,
-    initialMs: Long,
-    onDismiss: () -> Unit,
-    onConfirm: (Long) -> Unit
-) {
-    val safeDuration = durationMs.coerceAtLeast(0L)
-    val boundedInitial = if (safeDuration > 0L) initialMs.coerceIn(0L, safeDuration) else initialMs.coerceAtLeast(0L)
-    var selectedMs by remember(boundedInitial) { mutableLongStateOf(boundedInitial) }
-    var fraction by remember(boundedInitial, safeDuration) {
-        mutableFloatStateOf(if (safeDuration > 0L) (boundedInitial.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f) else 0f)
-    }
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(
-                    text = Formatting.formatTrackTime(selectedMs),
-                    style = MaterialTheme.typography.titleLarge,
-                    color = AsmrTheme.colorScheme.onSurface
-                )
-
-                if (safeDuration > 0L) {
-                    Slider(
-                        value = fraction,
-                        onValueChange = { f ->
-                            fraction = f.coerceIn(0f, 1f)
-                            selectedMs = (fraction.toDouble() * safeDuration.toDouble()).roundToLong().coerceIn(0L, safeDuration)
-                        },
-                        valueRange = 0f..1f,
-                        colors = SliderDefaults.colors(
-                            thumbColor = AsmrTheme.colorScheme.primary,
-                            activeTrackColor = AsmrTheme.colorScheme.primary,
-                            inactiveTrackColor = AsmrTheme.colorScheme.primary.copy(alpha = 0.18f)
-                        )
-                    )
-                } else {
-                    LinearProgressIndicator(
-                        progress = { 0f },
-                        modifier = Modifier.fillMaxWidth(),
-                        color = AsmrTheme.colorScheme.primary,
-                        trackColor = AsmrTheme.colorScheme.primary.copy(alpha = 0.18f)
-                    )
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(
-                        onClick = {
-                            val v = (selectedMs - 5_000L).coerceAtLeast(0L)
-                            selectedMs = if (safeDuration > 0L) v.coerceAtMost(safeDuration) else v
-                            if (safeDuration > 0L) fraction = (selectedMs.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f)
-                        },
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                    ) { Text("-5s") }
-                    OutlinedButton(
-                        onClick = {
-                            val v = (selectedMs - 1_000L).coerceAtLeast(0L)
-                            selectedMs = if (safeDuration > 0L) v.coerceAtMost(safeDuration) else v
-                            if (safeDuration > 0L) fraction = (selectedMs.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f)
-                        },
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                    ) { Text("-1s") }
-                    OutlinedButton(
-                        onClick = {
-                            val v = (selectedMs - 200L).coerceAtLeast(0L)
-                            selectedMs = if (safeDuration > 0L) v.coerceAtMost(safeDuration) else v
-                            if (safeDuration > 0L) fraction = (selectedMs.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f)
-                        },
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                    ) { Text("-0.2s") }
-                    OutlinedButton(
-                        onClick = {
-                            val v = selectedMs + 200L
-                            selectedMs = if (safeDuration > 0L) v.coerceIn(0L, safeDuration) else v
-                            if (safeDuration > 0L) fraction = (selectedMs.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f)
-                        },
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                    ) { Text("+0.2s") }
-                    OutlinedButton(
-                        onClick = {
-                            val v = selectedMs + 1_000L
-                            selectedMs = if (safeDuration > 0L) v.coerceIn(0L, safeDuration) else v
-                            if (safeDuration > 0L) fraction = (selectedMs.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f)
-                        },
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                    ) { Text("+1s") }
-                    OutlinedButton(
-                        onClick = {
-                            val v = selectedMs + 5_000L
-                            selectedMs = if (safeDuration > 0L) v.coerceIn(0L, safeDuration) else v
-                            if (safeDuration > 0L) fraction = (selectedMs.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f)
-                        },
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
-                    ) { Text("+5s") }
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    TextButton(
-                        onClick = {
-                            val v = currentMs.coerceAtLeast(0L)
-                            selectedMs = if (safeDuration > 0L) v.coerceAtMost(safeDuration) else v
-                            if (safeDuration > 0L) fraction = (selectedMs.toDouble() / safeDuration.toDouble()).toFloat().coerceIn(0f, 1f)
-                        }
-                    ) { Text("设为当前") }
-                    TextButton(
-                        onClick = {
-                            selectedMs = 0L
-                            fraction = 0f
-                        }
-                    ) { Text("设为 0") }
-                    if (safeDuration > 0L) {
-                        TextButton(
-                            onClick = {
-                                selectedMs = safeDuration
-                                fraction = 1f
-                            }
-                        ) { Text("设为末尾") }
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onConfirm(selectedMs)
-                }
-            ) { Text("确定") }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消") } }
-    )
 }

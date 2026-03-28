@@ -12,6 +12,7 @@ import com.asmr.player.data.remote.dlsite.DlsitePlayLibraryClient
 import com.asmr.player.data.remote.scraper.DLSiteScraper
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.domain.model.Album
+import com.asmr.player.util.AppErrorMessageFormatter
 import com.asmr.player.util.MessageManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -90,10 +91,9 @@ class SearchViewModel @Inject constructor(
         if (!bootstrapped.compareAndSet(false, true)) return
         viewModelScope.launch {
             val cached = runCatching { searchCacheStore.readLast() }.getOrNull()
-            if (cached != null && cached.results.isNotEmpty()) {
+            if (cached != null) {
                 applyCachedState(cached)
                 lastRequestedKeyword = cached.keyword
-                requestPage(cached.keyword, cached.page, SearchPendingRequestKind.Page)
             } else {
                 purchasedOnly = initialPurchasedOnly
                 currentLocale = initialLocale
@@ -239,7 +239,11 @@ class SearchViewModel @Inject constructor(
             } catch (e: Exception) {
                 if (e is CancellationException) throw e
                 Log.e("SearchViewModel", "Search paging failed", e)
-                val msg = toUserMessage(e)
+                val msg = if (e is IllegalStateException) {
+                    AppErrorMessageFormatter.sanitize(e.message.orEmpty(), fallback = "搜索失败，请稍后重试")
+                } else {
+                    toUserMessage(e)
+                }
                 messageManager.showError(msg)
                 if (previousSuccess != null) {
                     currentOrder = previousSuccess.order

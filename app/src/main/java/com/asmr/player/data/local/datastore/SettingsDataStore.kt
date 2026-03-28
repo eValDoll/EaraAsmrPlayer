@@ -30,6 +30,8 @@ class SettingsDataStore @Inject constructor(
     private val lyricsPageAlignKey = intPreferencesKey("lyrics_page_align")
     private val lyricsPageDisplayAreaModeKey = intPreferencesKey("lyrics_page_display_area_mode")
     private val recentAlbumsPanelExpandedKey = booleanPreferencesKey("recent_albums_panel_expanded")
+    private val miniPlayerDisplayModeKey = stringPreferencesKey("mini_player_display_mode")
+    private val bottomChromePinnedRouteKey = stringPreferencesKey("bottom_chrome_pinned_route")
 
     val theme: Flow<String> = context.settingsDataStore.data.map { it[themeKey] ?: "system" }
     val sfwMode: Flow<Boolean> = context.settingsDataStore.data.map { it[sfwModeKey] ?: false }
@@ -62,6 +64,12 @@ class SettingsDataStore @Inject constructor(
         )
     }
     val recentAlbumsPanelExpanded: Flow<Boolean> = context.settingsDataStore.data.map { it[recentAlbumsPanelExpandedKey] ?: true }
+    val miniPlayerDisplayMode: Flow<String> = context.settingsDataStore.data.map { prefs ->
+        prefs[miniPlayerDisplayModeKey] ?: "CoverOnly"
+    }
+    val bottomChromePinnedRoute: Flow<String?> = context.settingsDataStore.data.map { prefs ->
+        prefs[bottomChromePinnedRouteKey]
+    }
 
     suspend fun setTheme(theme: String) {
         context.settingsDataStore.edit { it[themeKey] = theme }
@@ -112,6 +120,20 @@ class SettingsDataStore @Inject constructor(
 
     suspend fun setRecentAlbumsPanelExpanded(expanded: Boolean) {
         context.settingsDataStore.edit { it[recentAlbumsPanelExpandedKey] = expanded }
+    }
+
+    suspend fun setMiniPlayerDisplayMode(mode: String) {
+        context.settingsDataStore.edit { it[miniPlayerDisplayModeKey] = mode }
+    }
+
+    suspend fun setBottomChromePinnedRoute(route: String?) {
+        context.settingsDataStore.edit { prefs ->
+            if (route.isNullOrBlank()) {
+                prefs.remove(bottomChromePinnedRouteKey)
+            } else {
+                prefs[bottomChromePinnedRouteKey] = route
+            }
+        }
     }
 
     suspend fun addLibraryRoot(path: String) {
