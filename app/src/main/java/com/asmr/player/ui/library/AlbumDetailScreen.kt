@@ -321,6 +321,9 @@ fun AlbumDetailScreen(
                         initialPage = selectedTab,
                         pageCount = { tabTitles.size }
                     )
+                    val tabIndicatorPageOffset =
+                        (tabPagerState.currentPage + tabPagerState.currentPageOffsetFraction)
+                            .coerceIn(0f, tabTitles.lastIndex.coerceAtLeast(0).toFloat())
     
                     LaunchedEffect(selectedTab) {
                         if (lastChromeResetTab != selectedTab) {
@@ -600,6 +603,7 @@ fun AlbumDetailScreen(
                             modifier = Modifier.align(Alignment.TopCenter),
                             titles = tabTitles,
                             selectedTab = selectedTab,
+                            indicatorPageOffset = tabIndicatorPageOffset,
                             animatedOffsetPx = animatedTabChromeOffsetPx,
                             collapseFraction = tabChromeState.collapseFraction,
                             onMeasured = { tabChromeState.updateHeight(it.height.toFloat()) },
@@ -758,6 +762,7 @@ private fun AlbumDetailTabChrome(
     modifier: Modifier = Modifier,
     titles: List<String>,
     selectedTab: Int,
+    indicatorPageOffset: Float,
     animatedOffsetPx: Float,
     collapseFraction: Float,
     onMeasured: (IntSize) -> Unit,
@@ -787,14 +792,8 @@ private fun AlbumDetailTabChrome(
         val segmentPadding = 6.dp
         val segmentHeight = 42.dp
         val slotWidth = (maxWidth - (segmentPadding * 2) - (segmentGap * (count - 1))) / count
-        val highlightX by animateDpAsState(
-            targetValue = (slotWidth + segmentGap) * selectedTab,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioNoBouncy,
-                stiffness = Spring.StiffnessMediumLow
-            ),
-            label = "albumDetailTabHighlightX"
-        )
+        val highlightX = (slotWidth + segmentGap) *
+            indicatorPageOffset.coerceIn(0f, (count - 1).coerceAtLeast(0).toFloat())
 
         Surface(
             modifier = Modifier

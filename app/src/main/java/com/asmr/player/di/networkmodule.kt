@@ -39,12 +39,13 @@ object NetworkModule {
         val asmrHeaders = Interceptor { chain ->
             val request = chain.request()
             val host = request.url.host.lowercase()
-            val silentIoError = request.header(NetworkHeaders.HEADER_SILENT_IO_ERROR) == NetworkHeaders.SILENT_IO_ERROR_ON
+            val suppressAutoErrorMessage =
+                request.header(NetworkHeaders.HEADER_SILENT_IO_ERROR) == NetworkHeaders.SILENT_IO_ERROR_ON
             
             val builder = request.newBuilder()
                 .header("User-Agent", NetworkHeaders.USER_AGENT)
 
-            if (silentIoError) {
+            if (suppressAutoErrorMessage) {
                 builder.removeHeader(NetworkHeaders.HEADER_SILENT_IO_ERROR)
             }
 
@@ -62,7 +63,7 @@ object NetworkModule {
             
             try {
                 val response = chain.proceed(builder.build())
-                if (!response.isSuccessful) {
+                if (!response.isSuccessful && !suppressAutoErrorMessage) {
                     when (response.code) {
                         401 -> messageManager.showError("认证已过期，请重新登录")
                         403 -> messageManager.showError("访问被拒绝")
@@ -75,7 +76,7 @@ object NetworkModule {
             } catch (e: IOException) {
                 val canceled = runCatching { chain.call().isCanceled() }.getOrDefault(false)
                 val canceledByMessage = e.message?.contains("canceled", ignoreCase = true) == true
-                if (!silentIoError && !canceled && !canceledByMessage) {
+                if (!suppressAutoErrorMessage && !canceled && !canceledByMessage) {
                     messageManager.showError("网络连接失败，请检查网络")
                 }
                 throw e
