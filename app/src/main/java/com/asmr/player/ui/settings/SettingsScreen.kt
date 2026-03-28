@@ -9,6 +9,7 @@ import android.provider.DocumentsContract
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -45,8 +46,10 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.IntOffset
@@ -56,6 +59,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.BuildConfig
+import com.asmr.player.data.settings.BackgroundEffectType
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.FloatingLyricsSettings
 import com.asmr.player.data.settings.LyricsPageSettings
@@ -68,8 +72,12 @@ import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
+import com.asmr.player.ui.theme.dynamicPageContainerColor
 import java.io.File
 import kotlin.math.abs
+
+internal const val BACKGROUND_EFFECT_TYPE_ROW_TAG = "settings_background_effect_type_row"
+internal const val BACKGROUND_EFFECT_VALUE_TAG = "settings_background_effect_value"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,6 +95,8 @@ fun SettingsScreen(
     val staticHueArgb by viewModel.staticHueArgb.collectAsState()
     val staticHueArgbLight by viewModel.staticHueArgbLight.collectAsState()
     val staticHueArgbDark by viewModel.staticHueArgbDark.collectAsState()
+    val backgroundEffectEnabled by viewModel.backgroundEffectEnabled.collectAsState()
+    val backgroundEffectType by viewModel.backgroundEffectType.collectAsState()
     val coverBackgroundEnabled by viewModel.coverBackgroundEnabled.collectAsState()
     val coverBackgroundClarity by viewModel.coverBackgroundClarity.collectAsState()
     val coverPreviewMode by viewModel.coverPreviewMode.collectAsState()
@@ -370,6 +380,13 @@ fun SettingsScreen(
                     text = "封面动态主题（全局）",
                     checked = dynamicPlayerHueEnabled,
                     onCheckedChange = viewModel::setDynamicPlayerHueEnabled
+                )
+
+                BackgroundEffectSettingsControls(
+                    backgroundEffectEnabled = backgroundEffectEnabled,
+                    backgroundEffectType = backgroundEffectType,
+                    onBackgroundEffectEnabledChange = viewModel::setBackgroundEffectEnabled,
+                    onBackgroundEffectTypeChange = viewModel::setBackgroundEffectType
                 )
 
                 SettingsToggleRow(
@@ -965,6 +982,120 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 content()
+            }
+        }
+    }
+}
+
+@Composable
+internal fun BackgroundEffectSettingsControls(
+    backgroundEffectEnabled: Boolean,
+    backgroundEffectType: BackgroundEffectType,
+    onBackgroundEffectEnabledChange: (Boolean) -> Unit,
+    onBackgroundEffectTypeChange: (BackgroundEffectType) -> Unit
+) {
+    BackgroundEffectTypeSelectorRow(
+        backgroundEffectEnabled = backgroundEffectEnabled,
+        selectedType = backgroundEffectType,
+        onBackgroundEffectEnabledChange = onBackgroundEffectEnabledChange,
+        onSelected = onBackgroundEffectTypeChange
+    )
+}
+
+@Composable
+internal fun BackgroundEffectTypeSelectorRow(
+    backgroundEffectEnabled: Boolean,
+    selectedType: BackgroundEffectType,
+    onBackgroundEffectEnabledChange: (Boolean) -> Unit,
+    onSelected: (BackgroundEffectType) -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
+    val selectorShape = RoundedCornerShape(12.dp)
+    val selectorBorderColor = MaterialTheme.colorScheme.outline.copy(
+        alpha = if (colorScheme.isDark) 0.26f else 0.18f
+    )
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = if (!backgroundEffectEnabled) {
+        "无"
+    } else {
+        when (selectedType) {
+            BackgroundEffectType.Flow -> "光点"
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(BACKGROUND_EFFECT_TYPE_ROW_TAG),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("背景特效", style = MaterialTheme.typography.bodyMedium)
+        Spacer(modifier = Modifier.weight(1f))
+        Box(
+            modifier = Modifier.wrapContentSize(Alignment.TopEnd)
+        ) {
+            Surface(
+                shape = selectorShape,
+                color = dynamicContainerColor,
+                contentColor = colorScheme.onSurface,
+                border = BorderStroke(1.dp, selectorBorderColor),
+                modifier = Modifier
+                    .clip(selectorShape)
+                    .clickable { expanded = true }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = selectedLabel,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colorScheme.textSecondary,
+                        modifier = Modifier.testTag(BACKGROUND_EFFECT_VALUE_TAG)
+                    )
+                    Text(
+                        text = "▾",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            MaterialTheme(
+                colorScheme = MaterialTheme.colorScheme.copy(
+                    surface = dynamicContainerColor,
+                    surfaceContainer = dynamicContainerColor
+                )
+            ) {
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                    offset = DpOffset(x = 0.dp, y = 6.dp),
+                    modifier = Modifier.background(dynamicContainerColor)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("无") },
+                        onClick = {
+                            expanded = false
+                            onBackgroundEffectEnabledChange(false)
+                        }
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                    )
+                    DropdownMenuItem(
+                        text = { Text("光点") },
+                        onClick = {
+                            expanded = false
+                            onSelected(BackgroundEffectType.Flow)
+                            onBackgroundEffectEnabledChange(true)
+                        }
+                    )
+                }
             }
         }
     }
