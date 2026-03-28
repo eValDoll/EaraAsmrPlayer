@@ -22,6 +22,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
+import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
@@ -56,7 +58,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
 import com.asmr.player.data.local.db.entities.PlaylistItemWithSubtitles
+import com.asmr.player.data.repository.PlaylistRepository
 import com.asmr.player.ui.common.AsmrAsyncImage
+import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.SubtitleStamp
@@ -141,6 +145,18 @@ internal fun PlaylistDetailContent(
     val playItems = localItems.map { item -> item.toPlaybackEntity() }
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
     val colorScheme = AsmrTheme.colorScheme
+    val isFavorites = title == PlaylistRepository.PLAYLIST_FAVORITES
+    val emptyHeadline = if (isFavorites) {
+        "收藏的内容会在这里出现"
+    } else {
+        "这个列表还没有内容"
+    }
+    val emptyDescription = if (isFavorites) {
+        "看到喜欢的专辑或音轨时点一下收藏，它们就会回到这里。"
+    } else {
+        "把常听内容添加进来，后续就能从这里快速播放。"
+    }
+    val emptySectionTitle = if (isFavorites) "我的收藏" else title.ifBlank { "我的列表" }
 
     Scaffold(
         contentWindowInsets = StableWindowInsets.navigationBars,
@@ -161,36 +177,47 @@ internal fun PlaylistDetailContent(
                     .widthIn(max = 720.dp)
                     .fillMaxWidth()
             }
-            LazyColumn(
-                state = listState,
-                modifier = contentModifier
-                    .reorderable(reorderState)
-                    .thinScrollbar(listState),
-                contentPadding = PaddingValues(top = 6.dp, bottom = LocalBottomOverlayPadding.current)
-            ) {
-                item(key = PLAYLIST_DETAIL_REORDER_SENTINEL_KEY) {
-                    Spacer(modifier = Modifier.height(1.dp))
-                }
-                itemsIndexed(localItems, key = { _, item -> item.mediaId }) { index, item ->
-                    ReorderableItem(
-                        reorderableState = reorderState,
-                        key = item.mediaId
-                    ) { isDragging ->
-                        PlaylistItemRow(
-                            item = item,
-                            showSubtitleStamp = item.hasSubtitles,
-                            showTopDivider = index > 0,
-                            isDragging = isDragging,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("$PLAYLIST_DETAIL_ITEM_TAG_PREFIX:${item.mediaId}")
-                                .detectReorderAfterLongPress(reorderState)
-                                .clickable { onPlayAll(playItems, item.toPlaybackEntity()) },
-                            onPlay = { onPlayAll(playItems, item.toPlaybackEntity()) },
-                            onMoveToTop = { onMoveItemToTop(item.mediaId) },
-                            onMoveToBottom = { onMoveItemToBottom(item.mediaId) },
-                            onRemove = { pendingRemoveItem = item }
-                        )
+            if (localItems.isEmpty()) {
+                EaraBrandedEmptyState(
+                    sectionTitle = emptySectionTitle,
+                    headline = emptyHeadline,
+                    description = emptyDescription,
+                    sectionIcon = if (isFavorites) Icons.Default.Favorite else Icons.AutoMirrored.Filled.QueueMusic,
+                    modifier = contentModifier,
+                    contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current + 88.dp)
+                )
+            } else {
+                LazyColumn(
+                    state = listState,
+                    modifier = contentModifier
+                        .reorderable(reorderState)
+                        .thinScrollbar(listState),
+                    contentPadding = PaddingValues(top = 6.dp, bottom = LocalBottomOverlayPadding.current)
+                ) {
+                    item(key = PLAYLIST_DETAIL_REORDER_SENTINEL_KEY) {
+                        Spacer(modifier = Modifier.height(1.dp))
+                    }
+                    itemsIndexed(localItems, key = { _, item -> item.mediaId }) { index, item ->
+                        ReorderableItem(
+                            reorderableState = reorderState,
+                            key = item.mediaId
+                        ) { isDragging ->
+                            PlaylistItemRow(
+                                item = item,
+                                showSubtitleStamp = item.hasSubtitles,
+                                showTopDivider = index > 0,
+                                isDragging = isDragging,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .testTag("$PLAYLIST_DETAIL_ITEM_TAG_PREFIX:${item.mediaId}")
+                                    .detectReorderAfterLongPress(reorderState)
+                                    .clickable { onPlayAll(playItems, item.toPlaybackEntity()) },
+                                onPlay = { onPlayAll(playItems, item.toPlaybackEntity()) },
+                                onMoveToTop = { onMoveItemToTop(item.mediaId) },
+                                onMoveToBottom = { onMoveItemToBottom(item.mediaId) },
+                                onRemove = { pendingRemoveItem = item }
+                            )
+                        }
                     }
                 }
             }

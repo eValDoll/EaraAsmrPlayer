@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.FloatingActionButton
@@ -54,6 +55,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.data.local.db.dao.AlbumGroupStatsRow
 import com.asmr.player.data.local.db.entities.AlbumGroupEntity
 import com.asmr.player.ui.common.AsmrAsyncImage
+import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.thinScrollbar
@@ -92,27 +94,38 @@ fun AlbumGroupsScreen(
                     .fillMaxWidth()
             }
             Box(modifier = contentModifier) {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize().thinScrollbar(listState),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                        .withAddedBottomPadding(LocalBottomOverlayPadding.current + 72.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(groups, key = { it.id }) { group ->
-                        val entity = remember(group.id, group.name, group.createdAt) {
-                            AlbumGroupEntity(
-                                id = group.id,
-                                name = group.name,
-                                createdAt = group.createdAt
+                if (groups.isEmpty()) {
+                    EaraBrandedEmptyState(
+                        sectionTitle = "我的分组",
+                        headline = "还没有创建分组",
+                        description = "按主题或场景建立分组，让收藏的专辑更容易整理和回看。",
+                        sectionIcon = Icons.Default.Folder,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current + 88.dp)
+                    )
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize().thinScrollbar(listState),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                            .withAddedBottomPadding(LocalBottomOverlayPadding.current + 72.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(groups, key = { it.id }) { group ->
+                            val entity = remember(group.id, group.name, group.createdAt) {
+                                AlbumGroupEntity(
+                                    id = group.id,
+                                    name = group.name,
+                                    createdAt = group.createdAt
+                                )
+                            }
+                            AlbumGroupRow(
+                                group = group,
+                                onClick = { onGroupClick(entity) },
+                                onDelete = { viewModel.deleteGroup(entity) },
+                                onRename = { newName -> viewModel.renameGroup(entity.id, newName) }
                             )
                         }
-                        AlbumGroupRow(
-                            group = group,
-                            onClick = { onGroupClick(entity) },
-                            onDelete = { viewModel.deleteGroup(entity) },
-                            onRename = { newName -> viewModel.renameGroup(entity.id, newName) }
-                        )
                     }
                 }
 

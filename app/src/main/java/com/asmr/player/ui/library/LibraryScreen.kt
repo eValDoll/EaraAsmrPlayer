@@ -55,12 +55,15 @@ import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.CoverContentRow
 import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.common.CvChipsSingleLine
+import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.withAddedBottomPadding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.DropdownMenu
@@ -458,6 +461,49 @@ fun LibraryScreen(
                                             querySpec.cvs.isNotEmpty() ||
                                             querySpec.source != null
 
+                                    EaraBrandedEmptyState(
+                                        sectionTitle = if (hasAnyQuery) "本地库结果" else "本地库",
+                                        headline = if (hasAnyQuery) "没有匹配的本地内容" else "还没有扫描到本地专辑",
+                                        description = if (hasAnyQuery) {
+                                            "可以调整关键词或筛选条件，也可以直接重置后重新查看全部内容。"
+                                        } else {
+                                            "到设置里的本地库添加目录后，再执行同步或刷新，这里就会出现内容。"
+                                        },
+                                        sectionIcon = if (hasAnyQuery) Icons.Default.Search else Icons.Default.FolderOpen,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentPadding = PaddingValues(
+                                            top = topPadding,
+                                            bottom = LocalBottomOverlayPadding.current + 24.dp
+                                        ),
+                                        footer = if (hasAnyQuery) {
+                                            {
+                                                FilledTonalButton(
+                                                    onClick = {
+                                                        searchText = ""
+                                                        viewModel.setSearchQuery("")
+                                                        viewModel.clearFilters()
+                                                    },
+                                                    colors = ButtonDefaults.filledTonalButtonColors(
+                                                        containerColor = colorScheme.primaryContainer,
+                                                        contentColor = colorScheme.onPrimaryContainer
+                                                    )
+                                                ) {
+                                                    Text("重置筛选")
+                                                }
+                                            }
+                                        } else {
+                                            null
+                                        }
+                                    )
+                                } /* else if (false) {
+                                    val hasAnyQuery =
+                                        !querySpec.textQuery.isNullOrBlank() ||
+                                            querySpec.includeTagIds.isNotEmpty() ||
+                                            querySpec.excludeTagIds.isNotEmpty() ||
+                                            querySpec.circles.isNotEmpty() ||
+                                            querySpec.cvs.isNotEmpty() ||
+                                            querySpec.source != null
+
                                     Box(modifier = Modifier.fillMaxSize()) {
                                         Column(
                                             modifier = Modifier
@@ -494,7 +540,7 @@ fun LibraryScreen(
                                             }
                                         }
                                     }
-                                } else if (isTrackList) {
+                                } */ else if (isTrackList) {
                                     LazyColumn(
                                         state = listState,
                                         modifier = Modifier

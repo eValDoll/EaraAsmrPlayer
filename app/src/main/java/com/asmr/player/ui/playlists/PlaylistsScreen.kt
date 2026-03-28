@@ -20,6 +20,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.QueueMusic
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
@@ -53,6 +54,7 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.ui.graphics.Color
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
+import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 
@@ -91,28 +93,39 @@ fun PlaylistsScreen(
                     .fillMaxWidth()
             }
             Box(modifier = contentModifier) {
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize().thinScrollbar(listState),
-                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
-                        .withAddedBottomPadding(LocalBottomOverlayPadding.current + 72.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(userPlaylists, key = { it.id }) { playlist ->
-                        val entity = remember(playlist.id, playlist.name, playlist.category, playlist.createdAt) {
-                            PlaylistEntity(
-                                id = playlist.id,
-                                name = playlist.name,
-                                category = playlist.category,
-                                createdAt = playlist.createdAt
+                if (userPlaylists.isEmpty()) {
+                    EaraBrandedEmptyState(
+                        sectionTitle = "我的列表",
+                        headline = "还没有创建列表",
+                        description = "从右下角新建一个列表，把常听内容整理成自己的播放集合。",
+                        sectionIcon = Icons.AutoMirrored.Filled.QueueMusic,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current + 88.dp)
+                    )
+                } else {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize().thinScrollbar(listState),
+                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                            .withAddedBottomPadding(LocalBottomOverlayPadding.current + 72.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(userPlaylists, key = { it.id }) { playlist ->
+                            val entity = remember(playlist.id, playlist.name, playlist.category, playlist.createdAt) {
+                                PlaylistEntity(
+                                    id = playlist.id,
+                                    name = playlist.name,
+                                    category = playlist.category,
+                                    createdAt = playlist.createdAt
+                                )
+                            }
+                            PlaylistRow(
+                                playlist = playlist,
+                                onClick = { onPlaylistClick(entity) },
+                                onDelete = { viewModel.deletePlaylist(entity) },
+                                onRename = { newName -> viewModel.renamePlaylist(entity.id, newName) }
                             )
                         }
-                        PlaylistRow(
-                            playlist = playlist,
-                            onClick = { onPlaylistClick(entity) },
-                            onDelete = { viewModel.deletePlaylist(entity) },
-                            onRename = { newName -> viewModel.renamePlaylist(entity.id, newName) }
-                        )
                     }
                 }
 
