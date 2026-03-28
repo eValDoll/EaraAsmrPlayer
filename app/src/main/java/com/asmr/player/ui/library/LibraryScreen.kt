@@ -1038,7 +1038,7 @@ internal fun LibraryChrome(
                     modifier = Modifier.background(dynamicContainerColor)
                 ) {
                     DropdownMenuItem(
-                        text = { Text("最近") },
+                        text = { Text("最近播放") },
                         onClick = {
                             onSortMenuExpandedChange(false)
                             onSortLastPlayed()
@@ -1062,7 +1062,7 @@ internal fun LibraryChrome(
                         color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
                     )
                     DropdownMenuItem(
-                        text = { Text("标题") },
+                        text = { Text("专辑标题") },
                         onClick = {
                             onSortMenuExpandedChange(false)
                             onSortTitle()
