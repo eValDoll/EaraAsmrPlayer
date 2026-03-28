@@ -336,7 +336,7 @@ fun MainContainer(
     var lastNonZeroAppVolumePercent by rememberSaveable { mutableIntStateOf(AppVolume.DefaultPercent) }
     var hardwareVolumeOverlayBounds by remember { mutableStateOf<Rect?>(null) }
     var bottomChromeOverflowExpanded by remember { mutableStateOf(false) }
-    var bottomChromeOverflowBounds by remember { mutableStateOf<Rect?>(null) }
+    var bottomChromeOverflowProtectedBounds by remember { mutableStateOf<List<Rect>>(emptyList()) }
     var pendingPrimaryNavigationRoute by remember { mutableStateOf<String?>(null) }
     val appVolumeWarningSessionState = rememberAppVolumeWarningSessionState()
     val audioOutputRouteKind = rememberCurrentAudioOutputRouteKind()
@@ -471,7 +471,7 @@ fun MainContainer(
         hardwareVolumeOverlayInteracting = false
         hardwareVolumeOverlayBounds = null
         bottomChromeOverflowExpanded = false
-        bottomChromeOverflowBounds = null
+        bottomChromeOverflowProtectedBounds = emptyList()
         val normalizedCurrentRoute = currentPrimaryRoute ?: currentRoute
         val last = lastRouteForTouchBlock
         val seq = ++touchBlockSeq
@@ -520,7 +520,7 @@ fun MainContainer(
         hardwareVolumeOverlayInteracting = false
         hardwareVolumeOverlayBounds = null
         bottomChromeOverflowExpanded = false
-        bottomChromeOverflowBounds = null
+        bottomChromeOverflowProtectedBounds = emptyList()
         nowPlayingVolumeEventTick = 0L
     }
 
@@ -1655,7 +1655,7 @@ fun MainContainer(
                 val chromeWidth = (maxWidth - reservedRight - 48.dp).coerceAtLeast(0.dp)
                 if (bottomChromeOverflowExpanded) {
                     DismissOutsideBoundsOverlay(
-                        targetBoundsInRoot = bottomChromeOverflowBounds,
+                        protectedBoundsInRoot = bottomChromeOverflowProtectedBounds,
                         onDismiss = { bottomChromeOverflowExpanded = false }
                     )
                 }
@@ -1676,7 +1676,7 @@ fun MainContainer(
                         navItems = bottomNavItems,
                         overflowExpanded = bottomChromeOverflowExpanded,
                         onOverflowExpandedChange = { bottomChromeOverflowExpanded = it },
-                        onOverflowBoundsChange = { bottomChromeOverflowBounds = it },
+                        onOverflowProtectedBoundsChange = { bottomChromeOverflowProtectedBounds = it },
                         onMiniPlayerDisplayModeChange = { nextMode ->
                             miniPlayerDisplayMode = nextMode
                             scope.launch { settingsDataStore.setMiniPlayerDisplayMode(nextMode.name) }

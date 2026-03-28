@@ -6,12 +6,14 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
@@ -77,18 +79,18 @@ import kotlin.math.sqrt
 const val BottomNavBarTag = "bottomChromeNavBar"
 const val BottomNavOverflowTag = "bottomChromeOverflow"
 
-private val BottomChromeOverlayHeightCompact = 92.dp
-private val BottomChromeOverlayHeightLarge = 104.dp
-private val BottomNavBarHeight = 56.dp
-private val BottomNavBarHeightLarge = 64.dp
-private val BottomNavBarCornerRadius = 28.dp
-private val BottomNavBarCornerRadiusLarge = 32.dp
+private val BottomChromeOverlayHeightCompact = 96.dp
+private val BottomChromeOverlayHeightLarge = 108.dp
+private val BottomNavBarHeight = 60.dp
+private val BottomNavBarHeightLarge = 68.dp
+private val BottomNavBarCornerRadius = 30.dp
+private val BottomNavBarCornerRadiusLarge = 34.dp
 private val BottomNavBorderWidth = 1.dp
 private val BottomNavExpandedSlotCount = 5
 private val BottomNavCollapsedWidth = 64.dp
 private val BottomNavCollapsedWidthLarge = 76.dp
-private val BottomNavChipSize = 42.dp
-private val BottomNavChipSizeLarge = 48.dp
+private val BottomNavChipSize = 44.dp
+private val BottomNavChipSizeLarge = 50.dp
 private val BottomNavItemSlotWidth = 48.dp
 private val BottomNavItemSlotWidthLarge = 56.dp
 private val BottomNavExpandedItemSpacing = 6.dp
@@ -117,13 +119,14 @@ private val BottomNavOverflowItemSize = 40.dp
 private val BottomNavOverflowItemSizeLarge = 46.dp
 private val BottomNavOverflowItemSpacing = 10.dp
 private val BottomNavOverflowItemSpacingLarge = 12.dp
-private val BottomNavIconSize = 19.dp
-private val BottomNavIconSizeLarge = 22.dp
+private val BottomNavIconSize = 21.dp
+private val BottomNavIconSizeLarge = 24.dp
 private val BottomNavGlowExpandedSize = 44.dp
 private val BottomNavGlowExpandedSizeLarge = 50.dp
 private val BottomNavGlowCollapsedSize = 46.dp
 private val BottomNavGlowCollapsedSizeLarge = 52.dp
 private const val QuarterArcKappa = 0.55228475f
+private const val BottomNavOverflowOutlineCollapseTailFraction = 0.18f
 
 data class BottomChromeNavItem(
     val icon: ImageVector,
@@ -410,6 +413,21 @@ private fun computeOverflowPanelCenterPx(
     return panelLeft + (panelWidth / 2f)
 }
 
+private fun computeOverflowOutlineProgress(
+    canShowOverflow: Boolean,
+    overflowExpanded: Boolean,
+    overflowRevealProgress: Float
+): Float {
+    if (!canShowOverflow) return 0f
+    if (overflowExpanded) return 1f
+    if (overflowRevealProgress <= 0f) return 0f
+    if (overflowRevealProgress >= BottomNavOverflowOutlineCollapseTailFraction) return 1f
+
+    val normalizedProgress =
+        (overflowRevealProgress / BottomNavOverflowOutlineCollapseTailFraction).coerceIn(0f, 1f)
+    return normalizedProgress * normalizedProgress * (3f - (2f * normalizedProgress))
+}
+
 private fun buildBottomNavRailEntries(
     layout: BottomChromeNavLayout,
     metrics: BottomChromeMetrics
@@ -512,7 +530,7 @@ fun BottomChrome(
     navItems: List<BottomChromeNavItem> = bottomChromeNavItems(),
     overflowExpanded: Boolean = false,
     onOverflowExpandedChange: (Boolean) -> Unit = {},
-    onOverflowBoundsChange: (Rect?) -> Unit = {}
+    onOverflowProtectedBoundsChange: (List<Rect>) -> Unit = {}
 ) {
     BoxWithConstraints(modifier = modifier) {
         val metrics = remember(largeLayout) { bottomChromeMetrics(largeLayout) }
@@ -522,12 +540,12 @@ fun BottomChrome(
         val miniWidthTarget = when {
             !miniPlayerVisible -> 0.dp
             miniPlayerDisplayMode == MiniPlayerDisplayMode.Expanded ->
-                (maxWidth - metrics.collapsedWidth - 10.dp).coerceAtLeast(if (largeLayout) 244.dp else 204.dp)
+                (maxWidth - metrics.collapsedWidth - 8.dp).coerceAtLeast(if (largeLayout) 244.dp else 204.dp)
             else -> miniCollapsedWidth
         }
         val navWidthTarget = when {
             !miniPlayerVisible -> expandedNavWidthLimit
-            navExpanded -> (maxWidth - miniWidthTarget - 10.dp)
+            navExpanded -> (maxWidth - miniWidthTarget - 8.dp)
                 .coerceAtLeast(if (largeLayout) 108.dp else 92.dp)
                 .coerceAtMost(expandedNavWidthLimit)
             else -> metrics.collapsedWidth
@@ -553,7 +571,7 @@ fun BottomChrome(
             else -> BottomNavExpandedSlotCount - 1
         }
         val chromeArrangement = Arrangement.spacedBy(
-            if (largeLayout) 12.dp else 10.dp,
+            if (largeLayout) 10.dp else 8.dp,
             alignment = Alignment.CenterHorizontally
         )
 
@@ -578,7 +596,7 @@ fun BottomChrome(
                 onOverflowExpandedChange = onOverflowExpandedChange,
                 onExpandRequest = { onMiniPlayerDisplayModeChange(MiniPlayerDisplayMode.CoverOnly) },
                 onNavigate = onNavigate,
-                onOverflowBoundsChange = onOverflowBoundsChange,
+                onOverflowProtectedBoundsChange = onOverflowProtectedBoundsChange,
                 modifier = Modifier.width(navWidth)
             )
 
@@ -611,7 +629,7 @@ private fun BottomNavigationPill(
     onOverflowExpandedChange: (Boolean) -> Unit = {},
     onExpandRequest: () -> Unit = {},
     onNavigate: (String) -> Unit,
-    onOverflowBoundsChange: (Rect?) -> Unit = {},
+    onOverflowProtectedBoundsChange: (List<Rect>) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     LaunchedEffect(expanded) {
@@ -634,7 +652,7 @@ private fun BottomNavigationPill(
         onOverflowExpandedChange = onOverflowExpandedChange,
         onExpandRequest = onExpandRequest,
         onNavigate = onNavigate,
-        onOverflowBoundsChange = onOverflowBoundsChange,
+        onOverflowProtectedBoundsChange = onOverflowProtectedBoundsChange,
         modifier = modifier
     )
 }
@@ -654,7 +672,7 @@ private fun BottomNavigationPillSurface(
     onOverflowExpandedChange: (Boolean) -> Unit = {},
     onExpandRequest: () -> Unit,
     onNavigate: (String) -> Unit,
-    onOverflowBoundsChange: (Rect?) -> Unit = {},
+    onOverflowProtectedBoundsChange: (List<Rect>) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val colorScheme = AsmrTheme.colorScheme
@@ -758,10 +776,15 @@ private fun BottomNavigationPillSurface(
         label = "bottomNavOverflowProgress"
     )
     var overflowAnchorCenterX by remember { mutableFloatStateOf(Float.NaN) }
+    var containerBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
     val overflowPanelWidthPx = with(density) { metrics.overflowPanelWidth.toPx() }
     val overflowAnchorBiasPx = with(density) { metrics.overflowHorizontalBias.toPx() }
     val overflowLiftPx = with(density) { 16.dp.toPx() }
     val currentWidthPx = with(density) { currentWidth.toPx() }
+    val barHeightPx = with(density) { metrics.barHeight.toPx() }
+    val overflowHeadroomPx = with(density) { overflowHeadroom.toPx() }
+    val overflowLeftShoulderReachPx = with(density) { metrics.overflowLeftShoulderReach.toPx() }
+    val overflowRightShoulderReachPx = with(density) { metrics.overflowRightShoulderReach.toPx() }
     val requestedOverflowCenterX = if (canShowOverflow) {
         overflowAnchorCenterX + overflowAnchorBiasPx
     } else {
@@ -777,13 +800,48 @@ private fun BottomNavigationPillSurface(
         requestedCenterX = requestedOverflowCenterX,
         panelWidth = overflowPanelWidthPx
     )
+    val overflowProtectedBounds = remember(
+        containerBoundsInRoot,
+        currentWidthPx,
+        barHeightPx,
+        overflowPanelLeftPx,
+        overflowPanelWidthPx,
+        overflowHeadroom,
+        overflowRevealProgress,
+        overflowLeftShoulderReachPx,
+        overflowRightShoulderReachPx
+    ) {
+        computeBottomNavOverflowProtectedBounds(
+            containerBoundsInRoot = containerBoundsInRoot,
+            surfaceWidth = currentWidthPx,
+            barHeight = barHeightPx,
+            overflowPanelLeft = overflowPanelLeftPx,
+            overflowPanelWidth = overflowPanelWidthPx,
+            overflowHeadroom = overflowHeadroomPx,
+            overflowRevealProgress = overflowRevealProgress,
+            leftShoulderReach = overflowLeftShoulderReachPx,
+            rightShoulderReach = overflowRightShoulderReachPx
+        )
+    }
+    val overflowOutlineProgress = computeOverflowOutlineProgress(
+        canShowOverflow = canShowOverflow,
+        overflowExpanded = overflowExpanded,
+        overflowRevealProgress = overflowRevealProgress
+    )
+    val interactionBlocked =
+        abs(currentWidth.value - availableWidth.value) > 0.5f ||
+            (overflowRevealProgress > 0.01f && overflowRevealProgress < 0.99f)
+
+    SideEffect {
+        onOverflowProtectedBoundsChange(overflowProtectedBounds)
+    }
 
     Box(
         modifier = modifier
             .defaultMinSize(minHeight = metrics.barHeight)
             .height(metrics.barHeight + overflowHeadroom)
             .onGloballyPositioned { coordinates ->
-                onOverflowBoundsChange(coordinates.boundsInRoot())
+                containerBoundsInRoot = coordinates.boundsInRoot()
             }
             .testTag(BottomNavBarTag)
             .semantics {
@@ -797,13 +855,14 @@ private fun BottomNavigationPillSurface(
                     barHeight = metrics.barHeight.toPx(),
                     barRadius = metrics.barCornerRadius.toPx(),
                     overflowAnchorX = overflowPanelCenterPx,
-                    overflowHeadroom = overflowHeadroom.toPx(),
+                    overflowHeadroom = overflowHeadroomPx,
                     overflowPanelWidth = overflowPanelWidthPx,
                     overflowTopCapHeight = metrics.overflowTopCapHeight.toPx(),
                     overflowShoulderLift = metrics.overflowShoulderLift.toPx(),
                     overflowNeckBottomOffset = metrics.overflowNeckBottomOffset.toPx(),
                     leftShoulderReach = metrics.overflowLeftShoulderReach.toPx(),
-                    rightShoulderReach = metrics.overflowRightShoulderReach.toPx()
+                    rightShoulderReach = metrics.overflowRightShoulderReach.toPx(),
+                    overflowShapeProgress = overflowOutlineProgress
                 )
                 drawPath(path = outline, color = containerColor)
                 drawPath(
@@ -946,7 +1005,63 @@ private fun BottomNavigationPillSurface(
                 }
             }
         }
+
+        if (interactionBlocked) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = {}
+                    )
+            )
+        }
     }
+}
+
+private fun computeBottomNavOverflowProtectedBounds(
+    containerBoundsInRoot: Rect?,
+    surfaceWidth: Float,
+    barHeight: Float,
+    overflowPanelLeft: Float,
+    overflowPanelWidth: Float,
+    overflowHeadroom: Float,
+    overflowRevealProgress: Float,
+    leftShoulderReach: Float,
+    rightShoulderReach: Float
+): List<Rect> {
+    val bounds = containerBoundsInRoot ?: return emptyList()
+    if (!bounds.left.isFinite() || !bounds.top.isFinite() || !bounds.right.isFinite() || !bounds.bottom.isFinite()) {
+        return emptyList()
+    }
+
+    val resolvedWidth = minOf(surfaceWidth, bounds.width).coerceAtLeast(0f)
+    if (resolvedWidth <= 0.5f || barHeight <= 0.5f) return emptyList()
+
+    val protectedBounds = mutableListOf<Rect>()
+    protectedBounds += Rect(
+        left = bounds.left,
+        top = (bounds.bottom - barHeight).coerceAtLeast(bounds.top),
+        right = bounds.left + resolvedWidth,
+        bottom = bounds.bottom
+    )
+
+    if (
+        overflowRevealProgress > 0.01f &&
+        overflowHeadroom > 0.5f &&
+        overflowPanelLeft.isFinite()
+    ) {
+        protectedBounds += Rect(
+            left = (bounds.left + overflowPanelLeft - leftShoulderReach).coerceAtLeast(bounds.left),
+            top = bounds.top,
+            right = (bounds.left + overflowPanelLeft + overflowPanelWidth + rightShoulderReach)
+                .coerceAtMost(bounds.left + resolvedWidth),
+            bottom = (bounds.top + overflowHeadroom).coerceAtMost(bounds.bottom)
+        )
+    }
+
+    return protectedBounds.filter { it.width > 0.5f && it.height > 0.5f }
 }
 
 private fun buildBottomNavContainerPath(
@@ -961,7 +1076,8 @@ private fun buildBottomNavContainerPath(
     overflowShoulderLift: Float,
     overflowNeckBottomOffset: Float,
     leftShoulderReach: Float,
-    rightShoulderReach: Float
+    rightShoulderReach: Float,
+    overflowShapeProgress: Float = 1f
 ): Path {
     val barTop = height - barHeight
     val bottom = height
@@ -980,23 +1096,39 @@ private fun buildBottomNavContainerPath(
             )
         )
     }
-    if (!overflowAnchorX.isFinite() || overflowHeadroom <= 1f) return basePath
+    val resolvedShapeProgress = overflowShapeProgress.coerceIn(0f, 1f)
+    val resolvedOverflowHeadroom = overflowHeadroom * resolvedShapeProgress
+    val resolvedOverflowPanelWidth = overflowPanelWidth * resolvedShapeProgress
+    val resolvedOverflowTopCapHeight = overflowTopCapHeight * resolvedShapeProgress
+    val resolvedOverflowShoulderLift = overflowShoulderLift * resolvedShapeProgress
+    val resolvedOverflowNeckBottomOffset = overflowNeckBottomOffset * resolvedShapeProgress
+    val resolvedLeftShoulderReach = leftShoulderReach * resolvedShapeProgress
+    val resolvedRightShoulderReach = rightShoulderReach * resolvedShapeProgress
+    if (
+        !overflowAnchorX.isFinite() ||
+        resolvedShapeProgress <= 0.001f ||
+        resolvedOverflowHeadroom <= 1f ||
+        resolvedOverflowPanelWidth <= 1f
+    ) {
+        return basePath
+    }
 
-    val panelHalf = overflowPanelWidth / 2f
-    val stemLeft = (overflowAnchorX - panelHalf).coerceIn(4f, width - overflowPanelWidth - 4f)
-    val stemRight = stemLeft + overflowPanelWidth
+    val panelHalf = resolvedOverflowPanelWidth / 2f
+    val stemLeft =
+        (overflowAnchorX - panelHalf).coerceIn(4f, width - resolvedOverflowPanelWidth - 4f)
+    val stemRight = stemLeft + resolvedOverflowPanelWidth
     val actualCenterX = stemLeft + panelHalf
-    val topY = (barTop - overflowHeadroom).coerceAtLeast(0f)
-    val topCapHeight = minOf(overflowTopCapHeight, overflowHeadroom)
+    val topY = (barTop - resolvedOverflowHeadroom).coerceAtLeast(0f)
+    val topCapHeight = minOf(resolvedOverflowTopCapHeight, resolvedOverflowHeadroom)
     val capBottomY = topY + topCapHeight
-    val neckBottomY = (barTop - overflowNeckBottomOffset)
+    val neckBottomY = (barTop - resolvedOverflowNeckBottomOffset)
         .coerceAtLeast(capBottomY)
         .coerceAtMost(barTop - 2f)
     val shoulderInset = (barTop - neckBottomY).coerceAtLeast(1f)
     val shoulderJoinRadius = minOf(
         shoulderInset,
-        leftShoulderReach,
-        maxOf(overflowShoulderLift, 6f)
+        resolvedLeftShoulderReach.coerceAtLeast(1f),
+        maxOf(resolvedOverflowShoulderLift, 2f)
     )
     val leftJoinStartY = barTop - shoulderJoinRadius
     val leftJoinEndX = (stemLeft - shoulderJoinRadius).coerceAtLeast(barRadius + 4f)
@@ -1012,7 +1144,7 @@ private fun buildBottomNavContainerPath(
     )
     val rightArcCenterX = right - barRadius
     val rightArcCenterY = barTop + barRadius
-    val desiredRightJoinX = (stemRight + rightShoulderReach).coerceAtMost(right - 1f)
+    val desiredRightJoinX = (stemRight + resolvedRightShoulderReach).coerceAtMost(right - 1f)
     val rightJoinsArc = desiredRightJoinX > rightCornerStartX
     val rightJoinX: Float
     val rightJoinY: Float
