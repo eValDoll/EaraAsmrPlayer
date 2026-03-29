@@ -313,6 +313,9 @@ fun MainContainer(
     var blockNavTouches by remember { mutableStateOf(false) }
     var lastRouteForTouchBlock by remember { mutableStateOf(currentPrimaryRoute ?: currentRoute) }
     var touchBlockSeq by remember { mutableIntStateOf(0) }
+    var pendingDetailNavigation by remember { mutableStateOf(false) }
+    var pendingDetailNavigationSeq by remember { mutableIntStateOf(0) }
+    var cancelPendingDetailNavigation by remember { mutableStateOf(false) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val searchViewModel: SearchViewModel = hiltViewModel()
@@ -445,6 +448,19 @@ fun MainContainer(
         }
     }
 
+    fun openAlbumDetailFromSearch(albumId: Long?, rj: String?) {
+        val seq = ++pendingDetailNavigationSeq
+        pendingDetailNavigation = true
+        cancelPendingDetailNavigation = false
+        navigator.openAlbumDetail(albumId = albumId, rj = rj)
+        scope.launch {
+            delay(700)
+            if (pendingDetailNavigationSeq == seq) {
+                pendingDetailNavigation = false
+            }
+        }
+    }
+
     LaunchedEffect(currentPrimaryRoute, primaryPagerRoutes, pendingPrimaryNavigationRoute) {
         val route = currentPrimaryRoute ?: return@LaunchedEffect
         val pendingRoute = pendingPrimaryNavigationRoute
@@ -478,6 +494,14 @@ fun MainContainer(
         hardwareVolumeOverlayBounds = null
         bottomChromeOverflowExpanded = false
         bottomChromeOverflowProtectedBounds = emptyList()
+        if (pendingDetailNavigation && currentRoute?.startsWith("album_detail") == true) {
+            pendingDetailNavigation = false
+        }
+        if (cancelPendingDetailNavigation && currentRoute?.startsWith("album_detail") == true) {
+            cancelPendingDetailNavigation = false
+            navController.popBackStack()
+            return@LaunchedEffect
+        }
         val normalizedCurrentRoute = currentPrimaryRoute ?: currentRoute
         val last = lastRouteForTouchBlock
         val seq = ++touchBlockSeq
@@ -674,6 +698,11 @@ fun MainContainer(
 
     BackHandler(drawerState.isOpen) {
         scope.launch { drawerState.close() }
+    }
+
+    BackHandler(pendingDetailNavigation && currentRoute == Routes.Search) {
+        pendingDetailNavigation = false
+        cancelPendingDetailNavigation = true
     }
 
     val drawerGesturesEnabled = false
@@ -1114,7 +1143,7 @@ fun MainContainer(
                                             SearchScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 onAlbumClick = { album ->
-                                                    navigator.openAlbumDetail(
+                                                    openAlbumDetailFromSearch(
                                                         albumId = album.id,
                                                         rj = album.rjCode.ifBlank { album.workId }
                                                     )
