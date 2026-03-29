@@ -267,12 +267,12 @@ fun LibraryScreen(
         animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
         label = "libraryChromeOffset"
     )
-    val chromeVisibleHeightPx = if (chromeState.heightPx > 0f) {
-        (chromeState.heightPx + animatedChromeOffsetPx).coerceIn(0f, chromeState.heightPx)
+    val chromeReservedHeightPx = if (chromeState.heightPx > 0f) {
+        chromeState.heightPx
     } else {
         with(LocalDensity.current) { 80.dp.toPx() }
     }
-    val topPadding = with(LocalDensity.current) { chromeVisibleHeightPx.toDp() } + LibraryChromeContentGap
+    val topPadding = with(LocalDensity.current) { chromeReservedHeightPx.toDp() } + LibraryChromeContentGap
 
     LaunchedEffect(isTrackList) {
         if (!isTrackList) {

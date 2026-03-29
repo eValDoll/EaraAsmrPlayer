@@ -847,8 +847,9 @@ fun MainContainer(
             alpha = if (colorScheme.isDark) 0.16f else 0.10f
         )
         val useLargeBottomChrome = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && !isPhone
+        val bottomOverlayPadding = bottomChromeOverlayHeight(useLargeBottomChrome)
         CompositionLocalProvider(
-            LocalBottomOverlayPadding provides (if (bottomChromeVisible) bottomChromeOverlayHeight(useLargeBottomChrome) else 0.dp),
+            LocalBottomOverlayPadding provides bottomOverlayPadding,
             LocalRightPanelExpandedState provides rightPanelExpandedState
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
