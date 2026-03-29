@@ -175,7 +175,7 @@ fun SearchScreen(
     val interactionLocked = success?.isBusy == true
     val filterControlsLocked = success == null || interactionLocked
     val searchSubmitLocked = uiState is SearchUiState.Loading || interactionLocked
-    val showSearchSpinner = success?.isSearching == true
+    val showSearchSpinner = success?.isBusy == true
     val highlightedPage = success?.page ?: 1
     val canGoPrev = success?.canGoPrev == true && success?.isSearching != true
     val canGoNext = success?.canGoNext == true && success?.isSearching != true
@@ -184,12 +184,12 @@ fun SearchScreen(
         animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
         label = "searchChromeOffset"
     )
-    val chromeVisibleHeightPx = when {
-        chromeState.heightPx > 0f -> (chromeState.heightPx + animatedChromeOffsetPx).coerceIn(0f, chromeState.heightPx)
+    val chromeReservedHeightPx = when {
+        chromeState.heightPx > 0f -> chromeState.heightPx
         success != null -> with(androidx.compose.ui.platform.LocalDensity.current) { 120.dp.toPx() }
         else -> with(androidx.compose.ui.platform.LocalDensity.current) { 80.dp.toPx() }
     }
-    val topPadding = with(androidx.compose.ui.platform.LocalDensity.current) { chromeVisibleHeightPx.toDp() } + SearchChromeContentGap
+    val topPadding = with(androidx.compose.ui.platform.LocalDensity.current) { chromeReservedHeightPx.toDp() } + SearchChromeContentGap
 
     fun scrollResultsToTop() {
         scope.launch {
