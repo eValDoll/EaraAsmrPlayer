@@ -1017,10 +1017,11 @@ internal fun BackgroundEffectTypeSelectorRow(
     )
     var expanded by remember { mutableStateOf(false) }
     val selectedLabel = if (!backgroundEffectEnabled) {
-        "无"
+        "关闭"
     } else {
         when (selectedType) {
             BackgroundEffectType.Flow -> "光点"
+            BackgroundEffectType.Ripple -> "呼吸波纹"
         }
     }
 
@@ -1056,7 +1057,7 @@ internal fun BackgroundEffectTypeSelectorRow(
                         modifier = Modifier.testTag(BACKGROUND_EFFECT_VALUE_TAG)
                     )
                     Text(
-                        text = "▾",
+                        text = "▼",
                         style = MaterialTheme.typography.bodyMedium,
                         color = colorScheme.onSurfaceVariant
                     )
@@ -1076,7 +1077,7 @@ internal fun BackgroundEffectTypeSelectorRow(
                     modifier = Modifier.background(dynamicContainerColor)
                 ) {
                     DropdownMenuItem(
-                        text = { Text("无") },
+                        text = { Text("关闭") },
                         onClick = {
                             expanded = false
                             onBackgroundEffectEnabledChange(false)
@@ -1095,12 +1096,19 @@ internal fun BackgroundEffectTypeSelectorRow(
                             onBackgroundEffectEnabledChange(true)
                         }
                     )
+                    DropdownMenuItem(
+                        text = { Text("呼吸波纹") },
+                        onClick = {
+                            expanded = false
+                            onSelected(BackgroundEffectType.Ripple)
+                            onBackgroundEffectEnabledChange(true)
+                        }
+                    )
                 }
             }
         }
     }
 }
-
 @Composable
 private fun SettingsToggleRow(
     text: String,

@@ -1,7 +1,8 @@
 package com.asmr.player.data.settings
 
 enum class BackgroundEffectType(val storageValue: String) {
-    Flow("flow");
+    Flow("flow"),
+    Ripple("ripple");
 
     companion object {
         fun fromStorageValue(value: String?): BackgroundEffectType {
