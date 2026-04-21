@@ -1,11 +1,14 @@
 package com.asmr.player
 
 import android.app.Application
+import androidx.work.Configuration
 import coil.disk.DiskCache
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.memory.MemoryCache
 import com.asmr.player.data.local.db.AppDatabaseProvider
+import com.asmr.player.data.remote.download.DownloadQueueCoordinator
+import com.asmr.player.data.remote.download.DownloadRuntimeConfig
 import com.asmr.player.data.settings.SettingsRepository
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
@@ -19,7 +22,7 @@ import javax.inject.Inject
 import javax.inject.Named
 
 @HiltAndroidApp
-class AsmrApp : Application(), ImageLoaderFactory {
+class AsmrApp : Application(), ImageLoaderFactory, Configuration.Provider {
 
     @Inject
     @Named("image")
@@ -35,8 +38,20 @@ class AsmrApp : Application(), ImageLoaderFactory {
         }
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             runCatching { AppDatabaseProvider.get(applicationContext) }
+            runCatching { DownloadQueueCoordinator.recoverLegacyScheduledDownloads(applicationContext) }
         }
     }
+
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        DownloadQueueCoordinator.onTrimMemory(applicationContext, level)
+    }
+
+    override val workManagerConfiguration: Configuration
+        get() = Configuration.Builder()
+            .setExecutor(DownloadRuntimeConfig.createWorkManagerExecutor(this))
+            .setTaskExecutor(DownloadRuntimeConfig.createWorkManagerTaskExecutor())
+            .build()
 
     override fun newImageLoader(): ImageLoader {
         return ImageLoader.Builder(this)

@@ -27,6 +27,34 @@ interface DownloadDao {
     @Query("UPDATE download_tasks SET subtitle = :subtitle, updatedAt = :updatedAt WHERE id = :taskId")
     suspend fun updateTaskSubtitle(taskId: Long, subtitle: String, updatedAt: Long)
 
+    @Query(
+        "UPDATE download_tasks SET " +
+            "subtitle = :subtitle, " +
+            "albumTitle = :albumTitle, " +
+            "albumCircle = :albumCircle, " +
+            "albumCv = :albumCv, " +
+            "albumTagsCsv = :albumTagsCsv, " +
+            "albumCoverUrl = :albumCoverUrl, " +
+            "albumDescription = :albumDescription, " +
+            "albumWorkId = :albumWorkId, " +
+            "albumRjCode = :albumRjCode, " +
+            "updatedAt = :updatedAt " +
+            "WHERE id = :taskId"
+    )
+    suspend fun updateTaskMetadata(
+        taskId: Long,
+        subtitle: String,
+        albumTitle: String,
+        albumCircle: String,
+        albumCv: String,
+        albumTagsCsv: String,
+        albumCoverUrl: String,
+        albumDescription: String,
+        albumWorkId: String,
+        albumRjCode: String,
+        updatedAt: Long
+    )
+
     @Query("SELECT * FROM download_items WHERE taskId = :taskId ORDER BY relativePath ASC")
     suspend fun getItemsForTask(taskId: Long): List<DownloadItemEntity>
 
@@ -35,6 +63,12 @@ interface DownloadDao {
 
     @Query("SELECT * FROM download_items WHERE filePath = :filePath LIMIT 1")
     suspend fun getItemByFilePath(filePath: String): DownloadItemEntity?
+
+    @Query("SELECT * FROM download_items WHERE state = 'QUEUED' ORDER BY createdAt ASC LIMIT :limit")
+    suspend fun getQueuedItems(limit: Int): List<DownloadItemEntity>
+
+    @Query("SELECT * FROM download_items WHERE state IN ('RUNNING', 'ENQUEUED', 'BLOCKED')")
+    suspend fun getActiveItems(): List<DownloadItemEntity>
 
     @Query("SELECT COUNT(*) FROM download_items WHERE taskId = :taskId")
     suspend fun countItemsForTask(taskId: Long): Int
@@ -90,7 +124,7 @@ interface DownloadDao {
     @Query("UPDATE download_items SET state = :state, updatedAt = :updatedAt WHERE taskId = :taskId AND state NOT IN ('SUCCEEDED', 'PAUSED')")
     suspend fun pauseAllItemsInTask(taskId: Long, state: String, updatedAt: Long)
 
-    @Query("SELECT * FROM download_items WHERE state = 'PAUSED' OR state IN ('RUNNING', 'ENQUEUED', 'BLOCKED')")
+    @Query("SELECT * FROM download_items WHERE state = 'PAUSED' OR state IN ('RUNNING', 'ENQUEUED', 'BLOCKED', 'QUEUED')")
     suspend fun getAllActiveOrPausedItems(): List<DownloadItemEntity>
 
     @Query("SELECT COUNT(*) FROM download_items WHERE state IN ('RUNNING', 'ENQUEUED', 'BLOCKED')")

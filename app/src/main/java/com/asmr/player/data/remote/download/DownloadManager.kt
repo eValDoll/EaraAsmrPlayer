@@ -17,7 +17,6 @@ import com.asmr.player.data.local.db.AppDatabaseProvider
 import com.asmr.player.util.SubtitleParser
 import com.asmr.player.util.TrackKeyNormalizer
 import com.asmr.player.work.AlbumCoverThumbWorker
-import com.asmr.player.BuildConfig
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -26,11 +25,24 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.ExecutorCoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.UUID
+import java.util.concurrent.Executors
+import kotlin.math.max
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -59,11 +71,7 @@ class DownloadManager @Inject constructor(
         albumWorkId: String = "",
         albumRjCode: String = ""
     ) {
-        val uniqueName = "${targetDir.trimEnd('/', '\\')}\\$fileName"
-        val uniqueWorkName = uniqueName.hashCode().toString()
-
         scope.launch {
-            val wm = WorkManager.getInstance(context)
             val now = System.currentTimeMillis()
 
             val taskKey = tags.firstOrNull { it.startsWith("album:") } ?: "dir:$taskRootDir"
@@ -79,10 +87,24 @@ class DownloadManager @Inject constructor(
             val safeAlbumDescription = albumDescription.trim().take(0)
             val safeAlbumWorkId = albumWorkId.trim().take(40)
             val safeAlbumRjCode = albumRjCode.trim().take(40)
+            val taskId = ensureTask(
+                taskKey = taskKey,
+                title = taskTitle,
+                subtitle = safeTaskSubtitle,
+                rootDir = taskRootDir,
+                albumTitle = safeAlbumTitle,
+                albumCircle = safeAlbumCircle,
+                albumCv = safeAlbumCv,
+                albumTagsCsv = safeAlbumTagsCsv,
+                albumCoverUrl = safeAlbumCoverUrl,
+                albumDescription = safeAlbumDescription,
+                albumWorkId = safeAlbumWorkId,
+                albumRjCode = safeAlbumRjCode,
+                now = now
+            )
 
             val existingFile = File(filePath)
             if (existingFile.exists() && existingFile.isFile) {
-                val taskId = ensureTask(taskKey = taskKey, title = taskTitle, subtitle = safeTaskSubtitle, rootDir = taskRootDir, now = now)
                 val size = existingFile.length().coerceAtLeast(0L)
                 val existingItem = downloadDao.getItemByFilePath(filePath)
                 if (existingItem != null) {
@@ -95,7 +117,7 @@ class DownloadManager @Inject constructor(
                         updatedAt = now
                     )
                 } else {
-                    val localWorkId = "local_$uniqueWorkName"
+                    val localWorkId = "local_${UUID.randomUUID()}"
                     downloadDao.upsertItem(
                         DownloadItemEntity(
                             taskId = taskId,
@@ -149,92 +171,39 @@ class DownloadManager @Inject constructor(
             }
 
             val existingItem = downloadDao.getItemByFilePath(filePath)
-            val workInfos = runCatching { wm.getWorkInfosForUniqueWork(uniqueWorkName).get() }.getOrDefault(emptyList())
-            val hasActiveWork = workInfos.any { info ->
-                info.state == WorkInfo.State.ENQUEUED || info.state == WorkInfo.State.RUNNING || info.state == WorkInfo.State.BLOCKED
-            }
-            val hasSucceededWork = workInfos.any { it.state == WorkInfo.State.SUCCEEDED }
-
-            if (hasActiveWork) return@launch
-            if (hasSucceededWork && existingItem != null) {
+            val existingBytes = runCatching { File(filePath).length() }.getOrDefault(0L).coerceAtLeast(0L)
+            if (existingItem != null) {
                 val file = File(existingItem.filePath.ifBlank { filePath })
-                if (file.exists() && file.isFile) {
-                    val size = file.length().coerceAtLeast(0L)
-                    downloadDao.updateItemProgress(
-                        workId = existingItem.workId,
-                        state = WorkInfo.State.SUCCEEDED.name,
-                        downloaded = size,
-                        total = size,
-                        speed = 0L,
-                        updatedAt = now
-                    )
+                if (existingItem.state == WorkInfo.State.SUCCEEDED.name && file.exists() && file.isFile) {
                     return@launch
                 }
-            }
-            if (existingItem != null && existingItem.state == WorkInfo.State.SUCCEEDED.name) {
-                val file = File(existingItem.filePath.ifBlank { filePath })
-                if (file.exists() && file.isFile) return@launch
-            }
-
-            val inputData = workDataOf(
-                "url" to url,
-                "fileName" to fileName,
-                "targetDir" to targetDir,
-                "taskRootDir" to taskRootDir,
-                "relativePath" to relativePath,
-                "taskKey" to taskKey,
-                "taskTitle" to taskTitle,
-                "taskSubtitle" to safeTaskSubtitle,
-                "albumTitle" to safeAlbumTitle,
-                "albumCircle" to safeAlbumCircle,
-                "albumCv" to safeAlbumCv,
-                "albumTagsCsv" to safeAlbumTagsCsv,
-                "albumCoverUrl" to safeAlbumCoverUrl,
-                "albumDescription" to safeAlbumDescription,
-                "albumWorkId" to safeAlbumWorkId,
-                "albumRjCode" to safeAlbumRjCode
-            )
-
-            val downloadRequest = OneTimeWorkRequestBuilder<DownloadWorker>()
-                .setInputData(inputData)
-                .addTag("download")
-                .apply {
-                    addTag(taskKey)
-                    tags.asSequence().filter { it != taskKey }.distinct().forEach { addTag(it) }
+                if (
+                    existingItem.state == WorkInfo.State.RUNNING.name ||
+                    existingItem.state == WorkInfo.State.ENQUEUED.name ||
+                    existingItem.state == WorkInfo.State.BLOCKED.name ||
+                    existingItem.state == DOWNLOAD_STATE_QUEUED
+                ) {
+                    return@launch
                 }
-                .setConstraints(
-                    Constraints.Builder()
-                        .setRequiredNetworkType(NetworkType.CONNECTED)
-                        .build()
-                )
-                .build()
-
-            val policy = if (workInfos.isNotEmpty()) ExistingWorkPolicy.REPLACE else ExistingWorkPolicy.KEEP
-            wm.enqueueUniqueWork(uniqueWorkName, policy, downloadRequest)
-
-            val taskId = ensureTask(taskKey = taskKey, title = taskTitle, subtitle = safeTaskSubtitle, rootDir = taskRootDir, now = now)
-            val workId = downloadRequest.id.toString()
-            val existingBytes = runCatching { File(filePath).length() }.getOrDefault(0L).coerceAtLeast(0L)
-
-            if (existingItem != null) {
-                downloadDao.replaceWorkIdForResume(
-                    oldWorkId = existingItem.workId,
-                    newWorkId = workId,
-                    state = WorkInfo.State.ENQUEUED.name,
+                downloadDao.updateItemProgress(
+                    workId = existingItem.workId,
+                    state = DOWNLOAD_STATE_QUEUED,
                     downloaded = existingBytes,
+                    total = existingItem.total,
+                    speed = 0L,
                     updatedAt = now
                 )
             } else {
                 downloadDao.upsertItem(
                     DownloadItemEntity(
                         taskId = taskId,
-                        workId = workId,
+                        workId = "queued_${UUID.randomUUID()}",
                         url = url,
                         relativePath = safeRelativePath,
                         fileName = fileName,
                         targetDir = targetDir,
                         filePath = filePath,
-                        state = WorkInfo.State.ENQUEUED.name,
+                        state = DOWNLOAD_STATE_QUEUED,
                         downloaded = existingBytes,
                         total = -1L,
                         speed = 0L,
@@ -243,14 +212,62 @@ class DownloadManager @Inject constructor(
                     )
                 )
             }
+            DownloadQueueCoordinator.requestSchedule(context)
         }
     }
 
-    private suspend fun ensureTask(taskKey: String, title: String, subtitle: String, rootDir: String, now: Long): Long {
+    private suspend fun ensureTask(
+        taskKey: String,
+        title: String,
+        subtitle: String,
+        rootDir: String,
+        albumTitle: String,
+        albumCircle: String,
+        albumCv: String,
+        albumTagsCsv: String,
+        albumCoverUrl: String,
+        albumDescription: String,
+        albumWorkId: String,
+        albumRjCode: String,
+        now: Long
+    ): Long {
         val existing = downloadDao.getTaskByKey(taskKey)
         if (existing != null) {
-            if (existing.subtitle.isBlank() && subtitle.isNotBlank()) {
-                runCatching { downloadDao.updateTaskSubtitle(existing.id, subtitle, now) }
+            val resolvedSubtitle = existing.subtitle.ifBlank { subtitle }
+            val resolvedAlbumTitle = existing.albumTitle.ifBlank { albumTitle }
+            val resolvedAlbumCircle = existing.albumCircle.ifBlank { albumCircle }
+            val resolvedAlbumCv = existing.albumCv.ifBlank { albumCv }
+            val resolvedAlbumTagsCsv = existing.albumTagsCsv.ifBlank { albumTagsCsv }
+            val resolvedAlbumCoverUrl = existing.albumCoverUrl.ifBlank { albumCoverUrl }
+            val resolvedAlbumDescription = existing.albumDescription.ifBlank { albumDescription }
+            val resolvedAlbumWorkId = existing.albumWorkId.ifBlank { albumWorkId }
+            val resolvedAlbumRjCode = existing.albumRjCode.ifBlank { albumRjCode }
+            if (
+                resolvedSubtitle != existing.subtitle ||
+                resolvedAlbumTitle != existing.albumTitle ||
+                resolvedAlbumCircle != existing.albumCircle ||
+                resolvedAlbumCv != existing.albumCv ||
+                resolvedAlbumTagsCsv != existing.albumTagsCsv ||
+                resolvedAlbumCoverUrl != existing.albumCoverUrl ||
+                resolvedAlbumDescription != existing.albumDescription ||
+                resolvedAlbumWorkId != existing.albumWorkId ||
+                resolvedAlbumRjCode != existing.albumRjCode
+            ) {
+                runCatching {
+                    downloadDao.updateTaskMetadata(
+                        taskId = existing.id,
+                        subtitle = resolvedSubtitle,
+                        albumTitle = resolvedAlbumTitle,
+                        albumCircle = resolvedAlbumCircle,
+                        albumCv = resolvedAlbumCv,
+                        albumTagsCsv = resolvedAlbumTagsCsv,
+                        albumCoverUrl = resolvedAlbumCoverUrl,
+                        albumDescription = resolvedAlbumDescription,
+                        albumWorkId = resolvedAlbumWorkId,
+                        albumRjCode = resolvedAlbumRjCode,
+                        updatedAt = now
+                    )
+                }
             }
             return existing.id
         }
@@ -260,12 +277,253 @@ class DownloadManager @Inject constructor(
                 title = title,
                 subtitle = subtitle,
                 rootDir = rootDir,
+                albumTitle = albumTitle,
+                albumCircle = albumCircle,
+                albumCv = albumCv,
+                albumTagsCsv = albumTagsCsv,
+                albumCoverUrl = albumCoverUrl,
+                albumDescription = albumDescription,
+                albumWorkId = albumWorkId,
+                albumRjCode = albumRjCode,
                 createdAt = now,
                 updatedAt = now
             )
         )
         if (created > 0) return created
         return downloadDao.getTaskByKey(taskKey)?.id ?: 0L
+    }
+}
+
+object DownloadQueueCoordinator {
+    private const val ACTIVE_WORK_RECONCILE_GRACE_MS = 30_000L
+    private const val RECOVERY_PREFS = "download_queue_recovery"
+    private const val RECOVERY_KEY = "download_queue_recovery_v2_done"
+    private const val MEMORY_RETRY_DELAY_MS = 15_000L
+    private const val TRIM_MEMORY_RUNNING_LOW_BACKOFF_MS = 20_000L
+    private const val TRIM_MEMORY_RUNNING_CRITICAL_BACKOFF_MS = 45_000L
+
+    private val scheduleMutex = Mutex()
+    private val requestMutex = Any()
+    @Volatile
+    private var scheduleRequested = false
+    @Volatile
+    private var scheduleLoopRunning = false
+    @Volatile
+    private var memoryRetryScheduled = false
+    @Volatile
+    private var memoryPauseUntilMs = 0L
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    fun requestSchedule(context: Context) {
+        val appContext = context.applicationContext
+        synchronized(requestMutex) {
+            scheduleRequested = true
+            if (scheduleLoopRunning) return
+            scheduleLoopRunning = true
+        }
+        scope.launch {
+            while (true) {
+                synchronized(requestMutex) {
+                    scheduleRequested = false
+                }
+                runCatching { schedulePendingDownloads(appContext) }
+                val shouldContinue = synchronized(requestMutex) {
+                    if (scheduleRequested) {
+                        true
+                    } else {
+                        scheduleLoopRunning = false
+                        false
+                    }
+                }
+                if (!shouldContinue) break
+            }
+        }
+    }
+
+    suspend fun recoverLegacyScheduledDownloads(context: Context) {
+        val appContext = context.applicationContext
+        val prefs = appContext.getSharedPreferences(RECOVERY_PREFS, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(RECOVERY_KEY, false)) {
+            requestSchedule(appContext)
+            return
+        }
+
+        val wm = WorkManager.getInstance(appContext)
+        runCatching { wm.cancelAllWorkByTag("download") }
+        val dao = AppDatabaseProvider.get(appContext).downloadDao()
+        val now = System.currentTimeMillis()
+        dao.getAllActiveOrPausedItems()
+            .filter { it.state != "PAUSED" && it.state != WorkInfo.State.SUCCEEDED.name }
+            .forEach { item ->
+                runCatching {
+                    dao.updateItemProgress(
+                        workId = item.workId,
+                        state = DOWNLOAD_STATE_QUEUED,
+                        downloaded = resolveExistingBytes(item),
+                        total = item.total,
+                        speed = 0L,
+                        updatedAt = now
+                    )
+                }
+            }
+        prefs.edit().putBoolean(RECOVERY_KEY, true).apply()
+        requestSchedule(appContext)
+    }
+
+    fun onTrimMemory(context: Context, level: Int) {
+        val now = System.currentTimeMillis()
+        val backoffMs = when {
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> TRIM_MEMORY_RUNNING_CRITICAL_BACKOFF_MS
+            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> TRIM_MEMORY_RUNNING_LOW_BACKOFF_MS
+            else -> 0L
+        }
+        if (backoffMs > 0L) {
+            memoryPauseUntilMs = max(memoryPauseUntilMs, now + backoffMs)
+            scheduleMemoryRetry(context, backoffMs)
+        }
+    }
+
+    suspend fun schedulePendingDownloads(context: Context) {
+        val appContext = context.applicationContext
+        scheduleMutex.withLock {
+            val wm = WorkManager.getInstance(appContext)
+            val dao = AppDatabaseProvider.get(appContext).downloadDao()
+            reconcileActiveItems(wm, dao)
+
+            val availableSlots = DownloadRuntimeConfig.maxConcurrentDownloads(appContext) - dao.countActiveItems()
+            if (availableSlots <= 0) return
+
+            val hasQueuedItems = dao.getQueuedItems(limit = 1).isNotEmpty()
+            if (!hasQueuedItems) return
+
+            val now = System.currentTimeMillis()
+            val memoryPaused = now < memoryPauseUntilMs
+            val memoryConstrained = DownloadRuntimeConfig.isMemoryConstrained(appContext)
+            if (memoryPaused || memoryConstrained) {
+                scheduleMemoryRetry(appContext, MEMORY_RETRY_DELAY_MS)
+                return
+            }
+
+            dao.getQueuedItems(availableSlots).forEach { item ->
+                val task = dao.getTaskById(item.taskId) ?: run {
+                    dao.updateItemState(item.workId, WorkInfo.State.FAILED.name, System.currentTimeMillis())
+                    return@forEach
+                }
+                val request = OneTimeWorkRequestBuilder<DownloadWorker>()
+                    .setInputData(
+                        workDataOf(
+                            "url" to item.url,
+                            "fileName" to item.fileName,
+                            "targetDir" to item.targetDir,
+                            "taskRootDir" to task.rootDir,
+                            "relativePath" to item.relativePath,
+                            "taskKey" to task.taskKey,
+                            "taskTitle" to task.title,
+                            "taskSubtitle" to task.subtitle,
+                            "albumTitle" to task.albumTitle,
+                            "albumCircle" to task.albumCircle,
+                            "albumCv" to task.albumCv,
+                            "albumTagsCsv" to task.albumTagsCsv,
+                            "albumCoverUrl" to task.albumCoverUrl,
+                            "albumDescription" to task.albumDescription,
+                            "albumWorkId" to task.albumWorkId,
+                            "albumRjCode" to task.albumRjCode
+                        )
+                    )
+                    .addTag("download")
+                    .addTag(task.taskKey)
+                    .setConstraints(
+                        Constraints.Builder()
+                            .setRequiredNetworkType(NetworkType.CONNECTED)
+                            .build()
+                    )
+                    .build()
+
+                wm.enqueue(request)
+
+                val existingBytes = runCatching {
+                    File(item.filePath.ifBlank { File(item.targetDir, item.fileName).absolutePath }).length()
+                }.getOrDefault(item.downloaded).coerceAtLeast(0L)
+
+                dao.replaceWorkIdForResume(
+                    oldWorkId = item.workId,
+                    newWorkId = request.id.toString(),
+                    state = WorkInfo.State.ENQUEUED.name,
+                    downloaded = existingBytes,
+                    updatedAt = System.currentTimeMillis()
+                )
+            }
+        }
+    }
+
+    private suspend fun reconcileActiveItems(workManager: WorkManager, dao: DownloadDao) {
+        val now = System.currentTimeMillis()
+        dao.getActiveItems().forEach { item ->
+            val workId = runCatching { UUID.fromString(item.workId) }.getOrNull()
+            if (workId == null) {
+                dao.updateItemProgress(
+                    workId = item.workId,
+                    state = DOWNLOAD_STATE_QUEUED,
+                    downloaded = resolveExistingBytes(item),
+                    total = item.total,
+                    speed = 0L,
+                    updatedAt = now
+                )
+                return@forEach
+            }
+
+                val info = runCatching { workManager.getWorkInfoById(workId).get() }.getOrNull()
+            when (info?.state) {
+                null -> {
+                    val recentlyScheduled = now - item.updatedAt <= ACTIVE_WORK_RECONCILE_GRACE_MS
+                    if (!recentlyScheduled) {
+                        dao.updateItemProgress(
+                            workId = item.workId,
+                            state = DOWNLOAD_STATE_QUEUED,
+                            downloaded = resolveExistingBytes(item),
+                            total = item.total,
+                            speed = 0L,
+                            updatedAt = now
+                        )
+                    }
+                }
+                WorkInfo.State.SUCCEEDED -> {
+                    val size = resolveExistingBytes(item)
+                    dao.updateItemProgress(
+                        workId = item.workId,
+                        state = WorkInfo.State.SUCCEEDED.name,
+                        downloaded = size,
+                        total = size.coerceAtLeast(item.total),
+                        speed = 0L,
+                        updatedAt = now
+                    )
+                }
+                WorkInfo.State.FAILED -> dao.updateItemState(item.workId, WorkInfo.State.FAILED.name, now)
+                WorkInfo.State.CANCELLED -> dao.updateItemState(item.workId, WorkInfo.State.CANCELLED.name, now)
+                else -> Unit
+            }
+        }
+    }
+
+    private fun scheduleMemoryRetry(context: Context, delayMs: Long) {
+        val appContext = context.applicationContext
+        synchronized(requestMutex) {
+            if (memoryRetryScheduled) return
+            memoryRetryScheduled = true
+        }
+        scope.launch {
+            delay(delayMs.coerceAtLeast(1_000L))
+            synchronized(requestMutex) {
+                memoryRetryScheduled = false
+            }
+            requestSchedule(appContext)
+        }
+    }
+
+    private fun resolveExistingBytes(item: DownloadItemEntity): Long {
+        return runCatching {
+            File(item.filePath.ifBlank { File(item.targetDir, item.fileName).absolutePath }).length()
+        }.getOrDefault(item.downloaded).coerceAtLeast(0L)
     }
 }
 
@@ -276,7 +534,11 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
         fun okHttpClient(): OkHttpClient
     }
 
-    override suspend fun doWork(): ListenableWorker.Result {
+    override suspend fun doWork(): ListenableWorker.Result = withContext(downloadDispatcher(applicationContext)) {
+        executeDownloadWork()
+    }
+
+    private suspend fun executeDownloadWork(): ListenableWorker.Result {
         val url = inputData.getString("url") ?: return ListenableWorker.Result.failure()
         val fileName = inputData.getString("fileName") ?: return ListenableWorker.Result.failure()
         val targetDir = inputData.getString("targetDir") ?: return ListenableWorker.Result.failure()
@@ -296,7 +558,9 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
 
         return try {
             val workId = id.toString()
-            val dao = AppDatabaseProvider.get(applicationContext).downloadDao()
+            val appDb = AppDatabaseProvider.get(applicationContext)
+            val dao = appDb.downloadDao()
+            val dailyStatDao = appDb.dailyStatDao()
             val now0 = System.currentTimeMillis()
             val resolvedTaskKey = taskKey.ifBlank { "dir:${taskRootDir.ifBlank { targetDir }}" }
             val resolvedRootDir = taskRootDir.ifBlank { targetDir }
@@ -305,8 +569,41 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
             val taskId = run {
                 val existing = dao.getTaskByKey(resolvedTaskKey)
                 if (existing != null) {
-                    if (existing.subtitle.isBlank() && resolvedSubtitle.isNotBlank()) {
-                        runCatching { dao.updateTaskSubtitle(existing.id, resolvedSubtitle, now0) }
+                    val mergedSubtitle = existing.subtitle.ifBlank { resolvedSubtitle }
+                    val mergedAlbumTitle = existing.albumTitle.ifBlank { albumTitle }
+                    val mergedAlbumCircle = existing.albumCircle.ifBlank { albumCircle }
+                    val mergedAlbumCv = existing.albumCv.ifBlank { albumCv }
+                    val mergedAlbumTagsCsv = existing.albumTagsCsv.ifBlank { albumTagsCsv }
+                    val mergedAlbumCoverUrl = existing.albumCoverUrl.ifBlank { albumCoverUrl }
+                    val mergedAlbumDescription = existing.albumDescription.ifBlank { albumDescription }
+                    val mergedAlbumWorkId = existing.albumWorkId.ifBlank { albumWorkId }
+                    val mergedAlbumRjCode = existing.albumRjCode.ifBlank { albumRjCode }
+                    if (
+                        mergedSubtitle != existing.subtitle ||
+                        mergedAlbumTitle != existing.albumTitle ||
+                        mergedAlbumCircle != existing.albumCircle ||
+                        mergedAlbumCv != existing.albumCv ||
+                        mergedAlbumTagsCsv != existing.albumTagsCsv ||
+                        mergedAlbumCoverUrl != existing.albumCoverUrl ||
+                        mergedAlbumDescription != existing.albumDescription ||
+                        mergedAlbumWorkId != existing.albumWorkId ||
+                        mergedAlbumRjCode != existing.albumRjCode
+                    ) {
+                        runCatching {
+                            dao.updateTaskMetadata(
+                                taskId = existing.id,
+                                subtitle = mergedSubtitle,
+                                albumTitle = mergedAlbumTitle,
+                                albumCircle = mergedAlbumCircle,
+                                albumCv = mergedAlbumCv,
+                                albumTagsCsv = mergedAlbumTagsCsv,
+                                albumCoverUrl = mergedAlbumCoverUrl,
+                                albumDescription = mergedAlbumDescription,
+                                albumWorkId = mergedAlbumWorkId,
+                                albumRjCode = mergedAlbumRjCode,
+                                updatedAt = now0
+                            )
+                        }
                     }
                     existing.id
                 } else {
@@ -316,6 +613,14 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                             title = resolvedTitle,
                             subtitle = resolvedSubtitle,
                             rootDir = resolvedRootDir,
+                            albumTitle = albumTitle,
+                            albumCircle = albumCircle,
+                            albumCv = albumCv,
+                            albumTagsCsv = albumTagsCsv,
+                            albumCoverUrl = albumCoverUrl,
+                            albumDescription = albumDescription,
+                            albumWorkId = albumWorkId,
+                            albumRjCode = albumRjCode,
                             createdAt = now0,
                             updatedAt = now0
                         )
@@ -367,6 +672,15 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
 
             var total = -1L
             var downloaded = existingBytes
+            val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(now0))
+            var pendingTrafficBytes = 0L
+
+            suspend fun flushTrafficStats() {
+                if (pendingTrafficBytes <= 0L) return
+                dailyStatDao.addTraffic(today, pendingTrafficBytes)
+                pendingTrafficBytes = 0L
+            }
+
             client.newCall(requestBuilder.build()).execute().use { response ->
                 if (!response.isSuccessful) return ListenableWorker.Result.failure()
                 val body = response.body ?: return ListenableWorker.Result.failure()
@@ -381,7 +695,7 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                     contentLen > 0 -> contentLen
                     else -> -1L
                 }
-                val buffer = ByteArray(DEFAULT_BUFFER_SIZE)
+                val buffer = ByteArray(DOWNLOAD_BUFFER_SIZE)
                 var lastProgressAt = 0L
                 var lastBytes = 0L
                 var lastTs = System.currentTimeMillis()
@@ -409,7 +723,9 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                         while (true) {
                             if (isStopped) {
                                 val now = System.currentTimeMillis()
+                                flushTrafficStats()
                                 dao.updateItemState(workId, "PAUSED", now)
+                                DownloadQueueCoordinator.requestSchedule(applicationContext)
                                 return ListenableWorker.Result.success(
                                     workDataOf(
                                         "fileName" to fileName,
@@ -424,14 +740,12 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                             if (read <= 0) break
                             output.write(buffer, 0, read)
                             downloaded += read
-                            
-                            // Track daily traffic
-                            val today = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault()).format(java.util.Date())
-                            AppDatabaseProvider.get(applicationContext).dailyStatDao().addTraffic(today, read.toLong())
+                            pendingTrafficBytes += read.toLong()
 
                             val now = System.currentTimeMillis()
-                            val shouldUpdate = downloaded - lastProgressAt >= 256 * 1024 || now - lastTs >= 1000
+                            val shouldUpdate = downloaded - lastProgressAt >= PROGRESS_UPDATE_BYTES || now - lastTs >= PROGRESS_UPDATE_INTERVAL_MS
                             if (shouldUpdate) {
+                                flushTrafficStats()
                                 val dt = (now - lastTs).coerceAtLeast(1)
                                 val speed = ((downloaded - lastBytes) * 1000 / dt).coerceAtLeast(0)
                                 dao.updateItemProgress(
@@ -442,15 +756,6 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                                     speed = speed,
                                     updatedAt = now
                                 )
-                                setProgress(
-                                    workDataOf(
-                                        "fileName" to fileName,
-                                        "targetDir" to targetDir,
-                                        "downloaded" to downloaded,
-                                        "total" to total,
-                                        "speed" to speed
-                                    )
-                                )
                                 lastProgressAt = downloaded
                                 lastBytes = downloaded
                                 lastTs = now
@@ -460,6 +765,10 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                 }
             }
             val now = System.currentTimeMillis()
+            try {
+                flushTrafficStats()
+            } catch (_: Exception) {
+            }
             val finalTotal = if (total > 0) total else downloaded
             dao.updateItemProgress(
                 workId = workId,
@@ -493,6 +802,7 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                 WorkManager.getInstance(applicationContext)
                     .enqueueUniqueWork(unique, ExistingWorkPolicy.REPLACE, request)
             }
+            DownloadQueueCoordinator.requestSchedule(applicationContext)
             ListenableWorker.Result.success(
                 workDataOf(
                     "fileName" to fileName,
@@ -509,6 +819,7 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                 val dao = AppDatabaseProvider.get(applicationContext).downloadDao()
                 dao.updateItemState(workId, WorkInfo.State.FAILED.name, now)
             }
+            DownloadQueueCoordinator.requestSchedule(applicationContext)
             ListenableWorker.Result.failure(
                 workDataOf(
                     "fileName" to fileName,
@@ -518,6 +829,45 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                     "taskKey" to taskKey
                 )
             )
+        }
+    }
+
+    companion object {
+        private const val DOWNLOAD_BUFFER_SIZE = 64 * 1024
+        private const val PROGRESS_UPDATE_BYTES = 256 * 1024L
+        private const val PROGRESS_UPDATE_INTERVAL_MS = 1_000L
+
+        @Volatile
+        private var lowRamDispatcher: ExecutorCoroutineDispatcher? = null
+
+        @Volatile
+        private var defaultDispatcher: ExecutorCoroutineDispatcher? = null
+
+        private val dispatcherLock = Any()
+
+        private fun downloadDispatcher(context: Context): CoroutineDispatcher {
+            val lowRamDevice = DownloadRuntimeConfig.isLowRamDevice(context)
+            val existing = if (lowRamDevice) lowRamDispatcher else defaultDispatcher
+            if (existing != null) return existing
+
+            return synchronized(dispatcherLock) {
+                val cached = if (lowRamDevice) lowRamDispatcher else defaultDispatcher
+                if (cached != null) {
+                    cached
+                } else {
+                    // Each file maps to its own worker, so we cap download execution here to
+                    // avoid dozens of concurrent network streams overwhelming low-memory phones.
+                    val created = Executors
+                        .newFixedThreadPool(DownloadRuntimeConfig.maxConcurrentDownloads(context))
+                        .asCoroutineDispatcher()
+                    if (lowRamDevice) {
+                        lowRamDispatcher = created
+                    } else {
+                        defaultDispatcher = created
+                    }
+                    created
+                }
+            }
         }
     }
 }

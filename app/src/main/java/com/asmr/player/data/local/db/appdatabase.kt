@@ -62,7 +62,7 @@ import com.asmr.player.data.local.db.entities.TrackPlaybackProgressEntity
         TrackSliceEntity::class,
         TrackPlaybackProgressEntity::class
     ],
-    version = 18,
+    version = 19,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

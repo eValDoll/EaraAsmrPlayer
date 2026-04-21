@@ -16,6 +16,14 @@ data class DownloadTaskEntity(
     val title: String,
     val subtitle: String = "",
     val rootDir: String,
+    val albumTitle: String = "",
+    val albumCircle: String = "",
+    val albumCv: String = "",
+    val albumTagsCsv: String = "",
+    val albumCoverUrl: String = "",
+    val albumDescription: String = "",
+    val albumWorkId: String = "",
+    val albumRjCode: String = "",
     val createdAt: Long,
     val updatedAt: Long
 )
