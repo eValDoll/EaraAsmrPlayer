@@ -143,10 +143,11 @@ class DlsitePlayLibraryClient @Inject constructor(
                 }
                 throw IllegalStateException("获取已购列表失败（${resp.code}）")
             }
-            val body = resp.body?.string().orEmpty()
+            val body = resp.body ?: return emptyMap()
             val type = object : TypeToken<List<Map<String, Any?>>>() {}.type
-            val parsed = runCatching { gson.fromJson<Any>(body, type) }.getOrNull()
-            val list: List<Map<String, Any?>> = (parsed as? List<*>)?.mapNotNull { it as? Map<String, Any?> }.orEmpty()
+            val list = body.charStream().use { reader ->
+                runCatching { gson.fromJson<List<Map<String, Any?>>>(reader, type) }.getOrNull().orEmpty()
+            }
             val out = LinkedHashMap<String, String>()
             list.forEach { item ->
                 val workno = pickString(item["workno"]).uppercase().trim()
@@ -181,16 +182,17 @@ class DlsitePlayLibraryClient @Inject constructor(
             val reqBuilder = Request.Builder().url("https://play.dlsite.com/api/v3/content/works").post(body)
             headers.forEach { (k, v) -> reqBuilder.header(k, v) }
             okHttpClient.newCall(reqBuilder.build()).execute().use { resp ->
-                if (!resp.isSuccessful) {
-                    if (resp.code == 401) {
-                        throw IllegalStateException("已购库鉴权失败（401），请重新登录 DLsite")
+                    if (!resp.isSuccessful) {
+                        if (resp.code == 401) {
+                            throw IllegalStateException("已购库鉴权失败（401），请重新登录 DLsite")
+                        }
+                        return@use
                     }
-                    return@use
-                }
-                val raw = resp.body?.string().orEmpty()
-                val parsed = runCatching { gson.fromJson<Any>(raw, type) }.getOrNull()
-                val obj = parsed as? Map<*, *> ?: emptyMap<Any, Any>()
-                val works = obj["works"] as? List<*>
+                    val body = resp.body ?: return@use
+                    val obj = body.charStream().use { reader ->
+                        runCatching { gson.fromJson<Map<String, Any?>>(reader, type) }.getOrNull().orEmpty()
+                    }
+                    val works = obj["works"] as? List<*>
                 works?.forEach { w ->
                     if (w is Map<*, *>) {
                         @Suppress("UNCHECKED_CAST")

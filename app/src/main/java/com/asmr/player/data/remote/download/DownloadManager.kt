@@ -17,6 +17,11 @@ import com.asmr.player.data.local.db.AppDatabaseProvider
 import com.asmr.player.util.SubtitleParser
 import com.asmr.player.util.TrackKeyNormalizer
 import com.asmr.player.work.AlbumCoverThumbWorker
+import com.asmr.player.BuildConfig
+import dagger.hilt.EntryPoint
+import dagger.hilt.InstallIn
+import dagger.hilt.android.EntryPointAccessors
+import dagger.hilt.components.SingletonComponent
 import dagger.hilt.android.qualifiers.ApplicationContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -32,7 +37,8 @@ import javax.inject.Singleton
 @Singleton
 class DownloadManager @Inject constructor(
     @ApplicationContext private val context: Context,
-    private val downloadDao: DownloadDao
+    private val downloadDao: DownloadDao,
+    private val okHttpClient: OkHttpClient
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -264,6 +270,12 @@ class DownloadManager @Inject constructor(
 }
 
 class DownloadWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
+    @EntryPoint
+    @InstallIn(SingletonComponent::class)
+    interface DownloadWorkerEntryPoint {
+        fun okHttpClient(): OkHttpClient
+    }
+
     override suspend fun doWork(): ListenableWorker.Result {
         val url = inputData.getString("url") ?: return ListenableWorker.Result.failure()
         val fileName = inputData.getString("fileName") ?: return ListenableWorker.Result.failure()
@@ -324,7 +336,8 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                 if (!marker.exists()) marker.createNewFile()
             }
 
-            val client = OkHttpClient()
+            val entryPoint = EntryPointAccessors.fromApplication(applicationContext, DownloadWorkerEntryPoint::class.java)
+            val client = entryPoint.okHttpClient()
             val requestBuilder = Request.Builder()
                 .url(url)
                 .header("User-Agent", NetworkHeaders.USER_AGENT)
