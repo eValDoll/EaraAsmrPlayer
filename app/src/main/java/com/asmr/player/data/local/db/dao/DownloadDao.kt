@@ -64,7 +64,16 @@ interface DownloadDao {
     @Query("SELECT * FROM download_items WHERE filePath = :filePath LIMIT 1")
     suspend fun getItemByFilePath(filePath: String): DownloadItemEntity?
 
-    @Query("SELECT * FROM download_items WHERE state = 'QUEUED' ORDER BY createdAt ASC LIMIT :limit")
+    @Query(
+        "SELECT * FROM download_items " +
+            "WHERE state = 'QUEUED' " +
+            "ORDER BY " +
+            "CASE WHEN downloaded > 0 THEN 0 ELSE 1 END ASC, " +
+            "downloaded DESC, " +
+            "updatedAt DESC, " +
+            "createdAt ASC " +
+            "LIMIT :limit"
+    )
     suspend fun getQueuedItems(limit: Int): List<DownloadItemEntity>
 
     @Query("SELECT * FROM download_items WHERE state IN ('RUNNING', 'ENQUEUED', 'BLOCKED')")

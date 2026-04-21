@@ -103,24 +103,26 @@ class DownloadsViewModel @Inject constructor(
 
                     val hasRunning = items.any { it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED }
                     val hasFailed = items.any { it.state == DownloadItemState.FAILED }
+                    val hasPaused = items.any { it.state == DownloadItemState.PAUSED }
+                    val allCancelled = items.isNotEmpty() && items.all { it.state == DownloadItemState.CANCELLED }
                     val allSucceeded = items.isNotEmpty() && items.all { it.state == DownloadItemState.SUCCEEDED }
                     val state = when {
                         hasRunning -> DownloadItemState.RUNNING
                         hasFailed -> DownloadItemState.FAILED
                         allSucceeded -> DownloadItemState.SUCCEEDED
+                        hasPaused -> DownloadItemState.PAUSED
+                        allCancelled -> DownloadItemState.CANCELLED
                         else -> DownloadItemState.ENQUEUED
                     }
 
-                    val knownTotal = items.filter { it.total > 0 }.sumOf { it.total }
-                    val knownDownloaded = items.filter { it.total > 0 }.sumOf { it.downloaded.coerceAtMost(it.total) }
-                    val progressFraction = when {
-                        allSucceeded -> 1f
-                        knownTotal > 0 -> (knownDownloaded.toDouble() / knownTotal.toDouble()).toFloat().coerceIn(0f, 1f)
-                        else -> null
-                    }
                     val hasUnknownTotalRunning = items.any {
                         (it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED) && it.total <= 0
                     }
+                    val progressFraction = resolveTaskProgress(
+                        items = items,
+                        allSucceeded = allSucceeded,
+                        hasUnknownTotalRunning = hasUnknownTotalRunning
+                    )
 
                     DownloadTaskUi(
                         taskId = task.id,
@@ -137,6 +139,50 @@ class DownloadsViewModel @Inject constructor(
             }
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private fun resolveTaskProgress(
+        items: List<DownloadItemUi>,
+        allSucceeded: Boolean,
+        hasUnknownTotalRunning: Boolean
+    ): Float? {
+        if (allSucceeded) return 1f
+        if (items.isEmpty()) return null
+
+        val hasResolvableTotalsForAllItems = items.all { item ->
+            item.total > 0L || item.state == DownloadItemState.SUCCEEDED
+        }
+        if (hasResolvableTotalsForAllItems) {
+            val resolvedTotal = items.sumOf { item ->
+                when {
+                    item.total > 0L -> item.total
+                    item.state == DownloadItemState.SUCCEEDED -> item.downloaded.coerceAtLeast(0L)
+                    else -> 0L
+                }
+            }
+            if (resolvedTotal > 0L) {
+                val resolvedDownloaded = items.sumOf { item ->
+                    when {
+                        item.total > 0L -> item.downloaded.coerceIn(0L, item.total)
+                        item.state == DownloadItemState.SUCCEEDED -> item.downloaded.coerceAtLeast(0L)
+                        else -> 0L
+                    }
+                }
+                return (resolvedDownloaded.toDouble() / resolvedTotal.toDouble()).toFloat().coerceIn(0f, 1f)
+            }
+        }
+
+        val totalItems = items.size.toDouble()
+        val aggregateProgress = items.sumOf { item ->
+            when {
+                item.state == DownloadItemState.SUCCEEDED -> 1.0
+                item.total > 0L -> item.downloaded.coerceIn(0L, item.total).toDouble() / item.total.toDouble()
+                else -> 0.0
+            }
+        } / totalItems
+
+        if (aggregateProgress <= 0.0 && hasUnknownTotalRunning) return null
+        return aggregateProgress.toFloat().coerceIn(0f, 1f)
+    }
 
     fun cancelItem(workId: String) {
         viewModelScope.launch(Dispatchers.IO) {

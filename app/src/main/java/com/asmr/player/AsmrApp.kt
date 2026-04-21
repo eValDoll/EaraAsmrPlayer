@@ -38,7 +38,7 @@ class AsmrApp : Application(), ImageLoaderFactory, Configuration.Provider {
         }
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             runCatching { AppDatabaseProvider.get(applicationContext) }
-            runCatching { DownloadQueueCoordinator.recoverLegacyScheduledDownloads(applicationContext) }
+            runCatching { DownloadQueueCoordinator.recoverDownloadsOnAppLaunch(applicationContext) }
         }
     }
 

@@ -296,8 +296,6 @@ class DownloadManager @Inject constructor(
 
 object DownloadQueueCoordinator {
     private const val ACTIVE_WORK_RECONCILE_GRACE_MS = 30_000L
-    private const val RECOVERY_PREFS = "download_queue_recovery"
-    private const val RECOVERY_KEY = "download_queue_recovery_v2_done"
     private const val MEMORY_RETRY_DELAY_MS = 15_000L
     private const val TRIM_MEMORY_RUNNING_LOW_BACKOFF_MS = 20_000L
     private const val TRIM_MEMORY_RUNNING_CRITICAL_BACKOFF_MS = 45_000L
@@ -340,34 +338,31 @@ object DownloadQueueCoordinator {
         }
     }
 
-    suspend fun recoverLegacyScheduledDownloads(context: Context) {
+    suspend fun recoverDownloadsOnAppLaunch(context: Context) {
         val appContext = context.applicationContext
-        val prefs = appContext.getSharedPreferences(RECOVERY_PREFS, Context.MODE_PRIVATE)
-        if (prefs.getBoolean(RECOVERY_KEY, false)) {
-            requestSchedule(appContext)
-            return
-        }
-
         val wm = WorkManager.getInstance(appContext)
         runCatching { wm.cancelAllWorkByTag("download") }
         val dao = AppDatabaseProvider.get(appContext).downloadDao()
         val now = System.currentTimeMillis()
         dao.getAllActiveOrPausedItems()
-            .filter { it.state != "PAUSED" && it.state != WorkInfo.State.SUCCEEDED.name }
             .forEach { item ->
+                val resolvedBytes = resolveExistingBytes(item)
+                val resolvedState = when (item.state) {
+                    WorkInfo.State.SUCCEEDED.name -> WorkInfo.State.SUCCEEDED.name
+                    "PAUSED" -> "PAUSED"
+                    else -> "PAUSED"
+                }
                 runCatching {
                     dao.updateItemProgress(
                         workId = item.workId,
-                        state = DOWNLOAD_STATE_QUEUED,
-                        downloaded = resolveExistingBytes(item),
+                        state = resolvedState,
+                        downloaded = resolvedBytes,
                         total = item.total,
                         speed = 0L,
                         updatedAt = now
                     )
                 }
             }
-        prefs.edit().putBoolean(RECOVERY_KEY, true).apply()
-        requestSchedule(appContext)
     }
 
     fun onTrimMemory(context: Context, level: Int) {
