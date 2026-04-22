@@ -2,7 +2,6 @@ package com.asmr.player.data.local.datastore
 
 import android.content.Context
 import androidx.datastore.preferences.core.*
-import com.asmr.player.data.settings.BackgroundEffectType
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.settingsDataStore
@@ -22,8 +21,6 @@ class SettingsDataStore @Inject constructor(
     private val dynamicPlayerHueEnabledKey = booleanPreferencesKey("dynamic_player_hue_enabled")
     private val staticHueArgbLightKey = intPreferencesKey("static_hue_argb_light")
     private val staticHueArgbDarkKey = intPreferencesKey("static_hue_argb_dark")
-    private val backgroundEffectEnabledKey = booleanPreferencesKey("background_effect_enabled")
-    private val backgroundEffectTypeKey = stringPreferencesKey("background_effect_type")
     private val coverBackgroundEnabledKey = booleanPreferencesKey("cover_background_enabled")
     private val coverBackgroundClarityKey = floatPreferencesKey("cover_background_clarity")
     private val coverPreviewModeKey = stringPreferencesKey("cover_preview_mode")
@@ -51,12 +48,6 @@ class SettingsDataStore @Inject constructor(
         val isDark = themeMode == "dark" || themeMode == "soft_dark"
         val key = if (isDark) staticHueArgbDarkKey else staticHueArgbLightKey
         if (prefs.contains(key)) prefs[key] else null
-    }
-    val backgroundEffectEnabled: Flow<Boolean> = context.settingsDataStore.data.map {
-        it[backgroundEffectEnabledKey] ?: false
-    }
-    val backgroundEffectType: Flow<BackgroundEffectType> = context.settingsDataStore.data.map {
-        BackgroundEffectType.fromStorageValue(it[backgroundEffectTypeKey])
     }
     val coverBackgroundEnabled: Flow<Boolean> = context.settingsDataStore.data.map { it[coverBackgroundEnabledKey] ?: true }
     val coverBackgroundClarity: Flow<Float> = context.settingsDataStore.data.map { it[coverBackgroundClarityKey] ?: 0.35f }
@@ -103,14 +94,6 @@ class SettingsDataStore @Inject constructor(
                 prefs[key] = argb
             }
         }
-    }
-
-    suspend fun setBackgroundEffectEnabled(enabled: Boolean) {
-        context.settingsDataStore.edit { it[backgroundEffectEnabledKey] = enabled }
-    }
-
-    suspend fun setBackgroundEffectType(type: BackgroundEffectType) {
-        context.settingsDataStore.edit { it[backgroundEffectTypeKey] = type.storageValue }
     }
 
     suspend fun setCoverBackgroundEnabled(enabled: Boolean) {

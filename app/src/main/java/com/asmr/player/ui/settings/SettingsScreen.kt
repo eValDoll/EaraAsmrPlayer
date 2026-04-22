@@ -9,7 +9,6 @@ import android.provider.DocumentsContract
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -59,7 +58,6 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.BuildConfig
-import com.asmr.player.data.settings.BackgroundEffectType
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.FloatingLyricsSettings
 import com.asmr.player.data.settings.LyricsPageSettings
@@ -72,12 +70,8 @@ import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
-import com.asmr.player.ui.theme.dynamicPageContainerColor
 import java.io.File
 import kotlin.math.abs
-
-internal const val BACKGROUND_EFFECT_TYPE_ROW_TAG = "settings_background_effect_type_row"
-internal const val BACKGROUND_EFFECT_VALUE_TAG = "settings_background_effect_value"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -95,8 +89,6 @@ fun SettingsScreen(
     val staticHueArgb by viewModel.staticHueArgb.collectAsState()
     val staticHueArgbLight by viewModel.staticHueArgbLight.collectAsState()
     val staticHueArgbDark by viewModel.staticHueArgbDark.collectAsState()
-    val backgroundEffectEnabled by viewModel.backgroundEffectEnabled.collectAsState()
-    val backgroundEffectType by viewModel.backgroundEffectType.collectAsState()
     val coverBackgroundEnabled by viewModel.coverBackgroundEnabled.collectAsState()
     val coverBackgroundClarity by viewModel.coverBackgroundClarity.collectAsState()
     val coverPreviewMode by viewModel.coverPreviewMode.collectAsState()
@@ -380,13 +372,6 @@ fun SettingsScreen(
                     text = "封面动态主题（全局）",
                     checked = dynamicPlayerHueEnabled,
                     onCheckedChange = viewModel::setDynamicPlayerHueEnabled
-                )
-
-                BackgroundEffectSettingsControls(
-                    backgroundEffectEnabled = backgroundEffectEnabled,
-                    backgroundEffectType = backgroundEffectType,
-                    onBackgroundEffectEnabledChange = viewModel::setBackgroundEffectEnabled,
-                    onBackgroundEffectTypeChange = viewModel::setBackgroundEffectType
                 )
 
                 SettingsToggleRow(
@@ -987,21 +972,7 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
     }
 }
 
-@Composable
-internal fun BackgroundEffectSettingsControls(
-    backgroundEffectEnabled: Boolean,
-    backgroundEffectType: BackgroundEffectType,
-    onBackgroundEffectEnabledChange: (Boolean) -> Unit,
-    onBackgroundEffectTypeChange: (BackgroundEffectType) -> Unit
-) {
-    BackgroundEffectTypeSelectorRow(
-        backgroundEffectEnabled = backgroundEffectEnabled,
-        selectedType = backgroundEffectType,
-        onBackgroundEffectEnabledChange = onBackgroundEffectEnabledChange,
-        onSelected = onBackgroundEffectTypeChange
-    )
-}
-
+/*
 @Composable
 internal fun BackgroundEffectTypeSelectorRow(
     backgroundEffectEnabled: Boolean,
@@ -1109,6 +1080,7 @@ internal fun BackgroundEffectTypeSelectorRow(
         }
     }
 }
+*/
 @Composable
 private fun SettingsToggleRow(
     text: String,
