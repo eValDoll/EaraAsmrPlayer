@@ -45,8 +45,10 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.IntOffset
@@ -970,6 +972,115 @@ private fun SettingsGroup(title: String, content: @Composable ColumnScope.() -> 
     }
 }
 
+/*
+@Composable
+internal fun BackgroundEffectTypeSelectorRow(
+    backgroundEffectEnabled: Boolean,
+    selectedType: BackgroundEffectType,
+    onBackgroundEffectEnabledChange: (Boolean) -> Unit,
+    onSelected: (BackgroundEffectType) -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
+    val selectorShape = RoundedCornerShape(12.dp)
+    val selectorBorderColor = MaterialTheme.colorScheme.outline.copy(
+        alpha = if (colorScheme.isDark) 0.26f else 0.18f
+    )
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel = if (!backgroundEffectEnabled) {
+        "关闭"
+    } else {
+        when (selectedType) {
+            BackgroundEffectType.Flow -> "光点"
+            BackgroundEffectType.Ripple -> "呼吸波纹"
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag(BACKGROUND_EFFECT_TYPE_ROW_TAG),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text("背景特效", style = MaterialTheme.typography.bodyMedium)
+        Spacer(modifier = Modifier.weight(1f))
+        Box(
+            modifier = Modifier.wrapContentSize(Alignment.TopEnd)
+        ) {
+            Surface(
+                shape = selectorShape,
+                color = dynamicContainerColor,
+                contentColor = colorScheme.onSurface,
+                border = BorderStroke(1.dp, selectorBorderColor),
+                modifier = Modifier
+                    .clip(selectorShape)
+                    .clickable { expanded = true }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = selectedLabel,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colorScheme.textSecondary,
+                        modifier = Modifier.testTag(BACKGROUND_EFFECT_VALUE_TAG)
+                    )
+                    Text(
+                        text = "▼",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            MaterialTheme(
+                colorScheme = MaterialTheme.colorScheme.copy(
+                    surface = dynamicContainerColor,
+                    surfaceContainer = dynamicContainerColor
+                )
+            ) {
+                DropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                    offset = DpOffset(x = 0.dp, y = 6.dp),
+                    modifier = Modifier.background(dynamicContainerColor)
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("关闭") },
+                        onClick = {
+                            expanded = false
+                            onBackgroundEffectEnabledChange(false)
+                        }
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
+                    )
+                    DropdownMenuItem(
+                        text = { Text("光点") },
+                        onClick = {
+                            expanded = false
+                            onSelected(BackgroundEffectType.Flow)
+                            onBackgroundEffectEnabledChange(true)
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("呼吸波纹") },
+                        onClick = {
+                            expanded = false
+                            onSelected(BackgroundEffectType.Ripple)
+                            onBackgroundEffectEnabledChange(true)
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+*/
 @Composable
 private fun SettingsToggleRow(
     text: String,

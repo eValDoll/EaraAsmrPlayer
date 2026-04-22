@@ -83,6 +83,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.domain.model.Album
 import com.asmr.player.ui.common.CustomSearchBar
+import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
@@ -174,7 +175,7 @@ fun SearchScreen(
     val interactionLocked = success?.isBusy == true
     val filterControlsLocked = success == null || interactionLocked
     val searchSubmitLocked = uiState is SearchUiState.Loading || interactionLocked
-    val showSearchSpinner = success?.isSearching == true
+    val showSearchSpinner = success?.isBusy == true
     val highlightedPage = success?.page ?: 1
     val canGoPrev = success?.canGoPrev == true && success?.isSearching != true
     val canGoNext = success?.canGoNext == true && success?.isSearching != true
@@ -183,12 +184,12 @@ fun SearchScreen(
         animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
         label = "searchChromeOffset"
     )
-    val chromeVisibleHeightPx = when {
-        chromeState.heightPx > 0f -> (chromeState.heightPx + animatedChromeOffsetPx).coerceIn(0f, chromeState.heightPx)
+    val chromeReservedHeightPx = when {
+        chromeState.heightPx > 0f -> chromeState.heightPx
         success != null -> with(androidx.compose.ui.platform.LocalDensity.current) { 120.dp.toPx() }
         else -> with(androidx.compose.ui.platform.LocalDensity.current) { 80.dp.toPx() }
     }
-    val topPadding = with(androidx.compose.ui.platform.LocalDensity.current) { chromeVisibleHeightPx.toDp() } + SearchChromeContentGap
+    val topPadding = with(androidx.compose.ui.platform.LocalDensity.current) { chromeReservedHeightPx.toDp() } + SearchChromeContentGap
 
     fun scrollResultsToTop() {
         scope.launch {
@@ -354,7 +355,23 @@ fun SearchScreen(
                             }
 
                             is SearchUiState.Success -> {
-                                if (viewMode == 0) {
+                                if (state.results.isEmpty()) {
+                                    EaraBrandedEmptyState(
+                                        sectionTitle = "在线搜索",
+                                        headline = if (state.keyword.isBlank()) "还没有搜索结果" else "没有找到匹配结果",
+                                        description = if (state.keyword.isBlank()) {
+                                            "输入作品号、社团或 CV 后，匹配结果会显示在这里。"
+                                        } else {
+                                            "没有找到和当前关键词相关的内容，试试更换关键词、语言或排序方式。"
+                                        },
+                                        sectionIcon = Icons.Default.Search,
+                                        modifier = Modifier.fillMaxSize(),
+                                        contentPadding = PaddingValues(
+                                            top = topPadding,
+                                            bottom = LocalBottomOverlayPadding.current + 24.dp
+                                        )
+                                    )
+                                } else if (viewMode == 0) {
                                     LazyColumn(
                                         state = listState,
                                         modifier = Modifier
@@ -409,8 +426,29 @@ fun SearchScreen(
                                 }
                             }
 
-                            is SearchUiState.Error -> Column(
-                                modifier = Modifier
+                            is SearchUiState.Error -> EaraBrandedEmptyState(
+                                sectionTitle = "在线搜索",
+                                headline = "网络连接出了点问题",
+                                description = state.message,
+                                sectionIcon = Icons.Filled.WifiOff,
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(
+                                    top = topPadding,
+                                    bottom = LocalBottomOverlayPadding.current + 24.dp
+                                ),
+                                footer = {
+                                    FilledTonalButton(
+                                        onClick = { viewModel.retry() },
+                                        colors = ButtonDefaults.filledTonalButtonColors(
+                                            containerColor = colorScheme.primaryContainer,
+                                            contentColor = colorScheme.onPrimaryContainer
+                                        )
+                                    ) {
+                                        Text("重试")
+                                    }
+                                }
+                            )
+                                /* modifier = Modifier
                                     .fillMaxSize()
                                     .verticalScroll(rememberScrollState())
                                     .padding(top = topPadding),
@@ -435,7 +473,7 @@ fun SearchScreen(
                                 ) {
                                     Text("刷新")
                                 }
-                            }
+                            } */
 
                             else -> Column(
                                 modifier = Modifier

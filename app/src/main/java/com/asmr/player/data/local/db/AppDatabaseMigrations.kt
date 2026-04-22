@@ -318,4 +318,17 @@ object AppDatabaseMigrations {
             db.execSQL("CREATE INDEX IF NOT EXISTS `index_track_playback_progress_updatedAt` ON `track_playback_progress` (`updatedAt`)")
         }
     }
+
+    val MIGRATION_18_19: Migration = object : Migration(18, 19) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE download_tasks ADD COLUMN `albumTitle` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE download_tasks ADD COLUMN `albumCircle` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE download_tasks ADD COLUMN `albumCv` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE download_tasks ADD COLUMN `albumTagsCsv` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE download_tasks ADD COLUMN `albumCoverUrl` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE download_tasks ADD COLUMN `albumDescription` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE download_tasks ADD COLUMN `albumWorkId` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE download_tasks ADD COLUMN `albumRjCode` TEXT NOT NULL DEFAULT ''")
+        }
+    }
 }

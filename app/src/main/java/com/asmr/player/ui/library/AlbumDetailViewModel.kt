@@ -2119,10 +2119,10 @@ class AlbumDetailViewModel @Inject constructor(
                 if (w <= 0 || h <= 0) return fail("decode_bounds_invalid")
                 val maxDim = maxOf(w, h)
                 var sample = 1
-                while (maxDim / sample > 2048) sample *= 2
+                while (maxDim / sample > 1280) sample *= 2 // 减小最大尺寸从 2048 到 1280
                 val opts = BitmapFactory.Options().apply {
                     inSampleSize = sample
-                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                    inPreferredConfig = Bitmap.Config.RGB_565 // 使用 RGB_565 减少一半内存占用
                 }
                 BitmapFactory.decodeFile(tmpFile.absolutePath, opts) ?: return fail("decode_failed_sample_$sample")
             } finally {
@@ -2142,10 +2142,10 @@ class AlbumDetailViewModel @Inject constructor(
                 if (w <= 0 || h <= 0) return fail("file_decode_bounds_invalid")
                 val maxDim = maxOf(w, h)
                 var sample = 1
-                while (maxDim / sample > 2048) sample *= 2
+                while (maxDim / sample > 1280) sample *= 2
                 val opts = BitmapFactory.Options().apply {
                     inSampleSize = sample
-                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                    inPreferredConfig = Bitmap.Config.RGB_565
                 }
                 BitmapFactory.decodeFile(f.absolutePath, opts) ?: return fail("file_decode_failed_sample_$sample")
             } else {
@@ -2160,10 +2160,10 @@ class AlbumDetailViewModel @Inject constructor(
                 if (w <= 0 || h <= 0) return fail("content_decode_bounds_invalid")
                 val maxDim = maxOf(w, h)
                 var sample = 1
-                while (maxDim / sample > 2048) sample *= 2
+                while (maxDim / sample > 1280) sample *= 2
                 val opts = BitmapFactory.Options().apply {
                     inSampleSize = sample
-                    inPreferredConfig = Bitmap.Config.ARGB_8888
+                    inPreferredConfig = Bitmap.Config.RGB_565
                 }
                 context.contentResolver.openInputStream(uri)?.use { input ->
                     BitmapFactory.decodeStream(input, null, opts)

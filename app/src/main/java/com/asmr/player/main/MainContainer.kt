@@ -307,6 +307,9 @@ fun MainContainer(
     var blockNavTouches by remember { mutableStateOf(false) }
     var lastRouteForTouchBlock by remember { mutableStateOf(currentPrimaryRoute ?: currentRoute) }
     var touchBlockSeq by remember { mutableIntStateOf(0) }
+    var pendingDetailNavigation by remember { mutableStateOf(false) }
+    var pendingDetailNavigationSeq by remember { mutableIntStateOf(0) }
+    var cancelPendingDetailNavigation by remember { mutableStateOf(false) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val searchViewModel: SearchViewModel = hiltViewModel()
@@ -439,6 +442,19 @@ fun MainContainer(
         }
     }
 
+    fun openAlbumDetailFromSearch(albumId: Long?, rj: String?) {
+        val seq = ++pendingDetailNavigationSeq
+        pendingDetailNavigation = true
+        cancelPendingDetailNavigation = false
+        navigator.openAlbumDetail(albumId = albumId, rj = rj)
+        scope.launch {
+            delay(700)
+            if (pendingDetailNavigationSeq == seq) {
+                pendingDetailNavigation = false
+            }
+        }
+    }
+
     LaunchedEffect(currentPrimaryRoute, primaryPagerRoutes, pendingPrimaryNavigationRoute) {
         val route = currentPrimaryRoute ?: return@LaunchedEffect
         val pendingRoute = pendingPrimaryNavigationRoute
@@ -472,6 +488,14 @@ fun MainContainer(
         hardwareVolumeOverlayBounds = null
         bottomChromeOverflowExpanded = false
         bottomChromeOverflowProtectedBounds = emptyList()
+        if (pendingDetailNavigation && currentRoute?.startsWith("album_detail") == true) {
+            pendingDetailNavigation = false
+        }
+        if (cancelPendingDetailNavigation && currentRoute?.startsWith("album_detail") == true) {
+            cancelPendingDetailNavigation = false
+            navController.popBackStack()
+            return@LaunchedEffect
+        }
         val normalizedCurrentRoute = currentPrimaryRoute ?: currentRoute
         val last = lastRouteForTouchBlock
         val seq = ++touchBlockSeq
@@ -660,6 +684,11 @@ fun MainContainer(
         scope.launch { drawerState.close() }
     }
 
+    BackHandler(pendingDetailNavigation && currentRoute == Routes.Search) {
+        pendingDetailNavigation = false
+        cancelPendingDetailNavigation = true
+    }
+
     val drawerGesturesEnabled = false
 
     ModalNavigationDrawer(
@@ -802,8 +831,9 @@ fun MainContainer(
             alpha = if (colorScheme.isDark) 0.16f else 0.10f
         )
         val useLargeBottomChrome = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && !isPhone
+        val bottomOverlayPadding = bottomChromeOverlayHeight(useLargeBottomChrome)
         CompositionLocalProvider(
-            LocalBottomOverlayPadding provides (if (bottomChromeVisible) bottomChromeOverlayHeight(useLargeBottomChrome) else 0.dp),
+            LocalBottomOverlayPadding provides bottomOverlayPadding,
             LocalRightPanelExpandedState provides rightPanelExpandedState
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
@@ -1103,7 +1133,7 @@ fun MainContainer(
                                             SearchScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 onAlbumClick = { album ->
-                                                    navigator.openAlbumDetail(
+                                                    openAlbumDetailFromSearch(
                                                         albumId = album.id,
                                                         rj = album.rjCode.ifBlank { album.workId }
                                                     )
@@ -1720,13 +1750,23 @@ fun MainContainer(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(colorScheme.background.copy(alpha = 0.92f * nowPlayingBackdropAlpha))
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(colorScheme.primarySoft.copy(alpha = 0.22f * nowPlayingBackdropAlpha))
-                )
+                        .graphicsLayer { alpha = nowPlayingBackdropAlpha }
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(colorScheme.background)
+                    )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(
+                                colorScheme.primarySoft.copy(
+                                    alpha = if (colorScheme.isDark) 0.18f else 0.14f
+                                )
+                            )
+                    )
+                }
                 Box(
                     modifier = Modifier
                         .fillMaxSize()

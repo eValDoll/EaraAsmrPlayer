@@ -492,7 +492,8 @@ private fun TagStamp(
     val bg = if (selected) tint.copy(alpha = 0.18f) else colorScheme.surfaceVariant.copy(alpha = 0.45f)
     val border = if (selected) tint.copy(alpha = 0.45f) else tint.copy(alpha = 0.22f)
     val nameColor = if (selected) tint else colorScheme.textPrimary
-    val countColor = if (selected) tint.copy(alpha = 0.8f) else colorScheme.textTertiary
+    val countColor = if (selected) tint else tint.copy(alpha = 0.9f)
+    val countBadgeColor = if (selected) tint.copy(alpha = 0.14f) else tint.copy(alpha = 0.12f)
     val shape = RoundedCornerShape(999.dp)
     Row(
         modifier = Modifier
@@ -500,8 +501,7 @@ private fun TagStamp(
             .background(bg)
             .border(width = 1.dp, color = border, shape = shape)
             .clickable { onClick() }
-            .padding(horizontal = 12.dp, vertical = 6.dp)
-            .height(20.dp),
+            .padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
@@ -512,7 +512,18 @@ private fun TagStamp(
             style = MaterialTheme.typography.labelSmall
         )
         Spacer(modifier = Modifier.width(6.dp))
-        Text(text = count.toString(), color = countColor, style = MaterialTheme.typography.labelSmall)
+        Surface(
+            color = countBadgeColor,
+            contentColor = countColor,
+            shape = RoundedCornerShape(999.dp)
+        ) {
+            Text(
+                text = count.toString(),
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                color = countColor,
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
     }
 }
 

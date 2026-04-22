@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -171,7 +172,8 @@ fun TagAssignDialog(
                     ) {
                         suggestions.forEach { t ->
                             TagBadge(
-                                text = "${t.name} ${t.albumCount}",
+                                text = t.name,
+                                count = t.albumCount,
                                 selected = false,
                                 isUser = false,
                                 onClick = {
@@ -231,6 +233,7 @@ private fun dedupeByNormalized(input: List<String>): List<String> {
 @Composable
 private fun TagBadge(
     text: String,
+    count: Long? = null,
     selected: Boolean,
     isUser: Boolean,
     onClick: (() -> Unit)?
@@ -240,6 +243,8 @@ private fun TagBadge(
     val bg = if (selected) tint.copy(alpha = 0.18f) else colorScheme.surfaceVariant.copy(alpha = 0.45f)
     val border = if (selected) tint.copy(alpha = 0.45f) else tint.copy(alpha = 0.22f)
     val label = if (selected) tint else colorScheme.textPrimary
+    val badgeColor = if (selected) tint.copy(alpha = 0.14f) else tint.copy(alpha = 0.12f)
+    val badgeLabel = if (selected) tint else tint.copy(alpha = 0.9f)
 
     androidx.compose.material3.Surface(
         color = bg,
@@ -256,6 +261,21 @@ private fun TagBadge(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(text = text, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            if (count != null) {
+                Spacer(modifier = Modifier.width(6.dp))
+                Surface(
+                    color = badgeColor,
+                    contentColor = badgeLabel,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(999.dp)
+                ) {
+                    Text(
+                        text = count.toString(),
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                        color = badgeLabel,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
         }
     }
 }

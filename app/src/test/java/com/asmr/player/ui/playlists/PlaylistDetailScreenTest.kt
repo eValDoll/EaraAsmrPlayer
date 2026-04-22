@@ -11,6 +11,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
 import com.asmr.player.data.local.db.entities.PlaylistItemWithSubtitles
+import com.asmr.player.data.repository.PlaylistRepository
+import com.asmr.player.ui.common.EARA_EMPTY_STATE_TAG
 import com.asmr.player.ui.testWindowSizeClass
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import org.junit.Rule
@@ -83,6 +85,31 @@ class PlaylistDetailScreenTest {
             SemanticsMatcher.expectValue(
                 SemanticsProperties.TestTag,
                 PLAYLIST_DETAIL_MOVE_BOTTOM_MENU_ITEM_TAG
+            )
+        )
+    }
+
+    @Test
+    fun emptyFavorites_showsBrandedEmptyState() {
+        composeRule.setContent {
+            AsmrPlayerTheme {
+                PlaylistDetailContent(
+                    windowSizeClass = testWindowSizeClass(),
+                    title = PlaylistRepository.PLAYLIST_FAVORITES,
+                    items = emptyList(),
+                    onPlayAll = { _: List<PlaylistItemEntity>, _: PlaylistItemEntity -> },
+                    onRemoveItem = {},
+                    onMoveItemToTop = {},
+                    onMoveItemToBottom = {},
+                    onSaveManualOrder = {}
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(EARA_EMPTY_STATE_TAG).assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.TestTag,
+                EARA_EMPTY_STATE_TAG
             )
         )
     }
