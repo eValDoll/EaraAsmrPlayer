@@ -205,12 +205,15 @@ class DlsitePlayWorkClient @Inject constructor(
             .build()
 
         okHttpClient.newCall(request).execute().use { resp ->
-            val body = resp.body?.string().orEmpty()
             if (!resp.isSuccessful) {
+                val body = resp.body?.string().orEmpty()
                 Log.w(TAG, "sign/url failed: ${resp.code}, body=${body.take(300)}")
                 throw IllegalStateException("DLsite Play 获取签名失败（${resp.code}）")
             }
-            val obj = runCatching { gson.fromJson(body, Map::class.java) as? Map<*, *> }.getOrNull().orEmpty()
+            val body = resp.body ?: throw IllegalStateException("DLsite Play 获取签名返回为空")
+            val obj = body.charStream().use { reader ->
+                runCatching { gson.fromJson(reader, Map::class.java) as? Map<*, *> }.getOrNull().orEmpty()
+            }
             val baseUrl = (obj["url"] as? String).orEmpty().trim()
             val paramsAny = obj["params"] as? Map<*, *>
             val params = paramsAny?.entries
@@ -247,13 +250,16 @@ class DlsitePlayWorkClient @Inject constructor(
             .build()
 
         okHttpClient.newCall(request).execute().use { resp ->
-            val body = resp.body?.string().orEmpty()
             if (!resp.isSuccessful) {
+                val body = resp.body?.string().orEmpty()
                 Log.w(TAG, "ziptree.json failed: ${resp.code}, body=${body.take(300)}")
                 throw IllegalStateException("DLsite Play 获取目录树失败（${resp.code}）")
             }
+            val body = resp.body ?: throw IllegalStateException("DLsite Play 获取目录树为空")
             @Suppress("UNCHECKED_CAST")
-            return runCatching { gson.fromJson(body, Map::class.java) as? Map<String, Any?> }.getOrNull().orEmpty()
+            return body.charStream().use { reader ->
+                runCatching { gson.fromJson(reader, Map::class.java) as? Map<String, Any?> }.getOrNull().orEmpty()
+            }
         }
     }
 
