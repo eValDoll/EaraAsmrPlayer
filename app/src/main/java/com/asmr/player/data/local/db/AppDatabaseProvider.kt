@@ -15,7 +15,7 @@ object AppDatabaseProvider {
 
     private fun buildDatabase(context: Context): AppDatabase {
         val appContext = context.applicationContext
-        val builder = Room.databaseBuilder(
+        return Room.databaseBuilder(
             appContext,
             AppDatabase::class.java,
             AppDatabase.DATABASE_NAME
@@ -36,22 +36,8 @@ object AppDatabaseProvider {
                 AppDatabaseMigrations.MIGRATION_17_18,
                 AppDatabaseMigrations.MIGRATION_18_19
             )
-            .fallbackToDestructiveMigration()
-            .fallbackToDestructiveMigrationOnDowngrade()
-
-        val db = builder.build()
-        val openResult = runCatching { db.openHelper.writableDatabase }
-        if (openResult.isSuccess) return db
-
-        val msg = openResult.exceptionOrNull()?.message.orEmpty()
-        val shouldReset = msg.contains("Room cannot verify the data integrity", ignoreCase = true) ||
-            msg.contains("A migration from", ignoreCase = true)
-        if (!shouldReset) {
-            openResult.getOrThrow()
-        }
-
-        runCatching { db.close() }
-        runCatching { appContext.deleteDatabase(AppDatabase.DATABASE_NAME) }
-        return builder.build()
+            // Never wipe the local database during app upgrades.
+            // If a migration is missing, fail loudly so user data can still be recovered.
+            .build()
     }
 }

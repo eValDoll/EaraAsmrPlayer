@@ -167,6 +167,11 @@ internal const val LIBRARY_FILTER_BUTTON_TAG = "library_filter_button"
 private val LibraryChromeContentGap = 20.dp
 private val LibraryChromeCollapseOvershoot = 12.dp
 
+private fun Album.withUserTags(userTags: List<String>): Album {
+    if (userTags.isEmpty()) return this
+    return copy(tags = (tags + userTags).distinct())
+}
+
 @Composable
 private fun LibraryActionItem(
     title: String,
@@ -726,12 +731,13 @@ fun LibraryScreen(
                                             key = { idx -> pagedAlbumSnapshot.items.getOrNull(idx)?.id?.takeIf { it > 0L } ?: idx }
                                         ) { idx ->
                                             val album = pagedAlbumSnapshot.items.getOrNull(idx) ?: return@staggeredItems
+                                            val mergedAlbum = album.withUserTags(userTagsByAlbumId[album.id].orEmpty())
                                             AlbumGridItem(
-                                                album = album,
+                                                album = mergedAlbum,
                                                 syncStatus = state.syncingAlbums[album.id] ?: SyncStatus.Idle,
-                                                onClick = { onAlbumClick(album) },
+                                                onClick = { onAlbumClick(mergedAlbum) },
                                                 onLongClick = {
-                                                    actionAlbum = album
+                                                    actionAlbum = mergedAlbum
                                                     showAlbumActions = true
                                                 }
                                             )
@@ -780,12 +786,13 @@ fun LibraryScreen(
                                             contentType = { "albumListItem" }
                                         ) { idx ->
                                             val album = pagedAlbums.itemSnapshotList.getOrNull(idx) ?: return@items
+                                            val mergedAlbum = album.withUserTags(userTagsByAlbumId[album.id].orEmpty())
                                             AlbumItem(
-                                                album = album,
+                                                album = mergedAlbum,
                                                 syncStatus = state.syncingAlbums[album.id] ?: SyncStatus.Idle,
-                                                onClick = { onAlbumClick(album) },
+                                                onClick = { onAlbumClick(mergedAlbum) },
                                                 onLongClick = {
-                                                    actionAlbum = album
+                                                    actionAlbum = mergedAlbum
                                                     showAlbumActions = true
                                                 }
                                             )

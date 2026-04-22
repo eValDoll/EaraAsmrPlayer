@@ -149,7 +149,6 @@ import com.asmr.player.ui.player.SleepTimerSheetContent
 import com.asmr.player.ui.player.MiniPlayerDisplayMode
 
 import com.asmr.player.data.local.datastore.SettingsDataStore
-import com.asmr.player.data.settings.BackgroundEffectType
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.util.MessageManager
@@ -243,8 +242,6 @@ class MainActivity : ComponentActivity() {
             val isVideo = themeMediaSource.isVideo
             val globalDynamicHueEnabled by settingsDataStore.dynamicPlayerHueEnabled.collectAsState(initial = false)
             val staticHueArgb by settingsDataStore.staticHueArgb.collectAsState(initial = null)
-            val backgroundEffectEnabled by settingsDataStore.backgroundEffectEnabled.collectAsState(initial = false)
-            val backgroundEffectType by settingsDataStore.backgroundEffectType.collectAsState(initial = BackgroundEffectType.Flow)
             val coverBackgroundEnabled by settingsDataStore.coverBackgroundEnabled.collectAsState(initial = true)
             val coverBackgroundClarity by settingsDataStore.coverBackgroundClarity.collectAsState(initial = 0.35f)
             val coverPreviewMode by settingsDataStore.coverPreviewMode.collectAsState(initial = CoverPreviewMode.Disabled)
@@ -379,8 +376,6 @@ class MainActivity : ComponentActivity() {
                         onContentReady = { contentReady = true },
                         visibleMessages = visibleMessagesSnapshot,
                         showMiniPlayerBar = showMiniPlayerBar,
-                        backgroundEffectEnabled = backgroundEffectEnabled,
-                        backgroundEffectType = backgroundEffectType,
                         coverBackgroundEnabled = coverBackgroundEnabled,
                         coverBackgroundClarity = coverBackgroundClarity,
                         coverPreviewMode = coverPreviewMode,

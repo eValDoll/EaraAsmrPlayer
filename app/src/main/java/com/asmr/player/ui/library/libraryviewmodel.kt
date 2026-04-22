@@ -261,9 +261,7 @@ class LibraryViewModel @Inject constructor(
                 pagingSourceFactory = { albumDao.queryAlbumsPaged(LibraryQueryBuilder.build(spec)) }
             ).flow
         }
-        .combine(userTagsByAlbumId) { paging, userTags ->
-            paging.map { entity -> entity.toAlbum(userTags[entity.id].orEmpty()) }
-        }
+        .map { paging -> paging.map { entity -> entity.toAlbum() } }
         .cachedIn(viewModelScope)
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
@@ -278,14 +276,13 @@ class LibraryViewModel @Inject constructor(
         }
         .cachedIn(viewModelScope)
 
-    private fun AlbumEntity.toAlbum(userTagsForAlbum: List<String>): Album {
+    private fun AlbumEntity.toAlbum(): Album {
         val baseTags = tags
             .split(",")
             .asSequence()
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .toList()
-        val allTags = (baseTags + userTagsForAlbum).distinct()
         return Album(
             id = id,
             title = title,
@@ -294,7 +291,7 @@ class LibraryViewModel @Inject constructor(
             downloadPath = downloadPath,
             circle = circle,
             cv = cv,
-            tags = allTags,
+            tags = baseTags,
             coverUrl = coverUrl,
             coverPath = coverPath,
             coverThumbPath = coverThumbPath,
