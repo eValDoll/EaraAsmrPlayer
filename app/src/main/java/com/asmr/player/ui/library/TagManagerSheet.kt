@@ -1,21 +1,27 @@
 package com.asmr.player.ui.library
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -24,12 +30,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import com.asmr.player.data.local.db.dao.TagWithCount
 import com.asmr.player.ui.common.thinScrollbar
+import com.asmr.player.ui.theme.AsmrTheme
 
 @Composable
 fun TagManagerSheet(
@@ -44,6 +50,7 @@ fun TagManagerSheet(
     var showRenameDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
+    val colorScheme = AsmrTheme.colorScheme
 
     val visibleTags = remember(tags, filter) {
         val q = filter.trim().lowercase()
@@ -80,13 +87,39 @@ fun TagManagerSheet(
         ) {
             items(visibleTags, key = { it.id }) { tag ->
                 ListItem(
-                    headlineContent = { Text(tag.name) },
-                    supportingContent = {
-                        if (tag.albumCount == 0L) {
-                            Text("未使用")
-                        } else {
-                            Text("用户标注 ${tag.userAlbumCount} / 总计 ${tag.albumCount}")
+                    headlineContent = {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                text = tag.name,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = colorScheme.textPrimary
+                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (tag.albumCount == 0L) {
+                                    TagManagerMetricBadge(label = "未使用")
+                                } else {
+                                    TagManagerMetricBadge(
+                                        label = "用户标注",
+                                        value = tag.userAlbumCount.toString(),
+                                        highlighted = true
+                                    )
+                                    TagManagerMetricBadge(
+                                        label = "总计",
+                                        value = tag.albumCount.toString()
+                                    )
+                                }
+                            }
                         }
+                    },
+                    supportingContent = {
+                        Text(
+                            text = "点击可重命名或删除",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colorScheme.textTertiary
+                        )
                     },
                     modifier = Modifier
                         .fillMaxWidth()
@@ -157,6 +190,64 @@ fun TagManagerSheet(
                     TextButton(onClick = { showDeleteDialog = false }) { Text("取消") }
                 }
             )
+        }
+    }
+}
+
+@Composable
+private fun TagManagerMetricBadge(
+    label: String,
+    value: String? = null,
+    highlighted: Boolean = false
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val containerColor = if (highlighted) {
+        colorScheme.primary.copy(alpha = 0.12f)
+    } else {
+        colorScheme.surfaceVariant.copy(alpha = 0.7f)
+    }
+    val borderColor = if (highlighted) {
+        colorScheme.primary.copy(alpha = 0.18f)
+    } else {
+        colorScheme.textTertiary.copy(alpha = 0.18f)
+    }
+    val contentColor = if (highlighted) colorScheme.primary else colorScheme.textSecondary
+    val valueContainerColor = if (highlighted) {
+        colorScheme.primary.copy(alpha = 0.14f)
+    } else {
+        colorScheme.textTertiary.copy(alpha = 0.12f)
+    }
+
+    Surface(
+        color = containerColor,
+        contentColor = contentColor,
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, borderColor)
+    ) {
+        Row(
+            modifier = Modifier.padding(start = 8.dp, end = 6.dp, top = 4.dp, bottom = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelSmall,
+                color = contentColor
+            )
+            if (value != null) {
+                Surface(
+                    color = valueContainerColor,
+                    contentColor = contentColor,
+                    shape = RoundedCornerShape(999.dp)
+                ) {
+                    Text(
+                        text = value,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
+                        style = MaterialTheme.typography.labelSmall,
+                        color = contentColor
+                    )
+                }
+            }
         }
     }
 }
