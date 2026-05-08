@@ -1,6 +1,7 @@
 package com.asmr.player.ui.playlists
 
 import android.net.Uri
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -27,11 +28,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -47,7 +48,6 @@ import com.asmr.player.playback.MediaItemFactory
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrTheme
 import java.io.File
-import kotlinx.coroutines.launch
 
 @Composable
 fun PlaylistPickerScreen(
@@ -68,10 +68,12 @@ fun PlaylistPickerScreen(
     val playlists by viewModel.playlists.collectAsState()
     val userPlaylists = remember(playlists) { playlists.filter { it.category == "user" } }
     val colorScheme = AsmrTheme.colorScheme
-    val scope = rememberCoroutineScope()
     val listState = rememberLazyListState()
+    val screenActive = remember { mutableStateOf(true) }
     var createName by rememberSaveable { mutableStateOf("") }
+    var addingPlaylistId by rememberSaveable { mutableStateOf<Long?>(null) }
     val canCreate = remember(createName) { createName.trim().isNotBlank() }
+    val isAdding = addingPlaylistId != null
 
     val pickerItems = remember(mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode, items) {
         items ?: listOf(
@@ -86,6 +88,12 @@ fun PlaylistPickerScreen(
                 rjCode = rjCode
             )
         )
+    }
+
+    BackHandler(enabled = isAdding) {}
+
+    DisposableEffect(Unit) {
+        onDispose { screenActive.value = false }
     }
 
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
@@ -130,7 +138,8 @@ fun PlaylistPickerScreen(
                         horizontalArrangement = Arrangement.End
                     ) {
                         TextButton(
-                            onClick = onBack,
+                            onClick = { if (!isAdding) onBack() },
+                            enabled = !isAdding,
                             colors = ButtonDefaults.textButtonColors(contentColor = colorScheme.primary)
                         ) {
                             Text("关闭")
@@ -143,6 +152,7 @@ fun PlaylistPickerScreen(
                         value = createName,
                         onValueChange = { createName = it },
                         modifier = Modifier.weight(1f),
+                        enabled = !isAdding,
                         singleLine = true,
                         placeholder = { Text("新建列表名称") }
                     )
@@ -154,7 +164,7 @@ fun PlaylistPickerScreen(
                             viewModel.createPlaylist(trimmed)
                             createName = ""
                         },
-                        enabled = canCreate,
+                        enabled = canCreate && !isAdding,
                         colors = ButtonDefaults.textButtonColors(contentColor = colorScheme.primary)
                     ) {
                         Text("创建")
@@ -183,11 +193,23 @@ fun PlaylistPickerScreen(
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp))
                                 .background(colorScheme.surface.copy(alpha = 0.5f))
-                                .clickable {
-                                    scope.launch {
-                                        viewModel.addItemsToPlaylist(playlist.id, pickerItems)
-                                    }
-                                    onBack()
+                                .clickable(enabled = !isAdding) {
+                                    addingPlaylistId = playlist.id
+                                    viewModel.addItemsToPlaylistInBackground(
+                                        playlistId = playlist.id,
+                                        items = pickerItems,
+                                        onComplete = {
+                                            if (screenActive.value) {
+                                                addingPlaylistId = null
+                                                onBack()
+                                            }
+                                        },
+                                        onFailure = {
+                                            if (screenActive.value) {
+                                                addingPlaylistId = null
+                                            }
+                                        }
+                                    )
                                 }
                                 .padding(horizontal = 16.dp, vertical = 12.dp)
                         ) {

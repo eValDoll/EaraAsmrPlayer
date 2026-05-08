@@ -10,6 +10,7 @@ import com.asmr.player.data.repository.PlaylistRepository
 import com.asmr.player.data.repository.RenamePlaylistResult
 import com.asmr.player.util.MessageManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -64,6 +65,35 @@ class PlaylistsViewModel @Inject constructor(
 
     suspend fun addItemToPlaylist(playlistId: Long, item: MediaItem): Boolean {
         return addItemsToPlaylist(playlistId, listOf(item)).addedCount > 0
+    }
+
+    fun addItemsToFavoritesInBackground(items: List<MediaItem>) {
+        viewModelScope.launch {
+            try {
+                addItemsToFavorites(items)
+            } catch (t: Throwable) {
+                if (t is CancellationException) throw t
+                messageManager.showError("添加到收藏失败，请重试")
+            }
+        }
+    }
+
+    fun addItemsToPlaylistInBackground(
+        playlistId: Long,
+        items: List<MediaItem>,
+        onComplete: () -> Unit = {},
+        onFailure: (Throwable) -> Unit = {}
+    ) {
+        viewModelScope.launch {
+            try {
+                addItemsToPlaylist(playlistId, items)
+                onComplete()
+            } catch (t: Throwable) {
+                if (t is CancellationException) throw t
+                messageManager.showError("添加到列表失败，请重试")
+                onFailure(t)
+            }
+        }
     }
 
     suspend fun addItemsToFavorites(items: List<MediaItem>): PlaylistAddSummary {

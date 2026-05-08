@@ -15,6 +15,8 @@ import com.asmr.player.util.ManualItemOrder
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -32,6 +34,8 @@ class PlaylistRepository @Inject constructor(
     private val trackDao: TrackDao,
     private val albumDao: AlbumDao
 ) {
+    private val addItemsMutex = Mutex()
+
     companion object {
         const val CATEGORY_SYSTEM = "system"
         const val CATEGORY_USER = "user"
@@ -103,9 +107,9 @@ class PlaylistRepository @Inject constructor(
         return addItemsToPlaylist(playlistId, listOf(item)).addedCount > 0
     }
 
-    suspend fun addItemsToPlaylist(playlistId: Long, items: List<MediaItem>): PlaylistAddSummary {
+    suspend fun addItemsToPlaylist(playlistId: Long, items: List<MediaItem>): PlaylistAddSummary = addItemsMutex.withLock {
         if (playlistId <= 0L || items.isEmpty()) {
-            return PlaylistAddSummary(addedCount = 0, skippedCount = items.size)
+            return@withLock PlaylistAddSummary(addedCount = 0, skippedCount = items.size)
         }
         val currentItems = playlistItemDao.getItemsOnce(playlistId)
         val existingIds = currentItems.map { it.mediaId }.toHashSet()
@@ -134,7 +138,7 @@ class PlaylistRepository @Inject constructor(
         if (toInsert.isNotEmpty()) {
             playlistItemDao.upsertItems(toInsert)
         }
-        return PlaylistAddSummary(
+        return@withLock PlaylistAddSummary(
             addedCount = toInsert.size,
             skippedCount = skipped
         )

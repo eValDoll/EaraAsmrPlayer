@@ -1,5 +1,6 @@
 .idea/
 .vscode/
+.claude/
 .trae/
 *.iml
 .worktrees/
@@ -13,6 +14,7 @@ keystore.properties
 .gradle-home
 **/build/
 .build_asmr_player_android/
+.debug_device_db/
 captures/
 
 app/.cxx/

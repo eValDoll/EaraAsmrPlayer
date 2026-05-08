@@ -9,6 +9,8 @@ import com.asmr.player.data.local.db.entities.AlbumGroupEntity
 import com.asmr.player.data.local.db.entities.AlbumGroupItemEntity
 import com.asmr.player.util.ManualItemOrder
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -18,6 +20,8 @@ class AlbumGroupRepository @Inject constructor(
     private val groupItemDao: AlbumGroupItemDao,
     private val trackDao: TrackDao
 ) {
+    private val addAlbumMutex = Mutex()
+
     fun observeGroupsWithStats(): Flow<List<AlbumGroupStatsRow>> = groupDao.observeGroupsWithStats()
 
     fun observeGroupTracks(groupId: Long): Flow<List<AlbumGroupTrackRow>> = groupItemDao.observeGroupTracks(groupId)
@@ -49,7 +53,7 @@ class AlbumGroupRepository @Inject constructor(
         return RenameAlbumGroupResult.RENAMED
     }
 
-    suspend fun addAlbumToGroup(groupId: Long, albumId: Long) {
+    suspend fun addAlbumToGroup(groupId: Long, albumId: Long) = addAlbumMutex.withLock {
         if (groupId <= 0L || albumId <= 0L) return
         val tracks = trackDao.getTracksForAlbumOnce(albumId).filter { it.path.isNotBlank() }
         if (tracks.isEmpty()) return

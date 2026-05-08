@@ -1,5 +1,6 @@
 package com.asmr.player.ui.groups
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -25,6 +26,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -52,8 +54,17 @@ fun AlbumGroupPickerScreen(
     val groups by viewModel.groups.collectAsState()
     val colorScheme = AsmrTheme.colorScheme
     val listState = rememberLazyListState()
+    val screenActive = remember { mutableStateOf(true) }
     var createName by rememberSaveable { mutableStateOf("") }
+    var addingGroupId by rememberSaveable { mutableStateOf<Long?>(null) }
     val canCreate = remember(createName) { createName.trim().isNotBlank() }
+    val isAdding = addingGroupId != null
+
+    BackHandler(enabled = isAdding) {}
+
+    DisposableEffect(Unit) {
+        onDispose { screenActive.value = false }
+    }
 
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
     Box(
@@ -89,6 +100,7 @@ fun AlbumGroupPickerScreen(
                         value = createName,
                         onValueChange = { createName = it },
                         modifier = Modifier.weight(1f),
+                        enabled = !isAdding,
                         singleLine = true,
                         placeholder = { Text("新建分组名称") }
                     )
@@ -100,7 +112,7 @@ fun AlbumGroupPickerScreen(
                             viewModel.createGroup(trimmed)
                             createName = ""
                         },
-                        enabled = canCreate,
+                        enabled = canCreate && !isAdding,
                         colors = ButtonDefaults.textButtonColors(contentColor = colorScheme.primary)
                     ) {
                         Text("创建")
@@ -129,9 +141,23 @@ fun AlbumGroupPickerScreen(
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(16.dp))
                                 .background(colorScheme.surface.copy(alpha = 0.5f))
-                                .clickable {
-                                    viewModel.addAlbumToGroup(group.id, albumId)
-                                    onBack()
+                                .clickable(enabled = !isAdding) {
+                                    addingGroupId = group.id
+                                    viewModel.addAlbumToGroupInBackground(
+                                        groupId = group.id,
+                                        albumId = albumId,
+                                        onComplete = {
+                                            if (screenActive.value) {
+                                                addingGroupId = null
+                                                onBack()
+                                            }
+                                        },
+                                        onFailure = {
+                                            if (screenActive.value) {
+                                                addingGroupId = null
+                                            }
+                                        }
+                                    )
                                 }
                                 .padding(horizontal = 16.dp, vertical = 12.dp)
                         ) {

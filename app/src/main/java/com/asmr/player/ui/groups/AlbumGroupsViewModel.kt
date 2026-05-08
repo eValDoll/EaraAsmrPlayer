@@ -8,6 +8,7 @@ import com.asmr.player.data.repository.AlbumGroupRepository
 import com.asmr.player.data.repository.RenameAlbumGroupResult
 import com.asmr.player.util.MessageManager
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -54,13 +55,29 @@ class AlbumGroupsViewModel @Inject constructor(
         }
     }
 
-    fun addAlbumToGroup(groupId: Long, albumId: Long) {
-        if (groupId <= 0L || albumId <= 0L) return
+    fun addAlbumToGroupInBackground(
+        groupId: Long,
+        albumId: Long,
+        onComplete: () -> Unit = {},
+        onFailure: (Throwable) -> Unit = {}
+    ) {
         viewModelScope.launch {
-            groupRepository.addAlbumToGroup(groupId, albumId)
-            val group = groupRepository.getGroupById(groupId)
-            val name = group?.name.orEmpty()
-            messageManager.showSuccess("已添加到分组：$name")
+            try {
+                addAlbumToGroup(groupId, albumId)
+                onComplete()
+            } catch (t: Throwable) {
+                if (t is CancellationException) throw t
+                messageManager.showError("添加到分组失败，请重试")
+                onFailure(t)
+            }
         }
+    }
+
+    suspend fun addAlbumToGroup(groupId: Long, albumId: Long) {
+        if (groupId <= 0L || albumId <= 0L) return
+        groupRepository.addAlbumToGroup(groupId, albumId)
+        val group = groupRepository.getGroupById(groupId)
+        val name = group?.name.orEmpty()
+        messageManager.showSuccess("已添加到分组：$name")
     }
 }

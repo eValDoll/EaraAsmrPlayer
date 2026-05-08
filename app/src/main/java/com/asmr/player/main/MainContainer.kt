@@ -1258,9 +1258,7 @@ fun MainContainer(
                             playerViewModel.addMediaItemsToQueue(items)
                         },
                         onAddMediaItemsToFavorites = { items ->
-                            scope.launch {
-                                playlistsViewModel.addItemsToFavorites(items)
-                            }
+                            playlistsViewModel.addItemsToFavoritesInBackground(items)
                         },
                         onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode ->
                             navController.navigateSingleTop(
@@ -1323,9 +1321,7 @@ fun MainContainer(
                             playerViewModel.addMediaItemsToQueue(items)
                         },
                         onAddMediaItemsToFavorites = { items ->
-                            scope.launch {
-                                playlistsViewModel.addItemsToFavorites(items)
-                            }
+                            playlistsViewModel.addItemsToFavoritesInBackground(items)
                         },
                         onOpenPlaylistPicker = { mediaId, uri, title, artist, artworkUri, albumId, trackId, rjCode ->
                             navController.navigateSingleTop(
@@ -1457,7 +1453,8 @@ fun MainContainer(
                     com.asmr.player.ui.groups.AlbumGroupPickerScreen(
                         windowSizeClass = windowSizeClass,
                         albumId = albumId,
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        viewModel = albumGroupsViewModel
                     )
                 }
                 composable(
@@ -1526,7 +1523,8 @@ fun MainContainer(
                         albumId = albumId,
                         trackId = trackId,
                         rjCode = rjCode,
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        viewModel = playlistsViewModel
                     )
                 }
                 composable("settings") {
@@ -1839,7 +1837,8 @@ fun MainContainer(
                                     trackId = request.trackId,
                                     rjCode = request.rjCode,
                                     onBack = { nowPlayingPlaylistPickerRequest = null },
-                                    embeddedInDialog = true
+                                    embeddedInDialog = true,
+                                    viewModel = playlistsViewModel
                                 )
                             }
                         }
@@ -1865,7 +1864,8 @@ fun MainContainer(
                                     windowSizeClass = windowSizeClass,
                                     items = request.items,
                                     onBack = { albumBatchPlaylistPickerRequest = null },
-                                    embeddedInDialog = true
+                                    embeddedInDialog = true,
+                                    viewModel = playlistsViewModel
                                 )
                             }
                         }
@@ -1893,7 +1893,8 @@ fun MainContainer(
                                     windowSizeClass = windowSizeClass,
                                     items = request.items,
                                     onBack = { albumBatchPlaylistPickerRequest = null },
-                                    embeddedInDialog = true
+                                    embeddedInDialog = true,
+                                    viewModel = playlistsViewModel
                                 )
                             }
                         }
