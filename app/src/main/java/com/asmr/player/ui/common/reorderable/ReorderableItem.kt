@@ -15,6 +15,7 @@ fun LazyItemScope.ReorderableItem(
     reorderableState: ReorderableState<*>,
     key: Any?,
     modifier: Modifier = Modifier,
+    draggingDecorationModifier: Modifier = Modifier,
     index: Int? = null,
     orientationLocked: Boolean = true,
     content: @Composable BoxScope.(isDragging: Boolean) -> Unit
@@ -22,6 +23,7 @@ fun LazyItemScope.ReorderableItem(
     state = reorderableState,
     key = key,
     modifier = modifier,
+    draggingDecorationModifier = draggingDecorationModifier,
     defaultDraggingModifier = Modifier.animateItemPlacement(),
     orientationLocked = orientationLocked,
     index = index,
@@ -33,6 +35,7 @@ fun ReorderableItem(
     state: ReorderableState<*>,
     key: Any?,
     modifier: Modifier = Modifier,
+    draggingDecorationModifier: Modifier = Modifier,
     defaultDraggingModifier: Modifier = Modifier,
     orientationLocked: Boolean = true,
     index: Int? = null,
@@ -43,6 +46,12 @@ fun ReorderableItem(
     } else {
         key == state.draggingItemKey
     }
+    val isDragCancelling = !isDragging && if (index != null) {
+        index == state.dragCancelledAnimation.position?.index
+    } else {
+        key == state.dragCancelledAnimation.position?.key
+    }
+    val active = isDragging || isDragCancelling
     val draggingModifier = if (isDragging) {
         Modifier
             .zIndex(1f)
@@ -51,12 +60,7 @@ fun ReorderableItem(
                 translationY = if (!orientationLocked || state.isVerticalScroll) state.draggingItemTop else 0f
             }
     } else {
-        val cancel = if (index != null) {
-            index == state.dragCancelledAnimation.position?.index
-        } else {
-            key == state.dragCancelledAnimation.position?.key
-        }
-        if (cancel) {
+        if (isDragCancelling) {
             Modifier
                 .zIndex(1f)
                 .graphicsLayer {
@@ -67,7 +71,11 @@ fun ReorderableItem(
             defaultDraggingModifier
         }
     }
-    Box(modifier = modifier.then(draggingModifier)) {
-        content(isDragging)
+    Box(
+        modifier = modifier
+            .then(draggingModifier)
+            .then(if (active) draggingDecorationModifier else Modifier)
+    ) {
+        content(active)
     }
 }

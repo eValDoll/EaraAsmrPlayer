@@ -1,9 +1,9 @@
 package com.asmr.player.ui.playlists
 
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -145,6 +145,9 @@ internal fun PlaylistDetailContent(
     val playItems = localItems.map { item -> item.toPlaybackEntity() }
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
     val colorScheme = AsmrTheme.colorScheme
+    val draggedItemShape = RoundedCornerShape(18.dp)
+    val draggedItemContainerColor = dynamicPageContainerColor(colorScheme)
+    val draggedItemElevation = if (colorScheme.isDark) 10.dp else 14.dp
     val isFavorites = title == PlaylistRepository.PLAYLIST_FAVORITES
     val emptyHeadline = if (isFavorites) {
         "收藏的内容会在这里出现"
@@ -200,7 +203,12 @@ internal fun PlaylistDetailContent(
                     itemsIndexed(localItems, key = { _, item -> item.mediaId }) { index, item ->
                         ReorderableItem(
                             reorderableState = reorderState,
-                            key = item.mediaId
+                            key = item.mediaId,
+                            modifier = Modifier.fillMaxWidth(),
+                            draggingDecorationModifier = Modifier
+                                .shadow(draggedItemElevation, draggedItemShape, clip = false)
+                                .clip(draggedItemShape)
+                                .background(draggedItemContainerColor)
                         ) { isDragging ->
                             PlaylistItemRow(
                                 item = item,
@@ -210,8 +218,7 @@ internal fun PlaylistDetailContent(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("$PLAYLIST_DETAIL_ITEM_TAG_PREFIX:${item.mediaId}")
-                                    .detectReorderAfterLongPress(reorderState)
-                                    .clickable { onPlayAll(playItems, item.toPlaybackEntity()) },
+                                    .detectReorderAfterLongPress(reorderState),
                                 onPlay = { onPlayAll(playItems, item.toPlaybackEntity()) },
                                 onMoveToTop = { onMoveItemToTop(item.mediaId) },
                                 onMoveToBottom = { onMoveItemToBottom(item.mediaId) },
@@ -269,16 +276,13 @@ private fun PlaylistItemRow(
     val colorScheme = AsmrTheme.colorScheme
     val materialColorScheme = MaterialTheme.colorScheme
     val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
+    val rowInteractionSource = remember { MutableInteractionSource() }
     var expanded by remember { mutableStateOf(false) }
-    val elevation by animateDpAsState(
-        targetValue = if (isDragging) 18.dp else 0.dp,
-        label = "playlistItemElevation"
-    )
 
     Box(
-        modifier = modifier.shadow(elevation, RoundedCornerShape(18.dp))
+        modifier = modifier
     ) {
-        if (showTopDivider) {
+        if (showTopDivider && !isDragging) {
             HorizontalDivider(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -289,7 +293,15 @@ private fun PlaylistItemRow(
             )
         }
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    enabled = !isDragging,
+                    interactionSource = rowInteractionSource,
+                    indication = null,
+                    onClick = onPlay
+                )
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AsmrAsyncImage(

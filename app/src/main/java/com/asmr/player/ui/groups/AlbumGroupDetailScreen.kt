@@ -1,10 +1,10 @@
 package com.asmr.player.ui.groups
 
 import android.net.Uri
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -149,6 +149,9 @@ internal fun AlbumGroupDetailContent(
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
+    val draggedTrackShape = RoundedCornerShape(18.dp)
+    val draggedTrackContainerColor = dynamicPageContainerColor(colorScheme)
+    val draggedTrackElevation = if (colorScheme.isDark) 10.dp else 14.dp
     val listState = rememberLazyListState()
     val expandedAlbumIds = rememberSaveable { mutableStateOf(setOf<Long>()) }
     val localRows = remember { mutableStateListOf<GroupDetailListRow>() }
@@ -258,7 +261,12 @@ internal fun AlbumGroupDetailContent(
                             is GroupDetailTrackRow -> {
                                 ReorderableItem(
                                     reorderableState = reorderState,
-                                    key = row.track.mediaId
+                                    key = row.track.mediaId,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    draggingDecorationModifier = Modifier
+                                        .shadow(draggedTrackElevation, draggedTrackShape, clip = false)
+                                        .clip(draggedTrackShape)
+                                        .background(draggedTrackContainerColor)
                                 ) { isDragging ->
                                     val albumTracks = localRows.tracksForAlbum(row.albumId)
                                     val startIndex = albumTracks.indexOfFirst { it.mediaId == row.track.mediaId }
@@ -271,13 +279,7 @@ internal fun AlbumGroupDetailContent(
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .testTag("$GROUP_DETAIL_TRACK_TAG_PREFIX:${row.track.mediaId}")
-                                            .detectReorderAfterLongPress(reorderState)
-                                            .clickable {
-                                                onPlayMediaItems(
-                                                    albumTracks.map { it.toMediaItem() },
-                                                    startIndex
-                                                )
-                                            },
+                                            .detectReorderAfterLongPress(reorderState),
                                         onPlay = {
                                             onPlayMediaItems(
                                                 albumTracks.map { it.toMediaItem() },
@@ -410,18 +412,15 @@ private fun GroupTrackRow(
     val colorScheme = AsmrTheme.colorScheme
     val materialColorScheme = MaterialTheme.colorScheme
     val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
+    val rowInteractionSource = remember { MutableInteractionSource() }
     var expanded by remember { mutableStateOf(false) }
     val durationMs = remember(item.trackDuration) { (item.trackDuration * 1000.0).roundToLong().coerceAtLeast(0L) }
     val subtitle = remember(durationMs) { Formatting.formatTrackTime(durationMs) }
-    val elevation by animateDpAsState(
-        targetValue = if (isDragging) 18.dp else 0.dp,
-        label = "groupTrackElevation"
-    )
 
     Box(
-        modifier = modifier.shadow(elevation, RoundedCornerShape(18.dp))
+        modifier = modifier
     ) {
-        if (showTopDivider) {
+        if (showTopDivider && !isDragging) {
             HorizontalDivider(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -432,7 +431,15 @@ private fun GroupTrackRow(
             )
         }
         Row(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    enabled = !isDragging,
+                    interactionSource = rowInteractionSource,
+                    indication = null,
+                    onClick = onPlay
+                )
+                .padding(horizontal = 16.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             AsmrAsyncImage(
