@@ -366,6 +366,10 @@ private fun DownloadTaskCard(
                 }
             }
 
+            val hasUnknownTotalRunningItem = task.items.any {
+                it.state == DownloadItemState.RUNNING && it.total <= 0
+            }
+
             when {
                 task.progressFraction != null -> {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -408,7 +412,7 @@ private fun DownloadTaskCard(
                         }
                     }
                 }
-                task.hasUnknownTotalRunning -> {
+                hasUnknownTotalRunningItem -> {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(
                             text = "下载中...",
@@ -780,7 +784,7 @@ private fun DownloadFileRow(
                         .background(colors.primary.copy(alpha = 0.3f))
                 )
             }
-            item.total <= 0 && (item.state == DownloadItemState.RUNNING || item.state == DownloadItemState.ENQUEUED) -> {
+            item.total <= 0 && item.state == DownloadItemState.RUNNING -> {
                 Spacer(modifier = Modifier.height(8.dp))
                 LinearProgressIndicator(
                     modifier = Modifier
