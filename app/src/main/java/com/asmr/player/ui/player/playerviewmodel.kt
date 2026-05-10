@@ -341,8 +341,10 @@ class PlayerViewModel @Inject constructor(
         val enabled = slicePlaybackController.sliceModeEnabled.value
         if (!enabled) {
             slicePlaybackController.setSliceModeEnabled(true)
+            messageManager.showInfo("仅播放切片已开启")
         } else {
             slicePlaybackController.setSliceModeEnabled(false)
+            messageManager.showInfo("仅播放切片已关闭")
         }
     }
 

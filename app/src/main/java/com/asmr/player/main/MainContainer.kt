@@ -1650,8 +1650,6 @@ fun MainContainer(
                     }
                 }
             }
-
-            NonTouchableAppMessageOverlay(messages = visibleMessages)
         }
 
         }
@@ -1902,6 +1900,8 @@ fun MainContainer(
                 }
             }
         }
+
+        NonTouchableAppMessageOverlay(messages = visibleMessages)
     }
 }
 

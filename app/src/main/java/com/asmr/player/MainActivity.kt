@@ -324,16 +324,63 @@ class MainActivity : ComponentActivity() {
             var messageSeq by remember { mutableLongStateOf(0L) }
 
             LaunchedEffect(Unit) {
-                val maxVisible = 8
+                val maxVisible = 5
+                val maxRetained = maxVisible + 1
+                val exitAnimationMs = 220L
+
+                fun hideMessage(id: Long) {
+                    val index = visibleMessages.indexOfFirst { it.id == id }
+                    if (index >= 0) {
+                        visibleMessages[index] = visibleMessages[index].copy(isVisible = false)
+                    }
+                }
+
+                fun removeImmediately(id: Long) {
+                    dismissJobs.remove(id)?.cancel()
+                    visibleMessages.removeAll { it.id == id }
+                }
+
+                fun removeAfterExit(id: Long, cancelExistingJob: Boolean = true) {
+                    hideMessage(id)
+                    if (cancelExistingJob) {
+                        dismissJobs.remove(id)?.cancel()
+                    } else {
+                        dismissJobs.remove(id)
+                    }
+                    dismissJobs[id] = launch {
+                        delay(exitAnimationMs)
+                        visibleMessages.removeAll { it.id == id }
+                        dismissJobs.remove(id)
+                    }
+                }
+
+                fun trimRetainedMessages() {
+                    while (visibleMessages.size >= maxRetained) {
+                        val removed = visibleMessages.lastOrNull { !it.isVisible }
+                            ?: visibleMessages.lastOrNull()
+                            ?: break
+                        removeImmediately(removed.id)
+                    }
+                }
+
+                fun prepareForIncomingMessage() {
+                    trimRetainedMessages()
+                    if (visibleMessages.count { it.isVisible } >= maxVisible) {
+                        val removed = visibleMessages.lastOrNull { it.isVisible } ?: return
+                        removeAfterExit(removed.id)
+                    }
+                    trimRetainedMessages()
+                }
 
                 messageManager.messages.collect { appMessage ->
                     val now = System.currentTimeMillis()
                     if ((now - appMessage.createdAtMs) > 10_000L) return@collect
                     val normalized = appMessage.message.trim()
                     if (normalized.isBlank()) return@collect
-                    val displayMs = appMessage.durationMs.coerceIn(1500L, 4500L)
+                    val displayMs = appMessage.durationMs.coerceIn(1200L, 3600L)
 
                     val id = ++messageSeq
+                    prepareForIncomingMessage()
                     visibleMessages.add(
                         0,
                         VisibleAppMessage(
@@ -348,13 +395,7 @@ class MainActivity : ComponentActivity() {
                     )
                     dismissJobs[id] = launch {
                         delay(displayMs)
-                        visibleMessages.removeAll { it.id == id }
-                        dismissJobs.remove(id)
-                    }
-
-                    while (visibleMessages.size > maxVisible) {
-                        val removed = visibleMessages.removeLast()
-                        dismissJobs.remove(removed.id)?.cancel()
+                        removeAfterExit(id, cancelExistingJob = false)
                     }
                 }
             }

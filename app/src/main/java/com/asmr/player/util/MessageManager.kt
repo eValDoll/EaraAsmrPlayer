@@ -18,7 +18,7 @@ data class AppMessage(
     val id: Long,
     val message: String,
     val type: MessageType = MessageType.Info,
-    val durationMs: Long = 3000,
+    val durationMs: Long = 2000,
     val createdAtMs: Long
 ) {
     fun formatForSnackbar(): String = "[${type.name.uppercase()}]$message"
@@ -34,7 +34,7 @@ class MessageManager @Inject constructor() {
     )
     val messages = _messages.asSharedFlow()
 
-    fun showMessage(message: String, type: MessageType = MessageType.Info, durationMs: Long = 3000) {
+    fun showMessage(message: String, type: MessageType = MessageType.Info, durationMs: Long = 2000) {
         val normalizedMessage = when (type) {
             MessageType.Error -> AppErrorMessageFormatter.sanitize(message)
             else -> message.trim()

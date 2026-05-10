@@ -177,7 +177,7 @@ fun AppSnackbarHost(
                 message = message,
                 type = type,
                 count = 1,
-                durationMs = 3_000L
+                durationMs = 2_000L
             )
         }
     )
