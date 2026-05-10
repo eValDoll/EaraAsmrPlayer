@@ -187,11 +187,22 @@ internal fun PlaybackControls(
                     )
                 }
 
-                IconButton(onClick = onManageTags) {
+                val isOnlineMedia = playback.currentMediaItem?.let { current ->
+                    val uri = current.localConfiguration?.uri?.toString().orEmpty()
+                    uri.startsWith("http://", ignoreCase = true) ||
+                        uri.startsWith("https://", ignoreCase = true) ||
+                        current.mediaId.startsWith("http://", ignoreCase = true) ||
+                        current.mediaId.startsWith("https://", ignoreCase = true)
+                } == true
+                IconButton(
+                    onClick = {
+                        if (isOnlineMedia) viewModel.showOnlineTagManageUnsupported() else onManageTags()
+                    }
+                ) {
                     Icon(
-                        imageVector = Icons.Default.Label,
+                        imageVector = if (isOnlineMedia) Icons.Outlined.LabelOff else Icons.Default.Label,
                         contentDescription = "标签管理",
-                        tint = colorScheme.onSurface.copy(alpha = 0.8f),
+                        tint = colorScheme.onSurface.copy(alpha = if (isOnlineMedia) 0.38f else 0.8f),
                         modifier = Modifier.size(24.dp)
                     )
                 }
@@ -206,26 +217,19 @@ internal fun PlaybackControls(
                 }
 
                 val sliceEnabled = sliceUiState.sliceModeEnabled
-                val targetBg = if (sliceEnabled) primaryColor.copy(alpha = 0.18f) else Color.Transparent
-                val bg by animateColorAsState(targetValue = targetBg, animationSpec = tween(240, easing = FastOutSlowInEasing), label = "sliceModeBg")
                 val baseTint = colorScheme.onSurface.copy(alpha = 0.8f)
                 val tint by animateColorAsState(
                     targetValue = if (sliceEnabled) primaryColor else baseTint,
                     animationSpec = tween(240, easing = FastOutSlowInEasing),
                     label = "sliceModeTint"
                 )
-                Surface(
-                    color = bg,
-                    contentColor = tint,
-                    shape = RoundedCornerShape(12.dp)
-                ) {
-                    IconButton(onClick = { viewModel.toggleSliceMode() }) {
-                        Icon(
-                            painter = painterResource(R.drawable.ic_segment),
-                            contentDescription = "切片播放",
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
+                IconButton(onClick = { viewModel.toggleSliceMode() }) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_segment),
+                        contentDescription = "切片播放",
+                        tint = tint,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
             }
         }

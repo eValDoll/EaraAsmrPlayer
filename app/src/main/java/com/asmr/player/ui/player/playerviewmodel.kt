@@ -264,6 +264,10 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
+    fun showOnlineTagManageUnsupported() {
+        messageManager.showInfo("在线音频暂不支持标签管理")
+    }
+
     fun addToQueue() {
         val item = playback.value.currentMediaItem ?: return
         showQueueAddSummary(playerConnection.addMediaItems(listOf(item)))
