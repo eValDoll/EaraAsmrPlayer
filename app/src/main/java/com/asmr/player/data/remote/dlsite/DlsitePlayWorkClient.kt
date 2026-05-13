@@ -87,6 +87,7 @@ class DlsitePlayWorkClient @Inject constructor(
         val q = buildQuery(mapOf("v" to rev) + params)
         val audioUrlByHash = LinkedHashMap<String, String>()
         val videoUrlByHash = LinkedHashMap<String, String>()
+        val optimizedUrlByHash = LinkedHashMap<String, String>()
         val durationByHash = LinkedHashMap<String, Double?>()
         val audioLeaves = mutableListOf<DlsitePlayLeaf>()
         val videoLeaves = mutableListOf<DlsitePlayLeaf>()
@@ -94,16 +95,20 @@ class DlsitePlayWorkClient @Inject constructor(
         if (playfile != null) {
             playfile.forEach { (k, v) ->
                 val origHash = k?.toString().orEmpty().trim()
+                if (origHash.isBlank()) return@forEach
                 val meta = v as? Map<*, *> ?: return@forEach
                 val type = (meta["type"] as? String).orEmpty()
+                val opt = optimizedBlock(meta, type)
+                val optName = (opt?.get("name") as? String).orEmpty().trim()
+                val optimizedUrl = if (optName.isNotBlank()) "${baseUrl}optimized/$optName?$q" else null
+                if (optimizedUrl != null) {
+                    optimizedUrlByHash[origHash] = optimizedUrl
+                }
                 when (type) {
                     "audio" -> {
-                        val audio = meta["audio"] as? Map<*, *> ?: return@forEach
-                        val opt = audio["optimized"] as? Map<*, *> ?: return@forEach
-                        val optName = (opt["name"] as? String).orEmpty().trim()
-                        if (optName.isBlank()) return@forEach
+                        if (opt == null || optimizedUrl == null) return@forEach
 
-                        val streamUrl = "${baseUrl}optimized/$optName?$q"
+                        val streamUrl = optimizedUrl
                         val display = fileToDisplay[origHash].orEmpty().ifBlank { origHash }
                         val (folder, filename) = splitFolder(display)
                         val subtitles = buildSubtitles(
@@ -114,7 +119,7 @@ class DlsitePlayWorkClient @Inject constructor(
                             dirToFiles = dirToFiles,
                             vttOpt = vttOpt
                         )
-                        val duration = (opt["duration"] as? Number)?.toDouble()
+                        val duration = parseDuration(opt["duration"])
                         audioUrlByHash[origHash] = streamUrl
                         durationByHash[origHash] = duration
                         audioLeaves.add(
@@ -127,12 +132,9 @@ class DlsitePlayWorkClient @Inject constructor(
                         )
                     }
                     "video", "movie" -> {
-                        val video = (meta["video"] as? Map<*, *>) ?: (meta["movie"] as? Map<*, *>)
-                        val opt = video?.get("optimized") as? Map<*, *> ?: return@forEach
-                        val optName = (opt["name"] as? String).orEmpty().trim()
-                        if (optName.isBlank()) return@forEach
+                        if (opt == null || optimizedUrl == null) return@forEach
 
-                        val streamUrl = "${baseUrl}optimized/$optName?$q"
+                        val streamUrl = optimizedUrl
                         val display = fileToDisplay[origHash].orEmpty().ifBlank { origHash }
                         val (folder, filename) = splitFolder(display)
                         val subtitles = buildSubtitles(
@@ -143,7 +145,7 @@ class DlsitePlayWorkClient @Inject constructor(
                             dirToFiles = dirToFiles,
                             vttOpt = vttOpt
                         )
-                        val duration = (opt["duration"] as? Number)?.toDouble()
+                        val duration = parseDuration(opt["duration"])
                         videoUrlByHash[origHash] = streamUrl
                         durationByHash[origHash] = duration
                         videoLeaves.add(
@@ -180,12 +182,38 @@ class DlsitePlayWorkClient @Inject constructor(
                 DlsiteFileKind.Audio -> audioUrlByHash[hn]
                 DlsiteFileKind.Subtitle -> subtitleUrlByHash[hn]
                 DlsiteFileKind.Video -> videoUrlByHash[hn]
+                DlsiteFileKind.Image,
+                DlsiteFileKind.Text,
+                DlsiteFileKind.Pdf -> optimizedUrlByHash[hn]
                 else -> null
+            }
+            if (url.isNullOrBlank() && kind != DlsiteFileKind.Pdf) return@mapNotNull null
+            val imageMeta = if (kind == DlsiteFileKind.Image) {
+                val meta = playfile?.get(hn) as? Map<*, *>
+                val opt = meta?.let { optimizedBlock(it, "image") }
+                val optimizedName = (opt?.get("name") as? String).orEmpty().trim()
+                if (opt != null && optimizedName.isNotBlank()) {
+                    val rawCrypt = opt["crypt"]
+                    val crypt = parseDlsitePlayCryptFlag(rawCrypt)
+                    val width = parseInt(opt["width"])
+                    val height = parseInt(opt["height"])
+                    DlsitePlayImageMeta(
+                        crypt = crypt,
+                        width = width,
+                        height = height,
+                        optimizedName = optimizedName
+                    )
+                } else {
+                    null
+                }
+            } else {
+                null
             }
             DlsitePlayFileEntry(
                 displayPath = display,
                 url = url,
-                duration = durationByHash[hn]
+                duration = durationByHash[hn],
+                imageMeta = imageMeta
             )
         }
 
@@ -268,7 +296,8 @@ class DlsitePlayWorkClient @Inject constructor(
             val title: String,
             val children: LinkedHashMap<String, Node> = linkedMapOf(),
             var url: String? = null,
-            var duration: Double? = null
+            var duration: Double? = null,
+            var imageMeta: DlsitePlayImageMeta? = null
         )
 
         val root = Node(title = "")
@@ -285,17 +314,23 @@ class DlsitePlayWorkClient @Inject constructor(
             val node = getOrCreateChild(cur, fileName)
             node.url = file.url
             node.duration = file.duration
+            node.imageMeta = file.imageMeta
         }
 
         fun toResponse(node: Node): AsmrOneTrackNodeResponse {
             val kids = node.children.values.map { toResponse(it) }
-            return AsmrOneTrackNodeResponse(
+            val resp = AsmrOneTrackNodeResponse(
                 title = node.title,
                 children = kids.takeIf { it.isNotEmpty() },
                 duration = node.duration,
                 streamUrl = node.url,
-                mediaDownloadUrl = node.url
+                mediaDownloadUrl = node.url,
+                dlsitePlayImageCrypt = node.imageMeta?.crypt == true,
+                dlsitePlayImageWidth = node.imageMeta?.width,
+                dlsitePlayImageHeight = node.imageMeta?.height,
+                dlsitePlayOptimizedName = node.imageMeta?.optimizedName
             )
+            return resp
         }
 
         return root.children.values.map { toResponse(it) }
@@ -337,6 +372,36 @@ class DlsitePlayWorkClient @Inject constructor(
         return if (idx >= 0) trimmed.substring(0, idx) to trimmed.substring(idx + 1) else "" to trimmed
     }
 
+    private fun typedFileBlock(meta: Map<*, *>, type: String): Map<*, *>? {
+        val keys = when (type) {
+            "movie" -> listOf("movie", "video")
+            else -> listOf(type)
+        }
+        return keys.asSequence()
+            .mapNotNull { key -> meta[key] as? Map<*, *> }
+            .firstOrNull()
+    }
+
+    private fun optimizedBlock(meta: Map<*, *>, type: String): Map<*, *>? {
+        return typedFileBlock(meta, type)?.get("optimized") as? Map<*, *>
+    }
+
+    private fun parseDuration(value: Any?): Double? {
+        return when (value) {
+            is Number -> value.toDouble()
+            is String -> value.toDoubleOrNull()
+            else -> null
+        }
+    }
+
+    private fun parseInt(value: Any?): Int? {
+        return when (value) {
+            is Number -> value.toInt()
+            is String -> value.toIntOrNull()
+            else -> null
+        }
+    }
+
     private fun buildQuery(params: Map<String, String>): String {
         return params.entries.joinToString("&") { (k, v) ->
             "${URLEncoder.encode(k, Charsets.UTF_8.name())}=${URLEncoder.encode(v, Charsets.UTF_8.name())}"
@@ -353,7 +418,15 @@ class DlsitePlayWorkClient @Inject constructor(
     private data class DlsitePlayFileEntry(
         val displayPath: String,
         val url: String?,
-        val duration: Double?
+        val duration: Double?,
+        val imageMeta: DlsitePlayImageMeta? = null
+    )
+
+    private data class DlsitePlayImageMeta(
+        val crypt: Boolean,
+        val width: Int?,
+        val height: Int?,
+        val optimizedName: String
     )
 
     private enum class DlsiteFileKind { Audio, Subtitle, Image, Video, Text, Pdf, Other }
@@ -362,10 +435,10 @@ class DlsitePlayWorkClient @Inject constructor(
         val ext = fileName.substringAfterLast('.', "").lowercase()
         return when (ext) {
             "mp3", "wav", "flac", "m4a", "ogg", "aac", "opus" -> DlsiteFileKind.Audio
-            "vtt", "lrc", "srt" -> DlsiteFileKind.Subtitle
+            "vtt", "lrc", "srt", "ass", "ssa" -> DlsiteFileKind.Subtitle
             "jpg", "jpeg", "png", "webp", "gif" -> DlsiteFileKind.Image
             "mp4", "mkv", "webm" -> DlsiteFileKind.Video
-            "txt", "md", "nfo" -> DlsiteFileKind.Text
+            "txt", "md", "nfo", "csv", "tsv", "json", "xml", "html", "htm", "log", "ini", "cue", "ks", "yaml", "yml", "rtf" -> DlsiteFileKind.Text
             "pdf" -> DlsiteFileKind.Pdf
             else -> DlsiteFileKind.Other
         }

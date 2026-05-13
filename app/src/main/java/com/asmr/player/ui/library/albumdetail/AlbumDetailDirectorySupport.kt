@@ -200,8 +200,8 @@ internal fun treeFileTypeForName(fileName: String): TreeFileType {
         "mp3", "wav", "flac", "m4a", "ogg", "aac", "opus" -> TreeFileType.Audio
         "mp4", "mkv", "webm", "mov", "m4v" -> TreeFileType.Video
         "jpg", "jpeg", "png", "webp", "gif" -> TreeFileType.Image
-        "lrc", "srt", "vtt" -> TreeFileType.Subtitle
-        "txt", "md", "nfo" -> TreeFileType.Text
+        "lrc", "srt", "vtt", "ass", "ssa" -> TreeFileType.Subtitle
+        "txt", "md", "nfo", "csv", "tsv", "json", "xml", "html", "htm", "log", "ini", "cue", "ks", "yaml", "yml", "rtf" -> TreeFileType.Text
         "pdf" -> TreeFileType.Pdf
         else -> TreeFileType.Other
     }
@@ -296,7 +296,11 @@ internal data class DirectoryFileItem(
     val thumbnailModel: Any? = null,
     val playlistTarget: PlaylistAddTarget? = null,
     val subtitleSources: List<RemoteSubtitleSource> = emptyList(),
-    val showSubtitleStamp: Boolean = false
+    val showSubtitleStamp: Boolean = false,
+    val dlsitePlayImageCrypt: Boolean = false,
+    val dlsitePlayImageWidth: Int? = null,
+    val dlsitePlayImageHeight: Int? = null,
+    val dlsitePlayOptimizedName: String? = null
 )
 
 internal data class DirectoryBrowserResult(
@@ -323,7 +327,7 @@ internal fun buildDirectoryImagePreviewRequest(
     if (imageFiles.isEmpty()) return null
     val items = imageFiles.mapNotNull(toPreviewItem)
     if (items.isEmpty()) return null
-    val initialIndex = imageFiles.indexOfFirst { it.path == clickedPath }
+    val initialIndex = items.indexOfFirst { it.key == clickedPath }
     if (initialIndex < 0) return null
     return ImagePreviewRequest(items = items, initialIndex = initialIndex)
 }
@@ -507,7 +511,11 @@ internal class RemoteTreeNode(
     var url: String = "",
     var durationSeconds: Double? = null,
     var subtitleSources: List<RemoteSubtitleSource> = emptyList(),
-    var playlistTarget: PlaylistAddTarget? = null
+    var playlistTarget: PlaylistAddTarget? = null,
+    var dlsitePlayImageCrypt: Boolean = false,
+    var dlsitePlayImageWidth: Int? = null,
+    var dlsitePlayImageHeight: Int? = null,
+    var dlsitePlayOptimizedName: String? = null
 )
 
 internal data class RemoteTreeIndex(
@@ -541,7 +549,11 @@ internal fun buildRemoteTreeIndex(
         val safeTitle: String,
         val url: String,
         val duration: Double?,
-        val fileType: TreeFileType
+        val fileType: TreeFileType,
+        val dlsitePlayImageCrypt: Boolean,
+        val dlsitePlayImageWidth: Int?,
+        val dlsitePlayImageHeight: Int?,
+        val dlsitePlayOptimizedName: String?
     ) {
         val ext: String = rawTitle.substringAfterLast('.', "").lowercase()
         val baseName: String = rawTitle.substringBeforeLast('.')
@@ -597,7 +609,11 @@ internal fun buildRemoteTreeIndex(
                     safeTitle = safeTitle,
                     url = url,
                     duration = node.duration,
-                    fileType = treeFileTypeForNode(rawTitle, url)
+                    fileType = treeFileTypeForNode(rawTitle, url),
+                    dlsitePlayImageCrypt = node.dlsitePlayImageCrypt,
+                    dlsitePlayImageWidth = node.dlsitePlayImageWidth,
+                    dlsitePlayImageHeight = node.dlsitePlayImageHeight,
+                    dlsitePlayOptimizedName = node.dlsitePlayOptimizedName
                 )
             } else {
                 null
@@ -632,6 +648,10 @@ internal fun buildRemoteTreeIndex(
             child.durationSeconds = leaf.duration
             child.subtitleSources = subtitleSources
             child.playlistTarget = playlistTarget
+            child.dlsitePlayImageCrypt = leaf.dlsitePlayImageCrypt
+            child.dlsitePlayImageWidth = leaf.dlsitePlayImageWidth
+            child.dlsitePlayImageHeight = leaf.dlsitePlayImageHeight
+            child.dlsitePlayOptimizedName = leaf.dlsitePlayOptimizedName
         }
 
         nodes.forEach { node ->
@@ -684,7 +704,11 @@ internal fun buildRemoteDirectoryBrowser(
                 url = child.url,
                 playlistTarget = child.playlistTarget,
                 subtitleSources = child.subtitleSources,
-                showSubtitleStamp = child.subtitleSources.isNotEmpty()
+                showSubtitleStamp = child.subtitleSources.isNotEmpty(),
+                dlsitePlayImageCrypt = child.dlsitePlayImageCrypt,
+                dlsitePlayImageWidth = child.dlsitePlayImageWidth,
+                dlsitePlayImageHeight = child.dlsitePlayImageHeight,
+                dlsitePlayOptimizedName = child.dlsitePlayOptimizedName
             )
         }
         .toList()

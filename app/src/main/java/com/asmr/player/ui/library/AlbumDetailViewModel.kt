@@ -22,13 +22,18 @@ import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.crawler.AsmrOneCrawler
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncResolveResult
+import com.asmr.player.data.remote.dlsite.DLSITE_PLAY_PREVIEW_CACHE_VERSION
 import com.asmr.player.data.remote.dlsite.DlsitePlayWorkClient
 import com.asmr.player.data.remote.dlsite.DlsitePlayTreeResult
 import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
 import com.asmr.player.data.remote.dlsite.DlsiteProductInfoClient
+import com.asmr.player.data.remote.dlsite.descrambleDlsitePlayBitmap
+import com.asmr.player.data.remote.dlsite.parseDlsitePlayImageSeed
 import com.asmr.player.data.remote.dlsite.resolveCloudSyncWorkId
 import com.asmr.player.data.remote.dlsite.resolveDlsiteCloudSync
 import com.asmr.player.data.remote.dlsite.resolveSelectedDlsiteCloudSync
+import com.asmr.player.data.remote.auth.DlsiteAuthStore
+import com.asmr.player.data.remote.auth.buildDlsiteCookieHeader
 import com.asmr.player.data.remote.download.DownloadManager
 import com.asmr.player.data.remote.scraper.DLSiteScraper
 import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
@@ -69,9 +74,6 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.Rect
 import android.os.SystemClock
 import androidx.work.ExistingWorkPolicy
 import androidx.work.OneTimeWorkRequestBuilder
@@ -257,6 +259,62 @@ class AlbumDetailViewModel @Inject constructor(
         val u = url.trim()
         if (u.isBlank()) return null
         return lyricsLoader.fetchTextForPreview(u)
+    }
+
+    suspend fun prepareDlsitePlayImagePreview(
+        url: String,
+        optimizedName: String?,
+        crypt: Boolean,
+        width: Int?,
+        height: Int?
+    ): String? = withContext(Dispatchers.IO) {
+        val normalizedUrl = url.trim()
+        if (normalizedUrl.isBlank()) return@withContext null
+        if (!crypt) return@withContext normalizedUrl
+        val imageWidth = width ?: return@withContext null
+        val imageHeight = height ?: return@withContext null
+        if (imageWidth <= 0 || imageHeight <= 0) return@withContext null
+        val name = optimizedName?.trim().orEmpty().ifBlank {
+            normalizedUrl.substringBefore('?').substringAfterLast('/')
+        }
+        val seed = parseDlsitePlayImageSeed(name) ?: return@withContext null
+
+        val previewDir = File(context.cacheDir, "dlsite_play_preview").apply { if (!exists()) mkdirs() }
+        val previewKey = listOf(
+            DLSITE_PLAY_PREVIEW_CACHE_VERSION.toString(),
+            normalizedUrl,
+            name,
+            imageWidth.toString(),
+            imageHeight.toString(),
+            seed.toString()
+        ).joinToString("|")
+        val previewFile = File(previewDir, "${previewKey.hashCode()}_descrambled.png")
+        if (previewFile.exists() && previewFile.length() > 0L) return@withContext previewFile.absolutePath
+
+        val requestBuilder = Request.Builder()
+            .url(normalizedUrl)
+            .header("Accept", "image/*,*/*;q=0.8")
+            .header("Referer", "https://play.dlsite.com/")
+            .header("User-Agent", NetworkHeaders.USER_AGENT)
+            .header("Accept-Language", NetworkHeaders.ACCEPT_LANGUAGE)
+            .get()
+        val cookie = buildDlsiteCookieHeader(DlsiteAuthStore(context).getPlayCookie())
+        if (cookie.isNotBlank()) requestBuilder.header("Cookie", cookie)
+
+        val bytes = runCatching {
+            imageOkHttpClient.newCall(requestBuilder.build()).execute().use { resp ->
+                if (!resp.isSuccessful) return@use null
+                resp.body?.bytes()
+            }
+        }.getOrNull() ?: return@withContext null
+        val scrambled = BitmapFactory.decodeByteArray(bytes, 0, bytes.size) ?: return@withContext null
+        val descrambled = descrambleDlsitePlayBitmap(scrambled, seed, imageWidth, imageHeight)
+        FileOutputStream(previewFile).use { out ->
+            descrambled.compress(Bitmap.CompressFormat.PNG, 100, out)
+        }
+        if (descrambled !== scrambled && !descrambled.isRecycled) descrambled.recycle()
+        if (!scrambled.isRecycled) scrambled.recycle()
+        previewFile.absolutePath
     }
 
     fun getListScrollPosition(stateKey: String): Pair<Int, Int> {
@@ -2188,7 +2246,6 @@ class AlbumDetailViewModel @Inject constructor(
             fail("db_update_${e.javaClass.simpleName}")
         }
     }
-
 
     private data class OnlineSaveLeaf(
         val relativePath: String,

@@ -198,6 +198,15 @@ internal fun encodeRouteArg(value: String): String = URLEncoder.encode(value, "U
 internal fun decodeRouteArg(value: String): String = runCatching { URLDecoder.decode(value, "UTF-8") }
     .getOrDefault(value)
 
+internal fun String?.toAlbumDetailInitialTab(): Int? {
+    return when (this?.trim()) {
+        "local" -> 0
+        "dl" -> 1
+        "dlsitePlay" -> 2
+        else -> null
+    }
+}
+
 internal fun computePrimaryNavSelectionProgresses(
     pagerRoutes: List<String>,
     currentPage: Int,

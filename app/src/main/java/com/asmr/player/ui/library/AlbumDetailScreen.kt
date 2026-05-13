@@ -201,6 +201,7 @@ fun AlbumDetailScreen(
     onPlayVideo: (String, String, String, String) -> Unit = { _, _, _, _ -> },
     onOpenDlsiteLogin: () -> Unit = {},
     onOpenAlbumByRj: (String) -> Unit = {},
+    initialTab: Int? = null,
     viewModel: AlbumDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -212,8 +213,11 @@ fun AlbumDetailScreen(
         if (rjPart.isNotBlank()) "album:$rjPart" else "albumId:$idPart"
     }
     val introSessionKey = remember(screenKey) { "intro:${UUID.randomUUID()}" }
-    var selectedTab by rememberSaveable(screenKey) {
-        mutableIntStateOf(if (albumId != null && albumId > 0) 0 else 1)
+    val initialSelectedTab = remember(albumId, initialTab) {
+        initialTab?.coerceIn(0, 2) ?: if (albumId != null && albumId > 0) 0 else 1
+    }
+    var selectedTab by rememberSaveable(screenKey, initialSelectedTab) {
+        mutableIntStateOf(initialSelectedTab)
     }
     var lastChromeResetTab by rememberSaveable(screenKey) {
         mutableIntStateOf(selectedTab)
@@ -399,7 +403,10 @@ fun AlbumDetailScreen(
                                 viewModel.ensureDlsiteLoaded()
                                 viewModel.ensureAsmrOneLoaded()
                             }
-                            2 -> viewModel.ensureDlsitePlayLoaded()
+                            2 -> {
+                                viewModel.ensureDlsiteLoaded()
+                                viewModel.ensureDlsitePlayLoaded()
+                            }
                         }
                     }
 
@@ -587,6 +594,7 @@ fun AlbumDetailScreen(
                                         },
                                         onPreviewImages = { request -> imagePreviewRequest = request },
                                         onPreviewFile = { onlinePreviewFile = it },
+                                        prepareImagePreview = viewModel::prepareDlsitePlayImagePreview,
                                         treeStateKey = "tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}",
                                         initialCurrentPath = viewModel.getTreeCurrentPath("tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}"),
                                         topContentPadding = tabContentTopPadding,

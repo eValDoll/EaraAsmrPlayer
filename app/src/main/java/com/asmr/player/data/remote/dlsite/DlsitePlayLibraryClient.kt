@@ -29,6 +29,8 @@ class DlsitePlayLibraryClient @Inject constructor(
     private var cachedAlbums: List<Album> = emptyList()
     private var cachedTs: Long = 0L
 
+    fun hasStoredCredentials(): Boolean = authStore.isPlayLoggedIn()
+
     suspend fun searchPurchased(keyword: String, page: Int, pageSize: Int): PurchasedSearchPage {
         return withContext(Dispatchers.IO) {
             val all = ensureLibraryCached()

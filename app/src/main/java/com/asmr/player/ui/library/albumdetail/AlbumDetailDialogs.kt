@@ -696,8 +696,21 @@ internal fun FilePreviewDialog(
         mutableIntStateOf(initialCandidates.indexOf(absolutePath).takeIf { it >= 0 } ?: 0)
     }
     val currentPath = initialCandidates.getOrElse(currentIndex) { absolutePath }
-    val currentName = remember(currentPath) { currentPath.substringAfterLast('/').substringAfterLast('\\') }
-    val currentType = remember(currentName) { treeFileTypeForName(currentName) }
+    val currentName = remember(currentPath, absolutePath, title) {
+        if (currentPath == absolutePath && title.isNotBlank()) {
+            title
+        } else {
+            currentPath.substringAfterLast('/').substringAfterLast('\\')
+        }
+    }
+    val currentType = remember(currentPath, absolutePath, currentName, fileType) {
+        val inferred = treeFileTypeForName(currentName)
+        when {
+            currentPath == absolutePath && fileType != TreeFileType.Other -> fileType
+            inferred != TreeFileType.Other -> inferred
+            else -> fileType
+        }
+    }
     val canNavigate = initialCandidates.size > 1
     var fullscreen by remember { mutableStateOf(false) }
     val canFullscreen = currentType == TreeFileType.Video

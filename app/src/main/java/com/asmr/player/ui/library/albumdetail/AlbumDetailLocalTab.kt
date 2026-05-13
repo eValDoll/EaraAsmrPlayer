@@ -336,8 +336,13 @@ internal fun AlbumLocalBreadcrumbTabV2(
                                                         ImagePreviewItem(
                                                             key = imageFile.path,
                                                             title = imageFile.title,
-                                                            imageModel = path,
-                                                            openPathOrUrl = path
+                                                            openPathOrUrl = path,
+                                                            prepareImage = {
+                                                                com.asmr.player.ui.common.ImagePreviewPreparedItem(
+                                                                    imageModel = path,
+                                                                    openPathOrUrl = path
+                                                                )
+                                                            }
                                                         )
                                                     }
                                                 }

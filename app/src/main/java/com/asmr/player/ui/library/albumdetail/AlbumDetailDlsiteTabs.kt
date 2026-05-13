@@ -125,6 +125,7 @@ import com.asmr.player.ui.common.AsmrShimmerPlaceholder
 import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.ImagePreviewItem
+import com.asmr.player.ui.common.ImagePreviewPreparedItem
 import com.asmr.player.ui.common.ImagePreviewRequest
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
@@ -642,8 +643,13 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                                                 ImagePreviewItem(
                                                     key = imageFile.path,
                                                     title = imageFile.title,
-                                                    imageModel = imageUrl,
-                                                    openPathOrUrl = imageUrl
+                                                    openPathOrUrl = imageUrl,
+                                                    prepareImage = {
+                                                        ImagePreviewPreparedItem(
+                                                            imageModel = imageUrl,
+                                                            openPathOrUrl = imageUrl
+                                                        )
+                                                    }
                                                 )
                                             }
                                         )?.let(onPreviewImages) ?: onPreviewFile(
@@ -818,7 +824,8 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
     onPersistCurrentPath: (String) -> Unit,
     initialScroll: Pair<Int, Int>,
     onPersistScroll: (Int, Int) -> Unit,
-    loadRemoteFileSize: suspend (String) -> Long?
+    loadRemoteFileSize: suspend (String) -> Long?,
+    prepareImagePreview: suspend (String, String?, Boolean, Int?, Int?) -> String?
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -990,7 +997,7 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
                                     }
                                 }
                                 TreeFileType.Image -> {
-                                    buildDirectoryImagePreviewRequest(
+                                    val request = buildDirectoryImagePreviewRequest(
                                         files = browser.files,
                                         clickedPath = file.path,
                                         toPreviewItem = { imageFile ->
@@ -998,20 +1005,37 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
                                             ImagePreviewItem(
                                                 key = imageFile.path,
                                                 title = imageFile.title,
-                                                imageModel = imageUrl,
-                                                openPathOrUrl = imageUrl
+                                                openPathOrUrl = imageUrl,
+                                                prepareImage = {
+                                                    val prepared = prepareImagePreview(
+                                                        imageUrl,
+                                                        imageFile.dlsitePlayOptimizedName,
+                                                        imageFile.dlsitePlayImageCrypt,
+                                                        imageFile.dlsitePlayImageWidth,
+                                                        imageFile.dlsitePlayImageHeight
+                                                    ) ?: imageUrl
+                                                    ImagePreviewPreparedItem(
+                                                        imageModel = prepared,
+                                                        openPathOrUrl = prepared
+                                                    )
+                                                }
                                             )
                                         }
-                                    )?.let(onPreviewImages) ?: onPreviewFile(
-                                        AsmrTreeUiEntry.File(
-                                            path = file.path,
-                                            title = file.title,
-                                            depth = 0,
-                                            fileType = file.fileType,
-                                            isPlayable = false,
-                                            url = file.url
-                                        )
                                     )
+                                    if (request != null) {
+                                        onPreviewImages(request)
+                                    } else {
+                                        onPreviewFile(
+                                            AsmrTreeUiEntry.File(
+                                                path = file.path,
+                                                title = file.title,
+                                                depth = 0,
+                                                fileType = file.fileType,
+                                                isPlayable = false,
+                                                url = file.url
+                                            )
+                                        )
+                                    }
                                 }
                                 else -> onPreviewFile(
                                     AsmrTreeUiEntry.File(

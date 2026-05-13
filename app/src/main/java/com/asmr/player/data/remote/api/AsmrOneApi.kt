@@ -85,5 +85,9 @@ data class AsmrOneTrackNodeResponse(
     @SerializedName(value = "streamUrl", alternate = ["mediaStreamUrl", "stream_url"])
     val streamUrl: String? = null,
     @SerializedName(value = "mediaDownloadUrl", alternate = ["mediaUrl", "media_url", "downloadUrl", "download_url", "url"])
-    val mediaDownloadUrl: String? = null
+    val mediaDownloadUrl: String? = null,
+    val dlsitePlayImageCrypt: Boolean = false,
+    val dlsitePlayImageWidth: Int? = null,
+    val dlsitePlayImageHeight: Int? = null,
+    val dlsitePlayOptimizedName: String? = null
 )

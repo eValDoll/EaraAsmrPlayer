@@ -43,6 +43,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -92,6 +93,12 @@ internal val DefaultImagePreviewLayoutSpec = ImagePreviewLayoutSpec()
 internal data class ImagePreviewItem(
     val key: String,
     val title: String,
+    val imageModel: Any? = null,
+    val openPathOrUrl: String,
+    val prepareImage: (suspend () -> ImagePreviewPreparedItem?)? = null
+)
+
+internal data class ImagePreviewPreparedItem(
     val imageModel: Any,
     val openPathOrUrl: String
 )
@@ -135,13 +142,14 @@ internal fun ImagePreviewDialog(
         pageCount = { items.size }
     )
     val pageTransforms = remember(items) { mutableStateMapOf<String, ImagePreviewTransformState>() }
+    val resolvedItems = remember(items) { mutableStateMapOf<String, ImagePreviewPreparedItem>() }
     val currentItem = items.getOrElse(pagerState.currentPage) { items.first() }
     val currentTransform = pageTransforms.getOrPut(currentItem.key) { ImagePreviewTransformState() }
     val canNavigate = items.size > 1
     val allowPaging = currentTransform.isAtRest
 
     fun openCurrentWithOtherApp() {
-        val path = currentItem.openPathOrUrl.trim()
+        val path = (resolvedItems[currentItem.key]?.openPathOrUrl ?: currentItem.openPathOrUrl).trim()
         if (path.isBlank()) {
             messageManager.showError("无法打开：路径为空")
             return
@@ -265,14 +273,19 @@ internal fun ImagePreviewDialog(
                                 .fillMaxSize()
                                 .clipToBounds()
                                 .testTag(IMAGE_PREVIEW_PAGER_TAG),
-                            userScrollEnabled = canNavigate && allowPaging
+                            beyondBoundsPageCount = 0,
+                            userScrollEnabled = canNavigate && allowPaging,
+                            key = { index -> items[index].key }
                         ) { page ->
                             val item = items[page]
                             val transformState = pageTransforms.getOrPut(item.key) { ImagePreviewTransformState() }
-                            pageContent(
+                            ImagePreviewPageHost(
                                 item = item,
+                                cachedPrepared = resolvedItems[item.key],
+                                onPrepared = { prepared -> resolvedItems[item.key] = prepared },
                                 state = transformState,
-                                onStateChange = { pageTransforms[item.key] = it }
+                                onStateChange = { pageTransforms[item.key] = it },
+                                pageContent = pageContent
                             )
                         }
 
@@ -338,6 +351,51 @@ internal data class ImagePreviewTransformState(
         get() = scale <= 1.01f && kotlin.math.abs(offset.x) < 0.5f && kotlin.math.abs(offset.y) < 0.5f
 }
 
+@Composable
+private fun ImagePreviewPageHost(
+    item: ImagePreviewItem,
+    cachedPrepared: ImagePreviewPreparedItem?,
+    onPrepared: (ImagePreviewPreparedItem) -> Unit,
+    state: ImagePreviewTransformState,
+    onStateChange: (ImagePreviewTransformState) -> Unit,
+    pageContent: @Composable (
+        item: ImagePreviewItem,
+        state: ImagePreviewTransformState,
+        onStateChange: (ImagePreviewTransformState) -> Unit
+    ) -> Unit
+) {
+    val prepared by produceState(
+        initialValue = cachedPrepared ?: item.imageModel?.let { model ->
+            ImagePreviewPreparedItem(imageModel = model, openPathOrUrl = item.openPathOrUrl)
+        },
+        key1 = item.key,
+        key2 = cachedPrepared
+    ) {
+        if (value != null) return@produceState
+        value = item.prepareImage?.invoke()
+    }
+
+    LaunchedEffect(item.key, prepared) {
+        prepared?.let(onPrepared)
+    }
+
+    val displayItem = remember(item, prepared) {
+        prepared?.let { resolved ->
+            item.copy(
+                imageModel = resolved.imageModel,
+                openPathOrUrl = resolved.openPathOrUrl,
+                prepareImage = null
+            )
+        } ?: item.copy(prepareImage = null)
+    }
+
+    pageContent(
+        item = displayItem,
+        state = state,
+        onStateChange = onStateChange
+    )
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ImagePreviewPage(
@@ -366,6 +424,16 @@ private fun ImagePreviewPage(
             .clipToBounds(),
         contentAlignment = Alignment.Center
     ) {
+        if (item.imageModel == null) {
+            Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center
+            ) {
+                AsmrShimmerPlaceholder(modifier = Modifier.fillMaxSize(), cornerRadius = 0)
+            }
+            return
+        }
+
         AsmrAsyncImage(
             model = item.imageModel,
             contentDescription = null,

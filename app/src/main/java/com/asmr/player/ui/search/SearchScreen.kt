@@ -123,7 +123,7 @@ private fun stableAlbumKey(album: Album): String {
 @Composable
 fun SearchScreen(
     windowSizeClass: WindowSizeClass,
-    onAlbumClick: (Album) -> Unit,
+    onAlbumClick: (Album, Boolean) -> Unit,
     viewModel: SearchViewModel = hiltViewModel()
 ) {
     var keyword by rememberSaveable { mutableStateOf("") }
@@ -304,7 +304,8 @@ fun SearchScreen(
                                 workId = album.workId,
                                 rjCode = album.rjCode,
                                 description = album.description
-                            )
+                            ),
+                            false
                         )
                     },
                     modifier = Modifier.fillMaxHeight()
@@ -388,7 +389,7 @@ fun SearchScreen(
                                         ) { album ->
                                             AlbumItem(
                                                 album = album,
-                                                onClick = { onAlbumClick(album) },
+                                                onClick = { onAlbumClick(album, state.purchasedOnly) },
                                                 emptyCoverUseShimmer = true
                                             )
                                         }
@@ -418,7 +419,7 @@ fun SearchScreen(
                                             val album = state.results[index]
                                             AlbumGridItem(
                                                 album = album,
-                                                onClick = { onAlbumClick(album) },
+                                                onClick = { onAlbumClick(album, state.purchasedOnly) },
                                                 emptyCoverUseShimmer = true
                                             )
                                         }
@@ -520,12 +521,14 @@ fun SearchScreen(
                         onMeasured = { size: IntSize -> chromeState.updateHeight(size.height.toFloat()) },
                         onSearchSubmit = ::submitSearch,
                         onPurchasedOnlySelected = {
-                            purchasedOnly = true
-                            viewModel.updateSearchOptions(
+                            val accepted = viewModel.updateSearchOptions(
                                 order = selectedOrder,
                                 purchasedOnly = true,
                                 locale = selectedLocale
                             )
+                            if (accepted) {
+                                purchasedOnly = true
+                            }
                         },
                         onOrderSelected = { order ->
                             selectedOrderName = order.name

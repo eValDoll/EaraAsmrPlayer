@@ -142,14 +142,19 @@ class SearchViewModel @Inject constructor(
         order: SearchSortOption = currentOrder,
         purchasedOnly: Boolean = this.purchasedOnly,
         locale: String? = currentLocale
-    ) {
-        val current = _uiState.value as? SearchUiState.Success ?: return
-        if (current.isBusy) return
-        if (currentOrder == order && this.purchasedOnly == purchasedOnly && currentLocale == locale) return
+    ): Boolean {
+        val current = _uiState.value as? SearchUiState.Success ?: return false
+        if (current.isBusy) return false
+        if (purchasedOnly && !dlsitePlayLibraryClient.hasStoredCredentials()) {
+            messageManager.showWarning("请先登录 DLsite 后再使用\"仅已购\"搜索")
+            return false
+        }
+        if (currentOrder == order && this.purchasedOnly == purchasedOnly && currentLocale == locale) return true
         currentOrder = order
         this.purchasedOnly = purchasedOnly
         currentLocale = locale
         requestPage(current.keyword, 1, SearchPendingRequestKind.Search)
+        return true
     }
 
     fun nextPage() {

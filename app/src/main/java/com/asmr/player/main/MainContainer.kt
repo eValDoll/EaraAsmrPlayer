@@ -442,11 +442,11 @@ fun MainContainer(
         }
     }
 
-    fun openAlbumDetailFromSearch(albumId: Long?, rj: String?) {
+    fun openAlbumDetailFromSearch(albumId: Long?, rj: String?, preferDlsitePlay: Boolean = false) {
         val seq = ++pendingDetailNavigationSeq
         pendingDetailNavigation = true
         cancelPendingDetailNavigation = false
-        navigator.openAlbumDetail(albumId = albumId, rj = rj)
+        navigator.openAlbumDetail(albumId = albumId, rj = rj, preferDlsitePlay = preferDlsitePlay)
         scope.launch {
             delay(700)
             if (pendingDetailNavigationSeq == seq) {
@@ -1132,10 +1132,11 @@ fun MainContainer(
                                         Routes.Search -> {
                                             SearchScreen(
                                                 windowSizeClass = windowSizeClass,
-                                                onAlbumClick = { album ->
+                                                onAlbumClick = { album, fromPurchasedOnly ->
                                                     openAlbumDetailFromSearch(
                                                         albumId = album.id,
-                                                        rj = album.rjCode.ifBlank { album.workId }
+                                                        rj = album.rjCode.ifBlank { album.workId },
+                                                        preferDlsitePlay = fromPurchasedOnly
                                                     )
                                                 },
                                                 viewModel = searchViewModel
@@ -1229,15 +1230,19 @@ fun MainContainer(
                                 composable("search") {
                     Box(modifier = Modifier.fillMaxSize())
                 }
-                                composable(
-                    route = "album_detail_rj/{rj}",
-                    arguments = listOf(navArgument("rj") { defaultValue = "" })
+                composable(
+                    route = Routes.AlbumDetailByRjPattern,
+                    arguments = listOf(
+                        navArgument("rj") { defaultValue = "" },
+                        navArgument("initialTab") { type = NavType.StringType; nullable = true; defaultValue = null }
+                    )
                 ) { backStackEntry ->
                     val rj = backStackEntry.arguments?.getString("rj").orEmpty()
                     val refreshToken by backStackEntry.savedStateHandle.getStateFlow("refreshToken", 0L).collectAsState()
                     AlbumDetailScreen(
                         windowSizeClass = windowSizeClass,
                         rjCode = rj,
+                        initialTab = backStackEntry.arguments?.getString("initialTab").toAlbumDetailInitialTab(),
                         refreshToken = refreshToken,
                         onConsumeRefreshToken = { backStackEntry.savedStateHandle["refreshToken"] = 0L },
                         onPlayTracks = { album, tracks, startTrack ->
@@ -1288,10 +1293,11 @@ fun MainContainer(
                     )
                 }
                 composable(
-                    route = "album_detail/{albumId}?rjCode={rjCode}",
+                    route = Routes.AlbumDetailByIdPattern,
                     arguments = listOf(
                         navArgument("albumId") { type = NavType.LongType },
-                        navArgument("rjCode") { type = NavType.StringType; nullable = true; defaultValue = null }
+                        navArgument("rjCode") { type = NavType.StringType; nullable = true; defaultValue = null },
+                        navArgument("initialTab") { type = NavType.StringType; nullable = true; defaultValue = null }
                     )
                 ) { backStackEntry ->
                     val albumId = backStackEntry.arguments?.getLong("albumId") ?: 0L
@@ -1301,6 +1307,7 @@ fun MainContainer(
                         windowSizeClass = windowSizeClass,
                         albumId = albumId,
                         rjCode = rjCode,
+                        initialTab = backStackEntry.arguments?.getString("initialTab").toAlbumDetailInitialTab(),
                         refreshToken = refreshToken,
                         onConsumeRefreshToken = { backStackEntry.savedStateHandle["refreshToken"] = 0L },
                         onPlayTracks = { album, tracks, startTrack ->
