@@ -28,9 +28,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
@@ -75,6 +78,8 @@ class PlayerConnection @Inject constructor(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val _snapshot = MutableStateFlow(PlaybackSnapshot())
     val snapshot: StateFlow<PlaybackSnapshot> = _snapshot.asStateFlow()
+    private val _lyricsReloadRequests = MutableSharedFlow<Unit>(extraBufferCapacity = 8)
+    val lyricsReloadRequests: SharedFlow<Unit> = _lyricsReloadRequests.asSharedFlow()
 
     private val _queue = MutableStateFlow<List<androidx.media3.common.MediaItem>>(emptyList())
     val queue: StateFlow<List<androidx.media3.common.MediaItem>> = _queue.asStateFlow()
@@ -372,7 +377,8 @@ class PlayerConnection @Inject constructor(
                     title = track.title,
                     path = track.path,
                     duration = track.duration,
-                    group = track.group
+                    group = track.group,
+                    lyricsRelativePathNoExt = ""
                 )
                 MediaItemFactory.fromTrack(album, t)
             } else {
@@ -612,9 +618,16 @@ class PlayerConnection @Inject constructor(
     }
 
     fun sendCustomCommand(action: String, args: android.os.Bundle) {
-        val c = controller ?: return
-        val cmd = androidx.media3.session.SessionCommand(action, android.os.Bundle.EMPTY)
-        c.sendCustomCommand(cmd, args)
+        scope.launch {
+            val c = controller ?: return@launch
+            val cmd = androidx.media3.session.SessionCommand(action, android.os.Bundle.EMPTY)
+            c.sendCustomCommand(cmd, args)
+        }
+    }
+
+    fun requestLyricsReload() {
+        _lyricsReloadRequests.tryEmit(Unit)
+        sendCustomCommand("RELOAD_LYRICS", android.os.Bundle.EMPTY)
     }
 
     fun setAppVolumePercent(percent: Int) {

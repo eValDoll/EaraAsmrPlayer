@@ -331,4 +331,32 @@ object AppDatabaseMigrations {
             db.execSQL("ALTER TABLE download_tasks ADD COLUMN `albumRjCode` TEXT NOT NULL DEFAULT ''")
         }
     }
+
+    val MIGRATION_19_20: Migration = object : Migration(19, 20) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `manual_lyrics_sources` (
+                    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                    `exactTargetKey` TEXT NOT NULL,
+                    `fallbackTargetKey` TEXT NOT NULL,
+                    `canonicalMediaId` TEXT NOT NULL,
+                    `sourceUri` TEXT NOT NULL,
+                    `displayName` TEXT NOT NULL,
+                    `createdAt` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE UNIQUE INDEX IF NOT EXISTS `index_manual_lyrics_sources_exactTargetKey` ON `manual_lyrics_sources` (`exactTargetKey`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_manual_lyrics_sources_fallbackTargetKey` ON `manual_lyrics_sources` (`fallbackTargetKey`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_manual_lyrics_sources_canonicalMediaId` ON `manual_lyrics_sources` (`canonicalMediaId`)"
+            )
+        }
+    }
 }

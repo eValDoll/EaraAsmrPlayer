@@ -43,6 +43,9 @@ interface TrackDao {
     @Query("SELECT * FROM tracks WHERE path = :path LIMIT 1")
     suspend fun getTrackByPathOnce(path: String): TrackEntity?
 
+    @Query("SELECT * FROM tracks WHERE albumId = :albumId ORDER BY id ASC")
+    suspend fun getTracksForAlbumOrderedOnce(albumId: Long): List<TrackEntity>
+
     @Query("SELECT * FROM tracks WHERE id = :id LIMIT 1")
     suspend fun getTrackByIdOnce(id: Long): TrackEntity?
 

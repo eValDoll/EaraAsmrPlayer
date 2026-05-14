@@ -5,6 +5,10 @@ import android.os.Bundle
 import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import com.asmr.player.data.lyrics.EXTRA_ALBUM_WORK_ID
+import com.asmr.player.data.lyrics.EXTRA_LYRICS_RELATIVE_PATH_NO_EXT
+import com.asmr.player.data.lyrics.EXTRA_TRACK_GROUP
+import com.asmr.player.data.lyrics.deriveLyricsRelativePathNoExt
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import java.io.File
@@ -19,6 +23,9 @@ data class MediaItemRequest(
     val albumId: Long = 0L,
     val trackId: Long = 0L,
     val rjCode: String = "",
+    val albumWorkId: String = "",
+    val trackGroup: String = "",
+    val lyricsRelativePathNoExt: String = "",
     val mimeType: String? = null,
     val isVideo: Boolean = false
 )
@@ -43,7 +50,12 @@ object MediaItemFactory {
                 artworkUri = album.coverPath.ifBlank { album.coverUrl },
                 albumId = album.id,
                 trackId = track.id,
-                rjCode = album.rjCode
+                rjCode = album.rjCode,
+                albumWorkId = album.workId,
+                trackGroup = track.group,
+                lyricsRelativePathNoExt = track.lyricsRelativePathNoExt.ifBlank {
+                    deriveLyricsRelativePathNoExt(track.path, album.getAllLocalPaths())
+                }
             )
         )
     }
@@ -58,6 +70,9 @@ object MediaItemFactory {
         albumId: Long = 0L,
         trackId: Long = 0L,
         rjCode: String = "",
+        albumWorkId: String = "",
+        trackGroup: String = "",
+        lyricsRelativePathNoExt: String = "",
         mimeType: String? = null,
         isVideo: Boolean = false
     ): MediaItem {
@@ -72,6 +87,9 @@ object MediaItemFactory {
                 albumId = albumId,
                 trackId = trackId,
                 rjCode = rjCode,
+                albumWorkId = albumWorkId,
+                trackGroup = trackGroup,
+                lyricsRelativePathNoExt = lyricsRelativePathNoExt,
                 mimeType = mimeType,
                 isVideo = isVideo
             )
@@ -88,6 +106,11 @@ object MediaItemFactory {
                     if (request.albumId > 0L) putLong("album_id", request.albumId)
                     if (request.trackId > 0L) putLong("track_id", request.trackId)
                     if (request.rjCode.isNotBlank()) putString("rj_code", request.rjCode)
+                    if (request.albumWorkId.isNotBlank()) putString(EXTRA_ALBUM_WORK_ID, request.albumWorkId)
+                    if (request.trackGroup.isNotBlank()) putString(EXTRA_TRACK_GROUP, request.trackGroup)
+                    if (request.lyricsRelativePathNoExt.isNotBlank()) {
+                        putString(EXTRA_LYRICS_RELATIVE_PATH_NO_EXT, request.lyricsRelativePathNoExt)
+                    }
                     if (request.isVideo) putBoolean("is_video", true)
                 }
             )

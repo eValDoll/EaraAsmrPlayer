@@ -3,6 +3,8 @@ package com.asmr.player.ui.player
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.net.Uri
+import com.asmr.player.data.lyrics.ManualLyricsSourceRepository
+import com.asmr.player.data.lyrics.lyricsTargetContextFromMediaItem
 import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.playback.MediaItemFactory
 import com.asmr.player.playback.PlayerConnection
@@ -64,6 +66,7 @@ class PlayerViewModel @Inject constructor(
     private val trackDao: TrackDao,
     private val trackSliceRepository: TrackSliceRepository,
     private val slicePlaybackController: SlicePlaybackController,
+    private val manualLyricsSourceRepository: ManualLyricsSourceRepository,
     private val messageManager: MessageManager
 ) : ViewModel() {
     val playback: StateFlow<PlaybackSnapshot> = playerConnection.snapshot
@@ -266,6 +269,28 @@ class PlayerViewModel @Inject constructor(
 
     fun showOnlineTagManageUnsupported() {
         messageManager.showInfo("在线音频暂不支持标签管理")
+    }
+
+    fun bindManualLyrics(uri: String, onSuccess: () -> Unit = {}) {
+        val item = playback.value.currentMediaItem ?: return
+        val target = lyricsTargetContextFromMediaItem(item) ?: return
+        val trimmed = uri.trim()
+        if (trimmed.isBlank()) return
+        viewModelScope.launch {
+            runCatching {
+                manualLyricsSourceRepository.upsert(target, trimmed)
+                playerConnection.requestLyricsReload()
+            }.onSuccess {
+                messageManager.showSuccess("歌词已添加")
+                onSuccess()
+            }.onFailure {
+                messageManager.showError("歌词添加失败")
+            }
+        }
+    }
+
+    fun showUnsupportedLyricsFileMessage() {
+        messageManager.showInfo("仅支持 LRC、SRT、VTT 歌词文件")
     }
 
     fun addToQueue() {
@@ -539,7 +564,8 @@ class PlayerViewModel @Inject constructor(
                     title = it.title,
                     path = it.path,
                     duration = it.duration,
-                    group = it.group
+                    group = it.group,
+                    lyricsRelativePathNoExt = ""
                 )
             }
             if (allTracks.isEmpty()) {

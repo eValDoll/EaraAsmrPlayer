@@ -7,6 +7,7 @@ import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.util.DlsiteWorkNo
 import com.asmr.player.util.RemoteSubtitleSource
+import com.asmr.player.util.SubtitleMatchSupport
 import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -345,25 +346,25 @@ class DlsitePlayWorkClient @Inject constructor(
         vttOpt: Map<String, String>
     ): List<RemoteSubtitleSource> {
         if (filename.isBlank()) return emptyList()
-        val candidates = dirToFiles[folder].orEmpty()
-        val out = mutableListOf<RemoteSubtitleSource>()
-        candidates.forEach { f ->
-            val nm = f["name"].orEmpty().trim()
-            val hn = f["hashname"].orEmpty().trim()
-            if (nm.isBlank() || hn.isBlank()) return@forEach
-            val low = nm.lowercase()
-            if (!low.endsWith(".vtt")) return@forEach
-            val lang = when {
-                nm == "$filename.vtt" -> "default"
-                nm.startsWith("$filename.") && low.endsWith(".vtt") -> nm.substring(filename.length + 1, nm.length - 4).ifBlank { "default" }
-                else -> return@forEach
+        val mediaPath = if (folder.isBlank()) filename else "$folder/$filename"
+        val subtitleCandidates = dirToFiles.flatMap { (candidateFolder, files) ->
+            files.mapNotNull { f ->
+                val nm = f["name"].orEmpty().trim()
+                val hn = f["hashname"].orEmpty().trim()
+                if (nm.isBlank() || hn.isBlank()) return@mapNotNull null
+                val low = nm.lowercase()
+                if (!low.endsWith(".vtt")) return@mapNotNull null
+                val optName = vttOpt[hn].orEmpty().trim()
+                if (optName.isBlank()) return@mapNotNull null
+                val subUrl = "${baseUrl}optimized/$optName?$query"
+                val relativePath = if (candidateFolder.isBlank()) nm else "$candidateFolder/$nm"
+                val candidate = SubtitleMatchSupport.inferCandidate(relativePath, subUrl) ?: return@mapNotNull null
+                candidate to subUrl
             }
-            val optName = vttOpt[hn].orEmpty().trim()
-            if (optName.isBlank()) return@forEach
-            val subUrl = "${baseUrl}optimized/$optName?$query"
-            out.add(RemoteSubtitleSource(url = subUrl, language = lang, ext = "vtt"))
         }
-        return out
+        val matched = SubtitleMatchSupport.matchBest(mediaPath, subtitleCandidates.map { it.first }) ?: return emptyList()
+        val subUrl = subtitleCandidates.firstOrNull { it.first.sourceRef == matched.sourceRef }?.second ?: return emptyList()
+        return listOf(RemoteSubtitleSource(url = subUrl, language = matched.language, ext = "vtt"))
     }
 
     private fun splitFolder(display: String): Pair<String, String> {

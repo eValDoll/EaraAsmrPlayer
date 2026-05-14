@@ -189,18 +189,41 @@ internal fun NowPlayingLyricsSurface(
     lyricColors: LyricReadableColors,
     lyricsPageSettings: LyricsPageSettings,
     onSeekTo: (Long) -> Unit,
+    onAddLyrics: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier) {
-        AppleLyricsView(
-            lyrics = lyrics,
-            currentPosition = playbackPositionMs,
-            onSeekTo = onSeekTo,
-            colors = lyricColors,
-            modifier = Modifier.fillMaxSize(),
-            isLandscape = isLandscape,
-            settings = lyricsPageSettings
-        )
+        if (lyrics.isEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 24.dp),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "暂无歌词",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = AsmrTheme.colorScheme.textSecondary
+                )
+                if (onAddLyrics != null) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Button(onClick = onAddLyrics) {
+                        Text("添加歌词")
+                    }
+                }
+            }
+        } else {
+            AppleLyricsView(
+                lyrics = lyrics,
+                currentPosition = playbackPositionMs,
+                onSeekTo = onSeekTo,
+                colors = lyricColors,
+                modifier = Modifier.fillMaxSize(),
+                isLandscape = isLandscape,
+                settings = lyricsPageSettings
+            )
+        }
     }
 }
 

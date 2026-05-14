@@ -119,6 +119,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.zIndex
+import com.asmr.player.data.lyrics.deriveLyricsRelativePathNoExt
 import com.asmr.player.ui.common.rememberDominantColor
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.DiscPlaceholder
@@ -1365,6 +1366,9 @@ internal data class PlaylistAddTarget(
     val albumId: Long = 0L,
     val trackId: Long = 0L,
     val rjCode: String = "",
+    val albumWorkId: String = "",
+    val trackGroup: String = "",
+    val lyricsRelativePathNoExt: String = "",
     val mimeType: String? = null,
     val isVideo: Boolean = false
 ) {
@@ -1379,6 +1383,9 @@ internal data class PlaylistAddTarget(
             albumId = albumId,
             trackId = trackId,
             rjCode = rjCode,
+            albumWorkId = albumWorkId,
+            trackGroup = trackGroup,
+            lyricsRelativePathNoExt = lyricsRelativePathNoExt,
             mimeType = mimeType,
             isVideo = isVideo
         )
@@ -1399,7 +1406,10 @@ internal data class PlaylistAddTarget(
                 albumTitle = album.title,
                 albumId = album.id,
                 trackId = track.id,
-                rjCode = rj
+                rjCode = rj,
+                albumWorkId = album.workId,
+                trackGroup = track.group,
+                lyricsRelativePathNoExt = deriveLyricsRelativePathNoExt(track.path, album.getAllLocalPaths())
             )
         }
 
@@ -1419,6 +1429,7 @@ internal data class PlaylistAddTarget(
                 albumTitle = album.title,
                 albumId = album.id,
                 rjCode = album.rjCode.ifBlank { album.workId },
+                albumWorkId = album.workId,
                 mimeType = MediaItemFactory.guessMimeType(trimmed),
                 isVideo = true
             )

@@ -757,6 +757,7 @@ class PlaybackService : MediaSessionService() {
                             .buildUpon()
                             .add(androidx.media3.session.SessionCommand("GET_AUDIO_SESSION_ID", android.os.Bundle.EMPTY))
                             .add(androidx.media3.session.SessionCommand("UPDATE_SESSION_EQ", android.os.Bundle.EMPTY))
+                            .add(androidx.media3.session.SessionCommand("RELOAD_LYRICS", android.os.Bundle.EMPTY))
                             .build()
                     }
                     val playerCommands = if (
@@ -847,6 +848,13 @@ class PlaybackService : MediaSessionService() {
                                 androidx.media3.session.SessionResult(androidx.media3.session.SessionResult.RESULT_SUCCESS, android.os.Bundle.EMPTY)
                             )
                         }
+
+                        "RELOAD_LYRICS" -> {
+                            serviceScope.launch { loadLyricsForCurrentMedia() }
+                            return com.google.common.util.concurrent.Futures.immediateFuture(
+                                androidx.media3.session.SessionResult(androidx.media3.session.SessionResult.RESULT_SUCCESS, android.os.Bundle.EMPTY)
+                            )
+                        }
                     }
                     return super.onCustomCommand(session, controller, customCommand, args)
                 }
@@ -924,14 +932,12 @@ class PlaybackService : MediaSessionService() {
     }
 
     private suspend fun loadLyricsForCurrentMedia() {
-        val (mediaId, fallback) = withContext(Dispatchers.Main.immediate) {
-            val item = exoPlayer.currentMediaItem
-            item?.mediaId.orEmpty() to item?.mediaMetadata?.title?.toString().orEmpty()
-        }
-        val result = lyricsLoader.load(mediaId, fallback)
+        val item = withContext(Dispatchers.Main.immediate) { exoPlayer.currentMediaItem }
+        val result = lyricsLoader.load(item)
         currentLyrics = result.lyrics
         lyricsIndexFinder = if (result.lyrics.isNotEmpty()) SubtitleIndexFinder(result.lyrics) else null
         lastLyricIndex = Int.MIN_VALUE
+        refreshMediaNotification()
     }
 
     private suspend fun updateLyricsTick(): Long {

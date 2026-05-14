@@ -9,6 +9,7 @@ import com.asmr.player.data.local.db.dao.AlbumGroupItemDao
 import com.asmr.player.data.local.db.dao.DailyStatDao
 import com.asmr.player.data.local.db.dao.DownloadDao
 import com.asmr.player.data.local.db.dao.LocalTreeCacheDao
+import com.asmr.player.data.local.db.dao.ManualLyricsSourceDao
 import com.asmr.player.data.local.db.dao.PlaylistDao
 import com.asmr.player.data.local.db.dao.PlaylistItemDao
 import com.asmr.player.data.local.db.dao.PlayStatDao
@@ -28,6 +29,7 @@ import com.asmr.player.data.local.db.entities.DailyStatEntity
 import com.asmr.player.data.local.db.entities.DownloadItemEntity
 import com.asmr.player.data.local.db.entities.DownloadTaskEntity
 import com.asmr.player.data.local.db.entities.LocalTreeCacheEntity
+import com.asmr.player.data.local.db.entities.ManualLyricsSourceEntity
 import com.asmr.player.data.local.db.entities.PlaylistEntity
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
 import com.asmr.player.data.local.db.entities.PlaylistTrackCrossRef
@@ -59,10 +61,11 @@ import com.asmr.player.data.local.db.entities.TrackPlaybackProgressEntity
         DownloadItemEntity::class,
         LocalTreeCacheEntity::class,
         RemoteSubtitleSourceEntity::class,
+        ManualLyricsSourceEntity::class,
         TrackSliceEntity::class,
         TrackPlaybackProgressEntity::class
     ],
-    version = 19,
+    version = 20,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -80,6 +83,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun downloadDao(): DownloadDao
     abstract fun localTreeCacheDao(): LocalTreeCacheDao
     abstract fun remoteSubtitleSourceDao(): RemoteSubtitleSourceDao
+    abstract fun manualLyricsSourceDao(): ManualLyricsSourceDao
     abstract fun trackSliceDao(): TrackSliceDao
     abstract fun trackPlaybackProgressDao(): TrackPlaybackProgressDao
 

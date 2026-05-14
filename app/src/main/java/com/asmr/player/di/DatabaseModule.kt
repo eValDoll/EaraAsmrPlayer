@@ -6,6 +6,7 @@ import com.asmr.player.data.local.db.dao.AlbumDao
 import com.asmr.player.data.local.db.dao.AlbumGroupDao
 import com.asmr.player.data.local.db.dao.AlbumGroupItemDao
 import com.asmr.player.data.local.db.dao.DownloadDao
+import com.asmr.player.data.local.db.dao.ManualLyricsSourceDao
 import com.asmr.player.data.local.db.dao.PlaylistDao
 import com.asmr.player.data.local.db.dao.PlaylistItemDao
 import com.asmr.player.data.local.db.dao.RemoteSubtitleSourceDao
@@ -51,6 +52,9 @@ object DatabaseModule {
 
     @Provides
     fun provideRemoteSubtitleSourceDao(database: AppDatabase): RemoteSubtitleSourceDao = database.remoteSubtitleSourceDao()
+
+    @Provides
+    fun provideManualLyricsSourceDao(database: AppDatabase): ManualLyricsSourceDao = database.manualLyricsSourceDao()
 
     @Provides
     fun provideTrackSliceDao(database: AppDatabase): TrackSliceDao = database.trackSliceDao()

@@ -5,8 +5,11 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.content.Intent
 import android.os.SystemClock
 import android.view.LayoutInflater
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -237,6 +240,40 @@ internal fun NowPlayingScreen(
     }
 
     val haptic = LocalHapticFeedback.current
+    val context = LocalContext.current
+    val lyricsPicker = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri == null) return@rememberLauncherForActivityResult
+        val displayName = runCatching {
+            context.contentResolver.query(
+                uri,
+                arrayOf(android.provider.OpenableColumns.DISPLAY_NAME),
+                null,
+                null,
+                null
+            )?.use { cursor ->
+                val index = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                if (index >= 0 && cursor.moveToFirst()) cursor.getString(index) else null
+            }
+        }.getOrNull().orEmpty()
+        val extension = displayName.ifBlank { uri.lastPathSegment.orEmpty() }
+            .substringAfterLast('.', "")
+            .lowercase()
+        if (extension !in setOf("lrc", "srt", "vtt")) {
+            viewModel.showUnsupportedLyricsFileMessage()
+            return@rememberLauncherForActivityResult
+        }
+        runCatching {
+            context.contentResolver.takePersistableUriPermission(
+                uri,
+                Intent.FLAG_GRANT_READ_URI_PERMISSION
+            )
+        }
+        viewModel.bindManualLyrics(uri.toString()) {
+            lyricsViewModel.refreshCurrentLyrics()
+        }
+    }
     LaunchedEffect(Unit) {
         viewModel.sliceUiEvents.collect { event ->
             when (event) {
@@ -1129,6 +1166,18 @@ internal fun NowPlayingScreen(
                     lyricColors = lyricColors,
                     lyricsPageSettings = lyricsPageSettings,
                     onSeekTo = { viewModel.seekTo(it) },
+                    onAddLyrics = {
+                        lyricsPicker.launch(
+                            arrayOf(
+                                "*/*",
+                                "text/*",
+                                "application/octet-stream",
+                                "application/x-subrip",
+                                "application/lrc",
+                                "audio/x-lrc"
+                            )
+                        )
+                    },
                     modifier = Modifier
                         .fillMaxSize()
                         .then(routeTransition.nowPlayingMotionModifier(currentMotionLayout, NowPlayingMotionSlot.COVER))

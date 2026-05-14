@@ -27,21 +27,47 @@ class LyricsViewModel @Inject constructor(
 
     val playback = playerConnection.snapshot
 
+    private suspend fun reloadForItem(item: androidx.media3.common.MediaItem?) {
+        val mediaId = item?.mediaId.orEmpty()
+        if (mediaId.isBlank()) {
+            _uiState.value = _uiState.value.copy(title = "", lyrics = emptyList())
+            return
+        }
+        val result = lyricsLoader.load(item)
+        _uiState.value = _uiState.value.copy(title = result.title, lyrics = result.lyrics)
+    }
+
+    fun refreshCurrentLyrics() {
+        viewModelScope.launch {
+            reloadForItem(playback.value.currentMediaItem)
+        }
+    }
+
     init {
         viewModelScope.launch {
-            var lastMediaId: String? = null
+            playerConnection.lyricsReloadRequests.collect {
+                reloadForItem(playback.value.currentMediaItem)
+            }
+        }
+        viewModelScope.launch {
+            var lastMediaKey: String? = null
             playerConnection.snapshot.collect { snap ->
-                val mediaId = snap.currentMediaItem?.mediaId.orEmpty()
+                val item = snap.currentMediaItem
+                val mediaId = item?.mediaId.orEmpty()
+                val extras = item?.mediaMetadata?.extras
+                val mediaKey = listOf(
+                    mediaId,
+                    extras?.getString(com.asmr.player.data.lyrics.EXTRA_LYRICS_RELATIVE_PATH_NO_EXT).orEmpty(),
+                    extras?.getString("rj_code").orEmpty(),
+                    extras?.getString(com.asmr.player.data.lyrics.EXTRA_ALBUM_WORK_ID).orEmpty()
+                ).joinToString("|")
                 if (mediaId.isBlank()) {
                     _uiState.value = _uiState.value.copy(title = "", lyrics = emptyList())
                     return@collect
                 }
-                if (lastMediaId == mediaId) return@collect
-                lastMediaId = mediaId
-
-                val fallbackTitle = snap.currentMediaItem?.mediaMetadata?.title?.toString().orEmpty()
-                val result = lyricsLoader.load(mediaId, fallbackTitle)
-                _uiState.value = _uiState.value.copy(title = result.title, lyrics = result.lyrics)
+                if (lastMediaKey == mediaKey) return@collect
+                lastMediaKey = mediaKey
+                reloadForItem(item)
             }
         }
     }

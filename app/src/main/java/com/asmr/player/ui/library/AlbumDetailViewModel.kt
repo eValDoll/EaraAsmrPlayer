@@ -40,10 +40,12 @@ import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
 import com.asmr.player.data.remote.scraper.DlsiteRecommendations
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.lyrics.LyricsLoader
+import com.asmr.player.data.lyrics.deriveLyricsRelativePathNoExt
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.util.OnlineLyricsStore
 import com.asmr.player.util.RemoteSubtitleSource
+import com.asmr.player.util.SubtitleMatchSupport
 import com.asmr.player.util.SyncCoordinator
 import com.asmr.player.util.TrackKeyNormalizer
 import com.asmr.player.util.DlsiteWorkNo
@@ -2276,33 +2278,25 @@ class AlbumDetailViewModel @Inject constructor(
             val baseName: String = safeTitle.substringBeforeLast('.')
         }
 
-        fun buildSubtitlesForAudio(audio: LeafFile, siblings: List<LeafFile>): List<RemoteSubtitleSource> {
-            val base = audio.baseName
-            if (base.isBlank()) return emptyList()
-            return siblings.filter { subtitleExts.contains(it.ext) }.mapNotNull { sib ->
-                val sibBase = sib.baseName
-                val lang = when {
-                    sibBase == base -> "default"
-                    sibBase.startsWith("$base.") -> {
-                        val suffix = sibBase.substring(base.length + 1)
-                        val parts = suffix.split('.').filter { it.isNotBlank() }
-                        val valid = parts.filter { !audioExts.contains(it.lowercase()) }
-                        when {
-                            valid.isEmpty() -> "zh"
-                            valid.size == 1 -> valid[0]
-                            else -> valid.last()
-                        }
-                    }
-                    else -> return@mapNotNull null
+        val subtitleCandidates = mutableListOf<Pair<com.asmr.player.util.SubtitleMatchCandidate, LeafFile>>()
+
+        fun collectSubtitleCandidates(nodes: List<AsmrOneTrackNodeResponse>, parentPath: String) {
+            nodes.forEach { node ->
+                val children = node.children.orEmpty()
+                val rawTitle = node.title?.trim().orEmpty().ifBlank { "item" }
+                val url = node.mediaDownloadUrl ?: node.streamUrl
+                val safeTitle = sanitize(rawTitle)
+                val path = if (parentPath.isBlank()) safeTitle else "$parentPath/$safeTitle"
+                if (children.isNotEmpty() || url.isNullOrBlank()) {
+                    if (children.isNotEmpty()) collectSubtitleCandidates(children, path)
+                    return@forEach
                 }
-                RemoteSubtitleSource(url = sib.url, language = lang, ext = sib.ext)
-            }.sortedWith(
-                compareBy<RemoteSubtitleSource> { s ->
-                    val prefer = listOf("default", "zh", "cn", "chs", "ja", "jp", "jpn")
-                    val idx = prefer.indexOf(s.language.lowercase())
-                    if (idx >= 0) idx else Int.MAX_VALUE
-                }.thenBy { it.url }
-            )
+                val leaf = LeafFile(rawTitle = rawTitle, safeTitle = safeTitle, url = url, duration = node.duration)
+                if (subtitleExts.contains(leaf.ext)) {
+                    val candidate = SubtitleMatchSupport.inferCandidate(path, leaf.url)
+                    if (candidate != null) subtitleCandidates += candidate to leaf
+                }
+            }
         }
 
         fun walk(nodes: List<AsmrOneTrackNodeResponse>, parentPath: String) {
@@ -2319,7 +2313,16 @@ class AlbumDetailViewModel @Inject constructor(
                 val path = if (parentPath.isBlank()) leaf.safeTitle else "$parentPath/${leaf.safeTitle}"
                 val relDir = path.substringBeforeLast('/', "")
                 val group = relDir
-                val subsRaw = if (audioExts.contains(leaf.ext)) buildSubtitlesForAudio(leaf, leafFiles) else emptyList()
+                val subsRaw = if (audioExts.contains(leaf.ext)) {
+                    val matched = SubtitleMatchSupport.matchBest(path.substringBeforeLast('.'), subtitleCandidates.map { it.first })
+                    if (matched != null) {
+                        subtitleCandidates.firstOrNull { it.first.sourceRef == matched.sourceRef }?.second?.let { subtitleLeaf ->
+                            listOf(RemoteSubtitleSource(url = subtitleLeaf.url, language = matched.language, ext = subtitleLeaf.ext))
+                        }.orEmpty()
+                    } else {
+                        emptyList()
+                    }
+                } else emptyList()
                 val subs = if (subsRaw.isNotEmpty()) subsRaw else OnlineLyricsStore.get(leaf.url)
                 out.add(
                     OnlineSaveLeaf(
@@ -2342,8 +2345,23 @@ class AlbumDetailViewModel @Inject constructor(
                 walk(children, path)
             }
         }
+        collectSubtitleCandidates(tree, "")
         walk(tree, "")
-        return out
+        return out.map { leaf ->
+            if (!(audioExts.contains(leaf.url.substringBefore('?').substringAfterLast('.', "").lowercase()) ||
+                    videoExts.contains(leaf.url.substringBefore('?').substringAfterLast('.', "").lowercase()))) {
+                return@map leaf
+            }
+            val matched = SubtitleMatchSupport.matchBest(leaf.relativePath.substringBeforeLast('.'), subtitleCandidates.map { it.first })
+            val subtitles = if (matched != null) {
+                subtitleCandidates.firstOrNull { it.first.sourceRef == matched.sourceRef }?.second?.let { subtitleLeaf ->
+                    listOf(RemoteSubtitleSource(url = subtitleLeaf.url, language = matched.language, ext = subtitleLeaf.ext))
+                }.orEmpty()
+            } else {
+                leaf.subtitleSources
+            }
+            leaf.copy(subtitleSources = subtitles)
+        }
     }
 
     private fun normalizeRj(raw: String): String {
@@ -2399,7 +2417,12 @@ class AlbumDetailViewModel @Inject constructor(
                                     title = name.substringBeforeLast('.'),
                                     path = trackUri.toString(),
                                     duration = 0.0,
-                                    group = group
+                                    group = group,
+                                    lyricsRelativePathNoExt = if (parentRelativePath.isEmpty()) {
+                                        name.substringBeforeLast('.')
+                                    } else {
+                                        "$parentRelativePath/${name.substringBeforeLast('.')}"
+                                    }
                                 )
                             )
                         }
@@ -2430,7 +2453,8 @@ class AlbumDetailViewModel @Inject constructor(
                 title = file.nameWithoutExtension,
                 path = file.absolutePath,
                 duration = 0.0,
-                group = group
+                group = group,
+                lyricsRelativePathNoExt = deriveLyricsRelativePathNoExt(file.absolutePath, listOf(root.absolutePath))
             )
         }
     }
@@ -2442,7 +2466,8 @@ class AlbumDetailViewModel @Inject constructor(
             title = title,
             path = path,
             duration = duration,
-            group = group
+            group = group,
+            lyricsRelativePathNoExt = ""
         )
     }
 

@@ -6,6 +6,7 @@ data class Track(
     val title: String,
     val path: String,
     val duration: Double = 0.0,
-    val group: String = ""
+    val group: String = "",
+    val lyricsRelativePathNoExt: String = ""
 )
 
