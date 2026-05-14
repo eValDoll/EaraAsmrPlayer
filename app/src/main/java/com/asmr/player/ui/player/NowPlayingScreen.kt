@@ -77,6 +77,7 @@ import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
 import androidx.media3.ui.PlayerView
 import com.asmr.player.R
+import com.asmr.player.data.lyrics.lyricsTargetContextFromMediaItem
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.ui.common.AsmrAsyncImage
@@ -188,6 +189,7 @@ internal fun NowPlayingScreen(
     val lyricsState by lyricsViewModel.uiState.collectAsState()
     val item = playback.currentMediaItem
     val metadata = item?.mediaMetadata
+    val canBindManualLyrics = lyricsTargetContextFromMediaItem(item) != null
     val colorScheme = AsmrTheme.colorScheme
     val uriText = item?.localConfiguration?.uri?.toString().orEmpty()
     val artworkModel = remember(metadata?.artworkUri) {
@@ -241,6 +243,16 @@ internal fun NowPlayingScreen(
 
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
+    val lyricsPickerMimeTypes = remember {
+        arrayOf(
+            "*/*",
+            "text/*",
+            "application/octet-stream",
+            "application/x-subrip",
+            "application/lrc",
+            "audio/x-lrc"
+        )
+    }
     val lyricsPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument()
     ) { uri ->
@@ -273,6 +285,11 @@ internal fun NowPlayingScreen(
         viewModel.bindManualLyrics(uri.toString()) {
             lyricsViewModel.refreshCurrentLyrics()
         }
+    }
+    val openLyricsPicker: (() -> Unit)? = if (canBindManualLyrics) {
+        { lyricsPicker.launch(lyricsPickerMimeTypes) }
+    } else {
+        null
     }
     LaunchedEffect(Unit) {
         viewModel.sliceUiEvents.collect { event ->
@@ -424,6 +441,7 @@ internal fun NowPlayingScreen(
                 onNavigateUp = handleNavigateUp,
                 onShowSleepTimer = onShowSleepTimer,
                 onShowQueue = onShowQueue,
+                onManualBindLyrics = if (surfaceMode == NowPlayingSurfaceMode.LYRICS) openLyricsPicker else null,
                 navigationEnabled = !pendingRouteExit,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1166,18 +1184,7 @@ internal fun NowPlayingScreen(
                     lyricColors = lyricColors,
                     lyricsPageSettings = lyricsPageSettings,
                     onSeekTo = { viewModel.seekTo(it) },
-                    onAddLyrics = {
-                        lyricsPicker.launch(
-                            arrayOf(
-                                "*/*",
-                                "text/*",
-                                "application/octet-stream",
-                                "application/x-subrip",
-                                "application/lrc",
-                                "audio/x-lrc"
-                            )
-                        )
-                    },
+                    onAddLyrics = openLyricsPicker,
                     modifier = Modifier
                         .fillMaxSize()
                         .then(routeTransition.nowPlayingMotionModifier(currentMotionLayout, NowPlayingMotionSlot.COVER))

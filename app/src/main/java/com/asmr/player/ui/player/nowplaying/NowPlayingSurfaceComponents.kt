@@ -113,6 +113,7 @@ internal fun PlayerSurfaceHeader(
     onNavigateUp: () -> Unit,
     onShowSleepTimer: () -> Unit,
     onShowQueue: () -> Unit,
+    onManualBindLyrics: (() -> Unit)? = null,
     navigationEnabled: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -153,6 +154,16 @@ internal fun PlayerSurfaceHeader(
             color = colorScheme.textPrimary
         )
         Row(verticalAlignment = Alignment.CenterVertically) {
+            if (onManualBindLyrics != null) {
+                IconButton(onClick = onManualBindLyrics) {
+                    Icon(
+                        painter = painterResource(R.drawable.ic_manual_subtitle_import),
+                        contentDescription = "手动绑定歌词",
+                        modifier = Modifier.size(if (isLandscape) 20.dp else 22.dp),
+                        tint = colorScheme.onSurface
+                    )
+                }
+            }
             IconButton(onClick = onShowSleepTimer) {
                 Icon(
                     Icons.Default.Timer,
