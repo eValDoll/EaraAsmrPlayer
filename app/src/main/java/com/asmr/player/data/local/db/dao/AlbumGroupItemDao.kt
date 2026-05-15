@@ -20,9 +20,14 @@ interface AlbumGroupItemDao {
             t.albumId AS albumId,
             t.title AS trackTitle,
             t.duration AS trackDuration,
+            (
+                EXISTS(SELECT 1 FROM subtitles s WHERE s.trackId = t.id LIMIT 1) OR
+                EXISTS(SELECT 1 FROM remote_subtitle_sources rs WHERE rs.trackId = t.id LIMIT 1)
+            ) AS hasSubtitles,
             t.path AS trackPath,
             t.`group` AS trackGroup,
             a.title AS albumTitle,
+            a.cv AS albumCv,
             a.rjCode AS albumRjCode,
             a.workId AS albumWorkId,
             a.coverThumbPath AS albumCoverThumbPath,
@@ -92,9 +97,11 @@ data class AlbumGroupTrackRow(
     val albumId: Long,
     val trackTitle: String,
     val trackDuration: Double,
+    val hasSubtitles: Boolean,
     val trackPath: String,
     val trackGroup: String,
     val albumTitle: String?,
+    val albumCv: String?,
     val albumRjCode: String?,
     val albumWorkId: String?,
     val albumCoverThumbPath: String?,

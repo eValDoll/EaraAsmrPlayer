@@ -64,10 +64,16 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import com.asmr.player.data.local.db.dao.AlbumGroupTrackRow
 import com.asmr.player.ui.common.AsmrAsyncImage
+import com.asmr.player.ui.common.AudioItemMenuAction
+import com.asmr.player.ui.common.AudioItemRow
 import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
+import com.asmr.player.ui.common.rememberAudioMeta
+import com.asmr.player.ui.common.rememberAudioMetaText
+import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.thinScrollbar
+import com.asmr.player.ui.common.rememberTrackMetaLine
 import com.asmr.player.ui.common.reorderable.ItemPosition
 import com.asmr.player.ui.common.reorderable.ReorderableItem
 import com.asmr.player.ui.common.reorderable.detectReorderAfterLongPress
@@ -75,12 +81,11 @@ import com.asmr.player.ui.common.reorderable.rememberReorderableLazyListState
 import com.asmr.player.ui.common.reorderable.reorderable
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
-import com.asmr.player.util.Formatting
-import kotlin.math.roundToLong
 
 internal const val GROUP_DETAIL_SECTION_HEADER_TAG_PREFIX = "groupDetailSectionHeader"
 internal const val GROUP_DETAIL_TRACK_TAG_PREFIX = "groupDetailTrack"
 internal const val GROUP_DETAIL_TRACK_MENU_BUTTON_TAG_PREFIX = "groupDetailTrackMenu"
+internal const val GROUP_DETAIL_TRACK_SUBTITLE_STAMP_TAG_PREFIX = "groupDetailTrackSubtitleStamp"
 internal const val GROUP_DETAIL_MOVE_TOP_MENU_ITEM_TAG = "groupDetailMoveTopMenuItem"
 internal const val GROUP_DETAIL_MOVE_BOTTOM_MENU_ITEM_TAG = "groupDetailMoveBottomMenuItem"
 internal const val GROUP_DETAIL_REORDER_DIALOG_TAG = "groupDetailReorderDialog"
@@ -409,14 +414,6 @@ private fun GroupTrackRow(
     onMoveToBottom: () -> Unit,
     onRemove: () -> Unit
 ) {
-    val colorScheme = AsmrTheme.colorScheme
-    val materialColorScheme = MaterialTheme.colorScheme
-    val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
-    val rowInteractionSource = remember { MutableInteractionSource() }
-    var expanded by remember { mutableStateOf(false) }
-    val durationMs = remember(item.trackDuration) { (item.trackDuration * 1000.0).roundToLong().coerceAtLeast(0L) }
-    val subtitle = remember(durationMs) { Formatting.formatTrackTime(durationMs) }
-
     Box(
         modifier = modifier
     ) {
@@ -430,99 +427,57 @@ private fun GroupTrackRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
             )
         }
-        Row(
+        val meta = rememberAudioMeta(
+            sourcePath = item.trackPath,
+            durationSeconds = item.trackDuration,
+            prefixSegments = listOf(item.albumCv.orEmpty())
+        )
+        AudioItemRow(
+            title = item.trackTitle.ifBlank { "未命名" },
+            subtitle = meta.leadingText,
+            fixedTrailingSubtitle = meta.trailingText,
+            showSubtitleStamp = item.hasSubtitles,
+            subtitleStampTestTag = "$GROUP_DETAIL_TRACK_SUBTITLE_STAMP_TAG_PREFIX:${item.mediaId}",
+            menuButtonTestTag = "$GROUP_DETAIL_TRACK_MENU_BUTTON_TAG_PREFIX:${item.mediaId}",
+            onClick = onPlay,
+            showClickIndication = false,
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(
-                    enabled = !isDragging,
-                    interactionSource = rowInteractionSource,
-                    indication = null,
-                    onClick = onPlay
-                )
                 .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AsmrAsyncImage(
-                model = coverModel?.toString().orEmpty(),
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                placeholderCornerRadius = 6,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(6.dp))
+            leadingContent = {
+                AsmrAsyncImage(
+                    model = coverModel?.toString().orEmpty(),
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    placeholderCornerRadius = 6,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                )
+            },
+            titleTextStyle = MaterialTheme.typography.bodyMedium,
+            actions = listOf(
+                AudioItemMenuAction(
+                    label = "播放",
+                    onClick = onPlay
+                ),
+                AudioItemMenuAction(
+                    label = "移至顶部",
+                    onClick = onMoveToTop,
+                    testTag = GROUP_DETAIL_MOVE_TOP_MENU_ITEM_TAG
+                ),
+                AudioItemMenuAction(
+                    label = "移至末尾",
+                    onClick = onMoveToBottom,
+                    testTag = GROUP_DETAIL_MOVE_BOTTOM_MENU_ITEM_TAG
+                ),
+                AudioItemMenuAction(
+                    label = "从分组移除",
+                    onClick = onRemove,
+                    showDividerBefore = true
+                )
             )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.trackTitle.ifBlank { "未命名" },
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colorScheme.textPrimary
-                )
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colorScheme.textTertiary
-                )
-            }
-            Box {
-                IconButton(
-                    onClick = { expanded = true },
-                    modifier = Modifier.testTag("$GROUP_DETAIL_TRACK_MENU_BUTTON_TAG_PREFIX:${item.mediaId}")
-                ) {
-                    Icon(imageVector = Icons.Default.MoreVert, contentDescription = null)
-                }
-                MaterialTheme(
-                    colorScheme = materialColorScheme.copy(
-                        surface = dynamicContainerColor,
-                        surfaceContainer = dynamicContainerColor
-                    )
-                ) {
-                    DropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false },
-                        modifier = Modifier.background(dynamicContainerColor)
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("播放") },
-                            onClick = {
-                                expanded = false
-                                onPlay()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("移至顶部") },
-                            modifier = Modifier.testTag(GROUP_DETAIL_MOVE_TOP_MENU_ITEM_TAG),
-                            onClick = {
-                                expanded = false
-                                onMoveToTop()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("移至末尾") },
-                            modifier = Modifier.testTag(GROUP_DETAIL_MOVE_BOTTOM_MENU_ITEM_TAG),
-                            onClick = {
-                                expanded = false
-                                onMoveToBottom()
-                            }
-                        )
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 8.dp),
-                            thickness = 0.5.dp,
-                            color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
-                        )
-                        DropdownMenuItem(
-                            text = { Text("从分组移除") },
-                            onClick = {
-                                expanded = false
-                                onRemove()
-                            }
-                        )
-                    }
-                }
-            }
-        }
+        )
     }
 }
 

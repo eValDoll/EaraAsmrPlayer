@@ -55,9 +55,14 @@ import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.CoverContentRow
 import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.common.CvChipsSingleLine
+import com.asmr.player.ui.common.AudioItemMenuAction
+import com.asmr.player.ui.common.AudioItemRow
 import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.StableWindowInsets
+import com.asmr.player.ui.common.rememberAudioMeta
+import com.asmr.player.ui.common.rememberAudioMetaText
+import com.asmr.player.ui.common.rememberTrackMetaLine
 import com.asmr.player.ui.common.withAddedBottomPadding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
@@ -590,14 +595,17 @@ fun LibraryScreen(
                                                             group = row.trackGroup
                                                         )
                                                     }
-                                                    val subtitleText = remember(row.duration) {
-                                                        if (row.duration > 0) Formatting.formatTrackTime(row.duration.toLong()) else ""
-                                                    }
+                                                    val meta = rememberAudioMeta(
+                                                        sourcePath = row.trackPath,
+                                                        durationSeconds = row.duration,
+                                                        prefixSegments = listOf(row.cv)
+                                                    )
 
                                                     Column {
                                                         TrackListRow(
                                                             title = track.title,
-                                                            subtitle = subtitleText,
+                                                            subtitle = meta.leadingText,
+                                                            fixedTrailingSubtitle = meta.trailingText,
                                                             showSubtitleStamp = row.hasSubtitles,
                                                             onClick = {
                                                                 scope.launch {
@@ -1140,6 +1148,7 @@ private fun TrackAlbumHeader(
 private fun TrackListRow(
     title: String,
     subtitle: String,
+    fixedTrailingSubtitle: String,
     showSubtitleStamp: Boolean,
     onClick: () -> Unit,
     onAddToQueue: () -> Unit,
@@ -1147,113 +1156,38 @@ private fun TrackListRow(
     onManageTags: () -> Unit,
     onRemove: () -> Unit
 ) {
-    val colorScheme = AsmrTheme.colorScheme
-    val materialColorScheme = MaterialTheme.colorScheme
-    val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
-    ListItem(
-        headlineContent = {
-            Text(
-                title,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyLarge
+    AudioItemRow(
+        title = title,
+        subtitle = subtitle,
+        fixedTrailingSubtitle = fixedTrailingSubtitle,
+        showSubtitleStamp = showSubtitleStamp,
+        onClick = onClick,
+        modifier = Modifier.fillMaxWidth(),
+        actions = listOf(
+            AudioItemMenuAction(
+                label = "娣诲姞鍒版挱鏀鹃槦鍒?",
+                onClick = onAddToQueue,
+                icon = Icons.AutoMirrored.Filled.QueueMusic
+            ),
+            AudioItemMenuAction(
+                label = "娣诲姞鍒版挱鏀惧垪琛?",
+                onClick = onAddToPlaylist,
+                icon = Icons.AutoMirrored.Filled.PlaylistAdd,
+                showDividerBefore = true
+            ),
+            AudioItemMenuAction(
+                label = "鏍囩绠＄悊",
+                onClick = onManageTags,
+                icon = Icons.AutoMirrored.Filled.Label,
+                showDividerBefore = true
+            ),
+            AudioItemMenuAction(
+                label = "浠庝笓杈戠Щ闄?",
+                onClick = onRemove,
+                icon = Icons.Default.Delete,
+                showDividerBefore = true
             )
-        },
-        supportingContent = {
-            if (subtitle.isNotBlank()) {
-                Text(
-                    text = subtitle,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colorScheme.textTertiary
-                )
-            }
-        },
-        trailingContent = {
-            var expanded by remember { mutableStateOf(false) }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (showSubtitleStamp) {
-                    SubtitleStamp(modifier = Modifier.padding(end = 8.dp))
-                }
-                Box {
-                    IconButton(onClick = { expanded = true }) {
-                        Icon(imageVector = Icons.Default.MoreVert, contentDescription = null)
-                    }
-                    MaterialTheme(
-                        colorScheme = materialColorScheme.copy(
-                            surface = dynamicContainerColor,
-                            surfaceContainer = dynamicContainerColor
-                        )
-                    ) {
-                        DropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false },
-                            modifier = Modifier.background(dynamicContainerColor)
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("添加到播放队列") },
-                                onClick = {
-                                    expanded = false
-                                    onAddToQueue()
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.AutoMirrored.Filled.QueueMusic, contentDescription = null)
-                                }
-                            )
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 8.dp),
-                                thickness = 0.5.dp,
-                                color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
-                            )
-                            DropdownMenuItem(
-                                text = { Text("添加到播放列表") },
-                                onClick = {
-                                    expanded = false
-                                    onAddToPlaylist()
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null)
-                                }
-                            )
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 8.dp),
-                                thickness = 0.5.dp,
-                                color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
-                            )
-                            DropdownMenuItem(
-                                text = { Text("标签管理") },
-                                onClick = {
-                                    expanded = false
-                                    onManageTags()
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.AutoMirrored.Filled.Label, contentDescription = null)
-                                }
-                            )
-                            HorizontalDivider(
-                                modifier = Modifier.padding(horizontal = 8.dp),
-                                thickness = 0.5.dp,
-                                color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
-                            )
-                            DropdownMenuItem(
-                                text = { Text("从专辑移除") },
-                                onClick = {
-                                    expanded = false
-                                    onRemove()
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Delete, contentDescription = null)
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-        },
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable { onClick() }
+        )
     )
 }
 
