@@ -125,7 +125,6 @@ import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
-import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.ImagePreviewDialog
 import com.asmr.player.ui.common.ImagePreviewRequest
@@ -1027,33 +1026,12 @@ private fun AlbumHeader(
                             delayMillis = 40,
                             enabled = animateIntro
                         ) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        if (rj.isNotBlank()) {
-                            Text(
-                                text = rj,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = colorScheme.primary,
-                                modifier = Modifier
-                                    .clickable { copy("RJ", rj) }
-                                    .background(Color.White.copy(alpha = 0.9f), RoundedCornerShape(4.dp))
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                            AlbumPrimaryMetaRow(
+                                rjCode = rj,
+                                circle = circle,
+                                rjOnClick = { copy("RJ", rj) },
+                                circleOnClick = { copy("社团", circle) },
                             )
-                        }
-                        if (circle.isNotBlank()) {
-                            Text(
-                                text = circle,
-                                modifier = Modifier.clickable { copy("社团", circle) },
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Color.White.copy(alpha = 0.9f),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
-                    }
                         }
                     }
                 }
@@ -1066,7 +1044,7 @@ private fun AlbumHeader(
                         delayMillis = 80,
                         enabled = animateIntro
                     ) {
-                        CvChipsFlow(
+                        AlbumCvChipsFlow(
                             cvText = album.cv,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
@@ -1120,22 +1098,12 @@ private fun AlbumHeader(
                         delayMillis = 120,
                         enabled = animateIntro
                     ) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        album.tags.forEach { tag ->
-                            Text(
-                                text = tag,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = colorScheme.primary,
-                                modifier = Modifier
-                                    .background(colorScheme.primary.copy(alpha = 0.1f), RoundedCornerShape(6.dp))
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                                    .clickable { copy("标签", tag) }
-                            )
-                        }
-                    }
+                        AlbumTagsFlow(
+                            tags = album.tags,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            onTagClick = { tag -> copy("标签", tag) },
+                        )
                     }
                 }
 

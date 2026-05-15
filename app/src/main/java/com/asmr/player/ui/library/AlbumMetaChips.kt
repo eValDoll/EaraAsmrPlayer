@@ -1,0 +1,296 @@
+package com.asmr.player.ui.library
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
+import com.asmr.player.ui.theme.AsmrTheme
+
+private val AlbumMetaPillShape = RoundedCornerShape(999.dp)
+private val AlbumMetaTagShape = RoundedCornerShape(7.dp)
+private val AlbumMetaDenseTagShape = RoundedCornerShape(6.dp)
+
+private data class AlbumMetaPalette(
+    val container: Color,
+    val content: Color,
+    val border: Color,
+)
+
+private fun parseAlbumCvNames(cvText: String): List<String> {
+    return cvText
+        .split(',', '，', '、', '/', '\n', ';', '；', '|')
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+}
+
+private fun normalizeAlbumTags(tags: List<String>): List<String> {
+    return tags
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
+}
+
+@Composable
+internal fun AlbumPrimaryMetaRow(
+    rjCode: String,
+    circle: String,
+    modifier: Modifier = Modifier,
+    rjOnClick: (() -> Unit)? = null,
+    circleOnClick: (() -> Unit)? = null,
+) {
+    val normalizedRj = remember(rjCode) { rjCode.trim() }
+    val normalizedCircle = remember(circle) { circle.trim() }
+    if (normalizedRj.isBlank() && normalizedCircle.isBlank()) return
+
+    Row(
+        modifier = modifier
+            .clipToBounds()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (normalizedRj.isNotBlank()) {
+            AlbumMetaBadge(
+                text = normalizedRj,
+                tone = AlbumMetaTone.Rj,
+                shape = AlbumMetaDenseTagShape,
+                onClick = rjOnClick,
+            )
+        }
+        if (normalizedCircle.isNotBlank()) {
+            AlbumMetaBadge(
+                text = normalizedCircle,
+                tone = AlbumMetaTone.Circle,
+                shape = AlbumMetaPillShape,
+                onClick = circleOnClick,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun AlbumCvChipsSingleLine(
+    cvText: String,
+    modifier: Modifier = Modifier,
+    showLabel: Boolean = true,
+    onCvClick: ((String) -> Unit)? = null,
+) {
+    val cvs = remember(cvText) { parseAlbumCvNames(cvText) }
+    if (cvs.isEmpty()) return
+
+    Row(
+        modifier = modifier
+            .clipToBounds()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (showLabel) {
+            AlbumMetaBadge(
+                text = "CV",
+                tone = AlbumMetaTone.CvLabel,
+                shape = AlbumMetaPillShape,
+                textWeight = FontWeight.SemiBold,
+            )
+        }
+        cvs.forEach { cv ->
+            AlbumMetaBadge(
+                text = cv,
+                tone = AlbumMetaTone.CvValue,
+                shape = AlbumMetaPillShape,
+                maxWidth = 200.dp,
+                onClick = { onCvClick?.invoke(cv) },
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun AlbumCvChipsFlow(
+    cvText: String,
+    modifier: Modifier = Modifier,
+    horizontalArrangement: Arrangement.Horizontal = Arrangement.spacedBy(4.dp),
+    verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(4.dp),
+    showLabel: Boolean = true,
+    onCvClick: ((String) -> Unit)? = null,
+) {
+    val cvs = remember(cvText) { parseAlbumCvNames(cvText) }
+    if (cvs.isEmpty()) return
+
+    FlowRow(
+        modifier = modifier,
+        horizontalArrangement = horizontalArrangement,
+        verticalArrangement = verticalArrangement,
+    ) {
+        if (showLabel) {
+            AlbumMetaBadge(
+                text = "CV",
+                tone = AlbumMetaTone.CvLabel,
+                shape = AlbumMetaPillShape,
+                textWeight = FontWeight.SemiBold,
+            )
+        }
+        cvs.forEach { cv ->
+            AlbumMetaBadge(
+                text = cv,
+                tone = AlbumMetaTone.CvValue,
+                shape = AlbumMetaPillShape,
+                maxWidth = 200.dp,
+                onClick = { onCvClick?.invoke(cv) },
+            )
+        }
+    }
+}
+
+@Composable
+internal fun AlbumTagsSingleLine(
+    tags: List<String>,
+    modifier: Modifier = Modifier,
+    onTagClick: ((String) -> Unit)? = null,
+) {
+    val normalizedTags = remember(tags) { normalizeAlbumTags(tags) }
+    if (normalizedTags.isEmpty()) return
+
+    Row(
+        modifier = modifier
+            .clipToBounds()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        normalizedTags.forEach { tag ->
+            AlbumMetaBadge(
+                text = if (tag.startsWith("#")) tag else "#$tag",
+                tone = AlbumMetaTone.Tag,
+                shape = AlbumMetaTagShape,
+                maxWidth = 220.dp,
+                onClick = { onTagClick?.invoke(tag) },
+            )
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+internal fun AlbumTagsFlow(
+    tags: List<String>,
+    modifier: Modifier = Modifier,
+    horizontalArrangement: Arrangement.Horizontal = Arrangement.spacedBy(4.dp),
+    verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(4.dp),
+    onTagClick: ((String) -> Unit)? = null,
+) {
+    val normalizedTags = remember(tags) { normalizeAlbumTags(tags) }
+    if (normalizedTags.isEmpty()) return
+
+    FlowRow(
+        modifier = modifier,
+        horizontalArrangement = horizontalArrangement,
+        verticalArrangement = verticalArrangement,
+    ) {
+        normalizedTags.forEach { tag ->
+            AlbumMetaBadge(
+                text = if (tag.startsWith("#")) tag else "#$tag",
+                tone = AlbumMetaTone.Tag,
+                shape = AlbumMetaTagShape,
+                maxWidth = 220.dp,
+                onClick = { onTagClick?.invoke(tag) },
+            )
+        }
+    }
+}
+
+private enum class AlbumMetaTone {
+    Rj,
+    Circle,
+    CvLabel,
+    CvValue,
+    Tag,
+}
+
+@Composable
+private fun AlbumMetaBadge(
+    text: String,
+    tone: AlbumMetaTone,
+    shape: RoundedCornerShape,
+    modifier: Modifier = Modifier,
+    maxWidth: androidx.compose.ui.unit.Dp? = null,
+    onClick: (() -> Unit)? = null,
+    textWeight: FontWeight? = null,
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val palette = albumMetaPalette(tone, colorScheme)
+    val styledModifier = modifier
+        .then(if (maxWidth != null) Modifier.widthIn(max = maxWidth) else Modifier)
+        .background(palette.container, shape)
+        .border(0.5.dp, palette.border, shape)
+        .padding(
+            horizontal = 7.dp,
+            vertical = 2.dp,
+        )
+        .let { if (onClick != null) it.clickable(onClick = onClick) else it }
+
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall,
+        fontWeight = textWeight,
+        color = palette.content,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+        modifier = styledModifier,
+    )
+}
+
+@Composable
+private fun albumMetaPalette(
+    tone: AlbumMetaTone,
+    colorScheme: com.asmr.player.ui.theme.AsmrColorScheme,
+): AlbumMetaPalette {
+    return when (tone) {
+        AlbumMetaTone.Rj -> AlbumMetaPalette(
+            container = colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.16f else 0.1f),
+            content = colorScheme.primary,
+            border = colorScheme.primary.copy(alpha = 0.18f),
+        )
+        AlbumMetaTone.Circle -> AlbumMetaPalette(
+            container = colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.1f else 0.06f),
+            content = colorScheme.primary,
+            border = colorScheme.primary.copy(alpha = 0.14f),
+        )
+        AlbumMetaTone.CvLabel -> AlbumMetaPalette(
+            container = colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.16f else 0.1f),
+            content = colorScheme.primary,
+            border = colorScheme.primary.copy(alpha = 0.18f),
+        )
+        AlbumMetaTone.CvValue -> AlbumMetaPalette(
+            container = colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.1f else 0.06f),
+            content = colorScheme.primary,
+            border = colorScheme.primary.copy(alpha = 0.14f),
+        )
+        AlbumMetaTone.Tag -> AlbumMetaPalette(
+            container = colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.75f else 0.92f),
+            content = colorScheme.textSecondary,
+            border = colorScheme.onSurfaceVariant.copy(alpha = if (colorScheme.isDark) 0.32f else 0.18f),
+        )
+    }
+}
