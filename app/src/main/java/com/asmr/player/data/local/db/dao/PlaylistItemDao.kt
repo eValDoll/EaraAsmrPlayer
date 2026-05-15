@@ -25,7 +25,9 @@ interface PlaylistItemDao {
             pi.title,
             pi.artist,
             pi.albumTitle,
+            COALESCE(a.cv, '') AS albumCv,
             pi.uri,
+            COALESCE(t.duration, 0) AS duration,
             COALESCE(
                 NULLIF(a.coverThumbPath, ''),
                 NULLIF(a.coverPath, ''),

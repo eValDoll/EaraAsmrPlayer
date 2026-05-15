@@ -122,15 +122,51 @@ class AlbumGroupDetailScreenTest {
         )
     }
 
+    @Test
+    fun expandedTrackWithSubtitles_showsSubtitleStamp() {
+        composeRule.setContent {
+            AsmrPlayerTheme {
+                AlbumGroupDetailContent(
+                    windowSizeClass = testWindowSizeClass(),
+                    title = "鎴戠殑鍒嗙粍",
+                    tracks = sampleTracks(),
+                    onPlayMediaItems = { _: List<MediaItem>, _: Int -> },
+                    onRemoveTrack = {},
+                    onRemoveAlbum = {},
+                    onMoveTrackToTop = { _, _ -> },
+                    onMoveTrackToBottom = { _, _ -> },
+                    onSaveAlbumTrackOrder = { _, _ -> }
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("$GROUP_DETAIL_SECTION_HEADER_TAG_PREFIX:101")
+            .performClick()
+
+        composeRule.onNodeWithTag("$GROUP_DETAIL_TRACK_SUBTITLE_STAMP_TAG_PREFIX:/albums/a/1.mp3")
+            .assert(
+                SemanticsMatcher.expectValue(
+                    SemanticsProperties.TestTag,
+                    "$GROUP_DETAIL_TRACK_SUBTITLE_STAMP_TAG_PREFIX:/albums/a/1.mp3"
+                )
+            )
+    }
+
     private fun sampleTracks(): List<AlbumGroupTrackRow> {
         return listOf(
-            track(albumId = 101L, mediaId = "/albums/a/1.mp3", title = "A1", albumTitle = "Album A"),
+            track(albumId = 101L, mediaId = "/albums/a/1.mp3", title = "A1", albumTitle = "Album A", hasSubtitles = true),
             track(albumId = 101L, mediaId = "/albums/a/2.mp3", title = "A2", albumTitle = "Album A"),
             track(albumId = 202L, mediaId = "/albums/b/1.mp3", title = "B1", albumTitle = "Album B")
         )
     }
 
-    private fun track(albumId: Long, mediaId: String, title: String, albumTitle: String): AlbumGroupTrackRow {
+    private fun track(
+        albumId: Long,
+        mediaId: String,
+        title: String,
+        albumTitle: String,
+        hasSubtitles: Boolean = false
+    ): AlbumGroupTrackRow {
         return AlbumGroupTrackRow(
             groupId = 1L,
             mediaId = mediaId,
@@ -140,9 +176,11 @@ class AlbumGroupDetailScreenTest {
             albumId = albumId,
             trackTitle = title,
             trackDuration = 12.0,
+            hasSubtitles = hasSubtitles,
             trackPath = mediaId,
             trackGroup = "",
             albumTitle = albumTitle,
+            albumCv = "CV Alice",
             albumRjCode = "",
             albumWorkId = "",
             albumCoverThumbPath = "",

@@ -60,11 +60,15 @@ import com.asmr.player.data.local.db.entities.PlaylistItemEntity
 import com.asmr.player.data.local.db.entities.PlaylistItemWithSubtitles
 import com.asmr.player.data.repository.PlaylistRepository
 import com.asmr.player.ui.common.AsmrAsyncImage
+import com.asmr.player.ui.common.AudioItemMenuAction
+import com.asmr.player.ui.common.AudioItemRow
 import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
+import com.asmr.player.ui.common.rememberAudioMeta
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.thinScrollbar
+import com.asmr.player.ui.common.rememberAudioMetaText
 import com.asmr.player.ui.common.reorderable.ItemPosition
 import com.asmr.player.ui.common.reorderable.ReorderableItem
 import com.asmr.player.ui.common.reorderable.detectReorderAfterLongPress
@@ -273,12 +277,6 @@ private fun PlaylistItemRow(
     onMoveToBottom: () -> Unit,
     onRemove: () -> Unit
 ) {
-    val colorScheme = AsmrTheme.colorScheme
-    val materialColorScheme = MaterialTheme.colorScheme
-    val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
-    val rowInteractionSource = remember { MutableInteractionSource() }
-    var expanded by remember { mutableStateOf(false) }
-
     Box(
         modifier = modifier
     ) {
@@ -292,108 +290,56 @@ private fun PlaylistItemRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
             )
         }
-        Row(
+        val meta = rememberAudioMeta(
+            sourcePath = item.uri.ifBlank { item.mediaId },
+            durationSeconds = item.duration,
+            prefixSegments = listOf(item.artist, item.albumCv)
+        )
+        AudioItemRow(
+            title = item.title.ifBlank { "未命名" },
+            subtitle = meta.leadingText,
+            fixedTrailingSubtitle = meta.trailingText,
+            showSubtitleStamp = showSubtitleStamp,
+            menuButtonTestTag = "$PLAYLIST_DETAIL_ITEM_MENU_BUTTON_TAG_PREFIX:${item.mediaId}",
+            onClick = onPlay,
+            showClickIndication = false,
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable(
-                    enabled = !isDragging,
-                    interactionSource = rowInteractionSource,
-                    indication = null,
-                    onClick = onPlay
-                )
                 .padding(horizontal = 16.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            AsmrAsyncImage(
-                model = item.artworkUri,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                placeholderCornerRadius = 6,
-                modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(6.dp))
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = item.title.ifBlank { "未命名" },
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colorScheme.textPrimary
+            leadingContent = {
+                AsmrAsyncImage(
+                    model = item.artworkUri,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    placeholderCornerRadius = 6,
+                    modifier = Modifier
+                        .size(40.dp)
+                        .clip(RoundedCornerShape(6.dp))
                 )
-                if (item.artist.isNotBlank()) {
-                    Text(
-                        text = item.artist,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colorScheme.textTertiary,
-                        modifier = Modifier.padding(top = 2.dp)
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.width(8.dp))
-            if (showSubtitleStamp) {
-                SubtitleStamp(modifier = Modifier.padding(end = 8.dp))
-            }
-            Box {
-                IconButton(
-                    onClick = { expanded = true },
-                    modifier = Modifier.testTag("$PLAYLIST_DETAIL_ITEM_MENU_BUTTON_TAG_PREFIX:${item.mediaId}")
-                ) {
-                    Icon(imageVector = Icons.Default.MoreVert, contentDescription = null)
-                }
-                MaterialTheme(
-                    colorScheme = materialColorScheme.copy(
-                        surface = dynamicContainerColor,
-                        surfaceContainer = dynamicContainerColor
-                    )
-                ) {
-                    DropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false },
-                        modifier = Modifier.background(dynamicContainerColor)
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("播放") },
-                            onClick = {
-                                expanded = false
-                                onPlay()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("移至顶部") },
-                            modifier = Modifier.testTag(PLAYLIST_DETAIL_MOVE_TOP_MENU_ITEM_TAG),
-                            onClick = {
-                                expanded = false
-                                onMoveToTop()
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("移至末尾") },
-                            modifier = Modifier.testTag(PLAYLIST_DETAIL_MOVE_BOTTOM_MENU_ITEM_TAG),
-                            onClick = {
-                                expanded = false
-                                onMoveToBottom()
-                            }
-                        )
-                        HorizontalDivider(
-                            modifier = Modifier.padding(horizontal = 8.dp),
-                            thickness = 0.5.dp,
-                            color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
-                        )
-                        DropdownMenuItem(
-                            text = { Text("移除") },
-                            onClick = {
-                                expanded = false
-                                onRemove()
-                            }
-                        )
-                    }
-                }
-            }
-        }
+            },
+            titleTextStyle = MaterialTheme.typography.bodyMedium,
+            actions = listOf(
+                AudioItemMenuAction(
+                    label = "播放",
+                    onClick = onPlay
+                ),
+                AudioItemMenuAction(
+                    label = "移至顶部",
+                    onClick = onMoveToTop,
+                    testTag = PLAYLIST_DETAIL_MOVE_TOP_MENU_ITEM_TAG
+                ),
+                AudioItemMenuAction(
+                    label = "移至末尾",
+                    onClick = onMoveToBottom,
+                    testTag = PLAYLIST_DETAIL_MOVE_BOTTOM_MENU_ITEM_TAG
+                ),
+                AudioItemMenuAction(
+                    label = "移除",
+                    onClick = onRemove,
+                    showDividerBefore = true
+                )
+            )
+        )
     }
 }
 

@@ -45,7 +45,7 @@ class PlaylistDetailViewModel @Inject constructor(
         if (id <= 0L || mediaId.isBlank()) return
         viewModelScope.launch {
             playlistRepository.removeItemFromPlaylist(id, mediaId)
-            messageManager.showInfo("\u5DF2\u4ECE\u6211\u7684\u5217\u8868\u79FB\u9664")
+            messageManager.showInfo("已从我的列表移除")
         }
     }
 
@@ -54,7 +54,7 @@ class PlaylistDetailViewModel @Inject constructor(
         if (id <= 0L || mediaId.isBlank()) return
         viewModelScope.launch {
             if (playlistRepository.movePlaylistItemToTop(id, mediaId)) {
-                messageManager.showInfo("\u5DF2\u79FB\u81F3\u9876\u90E8")
+                messageManager.showInfo("已移至顶部")
             }
         }
     }
@@ -64,7 +64,7 @@ class PlaylistDetailViewModel @Inject constructor(
         if (id <= 0L || mediaId.isBlank()) return
         viewModelScope.launch {
             if (playlistRepository.movePlaylistItemToBottom(id, mediaId)) {
-                messageManager.showInfo("\u5DF2\u79FB\u81F3\u672B\u5C3E")
+                messageManager.showInfo("已移至末尾")
             }
         }
     }

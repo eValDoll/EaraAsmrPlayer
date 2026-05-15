@@ -45,7 +45,7 @@ class AlbumGroupDetailViewModel @Inject constructor(
         if (id <= 0L || mediaId.isBlank()) return
         viewModelScope.launch {
             groupRepository.removeTrackFromGroup(id, mediaId)
-            messageManager.showInfo("\u5DF2\u4ECE\u5206\u7EC4\u79FB\u9664")
+            messageManager.showInfo("已从分组移除")
         }
     }
 
@@ -54,7 +54,7 @@ class AlbumGroupDetailViewModel @Inject constructor(
         if (id <= 0L || albumId <= 0L) return
         viewModelScope.launch {
             groupRepository.removeAlbumFromGroup(id, albumId)
-            messageManager.showInfo("\u5DF2\u4ECE\u5206\u7EC4\u79FB\u9664")
+            messageManager.showInfo("已从分组移除")
         }
     }
 
@@ -63,7 +63,7 @@ class AlbumGroupDetailViewModel @Inject constructor(
         if (id <= 0L || albumId <= 0L || mediaId.isBlank()) return
         viewModelScope.launch {
             if (groupRepository.moveTrackToTop(id, albumId, mediaId)) {
-                messageManager.showInfo("\u5DF2\u79FB\u81F3\u9876\u90E8")
+                messageManager.showInfo("已移至顶部")
             }
         }
     }
@@ -73,7 +73,7 @@ class AlbumGroupDetailViewModel @Inject constructor(
         if (id <= 0L || albumId <= 0L || mediaId.isBlank()) return
         viewModelScope.launch {
             if (groupRepository.moveTrackToBottom(id, albumId, mediaId)) {
-                messageManager.showInfo("\u5DF2\u79FB\u81F3\u672B\u5C3E")
+                messageManager.showInfo("已移至末尾")
             }
         }
     }
