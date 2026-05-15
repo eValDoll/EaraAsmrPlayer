@@ -164,6 +164,7 @@ private fun AnimatedContentTransitionScope<NowPlayingSurfaceMode>.nowPlayingSurf
 internal fun NowPlayingScreen(
     windowSizeClass: WindowSizeClass,
     hardwareVolumeEventTick: Long,
+    onInlineVolumeControlVisibilityChanged: (Boolean) -> Unit = {},
     onBack: () -> Unit,
     onRouteExitStarted: (exitDurationMs: Int) -> Unit = {},
     onShowQueue: () -> Unit,
@@ -418,6 +419,24 @@ internal fun NowPlayingScreen(
     val sharedHeaderHorizontalPadding = if (isLandscape) 4.dp else 12.dp
     var volumeControlExpanded by remember { mutableStateOf(false) }
     var volumeControlBounds by remember { mutableStateOf<Rect?>(null) }
+    // Only the portrait player layout renders the inline volume control.
+    // Split landscape, phone landscape, and the dedicated lyrics surface should
+    // all fall back to the floating hardware volume overlay.
+    val usesInlineVolumeControl =
+        surfaceMode == NowPlayingSurfaceMode.PLAYER &&
+            !useSplitLayout &&
+            !isPhoneLandscape
+    val latestOnInlineVolumeControlVisibilityChanged by rememberUpdatedState(onInlineVolumeControlVisibilityChanged)
+
+    SideEffect {
+        latestOnInlineVolumeControlVisibilityChanged(usesInlineVolumeControl)
+    }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            latestOnInlineVolumeControlVisibilityChanged(false)
+        }
+    }
 
     Box(
         modifier = Modifier.fillMaxSize()

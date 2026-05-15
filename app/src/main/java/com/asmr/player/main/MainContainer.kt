@@ -46,6 +46,7 @@ import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -351,6 +352,7 @@ fun MainContainer(
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     var nowPlayingVisible by rememberSaveable { mutableStateOf(false) }
+    var nowPlayingUsesInlineVolumeControl by remember { mutableStateOf(false) }
     var nowPlayingBackdropActive by rememberSaveable { mutableStateOf(false) }
     var nowPlayingBackdropExitDurationMs by rememberSaveable {
         mutableIntStateOf(NowPlayingMotionSpec.totalExitDurationMs(NowPlayingMotionLayout.PORTRAIT))
@@ -367,6 +369,7 @@ fun MainContainer(
         nowPlayingPlaylistPickerRequest = null
         albumBatchPlaylistPickerRequest = null
         nowPlayingBackdropActive = false
+        nowPlayingUsesInlineVolumeControl = false
         nowPlayingVisible = false
     }
     val playerBackdropVisible = nowPlayingVisible
@@ -539,7 +542,10 @@ fun MainContainer(
     }
 
     LaunchedEffect(nowPlayingVisible) {
-        if (!nowPlayingVisible) return@LaunchedEffect
+        if (!nowPlayingVisible) {
+            nowPlayingUsesInlineVolumeControl = false
+            return@LaunchedEffect
+        }
         showHardwareVolumeOverlay = false
         hardwareVolumeOverlayInteracting = false
         hardwareVolumeOverlayBounds = null
@@ -655,7 +661,7 @@ fun MainContainer(
         if (volumeKeyEventTick <= 0L) return@LaunchedEffect
         if (volumeKeyEventTick == lastHandledVolumeKeyTick) return@LaunchedEffect
         lastHandledVolumeKeyTick = volumeKeyEventTick
-        if (nowPlayingVisible) {
+        if (nowPlayingUsesInlineVolumeControl) {
             showHardwareVolumeOverlay = false
             nowPlayingVolumeEventTick = volumeKeyEventTick
             return@LaunchedEffect
@@ -664,9 +670,9 @@ fun MainContainer(
         hardwareVolumeOverlayHoldTick = volumeKeyEventTick
     }
 
-    LaunchedEffect(showHardwareVolumeOverlay, hardwareVolumeOverlayHoldTick, hardwareVolumeOverlayInteracting, nowPlayingVisible) {
+    LaunchedEffect(showHardwareVolumeOverlay, hardwareVolumeOverlayHoldTick, hardwareVolumeOverlayInteracting, nowPlayingUsesInlineVolumeControl) {
         if (!showHardwareVolumeOverlay) return@LaunchedEffect
-        if (nowPlayingVisible) {
+        if (nowPlayingUsesInlineVolumeControl) {
             showHardwareVolumeOverlay = false
             hardwareVolumeOverlayBounds = null
             return@LaunchedEffect
@@ -1601,62 +1607,6 @@ fun MainContainer(
                 )
             }
 
-            Box(
-                modifier = Modifier
-                    .fillMaxSize(),
-                contentAlignment = Alignment.CenterEnd
-            ) {
-                if (showHardwareVolumeOverlay) {
-                    DismissOutsideBoundsOverlay(
-                        targetBoundsInRoot = hardwareVolumeOverlayBounds,
-                        onDismiss = {
-                            showHardwareVolumeOverlay = false
-                            hardwareVolumeOverlayBounds = null
-                        }
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(end = 18.dp),
-                    contentAlignment = Alignment.CenterEnd
-                ) {
-                    AnimatedVisibility(
-                        visible = showHardwareVolumeOverlay,
-                        enter = fadeIn(animationSpec = tween(140)) + slideInHorizontally(animationSpec = tween(180)) { it / 3 },
-                        exit = fadeOut(animationSpec = tween(160)) + slideOutHorizontally(animationSpec = tween(180)) { it / 3 }
-                    ) {
-                        HardwareVolumeOverlay(
-                            modifier = Modifier.onGloballyPositioned { coordinates ->
-                                hardwareVolumeOverlayBounds = coordinates.boundsInRoot()
-                            },
-                            volumePercent = appVolumePercent,
-                            audioOutputRouteKind = audioOutputRouteKind,
-                            onVolumeChange = {
-                                playerViewModel.setAppVolumePercent(it)
-                                hardwareVolumeOverlayHoldTick += 1L
-                            },
-                            onToggleMute = {
-                                if (appVolumePercent > 0) {
-                                    playerViewModel.setAppVolumePercent(0)
-                                } else {
-                                    playerViewModel.setAppVolumePercent(
-                                        lastNonZeroAppVolumePercent.coerceAtLeast(AppVolume.StepPercent)
-                                    )
-                                }
-                                hardwareVolumeOverlayHoldTick += 1L
-                            },
-                            onInteractionActiveChanged = { active ->
-                                hardwareVolumeOverlayInteracting = active
-                                if (!active) {
-                                    hardwareVolumeOverlayHoldTick += 1L
-                                }
-                            },
-                            warningSessionState = appVolumeWarningSessionState
-                        )
-                    }
-                }
-            }
         }
 
         }
@@ -1785,6 +1735,7 @@ fun MainContainer(
                 NowPlayingScreen(
                     windowSizeClass = windowSizeClass,
                     hardwareVolumeEventTick = nowPlayingVolumeEventTick,
+                    onInlineVolumeControlVisibilityChanged = { nowPlayingUsesInlineVolumeControl = it },
                     onBack = closeNowPlaying,
                     onRouteExitStarted = { exitDurationMs ->
                         nowPlayingBackdropExitDurationMs = exitDurationMs
@@ -1877,33 +1828,92 @@ fun MainContainer(
                     }
                 }
             }
-            if (!nowPlayingVisible) {
-                albumBatchPlaylistPickerRequest?.let { request ->
-                    Dialog(
-                        onDismissRequest = { albumBatchPlaylistPickerRequest = null },
-                        properties = DialogProperties(usePlatformDefaultWidth = false)
+        }
+
+        if (!nowPlayingVisible) {
+            albumBatchPlaylistPickerRequest?.let { request ->
+                Dialog(
+                    onDismissRequest = { albumBatchPlaylistPickerRequest = null },
+                    properties = DialogProperties(usePlatformDefaultWidth = false)
+                ) {
+                    Surface(
+                        modifier = Modifier.fillMaxSize(),
+                        color = colorScheme.background.copy(alpha = 0.96f),
+                        contentColor = colorScheme.onBackground
                     ) {
-                        Surface(
-                            modifier = Modifier.fillMaxSize(),
-                            color = colorScheme.background.copy(alpha = 0.96f),
-                            contentColor = colorScheme.onBackground
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .windowInsetsPadding(StableWindowInsets.statusBars)
+                                .windowInsetsPadding(StableWindowInsets.navigationBars)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .windowInsetsPadding(StableWindowInsets.statusBars)
-                                    .windowInsetsPadding(StableWindowInsets.navigationBars)
-                            ) {
-                                PlaylistPickerScreen(
-                                    windowSizeClass = windowSizeClass,
-                                    items = request.items,
-                                    onBack = { albumBatchPlaylistPickerRequest = null },
-                                    embeddedInDialog = true,
-                                    viewModel = playlistsViewModel
-                                )
-                            }
+                            PlaylistPickerScreen(
+                                windowSizeClass = windowSizeClass,
+                                items = request.items,
+                                onBack = { albumBatchPlaylistPickerRequest = null },
+                                embeddedInDialog = true,
+                                viewModel = playlistsViewModel
+                            )
                         }
                     }
+                }
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .zIndex(3f),
+            contentAlignment = Alignment.CenterEnd
+        ) {
+            if (showHardwareVolumeOverlay) {
+                DismissOutsideBoundsOverlay(
+                    targetBoundsInRoot = hardwareVolumeOverlayBounds,
+                    onDismiss = {
+                        showHardwareVolumeOverlay = false
+                        hardwareVolumeOverlayBounds = null
+                    }
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(end = 18.dp),
+                contentAlignment = Alignment.CenterEnd
+            ) {
+                AnimatedVisibility(
+                    visible = showHardwareVolumeOverlay,
+                    enter = fadeIn(animationSpec = tween(140)) + slideInHorizontally(animationSpec = tween(180)) { it / 3 },
+                    exit = fadeOut(animationSpec = tween(160)) + slideOutHorizontally(animationSpec = tween(180)) { it / 3 }
+                ) {
+                    HardwareVolumeOverlay(
+                        modifier = Modifier.onGloballyPositioned { coordinates ->
+                            hardwareVolumeOverlayBounds = coordinates.boundsInRoot()
+                        },
+                        volumePercent = appVolumePercent,
+                        audioOutputRouteKind = audioOutputRouteKind,
+                        onVolumeChange = {
+                            playerViewModel.setAppVolumePercent(it)
+                            hardwareVolumeOverlayHoldTick += 1L
+                        },
+                        onToggleMute = {
+                            if (appVolumePercent > 0) {
+                                playerViewModel.setAppVolumePercent(0)
+                            } else {
+                                playerViewModel.setAppVolumePercent(
+                                    lastNonZeroAppVolumePercent.coerceAtLeast(AppVolume.StepPercent)
+                                )
+                            }
+                            hardwareVolumeOverlayHoldTick += 1L
+                        },
+                        onInteractionActiveChanged = { active ->
+                            hardwareVolumeOverlayInteracting = active
+                            if (!active) {
+                                hardwareVolumeOverlayHoldTick += 1L
+                            }
+                        },
+                        warningSessionState = appVolumeWarningSessionState
+                    )
                 }
             }
         }
