@@ -35,6 +35,11 @@ private data class AlbumMetaPalette(
     val border: Color,
 )
 
+internal enum class AlbumMetaAppearance {
+    Default,
+    OnImage,
+}
+
 private fun parseAlbumCvNames(cvText: String): List<String> {
     return cvText
         .split(',', '，', '、', '/', '\n', ';', '；', '|')
@@ -57,6 +62,7 @@ internal fun AlbumPrimaryMetaRow(
     modifier: Modifier = Modifier,
     rjOnClick: (() -> Unit)? = null,
     circleOnClick: (() -> Unit)? = null,
+    appearance: AlbumMetaAppearance = AlbumMetaAppearance.Default,
 ) {
     val normalizedRj = remember(rjCode) { rjCode.trim() }
     val normalizedCircle = remember(circle) { circle.trim() }
@@ -75,6 +81,7 @@ internal fun AlbumPrimaryMetaRow(
                 tone = AlbumMetaTone.Rj,
                 shape = AlbumMetaDenseTagShape,
                 onClick = rjOnClick,
+                appearance = appearance,
             )
         }
         if (normalizedCircle.isNotBlank()) {
@@ -83,6 +90,7 @@ internal fun AlbumPrimaryMetaRow(
                 tone = AlbumMetaTone.Circle,
                 shape = AlbumMetaPillShape,
                 onClick = circleOnClick,
+                appearance = appearance,
             )
         }
     }
@@ -237,9 +245,10 @@ private fun AlbumMetaBadge(
     maxWidth: androidx.compose.ui.unit.Dp? = null,
     onClick: (() -> Unit)? = null,
     textWeight: FontWeight? = null,
+    appearance: AlbumMetaAppearance = AlbumMetaAppearance.Default,
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val palette = albumMetaPalette(tone, colorScheme)
+    val palette = albumMetaPalette(tone, colorScheme, appearance)
     val styledModifier = modifier
         .then(if (maxWidth != null) Modifier.widthIn(max = maxWidth) else Modifier)
         .background(palette.container, shape)
@@ -265,12 +274,43 @@ private fun AlbumMetaBadge(
 private fun albumMetaPalette(
     tone: AlbumMetaTone,
     colorScheme: com.asmr.player.ui.theme.AsmrColorScheme,
+    appearance: AlbumMetaAppearance,
 ): AlbumMetaPalette {
+    if (appearance == AlbumMetaAppearance.OnImage) {
+        return when (tone) {
+            AlbumMetaTone.Rj -> AlbumMetaPalette(
+                container = Color.White.copy(alpha = 0.22f),
+                content = Color.White,
+                border = Color.White.copy(alpha = 0.28f),
+            )
+            AlbumMetaTone.Circle -> AlbumMetaPalette(
+                container = Color.White.copy(alpha = 0.12f),
+                content = Color.White.copy(alpha = 0.96f),
+                border = Color.White.copy(alpha = 0.18f),
+            )
+            AlbumMetaTone.CvLabel -> AlbumMetaPalette(
+                container = Color.White.copy(alpha = 0.18f),
+                content = Color.White,
+                border = Color.White.copy(alpha = 0.24f),
+            )
+            AlbumMetaTone.CvValue -> AlbumMetaPalette(
+                container = Color.White.copy(alpha = 0.1f),
+                content = Color.White.copy(alpha = 0.96f),
+                border = Color.White.copy(alpha = 0.16f),
+            )
+            AlbumMetaTone.Tag -> AlbumMetaPalette(
+                container = Color.Black.copy(alpha = 0.26f),
+                content = Color.White.copy(alpha = 0.92f),
+                border = Color.White.copy(alpha = 0.12f),
+            )
+        }
+    }
+
     return when (tone) {
         AlbumMetaTone.Rj -> AlbumMetaPalette(
-            container = colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.16f else 0.1f),
+            container = colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.38f else 0.28f),
             content = colorScheme.primary,
-            border = colorScheme.primary.copy(alpha = 0.18f),
+            border = colorScheme.primary.copy(alpha = 0.36f),
         )
         AlbumMetaTone.Circle -> AlbumMetaPalette(
             container = colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.1f else 0.06f),

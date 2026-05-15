@@ -1031,6 +1031,7 @@ private fun AlbumHeader(
                                 circle = circle,
                                 rjOnClick = { copy("RJ", rj) },
                                 circleOnClick = { copy("社团", circle) },
+                                appearance = AlbumMetaAppearance.OnImage,
                             )
                         }
                     }

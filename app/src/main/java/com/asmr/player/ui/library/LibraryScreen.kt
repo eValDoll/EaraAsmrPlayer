@@ -1295,9 +1295,8 @@ private fun AlbumGridItem(
                 overflow = TextOverflow.Clip
             )
             
-            val rj = album.rjCode.ifBlank { album.workId }
             AlbumPrimaryMetaRow(
-                rjCode = rj,
+                rjCode = "",
                 circle = album.circle,
                 modifier = Modifier.fillMaxWidth(),
             )
