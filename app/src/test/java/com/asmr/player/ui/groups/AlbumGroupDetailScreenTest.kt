@@ -128,7 +128,7 @@ class AlbumGroupDetailScreenTest {
             AsmrPlayerTheme {
                 AlbumGroupDetailContent(
                     windowSizeClass = testWindowSizeClass(),
-                    title = "鎴戠殑鍒嗙粍",
+                    title = "我的分组",
                     tracks = sampleTracks(),
                     onPlayMediaItems = { _: List<MediaItem>, _: Int -> },
                     onRemoveTrack = {},

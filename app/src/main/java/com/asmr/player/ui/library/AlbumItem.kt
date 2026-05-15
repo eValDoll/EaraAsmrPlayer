@@ -61,6 +61,10 @@ import com.asmr.player.util.DlsiteAntiHotlink
 
 import com.asmr.player.ui.theme.AsmrTheme
 
+internal val AlbumListItemCornerRadius = 6.dp
+internal val AlbumGridItemCornerRadius = 6.dp
+internal val AlbumGridItemSpacing = 6.dp
+
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 fun AlbumItem(
@@ -71,8 +75,15 @@ fun AlbumItem(
     emptyCoverUseShimmer: Boolean = false
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val shape = remember { RoundedCornerShape(16.dp) }
-    val coverShape = remember { RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp, topEnd = 0.dp, bottomEnd = 0.dp) }
+    val shape = remember { RoundedCornerShape(AlbumListItemCornerRadius) }
+    val coverShape = remember {
+        RoundedCornerShape(
+            topStart = AlbumListItemCornerRadius,
+            bottomStart = AlbumListItemCornerRadius,
+            topEnd = 0.dp,
+            bottomEnd = 0.dp
+        )
+    }
     val data = album.coverThumbPath.takeIf { it.isNotBlank() && it.contains("_v2") }
         .orEmpty()
         .ifBlank { album.coverPath }
@@ -138,7 +149,7 @@ fun AlbumItem(
                     val rj = album.rjCode.ifBlank { album.workId }
                     Text(
                         text = album.title,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                         color = colorScheme.textPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
@@ -261,8 +272,15 @@ fun AlbumGridItem(
     emptyCoverUseShimmer: Boolean = false
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val shape = remember { RoundedCornerShape(20.dp) }
-    val coverShape = remember { RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 0.dp, bottomEnd = 0.dp) }
+    val shape = remember { RoundedCornerShape(AlbumGridItemCornerRadius) }
+    val coverShape = remember {
+        RoundedCornerShape(
+            topStart = AlbumGridItemCornerRadius,
+            topEnd = AlbumGridItemCornerRadius,
+            bottomStart = 0.dp,
+            bottomEnd = 0.dp
+        )
+    }
     val data = album.coverThumbPath.takeIf { it.isNotBlank() && it.contains("_v2") }
         .orEmpty()
         .ifBlank { album.coverPath }

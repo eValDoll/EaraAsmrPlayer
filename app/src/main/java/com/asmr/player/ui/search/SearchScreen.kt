@@ -92,6 +92,7 @@ import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.library.AlbumGridItem
+import com.asmr.player.ui.library.AlbumGridItemSpacing
 import com.asmr.player.ui.library.AlbumItem
 import com.asmr.player.ui.sidepanel.LandscapeRightPanelHost
 import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
@@ -408,8 +409,8 @@ fun SearchScreen(
                                             end = 16.dp,
                                             bottom = 16.dp
                                         ).withAddedBottomPadding(LocalBottomOverlayPadding.current),
-                                        horizontalArrangement = Arrangement.spacedBy(16.dp),
-                                        verticalItemSpacing = 16.dp
+                                        horizontalArrangement = Arrangement.spacedBy(AlbumGridItemSpacing),
+                                        verticalItemSpacing = AlbumGridItemSpacing
                                     ) {
                                         items(
                                             state.results.size,

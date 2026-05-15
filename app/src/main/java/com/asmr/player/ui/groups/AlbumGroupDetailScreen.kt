@@ -203,23 +203,6 @@ internal fun AlbumGroupDetailContent(
                     .fillMaxWidth()
             }
         ) {
-            if (tracks.isNotEmpty()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.titleLarge,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        color = colorScheme.textPrimary
-                    )
-                }
-            }
-
             if (tracks.isEmpty()) {
                 EaraBrandedEmptyState(
                     sectionTitle = title.ifBlank { "我的分组" },
@@ -443,7 +426,7 @@ private fun GroupTrackRow(
             showClickIndication = false,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 12.dp, vertical = 2.dp),
             leadingContent = {
                 AsmrAsyncImage(
                     model = coverModel?.toString().orEmpty(),
@@ -451,7 +434,7 @@ private fun GroupTrackRow(
                     contentScale = ContentScale.Crop,
                     placeholderCornerRadius = 6,
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(48.dp)
                         .clip(RoundedCornerShape(6.dp))
                 )
             },

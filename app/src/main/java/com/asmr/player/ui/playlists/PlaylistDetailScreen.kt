@@ -305,7 +305,7 @@ private fun PlaylistItemRow(
             showClickIndication = false,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+                .padding(horizontal = 16.dp, vertical = 2.dp),
             leadingContent = {
                 AsmrAsyncImage(
                     model = item.artworkUri,
@@ -313,7 +313,7 @@ private fun PlaylistItemRow(
                     contentScale = ContentScale.Crop,
                     placeholderCornerRadius = 6,
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(48.dp)
                         .clip(RoundedCornerShape(6.dp))
                 )
             },

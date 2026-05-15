@@ -670,8 +670,8 @@ fun LibraryScreen(
                                             .thinScrollbar(gridState),
                                         contentPadding = PaddingValues(top = topPadding, start = 16.dp, end = 16.dp, bottom = 16.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current),
-                                        verticalItemSpacing = 16.dp,
-                                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                        verticalItemSpacing = AlbumGridItemSpacing,
+                                        horizontalArrangement = Arrangement.spacedBy(AlbumGridItemSpacing)
                                     ) {
                                         staggeredItems(
                                             pagedAlbumIndices,
@@ -1165,24 +1165,24 @@ private fun TrackListRow(
         modifier = Modifier.fillMaxWidth(),
         actions = listOf(
             AudioItemMenuAction(
-                label = "娣诲姞鍒版挱鏀鹃槦鍒?",
+                label = "添加到播放队列",
                 onClick = onAddToQueue,
                 icon = Icons.AutoMirrored.Filled.QueueMusic
             ),
             AudioItemMenuAction(
-                label = "娣诲姞鍒版挱鏀惧垪琛?",
+                label = "添加到播放列表",
                 onClick = onAddToPlaylist,
                 icon = Icons.AutoMirrored.Filled.PlaylistAdd,
                 showDividerBefore = true
             ),
             AudioItemMenuAction(
-                label = "鏍囩绠＄悊",
+                label = "标签管理",
                 onClick = onManageTags,
                 icon = Icons.AutoMirrored.Filled.Label,
                 showDividerBefore = true
             ),
             AudioItemMenuAction(
-                label = "浠庝笓杈戠Щ闄?",
+                label = "从专辑移除",
                 onClick = onRemove,
                 icon = Icons.Default.Delete,
                 showDividerBefore = true
@@ -1200,11 +1200,18 @@ private fun AlbumGridItem(
     onLongClick: () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val coverShape = remember { RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp, bottomStart = 0.dp, bottomEnd = 0.dp) }
+    val coverShape = remember {
+        RoundedCornerShape(
+            topStart = AlbumGridItemCornerRadius,
+            topEnd = AlbumGridItemCornerRadius,
+            bottomStart = 0.dp,
+            bottomEnd = 0.dp
+        )
+    }
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(20.dp))
+            .clip(RoundedCornerShape(AlbumGridItemCornerRadius))
             .background(colorScheme.surface.copy(alpha = 0.3f))
             .combinedClickable(
                 onClick = onClick,
@@ -1359,7 +1366,14 @@ private fun AlbumItem(
     onLongClick: () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val coverShape = remember { RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp, topEnd = 0.dp, bottomEnd = 0.dp) }
+    val coverShape = remember {
+        RoundedCornerShape(
+            topStart = AlbumListItemCornerRadius,
+            bottomStart = AlbumListItemCornerRadius,
+            topEnd = 0.dp,
+            bottomEnd = 0.dp
+        )
+    }
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
     val coverSize = listItemHeight
@@ -1368,7 +1382,7 @@ private fun AlbumItem(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(AlbumListItemCornerRadius))
             .background(colorScheme.surface.copy(alpha = 0.5f))
             .combinedClickable(
                 onClick = onClick,
@@ -1462,7 +1476,7 @@ private fun AlbumItem(
                 ) {
                     Text(
                         text = album.title,
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                         color = colorScheme.textPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis

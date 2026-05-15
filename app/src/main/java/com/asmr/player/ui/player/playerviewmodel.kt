@@ -649,11 +649,11 @@ class PlayerViewModel @Inject constructor(
         startPositionMs: Long
     ): Boolean {
         if (playerConnection.getControllerOrNull() == null) {
-            messageManager.showError("鎾斁鍣ㄦ湭杩炴帴")
+            messageManager.showError("播放器未连接")
             return false
         }
         if (startTrack.path.contains(".m3u8", ignoreCase = true)) {
-            messageManager.showError("褰撳墠涓嶆敮鎸?m3u8 娴佸獟浣擄紝璇峰厛涓嬭浇闊抽鏂囦欢")
+            messageManager.showError("当前不支持 m3u8 流媒体，请先下载音频文件")
             return false
         }
         val (items, index) = withContext(Dispatchers.Default) {
@@ -662,7 +662,7 @@ class PlayerViewModel @Inject constructor(
             preparedItems to preparedIndex
         }
         if (playerConnection.getControllerOrNull() == null) {
-            messageManager.showError("鎾斁鍣ㄦ湭杩炴帴")
+            messageManager.showError("播放器未连接")
             return false
         }
         playerConnection.setQueue(
