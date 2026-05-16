@@ -859,13 +859,15 @@ fun MainContainer(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(colorScheme.background.copy(alpha = 0.88f))
+                            .background(colorScheme.background)
                     )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(colorScheme.primarySoft.copy(alpha = 0.16f))
-                    )
+                    if (!colorScheme.isDark) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(colorScheme.primarySoft.copy(alpha = 0.16f))
+                        )
+                    }
                     Scaffold(
                         contentWindowInsets = WindowInsets(0, 0, 0, 0),
                         containerColor = Color.Transparent,
@@ -1659,15 +1661,13 @@ fun MainContainer(
                             .fillMaxSize()
                             .background(colorScheme.background)
                     )
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(
-                                colorScheme.primarySoft.copy(
-                                    alpha = if (colorScheme.isDark) 0.18f else 0.14f
-                                )
-                            )
-                    )
+                    if (!colorScheme.isDark) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(colorScheme.primarySoft.copy(alpha = 0.14f))
+                        )
+                    }
                 }
                 Box(
                     modifier = Modifier

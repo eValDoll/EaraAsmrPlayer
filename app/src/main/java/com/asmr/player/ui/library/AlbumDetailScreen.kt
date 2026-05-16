@@ -1,4 +1,4 @@
-package com.asmr.player.ui.library
+﻿package com.asmr.player.ui.library
 
 import android.content.Intent
 import android.net.Uri
@@ -247,7 +247,7 @@ fun AlbumDetailScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Color.Transparent), // Background handled by MainActivity
-        contentAlignment = Alignment.TopCenter // 仅用于平板适配：居中显示内容
+        contentAlignment = Alignment.TopCenter // 浠呯敤浜庡钩鏉块€傞厤锛氬眳涓樉绀哄唴瀹?
     ) {
         val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
         
@@ -255,7 +255,7 @@ fun AlbumDetailScreen(
             modifier = if (isCompact) {
                 Modifier.fillMaxSize()
             } else {
-                // 仅用于平板适配：限制内容区域最大宽度并填充可用空间
+                // 浠呯敤浜庡钩鏉块€傞厤锛氶檺鍒跺唴瀹瑰尯鍩熸渶澶у搴﹀苟濉厖鍙敤绌洪棿
                 Modifier
                     .fillMaxHeight()
                     .widthIn(max = 800.dp)
@@ -988,7 +988,7 @@ private fun AlbumHeader(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Photo,
-                            contentDescription = "选择封面",
+                            contentDescription = "閫夋嫨灏侀潰",
                             tint = Color.White,
                             modifier = Modifier.size(18.dp)
                         )
@@ -1037,6 +1037,7 @@ private fun AlbumHeader(
                                 rjOnClick = { copyMeta("RJ", rj) },
                                 circleOnClick = { copyMeta("社团", circle) },
                                 appearance = AlbumMetaAppearance.OnImage,
+                                leadingVisual = AlbumMetaLeadingVisual.Icon,
                             )
                         }
                     }
@@ -1055,6 +1056,7 @@ private fun AlbumHeader(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                             onCvClick = { cv -> copyMeta("CV", cv) },
+                            leadingVisual = AlbumMetaLeadingVisual.Icon,
                         )
                     }
                 }
@@ -1070,6 +1072,7 @@ private fun AlbumHeader(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
                             onTagClick = { tag -> copyMeta("标签", tag) },
+                            leadingVisual = AlbumMetaLeadingVisual.Icon,
                         )
                     }
                 }
@@ -1450,3 +1453,6 @@ internal data class PlaylistAddTarget(
         }
     }
 }
+
+
+

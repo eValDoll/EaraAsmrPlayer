@@ -173,6 +173,7 @@ private val LibraryChromeContentGap = 20.dp
 private val LibraryChromeCollapseOvershoot = 12.dp
 private val LibraryPageHorizontalPadding = 8.dp
 private val LibraryTrackListHeaderCornerRadius = 10.dp
+private val LibraryTrackListItemCornerRadius = 10.dp
 private val LibraryAlbumItemVerticalPadding = 2.dp
 
 private fun Album.withUserTags(userTags: List<String>): Album {
@@ -547,9 +548,15 @@ fun LibraryScreen(
                                             val albumId = header.albumId
                                             val expanded = expandedAlbumIds.contains(albumId)
                                             val rows = expandedAlbumTracks[albumId].orEmpty()
+                                            val isFirstAlbumHeader = headerIndex == 0
+                                            val isLastAlbumHeader = headerIndex == headerCount - 1
 
                                             stickyHeader(key = "album:$albumId") {
-                                                Column {
+                                                Column(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .background(colorScheme.background)
+                                                ) {
                                                     if (headerIndex > 0) {
                                                         HorizontalDivider(
                                                             modifier = Modifier.padding(horizontal = LibraryPageHorizontalPadding),
@@ -566,6 +573,9 @@ fun LibraryScreen(
                                                             ?: rememberAlbumTrackListTotalSizeBytes(rows),
                                                         coverModel = header.coverPath.takeIf { it.isNotBlank() }.takeIf { it != "null" }
                                                             ?: header.coverUrl.takeIf { it.isNotBlank() },
+                                                        expanded = expanded,
+                                                        isFirstInList = isFirstAlbumHeader,
+                                                        isLastInList = isLastAlbumHeader,
                                                         onToggle = {
                                                             if (expanded) expandedAlbumIds.remove(albumId) else expandedAlbumIds.add(albumId)
                                                         }
@@ -620,6 +630,7 @@ fun LibraryScreen(
                                                             subtitle = meta.leadingText,
                                                             fixedTrailingSubtitle = meta.trailingText,
                                                             showSubtitleStamp = row.hasSubtitles,
+                                                            isLastInSection = index == rows.lastIndex,
                                                             onClick = {
                                                                 scope.launch {
                                                                     val tracksForAlbum = withContext(Dispatchers.Default) {
@@ -1129,14 +1140,32 @@ private fun TrackAlbumHeader(
     totalDurationSeconds: Double,
     totalSizeBytes: Long?,
     coverModel: Any?,
+    expanded: Boolean,
+    isFirstInList: Boolean,
+    isLastInList: Boolean,
     onToggle: () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val containerShape = if (expanded) {
+        RoundedCornerShape(
+            topStart = if (isFirstInList) LibraryTrackListHeaderCornerRadius else 0.dp,
+            topEnd = if (isFirstInList) LibraryTrackListHeaderCornerRadius else 0.dp,
+            bottomStart = 0.dp,
+            bottomEnd = 0.dp
+        )
+    } else {
+        RoundedCornerShape(
+            topStart = if (isFirstInList) LibraryTrackListHeaderCornerRadius else 0.dp,
+            topEnd = if (isFirstInList) LibraryTrackListHeaderCornerRadius else 0.dp,
+            bottomStart = if (isLastInList) LibraryTrackListHeaderCornerRadius else 0.dp,
+            bottomEnd = if (isLastInList) LibraryTrackListHeaderCornerRadius else 0.dp
+        )
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(LibraryTrackListHeaderCornerRadius))
-            .background(colorScheme.surface.copy(alpha = 0.5f))
+            .clip(containerShape)
+            .background(colorScheme.surface)
             .clickable { onToggle() }
             .padding(horizontal = LibraryPageHorizontalPadding, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1199,19 +1228,35 @@ private fun TrackListRow(
     subtitle: String,
     fixedTrailingSubtitle: String,
     showSubtitleStamp: Boolean,
+    isLastInSection: Boolean,
     onClick: () -> Unit,
     onAddToQueue: () -> Unit,
     onAddToPlaylist: () -> Unit,
     onManageTags: () -> Unit,
     onRemove: () -> Unit
 ) {
+    val colorScheme = AsmrTheme.colorScheme
+    val rowShape = if (isLastInSection) {
+        RoundedCornerShape(
+            topStart = 0.dp,
+            topEnd = 0.dp,
+            bottomStart = LibraryTrackListItemCornerRadius,
+            bottomEnd = LibraryTrackListItemCornerRadius
+        )
+    } else {
+        RoundedCornerShape(0.dp)
+    }
+
     AudioItemRow(
         title = title,
         subtitle = subtitle,
         fixedTrailingSubtitle = fixedTrailingSubtitle,
         showSubtitleStamp = showSubtitleStamp,
         onClick = onClick,
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(rowShape)
+            .background(colorScheme.surface),
         actions = listOf(
             AudioItemMenuAction(
                 label = "添加到播放队列",
@@ -1366,11 +1411,13 @@ private fun AlbumGridItem(
                 circle = album.circle,
                 modifier = Modifier.fillMaxWidth(),
                 circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
+                leadingVisual = AlbumMetaLeadingVisual.Icon,
             )
 
             AlbumCvChipsFlow(
                 cvText = album.cv,
                 onCvClick = onCvClick,
+                leadingVisual = AlbumMetaLeadingVisual.Icon,
             )
 
             val statsText = buildString {
@@ -1400,6 +1447,7 @@ private fun AlbumGridItem(
                     tags = album.tags,
                     modifier = Modifier.padding(top = 2.dp),
                     onTagClick = onTagClick,
+                    leadingVisual = AlbumMetaLeadingVisual.Icon,
                 )
             }
         }
@@ -1445,7 +1493,7 @@ private fun AlbumItem(
         CoverContentRow(
             coverWidth = coverSize,
             minHeight = coverSize,
-            spacing = 16.dp,
+            spacing = 8.dp,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(listItemHeight),
@@ -1542,6 +1590,7 @@ private fun AlbumItem(
                         modifier = Modifier.fillMaxWidth(),
                         rjOnClick = onRjClick?.let { click -> { click(rj) } },
                         circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
+                        leadingVisual = AlbumMetaLeadingVisual.Icon,
                     )
 
                     if (album.cv.isNotBlank()) {
@@ -1549,6 +1598,7 @@ private fun AlbumItem(
                             cvText = album.cv,
                             modifier = Modifier.fillMaxWidth(),
                             onCvClick = onCvClick,
+                            leadingVisual = AlbumMetaLeadingVisual.Icon,
                         )
                     }
 
@@ -1567,6 +1617,7 @@ private fun AlbumItem(
                             tags = album.tags,
                             modifier = Modifier.fillMaxWidth(),
                             onTagClick = onTagClick,
+                            leadingVisual = AlbumMetaLeadingVisual.Icon,
                         )
                     }
                 }

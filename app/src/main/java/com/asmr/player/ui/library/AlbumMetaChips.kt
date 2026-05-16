@@ -8,10 +8,12 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,10 +23,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import com.asmr.player.R
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.util.MessageManager
 
@@ -41,6 +46,11 @@ private data class AlbumMetaPalette(
 internal enum class AlbumMetaAppearance {
     Default,
     OnImage,
+}
+
+internal enum class AlbumMetaLeadingVisual {
+    None,
+    Icon,
 }
 
 @Composable
@@ -84,6 +94,7 @@ internal fun AlbumPrimaryMetaRow(
     rjOnClick: (() -> Unit)? = null,
     circleOnClick: (() -> Unit)? = null,
     appearance: AlbumMetaAppearance = AlbumMetaAppearance.Default,
+    leadingVisual: AlbumMetaLeadingVisual = AlbumMetaLeadingVisual.None,
 ) {
     val normalizedRj = remember(rjCode) { rjCode.trim() }
     val normalizedCircle = remember(circle) { circle.trim() }
@@ -112,6 +123,7 @@ internal fun AlbumPrimaryMetaRow(
                 shape = AlbumMetaPillShape,
                 onClick = circleOnClick,
                 appearance = appearance,
+                leadingIcon = if (leadingVisual == AlbumMetaLeadingVisual.Icon) AlbumMetaLeadingIconKind.Club else null,
             )
         }
     }
@@ -123,6 +135,7 @@ internal fun AlbumCvChipsSingleLine(
     modifier: Modifier = Modifier,
     showLabel: Boolean = true,
     onCvClick: ((String) -> Unit)? = null,
+    leadingVisual: AlbumMetaLeadingVisual = AlbumMetaLeadingVisual.None,
 ) {
     val cvs = remember(cvText) { parseAlbumCvNames(cvText) }
     if (cvs.isEmpty()) return
@@ -135,12 +148,21 @@ internal fun AlbumCvChipsSingleLine(
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (showLabel) {
-            AlbumMetaBadge(
-                text = "CV",
-                tone = AlbumMetaTone.CvLabel,
-                shape = AlbumMetaPillShape,
-                textWeight = FontWeight.SemiBold,
-            )
+            if (leadingVisual == AlbumMetaLeadingVisual.Icon) {
+                AlbumMetaBadge(
+                    text = "",
+                    tone = AlbumMetaTone.CvLabel,
+                    shape = AlbumMetaPillShape,
+                    leadingIcon = AlbumMetaLeadingIconKind.Cv,
+                )
+            } else {
+                AlbumMetaBadge(
+                    text = "CV",
+                    tone = AlbumMetaTone.CvLabel,
+                    shape = AlbumMetaPillShape,
+                    textWeight = FontWeight.SemiBold,
+                )
+            }
         }
         cvs.forEach { cv ->
             AlbumMetaBadge(
@@ -163,6 +185,7 @@ internal fun AlbumCvChipsFlow(
     verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(4.dp),
     showLabel: Boolean = true,
     onCvClick: ((String) -> Unit)? = null,
+    leadingVisual: AlbumMetaLeadingVisual = AlbumMetaLeadingVisual.None,
 ) {
     val cvs = remember(cvText) { parseAlbumCvNames(cvText) }
     if (cvs.isEmpty()) return
@@ -173,12 +196,21 @@ internal fun AlbumCvChipsFlow(
         verticalArrangement = verticalArrangement,
     ) {
         if (showLabel) {
-            AlbumMetaBadge(
-                text = "CV",
-                tone = AlbumMetaTone.CvLabel,
-                shape = AlbumMetaPillShape,
-                textWeight = FontWeight.SemiBold,
-            )
+            if (leadingVisual == AlbumMetaLeadingVisual.Icon) {
+                AlbumMetaBadge(
+                    text = "",
+                    tone = AlbumMetaTone.CvLabel,
+                    shape = AlbumMetaPillShape,
+                    leadingIcon = AlbumMetaLeadingIconKind.Cv,
+                )
+            } else {
+                AlbumMetaBadge(
+                    text = "CV",
+                    tone = AlbumMetaTone.CvLabel,
+                    shape = AlbumMetaPillShape,
+                    textWeight = FontWeight.SemiBold,
+                )
+            }
         }
         cvs.forEach { cv ->
             AlbumMetaBadge(
@@ -197,6 +229,7 @@ internal fun AlbumTagsSingleLine(
     tags: List<String>,
     modifier: Modifier = Modifier,
     onTagClick: ((String) -> Unit)? = null,
+    leadingVisual: AlbumMetaLeadingVisual = AlbumMetaLeadingVisual.None,
 ) {
     val normalizedTags = remember(tags) { normalizeAlbumTags(tags) }
     if (normalizedTags.isEmpty()) return
@@ -208,6 +241,14 @@ internal fun AlbumTagsSingleLine(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
+        if (leadingVisual == AlbumMetaLeadingVisual.Icon) {
+            AlbumMetaBadge(
+                text = "",
+                tone = AlbumMetaTone.Tag,
+                shape = AlbumMetaTagShape,
+                leadingIcon = AlbumMetaLeadingIconKind.Tags,
+            )
+        }
         normalizedTags.forEach { tag ->
             AlbumMetaBadge(
                 text = if (tag.startsWith("#")) tag else "#$tag",
@@ -228,6 +269,7 @@ internal fun AlbumTagsFlow(
     horizontalArrangement: Arrangement.Horizontal = Arrangement.spacedBy(4.dp),
     verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(4.dp),
     onTagClick: ((String) -> Unit)? = null,
+    leadingVisual: AlbumMetaLeadingVisual = AlbumMetaLeadingVisual.None,
 ) {
     val normalizedTags = remember(tags) { normalizeAlbumTags(tags) }
     if (normalizedTags.isEmpty()) return
@@ -237,6 +279,14 @@ internal fun AlbumTagsFlow(
         horizontalArrangement = horizontalArrangement,
         verticalArrangement = verticalArrangement,
     ) {
+        if (leadingVisual == AlbumMetaLeadingVisual.Icon) {
+            AlbumMetaBadge(
+                text = "",
+                tone = AlbumMetaTone.Tag,
+                shape = AlbumMetaTagShape,
+                leadingIcon = AlbumMetaLeadingIconKind.Tags,
+            )
+        }
         normalizedTags.forEach { tag ->
             AlbumMetaBadge(
                 text = if (tag.startsWith("#")) tag else "#$tag",
@@ -257,6 +307,35 @@ private enum class AlbumMetaTone {
     Tag,
 }
 
+private enum class AlbumMetaLeadingIconKind {
+    Club,
+    Cv,
+    Tags,
+}
+
+@Composable
+private fun AlbumMetaLeadingIcon(
+    kind: AlbumMetaLeadingIconKind,
+    modifier: Modifier = Modifier,
+    appearance: AlbumMetaAppearance = AlbumMetaAppearance.Default,
+    iconSize: Dp = 14.dp,
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val (iconRes, tone) = when (kind) {
+        AlbumMetaLeadingIconKind.Club -> R.drawable.ic_album_meta_club to AlbumMetaTone.Circle
+        AlbumMetaLeadingIconKind.Cv -> R.drawable.ic_album_meta_cv to AlbumMetaTone.CvLabel
+        AlbumMetaLeadingIconKind.Tags -> R.drawable.ic_album_meta_tags to AlbumMetaTone.Tag
+    }
+    val tint = albumMetaPalette(tone, colorScheme, appearance).content
+
+    Icon(
+        painter = painterResource(id = iconRes),
+        contentDescription = null,
+        tint = tint,
+        modifier = modifier.size(iconSize)
+    )
+}
+
 @Composable
 private fun AlbumMetaBadge(
     text: String,
@@ -267,6 +346,7 @@ private fun AlbumMetaBadge(
     onClick: (() -> Unit)? = null,
     textWeight: FontWeight? = null,
     appearance: AlbumMetaAppearance = AlbumMetaAppearance.Default,
+    leadingIcon: AlbumMetaLeadingIconKind? = null,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val palette = albumMetaPalette(tone, colorScheme, appearance)
@@ -280,15 +360,29 @@ private fun AlbumMetaBadge(
         )
         .let { if (onClick != null) it.clickable(onClick = onClick) else it }
 
-    Text(
-        text = text,
-        style = MaterialTheme.typography.labelSmall,
-        fontWeight = textWeight,
-        color = palette.content,
-        maxLines = 1,
-        overflow = TextOverflow.Ellipsis,
+    Row(
         modifier = styledModifier,
-    )
+        horizontalArrangement = Arrangement.spacedBy(if (leadingIcon != null && text.isNotBlank()) 4.dp else 0.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (leadingIcon != null) {
+            AlbumMetaLeadingIcon(
+                kind = leadingIcon,
+                appearance = appearance,
+                iconSize = if (text.isBlank()) 14.dp else 12.dp,
+            )
+        }
+        if (text.isNotBlank()) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = textWeight,
+                color = palette.content,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
 }
 
 @Composable
