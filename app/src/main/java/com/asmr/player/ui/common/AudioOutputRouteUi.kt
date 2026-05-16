@@ -7,8 +7,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Headset
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -60,7 +60,7 @@ internal fun volumeRouteIcon(routeKind: AudioOutputRouteKind): ImageVector {
     return if (routeKind == AudioOutputRouteKind.Headphones) {
         Icons.Default.Headset
     } else {
-        Icons.Default.VolumeUp
+        Icons.AutoMirrored.Filled.VolumeUp
     }
 }
 

@@ -21,6 +21,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -174,7 +175,7 @@ internal fun PlayerSurfaceHeader(
             }
             IconButton(onClick = onShowQueue) {
                 Icon(
-                    Icons.Default.PlaylistPlay,
+                    Icons.AutoMirrored.Filled.PlaylistPlay,
                     contentDescription = null,
                     modifier = Modifier.size(if (isLandscape) 22.dp else 24.dp),
                     tint = colorScheme.onSurface

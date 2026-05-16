@@ -43,7 +43,6 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -197,7 +196,6 @@ fun AlbumDetailScreen(
     onAddMediaItemsToFavorites: (List<MediaItem>) -> Unit = {},
     onOpenPlaylistPicker: (MediaItem) -> Unit = {},
     onOpenGroupPicker: (albumId: Long) -> Unit = { _ -> },
-    onPlayVideo: (String, String, String, String) -> Unit = { _, _, _, _ -> },
     onOpenDlsiteLogin: () -> Unit = {},
     onOpenAlbumByRj: (String) -> Unit = {},
     initialTab: Int? = null,
@@ -283,7 +281,6 @@ fun AlbumDetailScreen(
                     val availableTags by viewModel.availableTags.collectAsState()
                     val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsState()
                     val libraryViewModel: LibraryViewModel = hiltViewModel()
-                    val tagManagerSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
                     var showTagManager by remember { mutableStateOf(false) }
                     var tagManageTrack by remember { mutableStateOf<Track?>(null) }
                     val context = LocalContext.current
@@ -452,9 +449,7 @@ fun AlbumDetailScreen(
                                                 chromeState = tabChromeState,
                                                 album = local,
                                                 header = { headerContent(tab) },
-                                                onPlayTracks = onPlayTracks,
                                                 onPlayMediaItems = onPlayMediaItems,
-                                                onPlayVideo = onPlayVideo,
                                                 onAddToQueue = { track ->
                                                     onAddToQueue(local, track)
                                                 },
@@ -552,9 +547,7 @@ fun AlbumDetailScreen(
                                         shouldAutoLoad = selectedTab == 2,
                                         onOpenLogin = onOpenDlsiteLogin,
                                         onEnsureLoaded = { viewModel.ensureDlsitePlayLoaded() },
-                                        onPlayTracks = onPlayTracks,
                                         onPlayMediaItems = onPlayMediaItems,
-                                        onPlayVideo = onPlayVideo,
                                         onAddToQueue = { track ->
                                             onAddToQueue(album, track)
                                         },

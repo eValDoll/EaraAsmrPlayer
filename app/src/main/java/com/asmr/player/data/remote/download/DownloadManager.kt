@@ -667,7 +667,7 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                 requestBuilder.addHeader("Range", "bytes=$existingBytes-")
             }
 
-            var total = -1L
+            var total: Long
             var downloaded = existingBytes
             val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(now0))
             var pendingTrafficBytes = 0L
@@ -693,8 +693,8 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                     else -> -1L
                 }
                 val buffer = ByteArray(DOWNLOAD_BUFFER_SIZE)
-                var lastBytes = 0L
-                var lastTs = System.currentTimeMillis()
+                @Suppress("UNUSED_VARIABLE") var progressBaselineBytes = 0L
+                @Suppress("UNUSED_VARIABLE") var progressBaselineTs = System.currentTimeMillis()
 
                 dao.upsertItem(
                     DownloadItemEntity(
@@ -739,11 +739,11 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                             pendingTrafficBytes += read.toLong()
 
                             val now = System.currentTimeMillis()
-                            val shouldUpdate = now - lastTs >= PROGRESS_UPDATE_INTERVAL_MS
+                            val shouldUpdate = now - progressBaselineTs >= PROGRESS_UPDATE_INTERVAL_MS
                             if (shouldUpdate) {
                                 flushTrafficStats()
-                                val dt = (now - lastTs).coerceAtLeast(1)
-                                val speed = ((downloaded - lastBytes) * 1000 / dt).coerceAtLeast(0)
+                                val dt = (now - progressBaselineTs).coerceAtLeast(1)
+                                val speed = ((downloaded - progressBaselineBytes) * 1000 / dt).coerceAtLeast(0)
                                 dao.updateItemProgress(
                                     workId = workId,
                                     state = WorkInfo.State.RUNNING.name,
@@ -752,8 +752,8 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                                     speed = speed,
                                     updatedAt = now
                                 )
-                                lastBytes = downloaded
-                                lastTs = now
+                                progressBaselineBytes = downloaded
+                                progressBaselineTs = now
                             }
                         }
                     }

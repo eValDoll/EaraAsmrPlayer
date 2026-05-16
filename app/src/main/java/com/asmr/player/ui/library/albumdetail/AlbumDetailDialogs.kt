@@ -36,6 +36,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.automirrored.filled.OpenInNew
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -553,7 +555,7 @@ private fun AsmrTreeFolderCheckboxRow(
             Spacer(modifier = Modifier.width(4.dp))
             IconButton(onClick = onToggleExpand, modifier = Modifier.size(32.dp)) {
                 Icon(
-                    imageVector = if (expanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowRight,
+                    imageVector = if (expanded) Icons.Default.KeyboardArrowDown else Icons.AutoMirrored.Filled.KeyboardArrowRight,
                     contentDescription = null,
                     tint = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -833,10 +835,10 @@ internal fun FilePreviewDialog(
                     )
                     if (canNavigate) {
                         IconButton(onClick = { currentIndex = (currentIndex - 1 + initialCandidates.size) % initialCandidates.size }) {
-                            Icon(Icons.Filled.KeyboardArrowLeft, contentDescription = "上一项")
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = "上一项")
                         }
                         IconButton(onClick = { currentIndex = (currentIndex + 1) % initialCandidates.size }) {
-                            Icon(Icons.Filled.KeyboardArrowRight, contentDescription = "下一项")
+                            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = "下一项")
                         }
                     }
                     if (canFullscreen) {

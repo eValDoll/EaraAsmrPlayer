@@ -389,11 +389,7 @@ private fun ImagePreviewPageHost(
         } ?: item.copy(prepareImage = null)
     }
 
-    pageContent(
-        item = displayItem,
-        state = state,
-        onStateChange = onStateChange
-    )
+    pageContent(displayItem, state, onStateChange)
 }
 
 @OptIn(ExperimentalFoundationApi::class)

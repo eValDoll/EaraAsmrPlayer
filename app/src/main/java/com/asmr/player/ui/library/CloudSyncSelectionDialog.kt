@@ -435,7 +435,7 @@ private fun buildCloudSyncCandidateCoverRequests(candidate: DlsiteCloudSyncCandi
             putAll(baseHeaders)
             if (cookie.isNotBlank()) put("Cookie", cookie)
         }
-        val model = if (headers.isEmpty()) {
+        val model: Any = if (headers.isEmpty()) {
             source.url
         } else {
             CacheImageModel(data = source.url, headers = headers, keyTag = "dlsite")

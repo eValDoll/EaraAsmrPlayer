@@ -187,7 +187,7 @@ class DLSiteScraper @Inject constructor(
         val start = jsonp.indexOf('(')
         val end = jsonp.lastIndexOf(')')
         val json = if (start >= 0 && end > start) jsonp.substring(start + 1, end) else jsonp
-        val obj = runCatching { gson.fromJson(json, Map::class.java) as? Map<*, *> }.getOrNull() ?: return ""
+        val obj = runCatching { gson.fromJson(json, Map::class.java) }.getOrNull() ?: return ""
         val works = obj["works"] as? List<*> ?: return ""
         val first = works.firstOrNull() as? Map<*, *> ?: return ""
         var embedUrl = (first["embed_url"] as? String).orEmpty().trim()

@@ -89,7 +89,6 @@ fun SettingsScreen(
     val lyricsPageSettings by viewModel.lyricsPageSettings.collectAsState()
     val dynamicPlayerHueEnabled by viewModel.dynamicPlayerHueEnabled.collectAsState()
     val themeMode by viewModel.themeMode.collectAsState()
-    val staticHueArgb by viewModel.staticHueArgb.collectAsState()
     val staticHueArgbLight by viewModel.staticHueArgbLight.collectAsState()
     val staticHueArgbDark by viewModel.staticHueArgbDark.collectAsState()
     val coverBackgroundEnabled by viewModel.coverBackgroundEnabled.collectAsState()
@@ -106,8 +105,6 @@ fun SettingsScreen(
     val scanRoots by libraryViewModel.scanRoots.collectAsState()
     val bulkProgress by libraryViewModel.bulkProgress.collectAsState()
     val isGlobalSyncRunning by libraryViewModel.isGlobalSyncRunning.collectAsState()
-    val configuration = LocalConfiguration.current
-    val density = LocalDensity.current
     val context = LocalContext.current
     val colorScheme = AsmrTheme.colorScheme
     val listState = rememberLazyListState()

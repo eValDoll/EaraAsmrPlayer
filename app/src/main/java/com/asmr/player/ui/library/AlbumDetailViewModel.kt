@@ -629,8 +629,8 @@ class AlbumDetailViewModel @Inject constructor(
 
         viewModelScope.launch {
             val token = syncCoordinator.tryBegin("绑定RJ并云同步") ?: run {
-                val current = syncCoordinator.state.value?.label
-                if (current.isNullOrBlank()) {
+                val currentLabel = syncCoordinator.state.value?.label
+                if (currentLabel.isNullOrBlank()) {
                     messageManager.showInfo("正在执行同步任务，请稍后再试")
                 } else {
                     messageManager.showInfo("正在执行：$current，请等待完成或取消后再同步")
@@ -696,8 +696,6 @@ class AlbumDetailViewModel @Inject constructor(
                                 return@launch
                             }
                         }
-                        messageManager.showError("同步失败：搜索结果不唯一")
-                        loadAlbum(local.id, normalized, force = true)
                     }
 
                     DlsiteCloudSyncResolveResult.NotFound -> {
@@ -1632,10 +1630,9 @@ class AlbumDetailViewModel @Inject constructor(
         if (!targetDir.exists()) targetDir.mkdirs()
 
         val coverUrl = album.coverUrl.trim()
-        val coverFileName: String
         if (coverUrl.startsWith("http", ignoreCase = true)) {
             val ext = coverUrl.substringBefore('?').substringAfterLast('.', "").takeIf { it.length in 2..5 } ?: "jpg"
-            coverFileName = "cover.$ext"
+            val coverFileName = "cover.$ext"
             downloadManager.enqueueDownload(
                 url = coverUrl,
                 fileName = coverFileName,
@@ -1652,8 +1649,6 @@ class AlbumDetailViewModel @Inject constructor(
                 albumWorkId = album.workId,
                 albumRjCode = album.rjCode
             )
-        } else {
-            coverFileName = "cover.jpg"
         }
 
         album.tracks.forEachIndexed { index, track ->
@@ -1714,13 +1709,13 @@ class AlbumDetailViewModel @Inject constructor(
             val audioBase = audioRelPath.substringBeforeLast('.')
             val audioDir = if (audioRelPath.contains('/')) audioRelPath.substringBeforeLast('/') else ""
 
-            leaves.forEach { potentialSub ->
+            leaves.forEach subtitleLoop@{ potentialSub ->
                 val subRelPath = potentialSub.relativePath
                 val subExt = subRelPath.substringAfterLast('.').lowercase()
-                if (!subExts.contains(subExt)) return@forEach
+                if (!subExts.contains(subExt)) return@subtitleLoop
 
                 val subDir = if (subRelPath.contains('/')) subRelPath.substringBeforeLast('/') else ""
-                if (subDir != audioDir) return@forEach
+                if (subDir != audioDir) return@subtitleLoop
 
                 val subBase = subRelPath.substringBeforeLast('.')
                 val isMatch = subBase.equals(audioBase, ignoreCase = true) ||
@@ -1741,10 +1736,9 @@ class AlbumDetailViewModel @Inject constructor(
         if (!targetDir.exists()) targetDir.mkdirs()
 
         val coverUrl = album.coverUrl.trim()
-        val coverFileName: String
         if (coverUrl.startsWith("http", ignoreCase = true)) {
             val ext = coverUrl.substringBefore('?').substringAfterLast('.', "").takeIf { it.length in 2..5 } ?: "jpg"
-            coverFileName = "cover.$ext"
+            val coverFileName = "cover.$ext"
             downloadManager.enqueueDownload(
                 url = coverUrl,
                 fileName = coverFileName,
@@ -1760,8 +1754,6 @@ class AlbumDetailViewModel @Inject constructor(
                 albumWorkId = album.workId,
                 albumRjCode = album.rjCode
             )
-        } else {
-            coverFileName = "cover.jpg"
         }
 
         val existingLocalKeys = LinkedHashSet<String>()
@@ -1859,13 +1851,13 @@ class AlbumDetailViewModel @Inject constructor(
             val audioBase = audioRelPath.substringBeforeLast('.')
             val audioDir = if (audioRelPath.contains('/')) audioRelPath.substringBeforeLast('/') else ""
 
-            leaves.forEach { potentialSub ->
+            leaves.forEach subtitleLoop@{ potentialSub ->
                 val subRelPath = potentialSub.relativePath
                 val subExt = subRelPath.substringAfterLast('.').lowercase()
-                if (!subExts.contains(subExt)) return@forEach
+                if (!subExts.contains(subExt)) return@subtitleLoop
 
                 val subDir = if (subRelPath.contains('/')) subRelPath.substringBeforeLast('/') else ""
-                if (subDir != audioDir) return@forEach
+                if (subDir != audioDir) return@subtitleLoop
 
                 val subBase = subRelPath.substringBeforeLast('.')
                 val isMatch = subBase.equals(audioBase, ignoreCase = true) ||
@@ -1886,10 +1878,9 @@ class AlbumDetailViewModel @Inject constructor(
         if (!targetDir.exists()) targetDir.mkdirs()
 
         val coverUrl = album.coverUrl.trim()
-        val coverFileName: String
         if (coverUrl.startsWith("http", ignoreCase = true)) {
             val ext = coverUrl.substringBefore('?').substringAfterLast('.', "").takeIf { it.length in 2..5 } ?: "jpg"
-            coverFileName = "cover.$ext"
+            val coverFileName = "cover.$ext"
             downloadManager.enqueueDownload(
                 url = coverUrl,
                 fileName = coverFileName,
@@ -1905,8 +1896,6 @@ class AlbumDetailViewModel @Inject constructor(
                 albumWorkId = album.workId,
                 albumRjCode = album.rjCode
             )
-        } else {
-            coverFileName = "cover.jpg"
         }
 
         val existingLocalKeys = LinkedHashSet<String>()

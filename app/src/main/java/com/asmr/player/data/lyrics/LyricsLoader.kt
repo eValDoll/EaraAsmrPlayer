@@ -160,10 +160,10 @@ class LyricsLoader @Inject constructor(
         roots.forEach { rootPath ->
             val root = File(rootPath)
             if (!root.exists() || !root.isDirectory) return@forEach
-            root.walkTopDown().forEach { file ->
-                if (!file.isFile) return@forEach
+            root.walkTopDown().forEach fileLoop@{ file ->
+                if (!file.isFile) return@fileLoop
                 val relative = runCatching { file.relativeTo(root).path.replace('\\', '/') }.getOrNull().orEmpty()
-                val candidate = SubtitleMatchSupport.inferCandidate(relative, file.absolutePath) ?: return@forEach
+                val candidate = SubtitleMatchSupport.inferCandidate(relative, file.absolutePath) ?: return@fileLoop
                 candidates += candidate to file
             }
         }

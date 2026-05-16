@@ -362,7 +362,7 @@ class ChannelSpectrumView @JvmOverloads constructor(
         val dt = dtSec.toFloat().coerceAtLeast(0.001f)
         
         // Update particles
-        updateParticles(dt, width.toFloat(), height.toFloat())
+        updateParticles(dt)
         
         val alphaAttack = (1.0 - exp((-dt / attackTauSeconds).toDouble())).toFloat().coerceIn(0f, 1f)
         val alphaRelease = (1.0 - exp((-dt / releaseTauSeconds).toDouble())).toFloat().coerceIn(0f, 1f)
@@ -472,7 +472,7 @@ class ChannelSpectrumView @JvmOverloads constructor(
         }
     }
     
-    private fun updateParticles(dt: Float, w: Float, h: Float) {
+    private fun updateParticles(dt: Float) {
         val iter = particles.iterator()
         while (iter.hasNext()) {
             val p = iter.next()

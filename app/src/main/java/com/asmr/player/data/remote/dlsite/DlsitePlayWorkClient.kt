@@ -249,7 +249,7 @@ class DlsitePlayWorkClient @Inject constructor(
             }
             val body = resp.body ?: throw IllegalStateException("DLsite Play 获取签名返回为空")
             val obj = body.charStream().use { reader ->
-                runCatching { gson.fromJson(reader, Map::class.java) as? Map<*, *> }.getOrNull().orEmpty()
+                runCatching { gson.fromJson(reader, Map::class.java) }.getOrNull().orEmpty()
             }
             val baseUrl = (obj["url"] as? String).orEmpty().trim()
             val paramsAny = obj["params"] as? Map<*, *>

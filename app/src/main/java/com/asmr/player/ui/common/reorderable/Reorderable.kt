@@ -1,7 +1,6 @@
 package com.asmr.player.ui.common.reorderable
 
 import androidx.compose.foundation.gestures.drag
-import androidx.compose.foundation.gestures.forEachGesture
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerId
@@ -14,7 +13,7 @@ import androidx.compose.ui.util.fastFirstOrNull
 
 fun Modifier.reorderable(state: ReorderableState<*>) = then(
     Modifier.pointerInput(Unit) {
-        forEachGesture {
+        while (true) {
             val dragStart = state.interactions.receive()
             val down = awaitPointerEventScope {
                 currentEvent.changes.fastFirstOrNull { it.id == dragStart.id }

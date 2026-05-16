@@ -976,7 +976,6 @@ class PlaybackService : MediaSessionService() {
             lastLyricIndex = idx
 
             val current = lyrics.getOrNull(idx)?.text.orEmpty().ifBlank { " " }
-            val next = lyrics.getOrNull(idx + 1)?.text.orEmpty()
             withContext(Dispatchers.Main.immediate) {
                 if (overlayNeeded) overlay?.updateLine(current)
             }

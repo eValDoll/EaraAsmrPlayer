@@ -24,6 +24,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -558,7 +559,7 @@ internal fun NowPlayingScreen(
                         }
                         IconButton(onClick = onShowQueue) {
                             Icon(
-                                Icons.Default.PlaylistPlay,
+                                Icons.AutoMirrored.Filled.PlaylistPlay,
                                 contentDescription = null,
                                 tint = colorScheme.onSurface,
                                 modifier = Modifier.size(32.dp)
@@ -781,7 +782,7 @@ internal fun NowPlayingScreen(
                         }
                         IconButton(onClick = onShowQueue) {
                             Icon(
-                                Icons.Default.PlaylistPlay,
+                                Icons.AutoMirrored.Filled.PlaylistPlay,
                                 contentDescription = null,
                                 tint = colorScheme.onSurface,
                                 modifier = Modifier.size(24.dp)
@@ -1014,7 +1015,7 @@ internal fun NowPlayingScreen(
                             }
                             IconButton(onClick = onShowQueue) {
                                 Icon(
-                                    Icons.Default.PlaylistPlay,
+                                    Icons.AutoMirrored.Filled.PlaylistPlay,
                                     contentDescription = null,
                                     tint = colorScheme.onSurface,
                                     modifier = Modifier.size(28.dp)

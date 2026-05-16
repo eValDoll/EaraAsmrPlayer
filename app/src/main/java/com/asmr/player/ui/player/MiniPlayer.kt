@@ -32,11 +32,11 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.PlaylistPlay
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.PlaylistPlay
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
@@ -255,7 +255,7 @@ fun MiniPlayer(
                                         modifier = Modifier.size(controlsButtonSize)
                                     ) {
                                         Icon(
-                                        imageVector = Icons.Default.PlaylistPlay,
+                                        imageVector = Icons.AutoMirrored.Filled.PlaylistPlay,
                                         contentDescription = null,
                                         tint = colorScheme.onSurface,
                                         modifier = Modifier.size(queueIconSize)
