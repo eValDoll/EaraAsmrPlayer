@@ -173,6 +173,7 @@ private val LibraryChromeContentGap = 20.dp
 private val LibraryChromeCollapseOvershoot = 12.dp
 private val LibraryPageHorizontalPadding = 8.dp
 private val LibraryTrackListHeaderCornerRadius = 10.dp
+private val LibraryAlbumItemVerticalPadding = 2.dp
 
 private fun Album.withUserTags(userTags: List<String>): Album {
     if (userTags.isEmpty()) return this
@@ -1432,7 +1433,7 @@ private fun AlbumItem(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = LibraryPageHorizontalPadding, vertical = 4.dp)
+            .padding(horizontal = LibraryPageHorizontalPadding, vertical = LibraryAlbumItemVerticalPadding)
             .clip(RoundedCornerShape(AlbumListItemCornerRadius))
             .background(colorScheme.surface.copy(alpha = 0.5f))
             .combinedClickable(
