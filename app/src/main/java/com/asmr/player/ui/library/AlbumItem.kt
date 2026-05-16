@@ -2,6 +2,7 @@ package com.asmr.player.ui.library
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -53,7 +54,11 @@ fun AlbumItem(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
-    emptyCoverUseShimmer: Boolean = false
+    emptyCoverUseShimmer: Boolean = false,
+    onRjClick: ((String) -> Unit)? = null,
+    onCircleClick: ((String) -> Unit)? = null,
+    onCvClick: ((String) -> Unit)? = null,
+    onTagClick: ((String) -> Unit)? = null,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val shape = remember { RoundedCornerShape(AlbumListItemCornerRadius) }
@@ -140,6 +145,8 @@ fun AlbumItem(
                         rjCode = rj,
                         circle = album.circle,
                         modifier = Modifier.fillMaxWidth(),
+                        rjOnClick = onRjClick?.let { click -> { click(rj) } },
+                        circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
                     )
 
                     if (album.cv.isNotBlank()) {
@@ -147,6 +154,7 @@ fun AlbumItem(
                         AlbumCvChipsSingleLine(
                             cvText = album.cv,
                             modifier = Modifier.fillMaxWidth(),
+                            onCvClick = onCvClick,
                         )
                     }
 
@@ -192,6 +200,7 @@ fun AlbumItem(
                         AlbumTagsSingleLine(
                             tags = album.tags,
                             modifier = Modifier.fillMaxWidth(),
+                            onTagClick = onTagClick,
                         )
                     }
                 }
@@ -215,7 +224,11 @@ fun AlbumGridItem(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
-    emptyCoverUseShimmer: Boolean = false
+    emptyCoverUseShimmer: Boolean = false,
+    onRjClick: ((String) -> Unit)? = null,
+    onCircleClick: ((String) -> Unit)? = null,
+    onCvClick: ((String) -> Unit)? = null,
+    onTagClick: ((String) -> Unit)? = null,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val shape = remember { RoundedCornerShape(AlbumGridItemCornerRadius) }
@@ -275,6 +288,13 @@ fun AlbumGridItem(
                         .align(Alignment.TopStart)
                         .padding(8.dp)
                         .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                        .let { base ->
+                            if (onRjClick != null) {
+                                base.clickable { onRjClick(rj) }
+                            } else {
+                                base
+                            }
+                        }
                         .padding(horizontal = 4.dp, vertical = 2.dp)
                 )
             }
@@ -316,9 +336,13 @@ fun AlbumGridItem(
                 rjCode = "",
                 circle = album.circle,
                 modifier = Modifier.fillMaxWidth(),
+                circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
             )
 
-            AlbumCvChipsFlow(cvText = album.cv)
+            AlbumCvChipsFlow(
+                cvText = album.cv,
+                onCvClick = onCvClick,
+            )
 
             val statsText = remember(album.ratingValue, album.ratingCount, album.priceJpy) {
                 buildString {
@@ -348,6 +372,7 @@ fun AlbumGridItem(
                 AlbumTagsFlow(
                     tags = album.tags,
                     modifier = Modifier.padding(top = 2.dp),
+                    onTagClick = onTagClick,
                 )
             }
         }

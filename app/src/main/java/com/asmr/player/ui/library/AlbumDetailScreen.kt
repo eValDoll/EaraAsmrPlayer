@@ -57,14 +57,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.state.ToggleableState
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -916,8 +914,8 @@ private fun AlbumHeader(
     messageManager: MessageManager
 ) {
     val context = LocalContext.current
-    val clipboard = LocalClipboardManager.current
     val colorScheme = AsmrTheme.colorScheme
+    val copyMeta = rememberAlbumMetaCopyAction(messageManager)
     val data = album.coverPath.ifEmpty { album.coverUrl }
     val imageModel = remember(data) {
         val headers = if (data.startsWith("http", ignoreCase = true)) DlsiteAntiHotlink.headersForImageUrl(data) else emptyMap()
@@ -938,12 +936,6 @@ private fun AlbumHeader(
         }
         delay(700)
         headerIntroPlayed = true
-    }
-    fun copy(label: String, value: String) {
-        val v = value.trim()
-        if (v.isBlank()) return
-        clipboard.setText(AnnotatedString(v))
-        messageManager.showSuccess("$label 已复制")
     }
 
     val headerContainerModifier = Modifier
@@ -1012,7 +1004,7 @@ private fun AlbumHeader(
                     ) {
                     Text(
                         text = album.title,
-                        modifier = Modifier.clickable { copy("标题", album.title) },
+                        modifier = Modifier.clickable { copyMeta("标题", album.title) },
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = Color.White,
                         maxLines = 2,
@@ -1029,8 +1021,8 @@ private fun AlbumHeader(
                             AlbumPrimaryMetaRow(
                                 rjCode = rj,
                                 circle = circle,
-                                rjOnClick = { copy("RJ", rj) },
-                                circleOnClick = { copy("社团", circle) },
+                                rjOnClick = { copyMeta("RJ", rj) },
+                                circleOnClick = { copyMeta("社团", circle) },
                                 appearance = AlbumMetaAppearance.OnImage,
                             )
                         }
@@ -1049,7 +1041,7 @@ private fun AlbumHeader(
                             cvText = album.cv,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
-                            onCvClick = { cv -> copy("CV", cv) },
+                            onCvClick = { cv -> copyMeta("CV", cv) },
                         )
                     }
                 }
@@ -1103,7 +1095,7 @@ private fun AlbumHeader(
                             tags = album.tags,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
-                            onTagClick = { tag -> copy("标签", tag) },
+                            onTagClick = { tag -> copyMeta("标签", tag) },
                         )
                     }
                 }

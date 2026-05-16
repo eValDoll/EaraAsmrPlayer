@@ -16,14 +16,17 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.asmr.player.ui.theme.AsmrTheme
+import com.asmr.player.util.MessageManager
 
 private val AlbumMetaPillShape = RoundedCornerShape(999.dp)
 private val AlbumMetaTagShape = RoundedCornerShape(7.dp)
@@ -38,6 +41,24 @@ private data class AlbumMetaPalette(
 internal enum class AlbumMetaAppearance {
     Default,
     OnImage,
+}
+
+@Composable
+internal fun rememberAlbumMetaCopyAction(
+    messageManager: MessageManager,
+): (String, String) -> Unit {
+    val clipboard = LocalClipboardManager.current
+    return remember(clipboard, messageManager) {
+        { label: String, value: String ->
+            val normalizedValue = value.trim()
+            if (normalizedValue.isBlank()) {
+                Unit
+            } else {
+                clipboard.setText(AnnotatedString(normalizedValue))
+                messageManager.showSuccess("$label 已复制")
+            }
+        }
+    }
 }
 
 private fun parseAlbumCvNames(cvText: String): List<String> {

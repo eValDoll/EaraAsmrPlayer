@@ -94,6 +94,7 @@ import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.library.AlbumGridItem
 import com.asmr.player.ui.library.AlbumGridItemSpacing
 import com.asmr.player.ui.library.AlbumItem
+import com.asmr.player.ui.library.rememberAlbumMetaCopyAction
 import com.asmr.player.ui.sidepanel.LandscapeRightPanelHost
 import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
 import com.asmr.player.ui.theme.AsmrTheme
@@ -141,6 +142,7 @@ fun SearchScreen(
     val listState = rememberSaveable(currentPageKey, saver = LazyListState.Saver) { LazyListState(0, 0) }
     val gridState = rememberSaveable(currentPageKey, saver = LazyStaggeredGridState.Saver) { LazyStaggeredGridState() }
     val colorScheme = AsmrTheme.colorScheme
+    val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
     val scope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
@@ -391,7 +393,11 @@ fun SearchScreen(
                                             AlbumItem(
                                                 album = album,
                                                 onClick = { onAlbumClick(album, state.purchasedOnly) },
-                                                emptyCoverUseShimmer = true
+                                                emptyCoverUseShimmer = true,
+                                                onRjClick = { copyMeta("RJ", it) },
+                                                onCircleClick = { copyMeta("社团", it) },
+                                                onCvClick = { copyMeta("CV", it) },
+                                                onTagClick = { copyMeta("标签", it) },
                                             )
                                         }
                                     }
@@ -421,7 +427,11 @@ fun SearchScreen(
                                             AlbumGridItem(
                                                 album = album,
                                                 onClick = { onAlbumClick(album, state.purchasedOnly) },
-                                                emptyCoverUseShimmer = true
+                                                emptyCoverUseShimmer = true,
+                                                onRjClick = { copyMeta("RJ", it) },
+                                                onCircleClick = { copyMeta("社团", it) },
+                                                onCvClick = { copyMeta("CV", it) },
+                                                onTagClick = { copyMeta("标签", it) },
                                             )
                                         }
                                     }

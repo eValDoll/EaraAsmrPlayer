@@ -238,6 +238,7 @@ fun LibraryScreen(
     val userTagsByAlbumId by viewModel.userTagsByAlbumId.collectAsState()
     val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsState()
     val isGlobalSyncRunning by viewModel.isGlobalSyncRunning.collectAsState()
+    val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
     val playerViewModel: PlayerViewModel = hiltViewModel()
     val scope = rememberCoroutineScope()
     var searchText by rememberSaveable { mutableStateOf(querySpec.textQuery.orEmpty()) }
@@ -680,7 +681,11 @@ fun LibraryScreen(
                                                 onLongClick = {
                                                     actionAlbum = mergedAlbum
                                                     showAlbumActions = true
-                                                }
+                                                },
+                                                onRjClick = { copyMeta("RJ", it) },
+                                                onCircleClick = { copyMeta("社团", it) },
+                                                onCvClick = { copyMeta("CV", it) },
+                                                onTagClick = { copyMeta("标签", it) },
                                             )
                                         }
                                     }
@@ -735,7 +740,11 @@ fun LibraryScreen(
                                                 onLongClick = {
                                                     actionAlbum = mergedAlbum
                                                     showAlbumActions = true
-                                                }
+                                                },
+                                                onRjClick = { copyMeta("RJ", it) },
+                                                onCircleClick = { copyMeta("社团", it) },
+                                                onCvClick = { copyMeta("CV", it) },
+                                                onTagClick = { copyMeta("标签", it) },
                                             )
                                         }
                                     }
@@ -1105,7 +1114,7 @@ private fun TrackAlbumHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(colorScheme.surface)
+            .background(colorScheme.surface.copy(alpha = 0.5f))
             .clickable { onToggle() }
             .padding(horizontal = 16.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1191,7 +1200,11 @@ private fun AlbumGridItem(
     album: Album,
     syncStatus: SyncStatus,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    onRjClick: ((String) -> Unit)? = null,
+    onCircleClick: ((String) -> Unit)? = null,
+    onCvClick: ((String) -> Unit)? = null,
+    onTagClick: ((String) -> Unit)? = null,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val coverShape = remember {
@@ -1279,6 +1292,13 @@ private fun AlbumGridItem(
                         .align(Alignment.TopStart)
                         .padding(8.dp)
                         .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                        .let { base ->
+                            if (onRjClick != null) {
+                                base.clickable { onRjClick(rj) }
+                            } else {
+                                base
+                            }
+                        }
                         .padding(horizontal = 4.dp, vertical = 2.dp)
                 )
             }
@@ -1299,9 +1319,13 @@ private fun AlbumGridItem(
                 rjCode = "",
                 circle = album.circle,
                 modifier = Modifier.fillMaxWidth(),
+                circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
             )
 
-            AlbumCvChipsFlow(cvText = album.cv)
+            AlbumCvChipsFlow(
+                cvText = album.cv,
+                onCvClick = onCvClick,
+            )
 
             val statsText = buildString {
                 val rv = album.ratingValue
@@ -1329,6 +1353,7 @@ private fun AlbumGridItem(
                 AlbumTagsFlow(
                     tags = album.tags,
                     modifier = Modifier.padding(top = 2.dp),
+                    onTagClick = onTagClick,
                 )
             }
         }
@@ -1341,7 +1366,11 @@ private fun AlbumItem(
     album: Album,
     syncStatus: SyncStatus,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    onRjClick: ((String) -> Unit)? = null,
+    onCircleClick: ((String) -> Unit)? = null,
+    onCvClick: ((String) -> Unit)? = null,
+    onTagClick: ((String) -> Unit)? = null,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val coverShape = remember {
@@ -1465,12 +1494,15 @@ private fun AlbumItem(
                         rjCode = rj,
                         circle = album.circle,
                         modifier = Modifier.fillMaxWidth(),
+                        rjOnClick = onRjClick?.let { click -> { click(rj) } },
+                        circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
                     )
 
                     if (album.cv.isNotBlank()) {
                         AlbumCvChipsSingleLine(
                             cvText = album.cv,
                             modifier = Modifier.fillMaxWidth(),
+                            onCvClick = onCvClick,
                         )
                     }
 
@@ -1488,6 +1520,7 @@ private fun AlbumItem(
                         AlbumTagsSingleLine(
                             tags = album.tags,
                             modifier = Modifier.fillMaxWidth(),
+                            onTagClick = onTagClick,
                         )
                     }
                 }

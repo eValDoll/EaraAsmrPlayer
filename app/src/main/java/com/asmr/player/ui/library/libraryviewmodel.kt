@@ -130,7 +130,7 @@ class LibraryViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val syncCoordinator: SyncCoordinator,
     @Named("image") private val imageOkHttpClient: OkHttpClient,
-    private val messageManager: MessageManager,
+    val messageManager: MessageManager,
     private val playerConnection: PlayerConnection,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
