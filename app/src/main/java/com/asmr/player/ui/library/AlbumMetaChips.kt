@@ -53,6 +53,11 @@ internal enum class AlbumMetaLeadingVisual {
     Icon,
 }
 
+internal enum class AlbumPrimaryMetaOrder {
+    RjThenCircle,
+    CircleThenRj,
+}
+
 @Composable
 internal fun rememberAlbumMetaCopyAction(
     messageManager: MessageManager,
@@ -95,18 +100,13 @@ internal fun AlbumPrimaryMetaRow(
     circleOnClick: (() -> Unit)? = null,
     appearance: AlbumMetaAppearance = AlbumMetaAppearance.Default,
     leadingVisual: AlbumMetaLeadingVisual = AlbumMetaLeadingVisual.None,
+    order: AlbumPrimaryMetaOrder = AlbumPrimaryMetaOrder.RjThenCircle,
 ) {
     val normalizedRj = remember(rjCode) { rjCode.trim() }
     val normalizedCircle = remember(circle) { circle.trim() }
     if (normalizedRj.isBlank() && normalizedCircle.isBlank()) return
 
-    Row(
-        modifier = modifier
-            .clipToBounds()
-            .horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    val rjBadge: @Composable () -> Unit = {
         if (normalizedRj.isNotBlank()) {
             AlbumMetaBadge(
                 text = normalizedRj,
@@ -116,6 +116,8 @@ internal fun AlbumPrimaryMetaRow(
                 appearance = appearance,
             )
         }
+    }
+    val circleBadge: @Composable () -> Unit = {
         if (normalizedCircle.isNotBlank()) {
             AlbumMetaBadge(
                 text = normalizedCircle,
@@ -125,6 +127,25 @@ internal fun AlbumPrimaryMetaRow(
                 appearance = appearance,
                 leadingIcon = if (leadingVisual == AlbumMetaLeadingVisual.Icon) AlbumMetaLeadingIconKind.Club else null,
             )
+        }
+    }
+
+    Row(
+        modifier = modifier
+            .clipToBounds()
+            .horizontalScroll(rememberScrollState()),
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        when (order) {
+            AlbumPrimaryMetaOrder.RjThenCircle -> {
+                rjBadge()
+                circleBadge()
+            }
+            AlbumPrimaryMetaOrder.CircleThenRj -> {
+                circleBadge()
+                rjBadge()
+            }
         }
     }
 }

@@ -166,6 +166,45 @@ internal sealed class AsmrTreeUiEntry {
     ) : AsmrTreeUiEntry()
 }
 
+private val DirectoryBrowserPanelCornerRadius = 10.dp
+private val DirectoryFolderRowCornerRadius = 10.dp
+private val DirectoryBrowserPanelVerticalPadding = 4.dp
+
+internal enum class DirectoryFolderPosition {
+    Single,
+    First,
+    Middle,
+    Last,
+}
+
+private fun directoryFolderPosition(index: Int, total: Int): DirectoryFolderPosition {
+    return when {
+        total <= 1 -> DirectoryFolderPosition.Single
+        index == 0 -> DirectoryFolderPosition.First
+        index == total - 1 -> DirectoryFolderPosition.Last
+        else -> DirectoryFolderPosition.Middle
+    }
+}
+
+private fun directoryFolderShape(position: DirectoryFolderPosition): RoundedCornerShape {
+    return when (position) {
+        DirectoryFolderPosition.Single -> RoundedCornerShape(DirectoryFolderRowCornerRadius)
+        DirectoryFolderPosition.First -> RoundedCornerShape(
+            topStart = DirectoryFolderRowCornerRadius,
+            topEnd = DirectoryFolderRowCornerRadius,
+            bottomStart = 0.dp,
+            bottomEnd = 0.dp,
+        )
+        DirectoryFolderPosition.Middle -> RoundedCornerShape(0.dp)
+        DirectoryFolderPosition.Last -> RoundedCornerShape(
+            topStart = 0.dp,
+            topEnd = 0.dp,
+            bottomStart = DirectoryFolderRowCornerRadius,
+            bottomEnd = DirectoryFolderRowCornerRadius,
+        )
+    }
+}
+
 internal sealed class LocalTreeUiEntry {
     abstract val path: String
     abstract val title: String
@@ -2166,12 +2205,12 @@ internal fun DirectoryBrowserPanelV2(
     }
 
     Surface(
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(DirectoryBrowserPanelCornerRadius),
         tonalElevation = 1.dp,
         color = AsmrTheme.colorScheme.surface.copy(alpha = 0.44f),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = AlbumDetailHorizontalPadding, vertical = DirectoryBrowserPanelVerticalPadding)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             CompactDirectoryBreadcrumbContentV2(
@@ -2367,13 +2406,15 @@ internal fun CompactDirectoryBreadcrumbContentV3(
 @Composable
 internal fun DirectoryFolderRowV3(
     title: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    position: DirectoryFolderPosition = DirectoryFolderPosition.Single,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .defaultMinSize(minHeight = 56.dp)
+            .clip(directoryFolderShape(position))
             .background(colorScheme.primary.copy(alpha = 0.08f))
             .clickable(onClick = onClick)
             .padding(horizontal = 12.dp, vertical = 12.dp),
@@ -2631,12 +2672,12 @@ internal fun DirectoryBrowserPanelV4(
     }
 
     Surface(
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(DirectoryBrowserPanelCornerRadius),
         tonalElevation = 1.dp,
         color = AsmrTheme.colorScheme.surface.copy(alpha = 0.44f),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = AlbumDetailHorizontalPadding, vertical = DirectoryBrowserPanelVerticalPadding)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             CompactDirectoryBreadcrumbContentV3(
@@ -2751,9 +2792,14 @@ internal fun DirectoryBrowserPanelV4(
                         key = { folder -> "$folderKeyPrefix:${folder.path}" },
                         contentType = { "folder" }
                     ) { folder ->
+                        val position = directoryFolderPosition(
+                            index = folders.indexOf(folder),
+                            total = folders.size,
+                        )
                         DirectoryFolderRowV3(
                             title = folder.title,
-                            onClick = { onNavigate(folder.path) }
+                            onClick = { onNavigate(folder.path) },
+                            position = position,
                         )
                     }
                     items(

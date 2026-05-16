@@ -29,7 +29,11 @@ class DlsitePlayWorkClient @Inject constructor(
 
     suspend fun fetchPlayableTree(workno: String): DlsitePlayTreeResult = withContext(Dispatchers.IO) {
         val clean = DlsiteWorkNo.extractRjCode(workno)
-        if (clean.isBlank()) return@withContext DlsitePlayTreeResult(emptyList(), emptyMap())
+        if (clean.isBlank()) return@withContext DlsitePlayTreeResult(
+            tree = emptyList(),
+            subtitlesByUrl = emptyMap(),
+            status = DlsitePlayLoadStatus.NotAvailable
+        )
 
         val cookie = authStore.getPlayCookie().trim()
         if (cookie.isBlank()) {
@@ -219,7 +223,11 @@ class DlsitePlayWorkClient @Inject constructor(
         }
 
         val treeNodes = buildTreeFromFiles(files)
-        DlsitePlayTreeResult(treeNodes, subtitleMap)
+        DlsitePlayTreeResult(
+            tree = treeNodes,
+            subtitlesByUrl = subtitleMap,
+            status = if (treeNodes.isNotEmpty()) DlsitePlayLoadStatus.Success else DlsitePlayLoadStatus.NotAvailable
+        )
     }
 
     private fun fetchDownloadSign(workno: String, cookie: String): Triple<String, Map<String, String>, String> {
@@ -454,5 +462,11 @@ class DlsitePlayWorkClient @Inject constructor(
 
 data class DlsitePlayTreeResult(
     val tree: List<AsmrOneTrackNodeResponse>,
-    val subtitlesByUrl: Map<String, List<RemoteSubtitleSource>>
+    val subtitlesByUrl: Map<String, List<RemoteSubtitleSource>>,
+    val status: DlsitePlayLoadStatus
 )
+
+enum class DlsitePlayLoadStatus {
+    Success,
+    NotAvailable,
+}

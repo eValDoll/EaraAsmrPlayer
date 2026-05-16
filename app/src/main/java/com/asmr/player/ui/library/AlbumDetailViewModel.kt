@@ -23,6 +23,7 @@ import com.asmr.player.data.remote.crawler.AsmrOneCrawler
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncResolveResult
 import com.asmr.player.data.remote.dlsite.DLSITE_PLAY_PREVIEW_CACHE_VERSION
+import com.asmr.player.data.remote.dlsite.DlsitePlayLoadStatus
 import com.asmr.player.data.remote.dlsite.DlsitePlayWorkClient
 import com.asmr.player.data.remote.dlsite.DlsitePlayTreeResult
 import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
@@ -169,6 +170,7 @@ class AlbumDetailViewModel @Inject constructor(
     private var lastAlbumKey: String? = null
     private var localTracksObserveJob: Job? = null
     private val asmrOneAttemptedRj = linkedSetOf<String>()
+    private val dlsitePlayAttemptedRj = linkedSetOf<String>()
     private val asmrOneCollectedCache = linkedMapOf<String, Pair<Long, Boolean?>>()
     private val asmrOneResolvedCache = linkedMapOf<String, Pair<Long, Pair<String, Int?>>>()
     private val asmrOneTracksCache = linkedMapOf<String, Pair<Long, List<AsmrOneTrackNodeResponse>>>()
@@ -1167,6 +1169,7 @@ class AlbumDetailViewModel @Inject constructor(
         dlsiteLoadToken++
         asmrOneLoadToken++
         asmrOneAttemptedRj.clear()
+        dlsitePlayAttemptedRj.clear()
         _uiState.value = AlbumDetailUiState.Success(
             model = current.model.copy(
                 dlsiteSelectedLang = target?.lang ?: normalized,
@@ -1454,8 +1457,16 @@ class AlbumDetailViewModel @Inject constructor(
                 baseRj
             )
         )
+        val playCookieFingerprint = DlsiteAuthStore(context).getPlayCookie().trim().hashCode()
+        val attemptKey = candidates0.joinToString("|") + "#" + playCookieFingerprint
 
-        if (candidates0.isEmpty() || current.model.dlsitePlayTree.isNotEmpty() || current.model.isLoadingDlsitePlay) return
+        if (
+            candidates0.isEmpty() ||
+            current.model.dlsitePlayTree.isNotEmpty() ||
+            current.model.isLoadingDlsitePlay ||
+            dlsitePlayAttemptedRj.contains(attemptKey)
+        ) return
+        dlsitePlayAttemptedRj.add(attemptKey)
         viewModelScope.launch {
             _uiState.value = AlbumDetailUiState.Success(model = current.model.copy(isLoadingDlsitePlay = true))
             try {
@@ -1480,6 +1491,7 @@ class AlbumDetailViewModel @Inject constructor(
                 var pickedWorkno: String? = null
                 var pickedResult: DlsitePlayTreeResult? = null
                 var lastError: Exception? = null
+                var sawNotAvailable = false
                 for (workno in candidates) {
                     val res = try {
                         dlsitePlayWorkClient.fetchPlayableTree(workno)
@@ -1487,19 +1499,27 @@ class AlbumDetailViewModel @Inject constructor(
                         lastError = e
                         continue
                     }
-                    if (res.tree.isNotEmpty()) {
+                    if (res.status == DlsitePlayLoadStatus.Success && res.tree.isNotEmpty()) {
                         pickedWorkno = workno
                         pickedResult = res
                         break
                     }
+                    if (res.status == DlsitePlayLoadStatus.NotAvailable) {
+                        sawNotAvailable = true
+                    }
                 }
 
-                val result = pickedResult ?: DlsitePlayTreeResult(emptyList(), emptyMap())
+                val result = pickedResult ?: DlsitePlayTreeResult(
+                    tree = emptyList(),
+                    subtitlesByUrl = emptyMap(),
+                    status = if (sawNotAvailable) DlsitePlayLoadStatus.NotAvailable else DlsitePlayLoadStatus.Success
+                )
                 result.subtitlesByUrl.forEach { (url, subs) ->
                     if (subs.isNotEmpty()) OnlineLyricsStore.set(url, subs)
                 }
                 val updated = (_uiState.value as? AlbumDetailUiState.Success)?.model ?: return@launch
-                if (pickedResult == null && lastError != null) {
+                if (pickedResult == null && lastError != null && !sawNotAvailable) {
+                    dlsitePlayAttemptedRj.remove(attemptKey)
                     messageManager.showError("DLsite Play 加载失败，请稍后重试")
                 }
                 _uiState.value = AlbumDetailUiState.Success(
@@ -1510,6 +1530,7 @@ class AlbumDetailViewModel @Inject constructor(
                     )
                 )
             } catch (e: Exception) {
+                dlsitePlayAttemptedRj.remove(attemptKey)
                 val updated = (_uiState.value as? AlbumDetailUiState.Success)?.model ?: return@launch
                 _uiState.value = AlbumDetailUiState.Success(model = updated.copy(isLoadingDlsitePlay = false))
             }

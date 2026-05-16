@@ -17,6 +17,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -47,8 +48,11 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -116,9 +120,12 @@ import kotlinx.coroutines.launch
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.zIndex
 import com.asmr.player.ui.common.rememberDominantColor
 import com.asmr.player.ui.common.SubtitleStamp
+import com.asmr.player.ui.common.AudioItemMenuButtonSize
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
@@ -180,12 +187,12 @@ private fun DlsiteDirectoryLoadingPanel() {
         (screenHeight * 0.48f).coerceIn(240.dp, 460.dp)
     }
     Surface(
-        shape = RoundedCornerShape(18.dp),
+        shape = RoundedCornerShape(12.dp),
         tonalElevation = 1.dp,
         color = AsmrTheme.colorScheme.surface.copy(alpha = 0.44f),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 4.dp)
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             Column(
@@ -262,13 +269,13 @@ private fun DlsiteTrialLoadingList() {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         repeat(3) { index ->
             Surface(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
+                shape = RoundedCornerShape(12.dp),
                 tonalElevation = 1.dp,
                 color = AsmrTheme.colorScheme.surface.copy(alpha = 0.36f)
             ) {
@@ -293,12 +300,326 @@ private fun DlsiteTrialLoadingList() {
 }
 
 @Composable
+private fun DlsiteTrialAudioItem(
+    track: Track,
+    onClick: () -> Unit,
+    onAddToPlaylist: (() -> Unit)? = null,
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val isOnline = remember(track.path) { track.path.trim().startsWith("http", ignoreCase = true) }
+    val durationText = remember(track.duration) { Formatting.formatTrackSeconds(track.duration) }
+    val subtitleText = remember(isOnline, durationText) {
+        when {
+            isOnline && durationText.isNotBlank() -> "在线 · $durationText"
+            isOnline -> "在线"
+            durationText.isNotBlank() -> durationText
+            else -> "在线播放"
+        }
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Default.PlayArrow,
+            contentDescription = null,
+            tint = colorScheme.primary
+        )
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(1.dp)
+        ) {
+            Text(
+                text = track.title,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                color = colorScheme.textPrimary
+            )
+            Text(
+                text = subtitleText,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodySmall,
+                color = colorScheme.textTertiary
+            )
+        }
+        if (onAddToPlaylist != null) {
+            IconButton(
+                onClick = onAddToPlaylist,
+                modifier = Modifier.size(AudioItemMenuButtonSize)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.PlaylistAdd,
+                    contentDescription = null,
+                    tint = colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+private enum class DlsiteEmptyArtworkKind {
+    Gallery,
+    One,
+    Trial,
+}
+
+@Composable
+private fun DlsiteSectionEmptyState(
+    text: String,
+    artworkKind: DlsiteEmptyArtworkKind,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 12.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        DlsiteSectionEmptyArtwork(
+            kind = artworkKind,
+            modifier = Modifier.size(width = 92.dp, height = 60.dp)
+        )
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodySmall,
+            color = AsmrTheme.colorScheme.textSecondary
+        )
+    }
+}
+
+@Composable
+private fun DlsiteSectionEmptyArtwork(
+    kind: DlsiteEmptyArtworkKind,
+    modifier: Modifier = Modifier
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val strokeColor = colorScheme.textTertiary.copy(alpha = if (colorScheme.isDark) 0.86f else 0.76f)
+    val accentColor = colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.76f else 0.68f)
+
+    Canvas(modifier = modifier) {
+        val strokeWidth = size.minDimension * 0.05f
+        when (kind) {
+            DlsiteEmptyArtworkKind.Gallery -> drawGalleryEmptyArtwork(
+                strokeColor = strokeColor,
+                accentColor = accentColor,
+                strokeWidth = strokeWidth
+            )
+            DlsiteEmptyArtworkKind.One -> drawOneEmptyArtwork(
+                strokeColor = strokeColor,
+                accentColor = accentColor,
+                strokeWidth = strokeWidth
+            )
+            DlsiteEmptyArtworkKind.Trial -> drawTrialEmptyArtwork(
+                strokeColor = strokeColor,
+                accentColor = accentColor,
+                strokeWidth = strokeWidth
+            )
+        }
+    }
+}
+
+private fun DrawScope.drawGalleryEmptyArtwork(
+    strokeColor: Color,
+    accentColor: Color,
+    strokeWidth: Float
+) {
+    val frameSize = Size(size.width * 0.34f, size.height * 0.48f)
+    val corner = CornerRadius(strokeWidth * 1.8f, strokeWidth * 1.8f)
+
+    fun drawPhotoFrame(origin: Offset) {
+        drawRoundRect(
+            color = strokeColor,
+            topLeft = origin,
+            size = frameSize,
+            cornerRadius = corner,
+            style = Stroke(width = strokeWidth)
+        )
+        drawCircle(
+            color = accentColor,
+            radius = strokeWidth * 0.8f,
+            center = origin + Offset(frameSize.width * 0.72f, frameSize.height * 0.24f)
+        )
+        drawLine(
+            color = strokeColor,
+            start = origin + Offset(frameSize.width * 0.16f, frameSize.height * 0.72f),
+            end = origin + Offset(frameSize.width * 0.40f, frameSize.height * 0.48f),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = strokeColor,
+            start = origin + Offset(frameSize.width * 0.40f, frameSize.height * 0.48f),
+            end = origin + Offset(frameSize.width * 0.58f, frameSize.height * 0.62f),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+        drawLine(
+            color = strokeColor,
+            start = origin + Offset(frameSize.width * 0.58f, frameSize.height * 0.62f),
+            end = origin + Offset(frameSize.width * 0.82f, frameSize.height * 0.42f),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+    }
+
+    drawPhotoFrame(Offset(size.width * 0.14f, size.height * 0.26f))
+    drawPhotoFrame(Offset(size.width * 0.42f, size.height * 0.14f))
+    drawLine(
+        color = strokeColor,
+        start = Offset(size.width * 0.20f, size.height * 0.84f),
+        end = Offset(size.width * 0.80f, size.height * 0.84f),
+        strokeWidth = strokeWidth,
+        cap = StrokeCap.Round
+    )
+}
+
+private fun DrawScope.drawOneEmptyArtwork(
+    strokeColor: Color,
+    accentColor: Color,
+    strokeWidth: Float
+) {
+    val folderSize = Size(size.width * 0.28f, size.height * 0.18f)
+    val folderTopLeft = Offset(size.width * 0.10f, size.height * 0.14f)
+    val corner = CornerRadius(strokeWidth * 1.6f, strokeWidth * 1.6f)
+
+    drawRoundRect(
+        color = strokeColor,
+        topLeft = folderTopLeft,
+        size = folderSize,
+        cornerRadius = corner,
+        style = Stroke(width = strokeWidth)
+    )
+
+    drawLine(
+        color = strokeColor,
+        start = Offset(size.width * 0.18f, size.height * 0.14f),
+        end = Offset(size.width * 0.26f, size.height * 0.14f),
+        strokeWidth = strokeWidth,
+        cap = StrokeCap.Round
+    )
+
+    val trunkX = size.width * 0.28f
+    val trunkStartY = size.height * 0.40f
+    val branchYs = listOf(size.height * 0.50f, size.height * 0.66f, size.height * 0.82f)
+    drawLine(
+        color = strokeColor,
+        start = Offset(trunkX, trunkStartY),
+        end = Offset(trunkX, branchYs.last()),
+        strokeWidth = strokeWidth,
+        cap = StrokeCap.Round
+    )
+    drawLine(
+        color = strokeColor,
+        start = Offset(size.width * 0.24f, size.height * 0.32f),
+        end = Offset(trunkX, trunkStartY),
+        strokeWidth = strokeWidth,
+        cap = StrokeCap.Round
+    )
+
+    branchYs.forEach { y ->
+        drawLine(
+            color = strokeColor,
+            start = Offset(trunkX, y),
+            end = Offset(size.width * 0.48f, y),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+        drawCircle(
+            color = accentColor,
+            radius = strokeWidth * 0.72f,
+            center = Offset(size.width * 0.48f, y)
+        )
+        drawLine(
+            color = strokeColor,
+            start = Offset(size.width * 0.58f, y),
+            end = Offset(size.width * 0.82f, y),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+    }
+}
+
+private fun DrawScope.drawTrialEmptyArtwork(
+    strokeColor: Color,
+    accentColor: Color,
+    strokeWidth: Float
+) {
+    val screenTopLeft = Offset(size.width * 0.10f, size.height * 0.18f)
+    val screenSize = Size(size.width * 0.46f, size.height * 0.34f)
+    val corner = CornerRadius(strokeWidth * 1.8f, strokeWidth * 1.8f)
+
+    drawRoundRect(
+        color = strokeColor,
+        topLeft = screenTopLeft,
+        size = screenSize,
+        cornerRadius = corner,
+        style = Stroke(width = strokeWidth)
+    )
+
+    val playCenter = screenTopLeft + Offset(screenSize.width * 0.50f, screenSize.height * 0.50f)
+    drawLine(
+        color = accentColor,
+        start = Offset(playCenter.x - size.width * 0.03f, playCenter.y - size.height * 0.09f),
+        end = Offset(playCenter.x - size.width * 0.03f, playCenter.y + size.height * 0.09f),
+        strokeWidth = strokeWidth,
+        cap = StrokeCap.Round
+    )
+    drawLine(
+        color = accentColor,
+        start = Offset(playCenter.x - size.width * 0.03f, playCenter.y - size.height * 0.09f),
+        end = Offset(playCenter.x + size.width * 0.08f, playCenter.y),
+        strokeWidth = strokeWidth,
+        cap = StrokeCap.Round
+    )
+    drawLine(
+        color = accentColor,
+        start = Offset(playCenter.x - size.width * 0.03f, playCenter.y + size.height * 0.09f),
+        end = Offset(playCenter.x + size.width * 0.08f, playCenter.y),
+        strokeWidth = strokeWidth,
+        cap = StrokeCap.Round
+    )
+
+    val barWidth = size.width * 0.07f
+    val barBottom = size.height * 0.80f
+    val barXs = listOf(0.62f, 0.72f, 0.82f)
+    val barHeights = listOf(0.18f, 0.30f, 0.22f)
+    barXs.zip(barHeights).forEach { (xFraction, heightFraction) ->
+        val height = size.height * heightFraction
+        val left = size.width * xFraction - barWidth / 2f
+        val top = barBottom - height
+        drawLine(
+            color = strokeColor,
+            start = Offset(left + barWidth / 2f, barBottom),
+            end = Offset(left + barWidth / 2f, top),
+            strokeWidth = strokeWidth,
+            cap = StrokeCap.Round
+        )
+    }
+
+    drawLine(
+        color = strokeColor,
+        start = Offset(size.width * 0.10f, size.height * 0.80f),
+        end = Offset(size.width * 0.94f, size.height * 0.80f),
+        strokeWidth = strokeWidth,
+        cap = StrokeCap.Round
+    )
+}
+
+@Composable
 private fun DlsiteRecommendationsLoadingBlocks() {
     val placeholders = remember { listOf(0, 1, 2) }
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         placeholders.forEach { sectionIndex ->
@@ -314,7 +635,7 @@ private fun DlsiteRecommendationsLoadingBlocks() {
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     items(listOf(0, 1, 2, 3), key = { it }, contentType = { "dlsiteRecommendationLoadingCard" }) {
                         Surface(
-                            shape = RoundedCornerShape(14.dp),
+                            shape = RoundedCornerShape(12.dp),
                             tonalElevation = 1.dp,
                             color = AsmrTheme.colorScheme.surface.copy(alpha = 0.35f),
                             modifier = Modifier.width(132.dp)
@@ -401,13 +722,27 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     val scope = rememberCoroutineScope()
     val videoTracks = remember(trialTracks) { trialTracks.filter { isVideoPreviewUrl(it.path) } }
     val audioTracks = remember(trialTracks) { trialTracks.filterNot { isVideoPreviewUrl(it.path) } }
-    val asmrLeafTracks = remember(asmrOneTree) { flattenAsmrOneTracksForUi(asmrOneTree) }
-    val asmrLeafByRelPath = remember(asmrLeafTracks) { asmrLeafTracks.associateBy { it.relativePath } }
-    val remoteIndex = remember(asmrOneTree, album.id, album.coverPath, album.coverUrl) {
-        buildRemoteTreeIndex(asmrOneTree, album)
-    }
     var currentPath by rememberSaveable(treeStateKey) { mutableStateOf(initialCurrentPath.trim().trim('/')) }
-    val browser = remember(remoteIndex, currentPath) { buildRemoteDirectoryBrowser(remoteIndex, currentPath) }
+    val asmrLeafTracks by produceState(initialValue = emptyList<AsmrOneLeafUi>(), key1 = asmrOneTree) {
+        value = withContext(Dispatchers.Default) { flattenAsmrOneTracksForUi(asmrOneTree) }
+    }
+    val asmrLeafByRelPath by produceState(initialValue = emptyMap<String, AsmrOneLeafUi>(), key1 = asmrLeafTracks) {
+        value = withContext(Dispatchers.Default) { asmrLeafTracks.associateBy { it.relativePath } }
+    }
+    val remoteIndex by produceState<RemoteTreeIndex?>(
+        initialValue = null,
+        asmrOneTree,
+        album.id,
+        album.coverPath,
+        album.coverUrl,
+    ) {
+        value = withContext(Dispatchers.Default) { buildRemoteTreeIndex(asmrOneTree, album) }
+    }
+    val browser by produceState<DirectoryBrowserResult?>(initialValue = null, key1 = remoteIndex, key2 = currentPath) {
+        value = remoteIndex?.let { index ->
+            withContext(Dispatchers.Default) { buildRemoteDirectoryBrowser(index, currentPath) }
+        }
+    }
     val listState = rememberSaveable("scroll:$treeStateKey", saver = LazyListState.Saver) {
         LazyListState(initialScroll.first, initialScroll.second)
     }
@@ -440,7 +775,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                 Column(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
                     Text(
                         text = "Gallery",
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                        modifier = Modifier.padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold
                     )
@@ -452,7 +787,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                     modifier = dlsiteAnimatedSectionModifier(
                         Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                            .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
                         animateIntro = animateIntro
                     ),
                     verticalAlignment = Alignment.CenterVertically
@@ -474,7 +809,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                 Row(
                     modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                            .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
@@ -497,19 +832,19 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             Column(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
             Text(
                 text = "Gallery",
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                modifier = Modifier.padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold
             )
             if (galleryUrls.isEmpty()) {
-                Text(
+                DlsiteSectionEmptyState(
                     text = "暂无样图",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    artworkKind = DlsiteEmptyArtworkKind.Gallery,
+                    modifier = Modifier.then(dlsiteAnimatedSectionModifier(Modifier, animateIntro))
                 )
             } else {
                 LazyRow(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding),
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     contentPadding = PaddingValues(vertical = 10.dp)
                 ) {
@@ -539,7 +874,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                                     }
                                 )?.let(onPreviewImages)
                             },
-                            shape = RoundedCornerShape(12.dp)
+                            shape = RoundedCornerShape(10.dp)
                         ) {
                             AsmrAsyncImage(
                                 model = model,
@@ -557,7 +892,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         item(key = "dlsite-one-header") {
             Row(
                 modifier = dlsiteAnimatedSectionModifier(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                    Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
                     animateIntro = animateIntro
                 ),
                 verticalAlignment = Alignment.CenterVertically
@@ -573,16 +908,17 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                 }
             }
         }
-        if (asmrOneTree.isNotEmpty()) {
+        if (asmrOneTree.isNotEmpty() && browser != null) {
             item(key = "dlsite-one-content") {
                 Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
+                    val browserValue = browser ?: return@Box
                     DirectoryBrowserPanelV4(
                     panelKey = treeStateKey,
                     currentPath = currentPath,
-                    breadcrumbs = browser.breadcrumbs,
-                    batchTargets = browser.batchTargets,
-                    folders = browser.folders,
-                    files = browser.files,
+                    breadcrumbs = browserValue.breadcrumbs,
+                    batchTargets = browserValue.batchTargets,
+                    folders = browserValue.folders,
+                    files = browserValue.files,
                     onNavigate = { path -> currentPath = path },
                     onAddToFavorites = onAddMediaItemsToFavorites,
                         onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
@@ -636,7 +972,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                                     }
                                     TreeFileType.Image -> {
                                         buildDirectoryImagePreviewRequest(
-                                            files = browser.files,
+                                            files = browserValue.files,
                                             clickedPath = file.path,
                                             toPreviewItem = { imageFile ->
                                                 val imageUrl = imageFile.url.takeIf { it.isNotBlank() } ?: return@buildDirectoryImagePreviewRequest null
@@ -690,7 +1026,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                     )
                 }
             }
-        } else if (isLoadingAsmrOne) {
+        } else if (isLoadingAsmrOne || (asmrOneTree.isNotEmpty() && browser == null)) {
             item(key = "dlsite-one-content") {
                 Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
                     DlsiteDirectoryLoadingPanel()
@@ -698,21 +1034,17 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             }
         } else {
             item(key = "dlsite-one-content") {
-                Box(
-                    modifier = dlsiteAnimatedSectionModifier(
-                        Modifier.fillMaxWidth().height(120.dp),
-                        animateIntro = animateIntro
-                    ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text("未收录")
-                }
+                DlsiteSectionEmptyState(
+                    text = "ONE 暂未收录",
+                    artworkKind = DlsiteEmptyArtworkKind.One,
+                    modifier = dlsiteAnimatedSectionModifier(Modifier, animateIntro)
+                )
             }
         }
         item(key = "dlsite-trial-header") {
             Row(
                 modifier = dlsiteAnimatedSectionModifier(
-                    Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                    Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
                     animateIntro = animateIntro
                 ),
                 verticalAlignment = Alignment.CenterVertically
@@ -730,15 +1062,19 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         }
         if (trialTracks.isEmpty()) {
             item(key = "dlsite-trial-content") {
-                Box(
-                    modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro),
-                    contentAlignment = Alignment.Center
-                ) {
-                    if (isLoadingTrial) {
+                if (isLoadingTrial) {
+                    Box(
+                        modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro),
+                        contentAlignment = Alignment.Center
+                    ) {
                         DlsiteTrialLoadingList()
-                    } else {
-                        Text("暂无试听")
                     }
+                } else {
+                    DlsiteSectionEmptyState(
+                        text = "暂无试听 / 试看",
+                        artworkKind = DlsiteEmptyArtworkKind.Trial,
+                        modifier = dlsiteAnimatedSectionModifier(Modifier, animateIntro)
+                    )
                 }
             }
         } else {
@@ -748,7 +1084,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                         modifier = dlsiteAnimatedSectionModifier(
                             Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 16.dp),
+                                .padding(horizontal = AlbumDetailHorizontalPadding),
                             animateIntro = animateIntro
                         )
                     )
@@ -757,7 +1093,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             items(items = videoTracks, key = { track -> if (track.id > 0L) track.id else track.path }, contentType = { "trialVideo" }) { track ->
                 Column(
                     modifier = dlsiteAnimatedSectionModifier(
-                        Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                        Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
                         animateIntro = animateIntro
                     )
                 ) {
@@ -777,7 +1113,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             }
             items(items = audioTracks, key = { track -> if (track.id > 0L) track.id else track.path }, contentType = { "trialAudioTrack" }) { track ->
                 Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
-                    TrackItem(
+                    DlsiteTrialAudioItem(
                         track = track,
                         onClick = { onPlayTracks(album, audioTracks, track) },
                         onAddToPlaylist = { onAddToPlaylist(track) }
@@ -804,6 +1140,7 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
     rjCode: String,
     tree: List<AsmrOneTrackNodeResponse>,
     isLoading: Boolean,
+    shouldAutoLoad: Boolean,
     onOpenLogin: () -> Unit,
     onEnsureLoaded: () -> Unit,
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
@@ -831,12 +1168,12 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
     val lifecycleOwner = LocalLifecycleOwner.current
     val authStore = remember { DlsiteAuthStore(context) }
     val scope = rememberCoroutineScope()
-    var loggedIn by remember { mutableStateOf(authStore.isLoggedIn()) }
+    var loggedIn by remember { mutableStateOf(authStore.isPlayLoggedIn()) }
 
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                loggedIn = authStore.isLoggedIn()
+                loggedIn = authStore.isPlayLoggedIn()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -854,8 +1191,8 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
         return
     }
 
-    LaunchedEffect(loggedIn, rjCode) {
-        if (loggedIn) onEnsureLoaded()
+    LaunchedEffect(loggedIn, rjCode, shouldAutoLoad) {
+        if (loggedIn && shouldAutoLoad) onEnsureLoaded()
     }
 
     val headerItemCount = 2
@@ -878,13 +1215,27 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
     }
 
     val rj = rjCode.trim().uppercase()
-    val leafTracks = remember(tree) { flattenAsmrOneTracksForUi(tree) }
-    val leafByRelPath = remember(leafTracks) { leafTracks.associateBy { it.relativePath } }
-    val remoteIndex = remember(tree, album.id, album.coverPath, album.coverUrl) {
-        buildRemoteTreeIndex(tree, album)
-    }
     var currentPath by rememberSaveable(treeStateKey) { mutableStateOf(initialCurrentPath.trim().trim('/')) }
-    val browser = remember(remoteIndex, currentPath) { buildRemoteDirectoryBrowser(remoteIndex, currentPath) }
+    val leafTracks by produceState(initialValue = emptyList<AsmrOneLeafUi>(), key1 = tree) {
+        value = withContext(Dispatchers.Default) { flattenAsmrOneTracksForUi(tree) }
+    }
+    val leafByRelPath by produceState(initialValue = emptyMap<String, AsmrOneLeafUi>(), key1 = leafTracks) {
+        value = withContext(Dispatchers.Default) { leafTracks.associateBy { it.relativePath } }
+    }
+    val remoteIndex by produceState<RemoteTreeIndex?>(
+        initialValue = null,
+        tree,
+        album.id,
+        album.coverPath,
+        album.coverUrl,
+    ) {
+        value = withContext(Dispatchers.Default) { buildRemoteTreeIndex(tree, album) }
+    }
+    val browser by produceState<DirectoryBrowserResult?>(initialValue = null, key1 = remoteIndex, key2 = currentPath) {
+        value = remoteIndex?.let { index ->
+            withContext(Dispatchers.Default) { buildRemoteDirectoryBrowser(index, currentPath) }
+        }
+    }
     LaunchedEffect(currentPath, treeStateKey) {
         onPersistCurrentPath(currentPath)
     }
@@ -900,7 +1251,7 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
         item(key = "dlplay-header:$treeStateKey") { header() }
         item {
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp),
+                modifier = Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -936,14 +1287,24 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
             return@LazyColumn
         }
 
+        if (browser == null) {
+            item {
+                Box(modifier = Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
+                    EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
+                }
+            }
+            return@LazyColumn
+        }
+
         item {
+            val browserValue = browser ?: return@item
             DirectoryBrowserPanelV4(
                 panelKey = treeStateKey,
                 currentPath = currentPath,
-                breadcrumbs = browser.breadcrumbs,
-                batchTargets = browser.batchTargets,
-                folders = browser.folders,
-                files = browser.files,
+                breadcrumbs = browserValue.breadcrumbs,
+                batchTargets = browserValue.batchTargets,
+                folders = browserValue.folders,
+                files = browserValue.files,
                 onNavigate = { path -> currentPath = path },
                 onAddToFavorites = onAddMediaItemsToFavorites,
                 onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
@@ -963,7 +1324,7 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
                                     scope.launch {
                                         val prepared = withContext(Dispatchers.Default) {
                                             val folderPath = file.path.substringBeforeLast('/', "")
-                                            val siblings = browser.files
+                                            val siblings = browserValue.files
                                                 .filter { sibling ->
                                                     sibling.path.substringBeforeLast('/', "") == folderPath &&
                                                         (sibling.fileType == TreeFileType.Audio || sibling.fileType == TreeFileType.Video) &&
@@ -998,7 +1359,7 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
                                 }
                                 TreeFileType.Image -> {
                                     val request = buildDirectoryImagePreviewRequest(
-                                        files = browser.files,
+                                        files = browserValue.files,
                                         clickedPath = file.path,
                                         toPreviewItem = { imageFile ->
                                             val imageUrl = imageFile.url.takeIf { it.isNotBlank() } ?: return@buildDirectoryImagePreviewRequest null

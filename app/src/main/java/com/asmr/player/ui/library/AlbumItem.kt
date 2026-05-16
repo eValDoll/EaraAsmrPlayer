@@ -51,6 +51,8 @@ private val AlbumItemHorizontalPadding = 8.dp
 private val AlbumItemVerticalPadding = 2.dp
 private val AlbumItemMetaLineVerticalPadding = 1.dp
 private val AlbumItemCoverContentSpacing = 8.dp
+private val AlbumGridInfoHorizontalPadding = 6.dp
+private val AlbumGridInfoVerticalPadding = 8.dp
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
@@ -154,6 +156,7 @@ fun AlbumItem(
                             rjOnClick = onRjClick?.let { click -> { click(rj) } },
                             circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
                             leadingVisual = Icon,
+                            order = AlbumPrimaryMetaOrder.CircleThenRj,
                         )
                     }
 
@@ -353,7 +356,7 @@ fun AlbumGridItem(
         }
         
         Column(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = AlbumGridInfoHorizontalPadding, vertical = AlbumGridInfoVerticalPadding),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(

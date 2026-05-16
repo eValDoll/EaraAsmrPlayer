@@ -175,6 +175,8 @@ private val LibraryPageHorizontalPadding = 8.dp
 private val LibraryTrackListHeaderCornerRadius = 10.dp
 private val LibraryTrackListItemCornerRadius = 10.dp
 private val LibraryAlbumItemVerticalPadding = 2.dp
+private val LibraryAlbumGridInfoHorizontalPadding = 6.dp
+private val LibraryAlbumGridInfoVerticalPadding = 8.dp
 
 private fun Album.withUserTags(userTags: List<String>): Album {
     if (userTags.isEmpty()) return this
@@ -1396,7 +1398,7 @@ private fun AlbumGridItem(
         }
         
         Column(
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 8.dp),
+            modifier = Modifier.padding(horizontal = LibraryAlbumGridInfoHorizontalPadding, vertical = LibraryAlbumGridInfoVerticalPadding),
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
@@ -1591,6 +1593,7 @@ private fun AlbumItem(
                         rjOnClick = onRjClick?.let { click -> { click(rj) } },
                         circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
                         leadingVisual = AlbumMetaLeadingVisual.Icon,
+                        order = AlbumPrimaryMetaOrder.CircleThenRj,
                     )
 
                     if (album.cv.isNotBlank()) {

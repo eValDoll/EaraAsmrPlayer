@@ -165,12 +165,12 @@ internal fun AlbumDescription(album: Album) {
     }
 
     Surface(
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(14.dp),
         tonalElevation = 1.dp,
         color = colorScheme.surface.copy(alpha = 0.5f),
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp)
     ) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -249,7 +249,7 @@ internal fun DlsiteRecommendationsBlocks(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 10.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         DlsiteRecommendationsBlock(
@@ -319,7 +319,7 @@ private fun DlsiteRecommendedWorkCard(
         }
     }
     Surface(
-        shape = RoundedCornerShape(14.dp),
+        shape = RoundedCornerShape(10.dp),
         tonalElevation = 1.dp,
         color = colorScheme.surface.copy(alpha = 0.35f),
         modifier = Modifier
@@ -447,7 +447,7 @@ internal fun AlbumTracks(album: Album, onTrackClick: (Track) -> Unit) {
                         ) {
                             Text(
                                 text = group,
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                modifier = Modifier.padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
                                 style = MaterialTheme.typography.labelLarge,
                                 color = MaterialTheme.colorScheme.primary
                             )
@@ -465,7 +465,7 @@ internal fun AlbumTracks(album: Album, onTrackClick: (Track) -> Unit) {
                     TrackItem(track = track, showSubtitleStamp = showStamp, onClick = { onTrackClick(track) })
                     if (index < tracks.size - 1) {
                         HorizontalDivider(
-                             modifier = Modifier.padding(horizontal = 16.dp),
+                             modifier = Modifier.padding(horizontal = AlbumDetailHorizontalPadding),
                              thickness = 0.5.dp,
                              color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                          )

@@ -163,7 +163,8 @@ internal data class PreparedMediaPlayback(
 private val AlbumDetailTabContentGap = 12.dp
 private val AlbumDetailTabCollapseOvershoot = 10.dp
 private const val AlbumDetailInitialIntroDurationMs = 1200L
-private val AlbumDetailHorizontalPadding = 8.dp
+internal val AlbumDetailHorizontalPadding = 8.dp
+private val AlbumDetailHeaderCornerRadius = 10.dp
 
 private val DlsiteElasticResizeSpring = spring<IntSize>(
     dampingRatio = Spring.DampingRatioLowBouncy,
@@ -403,7 +404,6 @@ fun AlbumDetailScreen(
                             }
                             2 -> {
                                 viewModel.ensureDlsiteLoaded()
-                                viewModel.ensureDlsitePlayLoaded()
                             }
                         }
                     }
@@ -549,6 +549,7 @@ fun AlbumDetailScreen(
                                         rjCode = model.rjCode,
                                         tree = model.dlsitePlayTree,
                                         isLoading = model.isLoadingDlsitePlay,
+                                        shouldAutoLoad = selectedTab == 2,
                                         onOpenLogin = onOpenDlsiteLogin,
                                         onEnsureLoaded = { viewModel.ensureDlsitePlayLoaded() },
                                         onPlayTracks = onPlayTracks,
@@ -942,7 +943,7 @@ private fun AlbumHeader(
     val headerContainerModifier = Modifier
         .fillMaxWidth()
         .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 12.dp)
-        .clip(RoundedCornerShape(24.dp))
+        .clip(RoundedCornerShape(AlbumDetailHeaderCornerRadius))
         .background(colorScheme.surface.copy(alpha = 0.5f))
     val langCandidates = remember(dlsiteEditions) {
         dlsiteEditions
