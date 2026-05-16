@@ -944,6 +944,18 @@ private fun AlbumHeader(
         .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 12.dp)
         .clip(RoundedCornerShape(24.dp))
         .background(colorScheme.surface.copy(alpha = 0.5f))
+    val langCandidates = remember(dlsiteEditions) {
+        dlsiteEditions
+            .filter { it.lang in setOf("JPN", "CHI_HANS", "CHI_HANT") }
+            .distinctBy { it.lang }
+            .sortedWith(compareBy({ it.displayOrder }, { it.lang }))
+    }
+    val selectedLangLabel = remember(dlsiteSelectedLang, langCandidates) {
+        langCandidates.firstOrNull { it.lang.equals(dlsiteSelectedLang, ignoreCase = true) }
+            ?.let { dlsiteLanguageButtonLabel(it.lang) }
+            ?: dlsiteLanguageButtonLabel(dlsiteSelectedLang)
+    }
+    var languageMenuExpanded by rememberSaveable { mutableStateOf(false) }
 
     Column(
         modifier = dlsiteElasticItemModifier(
@@ -1047,45 +1059,6 @@ private fun AlbumHeader(
                     }
                 }
 
-                val langCandidates = remember(dlsiteEditions) {
-                    dlsiteEditions
-                        .filter { it.lang in setOf("JPN", "CHI_HANS", "CHI_HANT") }
-                        .distinctBy { it.lang }
-                        .sortedWith(compareBy({ it.displayOrder }, { it.lang }))
-                }
-
-                if (langCandidates.size > 1) {
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        langCandidates.forEach { edition ->
-                            val selected = edition.lang.equals(dlsiteSelectedLang, ignoreCase = true)
-                            val label = when (edition.lang) {
-                                "CHI_HANS" -> "简中"
-                                "CHI_HANT" -> "繁中"
-                                else -> "日语"
-                            }
-                            FilterChip(
-                                selected = selected,
-                                onClick = { onDlsiteLangSelected(edition.lang) },
-                                label = { Text(label) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = colorScheme.primary.copy(alpha = 0.2f),
-                                    selectedLabelColor = colorScheme.primary,
-                                    selectedLeadingIconColor = colorScheme.primary
-                                ),
-                                border = FilterChipDefaults.filterChipBorder(
-                                    enabled = true,
-                                    selected = selected,
-                                    borderColor = colorScheme.primary.copy(alpha = 0.3f),
-                                    selectedBorderColor = colorScheme.primary
-                                )
-                            )
-                        }
-                    }
-                }
-
                 if (album.tags.isNotEmpty()) {
                     AlbumHeaderInfoReveal(
                         revealKey = "$headerAnimationScopeKey:tags",
@@ -1106,103 +1079,205 @@ private fun AlbumHeader(
                     delayMillis = 160,
                     enabled = animateIntro
                 ) {
-                Row(
-                    modifier = Modifier.padding(top = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Row(modifier = Modifier.height(36.dp).weight(1f)) {
-                        val radius = 10.dp
-                        val leftShape = if (canSaveOnline) {
-                            RoundedCornerShape(topStart = radius, bottomStart = radius, topEnd = 0.dp, bottomEnd = 0.dp)
-                        } else {
-                            RoundedCornerShape(radius)
+                    BoxWithConstraints(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp)
+                    ) {
+                        val compact = maxWidth < 400.dp
+                        val ultraCompact = maxWidth < 340.dp
+                        val actionGap = if (compact) 8.dp else 10.dp
+                        val primaryButtonPadding = when {
+                            ultraCompact -> 6.dp
+                            compact -> 8.dp
+                            else -> 12.dp
                         }
-                        val rightShape = RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp, topEnd = radius, bottomEnd = radius)
+                        val smallButtonPadding = when {
+                            ultraCompact -> 6.dp
+                            compact -> 8.dp
+                            else -> 12.dp
+                        }
+                        val primaryIconSize = if (compact) 16.dp else 18.dp
+                        val primaryIconGap = if (compact) 4.dp else 6.dp
+                        val selectorMinWidth = when {
+                            ultraCompact -> 68.dp
+                            compact -> 76.dp
+                            else -> 96.dp
+                        }
+                        val selectorMaxWidth = when {
+                            ultraCompact -> 92.dp
+                            compact -> 104.dp
+                            else -> 140.dp
+                        }
+                        val externalMinWidth = when {
+                            ultraCompact -> 46.dp
+                            compact -> 50.dp
+                            else -> 56.dp
+                        }
+                        val externalMaxWidth = when {
+                            ultraCompact -> 58.dp
+                            compact -> 64.dp
+                            else -> 76.dp
+                        }
 
-                        Button(
-                            onClick = onDownloadClick,
-                            enabled = downloadEnabled,
-                            modifier = Modifier.fillMaxHeight().weight(1f),
-                            shape = leftShape,
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = colorScheme.primary)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(actionGap),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("下载", style = MaterialTheme.typography.labelMedium)
-                        }
-
-                        if (canSaveOnline) {
-                            Button(
-                                onClick = onSaveClick,
-                                enabled = saveEnabled,
-                                modifier = Modifier.fillMaxHeight().weight(1f),
-                                shape = rightShape,
-                                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = colorScheme.primary.copy(alpha = 0.14f),
-                                    contentColor = colorScheme.primary
-                                )
+                            Row(
+                                modifier = Modifier
+                                    .height(36.dp)
+                                    .weight(1f)
                             ) {
-                                Icon(Icons.Default.Bookmark, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(modifier = Modifier.width(6.dp))
-                                Text("保存", style = MaterialTheme.typography.labelMedium)
+                                val radius = 10.dp
+                                val leftShape = if (canSaveOnline) {
+                                    RoundedCornerShape(topStart = radius, bottomStart = radius, topEnd = 0.dp, bottomEnd = 0.dp)
+                                } else {
+                                    RoundedCornerShape(radius)
+                                }
+                                val rightShape = RoundedCornerShape(topStart = 0.dp, bottomStart = 0.dp, topEnd = radius, bottomEnd = radius)
+
+                                Button(
+                                    onClick = onDownloadClick,
+                                    enabled = downloadEnabled,
+                                    modifier = Modifier
+                                        .fillMaxHeight()
+                                        .weight(1f),
+                                    shape = leftShape,
+                                    contentPadding = PaddingValues(horizontal = primaryButtonPadding, vertical = 0.dp),
+                                    colors = ButtonDefaults.buttonColors(containerColor = colorScheme.primary)
+                                ) {
+                                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(primaryIconSize))
+                                    Spacer(modifier = Modifier.width(primaryIconGap))
+                                    Text("下载", style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                                }
+
+                                if (canSaveOnline) {
+                                    Button(
+                                        onClick = onSaveClick,
+                                        enabled = saveEnabled,
+                                        modifier = Modifier
+                                            .fillMaxHeight()
+                                            .weight(1f),
+                                        shape = rightShape,
+                                        contentPadding = PaddingValues(horizontal = primaryButtonPadding, vertical = 0.dp),
+                                        colors = ButtonDefaults.buttonColors(
+                                            containerColor = colorScheme.primary.copy(alpha = 0.14f),
+                                            contentColor = colorScheme.primary
+                                        )
+                                    ) {
+                                        Icon(Icons.Default.Bookmark, contentDescription = null, modifier = Modifier.size(primaryIconSize))
+                                        Spacer(modifier = Modifier.width(primaryIconGap))
+                                        Text("保存", style = MaterialTheme.typography.labelMedium, maxLines = 1)
+                                    }
+                                }
+                            }
+
+                            if (showGroupButton) {
+                                OutlinedButton(
+                                    onClick = {
+                                        val id = album.id
+                                        if (id > 0L) onOpenGroupPicker(id)
+                                    },
+                                    enabled = album.id > 0L,
+                                    modifier = Modifier
+                                        .height(36.dp)
+                                        .widthIn(min = selectorMinWidth, max = selectorMaxWidth),
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = smallButtonPadding, vertical = 0.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, colorScheme.primary.copy(alpha = 0.3f))
+                                ) {
+                                    Icon(
+                                        Icons.Default.CreateNewFolder,
+                                        contentDescription = null,
+                                        tint = colorScheme.primary,
+                                        modifier = Modifier.size(primaryIconSize)
+                                    )
+                                    Spacer(modifier = Modifier.width(primaryIconGap))
+                                    Text("分组", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary, maxLines = 1)
+                                }
+                            }
+
+                            if (langCandidates.size > 1) {
+                                Box {
+                                    OutlinedButton(
+                                        onClick = { languageMenuExpanded = true },
+                                        modifier = Modifier
+                                            .height(36.dp)
+                                            .widthIn(min = selectorMinWidth, max = selectorMaxWidth),
+                                        shape = RoundedCornerShape(10.dp),
+                                        contentPadding = PaddingValues(horizontal = smallButtonPadding, vertical = 0.dp),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, colorScheme.primary.copy(alpha = 0.3f))
+                                    ) {
+                                        Text(
+                                            text = selectedLangLabel,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = colorScheme.primary,
+                                            maxLines = 1
+                                        )
+                                        Spacer(modifier = Modifier.width(if (compact) 2.dp else 4.dp))
+                                        Icon(
+                                            imageVector = Icons.Default.ArrowDropDown,
+                                            contentDescription = null,
+                                            tint = colorScheme.primary,
+                                            modifier = Modifier.size(primaryIconSize)
+                                        )
+                                    }
+                                    DropdownMenu(
+                                        expanded = languageMenuExpanded,
+                                        onDismissRequest = { languageMenuExpanded = false }
+                                    ) {
+                                        langCandidates.forEach { edition ->
+                                            DropdownMenuItem(
+                                                text = { Text(dlsiteLanguageButtonLabel(edition.lang)) },
+                                                onClick = {
+                                                    languageMenuExpanded = false
+                                                    onDlsiteLangSelected(edition.lang)
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            listOf(
+                                "DLsite" to dlsiteUrl,
+                                "ONE" to asmrOneUrl
+                            ).forEach { (label, url) ->
+                                OutlinedButton(
+                                    onClick = {
+                                        if (url.isNotBlank()) {
+                                            context.startActivity(
+                                                Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            )
+                                        }
+                                    },
+                                    enabled = url.isNotBlank(),
+                                    modifier = Modifier
+                                        .height(36.dp)
+                                        .widthIn(min = externalMinWidth, max = externalMaxWidth),
+                                    shape = RoundedCornerShape(10.dp),
+                                    contentPadding = PaddingValues(horizontal = smallButtonPadding, vertical = 0.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, colorScheme.primary.copy(alpha = 0.3f))
+                                ) {
+                                    Text(label, style = MaterialTheme.typography.labelMedium, color = colorScheme.primary, maxLines = 1)
+                                }
                             }
                         }
                     }
-                    
-                    if (showGroupButton) {
-                        OutlinedButton(
-                            onClick = {
-                                val id = album.id
-                                if (id > 0L) onOpenGroupPicker(id)
-                            },
-                            enabled = album.id > 0L,
-                            modifier = Modifier
-                                .height(36.dp)
-                                .widthIn(min = 98.dp, max = 140.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, colorScheme.primary.copy(alpha = 0.3f))
-                        ) {
-                            Icon(
-                                Icons.Default.CreateNewFolder,
-                                contentDescription = null,
-                                tint = colorScheme.primary,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("分组", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
-                        }
-                    }
-
-                    listOf(
-                        "DLsite" to dlsiteUrl,
-                        "ONE" to asmrOneUrl
-                    ).forEach { (label, url) ->
-                        OutlinedButton(
-                            onClick = {
-                                if (url.isNotBlank()) {
-                                    context.startActivity(
-                                        Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                    )
-                                }
-                            },
-                            enabled = url.isNotBlank(),
-                            modifier = Modifier
-                                .height(36.dp)
-                                .widthIn(min = 56.dp, max = 76.dp),
-                            shape = RoundedCornerShape(10.dp),
-                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, colorScheme.primary.copy(alpha = 0.3f))
-                        ) {
-                            Text(label, style = MaterialTheme.typography.labelMedium, color = colorScheme.primary)
-                        }
-                    }
-                }
                 }
             }
         }
+    }
+}
+
+private fun dlsiteLanguageButtonLabel(lang: String): String {
+    return when (lang.trim().uppercase()) {
+        "CHI_HANS" -> "简中"
+        "CHI_HANT" -> "繁中"
+        "JPN" -> "日语"
+        else -> lang.trim().ifBlank { "日语" }
     }
 }
 

@@ -693,7 +693,6 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                     else -> -1L
                 }
                 val buffer = ByteArray(DOWNLOAD_BUFFER_SIZE)
-                var lastProgressAt = 0L
                 var lastBytes = 0L
                 var lastTs = System.currentTimeMillis()
 
@@ -740,7 +739,7 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                             pendingTrafficBytes += read.toLong()
 
                             val now = System.currentTimeMillis()
-                            val shouldUpdate = downloaded - lastProgressAt >= PROGRESS_UPDATE_BYTES || now - lastTs >= PROGRESS_UPDATE_INTERVAL_MS
+                            val shouldUpdate = now - lastTs >= PROGRESS_UPDATE_INTERVAL_MS
                             if (shouldUpdate) {
                                 flushTrafficStats()
                                 val dt = (now - lastTs).coerceAtLeast(1)
@@ -753,7 +752,6 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                                     speed = speed,
                                     updatedAt = now
                                 )
-                                lastProgressAt = downloaded
                                 lastBytes = downloaded
                                 lastTs = now
                             }
@@ -831,7 +829,6 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
 
     companion object {
         private const val DOWNLOAD_BUFFER_SIZE = 64 * 1024
-        private const val PROGRESS_UPDATE_BYTES = 256 * 1024L
         private const val PROGRESS_UPDATE_INTERVAL_MS = 1_000L
 
         @Volatile

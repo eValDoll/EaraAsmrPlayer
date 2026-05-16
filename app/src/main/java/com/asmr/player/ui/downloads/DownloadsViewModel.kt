@@ -27,6 +27,7 @@ import java.util.UUID
 import androidx.work.workDataOf
 import javax.inject.Inject
 import com.asmr.player.util.MessageManager
+import kotlin.math.max
 
 enum class DownloadItemState {
     ENQUEUED,
@@ -59,6 +60,9 @@ data class DownloadTaskUi(
     val state: DownloadItemState,
     val progressFraction: Float?,
     val hasUnknownTotalRunning: Boolean,
+    val downloadedBytes: Long,
+    val totalBytes: Long?,
+    val speed: Long,
     val items: List<DownloadItemUi>
 )
 
@@ -123,6 +127,15 @@ class DownloadsViewModel @Inject constructor(
                         allSucceeded = allSucceeded,
                         hasUnknownTotalRunning = hasUnknownTotalRunning
                     )
+                    val downloadedBytes = items.sumOf { it.downloaded.coerceAtLeast(0L) }
+                    val totalBytes = resolveTaskTotalBytes(
+                        items = items,
+                        allSucceeded = allSucceeded,
+                        progressFraction = progressFraction
+                    )
+                    val speed = items.sumOf { item ->
+                        if (item.state == DownloadItemState.RUNNING) item.speed.coerceAtLeast(0L) else 0L
+                    }
 
                     DownloadTaskUi(
                         taskId = task.id,
@@ -133,6 +146,9 @@ class DownloadsViewModel @Inject constructor(
                         state = state,
                         progressFraction = progressFraction,
                         hasUnknownTotalRunning = hasUnknownTotalRunning,
+                        downloadedBytes = downloadedBytes,
+                        totalBytes = totalBytes,
+                        speed = speed,
                         items = items
                     )
                 }
@@ -182,6 +198,39 @@ class DownloadsViewModel @Inject constructor(
 
         if (aggregateProgress <= 0.0 && hasUnknownTotalRunning) return null
         return aggregateProgress.toFloat().coerceIn(0f, 1f)
+    }
+
+    private fun resolveTaskTotalBytes(
+        items: List<DownloadItemUi>,
+        allSucceeded: Boolean,
+        progressFraction: Float?
+    ): Long? {
+        if (items.isEmpty()) return null
+
+        val downloadedBytes = items.sumOf { it.downloaded.coerceAtLeast(0L) }
+        val knownTotalBytes = items.sumOf { item ->
+            when {
+                item.total > 0L -> item.total
+                item.state == DownloadItemState.SUCCEEDED -> item.downloaded.coerceAtLeast(0L)
+                else -> 0L
+            }
+        }
+
+        if (allSucceeded) {
+            return items.sumOf { item -> max(item.total, item.downloaded).coerceAtLeast(0L) }
+        }
+
+        val estimatedTotalBytes = progressFraction
+            ?.takeIf { it > 0f && it < 1f && downloadedBytes > 0L }
+            ?.let { fraction ->
+                (downloadedBytes.toDouble() / fraction.toDouble()).toLong().coerceAtLeast(downloadedBytes)
+            }
+
+        return when {
+            estimatedTotalBytes != null -> max(estimatedTotalBytes, knownTotalBytes).takeIf { it > 0L }
+            knownTotalBytes > downloadedBytes -> knownTotalBytes
+            else -> null
+        }
     }
 
     fun cancelItem(workId: String) {
