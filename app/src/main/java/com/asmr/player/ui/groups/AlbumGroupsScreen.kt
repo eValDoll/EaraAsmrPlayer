@@ -64,6 +64,8 @@ import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.theme.AsmrTheme
 
 private val AlbumGroupsPageHorizontalPadding = 8.dp
+private val AlbumGroupRowActionButtonSize = 34.dp
+private val AlbumGroupRowActionIconSize = 18.dp
 
 @Composable
 fun AlbumGroupsScreen(
@@ -207,11 +209,21 @@ private fun AlbumGroupRow(
                     color = colorScheme.textTertiary
                 )
             }
-            IconButton(onClick = { showRename = true }) {
-                Icon(Icons.Default.Edit, contentDescription = null, tint = colorScheme.textSecondary)
+            IconButton(onClick = { showRename = true }, modifier = Modifier.size(AlbumGroupRowActionButtonSize)) {
+                Icon(
+                    Icons.Default.Edit,
+                    contentDescription = null,
+                    tint = colorScheme.textSecondary,
+                    modifier = Modifier.size(AlbumGroupRowActionIconSize)
+                )
             }
-            IconButton(onClick = { showDeleteConfirm = true }) {
-                Icon(Icons.Default.Delete, contentDescription = null, tint = colorScheme.danger.copy(alpha = 0.7f))
+            IconButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.size(AlbumGroupRowActionButtonSize)) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = colorScheme.danger.copy(alpha = 0.7f),
+                    modifier = Modifier.size(AlbumGroupRowActionIconSize)
+                )
             }
         }
     }

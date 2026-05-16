@@ -60,6 +60,8 @@ import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 
 private val PlaylistsPageHorizontalPadding = 8.dp
+private val PlaylistRowActionButtonSize = 34.dp
+private val PlaylistRowActionIconSize = 18.dp
 
 @Composable
 fun PlaylistsScreen(
@@ -208,22 +210,26 @@ private fun PlaylistRow(
             }
             IconButton(
                 onClick = { showRename = true },
-                enabled = playlist.category != "system"
+                enabled = playlist.category != "system",
+                modifier = Modifier.size(PlaylistRowActionButtonSize)
             ) {
                 Icon(
                     Icons.Default.Edit,
                     contentDescription = null,
-                    tint = if (playlist.category != "system") colorScheme.textSecondary else colorScheme.textTertiary
+                    tint = if (playlist.category != "system") colorScheme.textSecondary else colorScheme.textTertiary,
+                    modifier = Modifier.size(PlaylistRowActionIconSize)
                 )
             }
             IconButton(
                 onClick = { showDeleteConfirm = true },
-                enabled = playlist.category != "system"
+                enabled = playlist.category != "system",
+                modifier = Modifier.size(PlaylistRowActionButtonSize)
             ) {
                 Icon(
                     Icons.Default.Delete, 
                     contentDescription = null, 
-                    tint = if (playlist.category != "system") colorScheme.danger.copy(alpha = 0.7f) else colorScheme.textTertiary
+                    tint = if (playlist.category != "system") colorScheme.danger.copy(alpha = 0.7f) else colorScheme.textTertiary,
+                    modifier = Modifier.size(PlaylistRowActionIconSize)
                 )
             }
         }
