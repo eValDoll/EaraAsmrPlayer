@@ -65,8 +65,8 @@ android {
         applicationId = "com.asmr.player"
         minSdk = 24
         targetSdk = 34
-        versionCode = 10005
-        versionName = "1.0.5"
+        versionCode = 10100
+        versionName = "1.1.0"
         buildConfigField("String", "UPDATE_REPO_OWNER", "\"eValDoll\"")
         buildConfigField("String", "UPDATE_REPO_NAME", "\"EaraAsmrPlayer\"")
 
