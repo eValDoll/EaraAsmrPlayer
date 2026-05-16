@@ -118,6 +118,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.zIndex
 import com.asmr.player.ui.common.rememberDominantColor
 import com.asmr.player.ui.common.SubtitleStamp
+import com.asmr.player.ui.common.AudioItemMenuButtonSize
+import com.asmr.player.ui.common.AudioItemSubtitleStampSpacing
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
@@ -511,10 +513,10 @@ internal fun TrackItem(
         },
         trailingContent = {
             if (showSubtitleStamp) {
-                SubtitleStamp(modifier = Modifier.padding(end = 8.dp))
+                SubtitleStamp(modifier = Modifier.padding(end = AudioItemSubtitleStampSpacing))
             }
             if (onAddToPlaylist != null) {
-                IconButton(onClick = onAddToPlaylist) {
+                IconButton(onClick = onAddToPlaylist, modifier = Modifier.size(AudioItemMenuButtonSize)) {
                     Icon(Icons.AutoMirrored.Filled.PlaylistAdd, contentDescription = null, tint = colorScheme.onSurfaceVariant)
                 }
             }

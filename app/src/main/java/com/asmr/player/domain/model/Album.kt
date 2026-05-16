@@ -21,6 +21,9 @@ data class Album(
     val priceJpy: Int = 0,
     val hasAsmrOne: Boolean = false,
     val description: String = "",
+    val audioTrackCount: Int = 0,
+    val audioTotalDuration: Double = 0.0,
+    val audioTotalSizeBytes: Long = 0L,
     val tracks: List<Track> = emptyList()
 ) {
     fun getAllLocalPaths(): List<String> {

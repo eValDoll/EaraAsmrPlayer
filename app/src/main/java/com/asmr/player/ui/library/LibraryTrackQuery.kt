@@ -278,7 +278,10 @@ object LibraryTrackQueryBuilder {
                 a.coverUrl AS coverUrl,
                 CASE WHEN a.coverThumbPath IS NOT NULL AND a.coverThumbPath != '' AND a.coverThumbPath LIKE '%_v2%' THEN a.coverThumbPath ELSE a.coverPath END AS coverPath,
                 a.workId AS workId,
-                a.rjCode AS rjCode
+                a.rjCode AS rjCode,
+                COALESCE(NULLIF(a.audioTrackCount, 0), COUNT(t.id)) AS trackCount,
+                COALESCE(NULLIF(a.audioTotalDuration, 0), SUM(t.duration), 0) AS totalDuration,
+                COALESCE(a.audioTotalSizeBytes, 0) AS totalSizeBytes
             FROM tracks t
             JOIN albums a ON a.id = t.albumId
             """.trimIndent()
@@ -360,6 +363,8 @@ object LibraryTrackQueryBuilder {
             sql.append(" WHERE ")
             sql.append(where.joinToString(" AND "))
         }
+
+        sql.append(" GROUP BY a.id, a.title, a.circle, a.cv, a.coverUrl, coverPath, a.workId, a.rjCode")
 
         sql.append(" ORDER BY ")
         sql.append(

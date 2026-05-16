@@ -59,7 +59,7 @@ class SearchViewModel @Inject constructor(
     private val asmrOneCrawler: AsmrOneCrawler,
     private val settingsRepository: SettingsRepository,
     private val searchCacheStore: SearchCacheStore,
-    private val messageManager: MessageManager
+    val messageManager: MessageManager
 ) : ViewModel() {
     private val pageSize = 30
     private var currentOrder: SearchSortOption = SearchSortOption.Trend

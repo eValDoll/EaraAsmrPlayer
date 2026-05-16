@@ -18,5 +18,8 @@ data class AlbumEntity(
     val coverThumbPath: String = "",
     val workId: String = "",
     val rjCode: String = "",
-    val description: String = ""
+    val description: String = "",
+    val audioTrackCount: Int = 0,
+    val audioTotalDuration: Double = 0.0,
+    val audioTotalSizeBytes: Long = 0L
 )

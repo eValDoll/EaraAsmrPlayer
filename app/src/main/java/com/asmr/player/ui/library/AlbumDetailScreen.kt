@@ -57,14 +57,12 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.state.ToggleableState
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
@@ -165,6 +163,7 @@ internal data class PreparedMediaPlayback(
 private val AlbumDetailTabContentGap = 12.dp
 private val AlbumDetailTabCollapseOvershoot = 10.dp
 private const val AlbumDetailInitialIntroDurationMs = 1200L
+private val AlbumDetailHorizontalPadding = 8.dp
 
 private val DlsiteElasticResizeSpring = spring<IntSize>(
     dampingRatio = Spring.DampingRatioLowBouncy,
@@ -259,7 +258,7 @@ fun AlbumDetailScreen(
                 // 仅用于平板适配：限制内容区域最大宽度并填充可用空间
                 Modifier
                     .fillMaxHeight()
-                    .widthIn(max = 720.dp)
+                    .widthIn(max = 800.dp)
                     .fillMaxWidth()
             }
         ) {
@@ -771,7 +770,7 @@ private fun AlbumDetailTabChrome(
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp)
             .onSizeChanged(onMeasured)
             .graphicsLayer {
                 translationY = animatedOffsetPx -
@@ -916,8 +915,8 @@ private fun AlbumHeader(
     messageManager: MessageManager
 ) {
     val context = LocalContext.current
-    val clipboard = LocalClipboardManager.current
     val colorScheme = AsmrTheme.colorScheme
+    val copyMeta = rememberAlbumMetaCopyAction(messageManager)
     val data = album.coverPath.ifEmpty { album.coverUrl }
     val imageModel = remember(data) {
         val headers = if (data.startsWith("http", ignoreCase = true)) DlsiteAntiHotlink.headersForImageUrl(data) else emptyMap()
@@ -939,16 +938,10 @@ private fun AlbumHeader(
         delay(700)
         headerIntroPlayed = true
     }
-    fun copy(label: String, value: String) {
-        val v = value.trim()
-        if (v.isBlank()) return
-        clipboard.setText(AnnotatedString(v))
-        messageManager.showSuccess("$label 已复制")
-    }
 
     val headerContainerModifier = Modifier
         .fillMaxWidth()
-        .padding(16.dp)
+        .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 12.dp)
         .clip(RoundedCornerShape(24.dp))
         .background(colorScheme.surface.copy(alpha = 0.5f))
 
@@ -1001,7 +994,7 @@ private fun AlbumHeader(
                 Column(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .padding(16.dp),
+                        .padding(12.dp),
                     verticalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     AlbumHeaderInfoReveal(
@@ -1012,7 +1005,7 @@ private fun AlbumHeader(
                     ) {
                     Text(
                         text = album.title,
-                        modifier = Modifier.clickable { copy("标题", album.title) },
+                        modifier = Modifier.clickable { copyMeta("标题", album.title) },
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
                         color = Color.White,
                         maxLines = 2,
@@ -1029,8 +1022,8 @@ private fun AlbumHeader(
                             AlbumPrimaryMetaRow(
                                 rjCode = rj,
                                 circle = circle,
-                                rjOnClick = { copy("RJ", rj) },
-                                circleOnClick = { copy("社团", circle) },
+                                rjOnClick = { copyMeta("RJ", rj) },
+                                circleOnClick = { copyMeta("社团", circle) },
                                 appearance = AlbumMetaAppearance.OnImage,
                             )
                         }
@@ -1038,7 +1031,7 @@ private fun AlbumHeader(
                 }
             }
 
-            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 if (album.cv.isNotBlank()) {
                     AlbumHeaderInfoReveal(
                         revealKey = "$headerAnimationScopeKey:cv",
@@ -1049,7 +1042,7 @@ private fun AlbumHeader(
                             cvText = album.cv,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
-                            onCvClick = { cv -> copy("CV", cv) },
+                            onCvClick = { cv -> copyMeta("CV", cv) },
                         )
                     }
                 }
@@ -1103,7 +1096,7 @@ private fun AlbumHeader(
                             tags = album.tags,
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp),
-                            onTagClick = { tag -> copy("标签", tag) },
+                            onTagClick = { tag -> copyMeta("标签", tag) },
                         )
                     }
                 }

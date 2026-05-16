@@ -373,4 +373,12 @@ object AppDatabaseMigrations {
             db.execSQL("ALTER TABLE playlist_items ADD COLUMN `isVideo` INTEGER NOT NULL DEFAULT 0")
         }
     }
+
+    val MIGRATION_21_22: Migration = object : Migration(21, 22) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE albums ADD COLUMN `audioTrackCount` INTEGER NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE albums ADD COLUMN `audioTotalDuration` REAL NOT NULL DEFAULT 0")
+            db.execSQL("ALTER TABLE albums ADD COLUMN `audioTotalSizeBytes` INTEGER NOT NULL DEFAULT 0")
+        }
+    }
 }

@@ -48,6 +48,7 @@ import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.playback.PlayerConnection
+import com.asmr.player.ui.common.queryTrackFileSize
 import com.asmr.player.util.GlobalSyncState
 import com.asmr.player.util.ScanRootsStore
 import com.asmr.player.util.SubtitleEntry
@@ -130,7 +131,7 @@ class LibraryViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val syncCoordinator: SyncCoordinator,
     @Named("image") private val imageOkHttpClient: OkHttpClient,
-    private val messageManager: MessageManager,
+    val messageManager: MessageManager,
     private val playerConnection: PlayerConnection,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -305,7 +306,45 @@ class LibraryViewModel @Inject constructor(
             coverThumbPath = coverThumbPath,
             workId = workId,
             rjCode = rjCode.ifBlank { workId },
+            audioTrackCount = audioTrackCount,
+            audioTotalDuration = audioTotalDuration,
+            audioTotalSizeBytes = audioTotalSizeBytes,
             description = description
+        )
+    }
+
+    private data class AlbumAudioAggregate(
+        val trackCount: Int,
+        val totalDuration: Double,
+        val totalSizeBytes: Long,
+    )
+
+    private suspend fun computeAlbumAudioAggregate(
+        trackSpecs: List<TrackEntity>,
+    ): AlbumAudioAggregate {
+        val totalSizeBytes = withContext(Dispatchers.IO) {
+            trackSpecs.sumOf { track ->
+                queryTrackFileSize(context, track.path) ?: 0L
+            }
+        }
+        return AlbumAudioAggregate(
+            trackCount = trackSpecs.size,
+            totalDuration = trackSpecs.sumOf { it.duration },
+            totalSizeBytes = totalSizeBytes,
+        )
+    }
+
+    private suspend fun refreshAlbumAudioAggregate(albumId: Long) {
+        if (albumId <= 0L) return
+        val entity = albumDao.getAlbumById(albumId) ?: return
+        val tracks = trackDao.getTracksForAlbumOnce(albumId)
+        val aggregate = computeAlbumAudioAggregate(tracks)
+        albumDao.updateAlbum(
+            entity.copy(
+                audioTrackCount = aggregate.trackCount,
+                audioTotalDuration = aggregate.totalDuration,
+                audioTotalSizeBytes = aggregate.totalSizeBytes,
+            )
         )
     }
 
@@ -1587,6 +1626,8 @@ class LibraryViewModel @Inject constructor(
                 runCatching { database.localTreeCacheDao().deleteByAlbum(track.albumId) }
             }
 
+            refreshAlbumAudioAggregate(track.albumId)
+
             if (deletedFile) {
                 messageManager.showSuccess("已删除文件并移除")
             } else {
@@ -1751,6 +1792,11 @@ class LibraryViewModel @Inject constructor(
                 localPath = null,
                 downloadPath = albumDir.absolutePath
             )
+            val aggregateTracks = albumDir.walkTopDown()
+                .filter { it.isFile && setOf("mp3", "flac", "wav", "m4a", "ogg", "aac", "opus").contains(it.extension.lowercase()) }
+                .map { file -> TrackEntity(albumId = 0L, title = file.nameWithoutExtension, path = file.absolutePath, duration = 0.0, group = "") }
+                .toList()
+            val aggregate = computeAlbumAudioAggregate(aggregateTracks)
             val entity = AlbumEntity(
                 id = existing?.id ?: 0L,
                 title = existing?.title?.takeIf { it.isNotBlank() && it != title } ?: title,
@@ -1765,7 +1811,10 @@ class LibraryViewModel @Inject constructor(
                 coverThumbPath = existing?.coverThumbPath ?: "",
                 workId = existing?.workId?.takeIf { it.isNotBlank() } ?: rj,
                 rjCode = existing?.rjCode?.takeIf { it.isNotBlank() } ?: rj,
-                description = existing?.description ?: ""
+                description = existing?.description ?: "",
+                audioTrackCount = aggregate.trackCount,
+                audioTotalDuration = aggregate.totalDuration,
+                audioTotalSizeBytes = aggregate.totalSizeBytes,
             )
             val albumId = albumDao.insertAlbum(entity)
             upsertAlbumFtsIndex(albumId, entity.copy(id = albumId))
@@ -1996,6 +2045,8 @@ class LibraryViewModel @Inject constructor(
             playerConnection.requestLyricsReload()
         }
 
+        refreshAlbumAudioAggregate(albumId)
+
         upsertLocalTreeCache(
             albumId = albumId,
             albumPaths = listOf(albumDir.absolutePath),
@@ -2199,6 +2250,8 @@ class LibraryViewModel @Inject constructor(
                         }
                     }
                 }
+
+                refreshAlbumAudioAggregate(insertedAlbumId)
 
                 val leaves = all.asSequence()
                     .mapNotNull { node ->
@@ -2561,6 +2614,7 @@ class LibraryViewModel @Inject constructor(
         if (wroteAnySubtitles) {
             playerConnection.requestLyricsReload()
         }
+        refreshAlbumAudioAggregate(albumId)
         if (persistedPaths.isNotEmpty() && cacheLeaves.isNotEmpty()) {
             upsertLocalTreeCache(
                 albumId = albumId,

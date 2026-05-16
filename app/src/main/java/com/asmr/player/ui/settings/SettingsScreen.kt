@@ -73,12 +73,15 @@ import com.asmr.player.ui.common.withAddedBottomPadding
 import java.io.File
 import kotlin.math.abs
 
+private val SettingsPageHorizontalPadding = 8.dp
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     windowSizeClass: WindowSizeClass,
     viewModel: SettingsViewModel = hiltViewModel(),
     libraryViewModel: LibraryViewModel = hiltViewModel(),
+    scrollToTopSignal: Long = 0L,
     onHorizontalControlInteractionChanged: (Boolean) -> Unit = {},
 ) {
     val floatingLyricsEnabled by viewModel.floatingLyricsEnabled.collectAsState()
@@ -150,6 +153,10 @@ fun SettingsScreen(
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground
     ) { padding ->
+        LaunchedEffect(scrollToTopSignal) {
+            if (scrollToTopSignal == 0L) return@LaunchedEffect
+            runCatching { listState.animateScrollToItem(0) }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -161,14 +168,14 @@ fun SettingsScreen(
             } else {
                 Modifier
                     .fillMaxHeight()
-                    .widthIn(max = 720.dp)
+                    .widthIn(max = 760.dp)
                     .fillMaxWidth()
             }
 
             LazyColumn(
                 state = listState,
                 modifier = contentModifier.thinScrollbar(listState),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+                contentPadding = PaddingValues(horizontal = SettingsPageHorizontalPadding, vertical = 10.dp)
                     .withAddedBottomPadding(LocalBottomOverlayPadding.current),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {

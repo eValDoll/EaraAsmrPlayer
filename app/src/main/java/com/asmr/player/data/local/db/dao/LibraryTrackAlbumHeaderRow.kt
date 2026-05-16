@@ -8,5 +8,8 @@ data class LibraryTrackAlbumHeaderRow(
     val coverUrl: String,
     val coverPath: String,
     val workId: String,
-    val rjCode: String
+    val rjCode: String,
+    val trackCount: Int,
+    val totalDuration: Double,
+    val totalSizeBytes: Long
 )

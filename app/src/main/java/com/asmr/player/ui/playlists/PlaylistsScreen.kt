@@ -28,6 +28,7 @@ import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,10 +59,15 @@ import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 
+private val PlaylistsPageHorizontalPadding = 8.dp
+private val PlaylistRowActionButtonSize = 34.dp
+private val PlaylistRowActionIconSize = 18.dp
+
 @Composable
 fun PlaylistsScreen(
     windowSizeClass: WindowSizeClass,
     onPlaylistClick: (PlaylistEntity) -> Unit,
+    scrollToTopSignal: Long = 0L,
     viewModel: PlaylistsViewModel = hiltViewModel()
 ) {
     val playlists by viewModel.playlists.collectAsState()
@@ -78,6 +84,10 @@ fun PlaylistsScreen(
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground
     ) { padding ->
+        LaunchedEffect(scrollToTopSignal) {
+            if (scrollToTopSignal == 0L) return@LaunchedEffect
+            runCatching { listState.animateScrollToItem(0) }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -89,7 +99,7 @@ fun PlaylistsScreen(
             } else {
                 Modifier
                     .fillMaxHeight()
-                    .widthIn(max = 720.dp)
+                    .widthIn(max = 760.dp)
                     .fillMaxWidth()
             }
             Box(modifier = contentModifier) {
@@ -106,7 +116,7 @@ fun PlaylistsScreen(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize().thinScrollbar(listState),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        contentPadding = PaddingValues(horizontal = PlaylistsPageHorizontalPadding, vertical = 8.dp)
                             .withAddedBottomPadding(LocalBottomOverlayPadding.current + 72.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -135,7 +145,7 @@ fun PlaylistsScreen(
                     contentColor = colorScheme.primary,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = LocalBottomOverlayPadding.current + 16.dp)
+                        .padding(end = PlaylistsPageHorizontalPadding, bottom = LocalBottomOverlayPadding.current + 16.dp)
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
                 }
@@ -200,22 +210,26 @@ private fun PlaylistRow(
             }
             IconButton(
                 onClick = { showRename = true },
-                enabled = playlist.category != "system"
+                enabled = playlist.category != "system",
+                modifier = Modifier.size(PlaylistRowActionButtonSize)
             ) {
                 Icon(
                     Icons.Default.Edit,
                     contentDescription = null,
-                    tint = if (playlist.category != "system") colorScheme.textSecondary else colorScheme.textTertiary
+                    tint = if (playlist.category != "system") colorScheme.textSecondary else colorScheme.textTertiary,
+                    modifier = Modifier.size(PlaylistRowActionIconSize)
                 )
             }
             IconButton(
                 onClick = { showDeleteConfirm = true },
-                enabled = playlist.category != "system"
+                enabled = playlist.category != "system",
+                modifier = Modifier.size(PlaylistRowActionButtonSize)
             ) {
                 Icon(
                     Icons.Default.Delete, 
                     contentDescription = null, 
-                    tint = if (playlist.category != "system") colorScheme.danger.copy(alpha = 0.7f) else colorScheme.textTertiary
+                    tint = if (playlist.category != "system") colorScheme.danger.copy(alpha = 0.7f) else colorScheme.textTertiary,
+                    modifier = Modifier.size(PlaylistRowActionIconSize)
                 )
             }
         }

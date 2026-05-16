@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -105,6 +106,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
@@ -169,6 +171,9 @@ internal const val LIBRARY_SORT_BUTTON_TAG = "library_sort_button"
 internal const val LIBRARY_FILTER_BUTTON_TAG = "library_filter_button"
 private val LibraryChromeContentGap = 20.dp
 private val LibraryChromeCollapseOvershoot = 12.dp
+private val LibraryPageHorizontalPadding = 8.dp
+private val LibraryTrackListHeaderCornerRadius = 10.dp
+private val LibraryAlbumItemVerticalPadding = 2.dp
 
 private fun Album.withUserTags(userTags: List<String>): Album {
     if (userTags.isEmpty()) return this
@@ -226,6 +231,7 @@ fun LibraryScreen(
     onOpenPlaylistPicker: (MediaItem) -> Unit = {},
     onOpenGroupPicker: (albumId: Long) -> Unit = { _ -> },
     onOpenFilterScreen: () -> Unit = {},
+    scrollToTopSignal: Long = 0L,
     viewModel: LibraryViewModel = hiltViewModel()
 ) {
     val colorScheme = AsmrTheme.colorScheme
@@ -238,6 +244,7 @@ fun LibraryScreen(
     val userTagsByAlbumId by viewModel.userTagsByAlbumId.collectAsState()
     val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsState()
     val isGlobalSyncRunning by viewModel.isGlobalSyncRunning.collectAsState()
+    val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
     val playerViewModel: PlayerViewModel = hiltViewModel()
     val scope = rememberCoroutineScope()
     var searchText by rememberSaveable { mutableStateOf(querySpec.textQuery.orEmpty()) }
@@ -318,6 +325,14 @@ fun LibraryScreen(
             chromeState.expand()
         }
     }
+    LaunchedEffect(scrollToTopSignal) {
+        if (scrollToTopSignal == 0L) return@LaunchedEffect
+        when (mode) {
+            1 -> runCatching { gridState.animateScrollToItem(0) }
+            else -> runCatching { listState.animateScrollToItem(0) }
+        }
+        chromeState.expand()
+    }
 
     Scaffold(
         contentWindowInsets = StableWindowInsets.navigationBars,
@@ -370,7 +385,7 @@ fun LibraryScreen(
                     } else {
                         Modifier
                             .fillMaxHeight()
-                            .widthIn(max = 720.dp)
+                            .widthIn(max = 760.dp)
                             .fillMaxWidth()
                     }
                 ) {
@@ -521,7 +536,7 @@ fun LibraryScreen(
                                                     Box(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
-                                                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                                                            .padding(horizontal = LibraryPageHorizontalPadding, vertical = 10.dp)
                                                     ) {
                                                         Spacer(modifier = Modifier.height(50.dp))
                                                     }
@@ -537,7 +552,7 @@ fun LibraryScreen(
                                                 Column {
                                                     if (headerIndex > 0) {
                                                         HorizontalDivider(
-                                                            modifier = Modifier.padding(horizontal = 16.dp),
+                                                            modifier = Modifier.padding(horizontal = LibraryPageHorizontalPadding),
                                                             thickness = 0.5.dp,
                                                             color = colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                                                         )
@@ -545,6 +560,10 @@ fun LibraryScreen(
                                                     TrackAlbumHeader(
                                                         albumTitle = header.albumTitle,
                                                         rjCode = header.rjCode.ifBlank { header.workId },
+                                                        trackCount = header.trackCount,
+                                                        totalDurationSeconds = header.totalDuration,
+                                                        totalSizeBytes = header.totalSizeBytes.takeIf { it > 0L }
+                                                            ?: rememberAlbumTrackListTotalSizeBytes(rows),
                                                         coverModel = header.coverPath.takeIf { it.isNotBlank() }.takeIf { it != "null" }
                                                             ?: header.coverUrl.takeIf { it.isNotBlank() },
                                                         onToggle = {
@@ -644,7 +663,7 @@ fun LibraryScreen(
                                                         )
                                                         if (index < rows.size - 1) {
                                                             HorizontalDivider(
-                                                                modifier = Modifier.padding(horizontal = 16.dp),
+                                                                modifier = Modifier.padding(horizontal = LibraryPageHorizontalPadding),
                                                                 thickness = 0.5.dp,
                                                                 color = colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                                                             )
@@ -662,7 +681,7 @@ fun LibraryScreen(
                                             .fillMaxSize()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(gridState),
-                                        contentPadding = PaddingValues(top = topPadding, start = 16.dp, end = 16.dp, bottom = 16.dp)
+                                        contentPadding = PaddingValues(top = topPadding, start = LibraryPageHorizontalPadding, end = LibraryPageHorizontalPadding, bottom = 16.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current),
                                         verticalItemSpacing = AlbumGridItemSpacing,
                                         horizontalArrangement = Arrangement.spacedBy(AlbumGridItemSpacing)
@@ -680,7 +699,11 @@ fun LibraryScreen(
                                                 onLongClick = {
                                                     actionAlbum = mergedAlbum
                                                     showAlbumActions = true
-                                                }
+                                                },
+                                                onRjClick = { copyMeta("RJ", it) },
+                                                onCircleClick = { copyMeta("社团", it) },
+                                                onCvClick = { copyMeta("CV", it) },
+                                                onTagClick = { copyMeta("标签", it) },
                                             )
                                         }
                                     }
@@ -735,7 +758,11 @@ fun LibraryScreen(
                                                 onLongClick = {
                                                     actionAlbum = mergedAlbum
                                                     showAlbumActions = true
-                                                }
+                                                },
+                                                onRjClick = { copyMeta("RJ", it) },
+                                                onCircleClick = { copyMeta("社团", it) },
+                                                onCvClick = { copyMeta("CV", it) },
+                                                onTagClick = { copyMeta("标签", it) },
                                             )
                                         }
                                     }
@@ -971,7 +998,7 @@ internal fun LibraryChrome(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = LibraryPageHorizontalPadding, vertical = 8.dp)
             .onSizeChanged(onMeasured)
             .graphicsLayer {
                 translationY = chromeOffsetPx - (collapseFraction.coerceIn(0f, 1f) * collapseOvershootPx)
@@ -1098,6 +1125,9 @@ private sealed class TagAssignTarget {
 private fun TrackAlbumHeader(
     albumTitle: String,
     rjCode: String,
+    trackCount: Int,
+    totalDurationSeconds: Double,
+    totalSizeBytes: Long?,
     coverModel: Any?,
     onToggle: () -> Unit
 ) {
@@ -1105,9 +1135,10 @@ private fun TrackAlbumHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .background(colorScheme.surface)
+            .clip(RoundedCornerShape(LibraryTrackListHeaderCornerRadius))
+            .background(colorScheme.surface.copy(alpha = 0.5f))
             .clickable { onToggle() }
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = LibraryPageHorizontalPadding, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsmrAsyncImage(
@@ -1120,22 +1151,46 @@ private fun TrackAlbumHeader(
                 .clip(RoundedCornerShape(8.dp)),
         )
         Spacer(modifier = Modifier.width(10.dp))
-        Text(
-            text = albumTitle.ifBlank { rjCode.ifBlank { "专辑" } },
-            style = MaterialTheme.typography.titleMedium,
-            color = colorScheme.textPrimary,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        if (rjCode.isNotBlank()) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                text = rjCode,
-                style = MaterialTheme.typography.labelSmall,
-                color = colorScheme.textTertiary
+                text = albumTitle.ifBlank { rjCode.ifBlank { "专辑" } },
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                color = colorScheme.textPrimary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
+
+            val footerSegments = buildList {
+                if (rjCode.isNotBlank()) add(rjCode)
+                add("$trackCount 音频")
+                Formatting.formatTrackSeconds(totalDurationSeconds).takeIf { it.isNotBlank() }?.let(::add)
+                totalSizeBytes?.takeIf { it > 0L }?.let(Formatting::formatFileSize)?.let(::add)
+            }
+            if (footerSegments.isNotEmpty()) {
+                Text(
+                    text = footerSegments.joinToString(" · "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colorScheme.textTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
+}
+
+@Composable
+private fun rememberAlbumTrackListTotalSizeBytes(rows: List<com.asmr.player.data.local.db.dao.LibraryTrackRow>): Long? {
+    val context = LocalContext.current
+    val paths = remember(rows) { rows.map { it.trackPath } }
+    return androidx.compose.runtime.produceState<Long?>(initialValue = null, paths) {
+        value = withContext(Dispatchers.IO) {
+            val total = rows.sumOf { row ->
+                com.asmr.player.ui.common.queryTrackFileSize(context, row.trackPath) ?: 0L
+            }
+            total.takeIf { it > 0L }
+        }
+    }.value
 }
 
 @Composable
@@ -1191,7 +1246,11 @@ private fun AlbumGridItem(
     album: Album,
     syncStatus: SyncStatus,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    onRjClick: ((String) -> Unit)? = null,
+    onCircleClick: ((String) -> Unit)? = null,
+    onCvClick: ((String) -> Unit)? = null,
+    onTagClick: ((String) -> Unit)? = null,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val coverShape = remember {
@@ -1279,6 +1338,13 @@ private fun AlbumGridItem(
                         .align(Alignment.TopStart)
                         .padding(8.dp)
                         .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
+                        .let { base ->
+                            if (onRjClick != null) {
+                                base.clickable { onRjClick(rj) }
+                            } else {
+                                base
+                            }
+                        }
                         .padding(horizontal = 4.dp, vertical = 2.dp)
                 )
             }
@@ -1299,9 +1365,13 @@ private fun AlbumGridItem(
                 rjCode = "",
                 circle = album.circle,
                 modifier = Modifier.fillMaxWidth(),
+                circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
             )
 
-            AlbumCvChipsFlow(cvText = album.cv)
+            AlbumCvChipsFlow(
+                cvText = album.cv,
+                onCvClick = onCvClick,
+            )
 
             val statsText = buildString {
                 val rv = album.ratingValue
@@ -1329,6 +1399,7 @@ private fun AlbumGridItem(
                 AlbumTagsFlow(
                     tags = album.tags,
                     modifier = Modifier.padding(top = 2.dp),
+                    onTagClick = onTagClick,
                 )
             }
         }
@@ -1341,7 +1412,11 @@ private fun AlbumItem(
     album: Album,
     syncStatus: SyncStatus,
     onClick: () -> Unit,
-    onLongClick: () -> Unit
+    onLongClick: () -> Unit,
+    onRjClick: ((String) -> Unit)? = null,
+    onCircleClick: ((String) -> Unit)? = null,
+    onCvClick: ((String) -> Unit)? = null,
+    onTagClick: ((String) -> Unit)? = null,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val coverShape = remember {
@@ -1359,7 +1434,7 @@ private fun AlbumItem(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .padding(horizontal = LibraryPageHorizontalPadding, vertical = LibraryAlbumItemVerticalPadding)
             .clip(RoundedCornerShape(AlbumListItemCornerRadius))
             .background(colorScheme.surface.copy(alpha = 0.5f))
             .combinedClickable(
@@ -1465,12 +1540,15 @@ private fun AlbumItem(
                         rjCode = rj,
                         circle = album.circle,
                         modifier = Modifier.fillMaxWidth(),
+                        rjOnClick = onRjClick?.let { click -> { click(rj) } },
+                        circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
                     )
 
                     if (album.cv.isNotBlank()) {
                         AlbumCvChipsSingleLine(
                             cvText = album.cv,
                             modifier = Modifier.fillMaxWidth(),
+                            onCvClick = onCvClick,
                         )
                     }
 
@@ -1488,6 +1566,7 @@ private fun AlbumItem(
                         AlbumTagsSingleLine(
                             tags = album.tags,
                             modifier = Modifier.fillMaxWidth(),
+                            onTagClick = onTagClick,
                         )
                     }
                 }

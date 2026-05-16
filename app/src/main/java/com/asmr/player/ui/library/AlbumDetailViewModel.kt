@@ -43,6 +43,7 @@ import com.asmr.player.data.lyrics.LyricsLoader
 import com.asmr.player.data.lyrics.deriveLyricsRelativePathNoExt
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
+import com.asmr.player.ui.common.queryTrackFileSize
 import com.asmr.player.util.OnlineLyricsStore
 import com.asmr.player.util.RemoteSubtitleSource
 import com.asmr.player.util.SubtitleMatchSupport
@@ -104,6 +105,39 @@ class AlbumDetailViewModel @Inject constructor(
     val messageManager: MessageManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
+
+    private data class AlbumAudioAggregate(
+        val trackCount: Int,
+        val totalDuration: Double,
+        val totalSizeBytes: Long,
+    )
+
+    private suspend fun computeAlbumAudioAggregate(
+        tracks: List<TrackEntity>,
+    ): AlbumAudioAggregate {
+        val totalSizeBytes = withContext(Dispatchers.IO) {
+            tracks.sumOf { track -> queryTrackFileSize(context, track.path) ?: 0L }
+        }
+        return AlbumAudioAggregate(
+            trackCount = tracks.size,
+            totalDuration = tracks.sumOf { it.duration },
+            totalSizeBytes = totalSizeBytes,
+        )
+    }
+
+    private suspend fun refreshAlbumAudioAggregate(albumId: Long) {
+        if (albumId <= 0L) return
+        val entity = albumDao.getAlbumById(albumId) ?: return
+        val tracks = trackDao.getTracksForAlbumOnce(albumId)
+        val aggregate = computeAlbumAudioAggregate(tracks)
+        albumDao.updateAlbum(
+            entity.copy(
+                audioTrackCount = aggregate.trackCount,
+                audioTotalDuration = aggregate.totalDuration,
+                audioTotalSizeBytes = aggregate.totalSizeBytes,
+            )
+        )
+    }
 
     private val _uiState = MutableStateFlow<AlbumDetailUiState>(AlbumDetailUiState.Loading)
     val uiState = _uiState.asStateFlow()
@@ -2040,11 +2074,15 @@ class AlbumDetailViewModel @Inject constructor(
                         if (sources.isNotEmpty()) {
                             runCatching { database.remoteSubtitleSourceDao().insertAll(sources) }
                         }
-                    }
                 }
+            }
 
-                SaveOnlineToLibraryResult(
-                    selectedCount = selected.size,
+            if (albumIdResult > 0L) {
+                refreshAlbumAudioAggregate(albumIdResult)
+            }
+
+            SaveOnlineToLibraryResult(
+                selectedCount = selected.size,
                     insertedCount = insertedCount,
                     albumId = albumIdResult,
                     coverUrl = coverUrlResult,

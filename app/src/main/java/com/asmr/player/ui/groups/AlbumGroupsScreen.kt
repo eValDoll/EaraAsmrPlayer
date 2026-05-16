@@ -38,6 +38,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,10 +63,15 @@ import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.theme.AsmrTheme
 
+private val AlbumGroupsPageHorizontalPadding = 8.dp
+private val AlbumGroupRowActionButtonSize = 34.dp
+private val AlbumGroupRowActionIconSize = 18.dp
+
 @Composable
 fun AlbumGroupsScreen(
     windowSizeClass: WindowSizeClass,
     onGroupClick: (AlbumGroupEntity) -> Unit,
+    scrollToTopSignal: Long = 0L,
     viewModel: AlbumGroupsViewModel = hiltViewModel()
 ) {
     val groups by viewModel.groups.collectAsState()
@@ -79,6 +85,10 @@ fun AlbumGroupsScreen(
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground
     ) { padding ->
+        LaunchedEffect(scrollToTopSignal) {
+            if (scrollToTopSignal == 0L) return@LaunchedEffect
+            runCatching { listState.animateScrollToItem(0) }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -90,7 +100,7 @@ fun AlbumGroupsScreen(
             } else {
                 Modifier
                     .fillMaxHeight()
-                    .widthIn(max = 720.dp)
+                    .widthIn(max = 760.dp)
                     .fillMaxWidth()
             }
             Box(modifier = contentModifier) {
@@ -107,7 +117,7 @@ fun AlbumGroupsScreen(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize().thinScrollbar(listState),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        contentPadding = PaddingValues(horizontal = AlbumGroupsPageHorizontalPadding, vertical = 8.dp)
                             .withAddedBottomPadding(LocalBottomOverlayPadding.current + 72.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -135,7 +145,7 @@ fun AlbumGroupsScreen(
                     contentColor = colorScheme.primary,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = LocalBottomOverlayPadding.current + 16.dp)
+                        .padding(end = AlbumGroupsPageHorizontalPadding, bottom = LocalBottomOverlayPadding.current + 16.dp)
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
                 }
@@ -199,11 +209,21 @@ private fun AlbumGroupRow(
                     color = colorScheme.textTertiary
                 )
             }
-            IconButton(onClick = { showRename = true }) {
-                Icon(Icons.Default.Edit, contentDescription = null, tint = colorScheme.textSecondary)
+            IconButton(onClick = { showRename = true }, modifier = Modifier.size(AlbumGroupRowActionButtonSize)) {
+                Icon(
+                    Icons.Default.Edit,
+                    contentDescription = null,
+                    tint = colorScheme.textSecondary,
+                    modifier = Modifier.size(AlbumGroupRowActionIconSize)
+                )
             }
-            IconButton(onClick = { showDeleteConfirm = true }) {
-                Icon(Icons.Default.Delete, contentDescription = null, tint = colorScheme.danger.copy(alpha = 0.7f))
+            IconButton(onClick = { showDeleteConfirm = true }, modifier = Modifier.size(AlbumGroupRowActionButtonSize)) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = null,
+                    tint = colorScheme.danger.copy(alpha = 0.7f),
+                    modifier = Modifier.size(AlbumGroupRowActionIconSize)
+                )
             }
         }
     }

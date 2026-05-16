@@ -18,6 +18,7 @@ import com.asmr.player.ui.theme.AsmrTheme
 fun SystemPlaylistScreen(
     windowSizeClass: WindowSizeClass,
     onPlayAll: (List<PlaylistItemEntity>, PlaylistItemEntity) -> Unit,
+    scrollToTopSignal: Long = 0L,
     viewModel: PlaylistsViewModel = hiltViewModel()
 ) {
     val playlists by viewModel.playlists.collectAsState()
@@ -35,6 +36,7 @@ fun SystemPlaylistScreen(
         windowSizeClass = windowSizeClass,
         playlistId = playlist.id,
         title = playlist.name,
-        onPlayAll = onPlayAll
+        onPlayAll = onPlayAll,
+        scrollToTopSignal = scrollToTopSignal,
     )
 }
