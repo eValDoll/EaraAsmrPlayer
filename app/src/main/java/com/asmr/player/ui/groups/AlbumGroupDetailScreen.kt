@@ -82,7 +82,7 @@ import com.asmr.player.ui.common.reorderable.reorderable
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 
-private val GroupDetailHorizontalPadding = 12.dp
+private val GroupDetailHorizontalPadding = 8.dp
 
 internal const val GROUP_DETAIL_SECTION_HEADER_TAG_PREFIX = "groupDetailSectionHeader"
 internal const val GROUP_DETAIL_TRACK_TAG_PREFIX = "groupDetailTrack"
@@ -123,6 +123,7 @@ fun AlbumGroupDetailScreen(
     groupId: Long,
     title: String,
     onPlayMediaItems: (List<MediaItem>, Int) -> Unit,
+    scrollToTopSignal: Long = 0L,
     viewModel: AlbumGroupDetailViewModel = hiltViewModel()
 ) {
     LaunchedEffect(groupId) {
@@ -138,7 +139,8 @@ fun AlbumGroupDetailScreen(
         onRemoveAlbum = viewModel::removeAlbum,
         onMoveTrackToTop = viewModel::moveTrackToTop,
         onMoveTrackToBottom = viewModel::moveTrackToBottom,
-        onSaveAlbumTrackOrder = viewModel::saveAlbumTrackOrder
+        onSaveAlbumTrackOrder = viewModel::saveAlbumTrackOrder,
+        scrollToTopSignal = scrollToTopSignal,
     )
 }
 
@@ -152,7 +154,8 @@ internal fun AlbumGroupDetailContent(
     onRemoveAlbum: (Long) -> Unit,
     onMoveTrackToTop: (Long, String) -> Unit,
     onMoveTrackToBottom: (Long, String) -> Unit,
-    onSaveAlbumTrackOrder: (Long, List<String>) -> Unit
+    onSaveAlbumTrackOrder: (Long, List<String>) -> Unit,
+    scrollToTopSignal: Long = 0L,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
@@ -187,6 +190,10 @@ internal fun AlbumGroupDetailContent(
         if (reorderState.draggingItemIndex == null) {
             localRows.sync(buildGroupDetailRows(tracks, expandedAlbumIds.value))
         }
+    }
+    LaunchedEffect(scrollToTopSignal) {
+        if (scrollToTopSignal == 0L) return@LaunchedEffect
+        runCatching { listState.animateScrollToItem(0) }
     }
 
     Box(

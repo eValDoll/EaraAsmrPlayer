@@ -335,6 +335,13 @@ fun MainContainer(
     var bottomChromeOverflowExpanded by remember { mutableStateOf(false) }
     var bottomChromeOverflowProtectedBounds by remember { mutableStateOf<List<Rect>>(emptyList()) }
     var pendingPrimaryNavigationRoute by remember { mutableStateOf<String?>(null) }
+    var libraryScrollToTopSignal by remember { mutableLongStateOf(0L) }
+    var searchScrollToTopSignal by remember { mutableLongStateOf(0L) }
+    var favoritesScrollToTopSignal by remember { mutableLongStateOf(0L) }
+    var playlistsScrollToTopSignal by remember { mutableLongStateOf(0L) }
+    var groupsScrollToTopSignal by remember { mutableLongStateOf(0L) }
+    var downloadsScrollToTopSignal by remember { mutableLongStateOf(0L) }
+    var settingsScrollToTopSignal by remember { mutableLongStateOf(0L) }
     val appVolumeWarningSessionState = rememberAppVolumeWarningSessionState()
     val audioOutputRouteKind = rememberCurrentAudioOutputRouteKind()
     
@@ -435,6 +442,18 @@ fun MainContainer(
         } else {
             pendingPrimaryNavigationRoute = null
             navController.navigateSingleTop(route, popUpToRoute = Routes.Library)
+        }
+    }
+
+    fun triggerPrimaryRouteScrollToTop(route: String) {
+        when (route) {
+            Routes.Library -> libraryScrollToTopSignal += 1L
+            Routes.Search -> searchScrollToTopSignal += 1L
+            "playlist_system/favorites" -> favoritesScrollToTopSignal += 1L
+            "playlists" -> playlistsScrollToTopSignal += 1L
+            "groups" -> groupsScrollToTopSignal += 1L
+            "downloads" -> downloadsScrollToTopSignal += 1L
+            "settings" -> settingsScrollToTopSignal += 1L
         }
     }
 
@@ -1103,6 +1122,7 @@ fun MainContainer(
                                         Routes.Library -> {
                                             LibraryScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                scrollToTopSignal = libraryScrollToTopSignal,
                                                 onAlbumClick = { album ->
                                                     navigator.openAlbumDetail(
                                                         albumId = album.id,
@@ -1130,6 +1150,7 @@ fun MainContainer(
                                         Routes.Search -> {
                                             SearchScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                scrollToTopSignal = searchScrollToTopSignal,
                                                 onAlbumClick = { album, fromPurchasedOnly ->
                                                     openAlbumDetailFromSearch(
                                                         albumId = album.id,
@@ -1144,6 +1165,7 @@ fun MainContainer(
                                         "playlist_system/favorites" -> {
                                             SystemPlaylistScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                scrollToTopSignal = favoritesScrollToTopSignal,
                                                 onPlayAll = { items, startItem ->
                                                     playerViewModel.playPlaylistItems(items, startItem)
                                                     openNowPlaying()
@@ -1155,6 +1177,7 @@ fun MainContainer(
                                         "playlists" -> {
                                             PlaylistsScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                scrollToTopSignal = playlistsScrollToTopSignal,
                                                 onPlaylistClick = { playlist ->
                                                     val encoded = URLEncoder.encode(playlist.name, "UTF-8")
                                                     navController.navigateSingleTop("playlist/${playlist.id}/$encoded")
@@ -1166,6 +1189,7 @@ fun MainContainer(
                                         "groups" -> {
                                             com.asmr.player.ui.groups.AlbumGroupsScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                scrollToTopSignal = groupsScrollToTopSignal,
                                                 onGroupClick = { group ->
                                                     val encoded = encodeRouteArg(group.name)
                                                     navController.navigateSingleTop("group/${group.id}/$encoded")
@@ -1177,6 +1201,7 @@ fun MainContainer(
                                         "downloads" -> {
                                             DownloadsScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                scrollToTopSignal = downloadsScrollToTopSignal,
                                                 viewModel = downloadsViewModel
                                             )
                                         }
@@ -1186,6 +1211,7 @@ fun MainContainer(
                                                 windowSizeClass = windowSizeClass,
                                                 viewModel = settingsViewModel,
                                                 libraryViewModel = libraryViewModel,
+                                                scrollToTopSignal = settingsScrollToTopSignal,
                                                 onHorizontalControlInteractionChanged = { active ->
                                                     primaryPagerScrollLocked = active
                                                 }
@@ -1590,6 +1616,10 @@ fun MainContainer(
                         },
                         onOpenQueue = onShowQueue,
                         onNavigate = { route ->
+                            if (route == activePrimaryRoute) {
+                                triggerPrimaryRouteScrollToTop(route)
+                                return@BottomChrome
+                            }
                             val projectedPagerRoutes = if (route in bottomNavRoutes && route !in fixedBottomNavRoutes) {
                                 resolvePrimaryPagerRoutes(
                                     navItems = bottomNavItems,

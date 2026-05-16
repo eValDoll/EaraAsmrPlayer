@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -105,6 +106,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
@@ -169,7 +171,8 @@ internal const val LIBRARY_SORT_BUTTON_TAG = "library_sort_button"
 internal const val LIBRARY_FILTER_BUTTON_TAG = "library_filter_button"
 private val LibraryChromeContentGap = 20.dp
 private val LibraryChromeCollapseOvershoot = 12.dp
-private val LibraryPageHorizontalPadding = 12.dp
+private val LibraryPageHorizontalPadding = 8.dp
+private val LibraryTrackListHeaderCornerRadius = 10.dp
 
 private fun Album.withUserTags(userTags: List<String>): Album {
     if (userTags.isEmpty()) return this
@@ -227,6 +230,7 @@ fun LibraryScreen(
     onOpenPlaylistPicker: (MediaItem) -> Unit = {},
     onOpenGroupPicker: (albumId: Long) -> Unit = { _ -> },
     onOpenFilterScreen: () -> Unit = {},
+    scrollToTopSignal: Long = 0L,
     viewModel: LibraryViewModel = hiltViewModel()
 ) {
     val colorScheme = AsmrTheme.colorScheme
@@ -319,6 +323,14 @@ fun LibraryScreen(
         ) {
             chromeState.expand()
         }
+    }
+    LaunchedEffect(scrollToTopSignal) {
+        if (scrollToTopSignal == 0L) return@LaunchedEffect
+        when (mode) {
+            1 -> runCatching { gridState.animateScrollToItem(0) }
+            else -> runCatching { listState.animateScrollToItem(0) }
+        }
+        chromeState.expand()
     }
 
     Scaffold(
@@ -547,6 +559,9 @@ fun LibraryScreen(
                                                     TrackAlbumHeader(
                                                         albumTitle = header.albumTitle,
                                                         rjCode = header.rjCode.ifBlank { header.workId },
+                                                        trackCount = header.trackCount,
+                                                        totalDurationSeconds = header.totalDuration,
+                                                        totalSizeBytes = rememberAlbumTrackListTotalSizeBytes(rows),
                                                         coverModel = header.coverPath.takeIf { it.isNotBlank() }.takeIf { it != "null" }
                                                             ?: header.coverUrl.takeIf { it.isNotBlank() },
                                                         onToggle = {
@@ -1108,6 +1123,9 @@ private sealed class TagAssignTarget {
 private fun TrackAlbumHeader(
     albumTitle: String,
     rjCode: String,
+    trackCount: Int,
+    totalDurationSeconds: Double,
+    totalSizeBytes: Long?,
     coverModel: Any?,
     onToggle: () -> Unit
 ) {
@@ -1115,6 +1133,7 @@ private fun TrackAlbumHeader(
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(LibraryTrackListHeaderCornerRadius))
             .background(colorScheme.surface.copy(alpha = 0.5f))
             .clickable { onToggle() }
             .padding(horizontal = LibraryPageHorizontalPadding, vertical = 10.dp),
@@ -1130,22 +1149,46 @@ private fun TrackAlbumHeader(
                 .clip(RoundedCornerShape(8.dp)),
         )
         Spacer(modifier = Modifier.width(10.dp))
-        Text(
-            text = albumTitle.ifBlank { rjCode.ifBlank { "专辑" } },
-            style = MaterialTheme.typography.titleMedium,
-            color = colorScheme.textPrimary,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        if (rjCode.isNotBlank()) {
+        Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                text = rjCode,
-                style = MaterialTheme.typography.labelSmall,
-                color = colorScheme.textTertiary
+                text = albumTitle.ifBlank { rjCode.ifBlank { "专辑" } },
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                color = colorScheme.textPrimary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
             )
+
+            val footerSegments = buildList {
+                if (rjCode.isNotBlank()) add(rjCode)
+                add("$trackCount 音频")
+                Formatting.formatTrackSeconds(totalDurationSeconds).takeIf { it.isNotBlank() }?.let(::add)
+                totalSizeBytes?.takeIf { it > 0L }?.let(Formatting::formatFileSize)?.let(::add)
+            }
+            if (footerSegments.isNotEmpty()) {
+                Text(
+                    text = footerSegments.joinToString(" 路 "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colorScheme.textTertiary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
     }
+}
+
+@Composable
+private fun rememberAlbumTrackListTotalSizeBytes(rows: List<com.asmr.player.data.local.db.dao.LibraryTrackRow>): Long? {
+    val context = LocalContext.current
+    val paths = remember(rows) { rows.map { it.trackPath } }
+    return androidx.compose.runtime.produceState<Long?>(initialValue = null, paths) {
+        value = withContext(Dispatchers.IO) {
+            val total = rows.sumOf { row ->
+                com.asmr.player.ui.common.queryTrackFileSize(context, row.trackPath) ?: 0L
+            }
+            total.takeIf { it > 0L }
+        }
+    }.value
 }
 
 @Composable

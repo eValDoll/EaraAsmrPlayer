@@ -77,7 +77,7 @@ import com.asmr.player.ui.common.reorderable.reorderable
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 
-private val PlaylistDetailHorizontalPadding = 12.dp
+private val PlaylistDetailHorizontalPadding = 8.dp
 
 internal const val PLAYLIST_DETAIL_ITEM_TAG_PREFIX = "playlistDetailItem"
 internal const val PLAYLIST_DETAIL_ITEM_MENU_BUTTON_TAG_PREFIX = "playlistDetailItemMenu"
@@ -94,6 +94,7 @@ fun PlaylistDetailScreen(
     playlistId: Long,
     title: String,
     onPlayAll: (List<PlaylistItemEntity>, PlaylistItemEntity) -> Unit,
+    scrollToTopSignal: Long = 0L,
     viewModel: PlaylistDetailViewModel = hiltViewModel()
 ) {
     LaunchedEffect(playlistId) {
@@ -108,7 +109,8 @@ fun PlaylistDetailScreen(
         onRemoveItem = viewModel::removeItem,
         onMoveItemToTop = viewModel::moveItemToTop,
         onMoveItemToBottom = viewModel::moveItemToBottom,
-        onSaveManualOrder = viewModel::saveManualOrder
+        onSaveManualOrder = viewModel::saveManualOrder,
+        scrollToTopSignal = scrollToTopSignal,
     )
 }
 
@@ -121,7 +123,8 @@ internal fun PlaylistDetailContent(
     onRemoveItem: (String) -> Unit,
     onMoveItemToTop: (String) -> Unit,
     onMoveItemToBottom: (String) -> Unit,
-    onSaveManualOrder: (List<String>) -> Unit
+    onSaveManualOrder: (List<String>) -> Unit,
+    scrollToTopSignal: Long = 0L,
 ) {
     val listState = rememberLazyListState()
     val localItems = remember { mutableStateListOf<PlaylistItemWithSubtitles>() }
@@ -146,6 +149,10 @@ internal fun PlaylistDetailContent(
         if (reorderState.draggingItemIndex == null) {
             localItems.sync(items)
         }
+    }
+    LaunchedEffect(scrollToTopSignal) {
+        if (scrollToTopSignal == 0L) return@LaunchedEffect
+        runCatching { listState.animateScrollToItem(0) }
     }
 
     val playItems = localItems.map { item -> item.toPlaybackEntity() }

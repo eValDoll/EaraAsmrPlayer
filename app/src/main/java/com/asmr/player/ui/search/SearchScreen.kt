@@ -113,7 +113,7 @@ internal const val SEARCH_CHROME_TAG = "search_chrome"
 private val SearchChromeContentGap = 16.dp
 private const val SearchPullRefreshContentShiftRatio = 1f
 private val SearchPullRefreshIndicatorSize = 40.dp
-private val SearchPageHorizontalPadding = 12.dp
+private val SearchPageHorizontalPadding = 8.dp
 
 private fun stableAlbumKey(album: Album): String {
     val id = album.rjCode.ifBlank { album.workId }.trim()
@@ -127,6 +127,7 @@ private fun stableAlbumKey(album: Album): String {
 fun SearchScreen(
     windowSizeClass: WindowSizeClass,
     onAlbumClick: (Album, Boolean) -> Unit,
+    scrollToTopSignal: Long = 0L,
     viewModel: SearchViewModel = hiltViewModel()
 ) {
     var keyword by rememberSaveable { mutableStateOf("") }
@@ -278,6 +279,14 @@ fun SearchScreen(
         if (viewMode != 0 && gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0) {
             chromeState.expand()
         }
+    }
+    LaunchedEffect(scrollToTopSignal) {
+        if (scrollToTopSignal == 0L) return@LaunchedEffect
+        when (viewMode) {
+            0 -> runCatching { listState.animateScrollToItem(0) }
+            else -> runCatching { gridState.animateScrollToItem(0) }
+        }
+        chromeState.expand()
     }
 
     Scaffold(

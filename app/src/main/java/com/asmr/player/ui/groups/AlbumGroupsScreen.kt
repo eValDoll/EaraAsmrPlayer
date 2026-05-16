@@ -38,6 +38,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -62,12 +63,13 @@ import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.theme.AsmrTheme
 
-private val AlbumGroupsPageHorizontalPadding = 12.dp
+private val AlbumGroupsPageHorizontalPadding = 8.dp
 
 @Composable
 fun AlbumGroupsScreen(
     windowSizeClass: WindowSizeClass,
     onGroupClick: (AlbumGroupEntity) -> Unit,
+    scrollToTopSignal: Long = 0L,
     viewModel: AlbumGroupsViewModel = hiltViewModel()
 ) {
     val groups by viewModel.groups.collectAsState()
@@ -81,6 +83,10 @@ fun AlbumGroupsScreen(
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground
     ) { padding ->
+        LaunchedEffect(scrollToTopSignal) {
+            if (scrollToTopSignal == 0L) return@LaunchedEffect
+            runCatching { listState.animateScrollToItem(0) }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()

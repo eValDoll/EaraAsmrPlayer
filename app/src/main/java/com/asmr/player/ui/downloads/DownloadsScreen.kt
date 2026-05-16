@@ -45,6 +45,7 @@ import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -65,11 +66,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.ui.common.thinScrollbar
 import java.io.File
 
-private val DownloadsPageHorizontalPadding = 12.dp
+private val DownloadsPageHorizontalPadding = 8.dp
 
 @Composable
 fun DownloadsScreen(
     windowSizeClass: WindowSizeClass,
+    scrollToTopSignal: Long = 0L,
     viewModel: DownloadsViewModel = hiltViewModel()
 ) {
     val tasks by viewModel.tasks.collectAsState()
@@ -81,6 +83,10 @@ fun DownloadsScreen(
         File(context.getExternalFilesDir(null), "albums").absolutePath
     }
     val listState = rememberLazyListState()
+    LaunchedEffect(scrollToTopSignal) {
+        if (scrollToTopSignal == 0L) return@LaunchedEffect
+        runCatching { listState.animateScrollToItem(0) }
+    }
 
     // 屏幕尺寸判断
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact

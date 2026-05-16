@@ -28,6 +28,7 @@ import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,12 +59,13 @@ import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 
-private val PlaylistsPageHorizontalPadding = 12.dp
+private val PlaylistsPageHorizontalPadding = 8.dp
 
 @Composable
 fun PlaylistsScreen(
     windowSizeClass: WindowSizeClass,
     onPlaylistClick: (PlaylistEntity) -> Unit,
+    scrollToTopSignal: Long = 0L,
     viewModel: PlaylistsViewModel = hiltViewModel()
 ) {
     val playlists by viewModel.playlists.collectAsState()
@@ -80,6 +82,10 @@ fun PlaylistsScreen(
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground
     ) { padding ->
+        LaunchedEffect(scrollToTopSignal) {
+            if (scrollToTopSignal == 0L) return@LaunchedEffect
+            runCatching { listState.animateScrollToItem(0) }
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()

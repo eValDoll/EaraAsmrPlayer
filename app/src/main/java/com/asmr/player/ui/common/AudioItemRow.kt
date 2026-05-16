@@ -52,6 +52,7 @@ internal val AudioItemTrailingSpacing = 4.dp
 internal val AudioItemSubtitleStampSpacing = 4.dp
 internal val AudioItemMenuButtonSize = 36.dp
 internal val AudioItemMenuIconSize = 18.dp
+internal val AudioItemTrailingEndPadding = 2.dp
 
 @Composable
 internal fun AudioItemRow(
@@ -153,6 +154,7 @@ internal fun AudioItemRow(
 
             var expanded by remember { mutableStateOf(false) }
             Row(
+                modifier = Modifier.padding(end = AudioItemTrailingEndPadding),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(AudioItemTrailingSpacing)
             ) {
