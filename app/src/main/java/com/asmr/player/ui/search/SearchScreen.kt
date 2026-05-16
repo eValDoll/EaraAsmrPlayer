@@ -113,6 +113,7 @@ internal const val SEARCH_CHROME_TAG = "search_chrome"
 private val SearchChromeContentGap = 16.dp
 private const val SearchPullRefreshContentShiftRatio = 1f
 private val SearchPullRefreshIndicatorSize = 40.dp
+private val SearchPageHorizontalPadding = 12.dp
 
 private fun stableAlbumKey(album: Album): String {
     val id = album.rjCode.ifBlank { album.workId }.trim()
@@ -326,7 +327,7 @@ fun SearchScreen(
                     } else {
                         Modifier
                             .fillMaxHeight()
-                            .widthIn(max = 720.dp)
+                            .widthIn(max = 760.dp)
                             .fillMaxWidth()
                     }
                 ) {
@@ -411,8 +412,8 @@ fun SearchScreen(
                                             .thinScrollbar(gridState),
                                         contentPadding = PaddingValues(
                                             top = topPadding,
-                                            start = 16.dp,
-                                            end = 16.dp,
+                                            start = SearchPageHorizontalPadding,
+                                            end = SearchPageHorizontalPadding,
                                             bottom = 16.dp
                                         ).withAddedBottomPadding(LocalBottomOverlayPadding.current),
                                         horizontalArrangement = Arrangement.spacedBy(AlbumGridItemSpacing),
@@ -722,7 +723,7 @@ internal fun SearchToolbar(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(horizontal = SearchPageHorizontalPadding, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         CustomSearchBar(
@@ -906,7 +907,7 @@ internal fun SearchPaginationHeader(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 2.dp)
+            .padding(horizontal = SearchPageHorizontalPadding, vertical = 2.dp)
     ) {
         Row(
             modifier = Modifier

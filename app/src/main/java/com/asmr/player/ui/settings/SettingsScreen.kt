@@ -73,6 +73,8 @@ import com.asmr.player.ui.common.withAddedBottomPadding
 import java.io.File
 import kotlin.math.abs
 
+private val SettingsPageHorizontalPadding = 12.dp
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
@@ -161,14 +163,14 @@ fun SettingsScreen(
             } else {
                 Modifier
                     .fillMaxHeight()
-                    .widthIn(max = 720.dp)
+                    .widthIn(max = 760.dp)
                     .fillMaxWidth()
             }
 
             LazyColumn(
                 state = listState,
                 modifier = contentModifier.thinScrollbar(listState),
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 10.dp)
+                contentPadding = PaddingValues(horizontal = SettingsPageHorizontalPadding, vertical = 10.dp)
                     .withAddedBottomPadding(LocalBottomOverlayPadding.current),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {

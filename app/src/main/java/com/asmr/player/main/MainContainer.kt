@@ -960,6 +960,9 @@ fun MainContainer(
                                                             ) {
                                                             DropdownMenuItem(
                                                                 text = { Text("专辑列表") },
+                                                                leadingIcon = {
+                                                                    Icon(Icons.Default.ViewList, contentDescription = null)
+                                                                },
                                                                 onClick = {
                                                                     viewMenuExpanded = false
                                                                     libraryViewModel.setLibraryViewMode(0)
@@ -972,6 +975,9 @@ fun MainContainer(
                                                             )
                                                             DropdownMenuItem(
                                                                 text = { Text("专辑卡片") },
+                                                                leadingIcon = {
+                                                                    Icon(Icons.Default.GridView, contentDescription = null)
+                                                                },
                                                                 onClick = {
                                                                     viewMenuExpanded = false
                                                                     libraryViewModel.setLibraryViewMode(1)
@@ -984,6 +990,9 @@ fun MainContainer(
                                                             )
                                                             DropdownMenuItem(
                                                                 text = { Text("音轨列表") },
+                                                                leadingIcon = {
+                                                                    Icon(Icons.Default.Audiotrack, contentDescription = null)
+                                                                },
                                                                 onClick = {
                                                                     viewMenuExpanded = false
                                                                     libraryViewModel.setLibraryViewMode(2)

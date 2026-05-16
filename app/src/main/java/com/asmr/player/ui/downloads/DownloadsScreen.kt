@@ -65,6 +65,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.ui.common.thinScrollbar
 import java.io.File
 
+private val DownloadsPageHorizontalPadding = 12.dp
+
 @Composable
 fun DownloadsScreen(
     windowSizeClass: WindowSizeClass,
@@ -92,14 +94,14 @@ fun DownloadsScreen(
             modifier = if (isCompact) {
                 Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                    .padding(horizontal = DownloadsPageHorizontalPadding, vertical = 10.dp)
             } else {
                 // 仅用于平板适配：限制内容区域最大宽度并填充可用空间
                 Modifier
                     .fillMaxHeight()
-                    .widthIn(max = 720.dp)
+                    .widthIn(max = 760.dp)
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 10.dp)
+                    .padding(horizontal = DownloadsPageHorizontalPadding, vertical = 10.dp)
             },
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {

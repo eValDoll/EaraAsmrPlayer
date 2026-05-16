@@ -77,6 +77,8 @@ import com.asmr.player.ui.common.reorderable.reorderable
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 
+private val PlaylistDetailHorizontalPadding = 12.dp
+
 internal const val PLAYLIST_DETAIL_ITEM_TAG_PREFIX = "playlistDetailItem"
 internal const val PLAYLIST_DETAIL_ITEM_MENU_BUTTON_TAG_PREFIX = "playlistDetailItemMenu"
 internal const val PLAYLIST_DETAIL_MOVE_TOP_MENU_ITEM_TAG = "playlistDetailMoveTopMenuItem"
@@ -181,7 +183,7 @@ internal fun PlaylistDetailContent(
             } else {
                 Modifier
                     .fillMaxHeight()
-                    .widthIn(max = 720.dp)
+                    .widthIn(max = 760.dp)
                     .fillMaxWidth()
             }
             if (localItems.isEmpty()) {
@@ -284,7 +286,7 @@ private fun PlaylistItemRow(
             HorizontalDivider(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
+                    .padding(horizontal = PlaylistDetailHorizontalPadding)
                     .align(Alignment.TopCenter),
                 thickness = 0.5.dp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
@@ -305,7 +307,7 @@ private fun PlaylistItemRow(
             showClickIndication = false,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 2.dp),
+                .padding(horizontal = PlaylistDetailHorizontalPadding, vertical = 2.dp),
             leadingContent = {
                 AsmrAsyncImage(
                     model = item.artworkUri,

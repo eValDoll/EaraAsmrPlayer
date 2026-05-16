@@ -169,6 +169,7 @@ internal const val LIBRARY_SORT_BUTTON_TAG = "library_sort_button"
 internal const val LIBRARY_FILTER_BUTTON_TAG = "library_filter_button"
 private val LibraryChromeContentGap = 20.dp
 private val LibraryChromeCollapseOvershoot = 12.dp
+private val LibraryPageHorizontalPadding = 12.dp
 
 private fun Album.withUserTags(userTags: List<String>): Album {
     if (userTags.isEmpty()) return this
@@ -371,7 +372,7 @@ fun LibraryScreen(
                     } else {
                         Modifier
                             .fillMaxHeight()
-                            .widthIn(max = 720.dp)
+                            .widthIn(max = 760.dp)
                             .fillMaxWidth()
                     }
                 ) {
@@ -522,7 +523,7 @@ fun LibraryScreen(
                                                     Box(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
-                                                            .padding(horizontal = 16.dp, vertical = 10.dp)
+                                                            .padding(horizontal = LibraryPageHorizontalPadding, vertical = 10.dp)
                                                     ) {
                                                         Spacer(modifier = Modifier.height(50.dp))
                                                     }
@@ -538,7 +539,7 @@ fun LibraryScreen(
                                                 Column {
                                                     if (headerIndex > 0) {
                                                         HorizontalDivider(
-                                                            modifier = Modifier.padding(horizontal = 16.dp),
+                                                            modifier = Modifier.padding(horizontal = LibraryPageHorizontalPadding),
                                                             thickness = 0.5.dp,
                                                             color = colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                                                         )
@@ -645,7 +646,7 @@ fun LibraryScreen(
                                                         )
                                                         if (index < rows.size - 1) {
                                                             HorizontalDivider(
-                                                                modifier = Modifier.padding(horizontal = 16.dp),
+                                                                modifier = Modifier.padding(horizontal = LibraryPageHorizontalPadding),
                                                                 thickness = 0.5.dp,
                                                                 color = colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
                                                             )
@@ -663,7 +664,7 @@ fun LibraryScreen(
                                             .fillMaxSize()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(gridState),
-                                        contentPadding = PaddingValues(top = topPadding, start = 16.dp, end = 16.dp, bottom = 16.dp)
+                                        contentPadding = PaddingValues(top = topPadding, start = LibraryPageHorizontalPadding, end = LibraryPageHorizontalPadding, bottom = 16.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current),
                                         verticalItemSpacing = AlbumGridItemSpacing,
                                         horizontalArrangement = Arrangement.spacedBy(AlbumGridItemSpacing)
@@ -980,7 +981,7 @@ internal fun LibraryChrome(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .padding(horizontal = LibraryPageHorizontalPadding, vertical = 8.dp)
             .onSizeChanged(onMeasured)
             .graphicsLayer {
                 translationY = chromeOffsetPx - (collapseFraction.coerceIn(0f, 1f) * collapseOvershootPx)
@@ -1116,7 +1117,7 @@ private fun TrackAlbumHeader(
             .fillMaxWidth()
             .background(colorScheme.surface.copy(alpha = 0.5f))
             .clickable { onToggle() }
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = LibraryPageHorizontalPadding, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsmrAsyncImage(
@@ -1388,7 +1389,7 @@ private fun AlbumItem(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .padding(horizontal = LibraryPageHorizontalPadding, vertical = 4.dp)
             .clip(RoundedCornerShape(AlbumListItemCornerRadius))
             .background(colorScheme.surface.copy(alpha = 0.5f))
             .combinedClickable(

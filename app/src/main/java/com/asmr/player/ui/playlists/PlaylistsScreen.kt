@@ -58,6 +58,8 @@ import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 
+private val PlaylistsPageHorizontalPadding = 12.dp
+
 @Composable
 fun PlaylistsScreen(
     windowSizeClass: WindowSizeClass,
@@ -89,7 +91,7 @@ fun PlaylistsScreen(
             } else {
                 Modifier
                     .fillMaxHeight()
-                    .widthIn(max = 720.dp)
+                    .widthIn(max = 760.dp)
                     .fillMaxWidth()
             }
             Box(modifier = contentModifier) {
@@ -106,7 +108,7 @@ fun PlaylistsScreen(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize().thinScrollbar(listState),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
+                        contentPadding = PaddingValues(horizontal = PlaylistsPageHorizontalPadding, vertical = 8.dp)
                             .withAddedBottomPadding(LocalBottomOverlayPadding.current + 72.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
@@ -135,7 +137,7 @@ fun PlaylistsScreen(
                     contentColor = colorScheme.primary,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(end = 16.dp, bottom = LocalBottomOverlayPadding.current + 16.dp)
+                        .padding(end = PlaylistsPageHorizontalPadding, bottom = LocalBottomOverlayPadding.current + 16.dp)
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
                 }

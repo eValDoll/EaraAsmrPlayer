@@ -82,6 +82,8 @@ import com.asmr.player.ui.common.reorderable.reorderable
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 
+private val GroupDetailHorizontalPadding = 12.dp
+
 internal const val GROUP_DETAIL_SECTION_HEADER_TAG_PREFIX = "groupDetailSectionHeader"
 internal const val GROUP_DETAIL_TRACK_TAG_PREFIX = "groupDetailTrack"
 internal const val GROUP_DETAIL_TRACK_MENU_BUTTON_TAG_PREFIX = "groupDetailTrackMenu"
@@ -199,7 +201,7 @@ internal fun AlbumGroupDetailContent(
             } else {
                 Modifier
                     .fillMaxHeight()
-                    .widthIn(max = 720.dp)
+                    .widthIn(max = 760.dp)
                     .fillMaxWidth()
             }
         ) {
@@ -344,7 +346,7 @@ private fun AlbumSectionHeader(
             .testTag("$GROUP_DETAIL_SECTION_HEADER_TAG_PREFIX:$albumId")
             .background(colorScheme.surface)
             .clickable { onToggle() }
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+            .padding(horizontal = GroupDetailHorizontalPadding, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsmrAsyncImage(
@@ -404,7 +406,7 @@ private fun GroupTrackRow(
             HorizontalDivider(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
+                    .padding(horizontal = GroupDetailHorizontalPadding)
                     .align(Alignment.TopCenter),
                 thickness = 0.5.dp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
@@ -426,7 +428,7 @@ private fun GroupTrackRow(
             showClickIndication = false,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 2.dp),
+                .padding(horizontal = GroupDetailHorizontalPadding, vertical = 2.dp),
             leadingContent = {
                 AsmrAsyncImage(
                     model = coverModel?.toString().orEmpty(),

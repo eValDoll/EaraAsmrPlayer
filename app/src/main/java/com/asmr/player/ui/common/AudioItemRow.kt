@@ -7,7 +7,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.DropdownMenu
@@ -46,6 +48,11 @@ internal data class AudioItemMenuAction(
     val showDividerBefore: Boolean = false
 )
 
+internal val AudioItemTrailingSpacing = 4.dp
+internal val AudioItemSubtitleStampSpacing = 4.dp
+internal val AudioItemMenuButtonSize = 36.dp
+internal val AudioItemMenuIconSize = 18.dp
+
 @Composable
 internal fun AudioItemRow(
     title: String,
@@ -54,7 +61,7 @@ internal fun AudioItemRow(
     modifier: Modifier = Modifier,
     leadingContent: (@Composable (() -> Unit))? = null,
     showSubtitleStamp: Boolean = false,
-    subtitleStampModifier: Modifier = Modifier.padding(end = 8.dp),
+    subtitleStampModifier: Modifier = Modifier,
     subtitleStampTestTag: String? = null,
     menuButtonTestTag: String? = null,
     actions: List<AudioItemMenuAction> = emptyList(),
@@ -145,7 +152,10 @@ internal fun AudioItemRow(
             if (!showTrailing) return@ListItem
 
             var expanded by remember { mutableStateOf(false) }
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(AudioItemTrailingSpacing)
+            ) {
                 if (showSubtitleStamp) {
                     val stampModifier = if (subtitleStampTestTag != null) {
                         subtitleStampModifier.testTag(subtitleStampTestTag)
@@ -162,15 +172,18 @@ internal fun AudioItemRow(
                         IconButton(
                             onClick = { expanded = true },
                             modifier = if (menuButtonTestTag != null) {
-                                Modifier.testTag(menuButtonTestTag)
-                            } else {
                                 Modifier
+                                    .size(AudioItemMenuButtonSize)
+                                    .testTag(menuButtonTestTag)
+                            } else {
+                                Modifier.size(AudioItemMenuButtonSize)
                             }
                         ) {
                             Icon(
                                 imageVector = Icons.Default.MoreVert,
                                 contentDescription = null,
-                                tint = colorScheme.onSurfaceVariant
+                                tint = colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(AudioItemMenuIconSize)
                             )
                         }
                         MaterialTheme(

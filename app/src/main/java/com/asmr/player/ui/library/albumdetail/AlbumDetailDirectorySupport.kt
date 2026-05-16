@@ -123,6 +123,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.zIndex
 import com.asmr.player.ui.common.rememberDominantColor
 import com.asmr.player.ui.common.SubtitleStamp
+import com.asmr.player.ui.common.AudioItemMenuButtonSize
+import com.asmr.player.ui.common.AudioItemSubtitleStampSpacing
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
@@ -3069,7 +3071,7 @@ internal fun DirectoryFileRow(
                 {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (file.showSubtitleStamp) {
-                            SubtitleStamp(modifier = Modifier.padding(end = 8.dp))
+                            SubtitleStamp(modifier = Modifier.padding(end = AudioItemSubtitleStampSpacing))
                         }
                         if (selectionMode && onSelectedChange != null) {
                             Checkbox(
@@ -3094,7 +3096,7 @@ internal fun DirectoryFileRow(
                             Box {
                                 IconButton(
                                     onClick = { showMenuExpanded = true },
-                                    modifier = Modifier.size(32.dp)
+                                    modifier = Modifier.size(AudioItemMenuButtonSize)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.MoreVert,
@@ -3330,7 +3332,7 @@ internal fun TreeFileRow(
                 {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         if (showSubtitleStamp) {
-                            SubtitleStamp(modifier = Modifier.padding(end = 8.dp))
+                            SubtitleStamp(modifier = Modifier.padding(end = AudioItemSubtitleStampSpacing))
                         }
                         if (onSetAsCover != null) {
                             IconButton(
@@ -3350,7 +3352,7 @@ internal fun TreeFileRow(
                             Box {
                                 IconButton(
                                     onClick = { showMenuExpanded = true },
-                                    modifier = Modifier.size(32.dp)
+                                    modifier = Modifier.size(AudioItemMenuButtonSize)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.MoreVert,

@@ -46,6 +46,7 @@ import com.asmr.player.ui.theme.AsmrTheme
 internal val AlbumListItemCornerRadius = 6.dp
 internal val AlbumGridItemCornerRadius = 6.dp
 internal val AlbumGridItemSpacing = 6.dp
+private val AlbumItemHorizontalPadding = 12.dp
 
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
@@ -85,7 +86,7 @@ fun AlbumItem(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
+            .padding(horizontal = AlbumItemHorizontalPadding, vertical = 4.dp)
             .clip(shape)
             .background(colorScheme.surface.copy(alpha = 0.5f))
             .combinedClickable(
