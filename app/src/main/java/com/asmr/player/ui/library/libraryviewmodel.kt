@@ -834,10 +834,6 @@ class LibraryViewModel @Inject constructor(
     }
     
     private fun isSubdirectory(child: Uri, parent: Uri): Boolean {
-        // 比较 URI 的路径部分
-        val childPath = child.toString()
-        val parentPath = parent.toString()
-        
         // 如果是相同的 URI scheme 和 authority
         if (child.scheme != parent.scheme || child.authority != parent.authority) {
             return false
@@ -2398,7 +2394,6 @@ class LibraryViewModel @Inject constructor(
                         albumDao.deleteAlbum(entity)
                         return@forEach
                     }
-                    anyValid = true
                 }
 
                 var updated = entity

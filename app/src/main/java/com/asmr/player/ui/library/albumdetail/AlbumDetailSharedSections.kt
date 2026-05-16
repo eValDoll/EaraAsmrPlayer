@@ -189,7 +189,7 @@ internal fun AlbumDescription(album: Album) {
                     }
                 }
             }
-            Divider(color = colorScheme.textTertiary.copy(alpha = 0.25f))
+            HorizontalDivider(color = colorScheme.textTertiary.copy(alpha = 0.25f))
             if (paragraphs.isEmpty()) {
                 Text("暂无介绍", color = colorScheme.textTertiary)
             } else {

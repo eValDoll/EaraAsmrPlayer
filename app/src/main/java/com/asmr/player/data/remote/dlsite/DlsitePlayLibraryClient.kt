@@ -190,8 +190,8 @@ class DlsitePlayLibraryClient @Inject constructor(
                         }
                         return@use
                     }
-                    val body = resp.body ?: return@use
-                    val obj = body.charStream().use { reader ->
+                    val responseBody = resp.body ?: return@use
+                    val obj = responseBody.charStream().use { reader ->
                         runCatching { gson.fromJson<Map<String, Any?>>(reader, type) }.getOrNull().orEmpty()
                     }
                     val works = obj["works"] as? List<*>

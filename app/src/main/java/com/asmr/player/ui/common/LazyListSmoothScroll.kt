@@ -1,13 +1,10 @@
 package com.asmr.player.ui.common
 
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.Spring
 
 suspend fun LazyListState.smoothScrollToIndex(
     index: Int,
-    anchorOffsetPx: Int,
-    durationMillis: Int = 520
+    anchorOffsetPx: Int
 ) {
     if (index < 0) return
     runCatching {

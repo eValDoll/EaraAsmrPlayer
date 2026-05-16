@@ -16,6 +16,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ViewList
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Audiotrack
@@ -772,7 +773,7 @@ fun MainContainer(
                                             currentRoute?.startsWith("album_detail_online") == true
                                     val isAlbumDetailFromLibrary =
                                         currentRoute?.startsWith("album_detail/") == true &&
-                                            currentRoute?.startsWith("album_detail_rj") != true
+                                            !currentRoute.startsWith("album_detail_rj")
                                     val isSelected = when (route) {
                                         "library" -> currentRoute == route || isAlbumDetailFromLibrary
                                         "search" -> currentRoute == route || isAlbumDetailFromSearch
@@ -963,7 +964,7 @@ fun MainContainer(
                                                         val icon = when (normalized) {
                                                             1 -> Icons.Default.GridView
                                                             2 -> Icons.Default.Audiotrack
-                                                            else -> Icons.Default.ViewList
+                                                            else -> Icons.AutoMirrored.Filled.ViewList
                                                         }
                                                         IconButton(onClick = { viewMenuExpanded = true }) {
                                                             Icon(imageVector = icon, contentDescription = "切换视图")
@@ -982,7 +983,7 @@ fun MainContainer(
                                                             DropdownMenuItem(
                                                                 text = { Text("专辑列表") },
                                                                 leadingIcon = {
-                                                                    Icon(Icons.Default.ViewList, contentDescription = null)
+                                                                    Icon(Icons.AutoMirrored.Filled.ViewList, contentDescription = null)
                                                                 },
                                                                 onClick = {
                                                                     viewMenuExpanded = false
@@ -1027,7 +1028,7 @@ fun MainContainer(
                                                 val viewMode by searchViewModel.viewMode.collectAsState()
                                                 IconButton(onClick = { searchViewModel.setViewMode(if (viewMode == 1) 0 else 1) }) {
                                                     Icon(
-                                                        imageVector = if (viewMode == 1) Icons.Default.ViewList else Icons.Default.ViewModule,
+                                                        imageVector = if (viewMode == 1) Icons.AutoMirrored.Filled.ViewList else Icons.Default.ViewModule,
                                                         contentDescription = null
                                                     )
                                                 }
@@ -1293,12 +1294,8 @@ fun MainContainer(
                         onOpenPlaylistPicker = { item ->
                             albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
                         },
-                        onOpenGroupPicker = { albumId ->
-                            navController.navigateSingleTop("group_picker?albumId=$albumId")
-                        },
-                        onPlayVideo = { title, uriOrPath, artwork, artist ->
-                            playerViewModel.playVideo(title, uriOrPath, artwork, artist)
-                            openNowPlaying()
+                        onOpenGroupPicker = { targetAlbumId ->
+                            navController.navigateSingleTop("group_picker?albumId=$targetAlbumId")
                         },
                         onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
                         onOpenAlbumByRj = { navigator.openAlbumDetailByRjStacked(it) }
@@ -1345,12 +1342,8 @@ fun MainContainer(
                         onOpenPlaylistPicker = { item ->
                             albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
                         },
-                        onOpenGroupPicker = { albumId ->
-                            navController.navigateSingleTop("group_picker?albumId=$albumId")
-                        },
-                        onPlayVideo = { title, uriOrPath, artwork, artist ->
-                            playerViewModel.playVideo(title, uriOrPath, artwork, artist)
-                            openNowPlaying()
+                        onOpenGroupPicker = { targetAlbumId ->
+                            navController.navigateSingleTop("group_picker?albumId=$targetAlbumId")
                         },
                         onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
                         onOpenAlbumByRj = { navigator.openAlbumDetailByRjStacked(it) }
@@ -1386,10 +1379,6 @@ fun MainContainer(
                         },
                         onOpenGroupPicker = { albumId ->
                             navController.navigateSingleTop("group_picker?albumId=$albumId")
-                        },
-                        onPlayVideo = { title, uriOrPath, artwork, artist ->
-                            playerViewModel.playVideo(title, uriOrPath, artwork, artist)
-                            openNowPlaying()
                         },
                         onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
                         onOpenAlbumByRj = { navigator.openAlbumDetailByRjStacked(it) }

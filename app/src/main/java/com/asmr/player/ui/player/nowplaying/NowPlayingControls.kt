@@ -21,6 +21,9 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Label
+import androidx.compose.material.icons.automirrored.outlined.LabelOff
+import androidx.compose.material.icons.automirrored.outlined.PlaylistAdd
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -170,7 +173,7 @@ internal fun PlaybackControls(
 
                 IconButton(onClick = onShowPlaylistPicker) {
                     Icon(
-                        Icons.Outlined.PlaylistAdd,
+                        Icons.AutoMirrored.Outlined.PlaylistAdd,
                         contentDescription = "添加到播放列表",
                         tint = colorScheme.onSurface.copy(alpha = 0.8f),
                         modifier = Modifier.size(24.dp)
@@ -194,7 +197,7 @@ internal fun PlaybackControls(
                     }
                 ) {
                     Icon(
-                        imageVector = if (isOnlineMedia) Icons.Outlined.LabelOff else Icons.Default.Label,
+                        imageVector = if (isOnlineMedia) Icons.AutoMirrored.Outlined.LabelOff else Icons.AutoMirrored.Filled.Label,
                         contentDescription = "标签管理",
                         tint = colorScheme.onSurface.copy(alpha = if (isOnlineMedia) 0.38f else 0.8f),
                         modifier = Modifier.size(24.dp)
@@ -460,9 +463,6 @@ private fun SlowMarqueeText(
             if (textWidth <= containerWidth) {
                 30.dp // Default slow velocity if no scroll needed
             } else {
-                val distancePx = (textWidth - containerWidth).toFloat()
-                // Target time: Duration - 1s (buffer)
-                val targetTimeSeconds = (durationMs - 1000).coerceAtLeast(2000) / 1000f
                 // Velocity = Distance / Time. basicMarquee expects Dp (implicitly Dp/s).
                 // We need to convert px/s to dp/s.
                 // 1 dp = density * px. 1 px = 1/density dp.

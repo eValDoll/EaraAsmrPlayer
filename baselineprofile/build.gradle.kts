@@ -15,7 +15,6 @@ android {
     }
 
     targetProjectPath = ":app"
-    targetVariant = "benchmark"
 
     experimentalProperties["android.experimental.self-instrumenting"] = true
 

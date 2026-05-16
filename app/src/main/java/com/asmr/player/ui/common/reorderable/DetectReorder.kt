@@ -1,7 +1,6 @@
 package com.asmr.player.ui.common.reorderable
 
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.forEachGesture
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerInputChange
@@ -10,7 +9,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 fun Modifier.detectReorder(state: ReorderableState<*>) =
     this.then(
         Modifier.pointerInput(Unit) {
-            forEachGesture {
+            while (true) {
                 awaitPointerEventScope {
                     val down = awaitFirstDown(requireUnconsumed = false)
                     var drag: PointerInputChange?
@@ -32,7 +31,7 @@ fun Modifier.detectReorder(state: ReorderableState<*>) =
 fun Modifier.detectReorderAfterLongPress(state: ReorderableState<*>) =
     this.then(
         Modifier.pointerInput(Unit) {
-            forEachGesture {
+            while (true) {
                 val down = awaitPointerEventScope {
                     awaitFirstDown(requireUnconsumed = false)
                 }

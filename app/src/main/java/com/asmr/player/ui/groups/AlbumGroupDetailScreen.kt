@@ -255,7 +255,6 @@ internal fun AlbumGroupDetailContent(
                                     rjCode = row.rjCode,
                                     coverModel = row.coverModel,
                                     tracks = row.tracks,
-                                    expanded = row.expanded,
                                     onToggle = {
                                         expandedAlbumIds.value = if (row.expanded) {
                                             expandedAlbumIds.value - row.albumId
@@ -357,17 +356,11 @@ private fun AlbumSectionHeader(
     rjCode: String,
     coverModel: Any?,
     tracks: List<AlbumGroupTrackRow>,
-    expanded: Boolean,
     onToggle: () -> Unit,
     onRemoveAlbum: () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val context = LocalContext.current
-    val persistedAlbum by produceState<com.asmr.player.data.local.db.entities.AlbumEntity?>(initialValue = null, albumId) {
-        value = withContext(Dispatchers.IO) {
-            AppDatabaseProvider.get(context).albumDao().getAlbumById(albumId)
-        }
-    }
     val totalSizeBytes by androidx.compose.runtime.produceState<Long?>(initialValue = null, tracks) {
         value = withContext(Dispatchers.IO) {
             tracks.sumOf { row -> queryTrackFileSize(context, row.trackPath) ?: 0L }

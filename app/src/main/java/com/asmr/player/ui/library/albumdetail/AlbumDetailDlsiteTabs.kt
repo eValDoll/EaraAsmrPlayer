@@ -860,7 +860,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                                     clickedUrl = url,
                                     toPreviewItem = { galleryUrl ->
                                         val headers = DlsiteAntiHotlink.headersForImageUrl(galleryUrl)
-                                        val model = if (headers.isEmpty()) {
+                                        val previewModel: Any = if (headers.isEmpty()) {
                                             galleryUrl
                                         } else {
                                             CacheImageModel(data = galleryUrl, headers = headers, keyTag = "dlsite")
@@ -868,7 +868,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                                         ImagePreviewItem(
                                             key = galleryUrl,
                                             title = galleryUrl.substringBefore('?').substringAfterLast('/').ifBlank { "Gallery" },
-                                            imageModel = model,
+                                            imageModel = previewModel,
                                             openPathOrUrl = galleryUrl
                                         )
                                     }
@@ -1143,9 +1143,7 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
     shouldAutoLoad: Boolean,
     onOpenLogin: () -> Unit,
     onEnsureLoaded: () -> Unit,
-    onPlayTracks: (Album, List<Track>, Track) -> Unit,
     onPlayMediaItems: (List<MediaItem>, Int) -> Unit,
-    onPlayVideo: (String, String, String, String) -> Unit,
     onAddToQueue: (Track) -> Boolean,
     onAddMediaItemsToQueue: (List<MediaItem>) -> Unit,
     onAddMediaItemsToFavorites: (List<MediaItem>) -> Unit,

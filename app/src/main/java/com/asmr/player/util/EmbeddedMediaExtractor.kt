@@ -135,7 +135,6 @@ object EmbeddedMediaExtractor {
             remaining -= 10
             if (size <= 0 || size > remaining) {
                 input.skip(remaining.toLong())
-                remaining = 0
                 break
             }
             val payload = ByteArray(size)

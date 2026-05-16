@@ -182,8 +182,8 @@ fun SearchScreen(
     val searchSubmitLocked = uiState is SearchUiState.Loading || interactionLocked
     val showSearchSpinner = success?.isBusy == true
     val highlightedPage = success?.page ?: 1
-    val canGoPrev = success?.canGoPrev == true && success?.isSearching != true
-    val canGoNext = success?.canGoNext == true && success?.isSearching != true
+    val canGoPrev = success?.canGoPrev == true && !success.isSearching
+    val canGoNext = success?.canGoNext == true && !success.isSearching
     val animatedChromeOffsetPx by animateFloatAsState(
         targetValue = chromeState.offsetPx,
         animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
