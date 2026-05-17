@@ -211,6 +211,7 @@ fun MainContainer(
     playerViewModel: PlayerViewModel,
     libraryViewModel: LibraryViewModel,
     settingsDataStore: SettingsDataStore,
+    messageManager: MessageManager,
     recentAlbumsPanelExpandedInitial: Boolean,
     startRouteFromIntent: String?,
     onShowQueue: () -> Unit,
@@ -229,6 +230,7 @@ fun MainContainer(
     val navigator = remember(navController) { AppNavigator(navController) }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
+    val hasPreviousBackStackEntry = navController.previousBackStackEntry != null
     val currentPlaylistSystemType = navBackStackEntry?.arguments?.getString("type")
     val startRoute = remember(startRouteFromIntent) {
         startRouteFromIntent?.trim().orEmpty()
@@ -284,7 +286,11 @@ fun MainContainer(
         if (startRoute.isBlank() || startRoute == initialDestination) return@LaunchedEffect
         withFrameNanos { }
         withFrameNanos { }
-        navController.navigateSingleTop(startRoute)
+        if (isPrimaryRoute(startRoute)) {
+            navController.navigatePrimaryRoute(startRoute)
+        } else {
+            navController.navigateSingleTop(startRoute)
+        }
     }
     var blockNavTouches by remember { mutableStateOf(false) }
     var lastRouteForTouchBlock by remember { mutableStateOf(currentPrimaryRoute ?: currentRoute) }
@@ -317,6 +323,7 @@ fun MainContainer(
     var hardwareVolumeOverlayInteracting by remember { mutableStateOf(false) }
     var hardwareVolumeOverlayHoldTick by remember { mutableLongStateOf(0L) }
     var lastHandledVolumeKeyTick by remember { mutableLongStateOf(0L) }
+    var lastLibraryBackPressElapsedRealtime by remember { mutableLongStateOf(0L) }
     var nowPlayingVolumeEventTick by remember { mutableLongStateOf(0L) }
     var lastNonZeroAppVolumePercent by rememberSaveable { mutableIntStateOf(AppVolume.DefaultPercent) }
     var hardwareVolumeOverlayBounds by remember { mutableStateOf<Rect?>(null) }
@@ -422,12 +429,12 @@ fun MainContainer(
                 pendingPrimaryNavigationRoute = route
                 primaryPagerState.animateScrollToPage(targetPage)
                 if (currentPrimaryRouteState.value != route) {
-                    navController.navigateSingleTop(route, popUpToRoute = Routes.Library)
+                    navController.navigatePrimaryRoute(route)
                 }
             }
         } else {
             pendingPrimaryNavigationRoute = null
-            navController.navigateSingleTop(route, popUpToRoute = Routes.Library)
+            navController.navigatePrimaryRoute(route)
         }
     }
 
@@ -478,7 +485,7 @@ fun MainContainer(
                 val currentPrimary = currentPrimaryRouteState.value ?: return@collect
                 val targetRoute = primaryPagerRoutes.getOrNull(page) ?: return@collect
                 if (targetRoute != currentPrimary) {
-                    navController.navigateSingleTop(targetRoute, popUpToRoute = Routes.Library)
+                    navController.navigatePrimaryRoute(targetRoute)
                 }
             }
     }
@@ -522,6 +529,12 @@ fun MainContainer(
     LaunchedEffect(activePrimaryRoute) {
         if (isPrimaryRoute(activePrimaryRoute)) {
             lastPrimaryRoute = activePrimaryRoute
+        }
+    }
+
+    LaunchedEffect(currentPrimaryRoute, hasPreviousBackStackEntry, nowPlayingVisible, drawerState.isOpen) {
+        if (currentPrimaryRoute != Routes.Library || hasPreviousBackStackEntry || nowPlayingVisible || drawerState.isOpen) {
+            lastLibraryBackPressElapsedRealtime = 0L
         }
     }
 
@@ -683,6 +696,22 @@ fun MainContainer(
     BackHandler(pendingDetailNavigation && currentRoute == Routes.Search) {
         pendingDetailNavigation = false
         cancelPendingDetailNavigation = true
+    }
+
+    BackHandler(
+        enabled = currentPrimaryRoute == Routes.Library &&
+            !hasPreviousBackStackEntry &&
+            !drawerState.isOpen &&
+            !pendingDetailNavigation &&
+            !nowPlayingVisible
+    ) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        if (now - lastLibraryBackPressElapsedRealtime <= 2_000L) {
+            activity?.finish()
+        } else {
+            lastLibraryBackPressElapsedRealtime = now
+            messageManager.showInfo("再按一次返回退出应用")
+        }
     }
 
     val drawerGesturesEnabled = false
@@ -919,7 +948,7 @@ fun MainContainer(
                                             actionIconContentColor = topBarContentColor
                                         ),
                                         navigationIcon = {
-                                            if (showBackButton && navController.previousBackStackEntry != null) {
+                                            if (showBackButton && hasPreviousBackStackEntry) {
                                                 IconButton(onClick = { navController.popBackStack() }) {
                                                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                                                 }
@@ -1575,7 +1604,11 @@ fun MainContainer(
                         },
                         onOpenQueue = onShowQueue,
                         onNavigate = { route ->
-                            if (route == activePrimaryRoute) {
+                            if (shouldScrollPrimaryRouteToTop(
+                                    requestedRoute = route,
+                                    activePrimaryRoute = activePrimaryRoute,
+                                    currentPrimaryRoute = currentPrimaryRoute
+                                )) {
                                 triggerPrimaryRouteScrollToTop(route)
                                 return@BottomChrome
                             }

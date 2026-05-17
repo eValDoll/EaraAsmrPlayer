@@ -31,4 +31,11 @@ class MainNavigationSupportTest {
         assertEquals("settings", resolveCurrentPrimaryDestinationRoute("settings"))
         assertEquals(null, resolveCurrentPrimaryDestinationRoute("playlist_system/{type}", "recent"))
     }
+
+    @Test
+    fun shouldScrollPrimaryRouteToTop_onlyWhenAlreadyAtPrimaryRoot() {
+        assertEquals(true, shouldScrollPrimaryRouteToTop("playlists", "playlists", "playlists"))
+        assertEquals(false, shouldScrollPrimaryRouteToTop("playlists", "playlists", null))
+        assertEquals(false, shouldScrollPrimaryRouteToTop("groups", "playlists", "playlists"))
+    }
 }
