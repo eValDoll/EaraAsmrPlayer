@@ -1,9 +1,16 @@
 package com.asmr.player.ui.nav
 
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -31,6 +38,7 @@ import androidx.compose.material.icons.filled.MoreHoriz
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
@@ -42,6 +50,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
@@ -86,7 +95,7 @@ private val BottomNavBarHeightLarge = 68.dp
 private val BottomNavBarCornerRadius = 30.dp
 private val BottomNavBarCornerRadiusLarge = 34.dp
 private val BottomNavBorderWidth = 1.dp
-private val BottomNavExpandedSlotCount = 5
+private const val BottomNavExpandedSlotCount = 5
 private val BottomNavCollapsedWidth = 64.dp
 private val BottomNavCollapsedWidthLarge = 76.dp
 private val BottomNavChipSize = 44.dp
@@ -109,8 +118,8 @@ private val BottomNavOverflowLeftShoulderReach = 22.dp
 private val BottomNavOverflowLeftShoulderReachLarge = 24.dp
 private val BottomNavOverflowRightShoulderReach = 24.dp
 private val BottomNavOverflowRightShoulderReachLarge = 26.dp
-private val BottomNavOverflowHorizontalBias = 10.dp
-private val BottomNavOverflowHorizontalBiasLarge = 12.dp
+private val BottomNavOverflowHorizontalBias = 0.dp
+private val BottomNavOverflowHorizontalBiasLarge = 0.dp
 private val BottomNavOverflowTopContentPadding = 1.dp
 private val BottomNavOverflowTopContentPaddingLarge = 2.dp
 private val BottomNavOverflowBottomPadding = 12.dp
@@ -125,6 +134,7 @@ private val BottomNavGlowExpandedSize = 44.dp
 private val BottomNavGlowExpandedSizeLarge = 50.dp
 private val BottomNavGlowCollapsedSize = 46.dp
 private val BottomNavGlowCollapsedSizeLarge = 52.dp
+private const val BottomNavPageToggleGroupSize = BottomNavExpandedSlotCount - 1
 private const val QuarterArcKappa = 0.55228475f
 private const val BottomNavOverflowOutlineCollapseTailFraction = 0.18f
 
@@ -280,25 +290,24 @@ fun resolvePrimaryRoute(
     }
 }
 
+@Suppress("UNUSED_PARAMETER")
 fun resolvePrimaryPagerRoutes(
     navItems: List<BottomChromeNavItem>,
     activeRoute: String,
     preferredPinnedRoute: String? = null
 ): List<String> {
-    if (navItems.isEmpty()) return emptyList()
+    return navItems.map { it.route }.distinct()
+}
 
-    val metrics = bottomChromeMetrics(largeLayout = false)
-    val layout = computeVisibleNavItems(
-        allItems = navItems,
-        activeRoute = activeRoute,
-        availableWidth = metrics.preferredExpandedWidth,
-        metrics = metrics,
-        preferredPinnedRoute = preferredPinnedRoute,
-        maxVisibleItems = BottomNavExpandedSlotCount - 1
-    )
-    return (layout.visibleItems + layout.overflowItems)
-        .map { it.route }
-        .distinct()
+private fun resolveBottomNavGroupIndex(
+    navItems: List<BottomChromeNavItem>,
+    route: String,
+    groupSize: Int = BottomNavPageToggleGroupSize
+): Int? {
+    val routeIndex = navItems.indexOfFirst { it.route == route }
+        .takeIf { it >= 0 }
+        ?: return null
+    return routeIndex / groupSize.coerceAtLeast(1)
 }
 
 private fun computeVisibleNavItems(
@@ -444,7 +453,7 @@ private fun buildBottomNavRailEntries(
 
     if (layout.showsOverflow) {
         entries += BottomNavRailEntry(
-            item = BottomChromeNavItem(Icons.Default.MoreHoriz, "...", BottomNavOverflowTag),
+            item = BottomChromeNavItem(Icons.Default.SwapHoriz, "切换", BottomNavOverflowTag),
             width = metrics.itemSlotWidth,
             isOverflow = true
         )
@@ -455,17 +464,33 @@ private fun buildBottomNavRailEntries(
 
 private fun computeBottomNavRailOffsets(
     entries: List<BottomNavRailEntry>,
+    currentWidth: Dp,
     metrics: BottomChromeMetrics
 ): List<Dp> {
     if (entries.isEmpty()) return emptyList()
 
+    val gapCount = (entries.size - 1).coerceAtLeast(0)
+    val baseContentWidth = entries.fold(0.dp) { total, entry -> total + entry.width } +
+        metrics.expandedHorizontalPadding * 2 +
+        metrics.expandedItemSpacing * gapCount
+    val extraWidth = (currentWidth - baseContentWidth).coerceAtLeast(0.dp)
+    val extraSpacing = if (gapCount > 0) {
+        extraWidth / (gapCount + 2)
+    } else {
+        0.dp
+    }
+    val resolvedSpacing = metrics.expandedItemSpacing + extraSpacing
+    val resolvedContentWidth = entries.fold(0.dp) { total, entry -> total + entry.width } +
+        metrics.expandedHorizontalPadding * 2 +
+        resolvedSpacing * gapCount
+    var currentOffset = metrics.expandedHorizontalPadding +
+        ((currentWidth - resolvedContentWidth).coerceAtLeast(0.dp) / 2)
     val offsets = ArrayList<Dp>(entries.size)
-    var currentOffset = metrics.expandedHorizontalPadding
     entries.forEachIndexed { index, entry ->
         offsets += currentOffset
         currentOffset += entry.width
         if (index != entries.lastIndex) {
-            currentOffset += metrics.expandedItemSpacing
+            currentOffset += resolvedSpacing
         }
     }
     return offsets
@@ -535,18 +560,25 @@ fun BottomChrome(
         val metrics = remember(largeLayout) { bottomChromeMetrics(largeLayout) }
         val navExpanded = !miniPlayerVisible || miniPlayerDisplayMode == MiniPlayerDisplayMode.CoverOnly
         val miniCollapsedWidth = if (largeLayout) 76.dp else 64.dp
+        val chromeSpacing = if (largeLayout) 8.dp else 6.dp
         val expandedNavWidthLimit = maxWidth.coerceAtMost(metrics.preferredExpandedWidth)
         val miniWidthTarget = when {
             !miniPlayerVisible -> 0.dp
             miniPlayerDisplayMode == MiniPlayerDisplayMode.Expanded ->
-                (maxWidth - metrics.collapsedWidth - 8.dp).coerceAtLeast(if (largeLayout) 244.dp else 204.dp)
+                (maxWidth - metrics.collapsedWidth - chromeSpacing).coerceAtLeast(if (largeLayout) 244.dp else 204.dp)
             else -> miniCollapsedWidth
         }
-        val navWidthTarget = when {
+        val navLayoutWidthTarget = when {
             !miniPlayerVisible -> expandedNavWidthLimit
-            navExpanded -> (maxWidth - miniWidthTarget - 8.dp)
+            navExpanded -> (maxWidth - miniWidthTarget - chromeSpacing)
                 .coerceAtLeast(if (largeLayout) 108.dp else 92.dp)
                 .coerceAtMost(expandedNavWidthLimit)
+            else -> metrics.collapsedWidth
+        }
+        val navSurfaceWidthTarget = when {
+            !miniPlayerVisible -> navLayoutWidthTarget
+            navExpanded -> (maxWidth - miniWidthTarget - chromeSpacing)
+                .coerceAtLeast(navLayoutWidthTarget)
             else -> metrics.collapsedWidth
         }
         val miniWidth by animateDpAsState(
@@ -558,7 +590,7 @@ fun BottomChrome(
             label = "bottomChromeMiniWidth"
         )
         val navWidth by animateDpAsState(
-            targetValue = navWidthTarget,
+            targetValue = navSurfaceWidthTarget,
             animationSpec = spring(
                 dampingRatio = Spring.DampingRatioNoBouncy,
                 stiffness = Spring.StiffnessMediumLow
@@ -569,16 +601,11 @@ fun BottomChrome(
             !navExpanded -> 1
             else -> BottomNavExpandedSlotCount - 1
         }
-        val chromeArrangement = Arrangement.spacedBy(
-            if (largeLayout) 10.dp else 8.dp,
-            alignment = Alignment.CenterHorizontally
-        )
-
         Row(
             modifier = Modifier
                 .fillMaxWidth()
                 .graphicsLayer { clip = false },
-            horizontalArrangement = chromeArrangement,
+            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.Bottom
         ) {
             BottomNavigationPill(
@@ -587,7 +614,8 @@ fun BottomChrome(
                 selectionProgresses = selectionProgresses,
                 preferredPinnedRoute = preferredPinnedRoute,
                 expanded = navExpanded,
-                availableWidth = navWidthTarget,
+                availableWidth = navLayoutWidthTarget,
+                surfaceTargetWidth = navSurfaceWidthTarget,
                 currentWidth = navWidth,
                 metrics = metrics,
                 maxVisibleItems = maxVisibleItems,
@@ -621,6 +649,7 @@ private fun BottomNavigationPill(
     preferredPinnedRoute: String? = null,
     expanded: Boolean,
     availableWidth: Dp,
+    surfaceTargetWidth: Dp = availableWidth,
     currentWidth: Dp = availableWidth,
     metrics: BottomChromeMetrics = bottomChromeMetrics(largeLayout = false),
     maxVisibleItems: Int? = null,
@@ -644,6 +673,7 @@ private fun BottomNavigationPill(
         preferredPinnedRoute = preferredPinnedRoute,
         expanded = expanded,
         availableWidth = availableWidth,
+        surfaceTargetWidth = surfaceTargetWidth,
         currentWidth = currentWidth,
         metrics = metrics,
         maxVisibleItems = maxVisibleItems,
@@ -657,6 +687,7 @@ private fun BottomNavigationPill(
 }
 
 @Composable
+@Suppress("UNUSED_PARAMETER")
 private fun BottomNavigationPillSurface(
     navItems: List<BottomChromeNavItem>,
     activeRoute: String,
@@ -664,6 +695,7 @@ private fun BottomNavigationPillSurface(
     preferredPinnedRoute: String?,
     expanded: Boolean,
     availableWidth: Dp,
+    surfaceTargetWidth: Dp,
     currentWidth: Dp,
     metrics: BottomChromeMetrics,
     maxVisibleItems: Int? = null,
@@ -694,7 +726,6 @@ private fun BottomNavigationPillSurface(
                 ?: activeRoute
         }
     }
-    val layoutPreferredPinnedRoute = if (expanded) preferredPinnedRoute else layoutFocusRoute
     val containerColor = colorScheme.primarySoft
         .copy(alpha = if (colorScheme.isDark) 0.10f else 0.14f)
         .compositeOver(colorScheme.surface)
@@ -704,47 +735,68 @@ private fun BottomNavigationPillSurface(
         colorScheme.primaryStrong.copy(alpha = 0.14f)
     }
     val activeItem = navItems.firstOrNull { it.route == layoutFocusRoute } ?: navItems.firstOrNull()
-    var lastExpandedWidth by remember(navItems, metrics) {
-        mutableStateOf(metrics.preferredExpandedWidth)
+    val navGroups = remember(navItems) {
+        navItems.chunked(BottomNavPageToggleGroupSize).filter { it.isNotEmpty() }
     }
-    var lastExpandedMaxVisibleItems by remember(navItems) {
-        mutableStateOf(BottomNavExpandedSlotCount - 1)
+    val navGroupKey = remember(navItems) {
+        navItems.joinToString(separator = "|") { it.route }
     }
-    if (expanded) {
-        SideEffect {
-            lastExpandedWidth = availableWidth
-            lastExpandedMaxVisibleItems = maxVisibleItems ?: (BottomNavExpandedSlotCount - 1)
+    var displayedGroupIndex by rememberSaveable(navGroupKey) {
+        mutableStateOf(resolveBottomNavGroupIndex(navItems, activeRoute) ?: 0)
+    }
+    var lastObservedActiveRoute by rememberSaveable(navGroupKey) {
+        mutableStateOf(activeRoute)
+    }
+    LaunchedEffect(activeRoute, navItems) {
+        if (activeRoute != lastObservedActiveRoute) {
+            resolveBottomNavGroupIndex(navItems, activeRoute)?.let { displayedGroupIndex = it }
+            lastObservedActiveRoute = activeRoute
         }
     }
-    val expandedReferenceWidth = if (expanded) availableWidth else lastExpandedWidth
-    val expandedReferenceMaxVisibleItems = if (expanded) maxVisibleItems else lastExpandedMaxVisibleItems
-    val expandedLayout = remember(
-        navItems,
-        layoutFocusRoute,
-        layoutPreferredPinnedRoute,
-        expandedReferenceWidth,
-        expandedReferenceMaxVisibleItems
-    ) {
-        computeVisibleNavItems(
-            allItems = navItems,
-            activeRoute = layoutFocusRoute,
-            availableWidth = expandedReferenceWidth,
-            metrics = metrics,
-            preferredPinnedRoute = layoutPreferredPinnedRoute,
-            maxVisibleItems = expandedReferenceMaxVisibleItems
+    val gestureFocusRoute = remember(activeRoute, resolvedSelectionProgresses) {
+        resolvedSelectionProgresses
+            .maxByOrNull { (_, progress) -> progress }
+            ?.takeIf { it.value > 0.001f }
+            ?.key
+            ?: activeRoute
+    }
+    val selectionTransitionInFlight = remember(resolvedSelectionProgresses) {
+        resolvedSelectionProgresses.count { (_, progress) -> progress > 0.001f } > 1
+    }
+    val gestureDrivenGroupIndex = remember(navItems, gestureFocusRoute, selectionTransitionInFlight) {
+        if (selectionTransitionInFlight) {
+            resolveBottomNavGroupIndex(navItems, gestureFocusRoute)
+        } else {
+            null
+        }
+    }
+    val resolvedGroupIndex = (gestureDrivenGroupIndex ?: displayedGroupIndex)
+        .coerceIn(0, (navGroups.lastIndex).coerceAtLeast(0))
+    if (resolvedGroupIndex != displayedGroupIndex) {
+        SideEffect {
+            displayedGroupIndex = resolvedGroupIndex
+        }
+    }
+    val visibleGroupItems = if (expanded) {
+        navGroups.getOrNull(resolvedGroupIndex).orEmpty()
+    } else {
+        listOfNotNull(activeItem)
+    }
+    val showsGroupToggle = expanded && navGroups.size > 1
+    val motionLayout = remember(visibleGroupItems, activeItem, showsGroupToggle) {
+        BottomChromeNavLayout(
+            visibleItems = visibleGroupItems.ifEmpty { listOfNotNull(activeItem) },
+            overflowItems = emptyList(),
+            showsOverflow = showsGroupToggle
         )
     }
-    val motionLayout = expandedLayout.takeIf { it.visibleItems.isNotEmpty() }
-        ?: BottomChromeNavLayout(
-            visibleItems = listOfNotNull(activeItem),
-            overflowItems = emptyList(),
-            showsOverflow = false
-        )
-    val overflowSelectionProgress = expandedLayout.overflowItems
-        .maxOfOrNull { item -> resolvedSelectionProgresses[item.route] ?: 0f }
-        ?: 0f
+    val toggleSelectionProgress = if (showsGroupToggle && resolvedGroupIndex > 0) 1f else 0f
     val motionEntries = buildBottomNavRailEntries(motionLayout, metrics)
-    val motionOffsets = computeBottomNavRailOffsets(motionEntries, metrics)
+    val motionOffsets = computeBottomNavRailOffsets(
+        entries = motionEntries,
+        currentWidth = currentWidth,
+        metrics = metrics
+    )
     val railShift = computeBottomNavRailShift(
         entries = motionEntries,
         offsets = motionOffsets,
@@ -752,12 +804,8 @@ private fun BottomNavigationPillSurface(
         currentWidth = currentWidth,
         metrics = metrics
     )
-    val canShowOverflow = expanded && expandedLayout.showsOverflow
-    val reservedOverflowHeadroom = if (canShowOverflow) {
-        computeOverflowHeadroom(expandedLayout.overflowItems.size, metrics)
-    } else {
-        0.dp
-    }
+    val canShowOverflow = false
+    val reservedOverflowHeadroom = 0.dp
     val overflowHeadroom by animateDpAsState(
         targetValue = if (canShowOverflow && overflowExpanded) reservedOverflowHeadroom else 0.dp,
         animationSpec = spring(
@@ -778,7 +826,6 @@ private fun BottomNavigationPillSurface(
     var containerBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
     val overflowPanelWidthPx = with(density) { metrics.overflowPanelWidth.toPx() }
     val overflowAnchorBiasPx = with(density) { metrics.overflowHorizontalBias.toPx() }
-    val overflowLiftPx = with(density) { 16.dp.toPx() }
     val currentWidthPx = with(density) { currentWidth.toPx() }
     val barHeightPx = with(density) { metrics.barHeight.toPx() }
     val overflowHeadroomPx = with(density) { overflowHeadroom.toPx() }
@@ -828,7 +875,7 @@ private fun BottomNavigationPillSurface(
         overflowRevealProgress = overflowRevealProgress
     )
     val interactionBlocked =
-        abs(currentWidth.value - availableWidth.value) > 0.5f ||
+        abs(currentWidth.value - surfaceTargetWidth.value) > 0.5f ||
             (overflowRevealProgress > 0.01f && overflowRevealProgress < 0.99f)
 
     SideEffect {
@@ -885,7 +932,7 @@ private fun BottomNavigationPillSurface(
             motionEntries.forEachIndexed { index, entry ->
                 val itemOffset = motionOffsets.getOrNull(index)?.minus(railShift) ?: 0.dp
                 val selectedProgress = if (entry.isOverflow) {
-                    maxOf(overflowSelectionProgress, overflowRevealProgress)
+                    toggleSelectionProgress
                 } else {
                     resolvedSelectionProgresses[entry.item.route] ?: 0f
                 }
@@ -924,7 +971,7 @@ private fun BottomNavigationPillSurface(
                         collapsed = !expanded,
                         metrics = metrics,
                         enabled = if (entry.isOverflow) {
-                            canShowOverflow && isFullyVisible
+                            navGroups.size > 1 && isFullyVisible
                         } else {
                             selectedProgress > 0.001f || isFullyVisible
                         },
@@ -937,70 +984,14 @@ private fun BottomNavigationPillSurface(
                             if (!expanded && !entry.isOverflow) {
                                 onExpandRequest()
                             } else if (entry.isOverflow) {
-                                if (canShowOverflow) {
-                                    onOverflowExpandedChange(!overflowExpanded)
+                                if (navGroups.size > 1) {
+                                    displayedGroupIndex = (resolvedGroupIndex + 1) % navGroups.size
                                 }
                             } else {
                                 onNavigate(entry.item.route)
                             }
                         }
                     )
-                }
-            }
-        }
-
-        if (
-            canShowOverflow &&
-            overflowRevealProgress > 0.01f &&
-            overflowPanelLeftPx.isFinite()
-        ) {
-            Column(
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .offset {
-                        IntOffset(
-                            x = overflowPanelLeftPx.roundToInt(),
-                            y = 0
-                        )
-                    }
-                    .graphicsLayer {
-                        alpha = overflowRevealProgress
-                        translationY = (1f - overflowRevealProgress) * overflowLiftPx
-                    }
-                    .width(metrics.overflowPanelWidth)
-                    .padding(
-                        top = metrics.overflowTopCapHeight + metrics.overflowTopContentPadding,
-                        bottom = metrics.overflowBottomPadding
-                    )
-                    .testTag("overflowIconStack"),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(metrics.overflowItemSpacing)
-            ) {
-                expandedLayout.overflowItems.forEach { item ->
-                    val selectedProgress = resolvedSelectionProgresses[item.route] ?: 0f
-                    val entryColor = lerp(
-                        colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.28f else 0.68f),
-                        colorScheme.primarySoft.copy(alpha = if (colorScheme.isDark) 0.44f else 0.76f),
-                        selectedProgress
-                    )
-                    Box(
-                        modifier = Modifier
-                            .size(metrics.overflowItemSize)
-                            .testTag("overflowIcon:${item.route}")
-                            .background(entryColor, CircleShape)
-                            .clickable {
-                                onOverflowExpandedChange(false)
-                                onNavigate(item.route)
-                            },
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Icon(
-                            imageVector = item.icon,
-                            contentDescription = item.label,
-                            modifier = Modifier.size(metrics.iconSize),
-                            tint = lerp(colorScheme.textSecondary, colorScheme.primaryStrong, selectedProgress)
-                        )
-                    }
                 }
             }
         }
@@ -1259,6 +1250,7 @@ private fun BottomNavItemChip(
     val contentColor = lerp(colorScheme.textSecondary, colorScheme.primaryStrong, resolvedSelectedProgress)
     val containerColor = lerp(inactiveContainer, activeContainer, resolvedSelectedProgress)
     val scale = 1f + (0.04f * resolvedSelectedProgress)
+    val iconScale = 1f + (0.16f * resolvedSelectedProgress)
     val glowAlpha = resolvedSelectedProgress
     val glowSize by animateDpAsState(
         targetValue = if (collapsed) metrics.glowCollapsedSize else metrics.glowExpandedSize,
@@ -1304,12 +1296,34 @@ private fun BottomNavItemChip(
                 modifier = Modifier.size(metrics.chipSize),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(
-                    imageVector = item.icon,
-                    contentDescription = item.label,
-                    modifier = Modifier.size(metrics.iconSize),
-                    tint = contentColor
-                )
+                AnimatedContent(
+                    targetState = item,
+                    transitionSpec = {
+                        (fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
+                            scaleIn(
+                                initialScale = 0.82f,
+                                animationSpec = spring(stiffness = Spring.StiffnessMediumLow)
+                            )) togetherWith
+                            (fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium)) +
+                                scaleOut(
+                                    targetScale = 1.08f,
+                                    animationSpec = spring(stiffness = Spring.StiffnessMedium)
+                                )) using SizeTransform(clip = false)
+                    },
+                    label = "bottomNavItemIcon"
+                ) { targetItem ->
+                    Icon(
+                        imageVector = targetItem.icon,
+                        contentDescription = targetItem.label,
+                        modifier = Modifier
+                            .size(metrics.iconSize)
+                            .graphicsLayer {
+                                scaleX = iconScale
+                                scaleY = iconScale
+                            },
+                        tint = contentColor
+                    )
+                }
             }
         }
     }

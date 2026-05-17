@@ -104,7 +104,6 @@ import com.asmr.player.ui.nav.Routes
 import com.asmr.player.ui.nav.bottomChromeNavItems
 import com.asmr.player.ui.nav.bottomChromeOverlayHeight
 import com.asmr.player.ui.nav.isPrimaryRoute
-import com.asmr.player.ui.nav.resolvePrimaryPagerRoutes
 import com.asmr.player.ui.nav.resolvePrimaryRoute
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.splash.EaraSplashOverlay
@@ -248,23 +247,11 @@ fun MainContainer(
         playlistSystemType = currentPlaylistSystemType
     )
     val bottomNavItems = remember { bottomChromeNavItems() }
-    val fixedBottomNavRoutes = remember(bottomNavItems) {
-        bottomNavItems.take(3).map { it.route }.toSet()
-    }
-    val bottomNavRoutes = remember(bottomNavItems) { bottomNavItems.map { it.route }.toSet() }
     val storedMiniPlayerDisplayMode by settingsDataStore.miniPlayerDisplayMode.collectAsState(
         initial = MiniPlayerDisplayMode.CoverOnly.name
     )
-    val storedBottomChromePinnedRoute by settingsDataStore.bottomChromePinnedRoute.collectAsState(initial = null)
     var miniPlayerDisplayMode by rememberSaveable { mutableStateOf(MiniPlayerDisplayMode.CoverOnly) }
-    var bottomChromePinnedRoute by rememberSaveable { mutableStateOf<String?>(null) }
-    val primaryPagerRoutes = remember(bottomNavItems, activePrimaryRoute, bottomChromePinnedRoute) {
-        resolvePrimaryPagerRoutes(
-            navItems = bottomNavItems,
-            activeRoute = activePrimaryRoute,
-            preferredPinnedRoute = bottomChromePinnedRoute
-        )
-    }
+    val primaryPagerRoutes = remember(bottomNavItems) { bottomNavItems.map { it.route } }
     val initialPrimaryPage = remember(initialDestination, primaryPagerRoutes) {
         primaryPagerRoutes.indexOf(initialDestination).takeIf { it >= 0 } ?: 0
     }
@@ -333,8 +320,6 @@ fun MainContainer(
     var nowPlayingVolumeEventTick by remember { mutableLongStateOf(0L) }
     var lastNonZeroAppVolumePercent by rememberSaveable { mutableIntStateOf(AppVolume.DefaultPercent) }
     var hardwareVolumeOverlayBounds by remember { mutableStateOf<Rect?>(null) }
-    var bottomChromeOverflowExpanded by remember { mutableStateOf(false) }
-    var bottomChromeOverflowProtectedBounds by remember { mutableStateOf<List<Rect>>(emptyList()) }
     var pendingPrimaryNavigationRoute by remember { mutableStateOf<String?>(null) }
     var libraryScrollToTopSignal by remember { mutableLongStateOf(0L) }
     var searchScrollToTopSignal by remember { mutableLongStateOf(0L) }
@@ -502,8 +487,6 @@ fun MainContainer(
         showHardwareVolumeOverlay = false
         hardwareVolumeOverlayInteracting = false
         hardwareVolumeOverlayBounds = null
-        bottomChromeOverflowExpanded = false
-        bottomChromeOverflowProtectedBounds = emptyList()
         if (pendingDetailNavigation && currentRoute?.startsWith("album_detail") == true) {
             pendingDetailNavigation = false
         }
@@ -550,10 +533,6 @@ fun MainContainer(
         }
     }
 
-    LaunchedEffect(storedBottomChromePinnedRoute) {
-        bottomChromePinnedRoute = storedBottomChromePinnedRoute
-    }
-
     LaunchedEffect(nowPlayingVisible) {
         if (!nowPlayingVisible) {
             nowPlayingUsesInlineVolumeControl = false
@@ -562,8 +541,6 @@ fun MainContainer(
         showHardwareVolumeOverlay = false
         hardwareVolumeOverlayInteracting = false
         hardwareVolumeOverlayBounds = null
-        bottomChromeOverflowExpanded = false
-        bottomChromeOverflowProtectedBounds = emptyList()
         nowPlayingVolumeEventTick = 0L
     }
 
@@ -1551,6 +1528,7 @@ fun MainContainer(
             BoxWithConstraints(
                 modifier = Modifier.fillMaxSize()
             ) {
+                val bottomChromeHorizontalPadding = if (useLargeBottomChrome) 16.dp else 12.dp
                 val isCompactWidth = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
                 val canUseRightPanel = !isCompactWidth &&
                     !isPhone &&
@@ -1571,31 +1549,21 @@ fun MainContainer(
                     animationSpec = tween(durationMillis = if (rightPanelExpanded) 220 else 180),
                     label = "miniPlayerReservedRight"
                 )
-                val chromeWidth = (maxWidth - reservedRight - 48.dp).coerceAtLeast(0.dp)
-                if (bottomChromeOverflowExpanded) {
-                    DismissOutsideBoundsOverlay(
-                        protectedBoundsInRoot = bottomChromeOverflowProtectedBounds,
-                        onDismiss = { bottomChromeOverflowExpanded = false }
-                    )
-                }
+                val chromeWidth = (maxWidth - reservedRight - (bottomChromeHorizontalPadding * 2)).coerceAtLeast(0.dp)
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .graphicsLayer { clip = false }
-                        .padding(start = 22.dp, bottom = 24.dp)
+                        .padding(start = bottomChromeHorizontalPadding, bottom = 24.dp)
                         .width(chromeWidth)
                 ) {
                     BottomChrome(
                         activeRoute = activePrimaryRoute,
                         selectionProgresses = primaryNavSelectionProgresses,
-                        preferredPinnedRoute = bottomChromePinnedRoute,
                         miniPlayerVisible = miniPlayerVisible,
                         miniPlayerDisplayMode = miniPlayerDisplayMode,
                         largeLayout = useLargeBottomChrome,
                         navItems = bottomNavItems,
-                        overflowExpanded = bottomChromeOverflowExpanded,
-                        onOverflowExpandedChange = { bottomChromeOverflowExpanded = it },
-                        onOverflowProtectedBoundsChange = { bottomChromeOverflowProtectedBounds = it },
                         onMiniPlayerDisplayModeChange = { nextMode ->
                             miniPlayerDisplayMode = nextMode
                             scope.launch { settingsDataStore.setMiniPlayerDisplayMode(nextMode.name) }
@@ -1611,20 +1579,7 @@ fun MainContainer(
                                 triggerPrimaryRouteScrollToTop(route)
                                 return@BottomChrome
                             }
-                            val projectedPagerRoutes = if (route in bottomNavRoutes && route !in fixedBottomNavRoutes) {
-                                resolvePrimaryPagerRoutes(
-                                    navItems = bottomNavItems,
-                                    activeRoute = activePrimaryRoute,
-                                    preferredPinnedRoute = route
-                                )
-                            } else {
-                                primaryPagerRoutes
-                            }
-                            if (route in bottomNavRoutes && route !in fixedBottomNavRoutes) {
-                                bottomChromePinnedRoute = route
-                                scope.launch { settingsDataStore.setBottomChromePinnedRoute(route) }
-                            }
-                            openPrimaryRoute(route, projectedPagerRoutes)
+                            openPrimaryRoute(route)
                         }
                     )
                 }
