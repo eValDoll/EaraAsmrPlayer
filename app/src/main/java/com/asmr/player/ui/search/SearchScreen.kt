@@ -6,6 +6,7 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,6 +73,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
@@ -109,6 +111,7 @@ internal const val SEARCH_SUBMIT_BUTTON_TAG = "search_submit_button"
 internal const val SEARCH_SUBMIT_SPINNER_TAG = "search_submit_spinner"
 internal const val SEARCH_PREV_BUTTON_TAG = "search_prev_button"
 internal const val SEARCH_NEXT_BUTTON_TAG = "search_next_button"
+internal const val SEARCH_PAGINATION_TAG = "search_pagination"
 internal const val SEARCH_CHROME_TAG = "search_chrome"
 private val SearchChromeContentGap = 16.dp
 private const val SearchPullRefreshContentShiftRatio = 1f
@@ -121,6 +124,16 @@ private fun stableAlbumKey(album: Album): String {
     val seed = "${album.coverUrl}|${album.title}|${album.circle}|${album.cv}"
     return "h${seed.hashCode().absoluteValue}"
 }
+
+private fun Modifier.consumeTapThrough(): Modifier =
+    pointerInput(Unit) {
+        awaitEachGesture {
+            do {
+                val event = awaitPointerEvent()
+                event.changes.forEach { change -> change.consume() }
+            } while (event.changes.any { it.pressed })
+        }
+    }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -584,6 +597,7 @@ fun SearchScreen(
     }
 }
 
+
 @Composable
 private fun SearchPullRefreshIndicator(
     progress: Float,
@@ -918,7 +932,7 @@ internal fun SearchPaginationHeader(
             .fillMaxWidth()
             .padding(horizontal = SearchPageHorizontalPadding, vertical = 2.dp)
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .shadow(
@@ -940,9 +954,20 @@ internal fun SearchPaginationHeader(
                 )
                 .clip(RoundedCornerShape(14.dp))
                 .background(if (isDark) colorScheme.surface else Color.White)
-                .padding(horizontal = 8.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .testTag(SEARCH_PAGINATION_TAG)
         ) {
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .consumeTapThrough()
+            )
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
             IconButton(
                 onClick = onPrev,
                 enabled = canGoPrev && !controlsLocked,
@@ -996,6 +1021,7 @@ internal fun SearchPaginationHeader(
                         Color.Gray
                     }
                 )
+            }
             }
         }
     }

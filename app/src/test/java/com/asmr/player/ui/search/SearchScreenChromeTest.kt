@@ -1,6 +1,10 @@
 package com.asmr.player.ui.search
 
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -17,7 +21,9 @@ import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.asmr.player.ui.common.CollapsibleHeaderState
 import com.asmr.player.ui.theme.AsmrPlayerTheme
@@ -144,6 +150,68 @@ class SearchScreenChromeTest {
         composeRule.onNodeWithTag(SEARCH_SUBMIT_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_PREV_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_NEXT_BUTTON_TAG).assertIsNotEnabled()
+    }
+
+    @Test
+    fun paginationBlankAreaTap_doesNotPassThroughToUnderlyingContent() {
+        var underlayClicks = 0
+
+        composeRule.setContent {
+            AsmrPlayerTheme {
+                Box(modifier = Modifier.size(width = 360.dp, height = 72.dp)) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clickable { underlayClicks += 1 }
+                    )
+                    SearchPaginationHeader(
+                        page = 2,
+                        canGoPrev = true,
+                        canGoNext = true,
+                        controlsLocked = false,
+                        onPrev = {},
+                        onNext = {}
+                    )
+                }
+            }
+        }
+
+        composeRule.onNodeWithTag(SEARCH_PAGINATION_TAG)
+            .performTouchInput {
+                down(center.copy(x = center.x, y = center.y))
+                up()
+            }
+
+        composeRule.runOnIdle {
+            assertEquals(0, underlayClicks)
+        }
+    }
+
+    @Test
+    fun paginationButtons_remainClickable() {
+        var prevCount = 0
+        var nextCount = 0
+
+        composeRule.setContent {
+            AsmrPlayerTheme {
+                SearchPaginationHeader(
+                    page = 2,
+                    canGoPrev = true,
+                    canGoNext = true,
+                    controlsLocked = false,
+                    onPrev = { prevCount += 1 },
+                    onNext = { nextCount += 1 }
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(SEARCH_PREV_BUTTON_TAG).performClick()
+        composeRule.onNodeWithTag(SEARCH_NEXT_BUTTON_TAG).performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(1, prevCount)
+            assertEquals(1, nextCount)
+        }
     }
 
     @Test
