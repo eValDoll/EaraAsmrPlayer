@@ -27,6 +27,7 @@ data class AppMessage(
 @Singleton
 class MessageManager @Inject constructor() {
     private val seq = AtomicLong(0L)
+    private val consumedMessageId = AtomicLong(0L)
     private val _messages = MutableSharedFlow<AppMessage>(
         replay = 1,
         extraBufferCapacity = 10,
@@ -57,4 +58,14 @@ class MessageManager @Inject constructor() {
     fun showError(message: String) = showMessage(message, MessageType.Error)
     fun showWarning(message: String) = showMessage(message, MessageType.Warning)
     fun showInfo(message: String) = showMessage(message, MessageType.Info)
+
+    fun tryConsume(messageId: Long): Boolean {
+        while (true) {
+            val current = consumedMessageId.get()
+            if (messageId <= current) return false
+            if (consumedMessageId.compareAndSet(current, messageId)) {
+                return true
+            }
+        }
+    }
 }

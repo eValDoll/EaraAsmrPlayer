@@ -373,6 +373,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 messageManager.messages.collect { appMessage ->
+                    if (!messageManager.tryConsume(appMessage.id)) return@collect
                     val now = System.currentTimeMillis()
                     if ((now - appMessage.createdAtMs) > 10_000L) return@collect
                     val normalized = appMessage.message.trim()
