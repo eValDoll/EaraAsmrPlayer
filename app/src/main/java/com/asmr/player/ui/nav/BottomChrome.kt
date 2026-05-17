@@ -11,6 +11,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -66,6 +67,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.boundsInParent
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -538,6 +540,16 @@ private fun computeBottomNavEntryVisibility(
         .coerceIn(0f, 1f)
 }
 
+private fun Modifier.consumeTapThrough(): Modifier =
+    pointerInput(Unit) {
+        awaitEachGesture {
+            do {
+                val event = awaitPointerEvent()
+                event.changes.forEach { change -> change.consume() }
+            } while (event.changes.any { it.pressed })
+        }
+    }
+
 @Composable
 fun BottomChrome(
     activeRoute: String,
@@ -922,6 +934,12 @@ private fun BottomNavigationPillSurface(
                 )
             }
     ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .consumeTapThrough()
+        )
+
         Box(
             modifier = Modifier
                 .align(Alignment.BottomStart)
