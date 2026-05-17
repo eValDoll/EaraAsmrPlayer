@@ -263,6 +263,26 @@ internal fun NavHostController.navigateSingleTop(route: String, popUpToRoute: St
     }
 }
 
+internal fun NavHostController.navigatePrimaryRoute(
+    route: String,
+    popUpToRoute: String = Routes.Library
+) {
+    navigate(route) {
+        launchSingleTop = true
+        restoreState = false
+        popUpTo(popUpToRoute) {
+            inclusive = false
+            saveState = false
+        }
+    }
+}
+
+internal fun shouldScrollPrimaryRouteToTop(
+    requestedRoute: String,
+    activePrimaryRoute: String,
+    currentPrimaryRoute: String?
+): Boolean = requestedRoute == activePrimaryRoute && currentPrimaryRoute == requestedRoute
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PrimaryTopBarBrand(

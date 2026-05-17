@@ -410,6 +410,7 @@ class MainActivity : ComponentActivity() {
                         playerViewModel = playerViewModel,
                         libraryViewModel = libraryViewModel,
                         settingsDataStore = settingsDataStore,
+                        messageManager = messageManager,
                         recentAlbumsPanelExpandedInitial = recentAlbumsPanelExpandedInitial,
                         startRouteFromIntent = startRouteFromIntent,
                         onShowQueue = { overlaySheet = OverlaySheet.Queue },
