@@ -15,6 +15,8 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -41,11 +43,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
@@ -65,6 +71,8 @@ import com.asmr.player.ui.library.BulkPhase
 import com.asmr.player.ui.library.LibraryViewModel
 import com.asmr.player.ui.common.AppSupportStatusSection
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
+import com.asmr.player.ui.theme.LocalThemeTransitionTrigger
+import com.asmr.player.ui.theme.ThemeTransitionRequest
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
@@ -315,21 +323,25 @@ fun SettingsScreen(
                     ThemeModeChip(
                         label = "系统",
                         selected = themeMode == "system",
+                        targetPref = "system",
                         onClick = { viewModel.setThemeMode("system") }
                     )
                     ThemeModeChip(
                         label = "浅色",
                         selected = themeMode == "light",
+                        targetPref = "light",
                         onClick = { viewModel.setThemeMode("light") }
                     )
                     ThemeModeChip(
                         label = "深色",
                         selected = themeMode == "dark",
+                        targetPref = "dark",
                         onClick = { viewModel.setThemeMode("dark") }
                     )
                     ThemeModeChip(
                         label = "柔和深色",
                         selected = themeMode == "soft_dark",
+                        targetPref = "soft_dark",
                         onClick = { viewModel.setThemeMode("soft_dark") }
                     )
                 }
@@ -1289,13 +1301,46 @@ private fun SettingsInfoTip(active: Boolean, title: String, text: String, onTogg
 }
 
 @Composable
-private fun ThemeModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun ThemeModeChip(
+    label: String,
+    selected: Boolean,
+    targetPref: String,
+    onClick: () -> Unit
+) {
     val colorScheme = AsmrTheme.colorScheme
     val isDark = colorScheme.isDark
+    val trigger = LocalThemeTransitionTrigger.current
+    val systemDark = isSystemInDarkTheme()
+    var positionInWindow by remember { mutableStateOf(Offset.Zero) }
+
+    val actualOnClick = {
+        if (trigger != null && !selected && targetPref.isNotBlank()) {
+            val targetIsDark = when (targetPref) {
+                "light" -> false
+                "system" -> systemDark
+                else -> true
+            }
+            trigger(
+                ThemeTransitionRequest(
+                    origin = positionInWindow,
+                    targetIsDark = targetIsDark,
+                    targetPref = targetPref
+                )
+            )
+        } else {
+            onClick()
+        }
+    }
+
     FilterChip(
         selected = selected,
-        onClick = onClick,
+        onClick = actualOnClick,
         label = { Text(label) },
+        modifier = Modifier.onGloballyPositioned { coordinates ->
+            val pos = coordinates.positionInWindow()
+            val size = coordinates.size
+            positionInWindow = Offset(pos.x + size.width / 2f, pos.y + size.height / 2f)
+        },
         colors = FilterChipDefaults.filterChipColors(
             selectedContainerColor = colorScheme.primarySoft,
             selectedLabelColor = if (isDark) colorScheme.onPrimaryContainer else colorScheme.primaryStrong

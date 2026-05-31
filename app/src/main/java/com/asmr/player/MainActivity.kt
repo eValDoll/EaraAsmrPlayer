@@ -107,6 +107,7 @@ import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.splash.EaraSplashOverlay
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.rememberCoroutineScope
 import java.net.URLDecoder
 import java.net.URLEncoder
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -159,6 +160,9 @@ import com.asmr.player.ui.common.VisibleAppMessage
 import com.asmr.player.ui.theme.HuePalette
 import com.asmr.player.ui.theme.PlayerTheme
 import com.asmr.player.ui.theme.ThemeMode
+import com.asmr.player.ui.theme.LocalThemeTransitionTrigger
+import com.asmr.player.ui.theme.ThemeTransitionRequest
+import com.asmr.player.ui.theme.ThemeCircularRevealOverlay
 import com.asmr.player.ui.theme.DefaultBrandPrimaryDark
 import com.asmr.player.ui.theme.DefaultBrandPrimaryLight
 import com.asmr.player.ui.theme.deriveHuePalette
@@ -503,6 +507,18 @@ class MainActivity : ComponentActivity() {
                 }
             }
 
+            val coroutineScope = rememberCoroutineScope()
+            var themeTransition by remember { mutableStateOf<ThemeTransitionRequest?>(null) }
+            val themeTransitionTrigger: (ThemeTransitionRequest) -> Unit = remember {
+                { request ->
+                    themeTransition = request
+                    coroutineScope.launch {
+                        settingsDataStore.setTheme(request.targetPref)
+                    }
+                }
+            }
+
+            CompositionLocalProvider(LocalThemeTransitionTrigger provides themeTransitionTrigger) {
             AsmrPlayerTheme(mode = mode, hue = globalHue) {
                 var showSplash by rememberSaveable { mutableStateOf(true) }
                 var contentReady by remember { mutableStateOf(false) }
@@ -534,6 +550,13 @@ class MainActivity : ComponentActivity() {
                         EaraSplashOverlay(
                             isReady = contentReady,
                             onFinished = { showSplash = false }
+                        )
+                    }
+
+                    themeTransition?.let { request ->
+                        ThemeCircularRevealOverlay(
+                            request = request,
+                            onAnimationEnd = { themeTransition = null }
                         )
                     }
                     
@@ -580,6 +603,7 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+            }
             }
         }
     }
