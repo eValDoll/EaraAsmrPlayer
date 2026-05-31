@@ -15,8 +15,6 @@ import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -49,7 +47,6 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.text.font.FontWeight
@@ -72,7 +69,7 @@ import com.asmr.player.ui.library.LibraryViewModel
 import com.asmr.player.ui.common.AppSupportStatusSection
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.theme.LocalThemeTransitionTrigger
-import com.asmr.player.ui.theme.ThemeTransitionRequest
+import com.asmr.player.ui.theme.ThemeTransitionTriggerRequest
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
@@ -1310,20 +1307,13 @@ private fun ThemeModeChip(
     val colorScheme = AsmrTheme.colorScheme
     val isDark = colorScheme.isDark
     val trigger = LocalThemeTransitionTrigger.current
-    val systemDark = isSystemInDarkTheme()
     var positionInWindow by remember { mutableStateOf(Offset.Zero) }
 
     val actualOnClick = {
         if (trigger != null && !selected && targetPref.isNotBlank()) {
-            val targetIsDark = when (targetPref) {
-                "light" -> false
-                "system" -> systemDark
-                else -> true
-            }
             trigger(
-                ThemeTransitionRequest(
+                ThemeTransitionTriggerRequest(
                     origin = positionInWindow,
-                    targetIsDark = targetIsDark,
                     targetPref = targetPref
                 )
             )

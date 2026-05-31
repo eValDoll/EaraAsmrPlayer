@@ -117,7 +117,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.theme.LocalThemeTransitionTrigger
-import com.asmr.player.ui.theme.ThemeTransitionRequest
+import com.asmr.player.ui.theme.ThemeTransitionTriggerRequest
 import androidx.compose.ui.draw.blur
 import android.os.Build
 import android.graphics.RenderEffect
@@ -324,9 +324,8 @@ internal fun PrimaryTopBarBrand(
                     )
                     val targetPref = if (isDark) "light" else "dark"
                     trigger(
-                        ThemeTransitionRequest(
+                        ThemeTransitionTriggerRequest(
                             origin = origin,
-                            targetIsDark = !isDark,
                             targetPref = targetPref
                         )
                     )

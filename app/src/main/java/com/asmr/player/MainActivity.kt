@@ -162,6 +162,7 @@ import com.asmr.player.ui.theme.PlayerTheme
 import com.asmr.player.ui.theme.ThemeMode
 import com.asmr.player.ui.theme.LocalThemeTransitionTrigger
 import com.asmr.player.ui.theme.ThemeTransitionRequest
+import com.asmr.player.ui.theme.ThemeTransitionTriggerRequest
 import com.asmr.player.ui.theme.ThemeCircularRevealOverlay
 import com.asmr.player.ui.theme.DefaultBrandPrimaryDark
 import com.asmr.player.ui.theme.DefaultBrandPrimaryLight
@@ -184,10 +185,8 @@ import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
 import com.asmr.player.service.AudioOutputRouteKind
 import javax.inject.Inject
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 
@@ -510,9 +509,16 @@ class MainActivity : ComponentActivity() {
 
             val coroutineScope = rememberCoroutineScope()
             var themeTransition by remember { mutableStateOf<ThemeTransitionRequest?>(null) }
-            val themeTransitionTrigger: (ThemeTransitionRequest) -> Unit = remember {
-                { request ->
-                    themeTransition = request
+            val themeTransitionTrigger: (ThemeTransitionTriggerRequest) -> Unit = remember(mode) {
+                { triggerReq ->
+                    val oldBg = neutralPaletteForMode(mode).background
+                    themeTransition = ThemeTransitionRequest(
+                        origin = triggerReq.origin,
+                        oldBackgroundColor = oldBg
+                    )
+                    coroutineScope.launch {
+                        settingsDataStore.setTheme(triggerReq.targetPref)
+                    }
                 }
             }
 
@@ -554,15 +560,7 @@ class MainActivity : ComponentActivity() {
                     themeTransition?.let { request ->
                         ThemeCircularRevealOverlay(
                             request = request,
-                            onAnimationEnd = {
-                                coroutineScope.launch {
-                                    settingsDataStore.setTheme(request.targetPref)
-                                    withTimeoutOrNull(500) {
-                                        settingsDataStore.themeBootstrapPreferences.first { it.theme == request.targetPref }
-                                    }
-                                    themeTransition = null
-                                }
-                            }
+                            onAnimationEnd = { themeTransition = null }
                         )
                     }
                     
