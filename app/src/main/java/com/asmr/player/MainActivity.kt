@@ -187,6 +187,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.runBlocking
 
@@ -512,9 +513,6 @@ class MainActivity : ComponentActivity() {
             val themeTransitionTrigger: (ThemeTransitionRequest) -> Unit = remember {
                 { request ->
                     themeTransition = request
-                    coroutineScope.launch {
-                        settingsDataStore.setTheme(request.targetPref)
-                    }
                 }
             }
 
@@ -556,7 +554,15 @@ class MainActivity : ComponentActivity() {
                     themeTransition?.let { request ->
                         ThemeCircularRevealOverlay(
                             request = request,
-                            onAnimationEnd = { themeTransition = null }
+                            onAnimationEnd = {
+                                coroutineScope.launch {
+                                    settingsDataStore.setTheme(request.targetPref)
+                                    withTimeoutOrNull(500) {
+                                        settingsDataStore.themeBootstrapPreferences.first { it.theme == request.targetPref }
+                                    }
+                                    themeTransition = null
+                                }
+                            }
                         )
                     }
                     
