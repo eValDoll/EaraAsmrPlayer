@@ -1017,11 +1017,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                             selected = selected,
                             onEnterSelectionMode = enterSelectionMode,
                             onSelectedChange = onSelectedChange,
-                            onDownload = if (
-                                file.fileType == TreeFileType.Audio ||
-                                file.fileType == TreeFileType.Video ||
-                                file.fileType == TreeFileType.Image
-                            ) ({ onDownloadOne(file.path) }) else null,
+                            onDownload = if (isDownloadableTreeFileType(file.fileType)) ({ onDownloadOne(file.path) }) else null,
                             onAddToQueue = if (leaf != null) ({
                                 com.asmr.player.util.OnlineLyricsStore.set(leaf.url, leaf.subtitles)
                                 onAddToQueue(leaf.toTrack())
@@ -1421,11 +1417,7 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
                         selected = selected,
                         onEnterSelectionMode = enterSelectionMode,
                         onSelectedChange = onSelectedChange,
-                        onDownload = if (
-                            file.fileType == TreeFileType.Audio ||
-                            file.fileType == TreeFileType.Video ||
-                            file.fileType == TreeFileType.Image
-                        ) ({ onDownloadOne(file.path) }) else null,
+                        onDownload = if (isDownloadableTreeFileType(file.fileType)) ({ onDownloadOne(file.path) }) else null,
                         onAddToQueue = if (leaf != null) ({
                             com.asmr.player.util.OnlineLyricsStore.set(leaf.url, leaf.subtitles)
                             onAddToQueue(leaf.toTrack())

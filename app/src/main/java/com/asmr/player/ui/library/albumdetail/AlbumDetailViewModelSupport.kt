@@ -280,11 +280,9 @@ internal fun filterDownloadableMediaTree(tree: List<AsmrOneTrackNodeResponse>): 
         when {
             filteredChildren.isNotEmpty() -> node.copy(children = filteredChildren)
             url.isBlank() -> null
-            else -> when (treeFileTypeForNode(node.title.orEmpty(), url)) {
-                TreeFileType.Audio,
-                TreeFileType.Video,
-                TreeFileType.Image -> node.copy(children = null)
-                else -> null
+            else -> {
+                val fileType = treeFileTypeForNode(node.title.orEmpty(), url, node.type)
+                if (isDownloadableTreeFileType(fileType)) node.copy(children = null) else null
             }
         }
     }

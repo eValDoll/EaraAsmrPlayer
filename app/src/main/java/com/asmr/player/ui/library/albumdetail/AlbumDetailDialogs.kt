@@ -199,7 +199,7 @@ internal fun AsmrOneDownloadDialog(
                                 .height(180.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("没有可下载的音频/视频文件")
+                            Text("没有可下载文件")
                         }
                     } else {
                         val entries = flattenAsmrOneTreeForUi(mediaTree, expanded.toSet()).entries
@@ -242,6 +242,7 @@ internal fun AsmrOneDownloadDialog(
                                         AsmrTreeFileCheckboxRow(
                                             title = entry.title,
                                             depth = entry.depth,
+                                            fileType = entry.fileType,
                                             checked = isChecked,
                                             onCheckedChange = { checked ->
                                                 if (checked) {
@@ -290,9 +291,8 @@ private fun flattenOnlineSaveLeaves(tree: List<AsmrOneTrackNodeResponse>): List<
             val url = node.mediaDownloadUrl ?: node.streamUrl
             if (children.isEmpty()) {
                 if (url.isNullOrBlank()) return@forEach
-                val nameForType = titleRaw.ifBlank { url.substringBefore('?').substringAfterLast('/') }
-                val type = treeFileTypeForName(nameForType)
-                if (type != TreeFileType.Audio && type != TreeFileType.Video) return@forEach
+                val type = treeFileTypeForNode(titleRaw, url, node.type)
+                if (!isLibrarySavableTreeFileType(type)) return@forEach
                 out.add(
                     OnlineSaveLeafUi(
                         relativePath = path,
@@ -323,9 +323,8 @@ private fun buildMediaLeafPathIndex(tree: List<AsmrOneTrackNodeResponse>): Map<S
             val url = node.mediaDownloadUrl ?: node.streamUrl
             if (children.isEmpty()) {
                 if (url.isNullOrBlank()) return@forEach
-                val nameForType = titleRaw.ifBlank { url.substringBefore('?').substringAfterLast('/') }
-                val type = treeFileTypeForName(nameForType)
-                if (type != TreeFileType.Audio && type != TreeFileType.Video) return@forEach
+                val type = treeFileTypeForNode(titleRaw, url, node.type)
+                if (!isLibrarySavableTreeFileType(type)) return@forEach
                 folderStack.forEach { folder ->
                     folderToLeaves.getOrPut(folder) { mutableListOf() }.add(path)
                 }
@@ -355,9 +354,8 @@ private fun flattenAsmrOneMediaTreeForUi(
         val url = node.mediaDownloadUrl ?: node.streamUrl
         return if (children.isEmpty()) {
             if (url.isNullOrBlank()) return false
-            val nameForType = titleRaw.ifBlank { url.substringBefore('?').substringAfterLast('/') }
-            val type = treeFileTypeForName(nameForType)
-            type == TreeFileType.Audio || type == TreeFileType.Video
+            val type = treeFileTypeForNode(titleRaw, url, node.type)
+            isLibrarySavableTreeFileType(type)
         } else {
             children.any { nodeHasMedia(it) }
         }
@@ -372,9 +370,8 @@ private fun flattenAsmrOneMediaTreeForUi(
             val url = node.mediaDownloadUrl ?: node.streamUrl
             if (children.isEmpty()) {
                 if (url.isNullOrBlank()) return@forEach
-                val nameForType = titleRaw.ifBlank { url.substringBefore('?').substringAfterLast('/') }
-                val type = treeFileTypeForName(nameForType)
-                if (type != TreeFileType.Audio && type != TreeFileType.Video) return@forEach
+                val type = treeFileTypeForNode(titleRaw, url, node.type)
+                if (!isLibrarySavableTreeFileType(type)) return@forEach
                 out.add(
                     AsmrTreeUiEntry.File(
                         path = path,
@@ -503,6 +500,7 @@ internal fun OnlineSaveDialog(
                                         AsmrTreeFileCheckboxRow(
                                             title = entry.title,
                                             depth = entry.depth,
+                                            fileType = entry.fileType,
                                             checked = isChecked,
                                             onCheckedChange = { checked ->
                                                 if (checked) {
@@ -576,9 +574,13 @@ private fun AsmrTreeFolderCheckboxRow(
 private fun AsmrTreeFileCheckboxRow(
     title: String,
     depth: Int,
+    fileType: TreeFileType,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit
 ) {
+    val colorScheme = AsmrTheme.colorScheme
+    val icon = treeFileTypeIcon(fileType)
+    val iconTint = treeFileTypeTint(fileType, colorScheme)
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -593,12 +595,29 @@ private fun AsmrTreeFileCheckboxRow(
         ) {
             Checkbox(checked = checked, onCheckedChange = onCheckedChange)
             Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = title,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyMedium
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconTint,
+                modifier = Modifier.size(22.dp)
             )
+            Spacer(modifier = Modifier.width(10.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = colorScheme.textPrimary,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                )
+                Text(
+                    text = fileTypeLabel(fileType),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    color = colorScheme.textSecondary,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
         }
     }
 }

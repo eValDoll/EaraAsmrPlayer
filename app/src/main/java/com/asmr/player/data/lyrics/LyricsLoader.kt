@@ -354,6 +354,14 @@ class LyricsLoader @Inject constructor(
             "Subtitle" -> TreeFileType.Subtitle
             "Text" -> TreeFileType.Text
             "Pdf" -> TreeFileType.Pdf
+            "Archive" -> TreeFileType.Archive
+            "Document" -> TreeFileType.Document
+            "Spreadsheet" -> TreeFileType.Spreadsheet
+            "Presentation" -> TreeFileType.Presentation
+            "Code" -> TreeFileType.Code
+            "Ebook" -> TreeFileType.Ebook
+            "Font" -> TreeFileType.Font
+            "AppPackage" -> TreeFileType.AppPackage
             else -> TreeFileType.Other
         }
     }

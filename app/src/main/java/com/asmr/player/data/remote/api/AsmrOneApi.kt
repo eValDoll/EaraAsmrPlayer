@@ -79,6 +79,8 @@ data class Pagination(val totalCount: Int, val pageSize: Int, val page: Int)
 data class AsmrOneTrackNodeResponse(
     @SerializedName(value = "title", alternate = ["name", "fileName"])
     val title: String? = null,
+    @SerializedName(value = "type", alternate = ["fileType", "mimeType"])
+    val type: String? = null,
     @SerializedName(value = "children", alternate = ["child", "items", "tracks"])
     val children: List<AsmrOneTrackNodeResponse>? = null,
     val duration: Double? = null,

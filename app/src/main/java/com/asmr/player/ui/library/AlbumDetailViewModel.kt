@@ -2370,16 +2370,11 @@ class AlbumDetailViewModel @Inject constructor(
         if (tree.isEmpty()) return
 
         val leaves = flattenAsmrOneLeafDownloads(tree)
-        val audioExts = setOf("mp3", "flac", "wav", "m4a", "ogg", "aac", "opus")
-        val videoExts = setOf("mp4", "mkv", "webm", "mov", "m4v", "m3u8")
-        val imageExts = setOf("jpg", "jpeg", "png", "webp", "gif")
         val subExts = setOf("lrc", "srt", "vtt")
-        val mediaExts = audioExts + videoExts + imageExts
 
         val initialSelected = if (selectedLeafPaths.isEmpty()) {
             leaves.filter { leaf ->
-                val ext = leaf.relativePath.substringAfterLast('.').lowercase()
-                mediaExts.contains(ext)
+                isDownloadableTreeFileType(treeFileTypeForName(leaf.relativePath))
             }
         } else {
             leaves.filter { selectedLeafPaths.contains(it.relativePath) }
@@ -2444,7 +2439,20 @@ class AlbumDetailViewModel @Inject constructor(
             val fileName = if (extFromName != null) {
                 baseName
             } else {
-                val defaultExt = if (videoExts.contains(relPath.substringAfterLast('.').lowercase())) "mp4" else "mp3"
+                val defaultExt = when (treeFileTypeForName(relPath)) {
+                    TreeFileType.Video -> "mp4"
+                    TreeFileType.Image -> "jpg"
+                    TreeFileType.Pdf -> "pdf"
+                    TreeFileType.Archive -> "zip"
+                    TreeFileType.Document -> "doc"
+                    TreeFileType.Spreadsheet -> "csv"
+                    TreeFileType.Presentation -> "ppt"
+                    TreeFileType.Code -> "txt"
+                    TreeFileType.Ebook -> "epub"
+                    TreeFileType.Font -> "ttf"
+                    TreeFileType.AppPackage -> "apk"
+                    else -> "mp3"
+                }
                 val ext = extFromUrl ?: defaultExt
                 "$baseName.$ext"
             }

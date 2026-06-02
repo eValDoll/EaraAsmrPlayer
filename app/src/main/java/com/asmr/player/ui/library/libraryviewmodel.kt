@@ -724,6 +724,14 @@ class LibraryViewModel @Inject constructor(
         Subtitle,
         Text,
         Pdf,
+        Archive,
+        Document,
+        Spreadsheet,
+        Presentation,
+        Code,
+        Ebook,
+        Font,
+        AppPackage,
         Other
     }
 
@@ -734,15 +742,22 @@ class LibraryViewModel @Inject constructor(
     )
 
     private fun cacheFileTypeForName(fileName: String): CacheTreeFileType {
-        val ext = fileName.substringAfterLast('.', "").lowercase()
-        return when (ext) {
-            "mp3", "wav", "flac", "m4a", "ogg", "aac", "opus" -> CacheTreeFileType.Audio
-            "mp4", "mkv", "webm" -> CacheTreeFileType.Video
-            "jpg", "jpeg", "png", "webp", "gif" -> CacheTreeFileType.Image
-            "lrc", "srt", "vtt" -> CacheTreeFileType.Subtitle
-            "txt", "md", "nfo" -> CacheTreeFileType.Text
-            "pdf" -> CacheTreeFileType.Pdf
-            else -> CacheTreeFileType.Other
+        return when (treeFileTypeForName(fileName)) {
+            TreeFileType.Audio -> CacheTreeFileType.Audio
+            TreeFileType.Video -> CacheTreeFileType.Video
+            TreeFileType.Image -> CacheTreeFileType.Image
+            TreeFileType.Subtitle -> CacheTreeFileType.Subtitle
+            TreeFileType.Text -> CacheTreeFileType.Text
+            TreeFileType.Pdf -> CacheTreeFileType.Pdf
+            TreeFileType.Archive -> CacheTreeFileType.Archive
+            TreeFileType.Document -> CacheTreeFileType.Document
+            TreeFileType.Spreadsheet -> CacheTreeFileType.Spreadsheet
+            TreeFileType.Presentation -> CacheTreeFileType.Presentation
+            TreeFileType.Code -> CacheTreeFileType.Code
+            TreeFileType.Ebook -> CacheTreeFileType.Ebook
+            TreeFileType.Font -> CacheTreeFileType.Font
+            TreeFileType.AppPackage -> CacheTreeFileType.AppPackage
+            TreeFileType.Other -> CacheTreeFileType.Other
         }
     }
 

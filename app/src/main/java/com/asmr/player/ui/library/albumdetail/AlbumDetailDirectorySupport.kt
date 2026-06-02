@@ -37,6 +37,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.Article
+import androidx.compose.material.icons.automirrored.rounded.MenuBook
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -138,6 +140,7 @@ import com.asmr.player.ui.common.CollapsibleHeaderState
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
+import com.asmr.player.ui.theme.AsmrColorScheme
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.thinScrollbar
@@ -235,25 +238,23 @@ internal enum class TreeFileType {
     Subtitle,
     Text,
     Pdf,
+    Archive,
+    Document,
+    Spreadsheet,
+    Presentation,
+    Code,
+    Ebook,
+    Font,
+    AppPackage,
     Other
 }
 
 internal fun treeFileTypeForName(fileName: String): TreeFileType {
-    val ext = fileName.substringAfterLast('.', "").lowercase()
-    return when (ext) {
-        "mp3", "wav", "flac", "m4a", "ogg", "aac", "opus" -> TreeFileType.Audio
-        "mp4", "mkv", "webm", "mov", "m4v" -> TreeFileType.Video
-        "jpg", "jpeg", "png", "webp", "gif" -> TreeFileType.Image
-        "lrc", "srt", "vtt", "ass", "ssa" -> TreeFileType.Subtitle
-        "txt", "md", "nfo", "csv", "tsv", "json", "xml", "html", "htm", "log", "ini", "cue", "ks", "yaml", "yml", "rtf" -> TreeFileType.Text
-        "pdf" -> TreeFileType.Pdf
-        else -> TreeFileType.Other
-    }
+    return treeFileTypeForExtension(fileExtensionFromName(fileName))
 }
 
-internal fun treeFileTypeForNode(title: String, url: String?): TreeFileType {
-    val t = title.trim()
-    val fromTitle = treeFileTypeForName(t)
+internal fun treeFileTypeForNode(title: String, url: String?, remoteType: String? = null): TreeFileType {
+    val fromTitle = treeFileTypeForName(title)
 
     val urlName = url
         ?.substringBefore('#')
@@ -262,11 +263,100 @@ internal fun treeFileTypeForNode(title: String, url: String?): TreeFileType {
         ?.substringAfterLast('\\')
         .orEmpty()
     val fromUrl = if (urlName.isNotBlank()) treeFileTypeForName(urlName) else TreeFileType.Other
+    val fromRemoteType = treeFileTypeForRemoteType(remoteType)
 
     return when {
-        fromUrl != TreeFileType.Other -> fromUrl
         fromTitle != TreeFileType.Other -> fromTitle
-        url != null && url.isNotBlank() -> TreeFileType.Audio
+        fromUrl != TreeFileType.Other -> fromUrl
+        fromRemoteType != TreeFileType.Other -> fromRemoteType
+        else -> TreeFileType.Other
+    }
+}
+
+internal fun isDownloadableTreeFileType(fileType: TreeFileType): Boolean {
+    return fileType != TreeFileType.Other && fileType != TreeFileType.Subtitle
+}
+
+internal fun isLibrarySavableTreeFileType(fileType: TreeFileType): Boolean {
+    return fileType == TreeFileType.Audio || fileType == TreeFileType.Video
+}
+
+private fun fileExtensionFromName(name: String): String {
+    val clean = name
+        .trim()
+        .substringBefore('#')
+        .substringBefore('?')
+        .substringAfterLast('/')
+        .substringAfterLast('\\')
+    val ext = clean.substringAfterLast('.', missingDelimiterValue = "")
+        .lowercase()
+        .trim()
+    return ext.takeIf { it.length in 1..12 && it.none { ch -> ch == '/' || ch == '\\' } }.orEmpty()
+}
+
+private fun treeFileTypeForExtension(ext: String): TreeFileType {
+    return when (ext.lowercase()) {
+        "mp3", "wav", "flac", "m4a", "m4b", "ogg", "oga", "aac", "opus", "wma", "alac",
+        "aiff", "aif", "ape", "amr", "mka", "mid", "midi" -> TreeFileType.Audio
+
+        "mp4", "mkv", "webm", "mov", "m4v", "avi", "wmv", "flv", "mpeg", "mpg", "ts",
+        "m2ts", "3gp", "rm", "rmvb", "m3u8" -> TreeFileType.Video
+
+        "jpg", "jpeg", "png", "webp", "gif", "bmp", "heic", "heif", "tif", "tiff",
+        "avif", "svg", "ico" -> TreeFileType.Image
+
+        "lrc", "srt", "vtt", "ass", "ssa", "smi", "sbv", "ttml", "dfxp", "sub", "idx" -> TreeFileType.Subtitle
+
+        "txt", "md", "markdown", "nfo", "log", "cue", "ks", "readme" -> TreeFileType.Text
+
+        "pdf" -> TreeFileType.Pdf
+
+        "zip", "rar", "7z", "tar", "gz", "tgz", "bz2", "xz", "lz", "lzma", "zst",
+        "cab", "iso", "dmg" -> TreeFileType.Archive
+
+        "doc", "docx", "odt", "rtf", "pages", "tex" -> TreeFileType.Document
+
+        "xls", "xlsx", "ods", "csv", "tsv", "numbers" -> TreeFileType.Spreadsheet
+
+        "ppt", "pptx", "odp", "key" -> TreeFileType.Presentation
+
+        "json", "xml", "html", "htm", "css", "js", "jsx", "tsx", "kt", "kts",
+        "java", "go", "rs", "py", "rb", "php", "c", "cc", "cpp", "h", "hpp", "cs",
+        "swift", "sh", "bash", "zsh", "bat", "cmd", "ps1", "gradle", "properties",
+        "yaml", "yml", "toml", "ini", "sql", "lua", "dart" -> TreeFileType.Code
+
+        "epub", "mobi", "azw", "azw3", "fb2", "cbz", "cbr" -> TreeFileType.Ebook
+
+        "ttf", "otf", "woff", "woff2", "eot" -> TreeFileType.Font
+
+        "apk", "aab", "ipa", "exe", "msi", "appx", "deb", "rpm", "pkg" -> TreeFileType.AppPackage
+
+        else -> TreeFileType.Other
+    }
+}
+
+private fun treeFileTypeForRemoteType(remoteType: String?): TreeFileType {
+    val normalized = remoteType
+        ?.trim()
+        ?.lowercase()
+        ?.replace('-', '_')
+        .orEmpty()
+    if (normalized.isBlank()) return TreeFileType.Other
+    return when {
+        normalized == "audio" || normalized.startsWith("audio/") -> TreeFileType.Audio
+        normalized == "video" || normalized.startsWith("video/") -> TreeFileType.Video
+        normalized == "image" || normalized.startsWith("image/") -> TreeFileType.Image
+        normalized == "subtitle" || normalized == "subtitles" || normalized == "caption" -> TreeFileType.Subtitle
+        normalized == "text" || normalized.startsWith("text/") -> TreeFileType.Text
+        normalized == "pdf" || normalized == "application/pdf" -> TreeFileType.Pdf
+        normalized == "archive" || normalized == "compressed" -> TreeFileType.Archive
+        normalized == "document" -> TreeFileType.Document
+        normalized == "spreadsheet" -> TreeFileType.Spreadsheet
+        normalized == "presentation" -> TreeFileType.Presentation
+        normalized == "code" || normalized == "source" -> TreeFileType.Code
+        normalized == "ebook" -> TreeFileType.Ebook
+        normalized == "font" || normalized.startsWith("font/") -> TreeFileType.Font
+        normalized == "package" || normalized == "app" -> TreeFileType.AppPackage
         else -> TreeFileType.Other
     }
 }
@@ -619,7 +709,7 @@ internal fun buildRemoteTreeIndex(
                         safeTitle = safeTitle,
                         url = url,
                         duration = node.duration,
-                        fileType = treeFileTypeForNode(rawTitle, url),
+                        fileType = treeFileTypeForNode(rawTitle, url, node.type),
                         dlsitePlayImageCrypt = node.dlsitePlayImageCrypt,
                         dlsitePlayImageWidth = node.dlsitePlayImageWidth,
                         dlsitePlayImageHeight = node.dlsitePlayImageHeight,
@@ -652,7 +742,7 @@ internal fun buildRemoteTreeIndex(
                     safeTitle = safeTitle,
                     url = url,
                     duration = node.duration,
-                    fileType = treeFileTypeForNode(rawTitle, url),
+                    fileType = treeFileTypeForNode(rawTitle, url, node.type),
                     dlsitePlayImageCrypt = node.dlsitePlayImageCrypt,
                     dlsitePlayImageWidth = node.dlsitePlayImageWidth,
                     dlsitePlayImageHeight = node.dlsitePlayImageHeight,
@@ -1348,7 +1438,7 @@ internal fun flattenAsmrOneTreeForUi(
                 val children = node.children.orEmpty()
                 val url = node.mediaDownloadUrl ?: node.streamUrl
                 if (children.isEmpty()) {
-                    val type = treeFileTypeForNode(title, url)
+                    val type = treeFileTypeForNode(title, url, node.type)
                     if (type == TreeFileType.Other || type == TreeFileType.Subtitle) return@forEach
                     val extLower = title.substringAfterLast('.', "").lowercase()
                     updateFolderStats(parentPath = parentPath, type = type, extLower = extLower)
@@ -1368,7 +1458,7 @@ internal fun flattenAsmrOneTreeForUi(
             val children = node.children.orEmpty()
             val url = node.mediaDownloadUrl ?: node.streamUrl
             if (children.isEmpty()) {
-                val type = treeFileTypeForNode(title, url)
+                val type = treeFileTypeForNode(title, url, node.type)
                 if (type == TreeFileType.Other || type == TreeFileType.Subtitle) return@forEach
                 out.add(
                     AsmrTreeUiEntry.File(
@@ -1400,7 +1490,51 @@ internal fun fileTypeLabel(fileType: TreeFileType): String = when (fileType) {
     TreeFileType.Subtitle -> "字幕"
     TreeFileType.Text -> "文本"
     TreeFileType.Pdf -> "PDF"
+    TreeFileType.Archive -> "压缩包"
+    TreeFileType.Document -> "文档"
+    TreeFileType.Spreadsheet -> "表格"
+    TreeFileType.Presentation -> "演示文稿"
+    TreeFileType.Code -> "代码"
+    TreeFileType.Ebook -> "电子书"
+    TreeFileType.Font -> "字体"
+    TreeFileType.AppPackage -> "安装包"
     TreeFileType.Other -> "文件"
+}
+
+internal fun treeFileTypeIcon(fileType: TreeFileType): ImageVector = when (fileType) {
+    TreeFileType.Audio -> Icons.Rounded.Audiotrack
+    TreeFileType.Video -> Icons.Rounded.Movie
+    TreeFileType.Image -> Icons.Rounded.Image
+    TreeFileType.Subtitle -> Icons.Rounded.Subtitles
+    TreeFileType.Text -> Icons.Rounded.Description
+    TreeFileType.Pdf -> Icons.Rounded.PictureAsPdf
+    TreeFileType.Archive -> Icons.Rounded.FolderZip
+    TreeFileType.Document -> Icons.AutoMirrored.Rounded.Article
+    TreeFileType.Spreadsheet -> Icons.Rounded.TableChart
+    TreeFileType.Presentation -> Icons.Rounded.Slideshow
+    TreeFileType.Code -> Icons.Rounded.Code
+    TreeFileType.Ebook -> Icons.AutoMirrored.Rounded.MenuBook
+    TreeFileType.Font -> Icons.Rounded.FontDownload
+    TreeFileType.AppPackage -> Icons.Rounded.Android
+    TreeFileType.Other -> Icons.AutoMirrored.Rounded.InsertDriveFile
+}
+
+internal fun treeFileTypeTint(fileType: TreeFileType, colorScheme: AsmrColorScheme): Color = when (fileType) {
+    TreeFileType.Audio -> colorScheme.primary
+    TreeFileType.Video -> colorScheme.accent
+    TreeFileType.Image -> colorScheme.textSecondary
+    TreeFileType.Subtitle -> colorScheme.textSecondary
+    TreeFileType.Text -> colorScheme.textTertiary
+    TreeFileType.Pdf -> colorScheme.danger
+    TreeFileType.Archive -> colorScheme.accent
+    TreeFileType.Document -> colorScheme.textSecondary
+    TreeFileType.Spreadsheet -> colorScheme.primary
+    TreeFileType.Presentation -> colorScheme.accent
+    TreeFileType.Code -> colorScheme.primary
+    TreeFileType.Ebook -> colorScheme.textSecondary
+    TreeFileType.Font -> colorScheme.textTertiary
+    TreeFileType.AppPackage -> colorScheme.primaryStrong
+    TreeFileType.Other -> colorScheme.textTertiary
 }
 
 internal fun queryLocalFileSize(context: android.content.Context, path: String): Long? {
@@ -2736,24 +2870,8 @@ internal fun DirectoryFileRow(
     val materialColorScheme = MaterialTheme.colorScheme
     val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
     val context = LocalContext.current
-    val icon = when (file.fileType) {
-        TreeFileType.Audio -> Icons.Rounded.Audiotrack
-        TreeFileType.Video -> Icons.Rounded.Movie
-        TreeFileType.Image -> Icons.Rounded.Image
-        TreeFileType.Subtitle -> Icons.Rounded.Subtitles
-        TreeFileType.Text -> Icons.Rounded.Description
-        TreeFileType.Pdf -> Icons.Rounded.PictureAsPdf
-        TreeFileType.Other -> Icons.AutoMirrored.Rounded.InsertDriveFile
-    }
-    val iconTint = when (file.fileType) {
-        TreeFileType.Audio -> colorScheme.primary
-        TreeFileType.Video -> colorScheme.accent
-        TreeFileType.Image -> colorScheme.textSecondary
-        TreeFileType.Subtitle -> colorScheme.textSecondary
-        TreeFileType.Text -> colorScheme.textTertiary
-        TreeFileType.Pdf -> colorScheme.danger
-        TreeFileType.Other -> colorScheme.textTertiary
-    }
+    val icon = treeFileTypeIcon(file.fileType)
+    val iconTint = treeFileTypeTint(file.fileType, colorScheme)
     val sizeText by produceState<String?>(initialValue = null, file.sizeSource) {
         value = when (val sizeSource = file.sizeSource) {
             FileSizeSource.None -> null
@@ -3034,24 +3152,8 @@ internal fun TreeFileRow(
     val colorScheme = AsmrTheme.colorScheme
     val materialColorScheme = MaterialTheme.colorScheme
     val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
-    val icon = when (fileType) {
-        TreeFileType.Audio -> Icons.Rounded.Audiotrack
-        TreeFileType.Video -> Icons.Rounded.Movie
-        TreeFileType.Image -> Icons.Rounded.Image
-        TreeFileType.Subtitle -> Icons.Rounded.Subtitles
-        TreeFileType.Text -> Icons.Rounded.Description
-        TreeFileType.Pdf -> Icons.Rounded.PictureAsPdf
-        TreeFileType.Other -> Icons.AutoMirrored.Rounded.InsertDriveFile
-    }
-    val iconTint = when (fileType) {
-        TreeFileType.Audio -> colorScheme.primary
-        TreeFileType.Video -> colorScheme.accent
-        TreeFileType.Image -> colorScheme.textSecondary
-        TreeFileType.Subtitle -> colorScheme.textSecondary
-        TreeFileType.Text -> colorScheme.textTertiary
-        TreeFileType.Pdf -> colorScheme.danger
-        TreeFileType.Other -> colorScheme.textTertiary
-    }
+    val icon = treeFileTypeIcon(fileType)
+    val iconTint = treeFileTypeTint(fileType, colorScheme)
 
     Box(
         modifier = Modifier
