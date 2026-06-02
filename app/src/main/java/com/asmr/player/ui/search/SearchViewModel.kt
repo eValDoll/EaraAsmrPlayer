@@ -2,18 +2,18 @@ package com.asmr.player.ui.search
 
 import android.os.SystemClock
 import android.util.Log
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import com.asmr.player.BuildConfig
 import com.asmr.player.data.local.datastore.LastSearchStateV1
 import com.asmr.player.data.local.datastore.SearchCacheStore
-import com.asmr.player.data.remote.crawler.AsmrOneCrawler
+import com.asmr.player.data.remote.api.AsmrOneAvailabilityApi
 import com.asmr.player.data.remote.dlsite.DlsitePlayLibraryClient
 import com.asmr.player.data.remote.scraper.DLSiteScraper
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.domain.model.Album
 import com.asmr.player.util.AppErrorMessageFormatter
 import com.asmr.player.util.MessageManager
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -36,11 +36,8 @@ import retrofit2.HttpException
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.ConcurrentLinkedQueue
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicInteger
 import javax.inject.Inject
-import kotlin.math.ceil
 
 enum class SearchPendingRequestKind {
     Search,
@@ -56,7 +53,7 @@ data class SearchPendingRequest(
 class SearchViewModel @Inject constructor(
     private val dlsiteScraper: DLSiteScraper,
     private val dlsitePlayLibraryClient: DlsitePlayLibraryClient,
-    private val asmrOneCrawler: AsmrOneCrawler,
+    private val asmrOneAvailabilityApi: AsmrOneAvailabilityApi,
     private val settingsRepository: SettingsRepository,
     private val searchCacheStore: SearchCacheStore,
     val messageManager: MessageManager
@@ -533,24 +530,6 @@ class SearchViewModel @Inject constructor(
         return null
     }
 
-    private suspend fun hasWorkFastWithRetry(rj: String, timeoutMs: Long): Boolean? {
-        val normalized = rj.trim().uppercase()
-        if (normalized.isBlank()) return null
-        var falseCount = 0
-        repeat(3) { idx ->
-            if (idx > 0) delay(250L * idx)
-            val result = runCatching {
-                asmrOneCrawler.hasWorkFast(normalized, timeoutMs = timeoutMs)
-            }.getOrNull()
-            when (result) {
-                true -> return true
-                false -> falseCount += 1
-                null -> {}
-            }
-        }
-        return if (falseCount == 3) false else null
-    }
-
     private fun startMarkAsmrOneAvailability(keyword: String, page: Int, baseItems: List<Album>) {
         asmrOneJob?.cancel()
         asmrOneJob = viewModelScope.launch(Dispatchers.IO) {
@@ -572,155 +551,38 @@ class SearchViewModel @Inject constructor(
                 cur.copy(isAsmrOneChecking = true, asmrOneChecked = 0, asmrOneTotal = total)
             }
 
-            val normalizedKeywordUpper = keyword.trim().uppercase()
-            if (
-                BuildConfig.DEBUG &&
-                normalizedKeywordUpper == DEBUG_DELAY_TEST_RJ &&
-                debugDelayTestOnce.compareAndSet(false, true)
-            ) {
-                launch {
-                    runDebugDelayTestForRj01491538()
-                }
-            }
             try {
-                val normalizedKeyword = keyword.trim()
-                val isRjKeyword = RJ_CODE_REGEX.matches(normalizedKeyword.uppercase())
-                if (!isRjKeyword && normalizedKeyword.isNotBlank()) {
-                    val maxPages = 2
-                    var pageNo = 1
-                    while (pageNo <= maxPages) {
-                        val resp = asmrOneCrawler.searchPrimaryOnly(normalizedKeyword, page = pageNo)
-                        val idsPrimary = resp?.works
-                            .orEmpty()
-                            .asSequence()
-                            .flatMap { w ->
-                                sequenceOf(
-                                    w.source_id,
-                                    w.original_workno.orEmpty(),
-                                    *w.language_editions.orEmpty()
-                                        .map { it.workno.orEmpty() }
-                                        .toTypedArray()
-                                )
-                            }
-                            .mapNotNull { s -> RJ_CODE_REGEX.find(s.trim().uppercase())?.value }
-                            .toSet()
-                        val idsBackup = asmrOneCrawler.searchBackupPreferredRjIds(
-                            normalizedKeyword,
-                            page = pageNo
+                val cachedTrue = indexByRj.keys.filter { asmrOneAvailabilityCache[it] == true }
+                cachedTrue.forEach { rj ->
+                    updateAsmrOneAvailability(
+                        keyword = keyword,
+                        page = page,
+                        rj = rj,
+                        has = true,
+                        indexByRj = indexByRj
+                    )
+                }
+
+                val unknown = indexByRj.keys.filter { asmrOneAvailabilityCache[it] != true }
+                val availability = asmrOneAvailabilityApi.check(unknown)
+                availability.forEach { (rj, collected) ->
+                    asmrOneAvailabilityCache[rj] = collected
+                    if (collected) {
+                        updateAsmrOneAvailability(
+                            keyword = keyword,
+                            page = page,
+                            rj = rj,
+                            has = true,
+                            indexByRj = indexByRj
                         )
-                        val ids = if (idsBackup.isEmpty()) idsPrimary else (idsPrimary + idsBackup)
-                        if (ids.isNotEmpty()) {
-                            indexByRj.keys.forEach { baseRj ->
-                                if (asmrOneAvailabilityCache[baseRj] == true) return@forEach
-                                if (baseRj in ids) {
-                                    asmrOneAvailabilityCache[baseRj] = true
-                                    updateAsmrOneAvailability(
-                                        keyword = keyword,
-                                        page = page,
-                                        rj = baseRj,
-                                        has = true,
-                                        indexByRj = indexByRj
-                                    )
-                                }
-                            }
-                        }
-                        val hasMorePrimary =
-                            resp?.pagination?.let { it.totalCount > it.page * it.pageSize } == true
-                        if (!hasMorePrimary && idsBackup.isEmpty()) break
-                        pageNo += 1
                     }
-                }
-
-                val ordered = indexByRj.keys.sortedByDescending { rj ->
-                    indexByRj[rj]?.maxOrNull() ?: -1
-                }
-                val pending = ConcurrentLinkedQueue<String>()
-
-                val semFast = Semaphore(4)
-                val fastChecks = coroutineScope {
-                    ordered.map { baseRj ->
-                        async(enrichDispatcher) {
-                            semFast.withPermit {
-                                if (asmrOneAvailabilityCache[baseRj] == true) {
-                                    updateAsmrOneAvailability(
-                                        keyword = keyword,
-                                        page = page,
-                                        rj = baseRj,
-                                        has = true,
-                                        indexByRj = indexByRj
-                                    )
-                                    return@withPermit
-                                }
-
-                                val has = runCatching {
-                                    asmrOneCrawler.hasWorkFast(baseRj, timeoutMs = 900L)
-                                }.getOrNull()
-                                if (has == true) {
-                                    asmrOneAvailabilityCache[baseRj] = true
-                                    updateAsmrOneAvailability(
-                                        keyword = keyword,
-                                        page = page,
-                                        rj = baseRj,
-                                        has = true,
-                                        indexByRj = indexByRj
-                                    )
-                                } else {
-                                    pending.add(baseRj)
-                                }
-                            }
-                        }
-                    }
-                }
-                fastChecks.forEach { deferred -> runCatching { deferred.await() } }
-
-                val retryTargets = pending.toList()
-                if (retryTargets.isNotEmpty()) {
-                    val semRetry = Semaphore(2)
-                    val doneCounter = AtomicInteger(0)
-                    val retries = coroutineScope {
-                        retryTargets.map { baseRj ->
-                            async(enrichDispatcher) {
-                                semRetry.withPermit {
-                                    val has = hasWorkFastWithRetry(baseRj, timeoutMs = 900L)
-                                    when (has) {
-                                        true -> {
-                                            asmrOneAvailabilityCache[baseRj] = true
-                                            updateAsmrOneAvailability(
-                                                keyword = keyword,
-                                                page = page,
-                                                rj = baseRj,
-                                                has = true,
-                                                indexByRj = indexByRj
-                                            )
-                                        }
-
-                                        false -> asmrOneAvailabilityCache[baseRj] = false
-                                        null -> {}
-                                    }
-                                }
-                                val done = doneCounter.incrementAndGet().coerceIn(0, total)
-                                _uiState.update { state ->
-                                    val cur = state as? SearchUiState.Success ?: return@update state
-                                    if (cur.keyword != keyword || cur.page != page || cur.purchasedOnly) {
-                                        return@update state
-                                    }
-                                    if (!cur.isAsmrOneChecking) {
-                                        cur
-                                    } else {
-                                        cur.copy(asmrOneChecked = done, asmrOneTotal = total)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    retries.forEach { deferred -> runCatching { deferred.await() } }
                 }
 
                 if (BuildConfig.DEBUG) {
                     val dt = (SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0L)
                     Log.d(
                         "SearchViewModel",
-                        "asmrOne availability page done keyword=$normalizedKeyword page=$page " +
+                        "asmrOne availability page done keyword=${keyword.trim()} page=$page " +
                             "rjCount=${indexByRj.size} dt=${dt}ms"
                     )
                 }
@@ -766,72 +628,8 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    private suspend fun runDebugDelayTestForRj01491538() {
-        val rj = DEBUG_DELAY_TEST_RJ
-        val durations = ArrayList<Long>(DEBUG_DELAY_TEST_ROUNDS)
-        val networkDurations = ArrayList<Long>(DEBUG_DELAY_TEST_ROUNDS)
-        var cacheHits = 0
-        var fallbackUsed = 0
-        var networkCalls = 0
-
-        repeat(DEBUG_DELAY_TEST_ROUNDS) { idx ->
-            if (idx % 3 == 2) asmrOneAvailabilityCache.remove(rj)
-            val cached = asmrOneAvailabilityCache[rj]
-            val cacheHit = cached != null
-            if (cacheHit) cacheHits++
-
-            val start = SystemClock.elapsedRealtime()
-            if (!cacheHit) {
-                val result = runCatching { asmrOneCrawler.searchWithTrace(rj) }.getOrNull()
-                val ok = result?.response?.works?.any { w ->
-                    w.source_id.equals(rj, ignoreCase = true) ||
-                        w.original_workno.orEmpty().equals(rj, ignoreCase = true) ||
-                        w.language_editions.orEmpty()
-                            .any { it.workno.orEmpty().equals(rj, ignoreCase = true) }
-                } == true
-                asmrOneAvailabilityCache[rj] = ok
-                networkCalls++
-                if (result?.trace?.fallbackUsed == true) fallbackUsed++
-            }
-            val dt = (SystemClock.elapsedRealtime() - start).coerceAtLeast(0L)
-            durations.add(dt)
-            if (!cacheHit) networkDurations.add(dt)
-        }
-
-        val networkStats = percentileStatsMs(networkDurations.ifEmpty { durations })
-        val overallStats = percentileStatsMs(durations)
-        Log.d(
-            "SearchViewModel",
-            "RJ01491538 delay test: n=$DEBUG_DELAY_TEST_ROUNDS cacheHit=$cacheHits " +
-                "network=$networkCalls fallbackUsed=$fallbackUsed " +
-                "overall(p50=${overallStats.p50}ms p95=${overallStats.p95}ms max=${overallStats.max}ms) " +
-                "network(p50=${networkStats.p50}ms p95=${networkStats.p95}ms max=${networkStats.max}ms)"
-        )
-    }
-
-    private data class PercentileStats(val p50: Long, val p95: Long, val max: Long)
-
-    private fun percentileStatsMs(values: List<Long>): PercentileStats {
-        if (values.isEmpty()) return PercentileStats(0L, 0L, 0L)
-        val sorted = values.sorted()
-        val p50 = percentileNearestRank(sorted, 50.0)
-        val p95 = percentileNearestRank(sorted, 95.0)
-        val max = sorted.last()
-        return PercentileStats(p50 = p50, p95 = p95, max = max)
-    }
-
-    private fun percentileNearestRank(sorted: List<Long>, percentile: Double): Long {
-        if (sorted.isEmpty()) return 0L
-        val n = sorted.size
-        val rank = ceil(percentile / 100.0 * n).toInt().coerceIn(1, n)
-        return sorted[rank - 1]
-    }
-
     private companion object {
         private val RJ_CODE_REGEX = Regex("""RJ\d{6,}""")
-        private const val DEBUG_DELAY_TEST_RJ = "RJ01491538"
-        private const val DEBUG_DELAY_TEST_ROUNDS = 30
-        private val debugDelayTestOnce = AtomicBoolean(false)
     }
 }
 
