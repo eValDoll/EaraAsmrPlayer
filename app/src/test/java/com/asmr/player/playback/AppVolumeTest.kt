@@ -33,4 +33,13 @@ class AppVolumeTest {
         assertEquals(8, systemVolume)
         assertEquals(0.9375f, playerVolume, 0.0001f)
     }
+
+    @Test
+    fun percentFromSystemVolumeDoesNotRoundIntoHigherSystemStep() {
+        val percent = AppVolume.percentFromSystemVolume(systemVolume = 5, maxSystemVolume = 15)
+
+        val (systemVolume, playerVolume) = AppVolume.resolveSystemVolume(percent, maxSystemVolume = 15)
+        assertEquals(5, systemVolume)
+        assertEquals(0.96f, playerVolume, 0.0001f)
+    }
 }

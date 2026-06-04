@@ -25,6 +25,7 @@ import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.media.AudioManager
 import android.net.Uri
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.core.view.WindowCompat
@@ -649,5 +650,23 @@ class MainActivity : ComponentActivity() {
             volumeKeyEventTick.value = volumeKeyEventSeq
         }
         return true
+    }
+
+    override fun onResume() {
+        super.onResume()
+        syncAppVolumePercentFromSystem()
+    }
+
+    private fun syncAppVolumePercentFromSystem() {
+        val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+        val maxSystemVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+        val currentSystemVolume = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val currentAppVolumePercent = AppVolume.percentFromSystemVolume(
+            systemVolume = currentSystemVolume,
+            maxSystemVolume = maxSystemVolume
+        )
+        lifecycleScope.launch {
+            settingsRepository.syncAppVolumePercentFromSystem(currentAppVolumePercent)
+        }
     }
 }

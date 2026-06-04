@@ -93,6 +93,7 @@ class PlaybackService : MediaSessionService() {
     private lateinit var exoPlayer: ExoPlayer
     private lateinit var sessionPlayer: FadingPlayer
     private lateinit var appVolumeBoostController: AppVolumeBoostController
+    private var startupAppVolumePercent: Int? = null
     private val graphicEqualizerAudioProcessor = GraphicEqualizerAudioProcessor()
     private val gainAudioProcessor = GainAudioProcessor()
     private val balanceAudioProcessor = BalanceAudioProcessor()
@@ -218,10 +219,10 @@ class PlaybackService : MediaSessionService() {
             settingsRepository.loadPlaybackRuntimeSettings()
         }
         applyPlaybackRuntimeSettings(runtimeSettings)
+        val currentAppVolumePercent = appVolumeBoostController.currentVolumePercent()
+        startupAppVolumePercent = currentAppVolumePercent
         runBlocking {
-            settingsRepository.ensureAppVolumePercentInitialized(
-                appVolumeBoostController.currentVolumePercent()
-            )
+            settingsRepository.syncAppVolumePercentFromSystem(currentAppVolumePercent)
         }
         runCatching {
             val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
@@ -1037,9 +1038,19 @@ class PlaybackService : MediaSessionService() {
             }
         }
         serviceScope.launch {
+            var skipStartupApplyPercent = startupAppVolumePercent
             settingsRepository.appVolumePercent
                 .distinctUntilChanged()
                 .collect { appVolumePercent ->
+                    if (
+                        skipStartupApplyPercent == appVolumePercent ||
+                        settingsRepository.consumePendingSystemVolumeSync(appVolumePercent)
+                    ) {
+                        skipStartupApplyPercent = null
+                        sessionPlayer.setBaseVolume(1f)
+                        return@collect
+                    }
+                    skipStartupApplyPercent = null
                     sessionPlayer.setBaseVolume(
                         appVolumeBoostController.applyVolumePercent(appVolumePercent)
                     )

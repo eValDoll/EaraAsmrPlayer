@@ -1,7 +1,6 @@
 package com.asmr.player.playback
 
 import kotlin.math.ceil
-import kotlin.math.roundToInt
 
 object AppVolume {
     const val MinPercent = 0
@@ -38,8 +37,9 @@ object AppVolume {
 
     fun percentFromSystemVolume(systemVolume: Int, maxSystemVolume: Int): Int {
         if (maxSystemVolume <= 0 || systemVolume <= 0) return 0
-        val percent = (systemVolume.toFloat() / maxSystemVolume.toFloat() * MaxPercent).roundToInt()
-        return clampPercent(percent)
+        val boundedSystemVolume = systemVolume.coerceAtMost(maxSystemVolume)
+        val percent = (boundedSystemVolume.toFloat() / maxSystemVolume.toFloat() * MaxPercent).toInt()
+        return (percent / StepPercent * StepPercent).coerceIn(MinPercent, MaxPercent)
     }
 
     fun visualFraction(percent: Int): Float {

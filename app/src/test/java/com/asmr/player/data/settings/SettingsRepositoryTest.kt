@@ -59,21 +59,38 @@ class SettingsRepositoryTest {
     }
 
     @Test
-    fun ensureAppVolumePercentInitialized_seedsWhenUnset() = runBlocking {
-        val resolved = repository.ensureAppVolumePercentInitialized(46)
+    fun setAppVolumePercent_storesClampedPercent() = runBlocking {
+        repository.setAppVolumePercent(47)
 
-        assertEquals(46, resolved)
-        assertEquals(46, repository.appVolumePercentValue())
+        assertEquals(48, repository.appVolumePercentValue())
     }
 
     @Test
-    fun ensureAppVolumePercentInitialized_keepsStoredValue() = runBlocking {
+    fun setAppVolumePercent_overwritesStoredValue() = runBlocking {
+        repository.setAppVolumePercent(72)
+        repository.setAppVolumePercent(32)
+
+        assertEquals(32, repository.appVolumePercentValue())
+    }
+
+    @Test
+    fun syncAppVolumePercentFromSystem_marksNextMatchingValueAsSystemSync() = runBlocking {
         repository.setAppVolumePercent(72)
 
-        val resolved = repository.ensureAppVolumePercentInitialized(32)
+        repository.syncAppVolumePercentFromSystem(32)
 
-        assertEquals(72, resolved)
-        assertEquals(72, repository.appVolumePercentValue())
+        assertEquals(32, repository.appVolumePercentValue())
+        assertEquals(true, repository.consumePendingSystemVolumeSync(32))
+        assertEquals(false, repository.consumePendingSystemVolumeSync(32))
+    }
+
+    @Test
+    fun setAppVolumePercent_clearsPendingSystemSync() = runBlocking {
+        repository.syncAppVolumePercentFromSystem(32)
+
+        repository.setAppVolumePercent(48)
+
+        assertEquals(false, repository.consumePendingSystemVolumeSync(32))
     }
 
     @Test

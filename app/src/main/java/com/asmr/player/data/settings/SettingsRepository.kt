@@ -27,6 +27,9 @@ data class PlaybackRuntimeSettings(
 class SettingsRepository @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
+    private val systemVolumeSyncLock = Any()
+    private var pendingSystemVolumeSyncPercent: Int? = null
+
     val appVolumePercent: Flow<Int> = context.settingsDataStore.data.map { prefs ->
         AppVolume.clampPercent(prefs[SettingsKeys.APP_VOLUME_PERCENT] ?: AppVolume.DefaultPercent)
     }
@@ -373,6 +376,7 @@ class SettingsRepository @Inject constructor(
     }
 
     suspend fun setAppVolumePercent(percent: Int) {
+        clearPendingSystemVolumeSync()
         withContext(Dispatchers.IO) {
             context.settingsDataStore.edit {
                 it[SettingsKeys.APP_VOLUME_PERCENT] = AppVolume.clampPercent(percent)
@@ -380,24 +384,35 @@ class SettingsRepository @Inject constructor(
         }
     }
 
-    suspend fun ensureAppVolumePercentInitialized(defaultPercent: Int): Int {
-        return withContext(Dispatchers.IO) {
-            var resolved = AppVolume.clampPercent(defaultPercent)
+    suspend fun syncAppVolumePercentFromSystem(percent: Int) {
+        val clampedPercent = AppVolume.clampPercent(percent)
+        withContext(Dispatchers.IO) {
             context.settingsDataStore.edit { prefs ->
-                val stored = prefs[SettingsKeys.APP_VOLUME_PERCENT]
-                resolved = if (stored == null) {
-                    AppVolume.clampPercent(defaultPercent).also {
-                        prefs[SettingsKeys.APP_VOLUME_PERCENT] = it
-                    }
-                } else {
-                    AppVolume.clampPercent(stored)
+                val currentPercent = AppVolume.clampPercent(
+                    prefs[SettingsKeys.APP_VOLUME_PERCENT] ?: AppVolume.DefaultPercent
+                )
+                if (currentPercent != clampedPercent) {
+                    markPendingSystemVolumeSync(clampedPercent)
                 }
+                prefs[SettingsKeys.APP_VOLUME_PERCENT] = clampedPercent
             }
-            resolved
+        }
+    }
+
+    fun consumePendingSystemVolumeSync(percent: Int): Boolean {
+        val clampedPercent = AppVolume.clampPercent(percent)
+        return synchronized(systemVolumeSyncLock) {
+            if (pendingSystemVolumeSyncPercent != clampedPercent) {
+                false
+            } else {
+                pendingSystemVolumeSyncPercent = null
+                true
+            }
         }
     }
 
     suspend fun adjustAppVolumePercent(deltaPercent: Int): Int {
+        clearPendingSystemVolumeSync()
         return withContext(Dispatchers.IO) {
             var updated = AppVolume.DefaultPercent
             context.settingsDataStore.edit {
@@ -412,6 +427,18 @@ class SettingsRepository @Inject constructor(
     suspend fun setAsmrOneSite(site: Int) {
         withContext(Dispatchers.IO) {
             context.settingsDataStore.edit { it[SettingsKeys.ASMR_ONE_SITE] = site }
+        }
+    }
+
+    private fun markPendingSystemVolumeSync(percent: Int) {
+        synchronized(systemVolumeSyncLock) {
+            pendingSystemVolumeSyncPercent = AppVolume.clampPercent(percent)
+        }
+    }
+
+    private fun clearPendingSystemVolumeSync() {
+        synchronized(systemVolumeSyncLock) {
+            pendingSystemVolumeSyncPercent = null
         }
     }
 
