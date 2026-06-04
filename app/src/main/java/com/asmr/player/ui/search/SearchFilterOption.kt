@@ -2,7 +2,6 @@
 
 import androidx.annotation.DrawableRes
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AutoStories
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.EmojiEvents
 import androidx.compose.material.icons.rounded.LocalFireDepartment
@@ -22,20 +21,15 @@ enum class SearchFilterOption(
     val mode: SearchFilterMode,
     val sortOption: SearchSortOption? = null
 ) {
-    PurchasedOnly(
-        label = "已购",
-        icon = SearchFilterIcon.Vector(Icons.Rounded.ShoppingBag),
-        mode = SearchFilterMode.PurchasedOnly
+    Collected(
+        label = "已收录",
+        icon = SearchFilterIcon.Drawable(R.drawable.ic_search_collected_library),
+        mode = SearchFilterMode.CollectedOnly
     ),
     ChineseTranslated(
         label = "中文作品",
-        icon = SearchFilterIcon.Vector(Icons.Rounded.AutoStories),
+        icon = SearchFilterIcon.Drawable(R.drawable.ic_search_chinese_book),
         mode = SearchFilterMode.ChineseTranslated
-    ),
-    Presale(
-        label = "预售",
-        icon = SearchFilterIcon.Vector(Icons.Rounded.CalendarMonth),
-        mode = SearchFilterMode.PresaleOnly
     ),
     Trend(
         label = SearchSortOption.Trend.label,
@@ -60,6 +54,16 @@ enum class SearchFilterOption(
         icon = SearchFilterIcon.Drawable(R.drawable.ic_search_badge_japanese_yen),
         mode = SearchFilterMode.Standard,
         sortOption = SearchSortOption.PriceHigh
+    ),
+    Presale(
+        label = "预售",
+        icon = SearchFilterIcon.Vector(Icons.Rounded.CalendarMonth),
+        mode = SearchFilterMode.PresaleOnly
+    ),
+    PurchasedOnly(
+        label = "已购",
+        icon = SearchFilterIcon.Vector(Icons.Rounded.ShoppingBag),
+        mode = SearchFilterMode.PurchasedOnly
     );
 
     val isPurchasedOnly: Boolean
@@ -71,17 +75,22 @@ enum class SearchFilterOption(
     val isChineseTranslated: Boolean
         get() = mode == SearchFilterMode.ChineseTranslated
 
+    val isCollectedOnly: Boolean
+        get() = mode == SearchFilterMode.CollectedOnly
+
     companion object {
         fun fromState(
             order: SearchSortOption,
             purchasedOnly: Boolean,
             presaleOnly: Boolean,
-            chineseTranslatedOnly: Boolean
+            chineseTranslatedOnly: Boolean,
+            collectedOnly: Boolean
         ): SearchFilterOption {
             return when {
                 purchasedOnly -> PurchasedOnly
                 chineseTranslatedOnly -> ChineseTranslated
                 presaleOnly -> Presale
+                collectedOnly -> Collected
                 else -> values().firstOrNull { it.sortOption == order } ?: Trend
             }
         }
@@ -92,5 +101,6 @@ enum class SearchFilterMode {
     Standard,
     PurchasedOnly,
     PresaleOnly,
-    ChineseTranslated
+    ChineseTranslated,
+    CollectedOnly
 }

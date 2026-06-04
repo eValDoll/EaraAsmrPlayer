@@ -95,6 +95,7 @@ class SearchScreenChromeTest {
                         canGoPrev = false,
                         canGoNext = false,
                         controlsLocked = true,
+                        onFirstPage = {},
                         onPrev = {},
                         onNext = {}
                     )
@@ -113,6 +114,11 @@ class SearchScreenChromeTest {
 
     @Test
     fun scopeMenu_displaysIconsAndUpdatedFilterOptions() {
+        val filterOptions = SearchFilterOption.values()
+        assertEquals(SearchFilterOption.Collected, filterOptions.first())
+        assertEquals(SearchFilterOption.Presale, filterOptions[filterOptions.lastIndex - 1])
+        assertEquals(SearchFilterOption.PurchasedOnly, filterOptions.last())
+
         composeRule.setContent {
             AsmrPlayerTheme {
                 SearchToolbar(
@@ -134,6 +140,7 @@ class SearchScreenChromeTest {
         composeRule.onNodeWithText("中文作品").assertExists()
         composeRule.onNodeWithText("已购").assertExists()
         composeRule.onNodeWithText("预售").assertExists()
+        composeRule.onNodeWithText("已收录").assertExists()
         composeRule.onNodeWithText("人气顺序").assertExists()
         composeRule.onNodeWithText("最新发售").assertExists()
         composeRule.onNodeWithText("销量最高").assertExists()
@@ -162,6 +169,7 @@ class SearchScreenChromeTest {
                         canGoPrev = true,
                         canGoNext = true,
                         controlsLocked = true,
+                        onFirstPage = {},
                         onPrev = {},
                         onNext = {}
                     )
@@ -193,6 +201,7 @@ class SearchScreenChromeTest {
                         canGoPrev = true,
                         canGoNext = true,
                         controlsLocked = false,
+                        onFirstPage = {},
                         onPrev = {},
                         onNext = {}
                     )
@@ -223,6 +232,7 @@ class SearchScreenChromeTest {
                     canGoPrev = true,
                     canGoNext = true,
                     controlsLocked = false,
+                    onFirstPage = {},
                     onPrev = { prevCount += 1 },
                     onNext = { nextCount += 1 }
                 )
@@ -301,6 +311,7 @@ class SearchScreenChromeTest {
                     onSearchSubmit = {},
                     onFilterSelected = {},
                     onLocaleSelected = {},
+                    onFirstPage = {},
                     onPrev = {},
                     onNext = {}
                 )

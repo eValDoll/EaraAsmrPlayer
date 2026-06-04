@@ -11,6 +11,8 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import java.io.IOException
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -32,6 +34,33 @@ data class AsmrOneAvailabilityItem(
     val matchedRjs: List<String> = emptyList(),
     val originalWorkno: String = "",
     val title: String = ""
+)
+
+data class AsmrOneCollectedSearchResponse(
+    val items: List<AsmrOneCollectedSearchItem>? = emptyList(),
+    val total: Int = 0,
+    val limit: Int = 0,
+    val offset: Int = 0,
+    val serverTimeEpochMs: Long = 0L
+)
+
+data class AsmrOneCollectedSearchItem(
+    val workId: Int = 0,
+    val rj: String = "",
+    val title: String = "",
+    val circle: String = "",
+    val cvs: List<String>? = emptyList(),
+    val tags: List<String>? = emptyList(),
+    val matchedRjs: List<String>? = emptyList(),
+    val originalWorkno: String = "",
+    val releaseDate: String = "",
+    val createDate: String = "",
+    val mainCoverUrl: String = "",
+    val dlCount: Int? = null,
+    val price: Int? = null,
+    val reviewCount: Int? = null,
+    val rateCount: Int? = null,
+    val rateAverage2dp: Double? = null
 )
 
 @Singleton
@@ -74,6 +103,38 @@ class AsmrOneAvailabilityApi @Inject constructor(
                 }
             }
         }.getOrDefault(emptyMap())
+    }
+
+    suspend fun search(keyword: String, limit: Int, offset: Int): AsmrOneCollectedSearchResponse {
+        if (baseUrl.isBlank()) throw IOException("asmr.one backend is not configured")
+        return withContext(Dispatchers.IO) {
+            val url = resolveUrl("api/asmr-one/search")
+                .toHttpUrlOrNull()
+                ?.newBuilder()
+                ?.addQueryParameter("q", keyword.trim())
+                ?.addQueryParameter("limit", limit.coerceIn(1, 100).toString())
+                ?.addQueryParameter("offset", offset.coerceAtLeast(0).toString())
+                ?.build()
+                ?: throw IOException("invalid asmr.one backend url")
+            val request = Request.Builder()
+                .url(url)
+                .header("User-Agent", userAgent)
+                .header("X-Listen-Together-App", appHeaderValue)
+                .header("X-Listen-Together-Client-Session-Id", clientSessionId)
+                .header("X-Listen-Together-Device-Fingerprint", deviceFingerprint)
+                .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
+                .get()
+                .build()
+            okHttpClient.newCall(request).execute().use { response ->
+                if (!response.isSuccessful) {
+                    throw IOException("asmr.one search failed: HTTP ${response.code}")
+                }
+                val raw = response.body?.string().orEmpty()
+                if (raw.isBlank()) return@withContext AsmrOneCollectedSearchResponse()
+                gson.fromJson(raw, AsmrOneCollectedSearchResponse::class.java)
+                    ?: AsmrOneCollectedSearchResponse()
+            }
+        }
     }
 
     private fun resolveUrl(path: String): String {

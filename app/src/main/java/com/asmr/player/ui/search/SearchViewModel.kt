@@ -6,6 +6,7 @@ import com.asmr.player.BuildConfig
 import com.asmr.player.data.local.datastore.LastSearchStateV1
 import com.asmr.player.data.local.datastore.SearchCacheStore
 import com.asmr.player.data.remote.api.AsmrOneAvailabilityApi
+import com.asmr.player.data.remote.api.AsmrOneCollectedSearchItem
 import com.asmr.player.data.remote.dlsite.DlsitePlayLibraryClient
 import com.asmr.player.data.remote.scraper.DLSiteScraper
 import com.asmr.player.data.settings.SettingsRepository
@@ -63,6 +64,7 @@ class SearchViewModel @Inject constructor(
     private var purchasedOnly: Boolean = false
     private var presaleOnly: Boolean = false
     private var chineseTranslatedOnly: Boolean = false
+    private var collectedOnly: Boolean = false
     private var enrichJob: Job? = null
     private var asmrOneJob: Job? = null
     private var cacheWriteJob: Job? = null
@@ -97,6 +99,7 @@ class SearchViewModel @Inject constructor(
                 purchasedOnly = initialPurchasedOnly
                 presaleOnly = false
                 chineseTranslatedOnly = false
+                collectedOnly = false
                 currentLocale = initialLocale
                 lastRequestedKeyword = initialKeyword.trim()
                 requestPage(lastRequestedKeyword, 1, SearchPendingRequestKind.Search)
@@ -148,25 +151,34 @@ class SearchViewModel @Inject constructor(
         purchasedOnly: Boolean = this.purchasedOnly,
         presaleOnly: Boolean = this.presaleOnly,
         chineseTranslatedOnly: Boolean = this.chineseTranslatedOnly,
+        collectedOnly: Boolean = this.collectedOnly,
         locale: String? = currentLocale
     ): Boolean {
+        val nextFilters = normalizeSearchFilters(
+            purchasedOnly = purchasedOnly,
+            presaleOnly = presaleOnly,
+            chineseTranslatedOnly = chineseTranslatedOnly,
+            collectedOnly = collectedOnly
+        )
         val current = _uiState.value as? SearchUiState.Success ?: return false
         if (current.isBusy) return false
-        if (purchasedOnly && !dlsitePlayLibraryClient.hasStoredCredentials()) {
+        if (nextFilters.purchasedOnly && !dlsitePlayLibraryClient.hasStoredCredentials()) {
             messageManager.showWarning("请先登录 DLsite 后再使用\"已购\"搜索")
             return false
         }
         if (
             currentOrder == order &&
-            this.purchasedOnly == purchasedOnly &&
-            this.presaleOnly == presaleOnly &&
-            this.chineseTranslatedOnly == chineseTranslatedOnly &&
+            this.purchasedOnly == nextFilters.purchasedOnly &&
+            this.presaleOnly == nextFilters.presaleOnly &&
+            this.chineseTranslatedOnly == nextFilters.chineseTranslatedOnly &&
+            this.collectedOnly == nextFilters.collectedOnly &&
             currentLocale == locale
         ) return true
         currentOrder = order
-        this.purchasedOnly = purchasedOnly
-        this.presaleOnly = presaleOnly
-        this.chineseTranslatedOnly = chineseTranslatedOnly
+        this.purchasedOnly = nextFilters.purchasedOnly
+        this.presaleOnly = nextFilters.presaleOnly
+        this.chineseTranslatedOnly = nextFilters.chineseTranslatedOnly
+        this.collectedOnly = nextFilters.collectedOnly
         currentLocale = locale
         requestPage(current.keyword, 1, SearchPendingRequestKind.Search)
         return true
@@ -224,7 +236,8 @@ class SearchViewModel @Inject constructor(
                     order = currentOrder,
                     purchasedOnly = purchasedOnly,
                     presaleOnly = presaleOnly,
-                    chineseTranslatedOnly = chineseTranslatedOnly
+                    chineseTranslatedOnly = chineseTranslatedOnly,
+                    collectedOnly = collectedOnly
                 )
                 _uiState.value = SearchUiState.Success(
                     results = pageResult.items,
@@ -234,6 +247,7 @@ class SearchViewModel @Inject constructor(
                     purchasedOnly = purchasedOnly,
                     presaleOnly = presaleOnly,
                     chineseTranslatedOnly = chineseTranslatedOnly,
+                    collectedOnly = collectedOnly,
                     locale = currentLocale,
                     canGoPrev = page > 1,
                     canGoNext = pageResult.canGoNext,
@@ -244,7 +258,7 @@ class SearchViewModel @Inject constructor(
                     asmrOneChecked = 0,
                     asmrOneTotal = 0
                 )
-                if (!purchasedOnly && pageResult.items.isNotEmpty()) {
+                if (!purchasedOnly && !collectedOnly && pageResult.items.isNotEmpty()) {
                     startEnrichDlsiteDetails(
                         keyword = normalizedKeyword,
                         page = page,
@@ -280,6 +294,7 @@ class SearchViewModel @Inject constructor(
                     purchasedOnly = previousSuccess.purchasedOnly
                     presaleOnly = previousSuccess.presaleOnly
                     chineseTranslatedOnly = previousSuccess.chineseTranslatedOnly
+                    collectedOnly = previousSuccess.collectedOnly
                     currentLocale = previousSuccess.locale
                     _uiState.value = previousSuccess.copy(
                         pendingRequest = null,
@@ -323,11 +338,23 @@ class SearchViewModel @Inject constructor(
         order: SearchSortOption,
         purchasedOnly: Boolean,
         presaleOnly: Boolean,
-        chineseTranslatedOnly: Boolean
+        chineseTranslatedOnly: Boolean,
+        collectedOnly: Boolean
     ): SearchPageResult {
         if (purchasedOnly) {
             val resp = dlsitePlayLibraryClient.searchPurchased(keyword, page, pageSize)
             return SearchPageResult(items = resp.items, canGoNext = resp.canGoNext)
+        }
+        if (collectedOnly) {
+            val offset = (page.coerceAtLeast(1) - 1) * pageSize
+            val resp = asmrOneAvailabilityApi.search(keyword, pageSize, offset)
+            val items = resp.items.orEmpty().map { it.toCollectedAlbum() }
+            val total = resp.total.coerceAtLeast(0)
+            val responseOffset = resp.offset.coerceAtLeast(offset)
+            return SearchPageResult(
+                items = items,
+                canGoNext = responseOffset + items.size < total
+            )
         }
         val normalizedKeyword = keyword.trim()
         val normalizedRj = normalizedKeyword.uppercase()
@@ -367,7 +394,7 @@ class SearchViewModel @Inject constructor(
         enrichJob?.cancel()
         enrichJob = viewModelScope.launch {
             val current0 = _uiState.value as? SearchUiState.Success ?: return@launch
-            if (current0.keyword != keyword || current0.page != page || current0.purchasedOnly) return@launch
+            if (current0.keyword != keyword || current0.page != page || current0.purchasedOnly || current0.collectedOnly) return@launch
             _uiState.value = current0.copy(isEnriching = true)
 
             coroutineScope {
@@ -390,7 +417,7 @@ class SearchViewModel @Inject constructor(
                     val detail = result.second
                     if (detail == null) return@forEach
                     val cur = _uiState.value as? SearchUiState.Success ?: return@forEach
-                    if (cur.keyword != keyword || cur.page != page || cur.purchasedOnly) return@forEach
+                    if (cur.keyword != keyword || cur.page != page || cur.purchasedOnly || cur.collectedOnly) return@forEach
                     val list = cur.results.toMutableList()
                     if (idx !in list.indices) return@forEach
                     list[idx] = mergeAlbum(list[idx], detail)
@@ -400,7 +427,7 @@ class SearchViewModel @Inject constructor(
             }
 
             val current1 = _uiState.value as? SearchUiState.Success ?: return@launch
-            if (current1.keyword == keyword && current1.page == page && !current1.purchasedOnly) {
+            if (current1.keyword == keyword && current1.page == page && !current1.purchasedOnly && !current1.collectedOnly) {
                 _uiState.value = current1.copy(isEnriching = false)
                 scheduleCacheWrite()
             }
@@ -425,19 +452,27 @@ class SearchViewModel @Inject constructor(
             .firstOrNull { it.name == cached.orderName }
             ?: SearchSortOption.Trend
         val page = cached.page.coerceAtLeast(1)
+        val filters = normalizeSearchFilters(
+            purchasedOnly = cached.purchasedOnly,
+            presaleOnly = cached.presaleOnly,
+            chineseTranslatedOnly = cached.chineseTranslatedOnly,
+            collectedOnly = cached.collectedOnly
+        )
         currentOrder = order
-        purchasedOnly = cached.purchasedOnly
-        presaleOnly = cached.presaleOnly
-        chineseTranslatedOnly = cached.chineseTranslatedOnly
+        purchasedOnly = filters.purchasedOnly
+        presaleOnly = filters.presaleOnly
+        chineseTranslatedOnly = filters.chineseTranslatedOnly
+        collectedOnly = filters.collectedOnly
         currentLocale = cached.locale
         _uiState.value = SearchUiState.Success(
             results = cached.results,
             keyword = cached.keyword,
             page = page,
             order = order,
-            purchasedOnly = cached.purchasedOnly,
-            presaleOnly = cached.presaleOnly,
-            chineseTranslatedOnly = cached.chineseTranslatedOnly,
+            purchasedOnly = filters.purchasedOnly,
+            presaleOnly = filters.presaleOnly,
+            chineseTranslatedOnly = filters.chineseTranslatedOnly,
+            collectedOnly = filters.collectedOnly,
             locale = cached.locale,
             canGoPrev = page > 1,
             canGoNext = cached.canGoNext,
@@ -467,6 +502,7 @@ class SearchViewModel @Inject constructor(
                         purchasedOnly = latest.purchasedOnly,
                         presaleOnly = latest.presaleOnly,
                         chineseTranslatedOnly = latest.chineseTranslatedOnly,
+                        collectedOnly = latest.collectedOnly,
                         locale = latest.locale,
                         page = latest.page,
                         canGoNext = latest.canGoNext,
@@ -520,6 +556,34 @@ class SearchViewModel @Inject constructor(
         )
     }
 
+    private fun AsmrOneCollectedSearchItem.toCollectedAlbum(): Album {
+        val normalizedRj = rj.trim().uppercase()
+            .ifBlank { originalWorkno.trim().uppercase() }
+        return Album(
+            title = title.trim().ifBlank { normalizedRj.ifBlank { "已收录作品" } },
+            path = "",
+            workId = normalizedRj,
+            rjCode = normalizedRj,
+            circle = circle.trim(),
+            cv = cvs.orEmpty()
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .joinToString(", "),
+            tags = tags.orEmpty()
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct(),
+            coverUrl = mainCoverUrl.trim(),
+            releaseDate = releaseDate.trim(),
+            ratingValue = rateAverage2dp?.takeIf { it > 0.0 },
+            ratingCount = (rateCount ?: reviewCount ?: 0).coerceAtLeast(0),
+            dlCount = 0,
+            priceJpy = price ?: 0,
+            hasAsmrOne = true
+        )
+    }
+
     private fun extractRjCode(a: Album): String? {
         val r1 = a.rjCode.trim().uppercase()
         val m1 = RJ_CODE_REGEX.find(r1)?.value
@@ -535,7 +599,7 @@ class SearchViewModel @Inject constructor(
         asmrOneJob = viewModelScope.launch(Dispatchers.IO) {
             val startedAt = SystemClock.elapsedRealtime()
             val cur0 = _uiState.value as? SearchUiState.Success ?: return@launch
-            if (cur0.keyword != keyword || cur0.page != page || cur0.purchasedOnly) return@launch
+            if (cur0.keyword != keyword || cur0.page != page || cur0.purchasedOnly || cur0.collectedOnly) return@launch
 
             val indexByRj = linkedMapOf<String, MutableList<Int>>()
             baseItems.forEachIndexed { idx, a ->
@@ -547,7 +611,7 @@ class SearchViewModel @Inject constructor(
             val total = indexByRj.size
             _uiState.update { state ->
                 val cur = state as? SearchUiState.Success ?: return@update state
-                if (cur.keyword != keyword || cur.page != page || cur.purchasedOnly) return@update state
+                if (cur.keyword != keyword || cur.page != page || cur.purchasedOnly || cur.collectedOnly) return@update state
                 cur.copy(isAsmrOneChecking = true, asmrOneChecked = 0, asmrOneTotal = total)
             }
 
@@ -589,7 +653,7 @@ class SearchViewModel @Inject constructor(
             } finally {
                 _uiState.update { state ->
                     val cur = state as? SearchUiState.Success ?: return@update state
-                    if (cur.keyword != keyword || cur.page != page || cur.purchasedOnly) return@update state
+                    if (cur.keyword != keyword || cur.page != page || cur.purchasedOnly || cur.collectedOnly) return@update state
                     cur.copy(isAsmrOneChecking = false, asmrOneChecked = total, asmrOneTotal = total)
                 }
             }
@@ -606,7 +670,7 @@ class SearchViewModel @Inject constructor(
         var changed = false
         _uiState.update { state ->
             val cur = state as? SearchUiState.Success ?: return@update state
-            if (cur.keyword != keyword || cur.page != page || cur.purchasedOnly) return@update state
+            if (cur.keyword != keyword || cur.page != page || cur.purchasedOnly || cur.collectedOnly) return@update state
 
             val indices = indexByRj[rj].orEmpty()
             if (indices.isEmpty()) return@update state
@@ -633,6 +697,32 @@ class SearchViewModel @Inject constructor(
     }
 }
 
+private fun normalizeSearchFilters(
+    purchasedOnly: Boolean,
+    presaleOnly: Boolean,
+    chineseTranslatedOnly: Boolean,
+    collectedOnly: Boolean
+): SearchFilterFlags {
+    val normalizedPurchasedOnly = purchasedOnly
+    val normalizedChineseTranslatedOnly = !normalizedPurchasedOnly && chineseTranslatedOnly
+    val normalizedPresaleOnly = !normalizedPurchasedOnly && !normalizedChineseTranslatedOnly && presaleOnly
+    val normalizedCollectedOnly =
+        !normalizedPurchasedOnly && !normalizedChineseTranslatedOnly && !normalizedPresaleOnly && collectedOnly
+    return SearchFilterFlags(
+        purchasedOnly = normalizedPurchasedOnly,
+        presaleOnly = normalizedPresaleOnly,
+        chineseTranslatedOnly = normalizedChineseTranslatedOnly,
+        collectedOnly = normalizedCollectedOnly
+    )
+}
+
+private data class SearchFilterFlags(
+    val purchasedOnly: Boolean,
+    val presaleOnly: Boolean,
+    val chineseTranslatedOnly: Boolean,
+    val collectedOnly: Boolean
+)
+
 private data class SearchPageResult(
     val items: List<Album>,
     val canGoNext: Boolean
@@ -650,6 +740,7 @@ sealed class SearchUiState {
         val purchasedOnly: Boolean,
         val presaleOnly: Boolean,
         val chineseTranslatedOnly: Boolean,
+        val collectedOnly: Boolean,
         val locale: String?,
         val canGoPrev: Boolean,
         val canGoNext: Boolean,

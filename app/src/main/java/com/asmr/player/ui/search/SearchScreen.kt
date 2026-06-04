@@ -178,17 +178,19 @@ fun SearchScreen(
     var purchasedOnly by rememberSaveable { mutableStateOf(false) }
     var presaleOnly by rememberSaveable { mutableStateOf(false) }
     var chineseTranslatedOnly by rememberSaveable { mutableStateOf(false) }
+    var collectedOnly by rememberSaveable { mutableStateOf(false) }
     var selectedLocale by rememberSaveable { mutableStateOf("ja_JP") }
     var selectedOrderName by rememberSaveable { mutableStateOf(SearchSortOption.Trend.name) }
     val selectedOrder = remember(selectedOrderName) {
         SearchSortOption.values().firstOrNull { it.name == selectedOrderName } ?: SearchSortOption.Trend
     }
-    val selectedFilter = remember(selectedOrderName, purchasedOnly, presaleOnly, chineseTranslatedOnly) {
+    val selectedFilter = remember(selectedOrderName, purchasedOnly, presaleOnly, chineseTranslatedOnly, collectedOnly) {
         SearchFilterOption.fromState(
             order = selectedOrder,
             purchasedOnly = purchasedOnly,
             presaleOnly = presaleOnly,
-            chineseTranslatedOnly = chineseTranslatedOnly
+            chineseTranslatedOnly = chineseTranslatedOnly,
+            collectedOnly = collectedOnly
         )
     }
     val viewMode by viewModel.viewMode.collectAsState()
@@ -227,6 +229,7 @@ fun SearchScreen(
         success?.purchasedOnly,
         success?.presaleOnly,
         success?.chineseTranslatedOnly,
+        success?.collectedOnly,
         success?.locale
     ) {
         val state = success ?: return@LaunchedEffect
@@ -234,6 +237,7 @@ fun SearchScreen(
             purchasedOnly = state.purchasedOnly
             presaleOnly = state.presaleOnly
             chineseTranslatedOnly = state.chineseTranslatedOnly
+            collectedOnly = state.collectedOnly
             selectedLocale = state.locale ?: "ja_JP"
             selectedOrderName = state.order.name
             optionsSyncedFromState = true
@@ -604,6 +608,7 @@ fun SearchScreen(
                                 purchasedOnly = option.isPurchasedOnly,
                                 presaleOnly = option.isPresaleOnly,
                                 chineseTranslatedOnly = option.isChineseTranslated,
+                                collectedOnly = option.isCollectedOnly,
                                 locale = selectedLocale
                             )
                             if (accepted) {
@@ -611,6 +616,7 @@ fun SearchScreen(
                                 purchasedOnly = option.isPurchasedOnly
                                 presaleOnly = option.isPresaleOnly
                                 chineseTranslatedOnly = option.isChineseTranslated
+                                collectedOnly = option.isCollectedOnly
                             }
                         },
                         onLocaleSelected = { locale ->
@@ -620,6 +626,7 @@ fun SearchScreen(
                                 purchasedOnly = purchasedOnly,
                                 presaleOnly = presaleOnly,
                                 chineseTranslatedOnly = chineseTranslatedOnly,
+                                collectedOnly = collectedOnly,
                                 locale = locale
                             )
                         },
