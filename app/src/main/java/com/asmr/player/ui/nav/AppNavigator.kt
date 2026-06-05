@@ -26,6 +26,15 @@ object Routes {
     }
 }
 
+internal fun resolveAlbumDetailPopUpToRoute(currentRoute: String?): String {
+    return when (currentRoute) {
+        Routes.Search -> Routes.Search
+        Routes.Library -> Routes.Library
+        Routes.HotListening -> Routes.HotListening
+        else -> currentRoute ?: Routes.Library
+    }
+}
+
 class AppNavigator(
     private val navController: NavHostController
 ) {
@@ -44,11 +53,7 @@ class AppNavigator(
         }
         val refreshToken = System.currentTimeMillis()
         val currentRoute = navController.currentBackStackEntry?.destination?.route
-        val popToRoute = when {
-            currentRoute == Routes.Search -> Routes.Search
-            currentRoute == Routes.Library -> Routes.Library
-            else -> currentRoute ?: Routes.Library
-        }
+        val popToRoute = resolveAlbumDetailPopUpToRoute(currentRoute)
         navController.navigate(route) {
             launchSingleTop = true
             restoreState = false
@@ -70,11 +75,7 @@ class AppNavigator(
         )
         val refreshToken = System.currentTimeMillis()
         val currentRoute = navController.currentBackStackEntry?.destination?.route
-        val popToRoute = when {
-            currentRoute == Routes.Search -> Routes.Search
-            currentRoute == Routes.Library -> Routes.Library
-            else -> currentRoute ?: Routes.Library
-        }
+        val popToRoute = resolveAlbumDetailPopUpToRoute(currentRoute)
         navController.navigate(route) {
             launchSingleTop = true
             restoreState = false

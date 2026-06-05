@@ -36,6 +36,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -80,20 +81,47 @@ fun HotListeningScreen(
     val scope = rememberCoroutineScope()
     val isCompactWidth = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
 
-    val listState = rememberSaveable(saver = LazyListState.Saver) { LazyListState(0, 0) }
-    val gridState = rememberSaveable(saver = LazyStaggeredGridState.Saver) { LazyStaggeredGridState() }
+    val savedScrollPosition = viewModel.scrollPosition
+    val listState = rememberSaveable(saver = LazyListState.Saver) {
+        LazyListState(
+            savedScrollPosition.listFirstVisibleItemIndex,
+            savedScrollPosition.listFirstVisibleItemScrollOffset
+        )
+    }
+    val gridState = rememberSaveable(saver = LazyStaggeredGridState.Saver) {
+        LazyStaggeredGridState(
+            savedScrollPosition.gridFirstVisibleItemIndex,
+            savedScrollPosition.gridFirstVisibleItemScrollOffset
+        )
+    }
 
     val periods = listOf("day" to "过去一天", "week" to "过去一周", "month" to "过去一月")
 
     fun scrollToTop() {
+        viewModel.resetScrollPosition()
         scope.launch {
             runCatching { listState.scrollToItem(0) }
             runCatching { gridState.scrollToItem(0) }
         }
     }
 
+    LaunchedEffect(listState) {
+        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) ->
+                viewModel.updateListScrollPosition(index, offset)
+            }
+    }
+
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) ->
+                viewModel.updateGridScrollPosition(index, offset)
+            }
+    }
+
     LaunchedEffect(scrollToTopSignal) {
         if (scrollToTopSignal == 0L) return@LaunchedEffect
+        viewModel.resetScrollPosition()
         when (viewMode) {
             0 -> runCatching { listState.animateScrollToItem(0) }
             else -> runCatching { gridState.animateScrollToItem(0) }
