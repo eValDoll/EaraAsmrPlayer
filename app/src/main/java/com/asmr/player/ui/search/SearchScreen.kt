@@ -178,7 +178,7 @@ fun SearchScreen(
     var purchasedOnly by rememberSaveable { mutableStateOf(false) }
     var presaleOnly by rememberSaveable { mutableStateOf(false) }
     var chineseTranslatedOnly by rememberSaveable { mutableStateOf(false) }
-    var collectedOnly by rememberSaveable { mutableStateOf(false) }
+    var collectedOnly by rememberSaveable { mutableStateOf(true) }
     var selectedLocale by rememberSaveable { mutableStateOf("ja_JP") }
     var selectedOrderName by rememberSaveable { mutableStateOf(SearchSortOption.Trend.name) }
     val selectedOrder = remember(selectedOrderName) {
@@ -212,7 +212,12 @@ fun SearchScreen(
     var optionsSyncedFromState by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
-        viewModel.bootstrap(keyword, purchasedOnly, selectedLocale)
+        viewModel.bootstrap(
+            initialKeyword = keyword,
+            initialPurchasedOnly = purchasedOnly,
+            initialLocale = selectedLocale,
+            initialCollectedOnly = collectedOnly
+        )
     }
 
     LaunchedEffect(success?.keyword) {

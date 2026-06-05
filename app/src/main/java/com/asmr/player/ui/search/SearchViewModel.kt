@@ -64,7 +64,7 @@ class SearchViewModel @Inject constructor(
     private var purchasedOnly: Boolean = false
     private var presaleOnly: Boolean = false
     private var chineseTranslatedOnly: Boolean = false
-    private var collectedOnly: Boolean = false
+    private var collectedOnly: Boolean = true
     private var enrichJob: Job? = null
     private var asmrOneJob: Job? = null
     private var cacheWriteJob: Job? = null
@@ -88,7 +88,12 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    fun bootstrap(initialKeyword: String, initialPurchasedOnly: Boolean, initialLocale: String?) {
+    fun bootstrap(
+        initialKeyword: String,
+        initialPurchasedOnly: Boolean,
+        initialLocale: String?,
+        initialCollectedOnly: Boolean = true
+    ) {
         if (!bootstrapped.compareAndSet(false, true)) return
         viewModelScope.launch {
             val cached = runCatching { searchCacheStore.readLast() }.getOrNull()
@@ -99,7 +104,7 @@ class SearchViewModel @Inject constructor(
                 purchasedOnly = initialPurchasedOnly
                 presaleOnly = false
                 chineseTranslatedOnly = false
-                collectedOnly = false
+                collectedOnly = initialCollectedOnly
                 currentLocale = initialLocale
                 lastRequestedKeyword = initialKeyword.trim()
                 requestPage(lastRequestedKeyword, 1, SearchPendingRequestKind.Search)
