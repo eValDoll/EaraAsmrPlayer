@@ -70,6 +70,12 @@ class MainNavigationSupportTest {
     }
 
     @Test
+    fun resolveCurrentPrimaryDestinationRoute_treatsSearchAssistAsSecondary() {
+        assertEquals(null, resolveCurrentPrimaryDestinationRoute("search_assist"))
+        assertEquals(null, resolveCurrentPrimaryDestinationRoute("search_assist?keyword={keyword}"))
+    }
+
+    @Test
     fun shouldScrollPrimaryRouteToTop_onlyWhenAlreadyAtPrimaryRoot() {
         assertEquals(true, shouldScrollPrimaryRouteToTop("playlists", "playlists", "playlists"))
         assertEquals(false, shouldScrollPrimaryRouteToTop("playlists", "playlists", null))

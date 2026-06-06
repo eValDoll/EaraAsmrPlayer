@@ -11,6 +11,7 @@ import com.asmr.player.data.remote.dlsite.DlsitePlayLibraryClient
 import com.asmr.player.data.remote.scraper.DLSiteScraper
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.domain.model.Album
+import com.asmr.player.hotlistening.HotListeningApi
 import com.asmr.player.util.AppErrorMessageFormatter
 import com.asmr.player.util.MessageManager
 import androidx.lifecycle.ViewModel
@@ -57,6 +58,7 @@ class SearchViewModel @Inject constructor(
     private val asmrOneAvailabilityApi: AsmrOneAvailabilityApi,
     private val settingsRepository: SettingsRepository,
     private val searchCacheStore: SearchCacheStore,
+    private val hotListeningApi: HotListeningApi,
     val messageManager: MessageManager
 ) : ViewModel() {
     private val pageSize = 30
@@ -75,12 +77,36 @@ class SearchViewModel @Inject constructor(
 
     private val _uiState = MutableStateFlow<SearchUiState>(SearchUiState.Idle)
     val uiState = _uiState.asStateFlow()
+    private val _hotKeywordTerms = MutableStateFlow<List<SearchHotKeywordTerm>>(emptyList())
+    internal val hotKeywordTerms: StateFlow<List<SearchHotKeywordTerm>> = _hotKeywordTerms.asStateFlow()
+    private val _showHotKeywordFallback = MutableStateFlow(false)
+    internal val showHotKeywordFallback: StateFlow<Boolean> = _showHotKeywordFallback.asStateFlow()
 
     val viewMode: StateFlow<Int> = settingsRepository.searchViewMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
 
     private var currentLocale: String? = "ja_JP"
     private var lastRequestedKeyword: String = ""
+
+    init {
+        refreshHotKeywordTerms()
+    }
+
+    private fun refreshHotKeywordTerms() {
+        if (!hotListeningApi.isBackendConfigured) {
+            _showHotKeywordFallback.value = true
+            return
+        }
+        viewModelScope.launch {
+            val suggestions = runCatching { hotListeningApi.getSearchSuggestions() }.getOrNull()
+            val terms = buildSearchHotKeywordTerms(
+                hotCvs = suggestions?.hotCvs.orEmpty(),
+                hotTags = suggestions?.hotTags.orEmpty()
+            )
+            _hotKeywordTerms.value = terms
+            _showHotKeywordFallback.value = terms.isEmpty()
+        }
+    }
 
     fun setViewMode(mode: Int) {
         viewModelScope.launch {
@@ -125,14 +151,51 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    fun search(keyword: String) {
-        if (_uiState.value is SearchUiState.Loading) return
+    fun search(keyword: String): Boolean {
+        return search(
+            keyword = keyword,
+            order = currentOrder,
+            purchasedOnly = purchasedOnly,
+            presaleOnly = presaleOnly,
+            chineseTranslatedOnly = chineseTranslatedOnly,
+            collectedOnly = collectedOnly,
+            locale = currentLocale
+        )
+    }
+
+    fun search(
+        keyword: String,
+        order: SearchSortOption,
+        purchasedOnly: Boolean,
+        presaleOnly: Boolean,
+        chineseTranslatedOnly: Boolean,
+        collectedOnly: Boolean,
+        locale: String?
+    ): Boolean {
+        if (_uiState.value is SearchUiState.Loading) return false
         val current = _uiState.value as? SearchUiState.Success
-        if (current?.isBusy == true) return
+        if (current?.isBusy == true) return false
+        val nextFilters = normalizeSearchFilters(
+            purchasedOnly = purchasedOnly,
+            presaleOnly = presaleOnly,
+            chineseTranslatedOnly = chineseTranslatedOnly,
+            collectedOnly = collectedOnly
+        )
+        if (nextFilters.purchasedOnly && !dlsitePlayLibraryClient.hasStoredCredentials()) {
+            messageManager.showWarning("请先登录 DLsite 后再使用\"已购\"搜索")
+            return false
+        }
         val normalizedKeyword = keyword.trim()
         Log.d("SearchViewModel", "Search requested: keyword=$normalizedKeyword")
+        currentOrder = order
+        this.purchasedOnly = nextFilters.purchasedOnly
+        this.presaleOnly = nextFilters.presaleOnly
+        this.chineseTranslatedOnly = nextFilters.chineseTranslatedOnly
+        this.collectedOnly = nextFilters.collectedOnly
+        currentLocale = locale
         lastRequestedKeyword = normalizedKeyword
         requestPage(normalizedKeyword, 1, SearchPendingRequestKind.Search)
+        return true
     }
 
     fun setOrder(order: SearchSortOption) {

@@ -287,6 +287,8 @@ fun resolvePrimaryRoute(
     return when {
         currentRoute == Routes.Library -> Routes.Library
         currentRoute == Routes.Search -> Routes.Search
+        currentRoute == Routes.SearchAssist -> Routes.Search
+        currentRoute == Routes.SearchAssistPattern -> Routes.Search
         currentRoute == Routes.HotListening -> Routes.HotListening
         currentRoute == "playlists" -> "playlists"
         currentRoute == "groups" -> "groups"

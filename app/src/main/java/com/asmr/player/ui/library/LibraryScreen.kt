@@ -161,6 +161,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import com.asmr.player.ui.common.CustomSearchBar
 import com.asmr.player.ui.common.ActionButton
+import com.asmr.player.ui.common.clearFocusOnTapOutside
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.thinScrollbar
@@ -395,7 +396,12 @@ fun LibraryScreen(
                 ) {
                     when (val state = uiState) {
                     is LibraryUiState.Loading -> {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clearFocusOnTapOutside(),
+                            contentAlignment = Alignment.Center
+                        ) {
                             EaraLogoLoadingIndicator(tint = colorScheme.primary)
                         }
                     }
@@ -457,7 +463,12 @@ fun LibraryScreen(
                     }
                     is LibraryUiState.Success -> {
                         if (viewMode == null) {
-                            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .clearFocusOnTapOutside(),
+                                contentAlignment = Alignment.Center
+                            ) {
                                 EaraLogoLoadingIndicator(tint = colorScheme.primary)
                             }
                         } else {
@@ -476,7 +487,12 @@ fun LibraryScreen(
                                     (pagedAlbums.loadState.refresh is LoadState.NotLoading) && pagedAlbums.itemCount == 0
                                 }
                                 if (isLoading) {
-                                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clearFocusOnTapOutside(),
+                                        contentAlignment = Alignment.Center
+                                    ) {
                                         EaraLogoLoadingIndicator(tint = colorScheme.primary)
                                     }
                                 } else if (isEmpty) {
@@ -492,7 +508,9 @@ fun LibraryScreen(
                                         sectionTitle = if (hasAnyQuery) "本地库结果" else "本地库",
                                         headline = if (hasAnyQuery) "没有匹配的本地内容" else "还没有扫描到本地专辑",
                                         sectionIcon = if (hasAnyQuery) Icons.Rounded.Search else Icons.Rounded.FolderOpen,
-                                        modifier = Modifier.fillMaxSize(),
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clearFocusOnTapOutside(),
                                         contentPadding = PaddingValues(
                                             top = topPadding,
                                             bottom = LocalBottomOverlayPadding.current + 24.dp
@@ -522,6 +540,7 @@ fun LibraryScreen(
                                         state = listState,
                                         modifier = Modifier
                                             .fillMaxSize()
+                                            .clearFocusOnTapOutside()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(listState),
                                         contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
@@ -688,6 +707,7 @@ fun LibraryScreen(
                                         state = gridState,
                                         modifier = Modifier
                                             .fillMaxSize()
+                                            .clearFocusOnTapOutside()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(gridState),
                                         contentPadding = PaddingValues(top = topPadding, start = LibraryPageHorizontalPadding, end = LibraryPageHorizontalPadding, bottom = 16.dp)
@@ -748,6 +768,7 @@ fun LibraryScreen(
                                         state = listState,
                                         modifier = Modifier
                                             .fillMaxSize()
+                                            .clearFocusOnTapOutside()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(listState),
                                         contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
@@ -1028,8 +1049,8 @@ internal fun LibraryChrome(
             onValueChange = onSearchTextChange,
             placeholder = "社团 / CV / 标签...",
             modifier = Modifier
-                .weight(1f)
-                .testTag(LIBRARY_SEARCH_INPUT_TAG),
+                .weight(1f),
+            inputTestTag = LIBRARY_SEARCH_INPUT_TAG,
             leadingIcon = {
                 Icon(
                     imageVector = Icons.Rounded.Search,

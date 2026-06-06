@@ -49,6 +49,19 @@ data class HotListeningItem(
         get() = tags.split(",").map { it.trim() }.filter { it.isNotBlank() }
 }
 
+data class SearchSuggestionTerm(
+    val value: String = "",
+    val count: Int = 0,
+    val rank: Int = 0
+)
+
+data class SearchSuggestionsResponse(
+    val hotCvs: List<SearchSuggestionTerm> = emptyList(),
+    val hotTags: List<SearchSuggestionTerm> = emptyList(),
+    val hotWorks: List<HotListeningItem> = emptyList(),
+    val serverTimeEpochMs: Long = 0L
+)
+
 enum class HotListeningSortMode(val wireValue: String, val label: String) {
     PlayCount("play_count", "按播放次数"),
     ListenDuration("listen_duration", "按收听时长");
@@ -116,9 +129,17 @@ class HotListeningApi @Inject constructor(
         )
     }
 
+    suspend fun getSearchSuggestions(): SearchSuggestionsResponse? {
+        if (!isBackendConfigured) return null
+        return getJson(
+            path = "api/search-suggestions",
+            responseType = SearchSuggestionsResponse::class.java
+        )
+    }
+
     private suspend fun <T> getJson(
         path: String,
-        queryParameters: Map<String, String>,
+        queryParameters: Map<String, String> = emptyMap(),
         responseType: java.lang.reflect.Type
     ): T? {
         return withContext(Dispatchers.IO) {

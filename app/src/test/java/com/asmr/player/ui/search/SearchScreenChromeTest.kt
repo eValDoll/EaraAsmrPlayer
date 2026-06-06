@@ -74,6 +74,62 @@ class SearchScreenChromeTest {
     }
 
     @Test
+    fun searchToolbar_readOnlyFieldOpensAssistAndSearchIconSubmits() {
+        var assistOpenCount by mutableIntStateOf(0)
+        var submitCount by mutableIntStateOf(0)
+
+        composeRule.setContent {
+            AsmrPlayerTheme {
+                SearchToolbar(
+                    keyword = "RJ123456",
+                    onKeywordChange = {},
+                    searchFieldReadOnly = true,
+                    onSearchFieldClick = { assistOpenCount += 1 },
+                    selectedFilter = SearchFilterOption.Trend,
+                    selectedLocale = "ja_JP",
+                    filterControlsLocked = false,
+                    searchSubmitLocked = false,
+                    showSearchSpinner = false,
+                    onSearchSubmit = { submitCount += 1 },
+                    onFilterSelected = {},
+                    onLocaleSelected = {}
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(SEARCH_INPUT_TAG).performClick()
+        composeRule.onNodeWithTag(SEARCH_SUBMIT_BUTTON_TAG).performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(1, assistOpenCount)
+            assertEquals(1, submitCount)
+        }
+    }
+
+    @Test
+    fun searchToolbar_usesHotKeywordPlaceholderWhenKeywordIsEmpty() {
+        composeRule.setContent {
+            AsmrPlayerTheme {
+                SearchToolbar(
+                    keyword = "",
+                    onKeywordChange = {},
+                    placeholder = "CV A",
+                    selectedFilter = SearchFilterOption.Trend,
+                    selectedLocale = "ja_JP",
+                    filterControlsLocked = false,
+                    searchSubmitLocked = false,
+                    showSearchSpinner = false,
+                    onSearchSubmit = {},
+                    onFilterSelected = {},
+                    onLocaleSelected = {}
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("CV A").assertExists()
+    }
+
+    @Test
     fun searchPending_disablesChromeAndShowsSearchSpinner() {
         composeRule.setContent {
             AsmrPlayerTheme {

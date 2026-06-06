@@ -72,6 +72,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -96,6 +97,7 @@ import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
+import com.asmr.player.ui.common.clearFocusOnTapOutside
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.thinScrollbar
@@ -171,6 +173,15 @@ private fun SearchFilterIconView(
 fun SearchScreen(
     windowSizeClass: WindowSizeClass,
     onAlbumClick: (Album, Boolean) -> Unit,
+    onOpenSearchAssist: (SearchAssistSearchRequest) -> Unit = {},
+    submittedSearchKeyword: String = "",
+    submittedSearchOrderName: String = SearchSortOption.Trend.name,
+    submittedSearchPurchasedOnly: Boolean = false,
+    submittedSearchPresaleOnly: Boolean = false,
+    submittedSearchChineseTranslatedOnly: Boolean = false,
+    submittedSearchCollectedOnly: Boolean = true,
+    submittedSearchLocale: String = "ja_JP",
+    submittedSearchSignal: Long = 0L,
     scrollToTopSignal: Long = 0L,
     viewModel: SearchViewModel = hiltViewModel()
 ) {
@@ -195,6 +206,12 @@ fun SearchScreen(
     }
     val viewMode by viewModel.viewMode.collectAsState()
     val uiState by viewModel.uiState.collectAsState()
+    val hotKeywordTerms by viewModel.hotKeywordTerms.collectAsState()
+    val showHotKeywordFallback by viewModel.showHotKeywordFallback.collectAsState()
+    val hotKeywordCarouselItem = rememberSearchHotKeywordCarouselItem(
+        terms = hotKeywordTerms,
+        showFallback = showHotKeywordFallback
+    )
     val success = uiState as? SearchUiState.Success
     val currentPageKey = success?.page ?: 0
     val listState = rememberSaveable(currentPageKey, saver = LazyListState.Saver) { LazyListState(0, 0) }
@@ -210,6 +227,7 @@ fun SearchScreen(
 
     var keywordSyncedFromState by rememberSaveable { mutableStateOf(false) }
     var optionsSyncedFromState by rememberSaveable { mutableStateOf(false) }
+    var lastHandledSubmittedSearchSignal by rememberSaveable { mutableStateOf(0L) }
 
     LaunchedEffect(Unit) {
         viewModel.bootstrap(
@@ -277,9 +295,72 @@ fun SearchScreen(
 
     fun submitSearch() {
         if (searchSubmitLocked) return
+        val nextKeyword = keyword.trim()
+            .ifBlank { hotKeywordCarouselItem.keyword.orEmpty() }
+        if (nextKeyword.isBlank()) return
         keyboardController?.hide()
-        viewModel.search(keyword)
+        val accepted = viewModel.search(nextKeyword)
+        if (!accepted) return
+        keyword = nextKeyword
         scrollResultsToTop()
+    }
+
+    fun currentSearchAssistRequest(): SearchAssistSearchRequest {
+        return SearchAssistSearchRequest(
+            keyword = keyword,
+            orderName = selectedOrder.name,
+            purchasedOnly = purchasedOnly,
+            presaleOnly = presaleOnly,
+            chineseTranslatedOnly = chineseTranslatedOnly,
+            collectedOnly = collectedOnly,
+            locale = selectedLocale
+        )
+    }
+
+    LaunchedEffect(
+        submittedSearchSignal,
+        submittedSearchKeyword,
+        submittedSearchOrderName,
+        submittedSearchPurchasedOnly,
+        submittedSearchPresaleOnly,
+        submittedSearchChineseTranslatedOnly,
+        submittedSearchCollectedOnly,
+        submittedSearchLocale,
+        searchSubmitLocked
+    ) {
+        if (
+            submittedSearchSignal == 0L ||
+            submittedSearchSignal == lastHandledSubmittedSearchSignal ||
+            searchSubmitLocked
+        ) {
+            return@LaunchedEffect
+        }
+        val normalizedKeyword = submittedSearchKeyword.trim()
+        if (normalizedKeyword.isBlank() || searchSubmitLocked) return@LaunchedEffect
+        val submittedOrder = SearchSortOption.values()
+            .firstOrNull { it.name == submittedSearchOrderName }
+            ?: SearchSortOption.Trend
+        keyboardController?.hide()
+        val accepted = viewModel.search(
+            keyword = normalizedKeyword,
+            order = submittedOrder,
+            purchasedOnly = submittedSearchPurchasedOnly,
+            presaleOnly = submittedSearchPresaleOnly,
+            chineseTranslatedOnly = submittedSearchChineseTranslatedOnly,
+            collectedOnly = submittedSearchCollectedOnly,
+            locale = submittedSearchLocale
+        )
+        if (!accepted) return@LaunchedEffect
+        lastHandledSubmittedSearchSignal = submittedSearchSignal
+        keyword = normalizedKeyword
+        selectedOrderName = submittedOrder.name
+        purchasedOnly = submittedSearchPurchasedOnly
+        presaleOnly = submittedSearchPresaleOnly
+        chineseTranslatedOnly = submittedSearchChineseTranslatedOnly
+        collectedOnly = submittedSearchCollectedOnly
+        selectedLocale = submittedSearchLocale
+        scrollResultsToTop()
+        chromeState.expand()
     }
 
     val pullToRefreshState = rememberPullToRefreshState()
@@ -427,6 +508,7 @@ fun SearchScreen(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
+                                .clearFocusOnTapOutside()
                         ) {
                             when (val state = uiState) {
                             is SearchUiState.Loading -> Column(
@@ -591,6 +673,9 @@ fun SearchScreen(
                         modifier = Modifier.align(Alignment.TopCenter),
                         keyword = keyword,
                         onKeywordChange = { keyword = it },
+                        placeholder = hotKeywordCarouselItem.placeholder,
+                        searchFieldReadOnly = true,
+                        onSearchFieldClick = { onOpenSearchAssist(currentSearchAssistRequest()) },
                         selectedFilter = selectedFilter,
                         selectedLocale = selectedLocale,
                         filterControlsLocked = filterControlsLocked,
@@ -605,7 +690,7 @@ fun SearchScreen(
                         animatedOffsetPx = animatedChromeOffsetPx,
                         collapseFraction = chromeState.collapseFraction,
                         onMeasured = { size: IntSize -> chromeState.updateHeight(size.height.toFloat()) },
-                        onSearchSubmit = ::submitSearch,
+                        onSearchSubmit = { submitSearch() },
                         onFilterSelected = { option ->
                             val nextOrder = option.sortOption ?: selectedOrder
                             val accepted = viewModel.updateSearchOptions(
@@ -713,6 +798,9 @@ internal fun SearchChrome(
     modifier: Modifier = Modifier,
     keyword: String,
     onKeywordChange: (String) -> Unit,
+    placeholder: String = DefaultSearchPlaceholder,
+    searchFieldReadOnly: Boolean = false,
+    onSearchFieldClick: (() -> Unit)? = null,
     selectedFilter: SearchFilterOption,
     selectedLocale: String,
     filterControlsLocked: Boolean,
@@ -726,6 +814,11 @@ internal fun SearchChrome(
     rightPanelToggle: (@Composable (Modifier) -> Unit)?,
     animatedOffsetPx: Float,
     collapseFraction: Float,
+    chromeTestTag: String = SEARCH_CHROME_TAG,
+    inputTestTag: String = SEARCH_INPUT_TAG,
+    clearButtonTestTag: String = SEARCH_CLEAR_BUTTON_TAG,
+    submitButtonTestTag: String = SEARCH_SUBMIT_BUTTON_TAG,
+    inputFocusRequester: FocusRequester? = null,
     onMeasured: (IntSize) -> Unit,
     onSearchSubmit: () -> Unit,
     onFilterSelected: (SearchFilterOption) -> Unit,
@@ -742,16 +835,23 @@ internal fun SearchChrome(
                 alpha = 1f - (collapseFraction.coerceIn(0f, 1f) * 0.1f)
             }
             .semantics { stateDescription = collapsibleHeaderUiState(collapseFraction) }
-            .testTag(SEARCH_CHROME_TAG)
+            .testTag(chromeTestTag)
     ) {
         SearchToolbar(
             keyword = keyword,
             onKeywordChange = onKeywordChange,
+            placeholder = placeholder,
+            searchFieldReadOnly = searchFieldReadOnly,
+            onSearchFieldClick = onSearchFieldClick,
             selectedFilter = selectedFilter,
             selectedLocale = selectedLocale,
             filterControlsLocked = filterControlsLocked,
             searchSubmitLocked = searchSubmitLocked,
             showSearchSpinner = showSearchSpinner,
+            inputTestTag = inputTestTag,
+            clearButtonTestTag = clearButtonTestTag,
+            submitButtonTestTag = submitButtonTestTag,
+            inputFocusRequester = inputFocusRequester,
             onSearchSubmit = onSearchSubmit,
             onFilterSelected = onFilterSelected,
             onLocaleSelected = onLocaleSelected,
@@ -775,11 +875,18 @@ internal fun SearchChrome(
 internal fun SearchToolbar(
     keyword: String,
     onKeywordChange: (String) -> Unit,
+    placeholder: String = DefaultSearchPlaceholder,
+    searchFieldReadOnly: Boolean = false,
+    onSearchFieldClick: (() -> Unit)? = null,
     selectedFilter: SearchFilterOption,
     selectedLocale: String,
     filterControlsLocked: Boolean,
     searchSubmitLocked: Boolean,
     showSearchSpinner: Boolean,
+    inputTestTag: String = SEARCH_INPUT_TAG,
+    clearButtonTestTag: String = SEARCH_CLEAR_BUTTON_TAG,
+    submitButtonTestTag: String = SEARCH_SUBMIT_BUTTON_TAG,
+    inputFocusRequester: FocusRequester? = null,
     onSearchSubmit: () -> Unit,
     onFilterSelected: (SearchFilterOption) -> Unit,
     onLocaleSelected: (String) -> Unit,
@@ -811,10 +918,13 @@ internal fun SearchToolbar(
         CustomSearchBar(
             value = keyword,
             onValueChange = onKeywordChange,
-            placeholder = "搜索专辑、社团、CV...",
+            placeholder = placeholder,
             modifier = Modifier
-                .weight(1f)
-                .testTag(SEARCH_INPUT_TAG),
+                .weight(1f),
+            readOnly = searchFieldReadOnly,
+            onFieldClick = onSearchFieldClick,
+            focusRequester = inputFocusRequester,
+            inputTestTag = inputTestTag,
             leadingIcon = {
                 Box {
                     TextButton(
@@ -894,7 +1004,7 @@ internal fun SearchToolbar(
                             enabled = !searchSubmitLocked,
                             modifier = Modifier
                                 .size(28.dp)
-                                .testTag(SEARCH_CLEAR_BUTTON_TAG)
+                                .testTag(clearButtonTestTag)
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Close,
@@ -956,7 +1066,7 @@ internal fun SearchToolbar(
                         enabled = !searchSubmitLocked,
                         modifier = Modifier
                             .size(28.dp)
-                            .testTag(SEARCH_SUBMIT_BUTTON_TAG)
+                            .testTag(submitButtonTestTag)
                     ) {
                         if (showSearchSpinner) {
                             EaraLogoLoadingIndicator(
@@ -969,7 +1079,7 @@ internal fun SearchToolbar(
                             Icon(
                                 imageVector = Icons.Rounded.Search,
                                 contentDescription = null,
-                                tint = colorScheme.primary,
+                                tint = if (!searchSubmitLocked) colorScheme.primary else colorScheme.textTertiary,
                                 modifier = Modifier.size(17.dp)
                             )
                         }
