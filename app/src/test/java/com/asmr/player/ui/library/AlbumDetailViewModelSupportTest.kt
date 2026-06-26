@@ -89,4 +89,72 @@ class AlbumDetailViewModelSupportTest {
         assertEquals("抓取CV", result.cv)
         assertEquals(listOf("抓取标签"), result.tags)
     }
+
+    @Test
+    fun withUpdatedLocalCover_updatesDisplayAlbumWhenLocalAlbumMatches() {
+        val localAlbum = Album(
+            id = 42L,
+            title = "本地作品",
+            path = "/local/RJ123456",
+            coverPath = "/old/cover.jpg",
+            coverThumbPath = "/old/thumb.jpg"
+        )
+        val displayAlbum = Album(
+            id = 0L,
+            title = "展示作品",
+            path = "web://rj/RJ123456",
+            coverPath = "",
+            coverThumbPath = ""
+        )
+        val model = AlbumDetailModel(
+            baseRjCode = "RJ123456",
+            rjCode = "RJ123456",
+            listenTogetherRjListenerCount = null,
+            displayAlbum = displayAlbum,
+            localAlbum = localAlbum,
+            dlsiteInfo = null,
+            dlsiteGalleryUrls = emptyList(),
+            dlsiteTrialTracks = emptyList(),
+            dlsiteRecommendations = com.asmr.player.data.remote.scraper.DlsiteRecommendations(),
+            dlsiteWorkno = "",
+            dlsitePlayWorkno = "",
+            dlsiteEditions = emptyList(),
+            dlsiteSelectedLang = "",
+            hasResolvedInitialDlsiteTarget = false,
+            hasLoadedInitialDlsiteContent = false,
+            hasResolvedAsmrOneContent = false,
+            preserveHeaderAlbumMetadata = false,
+            isDlsiteLanguageUserSelected = false,
+            asmrOneWorkId = null,
+            asmrOneSite = null,
+            asmrOneTree = emptyList(),
+            dlsitePlayTree = emptyList(),
+            isLoadingDlsite = false,
+            isLoadingDlsiteTrial = false,
+            isLoadingAsmrOne = false,
+            isLoadingDlsitePlay = false
+        )
+
+        val result = model.withUpdatedLocalCover(
+            albumId = 42L,
+            coverPath = "/new/cover.jpg",
+            coverThumbPath = ""
+        )
+
+        assertEquals("/new/cover.jpg", result.localAlbum?.coverPath)
+        assertEquals("", result.localAlbum?.coverThumbPath)
+        assertEquals("/new/cover.jpg", result.displayAlbum.coverPath)
+        assertEquals("", result.displayAlbum.coverThumbPath)
+    }
+
+    @Test
+    fun stableAlbumHeroCoverSource_updatesWhenLocalCoverPathChanges() {
+        val current = resolveStableAlbumHeroCoverSource(
+            stable = "https://example.com/old.jpg",
+            currentLocal = "/albums/RJ123456/new-cover.jpg",
+            current = "/albums/RJ123456/new-cover.jpg"
+        )
+
+        assertEquals("/albums/RJ123456/new-cover.jpg", current)
+    }
 }

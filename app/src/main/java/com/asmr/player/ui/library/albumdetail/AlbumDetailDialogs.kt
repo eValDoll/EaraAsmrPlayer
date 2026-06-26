@@ -271,14 +271,14 @@ internal fun AsmrOneDownloadDialog(
     }
 }
 
-private data class OnlineSaveLeafUi(
+internal data class OnlineSaveLeafUi(
     val relativePath: String,
     val title: String,
     val url: String,
     val fileType: TreeFileType
 )
 
-private fun flattenOnlineSaveLeaves(tree: List<AsmrOneTrackNodeResponse>): List<OnlineSaveLeafUi> {
+internal fun flattenOnlineSaveLeaves(tree: List<AsmrOneTrackNodeResponse>): List<OnlineSaveLeafUi> {
     val out = mutableListOf<OnlineSaveLeafUi>()
     fun sanitize(name: String): String = name.trim().ifEmpty { "item" }.replace(Regex("""[\\/:*?"<>|]"""), "_")
 
@@ -292,7 +292,7 @@ private fun flattenOnlineSaveLeaves(tree: List<AsmrOneTrackNodeResponse>): List<
             if (children.isEmpty()) {
                 if (url.isNullOrBlank()) return@forEach
                 val type = treeFileTypeForNode(titleRaw, url, node.type)
-                if (!isLibrarySavableTreeFileType(type)) return@forEach
+                if (!isLibraryResourceSavableTreeFileType(type)) return@forEach
                 out.add(
                     OnlineSaveLeafUi(
                         relativePath = path,
@@ -311,7 +311,7 @@ private fun flattenOnlineSaveLeaves(tree: List<AsmrOneTrackNodeResponse>): List<
     return out
 }
 
-private fun buildMediaLeafPathIndex(tree: List<AsmrOneTrackNodeResponse>): Map<String, List<String>> {
+private fun buildSaveLeafPathIndex(tree: List<AsmrOneTrackNodeResponse>): Map<String, List<String>> {
     val folderToLeaves = linkedMapOf<String, MutableList<String>>()
     fun sanitize(name: String): String = name.trim().ifEmpty { "item" }.replace(Regex("""[\\/:*?"<>|]"""), "_")
     fun walk(nodes: List<AsmrOneTrackNodeResponse>, parentPath: String, folderStack: List<String>) {
@@ -324,7 +324,7 @@ private fun buildMediaLeafPathIndex(tree: List<AsmrOneTrackNodeResponse>): Map<S
             if (children.isEmpty()) {
                 if (url.isNullOrBlank()) return@forEach
                 val type = treeFileTypeForNode(titleRaw, url, node.type)
-                if (!isLibrarySavableTreeFileType(type)) return@forEach
+                if (!isLibraryResourceSavableTreeFileType(type)) return@forEach
                 folderStack.forEach { folder ->
                     folderToLeaves.getOrPut(folder) { mutableListOf() }.add(path)
                 }
@@ -341,7 +341,7 @@ private fun buildMediaLeafPathIndex(tree: List<AsmrOneTrackNodeResponse>): Map<S
     return folderToLeaves
 }
 
-private fun flattenAsmrOneMediaTreeForUi(
+private fun flattenAsmrOneSaveTreeForUi(
     tree: List<AsmrOneTrackNodeResponse>,
     expanded: Set<String>
 ): AsmrTreeUiResult {
@@ -355,7 +355,7 @@ private fun flattenAsmrOneMediaTreeForUi(
         return if (children.isEmpty()) {
             if (url.isNullOrBlank()) return false
             val type = treeFileTypeForNode(titleRaw, url, node.type)
-            isLibrarySavableTreeFileType(type)
+            isLibraryResourceSavableTreeFileType(type)
         } else {
             children.any { nodeHasMedia(it) }
         }
@@ -371,7 +371,7 @@ private fun flattenAsmrOneMediaTreeForUi(
             if (children.isEmpty()) {
                 if (url.isNullOrBlank()) return@forEach
                 val type = treeFileTypeForNode(titleRaw, url, node.type)
-                if (!isLibrarySavableTreeFileType(type)) return@forEach
+                if (!isLibraryResourceSavableTreeFileType(type)) return@forEach
                 out.add(
                     AsmrTreeUiEntry.File(
                         path = path,
@@ -404,7 +404,7 @@ internal fun OnlineSaveDialog(
     onConfirm: (Set<String>) -> Unit
 ) {
     val leaves = remember(trackTree) { flattenOnlineSaveLeaves(trackTree) }
-    val leafPathsByFolder = remember(trackTree) { buildMediaLeafPathIndex(trackTree) }
+    val leafPathsByFolder = remember(trackTree) { buildSaveLeafPathIndex(trackTree) }
     val expanded = remember { mutableStateListOf<String>() }
     val selected = remember(trackTree) { mutableStateListOf<String>().apply { addAll(leaves.map { it.relativePath }) } }
     val listState = rememberLazyListState()
@@ -457,10 +457,10 @@ internal fun OnlineSaveDialog(
                                 .height(180.dp),
                             contentAlignment = Alignment.Center
                         ) {
-                            Text("没有可保存的音频/视频文件")
+                            Text("没有可保存文件")
                         }
                     } else {
-                        val entries = flattenAsmrOneMediaTreeForUi(trackTree, expanded.toSet()).entries
+                        val entries = flattenAsmrOneSaveTreeForUi(trackTree, expanded.toSet()).entries
                         LazyColumn(
                             state = listState,
                             modifier = Modifier.fillMaxSize().thinScrollbar(listState)

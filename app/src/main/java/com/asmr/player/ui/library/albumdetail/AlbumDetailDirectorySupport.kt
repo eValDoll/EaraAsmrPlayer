@@ -149,6 +149,7 @@ import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.util.Formatting
 import com.asmr.player.util.MessageManager
 import com.asmr.player.util.RemoteSubtitleSource
+import com.asmr.player.util.isOnlineTrackPath
 
 internal sealed class AsmrTreeUiEntry {
     abstract val path: String
@@ -277,7 +278,11 @@ internal fun isDownloadableTreeFileType(fileType: TreeFileType): Boolean {
     return fileType != TreeFileType.Other && fileType != TreeFileType.Subtitle
 }
 
-internal fun isLibrarySavableTreeFileType(fileType: TreeFileType): Boolean {
+internal fun isLibraryResourceSavableTreeFileType(fileType: TreeFileType): Boolean {
+    return fileType != TreeFileType.Other && fileType != TreeFileType.Subtitle
+}
+
+internal fun isPlayableTreeFileType(fileType: TreeFileType): Boolean {
     return fileType == TreeFileType.Audio || fileType == TreeFileType.Video
 }
 
@@ -422,6 +427,7 @@ internal data class DirectoryFileItem(
     val title: String,
     val fileType: TreeFileType,
     val isPlayable: Boolean,
+    val isOnline: Boolean = false,
     val durationSeconds: Double? = null,
     val sizeSource: FileSizeSource = FileSizeSource.None,
     val absolutePath: String = "",
@@ -436,6 +442,12 @@ internal data class DirectoryFileItem(
     val dlsitePlayImageHeight: Int? = null,
     val dlsitePlayOptimizedName: String? = null
 )
+
+internal fun isOnlineDirectoryAudio(fileType: TreeFileType, absolutePath: String, track: Track?): Boolean {
+    if (fileType != TreeFileType.Audio) return false
+    val path = track?.path?.trim().orEmpty().ifBlank { absolutePath.trim() }
+    return isOnlineTrackPath(path)
+}
 
 internal data class DirectoryBrowserResult(
     val currentPath: String,
@@ -618,6 +630,7 @@ internal fun buildLocalDirectoryBrowser(
                 title = displayTitle,
                 fileType = child.fileType,
                 isPlayable = child.track != null || child.fileType == TreeFileType.Video,
+                isOnline = isOnlineDirectoryAudio(child.fileType, absolutePath, child.track),
                 durationSeconds = child.track?.duration?.takeIf { it > 0.0 },
                 sizeSource = FileSizeSource.Local(path = absolutePath, sizeBytes = child.sizeBytes),
                 absolutePath = absolutePath,
@@ -849,6 +862,7 @@ internal fun buildRemoteDirectoryBrowser(
                 title = child.name.substringBeforeLast('.'),
                 fileType = child.fileType,
                 isPlayable = child.fileType == TreeFileType.Audio || child.fileType == TreeFileType.Video,
+                isOnline = true,
                 durationSeconds = child.durationSeconds,
                 sizeSource = if (child.url.isNotBlank()) FileSizeSource.Remote(child.url) else FileSizeSource.None,
                 absolutePath = child.url,
@@ -1499,6 +1513,14 @@ internal fun fileTypeLabel(fileType: TreeFileType): String = when (fileType) {
     TreeFileType.Font -> "字体"
     TreeFileType.AppPackage -> "安装包"
     TreeFileType.Other -> "文件"
+}
+
+internal fun directoryFileTypeLabel(file: DirectoryFileItem): String {
+    return if (file.fileType == TreeFileType.Audio) {
+        if (file.isOnline) "在线音频" else "本地音频"
+    } else {
+        fileTypeLabel(file.fileType)
+    }
 }
 
 internal fun treeFileTypeIcon(fileType: TreeFileType): ImageVector = when (fileType) {
@@ -2881,9 +2903,9 @@ internal fun DirectoryFileRow(
             is FileSizeSource.Remote -> loadRemoteFileSize(sizeSource.url)?.let(Formatting::formatFileSize)
         }
     }
-    val metaLine = remember(file.fileType, file.durationSeconds, sizeText) {
+    val metaLine = remember(file.fileType, file.isOnline, file.durationSeconds, sizeText) {
         listOf(
-            fileTypeLabel(file.fileType),
+            directoryFileTypeLabel(file),
             Formatting.formatTrackSeconds(file.durationSeconds).takeIf { it.isNotBlank() },
             sizeText
         ).filterNotNull().joinToString(" · ")
@@ -3139,6 +3161,7 @@ internal fun TreeFileRow(
     depth: Int,
     fileType: TreeFileType,
     isPlayable: Boolean,
+    isOnline: Boolean = true,
     showSubtitleStamp: Boolean = false,
     thumbnailModel: Any? = null,
     onPrimary: () -> Unit,
@@ -3164,6 +3187,11 @@ internal fun TreeFileRow(
         val showPrimaryAction = isPlayable
         val showMenu = showPrimaryAction || onDownload != null || onAddToQueue != null || onAddToPlaylist != null || onManageTags != null || onRemoveFromAlbum != null
         val showTrailing = onSetAsCover != null || showMenu
+        val metaLine = if (fileType == TreeFileType.Audio) {
+            if (isOnline) "在线音频" else "本地音频"
+        } else {
+            fileTypeLabel(fileType)
+        }
         ListItem(
             headlineContent = { 
                 Text(
@@ -3173,6 +3201,13 @@ internal fun TreeFileRow(
                     color = colorScheme.textSecondary,
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
                 ) 
+            },
+            supportingContent = {
+                Text(
+                    text = metaLine,
+                    color = colorScheme.textTertiary,
+                    style = MaterialTheme.typography.bodySmall
+                )
             },
             leadingContent = {
                 Row(verticalAlignment = Alignment.CenterVertically) {

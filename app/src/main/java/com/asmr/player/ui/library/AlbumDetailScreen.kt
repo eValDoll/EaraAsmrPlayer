@@ -1076,7 +1076,7 @@ private fun AlbumDetailHeroBackground(
             contentScale = ContentScale.Crop,
             alignment = Alignment.TopCenter,
             placeholderCornerRadius = 0,
-            peekAnySizeForInitial = true,
+            peekAnySizeForInitial = false,
             loadAtOriginalSize = true,
             modifier = Modifier
                 .fillMaxSize()
@@ -1127,7 +1127,7 @@ private fun AlbumDetailHeroBackground(
             contentScale = ContentScale.Crop,
             alignment = Alignment.TopCenter,
             placeholderCornerRadius = 0,
-            peekAnySizeForInitial = true,
+            peekAnySizeForInitial = false,
             loadAtOriginalSize = true,
             modifier = Modifier
                 .fillMaxSize()
@@ -1344,12 +1344,15 @@ private fun rememberStableAlbumHeroIdentity(album: Album, identitySessionKey: St
 
 @Composable
 private fun rememberStableAlbumHeroCoverSource(album: Album, coverSessionKey: String): String {
-    val current = album.coverPath.trim().ifEmpty { album.coverUrl.trim() }
+    val currentLocal = album.coverPath.trim()
+    val current = currentLocal.ifEmpty { album.coverUrl.trim() }
     var stable by remember(coverSessionKey) { mutableStateOf(current) }
-    LaunchedEffect(current) {
-        if (stable.isBlank() && current.isNotBlank()) {
-            stable = current
-        }
+    LaunchedEffect(currentLocal, current) {
+        stable = resolveStableAlbumHeroCoverSource(
+            stable = stable,
+            currentLocal = currentLocal,
+            current = current
+        )
     }
     return stable
 }
