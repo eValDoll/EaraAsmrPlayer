@@ -699,6 +699,19 @@ internal fun shouldShowAsmrOneDirectoryLoading(
         (hasAsmrOneTree && !hasDirectoryBrowser)
 }
 
+internal fun shouldShowDlsitePlayDirectoryLoading(
+    isAwaitingInitialTarget: Boolean,
+    hasResolvedDlsitePlayContent: Boolean,
+    isLoadingDlsitePlay: Boolean,
+    hasDlsitePlayTree: Boolean,
+    hasDirectoryBrowser: Boolean
+): Boolean {
+    return isAwaitingInitialTarget ||
+        !hasResolvedDlsitePlayContent ||
+        isLoadingDlsitePlay ||
+        (hasDlsitePlayTree && !hasDirectoryBrowser)
+}
+
 @Composable
 internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     album: Album,
@@ -1121,6 +1134,8 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
     tree: List<AsmrOneTrackNodeResponse>,
     isLoading: Boolean,
     shouldAutoLoad: Boolean,
+    isAwaitingInitialTarget: Boolean,
+    hasResolvedDlsitePlayContent: Boolean,
     onOpenLogin: () -> Unit,
     onEnsureLoaded: () -> Unit,
     onPlayMediaItems: (List<MediaItem>, Int) -> Unit,
@@ -1169,8 +1184,12 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
         return
     }
 
+    var autoLoadDispatched by remember(treeStateKey) { mutableStateOf(false) }
     LaunchedEffect(loggedIn, rjCode, shouldAutoLoad) {
-        if (loggedIn && shouldAutoLoad) onEnsureLoaded()
+        if (loggedIn && shouldAutoLoad && !autoLoadDispatched) {
+            autoLoadDispatched = true
+            onEnsureLoaded()
+        }
     }
 
     val headerItemCount = 2
@@ -1218,6 +1237,13 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
             withContext(Dispatchers.Default) { buildRemoteDirectoryBrowser(index, currentPath) }
         }
     }
+    val isDirectoryPending = shouldShowDlsitePlayDirectoryLoading(
+        isAwaitingInitialTarget = isAwaitingInitialTarget,
+        hasResolvedDlsitePlayContent = hasResolvedDlsitePlayContent,
+        isLoadingDlsitePlay = isLoading,
+        hasDlsitePlayTree = tree.isNotEmpty(),
+        hasDirectoryBrowser = browser != null
+    )
     LaunchedEffect(currentPath, treeStateKey) {
         onPersistCurrentPath(currentPath)
     }
@@ -1259,7 +1285,7 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
         if (tree.isEmpty()) {
             item {
                 Box(modifier = Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
-                    if (isLoading) {
+                    if (isDirectoryPending) {
                         EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
                     } else {
                         Text("暂无可播放资源")
@@ -1269,7 +1295,7 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
             return@LazyColumn
         }
 
-        if (browser == null) {
+        if (isDirectoryPending || browser == null) {
             item {
                 Box(modifier = Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
                     EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)

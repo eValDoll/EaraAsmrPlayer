@@ -1348,6 +1348,7 @@ class AlbumDetailViewModel @Inject constructor(
                 hasResolvedInitialDlsiteTarget = true,
                 hasLoadedInitialDlsiteContent = false,
                 hasResolvedAsmrOneContent = false,
+                hasResolvedDlsitePlayContent = false,
                 isDlsiteLanguageUserSelected = current.model.isDlsiteLanguageUserSelected || isUserSelection,
                 asmrOneWorkId = null,
                 asmrOneSite = null,
@@ -1687,7 +1688,12 @@ class AlbumDetailViewModel @Inject constructor(
         ) return
         dlsitePlayAttemptedRj.add(attemptKey)
         viewModelScope.launch {
-            _uiState.value = AlbumDetailUiState.Success(model = current.model.copy(isLoadingDlsitePlay = true))
+            _uiState.value = AlbumDetailUiState.Success(
+                model = current.model.copy(
+                    isLoadingDlsitePlay = true,
+                    hasResolvedDlsitePlayContent = false
+                )
+            )
             try {
                 val editions = runCatching {
                     if (current.model.dlsiteEditions.size > 1) {
@@ -1745,13 +1751,19 @@ class AlbumDetailViewModel @Inject constructor(
                     model = updated.copy(
                         dlsitePlayTree = result.tree,
                         dlsitePlayWorkno = pickedWorkno?.trim().orEmpty(),
+                        hasResolvedDlsitePlayContent = true,
                         isLoadingDlsitePlay = false
                     )
                 )
             } catch (e: Exception) {
                 dlsitePlayAttemptedRj.remove(attemptKey)
                 val updated = (_uiState.value as? AlbumDetailUiState.Success)?.model ?: return@launch
-                _uiState.value = AlbumDetailUiState.Success(model = updated.copy(isLoadingDlsitePlay = false))
+                _uiState.value = AlbumDetailUiState.Success(
+                    model = updated.copy(
+                        hasResolvedDlsitePlayContent = true,
+                        isLoadingDlsitePlay = false
+                    )
+                )
             }
         }
     }
@@ -1810,6 +1822,7 @@ class AlbumDetailViewModel @Inject constructor(
             hasResolvedInitialDlsiteTarget = false,
             hasLoadedInitialDlsiteContent = false,
             hasResolvedAsmrOneContent = false,
+            hasResolvedDlsitePlayContent = false,
             preserveHeaderAlbumMetadata = preserveHeaderAlbumMetadata,
             isDlsiteLanguageUserSelected = false,
             asmrOneWorkId = null,
