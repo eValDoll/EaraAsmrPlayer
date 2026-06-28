@@ -123,6 +123,7 @@ class AlbumDetailViewModelSupportTest {
             hasResolvedInitialDlsiteTarget = false,
             hasLoadedInitialDlsiteContent = false,
             hasResolvedAsmrOneContent = false,
+            hasResolvedDlsitePlayContent = false,
             preserveHeaderAlbumMetadata = false,
             isDlsiteLanguageUserSelected = false,
             asmrOneWorkId = null,

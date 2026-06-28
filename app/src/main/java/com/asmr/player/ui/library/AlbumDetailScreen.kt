@@ -244,6 +244,26 @@ internal fun shouldExpandAlbumHeaderMetaReveal(
     return deferMetaRevealExpected || !presentInitially
 }
 
+internal data class AlbumDetailOnlineLoadPlan(
+    val loadDlsite: Boolean = false,
+    val loadAsmrOne: Boolean = false,
+    val loadDlsitePlay: Boolean = false
+)
+
+internal fun albumDetailOnlineLoadPlan(
+    selectedTab: Int,
+    hasResolvedInitialDlsiteTarget: Boolean
+): AlbumDetailOnlineLoadPlan {
+    return when (selectedTab) {
+        1 -> AlbumDetailOnlineLoadPlan(loadDlsite = true, loadAsmrOne = true)
+        2 -> AlbumDetailOnlineLoadPlan(
+            loadDlsite = true,
+            loadDlsitePlay = hasResolvedInitialDlsiteTarget
+        )
+        else -> AlbumDetailOnlineLoadPlan()
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AlbumDetailScreen(
@@ -658,19 +678,18 @@ fun AlbumDetailScreen(
                                 model.dlsiteWorkno,
                                 model.hasResolvedInitialDlsiteTarget
                             ) {
-                                when (selectedTab) {
-                                    1 -> {
-                                        viewModel.ensureDlsiteLoaded()
-                                        if (model.hasResolvedInitialDlsiteTarget) {
-                                            viewModel.ensureAsmrOneLoaded()
-                                        }
-                                    }
-                                    2 -> {
-                                        viewModel.ensureDlsiteLoaded()
-                                        if (model.hasResolvedInitialDlsiteTarget) {
-                                            viewModel.ensureDlsitePlayLoaded()
-                                        }
-                                    }
+                                val loadPlan = albumDetailOnlineLoadPlan(
+                                    selectedTab = selectedTab,
+                                    hasResolvedInitialDlsiteTarget = model.hasResolvedInitialDlsiteTarget
+                                )
+                                if (loadPlan.loadDlsite) {
+                                    viewModel.ensureDlsiteLoaded()
+                                }
+                                if (loadPlan.loadAsmrOne) {
+                                    viewModel.ensureAsmrOneLoaded()
+                                }
+                                if (loadPlan.loadDlsitePlay) {
+                                    viewModel.ensureDlsitePlayLoaded()
                                 }
                             }
 
@@ -827,6 +846,8 @@ fun AlbumDetailScreen(
                                         tree = model.dlsitePlayTree,
                                         isLoading = model.isLoadingDlsitePlay,
                                         shouldAutoLoad = selectedTab == 2 && model.hasResolvedInitialDlsiteTarget,
+                                        isAwaitingInitialTarget = selectedTab == 2 && !model.hasResolvedInitialDlsiteTarget,
+                                        hasResolvedDlsitePlayContent = model.hasResolvedDlsitePlayContent,
                                         onOpenLogin = onOpenDlsiteLogin,
                                         onEnsureLoaded = { viewModel.ensureDlsitePlayLoaded() },
                                         onPlayMediaItems = onPlayMediaItems,

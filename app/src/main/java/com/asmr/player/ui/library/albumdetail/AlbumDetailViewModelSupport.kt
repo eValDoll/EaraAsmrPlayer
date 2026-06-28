@@ -160,6 +160,7 @@ data class AlbumDetailModel(
     val hasResolvedInitialDlsiteTarget: Boolean,
     val hasLoadedInitialDlsiteContent: Boolean,
     val hasResolvedAsmrOneContent: Boolean,
+    val hasResolvedDlsitePlayContent: Boolean,
     val preserveHeaderAlbumMetadata: Boolean,
     val isDlsiteLanguageUserSelected: Boolean,
     val asmrOneWorkId: String?,
