@@ -172,6 +172,43 @@ data class AlbumDetailModel(
     val isLoadingDlsitePlay: Boolean
 )
 
+internal fun AlbumDetailModel.withUpdatedLocalCover(
+    albumId: Long,
+    coverPath: String,
+    coverThumbPath: String
+): AlbumDetailModel {
+    val localMatches = localAlbum?.id == albumId
+    val displayMatches = displayAlbum.id == albumId || localMatches
+    if (!localMatches && !displayMatches) return this
+
+    return copy(
+        localAlbum = if (localMatches) {
+            localAlbum?.copy(coverPath = coverPath, coverThumbPath = coverThumbPath)
+        } else {
+            localAlbum
+        },
+        displayAlbum = if (displayMatches) {
+            displayAlbum.copy(coverPath = coverPath, coverThumbPath = coverThumbPath)
+        } else {
+            displayAlbum
+        }
+    )
+}
+
+internal fun resolveStableAlbumHeroCoverSource(
+    stable: String,
+    currentLocal: String,
+    current: String
+): String {
+    return if (currentLocal.isNotBlank() && currentLocal != stable) {
+        currentLocal
+    } else if (stable.isBlank() && current.isNotBlank()) {
+        current
+    } else {
+        stable
+    }
+}
+
 internal fun buildDisplayAlbum(
     rjCode: String,
     localAlbum: Album?,

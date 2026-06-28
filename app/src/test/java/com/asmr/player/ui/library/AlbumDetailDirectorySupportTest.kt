@@ -158,7 +158,7 @@ class AlbumDetailDirectorySupportTest {
     }
 
     @Test
-    fun filterDownloadableMediaTree_removesSubtitleAndImageLeaves() {
+    fun filterDownloadableMediaTree_keepsImagesAndRemovesSubtitles() {
         val filtered = filterDownloadableMediaTree(
             listOf(
                 AsmrOneTrackNodeResponse(title = "audio.mp3", mediaDownloadUrl = "https://example.com/audio.mp3"),
@@ -169,9 +169,89 @@ class AlbumDetailDirectorySupportTest {
 
         val leafPaths = flattenAsmrOneLeafDownloads(filtered).map { it.relativePath }
 
-        assertEquals(listOf("audio.mp3"), leafPaths)
-        assertFalse(leafPaths.contains("cover.jpg"))
+        assertEquals(listOf("audio.mp3", "cover.jpg"), leafPaths)
+        assertTrue(leafPaths.contains("cover.jpg"))
         assertFalse(leafPaths.contains("sub.srt"))
+    }
+
+    @Test
+    fun flattenOnlineSaveLeaves_includesResourceFilesButSkipsSubtitles() {
+        val leaves = flattenOnlineSaveLeaves(
+            listOf(
+                AsmrOneTrackNodeResponse(title = "audio.mp3", mediaDownloadUrl = "https://example.com/audio.mp3"),
+                AsmrOneTrackNodeResponse(title = "cover.jpg", mediaDownloadUrl = "https://example.com/cover.jpg"),
+                AsmrOneTrackNodeResponse(title = "readme.txt", mediaDownloadUrl = "https://example.com/readme.txt"),
+                AsmrOneTrackNodeResponse(title = "subtitle.vtt", mediaDownloadUrl = "https://example.com/subtitle.vtt")
+            )
+        )
+
+        val paths = leaves.map { it.relativePath }
+
+        assertEquals(listOf("audio.mp3", "cover.jpg", "readme.txt"), paths)
+        assertEquals(TreeFileType.Audio, leaves.first { it.relativePath == "audio.mp3" }.fileType)
+        assertEquals(TreeFileType.Image, leaves.first { it.relativePath == "cover.jpg" }.fileType)
+        assertEquals(TreeFileType.Text, leaves.first { it.relativePath == "readme.txt" }.fileType)
+        assertFalse(paths.contains("subtitle.vtt"))
+    }
+
+    @Test
+    fun directoryFileTypeLabel_distinguishesLocalAndOnlineAudio() {
+        val local = DirectoryFileItem(
+            path = "track.mp3",
+            title = "track",
+            fileType = TreeFileType.Audio,
+            isPlayable = true,
+            isOnline = false
+        )
+        val online = local.copy(isOnline = true)
+
+        assertEquals("本地音频", directoryFileTypeLabel(local))
+        assertEquals("在线音频", directoryFileTypeLabel(online))
+        assertEquals(
+            "图片",
+            directoryFileTypeLabel(
+                local.copy(fileType = TreeFileType.Image, isOnline = true)
+            )
+        )
+    }
+
+    @Test
+    fun buildLocalDirectoryBrowser_marksLogicalSavedAudioAsOnline() {
+        val onlineTrack = Track(
+            albumId = 9L,
+            title = "online",
+            path = "https://example.com/online.mp3"
+        )
+        val localTrack = Track(
+            albumId = 9L,
+            title = "local",
+            path = "/album/local.mp3"
+        )
+        val index = buildLocalTreeIndexFromLeaves(
+            leaves = listOf(
+                LocalTreeLeafCacheEntry(
+                    relativePath = "online.mp3",
+                    absolutePath = "https://example.com/online.mp3",
+                    fileType = TreeFileType.Audio
+                ),
+                LocalTreeLeafCacheEntry(
+                    relativePath = "local.mp3",
+                    absolutePath = "/album/local.mp3",
+                    fileType = TreeFileType.Audio
+                )
+            ),
+            tracks = listOf(onlineTrack, localTrack)
+        )
+
+        val browser = buildLocalDirectoryBrowser(
+            index = index,
+            currentPath = "",
+            album = Album(id = 9L, title = "album", path = "/album"),
+            shouldShowSubtitleStamp = { false }
+        )
+
+        assertEquals("在线音频", directoryFileTypeLabel(browser.files.single { it.title == "online" }))
+        assertEquals("本地音频", directoryFileTypeLabel(browser.files.single { it.title == "local" }))
     }
 
     @Test

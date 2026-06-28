@@ -230,6 +230,7 @@ class LibraryViewModel @Inject constructor(
         _scanRoots.value = runCatching { scanRootsStore.getRoots() }.getOrDefault(emptySet())
         viewModelScope.launch(Dispatchers.IO) {
             ensureTagTablesInitialized()
+            backfillLegacyOnlineSavedAlbumRoots()
         }
         viewModelScope.launch {
             val shouldAutoScan = withContext(Dispatchers.IO) {
@@ -1681,6 +1682,34 @@ class LibraryViewModel @Inject constructor(
         return "web://rj/${workKey.uppercase()}"
     }
 
+    internal fun legacyOnlineSavedAlbumDir(entity: AlbumEntity): File {
+        val baseDir = File(context.getExternalFilesDir(null), "albums")
+        val folderName = legacyOnlineSavedAlbumFolderName(entity)
+        return File(baseDir, folderName)
+    }
+
+    private suspend fun backfillLegacyOnlineSavedAlbumRoots() {
+        val albums = runCatching { albumDao.getAllAlbumsOnce() }.getOrDefault(emptyList())
+        if (albums.isEmpty()) return
+
+        database.withTransaction {
+            albums.forEach { entity ->
+                if (entity.localPath?.trim().orEmpty().isNotBlank() || entity.downloadPath?.trim().orEmpty().isNotBlank()) {
+                    return@forEach
+                }
+                val tracks = trackDao.getTracksForAlbumOnce(entity.id)
+                if (!shouldBackfillLegacyOnlineSavedAlbumRoot(entity, tracks)) return@forEach
+
+                val albumDir = legacyOnlineSavedAlbumDir(entity)
+                ensureLibraryAlbumDir(albumDir)
+                val updated = entity.copy(localPath = albumDir.absolutePath)
+                albumDao.updateAlbum(updated)
+                runCatching { database.localTreeCacheDao().deleteByAlbum(entity.id) }
+                upsertAlbumFtsIndex(updated.id, updated)
+            }
+        }
+    }
+
     private fun buildTagsToken(tagsCsv: String): String {
         return tagsCsv.split(",")
             .map { TagNormalizer.normalize(it) }
@@ -2391,6 +2420,20 @@ class LibraryViewModel @Inject constructor(
                     val ts = cachedTracks ?: trackDao.getTracksForAlbumOnce(entity.id).also { cachedTracks = it }
                     ts.any { isOnlineTrackPath(it.path) }.also { cachedHasOnlineTracks = it }
                 }
+
+                if (updated.localPath.isNullOrBlank() &&
+                    updated.downloadPath.isNullOrBlank() &&
+                    shouldBackfillLegacyOnlineSavedAlbumRoot(
+                        updated,
+                        cachedTracks ?: trackDao.getTracksForAlbumOnce(entity.id).also { cachedTracks = it }
+                    )
+                ) {
+                    val albumDir = legacyOnlineSavedAlbumDir(updated)
+                    ensureLibraryAlbumDir(albumDir)
+                    updated = updated.copy(localPath = albumDir.absolutePath)
+                    runCatching { database.localTreeCacheDao().deleteByAlbum(updated.id) }
+                }
+
                 if (updated.path.isNotBlank() && !uriOrFileExists(updated.path) && hasOnlineTracks) {
                     val onlinePath = buildOnlineAlbumPath(updated)
                     if (!onlinePath.isNullOrBlank()) {
