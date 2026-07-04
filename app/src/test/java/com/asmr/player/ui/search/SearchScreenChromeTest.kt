@@ -229,12 +229,13 @@ class SearchScreenChromeTest {
 
         composeRule.onNodeWithTag(SEARCH_COLLECTED_SORT_BUTTON_TAG).performClick()
         composeRule.onNodeWithText("最新发售").assertExists()
+        composeRule.onNodeWithText("最新收录").assertExists()
         composeRule.onNodeWithText("评分最高").assertExists()
         composeRule.onAllNodesWithText("时长最长").assertCountEquals(0)
-        composeRule.onNodeWithText("评分最高").performClick()
+        composeRule.onNodeWithText("最新收录").performClick()
 
         composeRule.runOnIdle {
-            assertEquals(SearchCollectedSortOption.RatingHigh, selectedSort)
+            assertEquals(SearchCollectedSortOption.CollectedNew, selectedSort)
         }
     }
 
