@@ -1244,6 +1244,7 @@ private fun TrackAlbumHeader(
             contentDescription = null,
             contentScale = ContentScale.Crop,
             placeholderCornerRadius = 8,
+            peekAnySizeForInitial = true,
             modifier = Modifier
                 .size(50.dp)
                 .clip(RoundedCornerShape(8.dp)),
@@ -1417,6 +1418,7 @@ private fun AlbumGridItem(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 placeholderCornerRadius = 0,
+                peekAnySizeForInitial = true,
                 modifier = Modifier.fillMaxSize().clip(coverShape),
             )
             
@@ -1512,16 +1514,18 @@ private fun AlbumGridItem(
                 leadingVisual = AlbumMetaLeadingVisual.Icon,
             )
 
-            val statsText = buildString {
-                val rv = album.ratingValue
-                if (rv != null && rv > 0.0) {
-                    append("★")
-                    append(String.format("%.1f", rv))
-                    if (album.ratingCount > 0) append("(${album.ratingCount})")
-                }
-                if (album.priceJpy > 0) {
-                    if (isNotEmpty()) append(" · ")
-                    append("¥${album.priceJpy}")
+            val statsText = remember(album.ratingValue, album.ratingCount, album.priceJpy) {
+                buildString {
+                    val rv = album.ratingValue
+                    if (rv != null && rv > 0.0) {
+                        append("★")
+                        append(String.format("%.1f", rv))
+                        if (album.ratingCount > 0) append("(${album.ratingCount})")
+                    }
+                    if (album.priceJpy > 0) {
+                        if (isNotEmpty()) append(" · ")
+                        append("¥${album.priceJpy}")
+                    }
                 }
             }
             if (statsText.isNotBlank()) {
@@ -1607,6 +1611,7 @@ private fun AlbumItem(
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         placeholderCornerRadius = 0,
+                        peekAnySizeForInitial = true,
                         modifier = Modifier.fillMaxSize().clip(coverShape),
                     )
                     
@@ -1643,24 +1648,32 @@ private fun AlbumItem(
                 }
             },
             content = {
-                val statsText = buildString {
-                    val rv = album.ratingValue
-                    if (rv != null && rv > 0.0) {
-                        append("★")
-                        append(String.format("%.1f", rv))
-                        if (album.ratingCount > 0) append("(${album.ratingCount})")
-                    }
-                    if (album.dlCount > 0) {
-                        if (isNotEmpty()) append(" · ")
-                        append("DL ${album.dlCount}")
-                    }
-                    if (album.priceJpy > 0) {
-                        if (isNotEmpty()) append(" · ")
-                        append("¥${album.priceJpy}")
-                    }
-                    if (album.releaseDate.isNotBlank()) {
-                        if (isNotEmpty()) append(" · ")
-                        append(album.releaseDate)
+                val statsText = remember(
+                    album.ratingValue,
+                    album.ratingCount,
+                    album.dlCount,
+                    album.priceJpy,
+                    album.releaseDate
+                ) {
+                    buildString {
+                        val rv = album.ratingValue
+                        if (rv != null && rv > 0.0) {
+                            append("★")
+                            append(String.format("%.1f", rv))
+                            if (album.ratingCount > 0) append("(${album.ratingCount})")
+                        }
+                        if (album.dlCount > 0) {
+                            if (isNotEmpty()) append(" · ")
+                            append("DL ${album.dlCount}")
+                        }
+                        if (album.priceJpy > 0) {
+                            if (isNotEmpty()) append(" · ")
+                            append("¥${album.priceJpy}")
+                        }
+                        if (album.releaseDate.isNotBlank()) {
+                            if (isNotEmpty()) append(" · ")
+                            append(album.releaseDate)
+                        }
                     }
                 }
 

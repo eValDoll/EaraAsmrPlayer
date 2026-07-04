@@ -38,6 +38,7 @@ import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -157,7 +158,11 @@ internal fun PlaylistDetailContent(
         listState.smoothScrollToTop()
     }
 
-    val playItems = localItems.map { item -> item.toPlaybackEntity() }
+    val playItems by remember {
+        derivedStateOf {
+            localItems.map { item -> item.toPlaybackEntity() }
+        }
+    }
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
     val colorScheme = AsmrTheme.colorScheme
     val draggedItemShape = RoundedCornerShape(18.dp)
@@ -209,7 +214,11 @@ internal fun PlaylistDetailContent(
                     item(key = PLAYLIST_DETAIL_REORDER_SENTINEL_KEY) {
                         Spacer(modifier = Modifier.height(1.dp))
                     }
-                    itemsIndexed(localItems, key = { _, item -> item.mediaId }) { index, item ->
+                    itemsIndexed(
+                        items = localItems,
+                        key = { _, item -> item.mediaId },
+                        contentType = { _, _ -> "playlistDetailItem" }
+                    ) { index, item ->
                         ReorderableItem(
                             reorderableState = reorderState,
                             key = item.mediaId,
@@ -287,36 +296,17 @@ private fun PlaylistItemRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
             )
         }
+        val prefixSegments = remember(item.artist, item.albumCv) {
+            listOf(item.artist, item.albumCv)
+        }
         val meta = rememberAudioMeta(
             sourcePath = item.uri.ifBlank { item.mediaId },
             durationSeconds = item.duration,
-            prefixSegments = listOf(item.artist, item.albumCv),
+            prefixSegments = prefixSegments,
             loadSize = loadFileSize
         )
-        AudioItemRow(
-            title = item.title.ifBlank { "未命名" },
-            subtitle = meta.leadingText,
-            fixedTrailingSubtitle = meta.trailingText,
-            showSubtitleStamp = showSubtitleStamp,
-            menuButtonTestTag = "$PLAYLIST_DETAIL_ITEM_MENU_BUTTON_TAG_PREFIX:${item.mediaId}",
-            onClick = onPlay,
-            showClickIndication = false,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = PlaylistDetailHorizontalPadding, vertical = 2.dp),
-            leadingContent = {
-                AsmrAsyncImage(
-                    model = item.artworkUri,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    placeholderCornerRadius = 6,
-                    modifier = Modifier
-                        .size(48.dp)
-                        .clip(RoundedCornerShape(6.dp))
-                )
-            },
-            titleTextStyle = MaterialTheme.typography.bodyMedium,
-            actions = listOf(
+        val actions = remember(onPlay, onMoveToTop, onMoveToBottom, onRemove) {
+            listOf(
                 AudioItemMenuAction(
                     label = "播放",
                     onClick = onPlay
@@ -337,6 +327,32 @@ private fun PlaylistItemRow(
                     showDividerBefore = true
                 )
             )
+        }
+        AudioItemRow(
+            title = item.title.ifBlank { "未命名" },
+            subtitle = meta.leadingText,
+            fixedTrailingSubtitle = meta.trailingText,
+            showSubtitleStamp = showSubtitleStamp,
+            menuButtonTestTag = "$PLAYLIST_DETAIL_ITEM_MENU_BUTTON_TAG_PREFIX:${item.mediaId}",
+            onClick = onPlay,
+            showClickIndication = false,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = PlaylistDetailHorizontalPadding, vertical = 2.dp),
+            leadingContent = {
+                AsmrAsyncImage(
+                    model = item.artworkUri,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    placeholderCornerRadius = 6,
+                    peekAnySizeForInitial = true,
+                    modifier = Modifier
+                        .size(48.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                )
+            },
+            titleTextStyle = MaterialTheme.typography.bodyMedium,
+            actions = actions
         )
     }
 }
