@@ -157,7 +157,11 @@ private fun LazyListState.thinScrollbarMetrics(): ThinScrollbarMetrics? {
 
     val viewportHeight = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat()
         .coerceAtLeast(1f)
-    val averageItemSize = visibleItems.sumOf { it.size }.toFloat() / visibleItems.size
+    var totalVisibleSize = 0
+    for (item in visibleItems) {
+        totalVisibleSize += item.size
+    }
+    val averageItemSize = totalVisibleSize.toFloat() / visibleItems.size
     val estimatedContentHeight =
         averageItemSize * totalItems + layoutInfo.beforeContentPadding + layoutInfo.afterContentPadding
     if (estimatedContentHeight <= viewportHeight) return null
@@ -178,8 +182,25 @@ private fun LazyStaggeredGridState.thinScrollbarMetrics(): ThinScrollbarMetrics?
 
     val viewportHeight = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat()
         .coerceAtLeast(1f)
-    val averageItemHeight = visibleItems.sumOf { it.size.height }.toFloat() / visibleItems.size
-    val laneCount = visibleItems.map { it.offset.x }.distinct().size.coerceAtLeast(1)
+    var totalVisibleHeight = 0
+    val laneOffsets = IntArray(visibleItems.size)
+    var laneCount = 0
+    for (item in visibleItems) {
+        totalVisibleHeight += item.size.height
+        var knownLane = false
+        for (index in 0 until laneCount) {
+            if (laneOffsets[index] == item.offset.x) {
+                knownLane = true
+                break
+            }
+        }
+        if (!knownLane) {
+            laneOffsets[laneCount] = item.offset.x
+            laneCount += 1
+        }
+    }
+    val averageItemHeight = totalVisibleHeight.toFloat() / visibleItems.size
+    laneCount = laneCount.coerceAtLeast(1)
     val estimatedRowCount = ceil(totalItems / laneCount.toFloat())
     val estimatedContentHeight =
         averageItemHeight * estimatedRowCount + layoutInfo.beforeContentPadding + layoutInfo.afterContentPadding

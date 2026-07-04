@@ -224,6 +224,7 @@ internal fun PlaylistDetailContent(
                                 showSubtitleStamp = item.hasSubtitles,
                                 showTopDivider = index > 0,
                                 isDragging = isDragging,
+                                loadFileSize = !listState.isScrollInProgress,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("$PLAYLIST_DETAIL_ITEM_TAG_PREFIX:${item.mediaId}")
@@ -266,6 +267,7 @@ private fun PlaylistItemRow(
     showSubtitleStamp: Boolean,
     showTopDivider: Boolean,
     isDragging: Boolean,
+    loadFileSize: Boolean,
     modifier: Modifier = Modifier,
     onPlay: () -> Unit,
     onMoveToTop: () -> Unit,
@@ -288,7 +290,8 @@ private fun PlaylistItemRow(
         val meta = rememberAudioMeta(
             sourcePath = item.uri.ifBlank { item.mediaId },
             durationSeconds = item.duration,
-            prefixSegments = listOf(item.artist, item.albumCv)
+            prefixSegments = listOf(item.artist, item.albumCv),
+            loadSize = loadFileSize
         )
         AudioItemRow(
             title = item.title.ifBlank { "未命名" },

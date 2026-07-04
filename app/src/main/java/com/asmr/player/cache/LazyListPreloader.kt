@@ -9,6 +9,9 @@ import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
+
+private const val MaxRememberedPreloadKeys = 96
 
 @Composable
 fun LazyListPreloader(
@@ -19,8 +22,17 @@ fun LazyListPreloader(
     cacheManagerProvider: () -> ImageCacheManager
 ) {
     val manager = remember { cacheManagerProvider() }
+    val preloadedModels = remember { LinkedHashSet<Any>() }
     LaunchedEffect(state, models, preloadNext, preloadSize) {
-        snapshotFlow { state.layoutInfo.visibleItemsInfo.maxOfOrNull { it.index } ?: -1 }
+        preloadedModels.clear()
+        snapshotFlow {
+            if (state.isScrollInProgress) {
+                null
+            } else {
+                state.layoutInfo.visibleItemsInfo.maxOfOrNull { it.index } ?: -1
+            }
+        }
+            .mapNotNull { it }
             .map { last ->
                 val start = (last + 1).coerceAtLeast(0)
                 val end = (start + preloadNext).coerceAtMost(models.size)
@@ -30,8 +42,11 @@ fun LazyListPreloader(
             .distinctUntilChanged()
             .collect { range ->
                 val r = range ?: return@collect
-                val toPreload = r.map { models[it] }
+                val toPreload = r.mapNotNull { index ->
+                    models[index].takeIf { model -> preloadedModels.add(model) }
+                }
                 manager.preload(toPreload, preloadSize)
+                preloadedModels.trimOldest(maxSize = MaxRememberedPreloadKeys)
             }
     }
 }
@@ -46,8 +61,17 @@ fun LazyListPreloader(
     modelAt: (Int) -> Any?
 ) {
     val manager = remember { cacheManagerProvider() }
+    val preloadedModels = remember { LinkedHashSet<Any>() }
     LaunchedEffect(state, itemCount, preloadNext, preloadSize) {
-        snapshotFlow { state.layoutInfo.visibleItemsInfo.maxOfOrNull { it.index } ?: -1 }
+        preloadedModels.clear()
+        snapshotFlow {
+            if (state.isScrollInProgress) {
+                null
+            } else {
+                state.layoutInfo.visibleItemsInfo.maxOfOrNull { it.index } ?: -1
+            }
+        }
+            .mapNotNull { it }
             .map { last ->
                 val start = (last + 1).coerceAtLeast(0)
                 val end = (start + preloadNext).coerceAtMost(itemCount)
@@ -57,10 +81,22 @@ fun LazyListPreloader(
             .distinctUntilChanged()
             .collect { range ->
                 val r = range ?: return@collect
-                val toPreload = r.mapNotNull(modelAt)
+                val toPreload = r.mapNotNull { index ->
+                    modelAt(index)?.takeIf { model -> preloadedModels.add(model) }
+                }
                 if (toPreload.isNotEmpty()) {
                     manager.preload(toPreload, preloadSize)
+                    preloadedModels.trimOldest(maxSize = MaxRememberedPreloadKeys)
                 }
             }
+    }
+}
+
+private fun <T> LinkedHashSet<T>.trimOldest(maxSize: Int) {
+    while (size > maxSize) {
+        val iterator = iterator()
+        if (!iterator.hasNext()) return
+        iterator.next()
+        iterator.remove()
     }
 }

@@ -12,23 +12,55 @@ import com.asmr.player.util.Formatting
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
+import java.util.concurrent.ConcurrentHashMap
 
 internal data class AudioMetaText(
     val leadingText: String,
     val trailingText: String
 )
 
+private object TrackFileSizeCache {
+    private const val MissingSize = Long.MIN_VALUE
+    private val values = ConcurrentHashMap<String, Long>()
+
+    fun get(path: String): Long? {
+        return when (val cached = getKnown(path)) {
+            null, MissingSize -> null
+            else -> cached
+        }
+    }
+
+    fun getKnown(path: String): Long? = values[path]
+
+    fun resolveKnownSize(cached: Long): Long? {
+        return when (cached) {
+            MissingSize -> null
+            else -> cached
+        }
+    }
+
+    fun put(path: String, size: Long?) {
+        values[path] = size ?: MissingSize
+    }
+}
+
 @Composable
 internal fun rememberAudioMetaText(
     sourcePath: String,
     durationSeconds: Double?,
     prefixSegments: List<String> = emptyList(),
-    suffixSegments: List<String> = emptyList()
+    suffixSegments: List<String> = emptyList(),
+    loadSize: Boolean = true
 ): String {
     val context = LocalContext.current
-    val sizeText by produceState<String?>(initialValue = null, sourcePath) {
+    val sizeText by produceState<String?>(
+        initialValue = cachedTrackFileSize(sourcePath)?.let(Formatting::formatFileSize),
+        sourcePath,
+        loadSize
+    ) {
+        if (!loadSize || value != null) return@produceState
         value = withContext(Dispatchers.IO) {
-            queryTrackFileSize(context, sourcePath)
+            queryCachedTrackFileSize(context, sourcePath)
         }?.let(Formatting::formatFileSize)
     }
     return buildAudioMetaText(
@@ -86,12 +118,18 @@ internal fun rememberAudioMeta(
     sourcePath: String,
     durationSeconds: Double?,
     prefixSegments: List<String> = emptyList(),
-    suffixSegments: List<String> = emptyList()
+    suffixSegments: List<String> = emptyList(),
+    loadSize: Boolean = true
 ): AudioMetaText {
     val context = LocalContext.current
-    val sizeText by produceState<String?>(initialValue = null, sourcePath) {
+    val sizeText by produceState<String?>(
+        initialValue = cachedTrackFileSize(sourcePath)?.let(Formatting::formatFileSize),
+        sourcePath,
+        loadSize
+    ) {
+        if (!loadSize || value != null) return@produceState
         value = withContext(Dispatchers.IO) {
-            queryTrackFileSize(context, sourcePath)
+            queryCachedTrackFileSize(context, sourcePath)
         }?.let(Formatting::formatFileSize)
     }
     return buildAudioMeta(
@@ -118,6 +156,32 @@ internal fun buildTrackMetaLine(
     sizeText: String?
 ): String {
     return buildAudioMetaText(durationSeconds = durationSeconds, sizeText = sizeText)
+}
+
+internal fun cachedTrackFileSize(path: String): Long? {
+    val trimmed = path.trim()
+    if (trimmed.isBlank()) return null
+    return TrackFileSizeCache.get(trimmed)
+}
+
+internal fun cacheTrackFileSize(path: String, size: Long?) {
+    val trimmed = path.trim()
+    if (trimmed.isBlank()) return
+    TrackFileSizeCache.put(trimmed, size)
+}
+
+internal fun queryCachedTrackFileSize(
+    context: Context,
+    path: String
+): Long? {
+    val trimmed = path.trim()
+    if (trimmed.isBlank()) return null
+    TrackFileSizeCache.getKnown(trimmed)?.let { cached ->
+        return TrackFileSizeCache.resolveKnownSize(cached)
+    }
+    val size = queryTrackFileSize(context, trimmed)
+    cacheTrackFileSize(trimmed, size)
+    return size
 }
 
 internal fun queryTrackFileSize(

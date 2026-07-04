@@ -74,7 +74,7 @@ import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
-import com.asmr.player.ui.common.queryTrackFileSize
+import com.asmr.player.ui.common.queryCachedTrackFileSize
 import com.asmr.player.ui.common.rememberAudioMeta
 import com.asmr.player.ui.common.rememberAudioMetaText
 import com.asmr.player.ui.common.SubtitleStamp
@@ -256,6 +256,7 @@ internal fun AlbumGroupDetailContent(
                                     rjCode = row.rjCode,
                                     coverModel = row.coverModel,
                                     tracks = row.tracks,
+                                    loadFileSizes = !listState.isScrollInProgress,
                                     onToggle = {
                                         expandedAlbumIds.value = if (row.expanded) {
                                             expandedAlbumIds.value - row.albumId
@@ -287,6 +288,7 @@ internal fun AlbumGroupDetailContent(
                                         coverModel = row.coverModel,
                                         showTopDivider = index > 0 && localRows[index - 1] is GroupDetailTrackRow,
                                         isDragging = isDragging,
+                                        loadFileSize = !listState.isScrollInProgress,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .testTag("$GROUP_DETAIL_TRACK_TAG_PREFIX:${row.track.mediaId}")
@@ -355,14 +357,16 @@ private fun AlbumSectionHeader(
     rjCode: String,
     coverModel: Any?,
     tracks: List<AlbumGroupTrackRow>,
+    loadFileSizes: Boolean,
     onToggle: () -> Unit,
     onRemoveAlbum: () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val context = LocalContext.current
-    val totalSizeBytes by androidx.compose.runtime.produceState<Long?>(initialValue = null, tracks) {
+    val totalSizeBytes by androidx.compose.runtime.produceState<Long?>(initialValue = null, tracks, loadFileSizes) {
+        if (!loadFileSizes) return@produceState
         value = withContext(Dispatchers.IO) {
-            tracks.sumOf { row -> queryTrackFileSize(context, row.trackPath) ?: 0L }
+            tracks.sumOf { row -> queryCachedTrackFileSize(context, row.trackPath) ?: 0L }
                 .takeIf { it > 0L }
         }
     }
@@ -427,6 +431,7 @@ private fun GroupTrackRow(
     coverModel: Any?,
     showTopDivider: Boolean,
     isDragging: Boolean,
+    loadFileSize: Boolean,
     modifier: Modifier = Modifier,
     onPlay: () -> Unit,
     onMoveToTop: () -> Unit,
@@ -449,7 +454,8 @@ private fun GroupTrackRow(
         val meta = rememberAudioMeta(
             sourcePath = item.trackPath,
             durationSeconds = item.trackDuration,
-            prefixSegments = listOf(item.albumCv.orEmpty())
+            prefixSegments = listOf(item.albumCv.orEmpty()),
+            loadSize = loadFileSize
         )
         AudioItemRow(
             title = item.trackTitle.ifBlank { "未命名" },

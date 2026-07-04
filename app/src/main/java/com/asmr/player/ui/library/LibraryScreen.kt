@@ -65,6 +65,7 @@ import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.rememberAudioMeta
 import com.asmr.player.ui.common.rememberAudioMetaText
 import com.asmr.player.ui.common.rememberTrackMetaLine
+import com.asmr.player.ui.common.queryCachedTrackFileSize
 import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.withAddedBottomPadding
 import androidx.compose.material3.HorizontalDivider
@@ -625,7 +626,10 @@ fun LibraryScreen(
                                                         trackCount = header.trackCount,
                                                         totalDurationSeconds = header.totalDuration,
                                                         totalSizeBytes = header.totalSizeBytes.takeIf { it > 0L }
-                                                            ?: rememberAlbumTrackListTotalSizeBytes(rows),
+                                                            ?: rememberAlbumTrackListTotalSizeBytes(
+                                                                rows = rows,
+                                                                loadFileSizes = !listState.isScrollInProgress
+                                                            ),
                                                         coverModel = albumCoverImageModel(
                                                             coverThumbPath = "",
                                                             coverPath = header.coverPath.takeIf { it != "null" }.orEmpty(),
@@ -679,7 +683,8 @@ fun LibraryScreen(
                                                     val meta = rememberAudioMeta(
                                                         sourcePath = row.trackPath,
                                                         durationSeconds = row.duration,
-                                                        prefixSegments = listOf(row.cv)
+                                                        prefixSegments = listOf(row.cv),
+                                                        loadSize = !listState.isScrollInProgress
                                                     )
 
                                                     Column {
@@ -791,7 +796,7 @@ fun LibraryScreen(
                                     LazyListPreloader(
                                         state = listState,
                                         itemCount = pagedAlbums.itemCount,
-                                        preloadNext = 10,
+                                        preloadNext = 4,
                                         preloadSize = preloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->
@@ -1273,13 +1278,17 @@ private fun TrackAlbumHeader(
 }
 
 @Composable
-private fun rememberAlbumTrackListTotalSizeBytes(rows: List<com.asmr.player.data.local.db.dao.LibraryTrackRow>): Long? {
+private fun rememberAlbumTrackListTotalSizeBytes(
+    rows: List<com.asmr.player.data.local.db.dao.LibraryTrackRow>,
+    loadFileSizes: Boolean
+): Long? {
     val context = LocalContext.current
     val paths = remember(rows) { rows.map { it.trackPath } }
-    return androidx.compose.runtime.produceState<Long?>(initialValue = null, paths) {
+    return androidx.compose.runtime.produceState<Long?>(initialValue = null, paths, loadFileSizes) {
+        if (!loadFileSizes) return@produceState
         value = withContext(Dispatchers.IO) {
             val total = rows.sumOf { row ->
-                com.asmr.player.ui.common.queryTrackFileSize(context, row.trackPath) ?: 0L
+                queryCachedTrackFileSize(context, row.trackPath) ?: 0L
             }
             total.takeIf { it > 0L }
         }
