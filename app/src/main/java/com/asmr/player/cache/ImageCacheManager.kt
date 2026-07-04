@@ -30,6 +30,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.ConcurrentHashMap
@@ -45,6 +47,8 @@ class ImageCacheManager(
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val inFlight = ConcurrentHashMap<String, Deferred<Result<ImageBitmap>>>()
+    private val loadSemaphore = Semaphore(config.loadParallelism)
+    private val preloadSemaphore = Semaphore(config.preloadParallelism)
 
     // 数据键(忽略尺寸) -> 最近一次写入内存的完整缓存键。
     // 用于跨尺寸即时复用同一张图片：列表已加载的小图可作为详情大图的瞬时占位。
@@ -112,28 +116,23 @@ class ImageCacheManager(
 
         val created = scope.async {
             runCatching {
-                stats.onNetworkFetch()
-                Trace.beginSection("img.net")
-                val bmp = loaderFacade.loadBitmap(model, size)
-                Trace.endSection()
-                stats.onDecode()
-                if (cachePolicy.writeDisk) {
-                    Trace.beginSection("img.encode")
-                    val bytes = encodeBitmapForDisk(bmp)
-                    Trace.endSection()
-                    diskCache.put(
-                        key,
-                        DiskCache.Entry(
-                            bytes = bytes,
-                            width = bmp.width,
-                            height = bmp.height
-                        )
-                    )
+                loadSemaphore.withPermit {
+                    stats.onNetworkFetch()
+                    Trace.beginSection("img.net")
+                    val bmp = try {
+                        loaderFacade.loadBitmap(model, size)
+                    } finally {
+                        Trace.endSection()
+                    }
+                    stats.onDecode()
+                    if (cachePolicy.writeMemory) {
+                        putMemory(key, dataKey, bmp)
+                    }
+                    if (cachePolicy.writeDisk) {
+                        writeDiskCacheAsync(key, bmp)
+                    }
+                    bmp.asImageBitmap()
                 }
-                if (cachePolicy.writeMemory) {
-                    putMemory(key, dataKey, bmp)
-                }
-                bmp.asImageBitmap()
             }.also {
                 if (config.logStats) {
                     val s = stats.snapshot()
@@ -182,34 +181,30 @@ class ImageCacheManager(
 
     fun preload(models: List<Any>) {
         if (models.isEmpty()) return
-        models.forEach { m ->
-            scope.launch {
-                runCatching { loadImage(model = m, size = null, cachePolicy = CachePolicy.DEFAULT) }
-            }
-        }
+        preload(models, size = null)
     }
 
     fun preload(models: List<Any>, size: IntSize?) {
         if (models.isEmpty()) return
         models.forEach { m ->
             scope.launch {
-                runCatching { loadImage(model = m, size = size, cachePolicy = CachePolicy.DEFAULT) }
+                preloadSemaphore.withPermit {
+                    runCatching { loadImageFromCache(model = m, size = size, cachePolicy = CachePolicy.CACHE_WARMUP) }
+                }
             }
         }
     }
 
     fun preload(scope: CoroutineScope, models: List<Any>): Job {
-        return scope.launch(Dispatchers.IO) {
-            models.forEach { m ->
-                runCatching { loadImage(model = m, size = null, cachePolicy = CachePolicy.DEFAULT) }
-            }
-        }
+        return preload(scope, models, size = null)
     }
 
     fun preload(scope: CoroutineScope, models: List<Any>, size: IntSize?): Job {
         return scope.launch(Dispatchers.IO) {
             models.forEach { m ->
-                runCatching { loadImage(model = m, size = size, cachePolicy = CachePolicy.DEFAULT) }
+                preloadSemaphore.withPermit {
+                    runCatching { loadImageFromCache(model = m, size = size, cachePolicy = CachePolicy.CACHE_WARMUP) }
+                }
             }
         }
     }
@@ -222,14 +217,37 @@ class ImageCacheManager(
     }
 
     private suspend fun encodeBitmapForDisk(bitmap: Bitmap): ByteArray = withContext(decodeDispatcher) {
-        val out = ByteArrayOutputStream()
-        val format = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            Bitmap.CompressFormat.WEBP_LOSSLESS
-        } else {
-            Bitmap.CompressFormat.PNG
+        Trace.beginSection("img.encode")
+        try {
+            val out = ByteArrayOutputStream()
+            val format = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                Bitmap.CompressFormat.WEBP_LOSSLESS
+            } else {
+                Bitmap.CompressFormat.PNG
+            }
+            bitmap.compress(format, 100, out)
+            out.toByteArray()
+        } finally {
+            Trace.endSection()
         }
-        bitmap.compress(format, 100, out)
-        out.toByteArray()
+    }
+
+    private fun writeDiskCacheAsync(key: String, bitmap: Bitmap) {
+        val width = bitmap.width
+        val height = bitmap.height
+        scope.launch {
+            runCatching {
+                val bytes = encodeBitmapForDisk(bitmap)
+                diskCache.put(
+                    key,
+                    DiskCache.Entry(
+                        bytes = bytes,
+                        width = width,
+                        height = height
+                    )
+                )
+            }
+        }
     }
 }
 

@@ -191,6 +191,7 @@ private fun AlbumGroupRow(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 placeholderCornerRadius = 12,
+                peekAnySizeForInitial = true,
                 modifier = Modifier
                     .size(54.dp)
                     .clip(RoundedCornerShape(12.dp))

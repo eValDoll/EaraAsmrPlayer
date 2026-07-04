@@ -152,6 +152,7 @@ fun AlbumItem(
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
                             placeholderCornerRadius = 0,
+                            peekAnySizeForInitial = true,
                             modifier = Modifier.fillMaxSize().clip(coverShape),
                             empty = { m -> AsmrShimmerPlaceholder(modifier = m, cornerRadius = 0) },
                         )
@@ -161,6 +162,7 @@ fun AlbumItem(
                             contentDescription = null,
                             contentScale = ContentScale.Crop,
                             placeholderCornerRadius = 0,
+                            peekAnySizeForInitial = true,
                             modifier = Modifier.fillMaxSize().clip(coverShape),
                         )
                     }
@@ -375,6 +377,7 @@ fun AlbumGridItem(
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     placeholderCornerRadius = 0,
+                    peekAnySizeForInitial = true,
                     modifier = Modifier.fillMaxSize().clip(coverShape),
                     empty = { m -> AsmrShimmerPlaceholder(modifier = m, cornerRadius = 0) },
                 )
@@ -384,6 +387,7 @@ fun AlbumGridItem(
                     contentDescription = null,
                     contentScale = ContentScale.Crop,
                     placeholderCornerRadius = 0,
+                    peekAnySizeForInitial = true,
                     modifier = Modifier.fillMaxSize().clip(coverShape),
                 )
             }
