@@ -42,10 +42,52 @@ class LyricsPageLayoutTest {
     }
 
     @Test
+    fun viewportLayout_ignoresMeasuredWindowForFullDisplayArea() {
+        val layout = buildLyricsViewportLayout(
+            settings = LyricsPageSettings(displayAreaMode = 0),
+            viewportHeightPx = 640f,
+            nominalItemHeightPx = 100f,
+            measuredWindowHeightPx = 140f
+        )
+
+        assertEquals(640f, layout.viewportWindowHeightPx, 0.001f)
+        assertEquals(0f, layout.viewportTopOffsetPx, 0.001f)
+    }
+
+    @Test
     fun lyricTextAlign_mapsStoredValues() {
         assertEquals(TextAlign.Start, lyricTextAlign(0))
         assertEquals(TextAlign.Center, lyricTextAlign(1))
         assertEquals(TextAlign.End, lyricTextAlign(2))
         assertEquals(TextAlign.Center, lyricTextAlign(999))
+    }
+
+    @Test
+    fun centeredLyricIndexForTimeline_picksNearestVisibleItemCenter() {
+        val frames = listOf(
+            LyricVisibleItemFrame(index = 0, offsetPx = -20, sizePx = 60),
+            LyricVisibleItemFrame(index = 1, offsetPx = 40, sizePx = 80),
+            LyricVisibleItemFrame(index = 2, offsetPx = 120, sizePx = 60)
+        )
+
+        assertEquals(1, centeredLyricIndexForTimeline(frames, viewportCenterPx = 100f, totalCount = 3))
+    }
+
+    @Test
+    fun centeredLyricIndexForTimeline_ignoresInvalidFrames() {
+        val frames = listOf(
+            LyricVisibleItemFrame(index = -1, offsetPx = 0, sizePx = 100),
+            LyricVisibleItemFrame(index = 4, offsetPx = 10, sizePx = 100),
+            LyricVisibleItemFrame(index = 1, offsetPx = 80, sizePx = 0),
+            LyricVisibleItemFrame(index = 2, offsetPx = 80, sizePx = 40)
+        )
+
+        assertEquals(2, centeredLyricIndexForTimeline(frames, viewportCenterPx = 100f, totalCount = 3))
+    }
+
+    @Test
+    fun centeredLyricIndexForTimeline_returnsMinusOneWhenUnavailable() {
+        assertEquals(-1, centeredLyricIndexForTimeline(emptyList(), viewportCenterPx = 100f, totalCount = 3))
+        assertEquals(-1, centeredLyricIndexForTimeline(emptyList(), viewportCenterPx = 100f, totalCount = 0))
     }
 }
