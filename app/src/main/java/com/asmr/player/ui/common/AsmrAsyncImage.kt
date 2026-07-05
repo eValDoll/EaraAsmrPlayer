@@ -48,6 +48,7 @@ fun AsmrAsyncImage(
         AsmrShimmerPlaceholder(modifier = m, cornerRadius = placeholderCornerRadius)
     },
     retainPainterDuringReload: Boolean = false,
+    reloadKey: Any? = null,
     loadWhenSizeStableForMillis: Long = 0L,
     fadeIn: Boolean = true,
     fadeInMillis: Int = 500,
@@ -69,23 +70,23 @@ fun AsmrAsyncImage(
     val measuredSize: MutableState<IntSize?> = remember { mutableStateOf(null) }
     // 跨尺寸即时占位：若该图片已被列表等处加载过，先用任意尺寸的缓存位图立即显示，
     // 同时仍按精确尺寸加载原图并在完成后无缝替换，避免详情大图等待网络重新请求。
-    val seededPainter = remember(normalizedModel) {
+    val seededPainter = remember(normalizedModel, reloadKey) {
         if (peekAnySizeForInitial) manager.peekAnySize(normalizedModel)?.let { BitmapPainter(it) } else null
     }
-    val painter: MutableState<Painter?> = remember(normalizedModel) { mutableStateOf(seededPainter) }
-    val seededPlaceholder = remember(normalizedModel) { mutableStateOf(seededPainter != null) }
+    val painter: MutableState<Painter?> = remember(normalizedModel, reloadKey) { mutableStateOf(seededPainter) }
+    val seededPlaceholder = remember(normalizedModel, reloadKey) { mutableStateOf(seededPainter != null) }
     val state: MutableState<AsmrAsyncImageState> =
-        remember(normalizedModel) {
+        remember(normalizedModel, reloadKey) {
             mutableStateOf(if (seededPainter != null) AsmrAsyncImageState.Success else AsmrAsyncImageState.Loading)
         }
-    val loadedSize: MutableState<IntSize?> = remember(normalizedModel) { mutableStateOf(null) }
-    val crossfade = remember(normalizedModel) { Animatable(if (seededPainter != null) 1f else 0f) }
+    val loadedSize: MutableState<IntSize?> = remember(normalizedModel, reloadKey) { mutableStateOf(null) }
+    val crossfade = remember(normalizedModel, reloadKey) { Animatable(if (seededPainter != null) 1f else 0f) }
     val containerModifier = modifier.onSizeChanged { sz ->
         if (sz.width > 0 && sz.height > 0) measuredSize.value = IntSize(sz.width, sz.height)
     }
     val contentModifier = Modifier.fillMaxSize()
 
-    LaunchedEffect(normalizedModel, measuredSize.value) {
+    LaunchedEffect(normalizedModel, measuredSize.value, reloadKey) {
         val initialSize = measuredSize.value ?: return@LaunchedEffect
         if (loadWhenSizeStableForMillis > 0L) {
             delay(loadWhenSizeStableForMillis)

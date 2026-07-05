@@ -77,6 +77,7 @@ class SearchViewModel @Inject constructor(
     private val enrichDispatcher = Dispatchers.IO
     private val asmrOneAvailabilityCache = ConcurrentHashMap<String, Boolean>()
     private val bootstrapped = AtomicBoolean(false)
+    private var searchResultRevision: Long = 0L
 
     private val _uiState = MutableStateFlow<SearchUiState>(SearchUiState.Idle)
     val uiState = _uiState.asStateFlow()
@@ -321,6 +322,7 @@ class SearchViewModel @Inject constructor(
                     chineseTranslatedOnly = chineseTranslatedOnly,
                     collectedOnly = collectedOnly
                 )
+                val resultRevision = ++searchResultRevision
                 _uiState.value = SearchUiState.Success(
                     results = pageResult.items,
                     keyword = normalizedKeyword,
@@ -341,7 +343,8 @@ class SearchViewModel @Inject constructor(
                     enrichedDetailRjCodes = pageResult.resolvedDetailRjCodes,
                     isAsmrOneChecking = false,
                     asmrOneChecked = 0,
-                    asmrOneTotal = 0
+                    asmrOneTotal = 0,
+                    resultRevision = resultRevision
                 )
                 if (!purchasedOnly && !collectedOnly && pageResult.items.isNotEmpty()) {
                     startEnrichDlsiteDetails(
@@ -624,7 +627,8 @@ class SearchViewModel @Inject constructor(
             },
             isAsmrOneChecking = false,
             asmrOneChecked = 0,
-            asmrOneTotal = 0
+            asmrOneTotal = 0,
+            resultRevision = searchResultRevision
         )
     }
 
@@ -918,7 +922,8 @@ sealed class SearchUiState {
         val enrichedDetailRjCodes: Set<String> = emptySet(),
         val isAsmrOneChecking: Boolean = false,
         val asmrOneChecked: Int = 0,
-        val asmrOneTotal: Int = 0
+        val asmrOneTotal: Int = 0,
+        val resultRevision: Long = 0L
     ) : SearchUiState() {
         val isBusy: Boolean
             get() = pendingRequest != null
