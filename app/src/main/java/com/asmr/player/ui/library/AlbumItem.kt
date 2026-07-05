@@ -99,6 +99,7 @@ fun AlbumItem(
     onlineDetailLoading: Boolean = false,
     onlineCvLoading: Boolean = onlineDetailLoading,
     coverReloadKey: Any? = null,
+    coverRetainPainterDuringReload: Boolean = false,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val shape = remember { RoundedCornerShape(AlbumListItemCornerRadius) }
@@ -154,6 +155,7 @@ fun AlbumItem(
                             contentScale = ContentScale.Crop,
                             placeholderCornerRadius = 0,
                             reloadKey = coverReloadKey,
+                            retainPainterDuringReload = coverRetainPainterDuringReload,
                             peekAnySizeForInitial = true,
                             modifier = Modifier.fillMaxSize().clip(coverShape),
                             empty = { m -> AsmrShimmerPlaceholder(modifier = m, cornerRadius = 0) },
@@ -165,6 +167,7 @@ fun AlbumItem(
                             contentScale = ContentScale.Crop,
                             placeholderCornerRadius = 0,
                             reloadKey = coverReloadKey,
+                            retainPainterDuringReload = coverRetainPainterDuringReload,
                             peekAnySizeForInitial = true,
                             modifier = Modifier.fillMaxSize().clip(coverShape),
                         )
@@ -346,6 +349,7 @@ fun AlbumGridItem(
     onlineDetailLoading: Boolean = false,
     onlineCvLoading: Boolean = onlineDetailLoading,
     coverReloadKey: Any? = null,
+    coverRetainPainterDuringReload: Boolean = false,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val shape = remember { RoundedCornerShape(AlbumGridItemCornerRadius) }
@@ -382,6 +386,7 @@ fun AlbumGridItem(
                     contentScale = ContentScale.Crop,
                     placeholderCornerRadius = 0,
                     reloadKey = coverReloadKey,
+                    retainPainterDuringReload = coverRetainPainterDuringReload,
                     peekAnySizeForInitial = true,
                     modifier = Modifier.fillMaxSize().clip(coverShape),
                     empty = { m -> AsmrShimmerPlaceholder(modifier = m, cornerRadius = 0) },
@@ -393,6 +398,7 @@ fun AlbumGridItem(
                     contentScale = ContentScale.Crop,
                     placeholderCornerRadius = 0,
                     reloadKey = coverReloadKey,
+                    retainPainterDuringReload = coverRetainPainterDuringReload,
                     peekAnySizeForInitial = true,
                     modifier = Modifier.fillMaxSize().clip(coverShape),
                 )
