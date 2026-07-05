@@ -1690,6 +1690,9 @@ fun MainContainer(
                                                 submittedSearchCollectedSortName = submittedSearchCollectedSortName,
                                                 submittedSearchLocale = submittedSearchLocale,
                                                 submittedSearchSignal = submittedSearchSignal,
+                                                onHorizontalPagerScrollLockChanged = { active ->
+                                                    primaryPagerScrollLocked = active
+                                                },
                                                 onOpenSearchAssist = { request ->
                                                     searchAssistInitialRequest = request
                                                     navController.navigateSingleTop(Routes.searchAssist(request.keyword))
