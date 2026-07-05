@@ -145,6 +145,11 @@ internal fun LyricsPage(
                     lyrics = uiState.lyrics,
                     currentPosition = position,
                     onSeekTo = onSeekTo,
+                    onTimelinePlay = { targetMs ->
+                        onSeekTo(targetMs)
+                        playerViewModel.play()
+                    },
+                    showPlaybackTimeline = true,
                     colors = lyricColors,
                     modifier = Modifier.fillMaxSize(),
                     isLandscape = isLandscape,

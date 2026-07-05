@@ -199,6 +199,7 @@ internal fun NowPlayingLyricsSurface(
     lyricColors: LyricReadableColors,
     lyricsPageSettings: LyricsPageSettings,
     onSeekTo: (Long) -> Unit,
+    onTimelinePlay: ((Long) -> Unit)? = null,
     onAddLyrics: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -228,6 +229,8 @@ internal fun NowPlayingLyricsSurface(
                 lyrics = lyrics,
                 currentPosition = playbackPositionMs,
                 onSeekTo = onSeekTo,
+                onTimelinePlay = onTimelinePlay,
+                showPlaybackTimeline = true,
                 colors = lyricColors,
                 modifier = Modifier.fillMaxSize(),
                 isLandscape = isLandscape,

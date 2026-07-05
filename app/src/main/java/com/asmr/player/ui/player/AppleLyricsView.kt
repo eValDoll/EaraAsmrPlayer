@@ -1,30 +1,45 @@
 package com.asmr.player.ui.player
 
 import android.os.SystemClock
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
@@ -37,7 +52,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -55,6 +72,7 @@ import androidx.compose.ui.unit.sp
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrTheme
+import com.asmr.player.util.Formatting
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.SubtitleIndexFinder
 import androidx.compose.runtime.withFrameNanos
@@ -70,6 +88,8 @@ internal fun AppleLyricsView(
     currentPosition: Long,
     onSeekTo: (Long) -> Unit,
     onOpenLyrics: () -> Unit = {},
+    onTimelinePlay: ((Long) -> Unit)? = null,
+    showPlaybackTimeline: Boolean = false,
     colors: LyricReadableColors,
     modifier: Modifier = Modifier,
     isLandscape: Boolean = false,
@@ -204,7 +224,26 @@ internal fun AppleLyricsView(
         val centeredActiveTopPx = ((viewportLayout.viewportWindowHeightPx - activeItemHeightPx) / 2f).coerceAtLeast(0f)
         val centeredActiveBottomDp = viewportWindowHeightDp / 2f
         val viewportCenterY = viewportLayout.viewportWindowHeightPx / 2f
+        val timelineCenterInViewportPx = (viewportHeightPx / 2f - viewportLayout.viewportTopOffsetPx)
+            .coerceIn(0f, viewportLayout.viewportWindowHeightPx)
         val maxWaveOffsetPx = viewportLayout.viewportWindowHeightPx * 0.22f
+        val timelineTargetIndex by remember(lyrics.size, timelineCenterInViewportPx, listState) {
+            derivedStateOf {
+                centeredLyricIndexForTimeline(
+                    visibleItems = listState.layoutInfo.visibleItemsInfo.map { item ->
+                        LyricVisibleItemFrame(
+                            index = item.index,
+                            offsetPx = item.offset,
+                            sizePx = item.size
+                        )
+                    },
+                    viewportCenterPx = timelineCenterInViewportPx,
+                    totalCount = lyrics.size
+                )
+            }
+        }
+        val timelineTargetPositionMs = lyrics.getOrNull(timelineTargetIndex)?.startMs
+        val timelineVisible = showPlaybackTimeline && lyrics.isNotEmpty() && autoFocusSuspended
         LaunchedEffect(lastUserScrollAt, autoFocusSuspended) {
             if (autoFocusSuspended) {
                 val scheduledAt = lastUserScrollAt
@@ -424,6 +463,33 @@ internal fun AppleLyricsView(
                 }
             }
         }
+
+        AnimatedVisibility(
+            visible = timelineVisible,
+            enter = fadeIn(animationSpec = tween(durationMillis = 140)),
+            exit = fadeOut(animationSpec = tween(durationMillis = 180)),
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth()
+                .padding(
+                    start = if (isLandscape) 12.dp else 18.dp,
+                    end = if (isLandscape) 8.dp else 14.dp
+                )
+        ) {
+            LyricsPlaybackTimeline(
+                targetPositionMs = timelineTargetPositionMs,
+                colors = colors,
+                isLandscape = isLandscape,
+                onPlayClick = { targetMs ->
+                    if (timelineTargetIndex in lyrics.indices) {
+                        pendingSmoothFocusIndex = timelineTargetIndex
+                    }
+                    autoFocusSuspended = false
+                    pendingAnimatedRefocus = false
+                    (onTimelinePlay ?: onSeekTo)(targetMs)
+                }
+            )
+        }
     }
 }
 
@@ -551,6 +617,94 @@ private fun focusScrollDurationMillis(
 }
 
 private fun Float?.orElseZero(): Float = this ?: 0f
+
+@Composable
+private fun LyricsPlaybackTimeline(
+    targetPositionMs: Long?,
+    colors: LyricReadableColors,
+    isLandscape: Boolean,
+    onPlayClick: (Long) -> Unit
+) {
+    val enabled = targetPositionMs != null
+    val buttonSize = if (isLandscape) 34.dp else 40.dp
+    val iconSize = if (isLandscape) 19.dp else 22.dp
+    val timelineColor = colors.accentEmphasis.copy(alpha = if (enabled) 0.82f else 0.36f)
+    val containerColor = colors.activeContainer.copy(alpha = if (enabled) 0.96f else 0.54f)
+    val contentColor = colors.activeText.copy(alpha = if (enabled) 0.94f else 0.46f)
+    val targetText = targetPositionMs?.let { Formatting.formatTrackTime(it) } ?: "--:--"
+    val description = targetPositionMs?.let { "跳转到 ${Formatting.formatTrackTime(it)} 播放" } ?: "跳转播放"
+    val density = LocalDensity.current
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(if (isLandscape) 36.dp else 44.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Canvas(
+            modifier = Modifier
+                .weight(1f)
+                .height(if (isLandscape) 18.dp else 20.dp)
+        ) {
+            val strokeWidth = with(density) { 1.dp.toPx() }
+            val dash = with(density) { 6.dp.toPx() }
+            val gap = with(density) { 5.dp.toPx() }
+            drawLine(
+                color = timelineColor,
+                start = Offset(0f, size.height / 2f),
+                end = Offset(size.width, size.height / 2f),
+                strokeWidth = strokeWidth,
+                cap = StrokeCap.Round,
+                pathEffect = PathEffect.dashPathEffect(
+                    intervals = floatArrayOf(dash, gap),
+                    phase = 0f
+                )
+            )
+        }
+        Spacer(modifier = Modifier.width(if (isLandscape) 6.dp else 8.dp))
+        Surface(
+            shape = RoundedCornerShape(999.dp),
+            color = containerColor,
+            contentColor = contentColor,
+            tonalElevation = 0.dp,
+            shadowElevation = if (enabled) 2.dp else 0.dp
+        ) {
+            Text(
+                text = targetText,
+                modifier = Modifier.padding(
+                    horizontal = if (isLandscape) 8.dp else 10.dp,
+                    vertical = if (isLandscape) 4.dp else 5.dp
+                ),
+                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                color = contentColor
+            )
+        }
+        Spacer(modifier = Modifier.width(if (isLandscape) 6.dp else 8.dp))
+        Surface(
+            modifier = Modifier.size(buttonSize),
+            shape = CircleShape,
+            color = containerColor,
+            contentColor = contentColor,
+            tonalElevation = 0.dp,
+            shadowElevation = if (enabled) 3.dp else 0.dp
+        ) {
+            IconButton(
+                onClick = {
+                    targetPositionMs?.let(onPlayClick)
+                },
+                enabled = enabled,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.PlayArrow,
+                    contentDescription = description,
+                    modifier = Modifier.size(iconSize),
+                    tint = contentColor
+                )
+            }
+        }
+    }
+}
 
 private suspend fun resetLyricWaveOffsets(
     itemOffsets: Map<Int, Animatable<Float, AnimationVector1D>>,
