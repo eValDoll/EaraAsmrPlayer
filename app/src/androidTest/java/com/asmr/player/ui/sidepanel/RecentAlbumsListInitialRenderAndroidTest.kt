@@ -4,12 +4,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.assertExists
 import androidx.compose.ui.unit.dp
 import com.asmr.player.data.local.db.entities.AlbumEntity
-import com.asmr.player.ui.theme.AsmrTheme
+import com.asmr.player.ui.theme.AsmrPlayerTheme
 import org.junit.Rule
 import org.junit.Test
 
@@ -39,10 +39,11 @@ class RecentAlbumsListInitialRenderAndroidTest {
         )
 
         composeRule.setContent {
-            AsmrTheme {
+            AsmrPlayerTheme {
                 Box(modifier = Modifier.width(360.dp).height(600.dp)) {
                     RecentAlbumsList(
                         items = items,
+                        preferredOrderIds = emptyList(),
                         onOpenAlbum = {},
                         onResumePlay = {}
                     )
@@ -50,8 +51,8 @@ class RecentAlbumsListInitialRenderAndroidTest {
             }
         }
 
-        composeRule.onNodeWithText("Album 1").assertExists()
-        composeRule.onNodeWithText("Album 2").assertExists()
+        composeRule.onNodeWithText("Album 1").assertIsDisplayed()
+        composeRule.onNodeWithText("Album 2").assertIsDisplayed()
     }
 }
 

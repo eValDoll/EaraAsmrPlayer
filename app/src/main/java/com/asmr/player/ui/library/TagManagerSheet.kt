@@ -3,18 +3,25 @@
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -31,6 +38,9 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.asmr.player.data.local.db.dao.TagWithCount
 import com.asmr.player.ui.common.FlatActionDialog
@@ -64,21 +74,38 @@ fun TagManagerSheet(
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 8.dp)) {
-            IconButton(onClick = onClose) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 6.dp, vertical = 8.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            IconButton(
+                onClick = onClose,
+                modifier = Modifier.align(Alignment.CenterStart)
+            ) {
                 Icon(imageVector = Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
             }
-            Text(text = "标签管理", modifier = Modifier.weight(1f))
-            TextButton(onClick = onClose) { Text("完成") }
+            Text(
+                text = "标签管理",
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = colorScheme.textPrimary
+            )
+            TextButton(
+                onClick = onClose,
+                modifier = Modifier.align(Alignment.CenterEnd)
+            ) {
+                Text("完成")
+            }
         }
 
-        OutlinedTextField(
-            value = filter,
-            onValueChange = { filter = it },
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-            singleLine = true,
-            placeholder = { Text("搜索标签") }
-        )
+        Box(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+            TagManagerSearchField(
+                value = filter,
+                onValueChange = { filter = it },
+                placeholder = "搜索标签"
+            )
+        }
 
         LazyColumn(
             state = listState,
@@ -90,11 +117,18 @@ fun TagManagerSheet(
             items(visibleTags, key = { it.id }) { tag ->
                 ListItem(
                     headlineContent = {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Text(
                                 text = tag.name,
                                 style = MaterialTheme.typography.titleSmall,
-                                color = colorScheme.textPrimary
+                                color = colorScheme.textPrimary,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
                             )
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -196,6 +230,68 @@ fun TagManagerSheet(
 }
 
 @Composable
+private fun TagManagerSearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val shape = RoundedCornerShape(8.dp)
+
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = Modifier.fillMaxWidth(),
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodySmall.copy(color = colorScheme.textPrimary),
+        cursorBrush = SolidColor(colorScheme.primary),
+        decorationBox = { innerTextField ->
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(38.dp),
+                shape = shape,
+                color = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.54f else 0.86f),
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = colorScheme.onSurfaceVariant.copy(alpha = if (colorScheme.isDark) 0.24f else 0.16f)
+                )
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.Search,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = colorScheme.textTertiary
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Box(
+                        modifier = Modifier.weight(1f),
+                        contentAlignment = Alignment.CenterStart
+                    ) {
+                        if (value.isEmpty()) {
+                            Text(
+                                text = placeholder,
+                                color = colorScheme.textTertiary,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
+            }
+        }
+    )
+}
+
+@Composable
 private fun TagManagerMetricBadge(
     label: String,
     value: String? = null,
@@ -232,8 +328,11 @@ private fun TagManagerMetricBadge(
         ) {
             Text(
                 text = label,
+                modifier = Modifier.widthIn(max = 72.dp),
                 style = MaterialTheme.typography.labelSmall,
-                color = contentColor
+                color = contentColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
             if (value != null) {
                 Surface(

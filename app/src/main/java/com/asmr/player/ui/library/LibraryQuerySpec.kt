@@ -11,7 +11,28 @@ data class LibraryQuerySpec(
     val circles: Set<String> = emptySet(),
     val source: LibrarySourceFilter? = null,
     val sort: LibrarySort = LibrarySort.AddedDesc
-)
+) {
+    val hasActiveFilters: Boolean
+        get() = includeTagIds.isNotEmpty() ||
+            excludeTagIds.isNotEmpty() ||
+            cvs.isNotEmpty() ||
+            circles.isNotEmpty() ||
+            (source != null && source != LibrarySourceFilter.Both)
+
+    fun filterOnly(): LibraryQuerySpec {
+        return copy(textQuery = null, sort = LibrarySort.AddedDesc)
+    }
+
+    fun withFiltersFrom(spec: LibraryQuerySpec): LibraryQuerySpec {
+        return copy(
+            includeTagIds = spec.includeTagIds,
+            excludeTagIds = spec.excludeTagIds,
+            cvs = spec.cvs,
+            circles = spec.circles,
+            source = spec.source.takeUnless { it == LibrarySourceFilter.Both }
+        )
+    }
+}
 
 enum class LibrarySourceFilter {
     LocalOnly,
@@ -26,7 +47,13 @@ enum class LibrarySort {
     RjAsc,
     CircleAsc,
     CvAsc,
-    LastPlayedDesc
+    LastPlayedDesc;
+
+    companion object {
+        fun fromStoredName(value: String?): LibrarySort {
+            return entries.firstOrNull { it.name == value } ?: AddedDesc
+        }
+    }
 }
 
 object LibraryQueryBuilder {
