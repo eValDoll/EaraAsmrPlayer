@@ -76,7 +76,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Surface
@@ -166,6 +165,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import com.asmr.player.ui.common.CustomSearchBar
+import com.asmr.player.ui.common.ActiveDropdownMenuItem
 import com.asmr.player.ui.common.ActionButton
 import com.asmr.player.ui.common.clearFocusOnTapOutside
 import com.asmr.player.ui.common.collapsibleHeaderUiState
@@ -177,6 +177,9 @@ import com.asmr.player.util.DlsiteAntiHotlink
 internal const val LIBRARY_CHROME_TAG = "library_chrome"
 internal const val LIBRARY_SEARCH_INPUT_TAG = "library_search_input"
 internal const val LIBRARY_SORT_BUTTON_TAG = "library_sort_button"
+internal const val LIBRARY_SORT_LAST_PLAYED_ITEM_TAG = "library_sort_last_played_item"
+internal const val LIBRARY_SORT_ADDED_ITEM_TAG = "library_sort_added_item"
+internal const val LIBRARY_SORT_TITLE_ITEM_TAG = "library_sort_title_item"
 internal const val LIBRARY_FILTER_BUTTON_TAG = "library_filter_button"
 private val LibraryChromeContentGap = 20.dp
 private val LibraryChromeCollapseOvershoot = 12.dp
@@ -280,6 +283,7 @@ fun LibraryScreen(
     val uiState by viewModel.uiState.collectAsState()
     val viewMode by viewModel.libraryViewMode.collectAsState()
     val querySpec by viewModel.querySpec.collectAsState()
+    val hasActiveFilters by viewModel.hasActiveFilters.collectAsState()
     val tags by viewModel.availableTags.collectAsState()
     val userTagsByAlbumId by viewModel.userTagsByAlbumId.collectAsState()
     val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsState()
@@ -857,12 +861,14 @@ fun LibraryScreen(
                                         searchText = ""
                                         viewModel.setSearchQuery("")
                                     },
+                                    currentSort = querySpec.sort,
                                     sortMenuExpanded = sortMenuExpanded,
                                     onSortMenuExpandedChange = { sortMenuExpanded = it },
                                     onSortLastPlayed = { viewModel.setSort(LibrarySort.LastPlayedDesc) },
                                     onSortAdded = { viewModel.setSort(LibrarySort.AddedDesc) },
                                     onSortTitle = { viewModel.setSort(LibrarySort.TitleAsc) },
                                     onOpenFilterScreen = onOpenFilterScreen,
+                                    filterActive = hasActiveFilters,
                                     rightPanelToggle = rightPanelToggle,
                                     dynamicContainerColor = dynamicContainerColor,
                                     materialColorScheme = materialColorScheme,
@@ -1052,12 +1058,14 @@ internal fun LibraryChrome(
     searchText: String,
     onSearchTextChange: (String) -> Unit,
     onClearSearch: () -> Unit,
+    currentSort: LibrarySort,
     sortMenuExpanded: Boolean,
     onSortMenuExpandedChange: (Boolean) -> Unit,
     onSortLastPlayed: () -> Unit,
     onSortAdded: () -> Unit,
     onSortTitle: () -> Unit,
     onOpenFilterScreen: () -> Unit,
+    filterActive: Boolean = false,
     rightPanelToggle: (@Composable (Modifier) -> Unit)?,
     dynamicContainerColor: Color,
     materialColorScheme: androidx.compose.material3.ColorScheme,
@@ -1138,8 +1146,12 @@ internal fun LibraryChrome(
                     onDismissRequest = { onSortMenuExpandedChange(false) },
                     modifier = Modifier.background(chromeActionContainerColor)
                 ) {
-                    DropdownMenuItem(
-                        text = { Text("最近播放") },
+                    ActiveDropdownMenuItem(
+                        label = "最近播放",
+                        selected = currentSort == LibrarySort.LastPlayedDesc,
+                        testTag = LIBRARY_SORT_LAST_PLAYED_ITEM_TAG,
+                        activeColor = materialColorScheme.primary,
+                        inactiveColor = materialColorScheme.onSurface,
                         onClick = {
                             onSortMenuExpandedChange(false)
                             onSortLastPlayed()
@@ -1150,8 +1162,12 @@ internal fun LibraryChrome(
                         thickness = 0.5.dp,
                         color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
                     )
-                    DropdownMenuItem(
-                        text = { Text("最近加入") },
+                    ActiveDropdownMenuItem(
+                        label = "最近加入",
+                        selected = currentSort == LibrarySort.AddedDesc,
+                        testTag = LIBRARY_SORT_ADDED_ITEM_TAG,
+                        activeColor = materialColorScheme.primary,
+                        inactiveColor = materialColorScheme.onSurface,
                         onClick = {
                             onSortMenuExpandedChange(false)
                             onSortAdded()
@@ -1162,8 +1178,12 @@ internal fun LibraryChrome(
                         thickness = 0.5.dp,
                         color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
                     )
-                    DropdownMenuItem(
-                        text = { Text("专辑标题") },
+                    ActiveDropdownMenuItem(
+                        label = "专辑标题",
+                        selected = currentSort == LibrarySort.TitleAsc,
+                        testTag = LIBRARY_SORT_TITLE_ITEM_TAG,
+                        activeColor = materialColorScheme.primary,
+                        inactiveColor = materialColorScheme.onSurface,
                         onClick = {
                             onSortMenuExpandedChange(false)
                             onSortTitle()
@@ -1176,7 +1196,10 @@ internal fun LibraryChrome(
         ActionButton(
             icon = Icons.Rounded.FilterList,
             onClick = onOpenFilterScreen,
-            modifier = Modifier.testTag(LIBRARY_FILTER_BUTTON_TAG)
+            modifier = Modifier
+                .testTag(LIBRARY_FILTER_BUTTON_TAG)
+                .semantics { stateDescription = if (filterActive) "筛选已启用" else "筛选未启用" },
+            active = filterActive
         )
         if (rightPanelToggle != null) {
             Spacer(modifier = Modifier.width(8.dp))

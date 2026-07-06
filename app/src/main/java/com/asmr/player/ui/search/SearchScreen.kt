@@ -105,6 +105,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.domain.model.Album
 import com.asmr.player.ui.common.CustomSearchBar
+import com.asmr.player.ui.common.ActiveDropdownMenuItem
 import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
@@ -133,7 +134,9 @@ internal const val SEARCH_INPUT_TAG = "search_input"
 internal const val SEARCH_SCOPE_BUTTON_TAG = "search_scope_button"
 internal const val SEARCH_SCOPE_OPTION_TAG_PREFIX = "search_scope_option"
 internal const val SEARCH_LANGUAGE_BUTTON_TAG = "search_language_button"
+internal const val SEARCH_LANGUAGE_OPTION_TAG_PREFIX = "search_language_option"
 internal const val SEARCH_COLLECTED_SORT_BUTTON_TAG = "search_collected_sort_button"
+internal const val SEARCH_COLLECTED_SORT_OPTION_TAG_PREFIX = "search_collected_sort_option"
 internal const val SEARCH_CLEAR_BUTTON_TAG = "search_clear_button"
 internal const val SEARCH_SUBMIT_BUTTON_TAG = "search_submit_button"
 internal const val SEARCH_SUBMIT_SPINNER_TAG = "search_submit_spinner"
@@ -1417,8 +1420,12 @@ internal fun SearchToolbar(
                                             color = colorScheme.textSecondary.copy(alpha = 0.2f)
                                         )
                                     }
-                                    DropdownMenuItem(
-                                        text = { Text(option.label, color = colorScheme.textPrimary) },
+                                    ActiveDropdownMenuItem(
+                                        label = option.label,
+                                        selected = option == selectedCollectedSort,
+                                        testTag = "${SEARCH_COLLECTED_SORT_OPTION_TAG_PREFIX}_${option.name}",
+                                        activeColor = colorScheme.primary,
+                                        inactiveColor = colorScheme.textPrimary,
                                         onClick = {
                                             secondaryMenuExpanded = false
                                             onCollectedSortSelected(option)
@@ -1438,8 +1445,12 @@ internal fun SearchToolbar(
                                             color = colorScheme.textSecondary.copy(alpha = 0.2f)
                                         )
                                     }
-                                    DropdownMenuItem(
-                                        text = { Text(label, color = colorScheme.textPrimary) },
+                                    ActiveDropdownMenuItem(
+                                        label = label,
+                                        selected = locale == selectedLocale.trim(),
+                                        testTag = "${SEARCH_LANGUAGE_OPTION_TAG_PREFIX}_$locale",
+                                        activeColor = colorScheme.primary,
+                                        inactiveColor = colorScheme.textPrimary,
                                         onClick = {
                                             secondaryMenuExpanded = false
                                             onLocaleSelected(locale)

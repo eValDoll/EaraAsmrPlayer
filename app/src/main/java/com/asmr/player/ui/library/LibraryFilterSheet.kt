@@ -1,9 +1,10 @@
-﻿package com.asmr.player.ui.library
+package com.asmr.player.ui.library
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
@@ -13,31 +14,30 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ManageSearch
 import androidx.compose.material.icons.rounded.Bookmark
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.FilterList
-import androidx.compose.material.icons.rounded.Restore
+import androidx.compose.material.icons.rounded.LocalOffer
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -51,6 +51,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.asmr.player.data.local.db.dao.TagWithCount
@@ -71,56 +74,28 @@ fun LibraryFilterScreen(
     val circles by viewModel.availableCircles.collectAsState()
     val cvs by viewModel.availableCvs.collectAsState()
     val presets by viewModel.filterPresets.collectAsState()
-    val colorScheme = AsmrTheme.colorScheme
+    val appliedSpec = remember(querySpec) { querySpec.filterOnly() }
+    var draftSpec by remember(appliedSpec) { mutableStateOf(appliedSpec) }
     var showTagManager by remember { mutableStateOf(false) }
 
-    Column(modifier = Modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.End,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = { showTagManager = true }) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Rounded.ManageSearch,
-                    contentDescription = "管理标签",
-                    tint = colorScheme.primary
-                )
-            }
-            IconButton(onClick = { viewModel.clearFilters() }) {
-                Icon(
-                    imageVector = Icons.Rounded.Restore,
-                    contentDescription = "重置筛选",
-                    tint = colorScheme.primary
-                )
-            }
-        }
-
-        LibraryFilterSheet(
-            modifier = Modifier.weight(1f),
-            showHeader = false,
-            querySpec = querySpec,
-            tags = tags,
-            circles = circles,
-            cvs = cvs,
-            presets = presets,
-            onOpenTagManager = { showTagManager = true },
-            onSetSource = { viewModel.setSourceFilter(it) },
-            onToggleTag = { viewModel.toggleTag(it) },
-            onToggleCircle = { viewModel.toggleCircle(it) },
-            onToggleCv = { viewModel.toggleCv(it) },
-            onClear = { viewModel.clearFilters() },
-            onApplyPreset = {
-                viewModel.applyPreset(it)
-                onClose()
-            },
-            onSavePreset = { viewModel.savePreset(it) },
-            onDeletePreset = { viewModel.deletePreset(it) },
-            onClose = onClose
-        )
-    }
+    LibraryFilterSheet(
+        modifier = Modifier.fillMaxSize(),
+        appliedSpec = appliedSpec,
+        draftSpec = draftSpec,
+        tags = tags,
+        circles = circles,
+        cvs = cvs,
+        presets = presets,
+        onDraftSpecChange = { draftSpec = it.filterOnly() },
+        onOpenTagManager = { showTagManager = true },
+        onApply = {
+            viewModel.applyFilters(draftSpec)
+            onClose()
+        },
+        onSavePreset = { name -> viewModel.savePreset(name, draftSpec) },
+        onDeletePreset = { viewModel.deletePreset(it) },
+        onClose = onClose
+    )
 
     if (showTagManager) {
         androidx.compose.ui.window.Dialog(
@@ -142,202 +117,230 @@ fun LibraryFilterScreen(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun LibraryFilterSheet(
-    querySpec: LibraryQuerySpec,
+    appliedSpec: LibraryQuerySpec,
+    draftSpec: LibraryQuerySpec,
     tags: List<TagWithCount>,
     circles: List<String>,
     cvs: List<String>,
     presets: List<LibraryFilterPreset>,
+    onDraftSpecChange: (LibraryQuerySpec) -> Unit,
     onOpenTagManager: () -> Unit,
-    onSetSource: (LibrarySourceFilter?) -> Unit,
-    onToggleTag: (Long) -> Unit,
-    onToggleCircle: (String) -> Unit,
-    onToggleCv: (String) -> Unit,
-    onClear: () -> Unit,
-    onApplyPreset: (LibraryFilterPreset) -> Unit,
+    onApply: () -> Unit,
     onSavePreset: (String) -> Unit,
     onDeletePreset: (String) -> Unit,
     onClose: () -> Unit,
-    modifier: Modifier = Modifier,
-    showHeader: Boolean = true
+    modifier: Modifier = Modifier
 ) {
-    val colorScheme = AsmrTheme.colorScheme
-    val tagListContainerColor = dynamicPageContainerColor(colorScheme)
+    val listState = rememberLazyListState()
     var tagSearch by rememberSaveable { mutableStateOf("") }
+    var circleSearch by rememberSaveable { mutableStateOf("") }
+    var cvSearch by rememberSaveable { mutableStateOf("") }
     var showSavePreset by remember { mutableStateOf(false) }
     var presetName by rememberSaveable { mutableStateOf("") }
-    val listState = rememberLazyListState()
+    val normalizedAppliedSpec = remember(appliedSpec) { appliedSpec.filterOnly() }
+    val normalizedDraftSpec = remember(draftSpec) { draftSpec.filterOnly() }
+    val isDirty = normalizedDraftSpec != normalizedAppliedSpec
 
     Column(modifier = modifier.fillMaxWidth()) {
-        if (showHeader) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(imageVector = Icons.Rounded.FilterList, contentDescription = null, tint = colorScheme.primary)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(text = "筛选", maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-                IconButton(onClick = onOpenTagManager) {
-                    Icon(imageVector = Icons.AutoMirrored.Rounded.ManageSearch, contentDescription = null)
-                }
-                IconButton(onClick = onClear) {
-                    Icon(imageVector = Icons.Rounded.Restore, contentDescription = null)
-                }
-                IconButton(onClick = onClose) {
-                    Icon(imageVector = Icons.Rounded.Close, contentDescription = null)
-                }
-            }
-        }
+        LibraryFilterHeader(
+            draftSpec = normalizedDraftSpec,
+            isDirty = isDirty,
+            onOpenTagManager = onOpenTagManager,
+            onClose = onClose
+        )
 
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxWidth().thinScrollbar(listState),
-            contentPadding = PaddingValues(bottom = 16.dp).withAddedBottomPadding(LocalBottomOverlayPadding.current),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
+            modifier = Modifier
+                .weight(1f)
+                .fillMaxWidth()
+                .thinScrollbar(listState),
+            contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp)
+                .withAddedBottomPadding(LocalBottomOverlayPadding.current),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item { Spacer(modifier = Modifier.height(2.dp)) }
             item {
-                SectionCard(title = "来源") {
-                    SourceChips(current = querySpec.source, onSetSource = onSetSource)
+                FilterSection(
+                    title = "来源",
+                    subtitle = sourceLabel(normalizedDraftSpec.source)
+                ) {
+                    SourceSelector(
+                        current = normalizedDraftSpec.source,
+                        onSetSource = { source ->
+                            onDraftSpecChange(normalizedDraftSpec.copy(source = source.takeUnless { it == LibrarySourceFilter.Both }))
+                        }
+                    )
                 }
             }
 
             item {
-                SectionCard(
+                FilterSection(
                     title = "标签",
-                    subtitle = if (querySpec.includeTagIds.isNotEmpty()) "已选 ${querySpec.includeTagIds.size}" else null
+                    subtitle = selectedCountText(normalizedDraftSpec.includeTagIds.size)
                 ) {
-                    OutlinedTextField(
+                    FilterSearchField(
                         value = tagSearch,
                         onValueChange = { tagSearch = it },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .heightIn(min = 30.dp),
-                        singleLine = true,
-                        textStyle = MaterialTheme.typography.bodySmall,
-                        leadingIcon = { Icon(imageVector = Icons.Rounded.Search, contentDescription = null) },
-                        placeholder = { Text("搜索标签", style = MaterialTheme.typography.bodySmall) }
+                        placeholder = "搜索标签"
                     )
-
-                    Spacer(modifier = Modifier.height(10.dp))
-                    val normalizedQuery = remember(tagSearch) { tagSearch.trim().lowercase() }
-                    val filtered = remember(normalizedQuery, tags) {
-                        if (normalizedQuery.isBlank()) {
-                            tags
-                        } else {
-                            tags.filter { it.name.lowercase().contains(normalizedQuery) || it.nameNormalized.contains(normalizedQuery) }
-                        }
-                    }
-                    Surface(
-                        shape = RoundedCornerShape(16.dp),
-                        tonalElevation = 1.dp,
-                        color = tagListContainerColor,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        val ordered = remember(filtered, querySpec.includeTagIds) {
-                            filtered.sortedWith(
-                                compareByDescending<TagWithCount> { querySpec.includeTagIds.contains(it.id) }
+                    val orderedTags = remember(tags, tagSearch, normalizedDraftSpec.includeTagIds) {
+                        tags.filterByTagQuery(tagSearch)
+                            .sortedWith(
+                                compareByDescending<TagWithCount> { normalizedDraftSpec.includeTagIds.contains(it.id) }
                                     .thenByDescending { it.albumCount }
                                     .thenBy(String.CASE_INSENSITIVE_ORDER) { it.name }
                             )
-                        }.take(400)
-                        val scrollState = rememberScrollState()
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(300.dp)
-                                .verticalScroll(scrollState)
-                                .thinScrollbar(scrollState)
-                                .padding(12.dp)
+                    }
+                    if (orderedTags.isEmpty()) {
+                        EmptyFilterHint(text = "没有匹配的标签")
+                    } else {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            FlowRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                ordered.forEach { tag ->
-                                    val selected = querySpec.includeTagIds.contains(tag.id)
-                                    TagStamp(
-                                        name = tag.name,
-                                        count = tag.albumCount,
-                                        isUserTag = tag.userAlbumCount > 0L,
-                                        selected = selected,
-                                        onClick = { onToggleTag(tag.id) }
-                                    )
+                            orderedTags.forEach { tag ->
+                                FilterTokenPill(
+                                    text = if (tag.name.startsWith("#")) tag.name else "#${tag.name}",
+                                    count = tag.albumCount,
+                                    selected = normalizedDraftSpec.includeTagIds.contains(tag.id),
+                                    tone = FilterTokenTone.Tag,
+                                    onClick = {
+                                        onDraftSpecChange(normalizedDraftSpec.toggleTag(tag.id))
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                FilterSection(
+                    title = "社团",
+                    subtitle = selectedCountText(normalizedDraftSpec.circles.size)
+                ) {
+                    FilterSearchField(
+                        value = circleSearch,
+                        onValueChange = { circleSearch = it },
+                        placeholder = "搜索社团"
+                    )
+                    val orderedCircles = remember(circles, circleSearch, normalizedDraftSpec.circles) {
+                        circles.filterByTextQuery(circleSearch)
+                            .sortedWith(
+                                compareByDescending<String> { normalizedDraftSpec.circles.contains(it) }
+                                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it }
+                            )
+                    }
+                    if (orderedCircles.isEmpty()) {
+                        EmptyFilterHint(text = "没有匹配的社团")
+                    } else {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            orderedCircles.forEach { circle ->
+                                FilterTokenPill(
+                                    text = circle,
+                                    selected = normalizedDraftSpec.circles.contains(circle),
+                                    tone = FilterTokenTone.Circle,
+                                    onClick = {
+                                        onDraftSpecChange(normalizedDraftSpec.toggleCircle(circle))
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                FilterSection(
+                    title = "CV",
+                    subtitle = selectedCountText(normalizedDraftSpec.cvs.size)
+                ) {
+                    FilterSearchField(
+                        value = cvSearch,
+                        onValueChange = { cvSearch = it },
+                        placeholder = "搜索 CV"
+                    )
+                    val orderedCvs = remember(cvs, cvSearch, normalizedDraftSpec.cvs) {
+                        cvs.filterByTextQuery(cvSearch)
+                            .sortedWith(
+                                compareByDescending<String> { normalizedDraftSpec.cvs.contains(it) }
+                                    .thenBy(String.CASE_INSENSITIVE_ORDER) { it }
+                            )
+                    }
+                    if (orderedCvs.isEmpty()) {
+                        EmptyFilterHint(text = "没有匹配的 CV")
+                    } else {
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            orderedCvs.forEach { cv ->
+                                FilterTokenPill(
+                                    text = cv,
+                                    selected = normalizedDraftSpec.cvs.contains(cv),
+                                    tone = FilterTokenTone.Cv,
+                                    onClick = {
+                                        onDraftSpecChange(normalizedDraftSpec.toggleCv(cv))
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            item {
+                PresetSectionHeader(onSavePreset = { showSavePreset = true })
+            }
+            if (presets.isEmpty()) {
+                item {
+                    EmptyFilterHint(
+                        text = "暂无筛选预设",
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    )
+                }
+            } else {
+                items(presets, key = { it.id }) { preset ->
+                    ElevatedCard(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .clickable {
+                                onDraftSpecChange(preset.spec.filterOnly())
+                            }
+                    ) {
+                        ListItem(
+                            headlineContent = {
+                                Text(preset.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            },
+                            supportingContent = {
+                                Text(
+                                    buildPresetSummary(preset.spec),
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            trailingContent = {
+                                IconButton(onClick = { onDeletePreset(preset.id) }) {
+                                    Icon(imageVector = Icons.Rounded.Delete, contentDescription = "删除预设")
                                 }
                             }
-                        }
+                        )
                     }
-                }
-            }
-
-            item {
-                SectionCard(
-                    title = "社团",
-                    subtitle = if (querySpec.circles.isNotEmpty()) "已选 ${querySpec.circles.size}" else null
-                ) {
-                    ValueChipGrid(
-                        values = circles.take(30),
-                        selected = querySpec.circles,
-                        onToggle = onToggleCircle
-                    )
-                }
-            }
-
-            item {
-                SectionCard(
-                    title = "CV",
-                    subtitle = if (querySpec.cvs.isNotEmpty()) "已选 ${querySpec.cvs.size}" else null
-                ) {
-                    ValueChipGrid(
-                        values = cvs.take(30),
-                        selected = querySpec.cvs,
-                        onToggle = onToggleCv
-                    )
-                }
-            }
-
-            item {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp, vertical = 6.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(imageVector = Icons.Rounded.Bookmark, contentDescription = null, tint = colorScheme.primary)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(text = "预设")
-                    }
-                    TextButton(onClick = { showSavePreset = true }) { Text("保存当前") }
-                }
-            }
-            items(presets, key = { it.id }) { preset ->
-                ElevatedCard(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            onApplyPreset(preset)
-                            onClose()
-                        }
-                        .padding(horizontal = 16.dp)
-                ) {
-                    ListItem(
-                        headlineContent = { Text(preset.name, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                        supportingContent = {
-                            Text(buildPresetSummary(preset.spec), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                        },
-                        trailingContent = {
-                            IconButton(onClick = { onDeletePreset(preset.id) }) {
-                                Icon(imageVector = Icons.Rounded.Delete, contentDescription = null)
-                            }
-                        }
-                    )
                 }
             }
         }
+
+        LibraryFilterBottomBar(
+            active = normalizedDraftSpec.hasActiveFilters,
+            isDirty = isDirty,
+            onClose = onClose,
+            onApply = onApply
+        )
     }
 
     if (showSavePreset) {
@@ -360,7 +363,75 @@ fun LibraryFilterSheet(
 }
 
 @Composable
-private fun SectionCard(
+private fun LibraryFilterHeader(
+    draftSpec: LibraryQuerySpec,
+    isDirty: Boolean,
+    onOpenTagManager: () -> Unit,
+    onClose: () -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Surface(
+            shape = RoundedCornerShape(8.dp),
+            color = colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.16f else 0.10f),
+            contentColor = colorScheme.primary,
+            modifier = Modifier.size(38.dp)
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(imageVector = Icons.Rounded.FilterList, contentDescription = null)
+            }
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "筛选本地库",
+                    color = colorScheme.textPrimary,
+                    style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                if (isDirty) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "未应用",
+                        color = colorScheme.primary,
+                        style = MaterialTheme.typography.labelSmall
+                    )
+                }
+            }
+            Text(
+                text = buildFilterSummary(draftSpec),
+                color = colorScheme.textSecondary,
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        IconButton(onClick = onOpenTagManager) {
+            Icon(
+                imageVector = Icons.Rounded.LocalOffer,
+                contentDescription = "管理标签",
+                tint = colorScheme.primary
+            )
+        }
+        IconButton(onClick = onClose) {
+            Icon(
+                imageVector = Icons.Rounded.Close,
+                contentDescription = "关闭筛选",
+                tint = colorScheme.textSecondary
+            )
+        }
+    }
+}
+
+@Composable
+private fun FilterSection(
     title: String,
     subtitle: String? = null,
     content: @Composable () -> Unit
@@ -373,22 +444,31 @@ private fun SectionCard(
             .padding(horizontal = 16.dp)
     ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text(text = title, color = colorScheme.textPrimary, modifier = Modifier.weight(1f))
+            Text(
+                text = title,
+                color = colorScheme.textPrimary,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                modifier = Modifier.weight(1f)
+            )
             if (!subtitle.isNullOrBlank()) {
-                Text(text = subtitle, color = colorScheme.textTertiary)
+                Text(
+                    text = subtitle,
+                    color = colorScheme.textTertiary,
+                    style = MaterialTheme.typography.labelSmall
+                )
             }
         }
         Spacer(modifier = Modifier.height(8.dp))
         Surface(
-            shape = RoundedCornerShape(20.dp),
-            tonalElevation = 1.dp,
+            shape = RoundedCornerShape(8.dp),
+            tonalElevation = 0.dp,
             color = sectionContainerColor,
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(14.dp),
+                    .padding(12.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 content()
@@ -399,173 +479,320 @@ private fun SectionCard(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun SourceChips(
+private fun SourceSelector(
     current: LibrarySourceFilter?,
     onSetSource: (LibrarySourceFilter?) -> Unit
 ) {
-    val colorScheme = AsmrTheme.colorScheme
-    val normalized = if (current == LibrarySourceFilter.Both) null else current
+    val normalized = current.takeUnless { it == LibrarySourceFilter.Both }
+    val options = listOf(
+        null to "不限",
+        LibrarySourceFilter.LocalOnly to "仅本地",
+        LibrarySourceFilter.DownloadOnly to "仅下载",
+        LibrarySourceFilter.LocalAndDownload to "本地+下载"
+    )
     FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        SourceChip(
-            label = "不限",
-            selected = normalized == null,
-            onClick = { onSetSource(null) },
-            colorScheme = colorScheme
-        )
-        SourceChip(
-            label = "仅本地",
-            selected = normalized == LibrarySourceFilter.LocalOnly,
-            onClick = { onSetSource(LibrarySourceFilter.LocalOnly) },
-            colorScheme = colorScheme
-        )
-        SourceChip(
-            label = "仅下载",
-            selected = normalized == LibrarySourceFilter.DownloadOnly,
-            onClick = { onSetSource(LibrarySourceFilter.DownloadOnly) },
-            colorScheme = colorScheme
-        )
-        SourceChip(
-            label = "本地+下载",
-            selected = normalized == LibrarySourceFilter.LocalAndDownload,
-            onClick = { onSetSource(LibrarySourceFilter.LocalAndDownload) },
-            colorScheme = colorScheme
-        )
+        options.forEach { (source, label) ->
+            FilterTokenPill(
+                text = label,
+                selected = normalized == source,
+                tone = FilterTokenTone.Source,
+                onClick = { onSetSource(source) }
+            )
+        }
     }
 }
 
 @Composable
-private fun SourceChip(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-    colorScheme: com.asmr.player.ui.theme.AsmrColorScheme
+private fun FilterSearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String
 ) {
-    FilterChip(
-        selected = selected,
-        onClick = onClick,
-        label = { Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-        colors = FilterChipDefaults.filterChipColors(
-            containerColor = colorScheme.surfaceVariant.copy(alpha = 0.42f),
-            labelColor = colorScheme.textPrimary,
-            selectedContainerColor = colorScheme.primary.copy(alpha = 0.18f),
-            selectedLabelColor = colorScheme.primary,
-            selectedLeadingIconColor = colorScheme.primary
-        ),
-        border = FilterChipDefaults.filterChipBorder(
-            enabled = true,
-            selected = selected,
-            borderColor = colorScheme.primary.copy(alpha = 0.25f),
-            selectedBorderColor = colorScheme.primary
+    val colorScheme = AsmrTheme.colorScheme
+    val shape = RoundedCornerShape(8.dp)
+
+    BasicTextField(
+        value = value,
+        onValueChange = onValueChange,
+        modifier = Modifier
+            .fillMaxWidth(),
+        singleLine = true,
+        textStyle = MaterialTheme.typography.bodySmall.copy(color = colorScheme.textPrimary),
+        cursorBrush = SolidColor(colorScheme.primary),
+        decorationBox = { innerTextField ->
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(38.dp)
+                    .clip(shape)
+                    .background(
+                        color = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.54f else 0.86f),
+                        shape = shape
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = colorScheme.onSurfaceVariant.copy(alpha = if (colorScheme.isDark) 0.24f else 0.16f),
+                        shape = shape
+                    )
+                    .padding(horizontal = 10.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Search,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                    tint = colorScheme.textTertiary
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    if (value.isEmpty()) {
+                        Text(
+                            text = placeholder,
+                            color = colorScheme.textTertiary,
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                    innerTextField()
+                }
+            }
+        }
+    )
+}
+
+private enum class FilterTokenTone {
+    Source,
+    Tag,
+    Circle,
+    Cv
+}
+
+@Composable
+private fun FilterTokenPill(
+    text: String,
+    selected: Boolean,
+    tone: FilterTokenTone,
+    onClick: () -> Unit,
+    count: Long? = null
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val shape = when (tone) {
+        FilterTokenTone.Tag -> RoundedCornerShape(7.dp)
+        FilterTokenTone.Source,
+        FilterTokenTone.Circle,
+        FilterTokenTone.Cv -> RoundedCornerShape(999.dp)
+    }
+    val tint = when (tone) {
+        FilterTokenTone.Tag -> colorScheme.textSecondary
+        FilterTokenTone.Source,
+        FilterTokenTone.Circle,
+        FilterTokenTone.Cv -> colorScheme.primary
+    }
+    val container = when {
+        selected -> colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.20f else 0.14f)
+        tone == FilterTokenTone.Tag -> colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.74f else 0.92f)
+        else -> colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.10f else 0.06f)
+    }
+    val border = when {
+        selected -> colorScheme.primary.copy(alpha = 0.46f)
+        tone == FilterTokenTone.Tag -> colorScheme.onSurfaceVariant.copy(alpha = if (colorScheme.isDark) 0.30f else 0.18f)
+        else -> colorScheme.primary.copy(alpha = 0.16f)
+    }
+    val content = if (selected) colorScheme.primary else tint
+
+    Row(
+        modifier = Modifier
+            .widthIn(max = 260.dp)
+            .clip(shape)
+            .background(container, shape)
+            .border(0.5.dp, border, shape)
+            .clickable(onClick = onClick)
+            .padding(start = 9.dp, end = if (count != null) 5.dp else 9.dp, top = 5.dp, bottom = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = text,
+            color = content,
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = if (selected) FontWeight.SemiBold else null,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
         )
+        if (count != null && count > 0L) {
+            Surface(
+                color = colorScheme.primary.copy(alpha = if (selected) 0.16f else 0.10f),
+                contentColor = content,
+                shape = RoundedCornerShape(999.dp)
+            ) {
+                Text(
+                    text = count.toString(),
+                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 1.dp),
+                    color = content,
+                    style = MaterialTheme.typography.labelSmall
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PresetSectionHeader(
+    onSavePreset: () -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(imageVector = Icons.Rounded.Bookmark, contentDescription = null, tint = colorScheme.primary)
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = "预设",
+            color = colorScheme.textPrimary,
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+            modifier = Modifier.weight(1f)
+        )
+        TextButton(onClick = onSavePreset) {
+            Text("保存草稿")
+        }
+    }
+}
+
+@Composable
+private fun EmptyFilterHint(
+    text: String,
+    modifier: Modifier = Modifier
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    Text(
+        text = text,
+        color = colorScheme.textTertiary,
+        style = MaterialTheme.typography.bodySmall,
+        modifier = modifier.padding(vertical = 4.dp)
     )
 }
 
 @Composable
-private fun TagStamp(
-    name: String,
-    count: Long,
-    isUserTag: Boolean,
-    selected: Boolean,
-    onClick: () -> Unit
+private fun LibraryFilterBottomBar(
+    active: Boolean,
+    isDirty: Boolean,
+    onClose: () -> Unit,
+    onApply: () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val tint = if (isUserTag) colorScheme.primary else colorScheme.accent
-    val bg = if (selected) tint.copy(alpha = 0.18f) else colorScheme.surfaceVariant.copy(alpha = 0.45f)
-    val border = if (selected) tint.copy(alpha = 0.45f) else tint.copy(alpha = 0.22f)
-    val nameColor = if (selected) tint else colorScheme.textPrimary
-    val countColor = if (selected) tint else tint.copy(alpha = 0.9f)
-    val countBadgeColor = if (selected) tint.copy(alpha = 0.14f) else tint.copy(alpha = 0.12f)
-    val shape = RoundedCornerShape(999.dp)
-    Row(
-        modifier = Modifier
-            .clip(shape)
-            .background(bg)
-            .border(width = 1.dp, color = border, shape = shape)
-            .clickable { onClick() }
-            .padding(start = 12.dp, end = 8.dp, top = 6.dp, bottom = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+    val containerColor = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.96f else 0.98f)
+        .compositeOver(colorScheme.background)
+    Surface(
+        color = containerColor,
+        tonalElevation = 0.dp,
+        shadowElevation = 6.dp,
+        modifier = Modifier.fillMaxWidth()
     ) {
-        Text(
-            text = name,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = nameColor,
-            style = MaterialTheme.typography.labelSmall
-        )
-        Spacer(modifier = Modifier.width(6.dp))
-        Surface(
-            color = countBadgeColor,
-            contentColor = countColor,
-            shape = RoundedCornerShape(999.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .padding(bottom = LocalBottomOverlayPadding.current),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(
-                text = count.toString(),
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                color = countColor,
-                style = MaterialTheme.typography.labelSmall
-            )
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-private fun ValueChipGrid(
-    values: List<String>,
-    selected: Set<String>,
-    onToggle: (String) -> Unit
-) {
-    val colorScheme = AsmrTheme.colorScheme
-    val ordered = remember(values, selected) {
-        values.sortedWith(
-            compareByDescending<String> { selected.contains(it) }
-                .thenBy(String.CASE_INSENSITIVE_ORDER) { it }
-        )
-    }
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        ordered.forEach { value ->
-            val isSelected = selected.contains(value)
-            FilterChip(
-                selected = isSelected,
-                onClick = { onToggle(value) },
-                label = { Text(value, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                colors = FilterChipDefaults.filterChipColors(
-                    containerColor = colorScheme.surfaceVariant.copy(alpha = 0.42f),
-                    labelColor = colorScheme.textPrimary,
-                    selectedContainerColor = colorScheme.primary.copy(alpha = 0.18f),
-                    selectedLabelColor = colorScheme.primary,
-                    selectedLeadingIconColor = colorScheme.primary
-                ),
-                border = FilterChipDefaults.filterChipBorder(
-                    enabled = true,
-                    selected = isSelected,
-                    borderColor = colorScheme.primary.copy(alpha = 0.25f),
-                    selectedBorderColor = colorScheme.primary
+            TextButton(
+                onClick = onClose,
+                modifier = Modifier.weight(1f)
+            ) {
+                Text("取消")
+            }
+            FilledTonalButton(
+                onClick = onApply,
+                modifier = Modifier.weight(2f),
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = if (active || isDirty) colorScheme.primaryContainer else colorScheme.surfaceVariant,
+                    contentColor = if (active || isDirty) colorScheme.onPrimaryContainer else colorScheme.textSecondary
                 )
-            )
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Check,
+                    contentDescription = null,
+                    modifier = Modifier.size(18.dp)
+                )
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("应用")
+            }
         }
     }
 }
 
-private fun buildPresetSummary(spec: LibraryQuerySpec): String {
-    val parts = ArrayList<String>(5)
-    val source = when (spec.source) {
+private fun LibraryQuerySpec.toggleTag(tagId: Long): LibraryQuerySpec {
+    val updated = includeTagIds.toMutableSet()
+    if (!updated.add(tagId)) updated.remove(tagId)
+    return copy(includeTagIds = updated)
+}
+
+private fun LibraryQuerySpec.toggleCircle(circle: String): LibraryQuerySpec {
+    val normalized = circle.trim()
+    if (normalized.isBlank()) return this
+    val updated = circles.toMutableSet()
+    if (!updated.add(normalized)) updated.remove(normalized)
+    return copy(circles = updated)
+}
+
+private fun LibraryQuerySpec.toggleCv(cv: String): LibraryQuerySpec {
+    val normalized = cv.trim()
+    if (normalized.isBlank()) return this
+    val updated = cvs.toMutableSet()
+    if (!updated.add(normalized)) updated.remove(normalized)
+    return copy(cvs = updated)
+}
+
+private fun List<TagWithCount>.filterByTagQuery(query: String): List<TagWithCount> {
+    val normalized = query.trim().lowercase()
+    if (normalized.isBlank()) return this
+    return filter { tag ->
+        tag.name.lowercase().contains(normalized) || tag.nameNormalized.contains(normalized)
+    }
+}
+
+private fun List<String>.filterByTextQuery(query: String): List<String> {
+    val normalized = query.trim().lowercase()
+    if (normalized.isBlank()) return this
+    return filter { it.lowercase().contains(normalized) }
+}
+
+private fun selectedCountText(count: Int): String? {
+    return if (count > 0) "已选 $count" else null
+}
+
+private fun sourceLabel(source: LibrarySourceFilter?): String {
+    return when (source) {
         LibrarySourceFilter.LocalOnly -> "仅本地"
         LibrarySourceFilter.DownloadOnly -> "仅下载"
         LibrarySourceFilter.LocalAndDownload -> "本地+下载"
-        LibrarySourceFilter.Both -> "不限来源"
-        null -> "不限来源"
+        LibrarySourceFilter.Both,
+        null -> "不限"
     }
-    parts.add(source)
-    if (!spec.textQuery.isNullOrBlank()) parts.add("搜索")
+}
+
+private fun buildFilterSummary(spec: LibraryQuerySpec): String {
+    if (!spec.hasActiveFilters) return "未选择筛选条件"
+    val parts = ArrayList<String>(4)
+    spec.source?.takeUnless { it == LibrarySourceFilter.Both }?.let { parts.add(sourceLabel(it)) }
     if (spec.includeTagIds.isNotEmpty()) parts.add("标签 ${spec.includeTagIds.size}")
     if (spec.circles.isNotEmpty()) parts.add("社团 ${spec.circles.size}")
     if (spec.cvs.isNotEmpty()) parts.add("CV ${spec.cvs.size}")
+    if (spec.excludeTagIds.isNotEmpty()) parts.add("排除标签 ${spec.excludeTagIds.size}")
     return parts.joinToString(" · ")
+}
+
+private fun buildPresetSummary(spec: LibraryQuerySpec): String {
+    return buildFilterSummary(spec.filterOnly())
 }

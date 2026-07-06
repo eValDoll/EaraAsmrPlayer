@@ -231,12 +231,46 @@ class SearchScreenChromeTest {
         composeRule.onNodeWithText("最新发售").assertExists()
         composeRule.onNodeWithText("最新收录").assertExists()
         composeRule.onNodeWithText("评分最高").assertExists()
+        composeRule.onNodeWithTag("${SEARCH_COLLECTED_SORT_OPTION_TAG_PREFIX}_${SearchCollectedSortOption.ReleaseNew.name}").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)
+        )
+        composeRule.onNodeWithTag("${SEARCH_COLLECTED_SORT_OPTION_TAG_PREFIX}_${SearchCollectedSortOption.CollectedNew.name}").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.Selected, false)
+        )
         composeRule.onAllNodesWithText("时长最长").assertCountEquals(0)
         composeRule.onNodeWithText("最新收录").performClick()
 
         composeRule.runOnIdle {
             assertEquals(SearchCollectedSortOption.CollectedNew, selectedSort)
         }
+    }
+
+    @Test
+    fun languageMenu_marksCurrentLocaleSelected() {
+        composeRule.setContent {
+            AsmrPlayerTheme {
+                SearchToolbar(
+                    keyword = "",
+                    onKeywordChange = {},
+                    selectedFilter = SearchFilterOption.Trend,
+                    selectedLocale = "zh_CN",
+                    filterControlsLocked = false,
+                    searchSubmitLocked = false,
+                    showSearchSpinner = false,
+                    onSearchSubmit = {},
+                    onFilterSelected = {},
+                    onLocaleSelected = {}
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(SEARCH_LANGUAGE_BUTTON_TAG).performClick()
+        composeRule.onNodeWithTag("${SEARCH_LANGUAGE_OPTION_TAG_PREFIX}_zh_CN").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)
+        )
+        composeRule.onNodeWithTag("${SEARCH_LANGUAGE_OPTION_TAG_PREFIX}_ja_JP").assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.Selected, false)
+        )
     }
 
     @Test
