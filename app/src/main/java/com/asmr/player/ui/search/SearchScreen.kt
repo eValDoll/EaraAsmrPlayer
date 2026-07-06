@@ -81,6 +81,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.compositeOver
@@ -150,6 +151,7 @@ private val SearchPageHorizontalPadding = 8.dp
 private const val SearchPullNextPageDragResistance = 0.82f
 private const val SearchPullNextPageFollowRatio = 0.84f
 private const val SearchPullStretchExtraRatio = 0.28f
+private const val SearchPullNextPageVerticalBias = 1.25f
 private val SearchPullNextPageTriggerDistance = 96.dp
 private val SearchPullNextPageMaxDistance = 172.dp
 private val SearchPullNextPageMaxLift = 108.dp
@@ -696,8 +698,11 @@ fun SearchScreen(
                                 awaitEachGesture {
                                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                                     var trackedPointerId = down.id
-                                    var previousY = down.position.y
+                                    var previousPosition = down.position
+                                    var dragFromDown = Offset.Zero
                                     var pullNextGestureActive = false
+                                    var horizontalGestureActive = false
+                                    val touchSlop = viewConfiguration.touchSlop
                                     do {
                                         val event = awaitPointerEvent(PointerEventPass.Initial)
                                         val change =
@@ -705,21 +710,42 @@ fun SearchScreen(
                                                 ?: event.changes.firstOrNull()
                                         if (change != null) {
                                             trackedPointerId = change.id
-                                            val deltaY = change.position.y - previousY
-                                            previousY = change.position.y
+                                            val positionDelta = change.position - previousPosition
+                                            previousPosition = change.position
+                                            if (!pullNextGestureActive && !horizontalGestureActive) {
+                                                dragFromDown += positionDelta
+                                                val isPastTouchSlop = dragFromDown.getDistance() > touchSlop
+                                                if (isPastTouchSlop) {
+                                                    horizontalGestureActive =
+                                                        dragFromDown.x.absoluteValue >=
+                                                            dragFromDown.y.absoluteValue * SearchPullNextPageVerticalBias
+                                                    pullNextGestureActive =
+                                                        !horizontalGestureActive &&
+                                                            dragFromDown.y < 0f &&
+                                                            dragFromDown.y.absoluteValue >=
+                                                            dragFromDown.x.absoluteValue * SearchPullNextPageVerticalBias &&
+                                                            latestIsAtBottom.value &&
+                                                            latestPullNextPageEnabled.value
+                                                    if (pullNextGestureActive) {
+                                                        latestHorizontalPagerScrollLockChanged.value(true)
+                                                    }
+                                                }
+                                            }
+                                            val deltaY = positionDelta.y
                                             when {
+                                                horizontalGestureActive -> Unit
+
                                                 !latestPullNextPageEnabled.value -> {
                                                     if (pullNextPageDragPx != 0f) {
                                                         pullNextPageDragPx = 0f
                                                     }
                                                 }
 
-                                                deltaY < 0f && latestIsAtBottom.value -> {
+                                                deltaY < 0f && latestIsAtBottom.value && pullNextGestureActive -> {
                                                     val delta = (-deltaY) * SearchPullNextPageDragResistance
                                                     pullNextPageDragPx =
                                                         (pullNextPageDragPx + delta)
                                                             .coerceIn(0f, latestPullNextPageMaxDistancePx.value)
-                                                    pullNextGestureActive = true
                                                     latestHorizontalPagerScrollLockChanged.value(true)
                                                     change.consume()
                                                 }
