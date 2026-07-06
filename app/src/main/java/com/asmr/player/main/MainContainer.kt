@@ -12,6 +12,7 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -241,6 +242,7 @@ internal data class BatchPlaylistPickerRequest(
 
 private const val SecondaryPageEnterDurationMs = 440
 private const val SecondaryPageExitDurationMs = 420
+private const val PrimaryPagerSnapThreshold = 0.16f
 private val SecondaryPageSlideEasing = CubicBezierEasing(0.215f, 0.61f, 0.355f, 1f)
 private val AlbumDetailTopBarButtonShape = CircleShape
 
@@ -547,6 +549,10 @@ fun MainContainer(
     val primaryPagerState = rememberPagerState(
         initialPage = initialPrimaryPage,
         pageCount = { primaryPagerRoutes.size }
+    )
+    val primaryPagerFlingBehavior = PagerDefaults.flingBehavior(
+        state = primaryPagerState,
+        snapPositionalThreshold = PrimaryPagerSnapThreshold
     )
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -1635,6 +1641,7 @@ fun MainContainer(
                                         .fillMaxSize()
                                         .padding(top = pagerTopContentPadding),
                                     beyondBoundsPageCount = primaryPagerBeyondBoundsPageCount,
+                                    flingBehavior = primaryPagerFlingBehavior,
                                     userScrollEnabled = !primaryPagerScrollLocked && !hasOverlayRoute,
                                     key = { primaryPagerRoutes[it] }
                                 ) { page ->
