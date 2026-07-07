@@ -64,6 +64,60 @@ class AlbumDetailOneStateTest {
     }
 
     @Test
+    fun canUseAsmrOneOnlineTreeActions_ignoresDlsiteTargetState() {
+        assertTrue(
+            canUseAsmrOneOnlineTreeActions(
+                selectedTab = 1,
+                hasAsmrOneTree = true
+            )
+        )
+        assertFalse(
+            canUseAsmrOneOnlineTreeActions(
+                selectedTab = 1,
+                hasAsmrOneTree = false
+            )
+        )
+        assertFalse(
+            canUseAsmrOneOnlineTreeActions(
+                selectedTab = 2,
+                hasAsmrOneTree = true
+            )
+        )
+    }
+
+    @Test
+    fun albumHeaderDownloadEnabled_enablesOneWhenTreeLoadedBeforeDlsiteTarget() {
+        assertTrue(
+            albumHeaderDownloadEnabled(
+                selectedTab = 1,
+                hasAsmrOneTree = true,
+                hasDlsitePlayTree = false,
+                hasResolvedInitialDlsiteTarget = false
+            )
+        )
+    }
+
+    @Test
+    fun albumHeaderDownloadEnabled_keepsDlsitePlayBehindResolvedTarget() {
+        assertFalse(
+            albumHeaderDownloadEnabled(
+                selectedTab = 2,
+                hasAsmrOneTree = true,
+                hasDlsitePlayTree = true,
+                hasResolvedInitialDlsiteTarget = false
+            )
+        )
+        assertTrue(
+            albumHeaderDownloadEnabled(
+                selectedTab = 2,
+                hasAsmrOneTree = false,
+                hasDlsitePlayTree = true,
+                hasResolvedInitialDlsiteTarget = true
+            )
+        )
+    }
+
+    @Test
     fun shouldShowDlsitePlayDirectoryLoading_waitsForInitialTargetBeforeEmptyState() {
         assertTrue(
             shouldShowDlsitePlayDirectoryLoading(

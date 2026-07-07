@@ -264,6 +264,26 @@ internal fun albumDetailOnlineLoadPlan(
     }
 }
 
+internal fun canUseAsmrOneOnlineTreeActions(
+    selectedTab: Int,
+    hasAsmrOneTree: Boolean
+): Boolean {
+    return selectedTab == 1 && hasAsmrOneTree
+}
+
+internal fun albumHeaderDownloadEnabled(
+    selectedTab: Int,
+    hasAsmrOneTree: Boolean,
+    hasDlsitePlayTree: Boolean,
+    hasResolvedInitialDlsiteTarget: Boolean
+): Boolean {
+    return when (selectedTab) {
+        1 -> canUseAsmrOneOnlineTreeActions(selectedTab, hasAsmrOneTree)
+        2 -> hasResolvedInitialDlsiteTarget && hasDlsitePlayTree
+        else -> false
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AlbumDetailScreen(
@@ -587,7 +607,10 @@ fun AlbumDetailScreen(
                         val headerContent: @Composable (Int) -> Unit = { tab ->
                             val isLocalTab = tab == 0
                             val resolvedInitialTarget = model.hasResolvedInitialDlsiteTarget
-                            val canSaveOnlineForTab = tab == 1 && resolvedInitialTarget && asmrOneTree.isNotEmpty()
+                            val canUseAsmrOneTreeActions = canUseAsmrOneOnlineTreeActions(
+                                selectedTab = tab,
+                                hasAsmrOneTree = asmrOneTree.isNotEmpty()
+                            )
                             val headerAlbum = headerAlbumForTab(tab)
                             val headerDlsiteEditions = if (isLocalTab) {
                                 emptyList()
@@ -610,7 +633,7 @@ fun AlbumDetailScreen(
                                 dlsiteEditions = headerDlsiteEditions,
                                 dlsiteSelectedLang = model.dlsiteSelectedLang,
                                 onDlsiteLangSelected = { viewModel.selectDlsiteLanguage(it) },
-                                canSaveOnline = canSaveOnlineForTab,
+                                canSaveOnline = canUseAsmrOneTreeActions,
                                 onDownloadClick = {
                                     downloadSource = if (tab == 2) {
                                         OnlineDownloadSource.DlsitePlay
@@ -626,13 +649,14 @@ fun AlbumDetailScreen(
                                 onSaveClick = {
                                     showOnlineSaveDialog = true
                                 },
-                                downloadEnabled = when (tab) {
-                                    1 -> resolvedInitialTarget && asmrOneTree.isNotEmpty()
-                                    2 -> resolvedInitialTarget && model.dlsitePlayTree.isNotEmpty()
-                                    else -> false
-                                },
+                                downloadEnabled = albumHeaderDownloadEnabled(
+                                    selectedTab = tab,
+                                    hasAsmrOneTree = asmrOneTree.isNotEmpty(),
+                                    hasDlsitePlayTree = model.dlsitePlayTree.isNotEmpty(),
+                                    hasResolvedInitialDlsiteTarget = resolvedInitialTarget
+                                ),
                                 losslessDownloadEnabled = tab == 2 && resolvedInitialTarget && model.dlsitePlayTree.isNotEmpty(),
-                                saveEnabled = canSaveOnlineForTab,
+                                saveEnabled = canUseAsmrOneTreeActions,
                                 showGroupButton = isLocalTab && model.localAlbum != null,
                                 onOpenGroupPicker = onOpenGroupPicker,
                                 introSessionKey = introSessionKey,
@@ -883,7 +907,10 @@ fun AlbumDetailScreen(
                     }
                 }
 
-                val canSaveOnline = selectedTab == 1 && model.hasResolvedInitialDlsiteTarget && asmrOneTree.isNotEmpty()
+                val canSaveOnline = canUseAsmrOneOnlineTreeActions(
+                    selectedTab = selectedTab,
+                    hasAsmrOneTree = asmrOneTree.isNotEmpty()
+                )
                 if (showAsmrDownloadDialog) {
                     val downloadTree = when (downloadSource) {
                         OnlineDownloadSource.AsmrOne -> asmrOneTree
