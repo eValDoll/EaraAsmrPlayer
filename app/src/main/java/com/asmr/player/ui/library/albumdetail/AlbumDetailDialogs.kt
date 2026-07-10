@@ -186,41 +186,31 @@ internal fun AsmrOneDownloadDialog(
     ) {
         AlbumDetailPickerSheetSurface {
             Column(modifier = Modifier.fillMaxSize()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 6.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onDismiss) {
-                        Icon(imageVector = Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
-                    }
-                    Text(
-                        text = "选择要下载的文件",
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    TextButton(
-                        onClick = { onConfirm(selected.toSet()) },
-                        enabled = leafPaths.isNotEmpty() && selected.isNotEmpty()
-                    ) { Text("开始下载") }
-                }
+                AlbumDetailSelectionSheetTopBar(
+                    title = "选择要下载的文件",
+                    confirmText = "开始下载",
+                    confirmIcon = Icons.Rounded.Download,
+                    confirmEnabled = leafPaths.isNotEmpty() && selected.isNotEmpty(),
+                    onDismiss = onDismiss,
+                    onConfirm = { onConfirm(selected.toSet()) }
+                )
 
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                        .padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(albumTitle, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedButton(onClick = {
+                    AlbumDetailSelectionSummary(
+                        albumTitle = albumTitle,
+                        selectedCount = selected.size,
+                        totalCount = leafPaths.size,
+                        onSelectAll = {
                             selected.clear()
                             selected.addAll(leafPaths)
-                        }) { Text("全选") }
-                        OutlinedButton(onClick = { selected.clear() }) { Text("全不选") }
-                    }
+                        },
+                        onClearSelection = { selected.clear() }
+                    )
                     if (leafPaths.isEmpty()) {
                         Box(
                             modifier = Modifier
@@ -234,7 +224,8 @@ internal fun AsmrOneDownloadDialog(
                         val entries = flattenAsmrOneTreeForUi(mediaTree, expanded.toSet()).entries
                         LazyColumn(
                             state = listState,
-                            modifier = Modifier.fillMaxSize().thinScrollbar(listState)
+                            modifier = Modifier.fillMaxSize().thinScrollbar(listState),
+                            contentPadding = PaddingValues(vertical = 2.dp)
                         ) {
                             itemsIndexed(items = entries, key = { _, it -> it.path }) { index, entry ->
                                 when (entry) {
@@ -285,9 +276,9 @@ internal fun AsmrOneDownloadDialog(
                                 }
                                 if (index < entries.size - 1) {
                                     HorizontalDivider(
-                                        modifier = Modifier.padding(horizontal = 16.dp),
+                                        modifier = Modifier.padding(horizontal = 8.dp),
                                         thickness = 0.5.dp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.14f)
                                     )
                                 }
                             }
@@ -444,41 +435,31 @@ internal fun OnlineSaveDialog(
     ) {
         AlbumDetailPickerSheetSurface {
             Column(modifier = Modifier.fillMaxSize()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 6.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(onClick = onDismiss) {
-                        Icon(imageVector = Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
-                    }
-                    Text(
-                        text = "选择要保存的文件",
-                        modifier = Modifier.weight(1f),
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    TextButton(
-                        onClick = { onConfirm(selected.toSet()) },
-                        enabled = leaves.isNotEmpty() && selected.isNotEmpty()
-                    ) { Text("保存到本地库") }
-                }
+                AlbumDetailSelectionSheetTopBar(
+                    title = "选择要保存的文件",
+                    confirmText = "保存到本地库",
+                    confirmIcon = Icons.Rounded.SaveAlt,
+                    confirmEnabled = leaves.isNotEmpty() && selected.isNotEmpty(),
+                    onDismiss = onDismiss,
+                    onConfirm = { onConfirm(selected.toSet()) }
+                )
 
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                        .padding(horizontal = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(albumTitle, style = MaterialTheme.typography.bodyMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        OutlinedButton(onClick = {
+                    AlbumDetailSelectionSummary(
+                        albumTitle = albumTitle,
+                        selectedCount = selected.size,
+                        totalCount = leaves.size,
+                        onSelectAll = {
                             selected.clear()
                             selected.addAll(leaves.map { it.relativePath })
-                        }) { Text("全选") }
-                        OutlinedButton(onClick = { selected.clear() }) { Text("全不选") }
-                    }
+                        },
+                        onClearSelection = { selected.clear() }
+                    )
                     if (leaves.isEmpty()) {
                         Box(
                             modifier = Modifier
@@ -492,7 +473,8 @@ internal fun OnlineSaveDialog(
                         val entries = flattenAsmrOneSaveTreeForUi(trackTree, expanded.toSet()).entries
                         LazyColumn(
                             state = listState,
-                            modifier = Modifier.fillMaxSize().thinScrollbar(listState)
+                            modifier = Modifier.fillMaxSize().thinScrollbar(listState),
+                            contentPadding = PaddingValues(vertical = 2.dp)
                         ) {
                             itemsIndexed(items = entries, key = { _, it -> it.path }) { index, entry ->
                                 when (entry) {
@@ -543,9 +525,9 @@ internal fun OnlineSaveDialog(
                                 }
                                 if (index < entries.size - 1) {
                                     HorizontalDivider(
-                                        modifier = Modifier.padding(horizontal = 16.dp),
+                                        modifier = Modifier.padding(horizontal = 8.dp),
                                         thickness = 0.5.dp,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.14f)
                                     )
                                 }
                             }
@@ -559,6 +541,108 @@ internal fun OnlineSaveDialog(
 }
 
 @Composable
+private fun AlbumDetailSelectionSheetTopBar(
+    title: String,
+    confirmText: String,
+    confirmIcon: ImageVector,
+    confirmEnabled: Boolean,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 6.dp, end = 12.dp, top = 8.dp, bottom = 6.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        IconButton(onClick = onDismiss) {
+            Icon(imageVector = Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
+        }
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
+        )
+        Button(
+            onClick = onConfirm,
+            enabled = confirmEnabled,
+            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
+            modifier = Modifier.height(40.dp)
+        ) {
+            Icon(imageVector = confirmIcon, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(6.dp))
+            Text(confirmText, maxLines = 1)
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
+private fun AlbumDetailSelectionSummary(
+    albumTitle: String,
+    selectedCount: Int,
+    totalCount: Int,
+    onSelectAll: () -> Unit,
+    onClearSelection: () -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(14.dp),
+        color = colorScheme.surface.copy(alpha = 0.58f),
+        tonalElevation = 1.dp
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = albumTitle,
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = colorScheme.textPrimary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "已选 $selectedCount / $totalCount",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colorScheme.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                CompositionLocalProvider(LocalMinimumInteractiveComponentEnforcement provides false) {
+                    OutlinedButton(
+                        onClick = onSelectAll,
+                        enabled = totalCount > 0 && selectedCount < totalCount,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Text("全选", style = MaterialTheme.typography.labelMedium)
+                    }
+                    OutlinedButton(
+                        onClick = onClearSelection,
+                        enabled = selectedCount > 0,
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+                        modifier = Modifier.height(30.dp)
+                    ) {
+                        Text("全不选", style = MaterialTheme.typography.labelMedium)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun AsmrTreeFolderCheckboxRow(
     title: String,
     depth: Int,
@@ -570,22 +654,28 @@ private fun AsmrTreeFolderCheckboxRow(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 2.dp),
-        shape = RoundedCornerShape(10.dp),
+            .padding(horizontal = 4.dp),
+        shape = RoundedCornerShape(8.dp),
         color = Color.Transparent
     ) {
         Row(
             modifier = Modifier
-                .padding(start = (2 + depth * 14).dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                .padding(start = (depth * 12).dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            TriStateCheckbox(state = toggleState, onClick = onToggleCheck)
-            Spacer(modifier = Modifier.width(4.dp))
-            IconButton(onClick = onToggleExpand, modifier = Modifier.size(32.dp)) {
+            CompositionLocalProvider(LocalMinimumInteractiveComponentEnforcement provides false) {
+                TriStateCheckbox(
+                    state = toggleState,
+                    onClick = onToggleCheck,
+                    modifier = Modifier.size(30.dp)
+                )
+            }
+            IconButton(onClick = onToggleExpand, modifier = Modifier.size(28.dp)) {
                 Icon(
                     imageVector = if (expanded) Icons.Rounded.KeyboardArrowDown else Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.size(20.dp)
                 )
             }
             Text(
@@ -593,13 +683,14 @@ private fun AsmrTreeFolderCheckboxRow(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f),
-                style = MaterialTheme.typography.bodyMedium
+                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
             )
         }
     }
 }
 
 @Composable
+@OptIn(ExperimentalMaterial3Api::class)
 private fun AsmrTreeFileCheckboxRow(
     title: String,
     depth: Int,
@@ -613,40 +704,46 @@ private fun AsmrTreeFileCheckboxRow(
     Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 8.dp, vertical = 2.dp),
-        shape = RoundedCornerShape(10.dp),
+            .padding(horizontal = 4.dp),
+        shape = RoundedCornerShape(8.dp),
         color = Color.Transparent
     ) {
         Row(
             modifier = Modifier
-                .padding(start = (38 + depth * 14).dp, end = 4.dp, top = 4.dp, bottom = 4.dp),
+                .padding(start = (depth * 12).dp, end = 6.dp, top = 3.dp, bottom = 3.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Checkbox(checked = checked, onCheckedChange = onCheckedChange)
-            Spacer(modifier = Modifier.width(8.dp))
+            CompositionLocalProvider(LocalMinimumInteractiveComponentEnforcement provides false) {
+                Checkbox(
+                    checked = checked,
+                    onCheckedChange = onCheckedChange,
+                    modifier = Modifier.size(30.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(4.dp))
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = iconTint,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(20.dp)
             )
-            Spacer(modifier = Modifier.width(10.dp))
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = title,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = colorScheme.textPrimary,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
-                )
-                Text(
-                    text = fileTypeLabel(fileType),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    color = colorScheme.textSecondary,
-                    style = MaterialTheme.typography.labelSmall
-                )
-            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = title,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = colorScheme.textPrimary,
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = fileTypeLabel(fileType),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = colorScheme.textSecondary,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier.widthIn(max = 56.dp)
+            )
         }
     }
 }
