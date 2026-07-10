@@ -718,6 +718,10 @@ fun AlbumDetailScreen(
                                 }
                             }
 
+                            val asmrOneTreeStableRj = model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()
+                            val asmrOneTreeStateKey = "tree:asmrOne:$asmrOneTreeStableRj"
+                            val asmrOneScrollStateKey = "scroll:$asmrOneTreeStateKey"
+
                             Box(
                                 modifier = Modifier
                                     .align(Alignment.TopCenter)
@@ -847,18 +851,17 @@ fun AlbumDetailScreen(
                                         },
                                         onPreviewImages = { request -> imagePreviewRequest = request },
                                         onPreviewFile = { onlinePreviewFile = it },
-                                        treeStateKey = "tree:asmrOne:${model.rjCode.trim().uppercase()}",
-                                        initialCurrentPath = viewModel.getTreeCurrentPath("tree:asmrOne:${model.rjCode.trim().uppercase()}"),
+                                        treeStateKey = asmrOneTreeStateKey,
+                                        initialCurrentPath = viewModel.getTreeCurrentPath(asmrOneTreeStateKey),
                                         topContentPadding = 0.dp,
                                         chromeState = tabChromeState,
                                         animateIntro = shouldPlayInitialAnimations,
                                         onPersistCurrentPath = { path ->
-                                            val rj = model.rjCode.trim().uppercase()
-                                            viewModel.persistTreeCurrentPath("tree:asmrOne:$rj", path)
+                                            viewModel.persistTreeCurrentPath(asmrOneTreeStateKey, path)
                                         },
-                                        initialScroll = viewModel.getListScrollPosition("scroll:tree:asmrOne:${model.rjCode.trim().uppercase()}"),
+                                        initialScroll = viewModel.getListScrollPosition(asmrOneScrollStateKey),
                                         onPersistScroll = { index, offset ->
-                                            viewModel.persistListScrollPosition("scroll:tree:asmrOne:${model.rjCode.trim().uppercase()}", index, offset)
+                                            viewModel.persistListScrollPosition(asmrOneScrollStateKey, index, offset)
                                         },
                                         dlsiteRecommendations = model.dlsiteRecommendations,
                                         onOpenAlbumByRj = onOpenAlbumByRj,

@@ -27,6 +27,14 @@ class AlbumDetailOneStateTest {
         assertFalse(
             shouldShowAsmrOneDirectoryLoading(
                 isAwaitingAsmrOneLoad = false,
+                isLoadingAsmrOne = true,
+                hasAsmrOneTree = true,
+                hasDirectoryBrowser = true
+            )
+        )
+        assertFalse(
+            shouldShowAsmrOneDirectoryLoading(
+                isAwaitingAsmrOneLoad = false,
                 isLoadingAsmrOne = false,
                 hasAsmrOneTree = false,
                 hasDirectoryBrowser = false
@@ -152,6 +160,19 @@ class AlbumDetailOneStateTest {
                 isLoadingDlsitePlay = false,
                 hasDlsitePlayTree = true,
                 hasDirectoryBrowser = false
+            )
+        )
+    }
+
+    @Test
+    fun shouldShowDlsitePlayDirectoryLoading_keepsVisibleTreeDuringBackgroundLoad() {
+        assertFalse(
+            shouldShowDlsitePlayDirectoryLoading(
+                isAwaitingInitialTarget = false,
+                hasResolvedDlsitePlayContent = true,
+                isLoadingDlsitePlay = true,
+                hasDlsitePlayTree = true,
+                hasDirectoryBrowser = true
             )
         )
     }
