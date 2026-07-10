@@ -1290,7 +1290,12 @@ fun MainContainer(
             )
         }
         val useLargeBottomChrome = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && !isPhone
-        val bottomOverlayPadding = bottomChromeOverlayHeight(useLargeBottomChrome)
+        val navigationBarBottomPadding = StableWindowInsets.navigationBars
+            .only(WindowInsetsSides.Bottom)
+            .asPaddingValues()
+            .calculateBottomPadding()
+        val bottomChromeBottomPadding = 24.dp + navigationBarBottomPadding
+        val bottomOverlayPadding = bottomChromeOverlayHeight(useLargeBottomChrome) + navigationBarBottomPadding
         CompositionLocalProvider(
             LocalBottomOverlayPadding provides bottomOverlayPadding,
             LocalRightPanelExpandedState provides rightPanelExpandedState
@@ -2288,7 +2293,7 @@ fun MainContainer(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .graphicsLayer { clip = false }
-                        .padding(start = bottomChromeHorizontalPadding, bottom = 24.dp)
+                        .padding(start = bottomChromeHorizontalPadding, bottom = bottomChromeBottomPadding)
                         .width(chromeWidth)
                 ) {
                     PrimaryBottomChrome(
