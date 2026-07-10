@@ -1159,6 +1159,8 @@ class AlbumDetailViewModel @Inject constructor(
                     val targetWorkno = resolvedTarget.workno.trim().uppercase()
                     val targetChanged = targetWorkno.isNotBlank() &&
                         !targetWorkno.equals(latestResolved.rjCode.trim().uppercase(), ignoreCase = true)
+                    val keepAsmrOneContentDuringTargetSwitch = targetChanged &&
+                        latestResolved.asmrOneTree.isNotEmpty()
                     if (targetChanged) {
                         asmrOneLoadToken++
                         asmrOneAttemptedRj.clear()
@@ -1178,9 +1180,21 @@ class AlbumDetailViewModel @Inject constructor(
                         dlsiteSelectedLang = resolvedTarget.selectedLang,
                         hasResolvedInitialDlsiteTarget = true,
                         hasResolvedAsmrOneContent = if (targetChanged) false else latestResolved.hasResolvedAsmrOneContent,
-                        asmrOneWorkId = if (targetChanged) null else latestResolved.asmrOneWorkId,
-                        asmrOneSite = if (targetChanged) null else latestResolved.asmrOneSite,
-                        asmrOneTree = if (targetChanged) emptyList() else latestResolved.asmrOneTree,
+                        asmrOneWorkId = if (targetChanged && !keepAsmrOneContentDuringTargetSwitch) {
+                            null
+                        } else {
+                            latestResolved.asmrOneWorkId
+                        },
+                        asmrOneSite = if (targetChanged && !keepAsmrOneContentDuringTargetSwitch) {
+                            null
+                        } else {
+                            latestResolved.asmrOneSite
+                        },
+                        asmrOneTree = if (targetChanged && !keepAsmrOneContentDuringTargetSwitch) {
+                            emptyList()
+                        } else {
+                            latestResolved.asmrOneTree
+                        },
                         isLoadingDlsite = true,
                         isLoadingAsmrOne = if (targetChanged) false else latestResolved.isLoadingAsmrOne,
                         isLoadingDlsiteTrial = false
@@ -1470,12 +1484,7 @@ class AlbumDetailViewModel @Inject constructor(
     fun ensureAsmrOneLoaded() {
         val current = _uiState.value as? AlbumDetailUiState.Success ?: return
         val keyRj = current.model.rjCode.trim().uppercase()
-        if (current.model.asmrOneTree.isNotEmpty()) {
-            if (!current.model.hasResolvedAsmrOneContent) {
-                _uiState.value = AlbumDetailUiState.Success(
-                    model = current.model.copy(hasResolvedAsmrOneContent = true)
-                )
-            }
+        if (current.model.asmrOneTree.isNotEmpty() && current.model.hasResolvedAsmrOneContent) {
             return
         }
         if (
