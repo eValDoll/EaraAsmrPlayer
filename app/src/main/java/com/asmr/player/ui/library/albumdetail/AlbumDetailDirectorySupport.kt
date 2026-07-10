@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.library
+package com.asmr.player.ui.library
 
 import android.content.Intent
 import android.net.Uri
@@ -24,6 +24,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -2386,7 +2387,8 @@ internal fun DirectoryFolderRow(
 internal fun CompactDirectoryBreadcrumbContentV3(
     currentPath: String,
     breadcrumbs: List<DirectoryBreadcrumbSegment>,
-    onNavigate: (String) -> Unit
+    onNavigate: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val displayedCrumbs = remember(breadcrumbs) {
@@ -2400,11 +2402,11 @@ internal fun CompactDirectoryBreadcrumbContentV3(
         }
     }
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 14.dp),
+            .padding(horizontal = 10.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(6.dp)
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         CompactBreadcrumbNode(
             text = "根目录",
@@ -2446,11 +2448,11 @@ internal fun DirectoryFolderRowV3(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .defaultMinSize(minHeight = 56.dp)
+            .defaultMinSize(minHeight = 42.dp)
             .clip(directoryFolderShape(position))
             .background(colorScheme.primary.copy(alpha = 0.08f))
             .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 12.dp),
+            .padding(horizontal = 12.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(
@@ -2557,8 +2559,7 @@ internal fun DirectoryBatchBarEmbeddedV5(
     val hasMediaItems = mediaItems.isNotEmpty()
     Row(
         modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
@@ -2568,7 +2569,10 @@ internal fun DirectoryBatchBarEmbeddedV5(
         ) {
             Text(
                 text = summaryText,
-                style = MaterialTheme.typography.titleSmall.copy(lineHeight = 18.sp),
+                style = MaterialTheme.typography.labelLarge.copy(
+                    fontWeight = FontWeight.SemiBold,
+                    lineHeight = 16.sp
+                ),
                 color = AsmrTheme.colorScheme.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
@@ -2698,6 +2702,11 @@ internal fun DirectoryBrowserPanelV4(
     val fixedHeight = remember(screenHeight) {
         (screenHeight * 0.48f).coerceIn(240.dp, 460.dp)
     }
+    val colorScheme = AsmrTheme.colorScheme
+    val headerSectionColor = colorScheme.primarySoft.copy(alpha = if (colorScheme.isDark) 0.14f else 0.22f)
+    val actionSectionColor = colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.24f else 0.42f)
+    val listSectionColor = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.28f else 0.62f)
+    val sectionDividerColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f)
 
     LaunchedEffect(panelKey, currentPath) {
         browserListState.scrollToItem(0)
@@ -2706,27 +2715,38 @@ internal fun DirectoryBrowserPanelV4(
     Surface(
         shape = RoundedCornerShape(DirectoryBrowserPanelCornerRadius),
         tonalElevation = 1.dp,
-        color = AsmrTheme.colorScheme.surface.copy(alpha = 0.44f),
+        color = colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.28f else 0.46f),
+        border = BorderStroke(
+            width = 0.5.dp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f)
+        ),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = AlbumDetailHorizontalPadding, vertical = DirectoryBrowserPanelVerticalPadding)
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(listSectionColor)
+        ) {
             CompactDirectoryBreadcrumbContentV3(
                 currentPath = currentPath,
                 breadcrumbs = breadcrumbs,
-                onNavigate = onNavigate
+                onNavigate = onNavigate,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(headerSectionColor)
             )
             HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 12.dp),
                 thickness = 0.5.dp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+                color = sectionDividerColor
             )
             Row(
                 modifier = dlsiteSectionRevealModifier(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                        .background(actionSectionColor)
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
                     enabled = animateIntro
                 ),
                 verticalAlignment = Alignment.CenterVertically,
@@ -2744,8 +2764,8 @@ internal fun DirectoryBrowserPanelV4(
                 )
                 if (onTogglePreferredPath != null && !selectionMode) {
                     val preferredIcon = if (isPreferredPath) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder
-                    val preferredTextColor = if (isPreferredPath) AsmrTheme.colorScheme.primary else AsmrTheme.colorScheme.textSecondary
-                    val preferredContainerColor = AsmrTheme.colorScheme.primary.copy(alpha = if (AsmrTheme.colorScheme.isDark) 0.24f else 0.14f)
+                    val preferredTextColor = if (isPreferredPath) colorScheme.primary else colorScheme.textSecondary
+                    val preferredContainerColor = colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.22f else 0.12f)
                     val preferredButton: @Composable (@Composable () -> Unit) -> Unit = { content ->
                         if (isPreferredPath) {
                             FilledTonalButton(
@@ -2757,8 +2777,8 @@ internal fun DirectoryBrowserPanelV4(
                                     containerColor = preferredContainerColor,
                                     contentColor = preferredTextColor
                                 ),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                                modifier = Modifier.height(34.dp)
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                modifier = Modifier.height(30.dp)
                             ) { content() }
                         } else {
                             TextButton(
@@ -2769,8 +2789,8 @@ internal fun DirectoryBrowserPanelV4(
                                 colors = ButtonDefaults.textButtonColors(
                                     contentColor = preferredTextColor
                                 ),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                                modifier = Modifier.height(34.dp)
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
+                                modifier = Modifier.height(30.dp)
                             ) { content() }
                         }
                     }
@@ -2791,9 +2811,8 @@ internal fun DirectoryBrowserPanelV4(
                 }
             }
             HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 12.dp),
                 thickness = 0.5.dp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+                color = sectionDividerColor
             )
             LazyColumn(
                 state = browserListState,
@@ -2802,71 +2821,71 @@ internal fun DirectoryBrowserPanelV4(
                     .height(fixedHeight)
                     .nestedScroll(listNestedScrollConnection)
                     .thinScrollbar(browserListState),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp)
             ) {
-                if (folders.isEmpty() && files.isEmpty()) {
-                    item(key = "empty") {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(fixedHeight - 24.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = emptyText,
-                                color = AsmrTheme.colorScheme.textSecondary
+                    if (folders.isEmpty() && files.isEmpty()) {
+                        item(key = "empty") {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(fixedHeight - 24.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = emptyText,
+                                    color = colorScheme.textSecondary
+                                )
+                            }
+                        }
+                    } else {
+                        items(
+                            items = folders,
+                            key = { folder -> "$folderKeyPrefix:${folder.path}" },
+                            contentType = { "folder" }
+                        ) { folder ->
+                            val position = directoryFolderPosition(
+                                index = folders.indexOf(folder),
+                                total = folders.size,
+                            )
+                            DirectoryFolderRowV3(
+                                title = folder.title,
+                                onClick = { onNavigate(folder.path) },
+                                position = position,
                             )
                         }
-                    }
-                } else {
-                    items(
-                        items = folders,
-                        key = { folder -> "$folderKeyPrefix:${folder.path}" },
-                        contentType = { "folder" }
-                    ) { folder ->
-                        val position = directoryFolderPosition(
-                            index = folders.indexOf(folder),
-                            total = folders.size,
-                        )
-                        DirectoryFolderRowV3(
-                            title = folder.title,
-                            onClick = { onNavigate(folder.path) },
-                            position = position,
-                        )
-                    }
-                    items(
-                        items = files,
-                        key = { file -> "$fileKeyPrefix:${file.path}" },
-                        contentType = { "file" }
-                    ) { file ->
-                        val isSelected = selectedPaths.contains(file.path)
-                        fileContent(
-                            file,
-                            selectionMode,
-                            isSelected,
-                            {
-                                selectionMode = true
-                                if (!selectedPaths.contains(file.path)) {
-                                    selectedPaths.add(file.path)
-                                }
-                            },
-                            { checked ->
-                                if (checked) {
+                        items(
+                            items = files,
+                            key = { file -> "$fileKeyPrefix:${file.path}" },
+                            contentType = { "file" }
+                        ) { file ->
+                            val isSelected = selectedPaths.contains(file.path)
+                            fileContent(
+                                file,
+                                selectionMode,
+                                isSelected,
+                                {
+                                    selectionMode = true
                                     if (!selectedPaths.contains(file.path)) {
                                         selectedPaths.add(file.path)
                                     }
-                                    selectionMode = true
-                                } else {
-                                    selectedPaths.remove(file.path)
-                                    if (selectedPaths.isEmpty()) {
-                                        selectionMode = false
+                                },
+                                { checked ->
+                                    if (checked) {
+                                        if (!selectedPaths.contains(file.path)) {
+                                            selectedPaths.add(file.path)
+                                        }
+                                        selectionMode = true
+                                    } else {
+                                        selectedPaths.remove(file.path)
+                                        if (selectedPaths.isEmpty()) {
+                                            selectionMode = false
+                                        }
                                     }
                                 }
-                            }
-                        )
+                            )
+                        }
                     }
                 }
-            }
         }
     }
 }
@@ -2935,26 +2954,17 @@ internal fun DirectoryFileRow(
                 }
             )
     ) {
-        ListItem(
-            headlineContent = {
-                Text(
-                    text = file.title,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
-                    color = colorScheme.textPrimary,
-                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
-                )
-            },
-            supportingContent = {
-                if (metaLine.isNotBlank()) {
-                    Text(
-                        text = metaLine,
-                        color = colorScheme.textSecondary,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            },
-            leadingContent = {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = 58.dp)
+                .padding(start = 8.dp, top = 8.dp, end = 4.dp, bottom = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier.width(if (file.fileType == TreeFileType.Image && file.thumbnailModel != null) 42.dp else 24.dp),
+                contentAlignment = Alignment.Center
+            ) {
                 if (file.fileType == TreeFileType.Image && file.thumbnailModel != null) {
                     AsmrAsyncImage(
                         model = file.thumbnailModel,
@@ -2970,140 +2980,182 @@ internal fun DirectoryFileRow(
                         imageVector = icon,
                         contentDescription = null,
                         tint = iconTint,
-                        modifier = Modifier.size(22.dp)
+                        modifier = Modifier.size(21.dp)
                     )
                 }
-            },
-            trailingContent = if (showTrailing) {
-                {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        if (file.showSubtitleStamp) {
-                            SubtitleStamp(modifier = Modifier.padding(end = AudioItemSubtitleStampSpacing))
+            }
+            Spacer(modifier = Modifier.width(8.dp))
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp)
+            ) {
+                Text(
+                    text = file.title,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
+                    color = colorScheme.textPrimary,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
+                )
+                if (metaLine.isNotBlank()) {
+                    Text(
+                        text = metaLine,
+                        color = colorScheme.textSecondary,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+            if (showTrailing) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (file.showSubtitleStamp) {
+                        SubtitleStamp(modifier = Modifier.padding(end = AudioItemSubtitleStampSpacing))
+                    }
+                    if (selectionMode && onSelectedChange != null) {
+                        Box(
+                            modifier = Modifier.size(AudioItemMenuButtonSize),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(24.dp)
+                                    .clip(RoundedCornerShape(6.dp))
+                                    .border(
+                                        width = 1.5.dp,
+                                        color = if (selected) colorScheme.primary else colorScheme.textTertiary,
+                                        shape = RoundedCornerShape(6.dp)
+                                    )
+                                    .clickable { onSelectedChange(!selected) },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                if (selected) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Check,
+                                        contentDescription = "已选择",
+                                        tint = colorScheme.primary,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                } else {
+                                    Spacer(modifier = Modifier.size(18.dp))
+                                }
+                            }
                         }
-                        if (selectionMode && onSelectedChange != null) {
-                            Checkbox(
-                                checked = selected,
-                                onCheckedChange = { checked -> onSelectedChange(checked) }
+                    } else if (onSetAsCover != null) {
+                        IconButton(
+                            onClick = onSetAsCover,
+                            modifier = Modifier.size(32.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Photo,
+                                contentDescription = "设为封面",
+                                tint = colorScheme.textSecondary,
+                                modifier = Modifier.size(20.dp)
                             )
-                        } else if (onSetAsCover != null) {
+                        }
+                    }
+                    if (!selectionMode && showMenu) {
+                        var showMenuExpanded by rememberSaveable(file.path) { mutableStateOf(false) }
+                        Box {
                             IconButton(
-                                onClick = onSetAsCover,
-                                modifier = Modifier.size(32.dp)
+                                onClick = { showMenuExpanded = true },
+                                modifier = Modifier.size(AudioItemMenuButtonSize)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Rounded.Photo,
-                                    contentDescription = "设为封面",
+                                    imageVector = Icons.Rounded.MoreVert,
+                                    contentDescription = "更多操作",
                                     tint = colorScheme.textSecondary,
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
-                        }
-                        if (!selectionMode && showMenu) {
-                            var showMenuExpanded by rememberSaveable(file.path) { mutableStateOf(false) }
-                            Box {
-                                IconButton(
-                                    onClick = { showMenuExpanded = true },
-                                    modifier = Modifier.size(AudioItemMenuButtonSize)
+                            MaterialTheme(
+                                colorScheme = materialColorScheme.copy(
+                                    surface = dynamicContainerColor,
+                                    surfaceContainer = dynamicContainerColor
+                                )
+                            ) {
+                                DropdownMenu(
+                                    expanded = showMenuExpanded,
+                                    onDismissRequest = { showMenuExpanded = false },
+                                    modifier = Modifier.background(dynamicContainerColor)
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Rounded.MoreVert,
-                                        contentDescription = "更多操作",
-                                        tint = colorScheme.textSecondary,
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-                                MaterialTheme(
-                                    colorScheme = materialColorScheme.copy(
-                                        surface = dynamicContainerColor,
-                                        surfaceContainer = dynamicContainerColor
-                                    )
-                                ) {
-                                    DropdownMenu(
-                                        expanded = showMenuExpanded,
-                                        onDismissRequest = { showMenuExpanded = false },
-                                        modifier = Modifier.background(dynamicContainerColor)
-                                    ) {
-                                        if (showPrimaryAction) {
-                                            DropdownMenuItem(
-                                                text = { Text("播放") },
-                                                onClick = {
-                                                    onPrimary()
-                                                    showMenuExpanded = false
-                                                },
-                                                leadingIcon = {
-                                                    Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = colorScheme.primary)
-                                                }
-                                            )
-                                        }
-                                        if (onDownload != null) {
-                                            DropdownMenuItem(
-                                                text = { Text("下载") },
-                                                onClick = {
-                                                    onDownload()
-                                                    showMenuExpanded = false
-                                                },
-                                                leadingIcon = {
-                                                    Icon(Icons.Rounded.Download, contentDescription = null, tint = colorScheme.textSecondary)
-                                                }
-                                            )
-                                        }
-                                        if (onAddToQueue != null) {
-                                            DropdownMenuItem(
-                                                text = { Text("添加到播放队列") },
-                                                onClick = {
-                                                    onAddToQueue()
-                                                    showMenuExpanded = false
-                                                },
-                                                leadingIcon = {
-                                                    Icon(Icons.AutoMirrored.Rounded.PlaylistPlay, contentDescription = null, tint = colorScheme.textSecondary)
-                                                }
-                                            )
-                                        }
-                                        if (onAddToPlaylist != null) {
-                                            DropdownMenuItem(
-                                                text = { Text("添加到我的列表") },
-                                                onClick = {
-                                                    onAddToPlaylist()
-                                                    showMenuExpanded = false
-                                                },
-                                                leadingIcon = {
-                                                    Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, contentDescription = null, tint = colorScheme.textSecondary)
-                                                }
-                                            )
-                                        }
-                                        if (onManageTags != null) {
-                                            DropdownMenuItem(
-                                                text = { Text("标签管理") },
-                                                onClick = {
-                                                    onManageTags()
-                                                    showMenuExpanded = false
-                                                },
-                                                leadingIcon = {
-                                                    Icon(Icons.AutoMirrored.Rounded.Label, contentDescription = null, tint = colorScheme.textSecondary)
-                                                }
-                                            )
-                                        }
-                                        if (onRemoveFromAlbum != null) {
-                                            DropdownMenuItem(
-                                                text = { Text("从专辑移除") },
-                                                onClick = {
-                                                    onRemoveFromAlbum()
-                                                    showMenuExpanded = false
-                                                },
-                                                leadingIcon = {
-                                                    Icon(Icons.Rounded.Delete, contentDescription = null, tint = colorScheme.textSecondary)
-                                                }
-                                            )
-                                        }
+                                    if (showPrimaryAction) {
+                                        DropdownMenuItem(
+                                            text = { Text("播放") },
+                                            onClick = {
+                                                onPrimary()
+                                                showMenuExpanded = false
+                                            },
+                                            leadingIcon = {
+                                                Icon(Icons.Rounded.PlayArrow, contentDescription = null, tint = colorScheme.primary)
+                                            }
+                                        )
+                                    }
+                                    if (onDownload != null) {
+                                        DropdownMenuItem(
+                                            text = { Text("下载") },
+                                            onClick = {
+                                                onDownload()
+                                                showMenuExpanded = false
+                                            },
+                                            leadingIcon = {
+                                                Icon(Icons.Rounded.Download, contentDescription = null, tint = colorScheme.textSecondary)
+                                            }
+                                        )
+                                    }
+                                    if (onAddToQueue != null) {
+                                        DropdownMenuItem(
+                                            text = { Text("添加到播放队列") },
+                                            onClick = {
+                                                onAddToQueue()
+                                                showMenuExpanded = false
+                                            },
+                                            leadingIcon = {
+                                                Icon(Icons.AutoMirrored.Rounded.PlaylistPlay, contentDescription = null, tint = colorScheme.textSecondary)
+                                            }
+                                        )
+                                    }
+                                    if (onAddToPlaylist != null) {
+                                        DropdownMenuItem(
+                                            text = { Text("添加到我的列表") },
+                                            onClick = {
+                                                onAddToPlaylist()
+                                                showMenuExpanded = false
+                                            },
+                                            leadingIcon = {
+                                                Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, contentDescription = null, tint = colorScheme.textSecondary)
+                                            }
+                                        )
+                                    }
+                                    if (onManageTags != null) {
+                                        DropdownMenuItem(
+                                            text = { Text("标签管理") },
+                                            onClick = {
+                                                onManageTags()
+                                                showMenuExpanded = false
+                                            },
+                                            leadingIcon = {
+                                                Icon(Icons.AutoMirrored.Rounded.Label, contentDescription = null, tint = colorScheme.textSecondary)
+                                            }
+                                        )
+                                    }
+                                    if (onRemoveFromAlbum != null) {
+                                        DropdownMenuItem(
+                                            text = { Text("从专辑移除") },
+                                            onClick = {
+                                                onRemoveFromAlbum()
+                                                showMenuExpanded = false
+                                            },
+                                            leadingIcon = {
+                                                Icon(Icons.Rounded.Delete, contentDescription = null, tint = colorScheme.textSecondary)
+                                            }
+                                        )
                                     }
                                 }
                             }
                         }
                     }
                 }
-            } else null,
-            colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-        )
+            }
+        }
     }
 }
 
