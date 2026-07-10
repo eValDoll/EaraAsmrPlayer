@@ -142,6 +142,7 @@ import com.asmr.player.ui.common.ImagePreviewRequest
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.consumeTapThrough
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
+import com.asmr.player.ui.groups.AlbumGroupPickerScreen
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
@@ -298,7 +299,6 @@ fun AlbumDetailScreen(
     onAddMediaItemsToQueue: (List<MediaItem>) -> Unit = {},
     onAddMediaItemsToFavorites: (List<MediaItem>) -> Unit = {},
     onOpenPlaylistPicker: (MediaItem) -> Unit = {},
-    onOpenGroupPicker: (albumId: Long) -> Unit = { _ -> },
     onOpenDlsiteLogin: () -> Unit = {},
     onOpenAlbumByRj: (String) -> Unit = {},
     initialTab: Int? = null,
@@ -323,6 +323,7 @@ fun AlbumDetailScreen(
     var showOnlineSaveDialog by remember { mutableStateOf(false) }
     var pendingOnlineSaveSelection by remember { mutableStateOf<Set<String>?>(null) }
     var batchPlaylistItems by remember { mutableStateOf<List<MediaItem>?>(null) }
+    var groupPickerAlbumId by remember { mutableStateOf<Long?>(null) }
     var downloadSource by remember { mutableStateOf(OnlineDownloadSource.AsmrOne) }
 
     LaunchedEffect(albumId, rjCode) {
@@ -658,7 +659,7 @@ fun AlbumDetailScreen(
                                 losslessDownloadEnabled = tab == 2 && resolvedInitialTarget && model.dlsitePlayTree.isNotEmpty(),
                                 saveEnabled = canUseAsmrOneTreeActions,
                                 showGroupButton = isLocalTab && model.localAlbum != null,
-                                onOpenGroupPicker = onOpenGroupPicker,
+                                onOpenGroupPicker = { id -> groupPickerAlbumId = id },
                                 introSessionKey = introSessionKey,
                                 animateIntro = shouldAnimateHeaderIntro,
                                 deferMetaRevealExpected = !isLocalTab,
@@ -943,6 +944,25 @@ fun AlbumDetailScreen(
                             showOnlineSaveDialog = false
                         }
                     )
+                }
+
+                groupPickerAlbumId?.let { targetAlbumId ->
+                    Dialog(
+                        onDismissRequest = { groupPickerAlbumId = null },
+                        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+                    ) {
+                        AlbumDetailPickerSheetSurface(
+                            color = MaterialTheme.colorScheme.background,
+                            contentColor = colorScheme.textPrimary
+                        ) {
+                            AlbumGroupPickerScreen(
+                                windowSizeClass = windowSizeClass,
+                                albumId = targetAlbumId,
+                                onBack = { groupPickerAlbumId = null },
+                                embeddedInDialog = true
+                            )
+                        }
+                    }
                 }
 
                 batchPlaylistItems?.let { items ->

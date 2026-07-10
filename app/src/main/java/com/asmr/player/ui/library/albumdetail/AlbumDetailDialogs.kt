@@ -51,7 +51,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -137,6 +136,36 @@ import com.asmr.player.util.Formatting
 import com.asmr.player.util.MessageManager
 import com.asmr.player.util.RemoteSubtitleSource
 
+private val AlbumDetailPickerSheetTopRadius = 28.dp
+private val AlbumDetailPickerSheetTopGap = 10.dp
+
+@Composable
+internal fun AlbumDetailPickerSheetSurface(
+    color: Color = MaterialTheme.colorScheme.background,
+    contentColor: Color = MaterialTheme.colorScheme.onBackground,
+    content: @Composable () -> Unit
+) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        Surface(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = AlbumDetailPickerSheetTopGap),
+            shape = RoundedCornerShape(
+                topStart = AlbumDetailPickerSheetTopRadius,
+                topEnd = AlbumDetailPickerSheetTopRadius
+            ),
+            color = color,
+            contentColor = contentColor,
+            shadowElevation = 12.dp
+        ) {
+            content()
+        }
+    }
+}
+
 @Composable
 internal fun AsmrOneDownloadDialog(
     albumTitle: String,
@@ -155,7 +184,7 @@ internal fun AsmrOneDownloadDialog(
         onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        AlbumDetailPickerSheetSurface {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(
                     modifier = Modifier
@@ -413,7 +442,7 @@ internal fun OnlineSaveDialog(
         onDismissRequest = onDismiss,
         properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
     ) {
-        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+        AlbumDetailPickerSheetSurface {
             Column(modifier = Modifier.fillMaxSize()) {
                 Row(
                     modifier = Modifier

@@ -2014,9 +2014,6 @@ fun MainContainer(
                         onOpenPlaylistPicker = { item ->
                             albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
                         },
-                        onOpenGroupPicker = { targetAlbumId ->
-                            navController.navigateSingleTop("group_picker?albumId=$targetAlbumId")
-                        },
                         onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
                         onOpenAlbumByRj = { navigator.openAlbumDetailByRjStacked(it) }
                     )
@@ -2062,9 +2059,6 @@ fun MainContainer(
                         onOpenPlaylistPicker = { item ->
                             albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
                         },
-                        onOpenGroupPicker = { targetAlbumId ->
-                            navController.navigateSingleTop("group_picker?albumId=$targetAlbumId")
-                        },
                         onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
                         onOpenAlbumByRj = { navigator.openAlbumDetailByRjStacked(it) }
                     )
@@ -2096,9 +2090,6 @@ fun MainContainer(
                         },
                         onOpenPlaylistPicker = { item ->
                             albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
-                        },
-                        onOpenGroupPicker = { albumId ->
-                            navController.navigateSingleTop("group_picker?albumId=$albumId")
                         },
                         onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
                         onOpenAlbumByRj = { navigator.openAlbumDetailByRjStacked(it) }
