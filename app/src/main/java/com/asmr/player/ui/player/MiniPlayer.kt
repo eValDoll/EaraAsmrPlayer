@@ -70,6 +70,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlin.math.roundToInt
 
 enum class MiniPlayerDisplayMode {
     CoverOnly,
@@ -106,6 +107,7 @@ fun MiniPlayer(
     onOpenNowPlaying: () -> Unit,
     onOpenQueue: () -> Unit,
     largeLayout: Boolean = false,
+    compactScale: Float = 1f,
     modifier: Modifier = Modifier,
     viewModel: PlayerViewModel = hiltViewModel()
 ) {
@@ -133,9 +135,11 @@ fun MiniPlayer(
     val metadata = item.mediaMetadata
     val colorScheme = AsmrTheme.colorScheme
     val currentMediaId = item.mediaId
-    val barHeight = if (largeLayout) 64.dp else 56.dp
-    val coverSize = if (largeLayout) 60.dp else 52.dp
-    val coverInset = 2.dp
+    val resolvedCompactScale = compactScale.coerceIn(0.72f, 1f)
+    val barHeight = (if (largeLayout) 64.dp else 56.dp) * resolvedCompactScale
+    val coverSize = (if (largeLayout) 60.dp else 52.dp) * resolvedCompactScale
+    val coverInset = 2.dp * resolvedCompactScale
+    val expandedEndCornerRadius = (if (largeLayout) 26.dp else 22.dp) * resolvedCompactScale
     val miniPlayerBorderColor = if (colorScheme.isDark) {
         Color.White.copy(alpha = 0.14f)
     } else {
@@ -186,18 +190,23 @@ fun MiniPlayer(
                     artworkModel = metadata.artworkUri,
                     isPlaying = isPlayingEffective,
                     onExpand = { onDisplayModeChange(MiniPlayerDisplayMode.Expanded) },
-                    largeLayout = largeLayout
+                    largeLayout = largeLayout,
+                    compactScale = resolvedCompactScale
                 )
             }
 
             MiniPlayerDisplayMode.Expanded -> {
                 BoxWithConstraints {
                     val widthProgress = ((maxWidth.value - 220f) / 280f).coerceIn(0f, 1f)
-                    val controlsSpacing = ((if (largeLayout) 4f else 2f) + (if (largeLayout) 6f else 5f) * widthProgress).dp
-                    val controlsButtonSize = ((if (largeLayout) 32f else 28f) + (if (largeLayout) 8f else 6f) * widthProgress).dp
-                    val favoriteIconSize = if (largeLayout) 19.dp else 17.dp
-                    val playbackIconSize = if (largeLayout) 22.dp else 20.dp
-                    val queueIconSize = if (largeLayout) 20.dp else 18.dp
+                    val controlsSpacing =
+                        ((if (largeLayout) 4f else 2f) + (if (largeLayout) 6f else 5f) * widthProgress).dp *
+                            resolvedCompactScale
+                    val controlsButtonSize =
+                        ((if (largeLayout) 32f else 28f) + (if (largeLayout) 8f else 6f) * widthProgress).dp *
+                            resolvedCompactScale
+                    val favoriteIconSize = (if (largeLayout) 19.dp else 17.dp) * resolvedCompactScale
+                    val playbackIconSize = (if (largeLayout) 22.dp else 20.dp) * resolvedCompactScale
+                    val queueIconSize = (if (largeLayout) 20.dp else 18.dp) * resolvedCompactScale
 
                     ElevatedCard(
                         modifier = Modifier
@@ -206,8 +215,8 @@ fun MiniPlayer(
                         shape = RoundedCornerShape(
                             topStart = coverSize / 2,
                             bottomStart = coverSize / 2,
-                            topEnd = if (largeLayout) 26.dp else 22.dp,
-                            bottomEnd = if (largeLayout) 26.dp else 22.dp
+                            topEnd = expandedEndCornerRadius,
+                            bottomEnd = expandedEndCornerRadius
                         ),
                         colors = CardDefaults.elevatedCardColors(
                             containerColor = lerp(
@@ -240,7 +249,7 @@ fun MiniPlayer(
                                         model = metadata.artworkUri,
                                         contentDescription = null,
                                         contentScale = ContentScale.Crop,
-                                        placeholderCornerRadius = 52,
+                                        placeholderCornerRadius = (52 * resolvedCompactScale).roundToInt(),
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 }
@@ -248,7 +257,10 @@ fun MiniPlayer(
                                 Column(
                                     modifier = Modifier
                                         .weight(1f)
-                                        .padding(start = if (largeLayout) 12.dp else 10.dp, end = 8.dp)
+                                        .padding(
+                                            start = (if (largeLayout) 12.dp else 10.dp) * resolvedCompactScale,
+                                            end = 8.dp * resolvedCompactScale
+                                        )
                                         .clickable(onClick = onOpenNowPlaying),
                                     verticalArrangement = Arrangement.Center
                                 ) {
@@ -271,7 +283,7 @@ fun MiniPlayer(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxHeight()
-                                        .padding(end = 8.dp),
+                                        .padding(end = 8.dp * resolvedCompactScale),
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(controlsSpacing)
                                 ) {
@@ -318,7 +330,7 @@ fun MiniPlayer(
                                 progress = { progress },
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(if (largeLayout) 3.dp else 2.dp),
+                                    .height((if (largeLayout) 3.dp else 2.dp) * resolvedCompactScale),
                                 color = colorScheme.primary,
                                 trackColor = colorScheme.primary.copy(alpha = 0.1f)
                             )
@@ -333,8 +345,8 @@ fun MiniPlayer(
                                 shape = RoundedCornerShape(
                                     topStart = coverSize / 2,
                                     bottomStart = coverSize / 2,
-                                    topEnd = if (largeLayout) 26.dp else 22.dp,
-                                    bottomEnd = if (largeLayout) 26.dp else 22.dp
+                                    topEnd = expandedEndCornerRadius,
+                                    bottomEnd = expandedEndCornerRadius
                                 )
                             )
                     )
@@ -350,12 +362,16 @@ private fun MiniPlayerCoverOnly(
     isPlaying: Boolean,
     onExpand: () -> Unit,
     largeLayout: Boolean,
+    compactScale: Float,
     modifier: Modifier = Modifier
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val compactMinWidth = if (largeLayout) 76.dp else 64.dp
-    val barHeight = if (largeLayout) 64.dp else 56.dp
-    val coverSize = if (largeLayout) 60.dp else 52.dp
+    val compactMinWidth = (if (largeLayout) 76.dp else 64.dp) * compactScale
+    val barHeight = (if (largeLayout) 64.dp else 56.dp) * compactScale
+    val coverSize = (if (largeLayout) 60.dp else 52.dp) * compactScale
+    val placeholderCornerRadius = ((if (largeLayout) 60 else 52) * compactScale)
+        .roundToInt()
+        .coerceAtLeast(1)
     val miniPlayerBorderColor = if (colorScheme.isDark) {
         Color.White.copy(alpha = 0.14f)
     } else {
@@ -380,13 +396,14 @@ private fun MiniPlayerCoverOnly(
                 model = artworkModel,
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
-                placeholderCornerRadius = if (largeLayout) 60 else 52,
+                placeholderCornerRadius = placeholderCornerRadius,
                 modifier = Modifier.fillMaxSize()
             )
             MiniPlayerActivityBars(
                 isPlaying = isPlaying,
                 modifier = Modifier.align(Alignment.Center),
-                tint = Color.White
+                tint = Color.White,
+                compactScale = compactScale
             )
         }
     }
@@ -396,6 +413,7 @@ private fun MiniPlayerCoverOnly(
 private fun MiniPlayerActivityBars(
     isPlaying: Boolean,
     tint: Color,
+    compactScale: Float,
     modifier: Modifier = Modifier
 ) {
     val transition = rememberInfiniteTransition(label = "miniPlayerBars")
@@ -417,16 +435,17 @@ private fun MiniPlayerActivityBars(
 
     Row(
         modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(1.8.dp),
+        horizontalArrangement = Arrangement.spacedBy(1.8.dp * compactScale),
         verticalAlignment = Alignment.CenterVertically
     ) {
         heights.forEachIndexed { index, height ->
-            val maxHeight = 8.2f + (index % 3) * 1.8f + index * 0.35f
+            val maxHeight = (8.2f + (index % 3) * 1.8f + index * 0.35f) * compactScale
+            val minHeight = 4f * compactScale
             Box(
                 modifier = Modifier
                     .size(
-                        width = 2.6.dp,
-                        height = (if (isPlaying) 4f + height.value * maxHeight else 4f).dp
+                        width = 2.6.dp * compactScale,
+                        height = (if (isPlaying) minHeight + height.value * maxHeight else minHeight).dp
                     )
                     .clip(RoundedCornerShape(99.dp))
                     .background(tint)

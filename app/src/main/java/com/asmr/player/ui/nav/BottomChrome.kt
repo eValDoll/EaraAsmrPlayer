@@ -14,11 +14,9 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -139,6 +137,7 @@ private val BottomNavGlowExpandedSizeLarge = 50.dp
 private val BottomNavGlowCollapsedSize = 46.dp
 private val BottomNavGlowCollapsedSizeLarge = 52.dp
 private const val BottomNavPageToggleGroupSize = BottomNavExpandedSlotCount - 1
+private const val BottomChromeMinCompactScale = 0.72f
 private const val QuarterArcKappa = 0.55228475f
 private const val BottomNavOverflowOutlineCollapseTailFraction = 0.18f
 
@@ -188,6 +187,35 @@ private data class BottomChromeMetrics(
         get() = (expandedHorizontalPadding * 2) +
             (itemSlotWidth * BottomNavExpandedSlotCount) +
             (expandedItemSpacing * (BottomNavExpandedSlotCount - 1))
+
+    fun scaled(scale: Float): BottomChromeMetrics {
+        val resolvedScale = scale.coerceIn(BottomChromeMinCompactScale, 1f)
+        if (resolvedScale >= 0.999f) return this
+        return copy(
+            overlayHeight = overlayHeight * resolvedScale,
+            barHeight = barHeight * resolvedScale,
+            barCornerRadius = barCornerRadius * resolvedScale,
+            collapsedWidth = collapsedWidth * resolvedScale,
+            chipSize = chipSize * resolvedScale,
+            itemSlotWidth = itemSlotWidth * resolvedScale,
+            expandedItemSpacing = expandedItemSpacing * resolvedScale,
+            expandedHorizontalPadding = expandedHorizontalPadding * resolvedScale,
+            overflowPanelWidth = overflowPanelWidth * resolvedScale,
+            overflowTopCapHeight = overflowTopCapHeight * resolvedScale,
+            overflowShoulderLift = overflowShoulderLift * resolvedScale,
+            overflowNeckBottomOffset = overflowNeckBottomOffset * resolvedScale,
+            overflowLeftShoulderReach = overflowLeftShoulderReach * resolvedScale,
+            overflowRightShoulderReach = overflowRightShoulderReach * resolvedScale,
+            overflowHorizontalBias = overflowHorizontalBias * resolvedScale,
+            overflowTopContentPadding = overflowTopContentPadding * resolvedScale,
+            overflowBottomPadding = overflowBottomPadding * resolvedScale,
+            overflowItemSize = overflowItemSize * resolvedScale,
+            overflowItemSpacing = overflowItemSpacing * resolvedScale,
+            iconSize = iconSize * resolvedScale,
+            glowExpandedSize = glowExpandedSize * resolvedScale,
+            glowCollapsedSize = glowCollapsedSize * resolvedScale
+        )
+    }
 }
 
 fun bottomChromeOverlayHeight(largeLayout: Boolean): Dp =
@@ -325,80 +353,6 @@ private fun resolveBottomNavGroupIndex(
     return routeIndex / groupSize.coerceAtLeast(1)
 }
 
-private fun computeVisibleNavItems(
-    allItems: List<BottomChromeNavItem>,
-    activeRoute: String,
-    availableWidth: Dp,
-    metrics: BottomChromeMetrics = bottomChromeMetrics(largeLayout = false),
-    preferredPinnedRoute: String? = null,
-    maxVisibleItems: Int? = null
-): BottomChromeNavLayout {
-    if (allItems.isEmpty()) {
-        return BottomChromeNavLayout(emptyList(), emptyList(), showsOverflow = false)
-    }
-
-    val slotWidth = metrics.itemSlotWidth.value
-    val slotSpacing = metrics.expandedItemSpacing.value
-    val horizontalPadding = (metrics.expandedHorizontalPadding * 2).value
-    val width = availableWidth.value.coerceAtLeast(slotWidth + horizontalPadding)
-    fun requiredWidth(slotCount: Int): Float {
-        if (slotCount <= 0) return horizontalPadding
-        return horizontalPadding +
-            (slotWidth * slotCount) +
-            (slotSpacing * (slotCount - 1))
-    }
-
-    val maxWithoutOverflow = (1..allItems.size)
-        .lastOrNull { requiredWidth(it) <= width }
-        ?.coerceAtLeast(1)
-        ?: 1
-    if (allItems.size <= maxWithoutOverflow) {
-        return BottomChromeNavLayout(
-            visibleItems = allItems,
-            overflowItems = emptyList(),
-            showsOverflow = false
-        )
-    }
-
-    val maxVisible = ((1..allItems.size)
-        .lastOrNull { requiredWidth(it) <= width }
-        ?: 1) - 1
-    
-    val resolvedMaxVisible = maxVisible
-        .coerceAtLeast(1)
-        .coerceAtMost(allItems.size - 1)
-        .let { computed -> maxVisibleItems?.let { computed.coerceAtMost(it) } ?: computed }
-    val activeItem = allItems.firstOrNull { it.route == activeRoute } ?: allItems.first()
-    val fixedVisibleCount = (resolvedMaxVisible - 1).coerceAtLeast(0)
-    val fixedVisibleItems = allItems.take(fixedVisibleCount)
-    val defaultPinnedItem = allItems.getOrNull(fixedVisibleCount) ?: activeItem
-    val preferredPinnedItem = allItems.firstOrNull { it.route == preferredPinnedRoute }
-        ?.takeIf { it !in fixedVisibleItems }
-    val slotItem = preferredPinnedItem
-        ?: activeItem.takeIf { it !in fixedVisibleItems }
-        ?: defaultPinnedItem
-    val visible = fixedVisibleItems
-        .plus(slotItem)
-        .take(resolvedMaxVisible)
-        .distinct()
-        .toMutableList()
-    if (visible.size < resolvedMaxVisible) {
-        allItems.forEach { item ->
-            if (visible.size >= resolvedMaxVisible) return@forEach
-            if (item !in visible) {
-                visible += item
-            }
-        }
-    }
-    val overflow = allItems.filterNot { it in visible }
-
-    return BottomChromeNavLayout(
-        visibleItems = visible,
-        overflowItems = overflow,
-        showsOverflow = overflow.isNotEmpty()
-    )
-}
-
 private fun computeOverflowHeadroom(
     itemCount: Int,
     metrics: BottomChromeMetrics
@@ -515,7 +469,7 @@ private fun computeBottomNavRailShift(
     entries: List<BottomNavRailEntry>,
     offsets: List<Dp>,
     activeRoute: String,
-    currentWidth: Dp,
+    collapseProgress: Float,
     metrics: BottomChromeMetrics
 ): Dp {
     val activeIndex = entries.indexOfFirst { !it.isOverflow && it.item.route == activeRoute }
@@ -523,18 +477,11 @@ private fun computeBottomNavRailShift(
         ?: return 0.dp
     val activeLeft = offsets.getOrNull(activeIndex) ?: return 0.dp
     val activeWidth = entries[activeIndex].width
-    val activeRight = activeLeft + activeWidth
     val collapsedActiveLeft = ((metrics.collapsedWidth - activeWidth) / 2f).coerceAtLeast(0.dp)
     val collapsedShift = activeLeft - collapsedActiveLeft
     if (collapsedShift == 0.dp) return 0.dp
 
-    val moveStartWidth = maxOf(
-        (activeRight + metrics.expandedHorizontalPadding).value,
-        metrics.collapsedWidth.value + abs((collapsedActiveLeft - activeLeft).value)
-    )
-    val moveRange = (moveStartWidth - metrics.collapsedWidth.value).coerceAtLeast(1f)
-    val progress = ((moveStartWidth - currentWidth.value) / moveRange).coerceIn(0f, 1f)
-    return collapsedShift * progress
+    return collapsedShift * collapseProgress.coerceIn(0f, 1f)
 }
 
 private fun computeBottomNavEntryVisibility(
@@ -573,88 +520,145 @@ fun BottomChrome(
     miniPlayerContent: (@Composable (Modifier) -> Unit)? = null
 ) {
     BoxWithConstraints(modifier = modifier) {
-        val metrics = remember(largeLayout) { bottomChromeMetrics(largeLayout) }
+        val baseMetrics = remember(largeLayout) { bottomChromeMetrics(largeLayout) }
         val navExpanded = !miniPlayerVisible || miniPlayerDisplayMode == MiniPlayerDisplayMode.CoverOnly
-        val miniCollapsedWidth = if (largeLayout) 84.dp else 72.dp
-        val chromeSpacing = if (largeLayout) 8.dp else 6.dp
+        val baseMiniCollapsedWidth = if (largeLayout) 84.dp else 72.dp
+        val baseChromeSpacing = if (largeLayout) 8.dp else 6.dp
+        val compactScaleTarget = remember(
+            maxWidth,
+            miniPlayerVisible,
+            baseMetrics,
+            baseMiniCollapsedWidth,
+            baseChromeSpacing
+        ) {
+            val requiredWidth = baseMetrics.preferredExpandedWidth +
+                if (miniPlayerVisible) baseMiniCollapsedWidth + baseChromeSpacing else 0.dp
+            (maxWidth.value / requiredWidth.value)
+                .coerceIn(BottomChromeMinCompactScale, 1f)
+        }
+        val compactScale by animateFloatAsState(
+            targetValue = compactScaleTarget,
+            animationSpec = spring(
+                dampingRatio = Spring.DampingRatioNoBouncy,
+                stiffness = Spring.StiffnessMediumLow
+            ),
+            label = "bottomChromeCompactScale"
+        )
+        val metrics = remember(baseMetrics, compactScale) { baseMetrics.scaled(compactScale) }
+        val miniCollapsedWidth = baseMiniCollapsedWidth * compactScale
+        val miniExpandedMinWidth = (if (largeLayout) 244.dp else 204.dp) * compactScale
+        val chromeSpacing = baseChromeSpacing * compactScale
         val expandedNavWidthLimit = maxWidth.coerceAtMost(metrics.preferredExpandedWidth)
-        val miniWidthTarget = when {
-            !miniPlayerVisible -> 0.dp
-            miniPlayerDisplayMode == MiniPlayerDisplayMode.Expanded ->
-                (maxWidth - metrics.collapsedWidth - chromeSpacing).coerceAtLeast(if (largeLayout) 244.dp else 204.dp)
-            else -> miniCollapsedWidth
-        }
-        val navWidthTarget = when {
-            !miniPlayerVisible -> expandedNavWidthLimit
-            navExpanded -> (maxWidth - miniWidthTarget - chromeSpacing)
-                .coerceAtLeast(if (largeLayout) 108.dp else 92.dp)
+        val miniExpandedWidth = (maxWidth - metrics.collapsedWidth - chromeSpacing)
+            .coerceAtLeast(miniExpandedMinWidth)
+        val expandedNavWidth = if (!miniPlayerVisible) {
+            expandedNavWidthLimit
+        } else {
+            (maxWidth - miniCollapsedWidth - chromeSpacing)
+                .coerceAtLeast(metrics.preferredExpandedWidth)
                 .coerceAtMost(expandedNavWidthLimit)
-            else -> metrics.collapsedWidth
         }
-        val miniWidth by animateDpAsState(
-            targetValue = miniWidthTarget,
+        val expansionProgress by animateFloatAsState(
+            targetValue = if (miniPlayerVisible && miniPlayerDisplayMode == MiniPlayerDisplayMode.Expanded) 1f else 0f,
             animationSpec = spring(
                 dampingRatio = Spring.DampingRatioNoBouncy,
                 stiffness = Spring.StiffnessMediumLow
             ),
-            label = "bottomChromeMiniWidth"
+            label = "bottomChromeExpansionProgress"
         )
-        val navWidth by animateDpAsState(
-            targetValue = navWidthTarget,
-            animationSpec = spring(
-                dampingRatio = Spring.DampingRatioNoBouncy,
-                stiffness = Spring.StiffnessMediumLow
-            ),
-            label = "bottomChromeNavWidth"
-        )
-        val maxVisibleItems = when {
-            !navExpanded -> 1
-            else -> BottomNavExpandedSlotCount - 1
+        val miniWidth = if (!miniPlayerVisible) {
+            0.dp
+        } else {
+            miniCollapsedWidth + (miniExpandedWidth - miniCollapsedWidth) * expansionProgress
         }
-        val chromeArrangement = Arrangement.spacedBy(
-            space = chromeSpacing,
-            alignment = Alignment.CenterHorizontally
-        )
-        Row(
+        val navWidthTarget = if (miniPlayerVisible && miniPlayerDisplayMode == MiniPlayerDisplayMode.Expanded) {
+            metrics.collapsedWidth
+        } else {
+            expandedNavWidth
+        }
+        val navWidth = if (!miniPlayerVisible) {
+            expandedNavWidth
+        } else {
+            expandedNavWidth + (metrics.collapsedWidth - expandedNavWidth) * expansionProgress
+        }
+        val navCollapseProgress = if (miniPlayerVisible) expansionProgress else 0f
+        val coverOnlyGroupWidth = if (miniPlayerVisible) {
+            expandedNavWidth + chromeSpacing + miniCollapsedWidth
+        } else {
+            expandedNavWidth
+        }
+        val expandedGroupWidth = if (miniPlayerVisible) {
+            metrics.collapsedWidth + chromeSpacing + miniExpandedWidth
+        } else {
+            expandedNavWidth
+        }
+        val trackWidth = if (miniPlayerVisible) {
+            maxOf(coverOnlyGroupWidth, expandedGroupWidth).coerceAtMost(maxWidth)
+        } else {
+            expandedNavWidth
+        }
+        val currentGroupWidth = if (miniPlayerVisible) {
+            navWidth + chromeSpacing + miniWidth
+        } else {
+            navWidth
+        }
+        val groupOffset = ((trackWidth - currentGroupWidth).coerceAtLeast(0.dp) / 2f)
+
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .graphicsLayer { clip = false },
-            horizontalArrangement = chromeArrangement,
-            verticalAlignment = Alignment.Bottom
+                .height(metrics.barHeight)
+                .align(Alignment.BottomCenter)
+                .graphicsLayer { clip = false }
         ) {
-            BottomNavigationPill(
-                navItems = navItems,
-                activeRoute = activeRoute,
-                selectionProgresses = selectionProgresses,
-                preferredPinnedRoute = preferredPinnedRoute,
-                expanded = navExpanded,
-                availableWidth = navWidthTarget,
-                currentWidth = navWidth,
-                metrics = metrics,
-                maxVisibleItems = maxVisibleItems,
-                overflowExpanded = overflowExpanded,
-                onOverflowExpandedChange = onOverflowExpandedChange,
-                onExpandRequest = { onMiniPlayerDisplayModeChange(MiniPlayerDisplayMode.CoverOnly) },
-                onNavigate = onNavigate,
-                onOverflowProtectedBoundsChange = onOverflowProtectedBoundsChange,
-                modifier = Modifier.width(navWidth)
-            )
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .width(trackWidth)
+                    .height(metrics.barHeight)
+                    .graphicsLayer { clip = false }
+            ) {
+                BottomNavigationPill(
+                    navItems = navItems,
+                    activeRoute = activeRoute,
+                    selectionProgresses = selectionProgresses,
+                    preferredPinnedRoute = preferredPinnedRoute,
+                    expanded = navExpanded,
+                    availableWidth = expandedNavWidth,
+                    targetWidth = navWidthTarget,
+                    currentWidth = navWidth,
+                    collapseProgress = navCollapseProgress,
+                    metrics = metrics,
+                    overflowExpanded = overflowExpanded,
+                    onOverflowExpandedChange = onOverflowExpandedChange,
+                    onExpandRequest = { onMiniPlayerDisplayModeChange(MiniPlayerDisplayMode.CoverOnly) },
+                    onNavigate = onNavigate,
+                    onOverflowProtectedBoundsChange = onOverflowProtectedBoundsChange,
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .offset(x = groupOffset)
+                        .width(navWidth)
+                )
 
-            if (miniPlayerVisible) {
-                val miniPlayerModifier = Modifier
-                    .width(miniWidth.coerceAtLeast(miniCollapsedWidth))
-                    .testTag(BottomChromeMiniPlayerTag)
-                if (miniPlayerContent != null) {
-                    miniPlayerContent(miniPlayerModifier)
-                } else {
-                    MiniPlayer(
-                        displayMode = miniPlayerDisplayMode,
-                        onDisplayModeChange = onMiniPlayerDisplayModeChange,
-                        onOpenNowPlaying = onOpenNowPlaying,
-                        onOpenQueue = onOpenQueue,
-                        largeLayout = largeLayout,
-                        modifier = miniPlayerModifier
-                    )
+                if (miniPlayerVisible) {
+                    val miniPlayerModifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .offset(x = groupOffset + navWidth + chromeSpacing)
+                        .width(miniWidth.coerceAtLeast(miniCollapsedWidth))
+                        .testTag(BottomChromeMiniPlayerTag)
+                    if (miniPlayerContent != null) {
+                        miniPlayerContent(miniPlayerModifier)
+                    } else {
+                        MiniPlayer(
+                            displayMode = miniPlayerDisplayMode,
+                            onDisplayModeChange = onMiniPlayerDisplayModeChange,
+                            onOpenNowPlaying = onOpenNowPlaying,
+                            onOpenQueue = onOpenQueue,
+                            largeLayout = largeLayout,
+                            compactScale = compactScale,
+                            modifier = miniPlayerModifier
+                        )
+                    }
                 }
             }
         }
@@ -669,9 +673,10 @@ private fun BottomNavigationPill(
     preferredPinnedRoute: String? = null,
     expanded: Boolean,
     availableWidth: Dp,
+    targetWidth: Dp = availableWidth,
     currentWidth: Dp = availableWidth,
+    collapseProgress: Float = 0f,
     metrics: BottomChromeMetrics = bottomChromeMetrics(largeLayout = false),
-    maxVisibleItems: Int? = null,
     overflowExpanded: Boolean = false,
     onOverflowExpandedChange: (Boolean) -> Unit = {},
     onExpandRequest: () -> Unit = {},
@@ -692,9 +697,10 @@ private fun BottomNavigationPill(
         preferredPinnedRoute = preferredPinnedRoute,
         expanded = expanded,
         availableWidth = availableWidth,
+        targetWidth = targetWidth,
         currentWidth = currentWidth,
+        collapseProgress = collapseProgress,
         metrics = metrics,
-        maxVisibleItems = maxVisibleItems,
         overflowExpanded = overflowExpanded,
         onOverflowExpandedChange = onOverflowExpandedChange,
         onExpandRequest = onExpandRequest,
@@ -713,9 +719,10 @@ private fun BottomNavigationPillSurface(
     preferredPinnedRoute: String?,
     expanded: Boolean,
     availableWidth: Dp,
+    targetWidth: Dp,
     currentWidth: Dp,
+    collapseProgress: Float,
     metrics: BottomChromeMetrics,
-    maxVisibleItems: Int? = null,
     overflowExpanded: Boolean = false,
     onOverflowExpandedChange: (Boolean) -> Unit = {},
     onExpandRequest: () -> Unit,
@@ -794,15 +801,12 @@ private fun BottomNavigationPillSurface(
             displayedGroupIndex = resolvedGroupIndex
         }
     }
-    val visibleGroupItems = if (expanded) {
-        navGroups.getOrNull(resolvedGroupIndex).orEmpty()
-    } else {
-        listOfNotNull(activeItem)
-    }
-    val showsGroupToggle = expanded && navGroups.size > 1
+    val visibleGroupItems = navGroups.getOrNull(resolvedGroupIndex).orEmpty()
+        .ifEmpty { listOfNotNull(activeItem) }
+    val showsGroupToggle = navGroups.size > 1
     val motionLayout = remember(visibleGroupItems, activeItem, showsGroupToggle) {
         BottomChromeNavLayout(
-            visibleItems = visibleGroupItems.ifEmpty { listOfNotNull(activeItem) },
+            visibleItems = visibleGroupItems,
             overflowItems = emptyList(),
             showsOverflow = showsGroupToggle
         )
@@ -811,14 +815,14 @@ private fun BottomNavigationPillSurface(
     val motionEntries = buildBottomNavRailEntries(motionLayout, metrics)
     val motionOffsets = computeBottomNavRailOffsets(
         entries = motionEntries,
-        currentWidth = currentWidth,
+        currentWidth = availableWidth,
         metrics = metrics
     )
     val railShift = computeBottomNavRailShift(
         entries = motionEntries,
         offsets = motionOffsets,
         activeRoute = layoutFocusRoute,
-        currentWidth = currentWidth,
+        collapseProgress = collapseProgress,
         metrics = metrics
     )
     val canShowOverflow = false
@@ -892,7 +896,7 @@ private fun BottomNavigationPillSurface(
         overflowRevealProgress = overflowRevealProgress
     )
     val interactionBlocked =
-        abs(currentWidth.value - availableWidth.value) > 0.5f ||
+        abs(currentWidth.value - targetWidth.value) > 0.5f ||
             (overflowRevealProgress > 0.01f && overflowRevealProgress < 0.99f)
 
     SideEffect {
@@ -1013,7 +1017,7 @@ private fun BottomNavigationPillSurface(
                     BottomNavItemChip(
                         item = entry.item,
                         selectedProgress = selectedProgress,
-                        collapsed = !expanded,
+                        collapseProgress = collapseProgress,
                         metrics = metrics,
                         enabled = if (entry.isOverflow) {
                             navGroups.size > 1 && isFullyVisible
@@ -1278,7 +1282,7 @@ private fun buildBottomNavContainerPath(
 private fun BottomNavItemChip(
     item: BottomChromeNavItem,
     selectedProgress: Float,
-    collapsed: Boolean,
+    collapseProgress: Float,
     metrics: BottomChromeMetrics,
     enabled: Boolean = true,
     onClick: () -> Unit,
@@ -1294,14 +1298,8 @@ private fun BottomNavItemChip(
     )
     val iconScale = 1f + (0.16f * resolvedSelectedProgress)
     val glowAlpha = resolvedSelectedProgress
-    val glowSize by animateDpAsState(
-        targetValue = if (collapsed) metrics.glowCollapsedSize else metrics.glowExpandedSize,
-        animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessLow
-        ),
-        label = "bottomNavItemGlowSize"
-    )
+    val glowSize = metrics.glowExpandedSize +
+        (metrics.glowCollapsedSize - metrics.glowExpandedSize) * collapseProgress.coerceIn(0f, 1f)
     val glowColor = colorScheme.primaryStrong.copy(alpha = if (colorScheme.isDark) 0.22f else 0.18f)
     val interactionSource = remember { MutableInteractionSource() }
 
