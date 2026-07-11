@@ -33,13 +33,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
-import kotlinx.coroutines.yield
 import org.jsoup.HttpStatusException
 import retrofit2.HttpException
 import java.io.IOException
 import java.net.SocketTimeoutException
 import java.util.Locale
-import java.util.concurrent.ConcurrentHashMap
+import java.util.LinkedHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
@@ -73,9 +72,10 @@ class SearchViewModel @Inject constructor(
     private var enrichJob: Job? = null
     private var asmrOneJob: Job? = null
     private var cacheWriteJob: Job? = null
-    private val dlsiteDetailCache = ConcurrentHashMap<String, Album>()
+    private val dlsiteDetailCache = BoundedLruCache<String, Album>(maxEntries = 180)
     private val enrichDispatcher = Dispatchers.IO
-    private val asmrOneAvailabilityCache = ConcurrentHashMap<String, Boolean>()
+    private val asmrOneAvailabilityCache =
+        BoundedLruCache<String, CachedAsmrOneAvailability>(maxEntries = 1_000)
     private val bootstrapped = AtomicBoolean(false)
     private var searchResultRevision: Long = 0L
 
@@ -350,12 +350,14 @@ class SearchViewModel @Inject constructor(
                     startEnrichDlsiteDetails(
                         keyword = normalizedKeyword,
                         page = page,
-                        baseItems = pageResult.items
+                        baseItems = pageResult.items,
+                        resultRevision = resultRevision,
                     )
                     startMarkAsmrOneAvailability(
                         keyword = normalizedKeyword,
                         page = page,
-                        baseItems = pageResult.items
+                        baseItems = pageResult.items,
+                        resultRevision = resultRevision,
                     )
                 } else {
                     val cur = _uiState.value as? SearchUiState.Success
@@ -498,72 +500,127 @@ class SearchViewModel @Inject constructor(
         return SearchPageResult(items = result.items, canGoNext = result.canGoNext)
     }
 
-    private fun startEnrichDlsiteDetails(keyword: String, page: Int, baseItems: List<Album>) {
+    private fun startEnrichDlsiteDetails(
+        keyword: String,
+        page: Int,
+        baseItems: List<Album>,
+        resultRevision: Long,
+    ) {
         enrichJob?.cancel()
         enrichJob = viewModelScope.launch {
-            val current0 = _uiState.value as? SearchUiState.Success ?: return@launch
-            if (current0.keyword != keyword || current0.page != page || current0.purchasedOnly || current0.collectedOnly) return@launch
             val enrichTargets = baseItems
                 .mapNotNull { it.rjCode.ifBlank { it.workId }.trim().uppercase().takeIf(String::isNotBlank) }
                 .distinct()
                 .toSet()
             if (enrichTargets.isEmpty()) return@launch
-            _uiState.value = current0.copy(
-                isEnriching = true,
-                enrichingRjCodes = enrichTargets
-            )
+            var started = false
+            _uiState.update { state ->
+                val current = state as? SearchUiState.Success ?: return@update state
+                if (
+                    current.keyword != keyword ||
+                    current.page != page ||
+                    current.resultRevision != resultRevision ||
+                    current.purchasedOnly ||
+                    current.collectedOnly
+                ) {
+                    return@update state
+                }
+                started = true
+                current.copy(
+                    isEnriching = true,
+                    enrichingRjCodes = enrichTargets,
+                )
+            }
+            if (!started) return@launch
 
             coroutineScope {
-                val sem = Semaphore(6)
+                val sem = Semaphore(3)
                 val deferreds = baseItems.mapIndexedNotNull { index, base ->
                     val rj = base.rjCode.ifBlank { base.workId }.trim().uppercase()
                     if (rj.isBlank() || rj !in enrichTargets) return@mapIndexedNotNull null
                     async(enrichDispatcher) {
                         sem.withPermit {
                             val cached = dlsiteDetailCache[rj]
-                            val detail = cached ?: runCatching { dlsiteScraper.getWorkInfo(rj)?.album }.getOrNull()
+                            val detail = cached ?: try {
+                                dlsiteScraper.getWorkInfo(rj)?.album
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (_: Throwable) {
+                                null
+                            }
                             if (detail != null) dlsiteDetailCache[rj] = detail
                             Triple(index, rj, detail)
                         }
                     }
                 }
-                deferreds.forEach { deferred ->
-                    val result = runCatching { deferred.await() }.getOrNull()
-                    if (result == null) {
-                        val current = _uiState.value as? SearchUiState.Success ?: return@forEach
-                        if (current.keyword == keyword && current.page == page && !current.purchasedOnly && !current.collectedOnly) {
-                            _uiState.value = current.copy(enrichingRjCodes = emptySet())
+                deferreds.chunked(5).forEach { batch ->
+                    val results = batch.mapNotNull { deferred ->
+                        try {
+                            deferred.await()
+                        } catch (error: CancellationException) {
+                            throw error
+                        } catch (_: Throwable) {
+                            null
                         }
-                        return@forEach
                     }
-                    val idx = result.first
-                    val rj = result.second
-                    val detail = result.third
-                    val cur = _uiState.value as? SearchUiState.Success ?: return@forEach
-                    if (cur.keyword != keyword || cur.page != page || cur.purchasedOnly || cur.collectedOnly) return@forEach
-                    val list = cur.results.toMutableList()
-                    if (detail != null && idx in list.indices) {
-                        list[idx] = mergeSearchAlbumDetail(list[idx], detail)
-                    }
-                    _uiState.value = cur.copy(
-                        results = list,
-                        enrichingRjCodes = cur.enrichingRjCodes - rj,
-                        enrichedDetailRjCodes = if (detail != null) {
-                            cur.enrichedDetailRjCodes + rj
-                        } else {
-                            cur.enrichedDetailRjCodes
+                    if (results.isEmpty()) return@forEach
+                    var hasResolvedDetail = false
+                    val completedRjs = LinkedHashSet<String>(results.size)
+                    val enrichedRjs = LinkedHashSet<String>()
+                    _uiState.update { state ->
+                        val cur = state as? SearchUiState.Success ?: return@update state
+                        if (
+                            cur.keyword != keyword ||
+                            cur.page != page ||
+                            cur.resultRevision != resultRevision ||
+                            cur.purchasedOnly ||
+                            cur.collectedOnly
+                        ) {
+                            return@update state
                         }
-                    )
-                    if (detail != null) scheduleCacheWrite()
+                        val list = cur.results.toMutableList()
+                        var resultsChanged = false
+                        results.forEach { (idx, rj, detail) ->
+                            completedRjs += rj
+                            if (detail != null && idx in list.indices) {
+                                val merged = mergeSearchAlbumDetail(list[idx], detail)
+                                if (merged != list[idx]) {
+                                    list[idx] = merged
+                                    resultsChanged = true
+                                }
+                                enrichedRjs += rj
+                                hasResolvedDetail = true
+                            }
+                        }
+                        cur.copy(
+                            results = if (resultsChanged) list else cur.results,
+                            enrichingRjCodes = cur.enrichingRjCodes - completedRjs,
+                            enrichedDetailRjCodes = cur.enrichedDetailRjCodes + enrichedRjs,
+                        )
+                    }
+                    if (hasResolvedDetail) scheduleCacheWrite()
                 }
             }
 
-            val current1 = _uiState.value as? SearchUiState.Success ?: return@launch
-            if (current1.keyword == keyword && current1.page == page && !current1.purchasedOnly && !current1.collectedOnly) {
-                _uiState.value = current1.copy(
+            var completed = false
+            _uiState.update { state ->
+                val current = state as? SearchUiState.Success ?: return@update state
+                if (
+                    current.keyword != keyword ||
+                    current.page != page ||
+                    current.resultRevision != resultRevision ||
+                    current.purchasedOnly ||
+                    current.collectedOnly
+                ) {
+                    return@update state
+                }
+                completed = true
+                current.copy(
                     isEnriching = false,
                     enrichingRjCodes = emptySet()
                 )
+            }
+            if (completed) {
                 scheduleCacheWrite()
             }
         }
@@ -727,12 +784,23 @@ class SearchViewModel @Inject constructor(
         return null
     }
 
-    private fun startMarkAsmrOneAvailability(keyword: String, page: Int, baseItems: List<Album>) {
+    private fun startMarkAsmrOneAvailability(
+        keyword: String,
+        page: Int,
+        baseItems: List<Album>,
+        resultRevision: Long,
+    ) {
         asmrOneJob?.cancel()
         asmrOneJob = viewModelScope.launch(Dispatchers.IO) {
             val startedAt = SystemClock.elapsedRealtime()
             val cur0 = _uiState.value as? SearchUiState.Success ?: return@launch
-            if (cur0.keyword != keyword || cur0.page != page || cur0.purchasedOnly || cur0.collectedOnly) return@launch
+            if (
+                cur0.keyword != keyword ||
+                cur0.page != page ||
+                cur0.resultRevision != resultRevision ||
+                cur0.purchasedOnly ||
+                cur0.collectedOnly
+            ) return@launch
 
             val indexByRj = linkedMapOf<String, MutableList<Int>>()
             baseItems.forEachIndexed { idx, a ->
@@ -744,35 +812,61 @@ class SearchViewModel @Inject constructor(
             val total = indexByRj.size
             _uiState.update { state ->
                 val cur = state as? SearchUiState.Success ?: return@update state
-                if (cur.keyword != keyword || cur.page != page || cur.purchasedOnly || cur.collectedOnly) return@update state
+                if (
+                    cur.keyword != keyword ||
+                    cur.page != page ||
+                    cur.resultRevision != resultRevision ||
+                    cur.purchasedOnly ||
+                    cur.collectedOnly
+                ) return@update state
                 cur.copy(isAsmrOneChecking = true, asmrOneChecked = 0, asmrOneTotal = total)
             }
 
             try {
-                val cachedTrue = indexByRj.keys.filter { asmrOneAvailabilityCache[it] == true }
-                cachedTrue.forEach { rj ->
+                val cacheReadAt = SystemClock.elapsedRealtime()
+                val cachedAvailability = indexByRj.keys.associateWith { rj ->
+                    asmrOneAvailabilityCache[rj]
+                }
+                val cachedTrue = cachedAvailability
+                    .filterValues { cached -> cached?.collected == true }
+                    .keys
+                if (cachedTrue.isNotEmpty()) {
                     updateAsmrOneAvailability(
                         keyword = keyword,
                         page = page,
-                        rj = rj,
-                        has = true,
+                        resultRevision = resultRevision,
+                        rjs = cachedTrue.toSet(),
                         indexByRj = indexByRj
                     )
                 }
 
-                val unknown = indexByRj.keys.filter { asmrOneAvailabilityCache[it] != true }
-                val availability = asmrOneAvailabilityApi.check(unknown)
-                availability.forEach { (rj, collected) ->
-                    asmrOneAvailabilityCache[rj] = collected
-                    if (collected) {
-                        updateAsmrOneAvailability(
-                            keyword = keyword,
-                            page = page,
-                            rj = rj,
-                            has = true,
-                            indexByRj = indexByRj
-                        )
+                val unknown = cachedAvailability
+                    .filterValues { cached ->
+                        cached == null ||
+                            (!cached.collected &&
+                                cacheReadAt - cached.checkedAtElapsedMs >= ASMR_ONE_NEGATIVE_CACHE_TTL_MS)
                     }
+                    .keys
+                    .toList()
+                val availability = asmrOneAvailabilityApi.check(unknown)
+                val checkedAt = SystemClock.elapsedRealtime()
+                availability.forEach { (rj, collected) ->
+                    asmrOneAvailabilityCache[rj] = CachedAsmrOneAvailability(
+                        collected = collected,
+                        checkedAtElapsedMs = checkedAt,
+                    )
+                }
+                val newlyCollected = availability
+                    .filterValues { collected -> collected }
+                    .keys
+                if (newlyCollected.isNotEmpty()) {
+                    updateAsmrOneAvailability(
+                        keyword = keyword,
+                        page = page,
+                        resultRevision = resultRevision,
+                        rjs = newlyCollected,
+                        indexByRj = indexByRj
+                    )
                 }
 
                 if (BuildConfig.DEBUG) {
@@ -786,34 +880,46 @@ class SearchViewModel @Inject constructor(
             } finally {
                 _uiState.update { state ->
                     val cur = state as? SearchUiState.Success ?: return@update state
-                    if (cur.keyword != keyword || cur.page != page || cur.purchasedOnly || cur.collectedOnly) return@update state
+                    if (
+                        cur.keyword != keyword ||
+                        cur.page != page ||
+                        cur.resultRevision != resultRevision ||
+                        cur.purchasedOnly ||
+                        cur.collectedOnly
+                    ) return@update state
                     cur.copy(isAsmrOneChecking = false, asmrOneChecked = total, asmrOneTotal = total)
                 }
             }
         }
     }
 
-    private suspend fun updateAsmrOneAvailability(
+    private fun updateAsmrOneAvailability(
         keyword: String,
         page: Int,
-        rj: String,
-        has: Boolean,
+        resultRevision: Long,
+        rjs: Set<String>,
         indexByRj: Map<String, List<Int>>
     ) {
         var changed = false
         _uiState.update { state ->
             val cur = state as? SearchUiState.Success ?: return@update state
-            if (cur.keyword != keyword || cur.page != page || cur.purchasedOnly || cur.collectedOnly) return@update state
+            if (
+                cur.keyword != keyword ||
+                cur.page != page ||
+                cur.resultRevision != resultRevision ||
+                cur.purchasedOnly ||
+                cur.collectedOnly
+            ) return@update state
 
-            val indices = indexByRj[rj].orEmpty()
+            val indices = rjs.flatMap { rj -> indexByRj[rj].orEmpty() }
             if (indices.isEmpty()) return@update state
 
             val list = cur.results.toMutableList()
             indices.forEach { idx ->
                 if (idx !in list.indices) return@forEach
                 val old = list[idx]
-                if (old.hasAsmrOne != has) {
-                    list[idx] = old.copy(hasAsmrOne = has)
+                if (!old.hasAsmrOne) {
+                    list[idx] = old.copy(hasAsmrOne = true)
                     changed = true
                 }
             }
@@ -821,12 +927,35 @@ class SearchViewModel @Inject constructor(
         }
         if (changed) {
             scheduleCacheWrite()
-            yield()
         }
     }
 
     private companion object {
+        private const val ASMR_ONE_NEGATIVE_CACHE_TTL_MS = 5 * 60 * 1_000L
         private val RJ_CODE_REGEX = Regex("""RJ\d{6,}""")
+    }
+}
+
+private data class CachedAsmrOneAvailability(
+    val collected: Boolean,
+    val checkedAtElapsedMs: Long,
+)
+
+private class BoundedLruCache<K, V>(
+    private val maxEntries: Int,
+) {
+    private val entries = object : LinkedHashMap<K, V>(maxEntries, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<K, V>?): Boolean {
+            return size > maxEntries
+        }
+    }
+
+    @Synchronized
+    operator fun get(key: K): V? = entries[key]
+
+    @Synchronized
+    operator fun set(key: K, value: V) {
+        entries[key] = value
     }
 }
 

@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.library
+package com.asmr.player.ui.library
 
 import android.content.Intent
 import android.graphics.RenderEffect
@@ -135,7 +135,7 @@ import com.asmr.player.data.lyrics.deriveLyricsRelativePathNoExt
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.AsmrAsyncImage
-import com.asmr.player.ui.common.AsmrShimmerPlaceholder
+import com.asmr.player.ui.common.AsmrImageLoadingPlaceholder
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.ImagePreviewDialog
 import com.asmr.player.ui.common.ImagePreviewRequest
@@ -1183,10 +1183,10 @@ private fun AlbumDetailHeroBackground(
                     }
                 },
             placeholder = { m -> DiscPlaceholder(modifier = m, cornerRadius = 0) },
-            loading = { m -> AsmrShimmerPlaceholder(modifier = m, cornerRadius = 0) },
+            loading = { m -> AsmrImageLoadingPlaceholder(modifier = m, cornerRadius = 0, indicatorSize = 36.dp) },
             empty = { m ->
                 if (showCoverLoadingState) {
-                    AsmrShimmerPlaceholder(modifier = m, cornerRadius = 0)
+                    AsmrImageLoadingPlaceholder(modifier = m, cornerRadius = 0, indicatorSize = 36.dp)
                 } else {
                     DiscPlaceholder(modifier = m, cornerRadius = 0)
                 }

@@ -32,6 +32,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -90,7 +91,6 @@ fun AlbumItem(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
-    emptyCoverUseShimmer: Boolean = false,
     onRjClick: ((String) -> Unit)? = null,
     onCircleClick: ((String) -> Unit)? = null,
     onCvClick: ((String) -> Unit)? = null,
@@ -148,30 +148,16 @@ fun AlbumItem(
                     modifier = Modifier
                         .fillMaxSize()
                 ) {
-                    if (emptyCoverUseShimmer) {
-                        AsmrAsyncImage(
-                            model = imageModel,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            placeholderCornerRadius = 0,
-                            reloadKey = coverReloadKey,
-                            retainPainterDuringReload = coverRetainPainterDuringReload,
-                            peekAnySizeForInitial = true,
-                            modifier = Modifier.fillMaxSize().clip(coverShape),
-                            empty = { m -> AsmrShimmerPlaceholder(modifier = m, cornerRadius = 0) },
-                        )
-                    } else {
-                        AsmrAsyncImage(
-                            model = imageModel,
-                            contentDescription = null,
-                            contentScale = ContentScale.Crop,
-                            placeholderCornerRadius = 0,
-                            reloadKey = coverReloadKey,
-                            retainPainterDuringReload = coverRetainPainterDuringReload,
-                            peekAnySizeForInitial = true,
-                            modifier = Modifier.fillMaxSize().clip(coverShape),
-                        )
-                    }
+                    AsmrAsyncImage(
+                        model = imageModel,
+                        contentDescription = null,
+                        contentScale = ContentScale.Crop,
+                        placeholderCornerRadius = 0,
+                        reloadKey = coverReloadKey,
+                        retainPainterDuringReload = coverRetainPainterDuringReload,
+                        peekAnySizeForInitial = true,
+                        modifier = Modifier.fillMaxSize().clip(coverShape),
+                    )
                     coverBadge?.let { badge ->
                         AlbumCoverMetricBadge(
                             badge = badge,
@@ -340,7 +326,6 @@ fun AlbumGridItem(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
-    emptyCoverUseShimmer: Boolean = false,
     onRjClick: ((String) -> Unit)? = null,
     onCircleClick: ((String) -> Unit)? = null,
     onCvClick: ((String) -> Unit)? = null,
@@ -379,30 +364,16 @@ fun AlbumGridItem(
             )
     ) {
         Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
-            if (emptyCoverUseShimmer) {
-                AsmrAsyncImage(
-                    model = imageModel,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    placeholderCornerRadius = 0,
-                    reloadKey = coverReloadKey,
-                    retainPainterDuringReload = coverRetainPainterDuringReload,
-                    peekAnySizeForInitial = true,
-                    modifier = Modifier.fillMaxSize().clip(coverShape),
-                    empty = { m -> AsmrShimmerPlaceholder(modifier = m, cornerRadius = 0) },
-                )
-            } else {
-                AsmrAsyncImage(
-                    model = imageModel,
-                    contentDescription = null,
-                    contentScale = ContentScale.Crop,
-                    placeholderCornerRadius = 0,
-                    reloadKey = coverReloadKey,
-                    retainPainterDuringReload = coverRetainPainterDuringReload,
-                    peekAnySizeForInitial = true,
-                    modifier = Modifier.fillMaxSize().clip(coverShape),
-                )
-            }
+            AsmrAsyncImage(
+                model = imageModel,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                placeholderCornerRadius = 0,
+                reloadKey = coverReloadKey,
+                retainPainterDuringReload = coverRetainPainterDuringReload,
+                peekAnySizeForInitial = true,
+                modifier = Modifier.fillMaxSize().clip(coverShape),
+            )
             
             val rj = album.rjCode.ifBlank { album.workId }
             if (rj.isNotBlank()) {
@@ -671,6 +642,7 @@ private fun AlbumDetailSkeletonLine(
     )
 }
 
+@Immutable
 data class AlbumCoverBadge(
     val icon: ImageVector,
     val text: String

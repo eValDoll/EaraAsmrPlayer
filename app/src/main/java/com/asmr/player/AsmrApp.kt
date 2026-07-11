@@ -7,6 +7,7 @@ import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.memory.MemoryCache
 import com.asmr.player.data.local.db.AppDatabaseProvider
+import com.asmr.player.cache.ImageCacheManager
 import com.asmr.player.data.remote.download.DownloadQueueCoordinator
 import com.asmr.player.data.remote.download.DownloadRuntimeConfig
 import com.asmr.player.data.settings.SettingsRepository
@@ -45,6 +46,7 @@ class AsmrApp : Application(), ImageLoaderFactory, Configuration.Provider {
     override fun onTrimMemory(level: Int) {
         super.onTrimMemory(level)
         DownloadQueueCoordinator.onTrimMemory(applicationContext, level)
+        ImageCacheManager.trimMemoryIfInitialized(level)
     }
 
     override val workManagerConfiguration: Configuration

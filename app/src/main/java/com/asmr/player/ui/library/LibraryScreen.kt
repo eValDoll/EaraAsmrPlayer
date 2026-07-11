@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.library
+package com.asmr.player.ui.library
 
 import android.content.Intent
 import androidx.activity.compose.BackHandler
@@ -93,7 +93,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -189,6 +188,7 @@ private val LibraryTrackListItemCornerRadius = 10.dp
 private val LibraryAlbumItemVerticalPadding = 2.dp
 private val LibraryAlbumGridInfoHorizontalPadding = 6.dp
 private val LibraryAlbumGridInfoVerticalPadding = 8.dp
+private const val LibraryTrackPagingHintDistance = 10
 
 private fun Album.withUserTags(userTags: List<String>): Album {
     if (userTags.isEmpty()) return this
@@ -314,8 +314,9 @@ fun LibraryScreen(
     val pagedTrackAlbumHeaders = viewModel.pagedTrackAlbumHeaders.collectAsLazyPagingItems()
     val pagedAlbumSnapshot = pagedAlbums.itemSnapshotList
     val pagedAlbumIndices = remember(pagedAlbumSnapshot.items.size) { List(pagedAlbumSnapshot.items.size) { it } }
+    val loadedTrackAlbumHeaders = pagedTrackAlbumHeaders.itemSnapshotList.items
     val expandedAlbumTracks by (if (isTrackList) viewModel.expandedTrackAlbumTracks else flowOf(emptyMap())).collectAsState(initial = emptyMap())
-    val expandedAlbumIds = remember { mutableStateListOf<Long>() }
+    val expandedAlbumIds by viewModel.expandedTrackAlbumIds.collectAsState()
     var actionAlbum by remember { mutableStateOf<Album?>(null) }
     var showAlbumActions by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -335,12 +336,8 @@ fun LibraryScreen(
 
     LaunchedEffect(isTrackList) {
         if (!isTrackList) {
-            expandedAlbumIds.clear()
-            viewModel.setExpandedTrackAlbums(emptySet())
-            return@LaunchedEffect
+            viewModel.clearExpandedTrackAlbums()
         }
-        snapshotFlow { expandedAlbumIds.toSet() }
-            .collect { ids -> viewModel.setExpandedTrackAlbums(ids) }
     }
     LaunchedEffect(showDeleteConfirm, actionAlbum) {
         if (showDeleteConfirm && (actionAlbum == null || actionAlbum?.id?.let { it <= 0L } == true)) {
@@ -589,21 +586,35 @@ fun LibraryScreen(
                                         contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                                     ) {
-                                        val headerCount = pagedTrackAlbumHeaders.itemCount
+                                        val headerCount = loadedTrackAlbumHeaders.size
+                                        val lastLoadedHeader = loadedTrackAlbumHeaders.lastOrNull()
+                                        val appendState = pagedTrackAlbumHeaders.loadState.append
+                                        val pagingHintHeaderIndex =
+                                            (headerCount - LibraryTrackPagingHintDistance).coerceAtLeast(0)
+                                        val pagingHintHeader = lastLoadedHeader?.takeIf {
+                                            appendState is LoadState.NotLoading &&
+                                                !appendState.endOfPaginationReached
+                                        }
                                         for (headerIndex in 0 until headerCount) {
-                                            val header = pagedTrackAlbumHeaders[headerIndex]
-                                            if (header == null) {
-                                                item(key = "header:$headerIndex") {
-                                                    Box(
+                                            if (pagingHintHeader != null && headerIndex == pagingHintHeaderIndex) {
+                                                item(
+                                                    key = "trackPagingHint:${pagingHintHeader.albumId}:$headerCount",
+                                                    contentType = "trackPagingHint"
+                                                ) {
+                                                    LaunchedEffect(pagingHintHeader.albumId, headerCount, querySpec) {
+                                                        val hintIndex = headerCount - 1
+                                                        if (hintIndex in 0 until pagedTrackAlbumHeaders.itemCount) {
+                                                            pagedTrackAlbumHeaders[hintIndex]
+                                                        }
+                                                    }
+                                                    Spacer(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
-                                                            .padding(horizontal = LibraryPageHorizontalPadding, vertical = 10.dp)
-                                                    ) {
-                                                        Spacer(modifier = Modifier.height(50.dp))
-                                                    }
+                                                            .height(1.dp)
+                                                    )
                                                 }
-                                                continue
                                             }
+                                            val header = loadedTrackAlbumHeaders[headerIndex]
 
                                             val albumId = header.albumId
                                             val expanded = expandedAlbumIds.contains(albumId)
@@ -642,9 +653,7 @@ fun LibraryScreen(
                                                         expanded = expanded,
                                                         isFirstInList = isFirstAlbumHeader,
                                                         isLastInList = isLastAlbumHeader,
-                                                        onToggle = {
-                                                            if (expanded) expandedAlbumIds.remove(albumId) else expandedAlbumIds.add(albumId)
-                                                        }
+                                                        onToggle = { viewModel.toggleExpandedTrackAlbum(albumId) }
                                                     )
                                                 }
                                             }
@@ -767,9 +776,10 @@ fun LibraryScreen(
                                     ) {
                                         staggeredItems(
                                             pagedAlbumIndices,
-                                            key = { idx -> pagedAlbumSnapshot.items.getOrNull(idx)?.id?.takeIf { it > 0L } ?: idx }
+                                            key = { idx -> pagedAlbumSnapshot.items.getOrNull(idx)?.id?.takeIf { it > 0L } ?: idx },
+                                            contentType = { "albumGridItem" },
                                         ) { idx ->
-                                            val album = pagedAlbumSnapshot.items.getOrNull(idx) ?: return@staggeredItems
+                                            val album = pagedAlbums[idx] ?: return@staggeredItems
                                             val mergedAlbum = album.withUserTags(userTagsByAlbumId[album.id].orEmpty())
                                             AlbumGridItem(
                                                 album = mergedAlbum,
@@ -831,7 +841,7 @@ fun LibraryScreen(
                                             key = { idx -> pagedAlbums.itemSnapshotList.getOrNull(idx)?.id?.takeIf { it > 0L } ?: idx },
                                             contentType = { "albumListItem" }
                                         ) { idx ->
-                                            val album = pagedAlbums.itemSnapshotList.getOrNull(idx) ?: return@items
+                                            val album = pagedAlbums[idx] ?: return@items
                                             val mergedAlbum = album.withUserTags(userTagsByAlbumId[album.id].orEmpty())
                                             AlbumItem(
                                                 album = mergedAlbum,
@@ -1306,10 +1316,10 @@ private fun rememberAlbumTrackListTotalSizeBytes(
     rows: List<com.asmr.player.data.local.db.dao.LibraryTrackRow>,
     loadFileSizes: Boolean
 ): Long? {
+    if (rows.isEmpty() || !loadFileSizes) return null
     val context = LocalContext.current
     val paths = remember(rows) { rows.map { it.trackPath } }
     return androidx.compose.runtime.produceState<Long?>(initialValue = null, paths, loadFileSizes) {
-        if (!loadFileSizes) return@produceState
         value = withContext(Dispatchers.IO) {
             val total = rows.sumOf { row ->
                 queryCachedTrackFileSize(context, row.trackPath) ?: 0L

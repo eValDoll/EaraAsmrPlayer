@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.search
+package com.asmr.player.ui.search
 
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
@@ -860,7 +860,6 @@ fun SearchScreen(
                                                 album = album,
                                                 onClick = { onAlbumClick(album, state.purchasedOnly, hasResolvedDetail) },
                                                 modifier = Modifier.animateItemPlacement(SearchResultPlacementSpring),
-                                                emptyCoverUseShimmer = true,
                                                 onlineDetailLoading = onlineDetailLoading,
                                                 onlineCvLoading = onlineDetailLoading,
                                                 coverReloadKey = state.resultRevision,
@@ -901,7 +900,6 @@ fun SearchScreen(
                                                 album = album,
                                                 onClick = { onAlbumClick(album, state.purchasedOnly, hasResolvedDetail) },
                                                 modifier = Modifier.animateItemPlacement(SearchResultPlacementSpring),
-                                                emptyCoverUseShimmer = true,
                                                 onlineDetailLoading = onlineDetailLoading,
                                                 onlineCvLoading = onlineDetailLoading,
                                                 coverReloadKey = state.resultRevision,
