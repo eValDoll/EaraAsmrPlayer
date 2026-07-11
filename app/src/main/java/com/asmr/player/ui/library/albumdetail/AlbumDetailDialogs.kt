@@ -660,6 +660,8 @@ private fun AsmrTreeFolderCheckboxRow(
     ) {
         Row(
             modifier = Modifier
+                .clip(RoundedCornerShape(8.dp))
+                .clickable(onClick = onToggleExpand)
                 .padding(start = (depth * 12).dp, end = 4.dp, top = 2.dp, bottom = 2.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -670,14 +672,13 @@ private fun AsmrTreeFolderCheckboxRow(
                     modifier = Modifier.size(30.dp)
                 )
             }
-            IconButton(onClick = onToggleExpand, modifier = Modifier.size(28.dp)) {
-                Icon(
-                    imageVector = if (expanded) Icons.Rounded.KeyboardArrowDown else Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(20.dp)
-                )
-            }
+            Icon(
+                imageVector = if (expanded) Icons.Rounded.KeyboardArrowDown else Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
             Text(
                 text = title,
                 maxLines = 1,

@@ -340,7 +340,11 @@ class PlaybackService : MediaSessionService() {
             initialHideSystemControls = sfwHideSystemControlsEnabled
         )
         setMediaNotificationProvider(notificationProvider!!)
-        overlay = FloatingLyricsOverlay(this)
+        overlay = FloatingLyricsOverlay(this) { settings ->
+            serviceScope.launch {
+                settingsRepository.updateFloatingLyricsSettings(settings)
+            }
+        }
         
         exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {

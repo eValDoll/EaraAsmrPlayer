@@ -10,6 +10,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,14 +20,15 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.background
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.material3.Icon as MaterialIcon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -52,6 +54,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.asmr.player.domain.model.Album
 import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.ui.common.AsmrAsyncImage
@@ -158,12 +161,33 @@ fun AlbumItem(
                         peekAnySizeForInitial = true,
                         modifier = Modifier.fillMaxSize().clip(coverShape),
                     )
+                    if (coverBadge?.bottomScrim == true) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .fillMaxHeight(0.34f)
+                                .background(
+                                    Brush.verticalGradient(
+                                        colors = listOf(
+                                            Color.Transparent,
+                                            Color.Black.copy(alpha = 0.18f),
+                                            Color.Black.copy(alpha = 0.42f),
+                                            Color.Black.copy(alpha = 0.68f)
+                                        )
+                                    )
+                                )
+                        )
+                    }
                     coverBadge?.let { badge ->
                         AlbumCoverMetricBadge(
                             badge = badge,
                             modifier = Modifier
                                 .align(Alignment.BottomEnd)
-                                .padding(6.dp)
+                                .padding(
+                                    end = if (badge.compactOffset) 4.dp else 6.dp,
+                                    bottom = if (badge.compactOffset) 4.dp else 6.dp
+                                )
                         )
                     }
                 }
@@ -374,6 +398,24 @@ fun AlbumGridItem(
                 peekAnySizeForInitial = true,
                 modifier = Modifier.fillMaxSize().clip(coverShape),
             )
+            if (coverBadge?.bottomScrim == true) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .fillMaxHeight(0.36f)
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.18f),
+                                    Color.Black.copy(alpha = 0.44f),
+                                    Color.Black.copy(alpha = 0.70f)
+                                )
+                            )
+                        )
+                )
+            }
             
             val rj = album.rjCode.ifBlank { album.workId }
             if (rj.isNotBlank()) {
@@ -418,7 +460,10 @@ fun AlbumGridItem(
                     badge = badge,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
-                        .padding(8.dp)
+                        .padding(
+                            end = if (badge.compactOffset) 5.dp else 8.dp,
+                            bottom = if (badge.compactOffset) 5.dp else 8.dp
+                        )
                 )
             }
 
@@ -645,7 +690,10 @@ private fun AlbumDetailSkeletonLine(
 @Immutable
 data class AlbumCoverBadge(
     val icon: ImageVector,
-    val text: String
+    val text: String,
+    val showContainer: Boolean = true,
+    val bottomScrim: Boolean = false,
+    val compactOffset: Boolean = false
 )
 
 @Composable
@@ -654,26 +702,42 @@ private fun AlbumCoverMetricBadge(
     modifier: Modifier = Modifier
 ) {
     if (badge.text.isBlank()) return
-    Row(
-        modifier = modifier
-            .background(Color.Black.copy(alpha = 0.58f), RoundedCornerShape(4.dp))
-            .padding(horizontal = 5.dp, vertical = 3.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        MaterialIcon(
-            imageVector = badge.icon,
-            contentDescription = null,
-            tint = Color.White,
-            modifier = Modifier.size(12.dp)
-        )
-        Text(
-            text = badge.text,
-            style = MaterialTheme.typography.labelSmall,
-            color = Color.White,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+    Box(modifier = modifier) {
+        Row(
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .then(
+                    if (badge.showContainer) {
+                        Modifier.background(Color.Black.copy(alpha = 0.58f), RoundedCornerShape(4.dp))
+                    } else {
+                        Modifier
+                    }
+                )
+                .padding(
+                    horizontal = if (badge.showContainer) 5.dp else 0.dp,
+                    vertical = if (badge.showContainer) 3.dp else 0.dp
+                ),
+            horizontalArrangement = Arrangement.spacedBy(if (badge.showContainer) 3.dp else 2.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            MaterialIcon(
+                imageVector = badge.icon,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(if (badge.showContainer) 12.dp else 10.dp)
+            )
+            Text(
+                text = badge.text,
+                style = if (badge.showContainer) {
+                    MaterialTheme.typography.labelSmall
+                } else {
+                    MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp)
+                },
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 

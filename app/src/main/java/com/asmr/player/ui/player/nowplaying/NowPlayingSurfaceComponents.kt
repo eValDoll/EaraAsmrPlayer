@@ -255,7 +255,6 @@ internal fun ArtworkBox(
     modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(28.dp)
-    val hasArtwork = metadata?.artworkUri != null
     val videoSurfaceHandle = remember(viewModel) {
         VideoSurfaceVisibilityHandle { visible -> viewModel.setVideoSurfaceVisible(visible) }
     }
@@ -269,10 +268,8 @@ internal fun ArtworkBox(
                 enabled = dragPreviewEnabled && dragPreviewState != null,
                 state = dragPreviewState ?: CoverDragPreviewState(),
                 minPointers = 2
-            )
-            .clip(shape)
-            .background(if (isVideo) videoBackdropColor else Color.Transparent)
-            .then(if (hasArtwork && !edgeBlendEnabled) Modifier.shadow(12.dp, shape) else Modifier)
+            ),
+        contentAlignment = Alignment.Center
     ) {
         if (isVideo) {
             var fullscreen by rememberSaveable { mutableStateOf(false) }
@@ -286,7 +283,11 @@ internal fun ArtworkBox(
                     onToggleFullscreen = { fullscreen = true },
                     viewKey = "inline",
                     backdropColor = videoBackdropColor,
-                    modifier = Modifier.fillMaxSize().clipToBounds()
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(shape)
+                        .background(videoBackdropColor)
+                        .clipToBounds()
                 )
             } else {
                 Box(modifier = Modifier.fillMaxSize().background(videoBackdropColor))
@@ -310,35 +311,39 @@ internal fun ArtworkBox(
                 }
             }
         } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable { onOpenLyrics() }
-            ) {
-                if (edgeBlendEnabled) {
-                    val artwork = metadata?.artworkUri
-                    if (artwork != null) {
+            if (edgeBlendEnabled) {
+                val artwork = metadata?.artworkUri
+                if (artwork != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clickable { onOpenLyrics() }
+                    ) {
                         CoverArtworkEdgeBlend(
                             artworkModel = artwork,
                             blendColor = edgeBlendColor,
                             modifier = Modifier.fillMaxSize(),
                             artworkAlignment = artworkAlignment
                         )
-                    } else {
-                        DiscPlaceholder(modifier = Modifier.fillMaxSize(), cornerRadius = 28)
                     }
-                } else {
-                    AsmrAsyncImage(
-                        model = metadata?.artworkUri,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        alignment = artworkAlignment,
-                        placeholderCornerRadius = 28,
-                        retainPainterDuringReload = true,
-                        loadWhenSizeStableForMillis = 120L,
-                        modifier = Modifier.fillMaxSize(),
-                    )
                 }
+            } else {
+                AsmrAsyncImage(
+                    model = metadata?.artworkUri,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    alignment = artworkAlignment,
+                    placeholderCornerRadius = 28,
+                    placeholder = {},
+                    loading = {},
+                    empty = {},
+                    retainPainterDuringReload = true,
+                    loadWhenSizeStableForMillis = 120L,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(shape)
+                        .clickable { onOpenLyrics() },
+                )
             }
         }
     }

@@ -2,6 +2,8 @@ package com.asmr.player.service
 
 import android.content.Context
 import android.graphics.PixelFormat
+import android.graphics.Color as AndroidColor
+import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
@@ -14,9 +16,11 @@ import android.view.WindowManager
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.asmr.player.data.settings.FloatingLyricsSettings
+import kotlin.math.roundToInt
 
 class FloatingLyricsOverlay(
-    private val context: Context
+    private val context: Context,
+    private val onSettingsChanged: (FloatingLyricsSettings) -> Unit = {}
 ) {
     private val windowManager = context.getSystemService(Context.WINDOW_SERVICE) as WindowManager
     private var container: View? = null
@@ -41,7 +45,18 @@ class FloatingLyricsOverlay(
         val line1 = layout.getChildAt(0) as? TextView ?: return
         
         line1.textSize = settings.size
-        line1.setTextColor(settings.color)
+        line1.setTextColor(adjustTextColorForReadability(settings.color))
+        line1.setShadowLayer(
+            dp(4).toFloat(),
+            0f,
+            dp(1).toFloat(),
+            AndroidColor.argb(
+                if (isLightColor(settings.color)) 176 else 208,
+                0,
+                0,
+                0
+            )
+        )
         
         val align = when (settings.align) {
             0 -> Gravity.START
@@ -56,7 +71,8 @@ class FloatingLyricsOverlay(
             setColor(0xFF000000.toInt())
         }
         
-        // 更新位置
+        // 始终应用 settings 中的位置，确保设置页滑条和已持久化拖拽位置都能立即生效。
+        p.x = settings.xOffset
         p.y = settings.yOffset
         
         // 更新点击穿透
@@ -87,9 +103,10 @@ class FloatingLyricsOverlay(
 
         val line1 = TextView(context).apply {
             id = View.generateViewId()
-            setTextColor(currentSettings.color)
+            setTextColor(adjustTextColorForReadability(currentSettings.color))
             textSize = currentSettings.size
             setTypeface(typeface, Typeface.BOLD)
+            paintFlags = paintFlags or Paint.SUBPIXEL_TEXT_FLAG or Paint.ANTI_ALIAS_FLAG
             isSingleLine = true
             ellipsize = TextUtils.TruncateAt.MARQUEE
             marqueeRepeatLimit = -1
@@ -119,7 +136,7 @@ class FloatingLyricsOverlay(
             PixelFormat.TRANSLUCENT
         ).apply {
             gravity = Gravity.TOP or Gravity.START
-            x = 0
+            x = currentSettings.xOffset
             y = currentSettings.yOffset
         }
 
@@ -138,9 +155,15 @@ class FloatingLyricsOverlay(
                     val dy = (event.rawY - downRawY).toInt()
                     p.x = lastX + dx
                     p.y = lastY + dy
-                    currentSettings = currentSettings.copy(yOffset = p.y)
+                    currentSettings = currentSettings.copy(xOffset = p.x, yOffset = p.y)
                     runCatching { windowManager.updateViewLayout(layout, p) }
                     true
+                }
+                MotionEvent.ACTION_UP,
+                MotionEvent.ACTION_CANCEL -> {
+                    currentSettings = currentSettings.copy(xOffset = p.x, yOffset = p.y)
+                    onSettingsChanged(currentSettings)
+                    false
                 }
                 else -> false
             }
@@ -168,5 +191,35 @@ class FloatingLyricsOverlay(
     private fun dp(value: Int): Int {
         val density = context.resources.displayMetrics.density
         return (value * density).toInt()
+    }
+
+    private fun adjustTextColorForReadability(color: Int): Int {
+        val hsv = FloatArray(3)
+        AndroidColor.colorToHSV(color, hsv)
+        hsv[1] = if (isLightThemeApprox()) {
+            hsv[1].coerceIn(0.48f, 0.88f)
+        } else {
+            hsv[1].coerceIn(0.42f, 0.90f)
+        }
+        hsv[2] = if (isLightThemeApprox()) {
+            hsv[2].coerceIn(0.98f, 1.0f)
+        } else {
+            hsv[2].coerceIn(0.94f, 1.0f)
+        }
+        return AndroidColor.HSVToColor(255, hsv)
+    }
+
+    private fun isLightColor(color: Int): Boolean {
+        val luminance = (
+            0.2126f * AndroidColor.red(color) +
+                0.7152f * AndroidColor.green(color) +
+                0.0722f * AndroidColor.blue(color)
+            ) / 255f
+        return luminance > 0.72f
+    }
+
+    private fun isLightThemeApprox(): Boolean {
+        val nightMask = context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK
+        return nightMask != android.content.res.Configuration.UI_MODE_NIGHT_YES
     }
 }
