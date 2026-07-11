@@ -2,8 +2,10 @@
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -84,6 +86,7 @@ private val DownloadsPageHorizontalPadding = 8.dp
 @Composable
 fun DownloadsScreen(
     windowSizeClass: WindowSizeClass,
+    isActive: Boolean = true,
     scrollToTopSignal: Long = 0L,
     viewModel: DownloadsViewModel = hiltViewModel()
 ) {
@@ -100,6 +103,10 @@ fun DownloadsScreen(
     LaunchedEffect(scrollToTopSignal) {
         if (scrollToTopSignal == 0L) return@LaunchedEffect
         listState.smoothScrollToTop()
+    }
+    LaunchedEffect(isActive) {
+        if (isActive) return@LaunchedEffect
+        listState.stopScroll(MutatePriority.PreventUserInput)
     }
 
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact

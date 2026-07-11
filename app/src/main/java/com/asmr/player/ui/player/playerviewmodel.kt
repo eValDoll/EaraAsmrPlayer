@@ -71,6 +71,7 @@ import java.util.Date
 import java.util.Locale
 
 private const val ONLINE_MANUAL_LYRICS_MESSAGE = "在线音频如需替换歌词，请先下载音频到本地"
+private const val LISTEN_TOGETHER_POLL_INTERVAL_MS = 60_000L
 
 @HiltViewModel
 @OptIn(FlowPreview::class)
@@ -936,7 +937,7 @@ class PlayerViewModel @Inject constructor(
                         backendConfigured = true,
                         status = ListenTogetherStatus.Ready
                     )
-                    delay(response?.heartbeatIntervalMs?.coerceIn(5_000L, 60_000L) ?: 15_000L)
+                    delay(response?.heartbeatIntervalMs?.coerceAtLeast(LISTEN_TOGETHER_POLL_INTERVAL_MS) ?: LISTEN_TOGETHER_POLL_INTERVAL_MS)
                 }.onFailure {
                     _listenTogetherUiState.value = _listenTogetherUiState.value.copy(
                         available = true,
@@ -945,7 +946,7 @@ class PlayerViewModel @Inject constructor(
                         backendConfigured = true,
                         status = ListenTogetherStatus.Error
                     )
-                    delay(15_000L)
+                    delay(LISTEN_TOGETHER_POLL_INTERVAL_MS)
                 }
             }
         }

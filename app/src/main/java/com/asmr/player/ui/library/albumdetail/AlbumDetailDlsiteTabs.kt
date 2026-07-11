@@ -7,7 +7,9 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -15,7 +17,9 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -55,6 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -128,6 +133,7 @@ import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.AudioItemMenuButtonSize
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.AsmrAsyncImage
+import com.asmr.player.ui.common.NoImageLoadingIndicator
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
 import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
@@ -186,11 +192,21 @@ private fun DlsiteSectionPlaceholderLine(
 }
 
 @Composable
-private fun DlsiteDirectoryLoadingPanel() {
+private fun rememberDlsiteDirectoryListHeight(): Dp {
     val screenHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
-    val fixedHeight = remember(screenHeight) {
+    return remember(screenHeight) {
         (screenHeight * 0.48f).coerceIn(240.dp, 460.dp)
     }
+}
+
+@Composable
+private fun rememberStableOneDirectoryContainerHeight(): Dp {
+    return rememberDlsiteDirectoryListHeight() + 152.dp
+}
+
+@Composable
+private fun DlsiteDirectoryLoadingPanel() {
+    val fixedHeight = rememberDlsiteDirectoryListHeight()
     Surface(
         shape = RoundedCornerShape(12.dp),
         tonalElevation = 1.dp,
@@ -676,6 +692,13 @@ private val DlsiteSectionPlacementTweenSpec = tween<IntOffset>(
     easing = FastOutSlowInEasing
 )
 
+private enum class DirectoryTreePanelState {
+    Loading,
+    Content,
+    Empty,
+    MissingRj
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 private fun LazyItemScope.dlsiteAnimatedSectionModifier(
     modifier: Modifier = Modifier,
@@ -688,15 +711,106 @@ private fun LazyItemScope.dlsiteAnimatedSectionModifier(
     )
 }
 
+@Composable
+private fun StableOneDirectoryTreeContent(
+    targetState: DirectoryTreePanelState,
+    modifier: Modifier = Modifier,
+    content: @Composable (DirectoryTreePanelState) -> Unit
+) {
+    val contentAlpha = remember { Animatable(if (targetState == DirectoryTreePanelState.Content) 0f else 1f) }
+    LaunchedEffect(targetState) {
+        if (targetState == DirectoryTreePanelState.Content) {
+            contentAlpha.snapTo(0f)
+            contentAlpha.animateTo(1f, animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing))
+        } else {
+            contentAlpha.snapTo(1f)
+        }
+    }
+    AnimatedContent(
+        targetState = targetState,
+        modifier = modifier
+            .height(rememberStableOneDirectoryContainerHeight())
+            .clipToBounds(),
+        transitionSpec = {
+            fadeIn(animationSpec = tween(durationMillis = 140))
+                .togetherWith(fadeOut(animationSpec = tween(durationMillis = 90)))
+        },
+        label = "stableAsmrOneDirectoryTree",
+        content = { state ->
+            val stateModifier = if (state == DirectoryTreePanelState.Content) {
+                Modifier.graphicsLayer {
+                    alpha = contentAlpha.value
+                    compositingStrategy = CompositingStrategy.ModulateAlpha
+                }
+            } else {
+                Modifier
+            }
+            Box(modifier = stateModifier.fillMaxSize()) {
+                content(state)
+            }
+        }
+    )
+}
+
+@Composable
+private fun DirectoryTreeAnimatedContent(
+    targetState: DirectoryTreePanelState,
+    label: String,
+    modifier: Modifier = Modifier,
+    content: @Composable (DirectoryTreePanelState) -> Unit
+) {
+    AnimatedContent(
+        targetState = targetState,
+        modifier = modifier.animateContentSize(
+            animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
+        ),
+        transitionSpec = {
+            (
+                fadeIn(animationSpec = tween(durationMillis = 180, delayMillis = 60)) +
+                    slideInVertically(
+                        animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+                        initialOffsetY = { height -> (height * 0.06f).toInt() }
+                    )
+                ).togetherWith(
+                fadeOut(animationSpec = tween(durationMillis = 120)) +
+                    slideOutVertically(
+                        animationSpec = tween(durationMillis = 160, easing = FastOutSlowInEasing),
+                        targetOffsetY = { height -> -(height * 0.03f).toInt() }
+                    )
+            ).using(SizeTransform(clip = false))
+        },
+        label = label,
+        content = { state -> content(state) }
+    )
+}
+
 internal fun shouldShowAsmrOneDirectoryLoading(
     isAwaitingAsmrOneLoad: Boolean,
+    hasResolvedAsmrOneContent: Boolean,
     isLoadingAsmrOne: Boolean,
     hasAsmrOneTree: Boolean,
     hasDirectoryBrowser: Boolean
 ): Boolean {
+    if (hasDirectoryBrowser && hasAsmrOneTree) return false
     return isAwaitingAsmrOneLoad ||
+        !hasResolvedAsmrOneContent ||
         isLoadingAsmrOne ||
-        (hasAsmrOneTree && !hasDirectoryBrowser)
+        hasAsmrOneTree
+}
+
+internal fun shouldShowDlsitePlayDirectoryLoading(
+    isAwaitingInitialTarget: Boolean,
+    hasResolvedDlsitePlayContent: Boolean,
+    isLoadingDlsitePlay: Boolean,
+    hasDlsitePlayTree: Boolean,
+    hasDirectoryBrowser: Boolean
+): Boolean {
+    return !hasDirectoryBrowser && (
+        isAwaitingInitialTarget ||
+            !hasResolvedDlsitePlayContent ||
+            isLoadingDlsitePlay ||
+            hasDlsitePlayTree
+        )
 }
 
 @Composable
@@ -709,6 +823,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     isLoading: Boolean,
     isAwaitingInitialLoad: Boolean,
     isAwaitingAsmrOneLoad: Boolean,
+    hasResolvedAsmrOneContent: Boolean,
     asmrOneTree: List<AsmrOneTrackNodeResponse>,
     isLoadingAsmrOne: Boolean,
     isLoadingTrial: Boolean,
@@ -735,7 +850,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     initialScroll: Pair<Int, Int>,
     onPersistScroll: (Int, Int) -> Unit,
     dlsiteRecommendations: DlsiteRecommendations,
-    onOpenAlbumByRj: (String) -> Unit,
+    onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit,
     loadRemoteFileSize: suspend (String) -> Long?
 ) {
     val scope = rememberCoroutineScope()
@@ -785,6 +900,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     val isInitialDlsiteLoading = isLoading || isAwaitingInitialLoad
     val isAsmrOnePending = shouldShowAsmrOneDirectoryLoading(
         isAwaitingAsmrOneLoad = isAwaitingAsmrOneLoad,
+        hasResolvedAsmrOneContent = hasResolvedAsmrOneContent,
         isLoadingAsmrOne = isLoadingAsmrOne,
         hasAsmrOneTree = asmrOneTree.isNotEmpty(),
         hasDirectoryBrowser = browser != null
@@ -854,6 +970,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 placeholderCornerRadius = DlsiteGalleryThumbCornerRadius,
+                                loading = NoImageLoadingIndicator,
                                 modifier = Modifier.fillMaxSize()
                             )
                         }
@@ -881,137 +998,146 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                 }
             }
         }
-        if (asmrOneTree.isNotEmpty() && browser != null) {
-            item(key = "dlsite-one-content") {
-                Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
-                    val browserValue = browser ?: return@Box
-                    DirectoryBrowserPanelV4(
-                    panelKey = treeStateKey,
-                    currentPath = currentPath,
-                    breadcrumbs = browserValue.breadcrumbs,
-                    batchTargets = browserValue.batchTargets,
-                    folders = browserValue.folders,
-                    files = browserValue.files,
-                    onNavigate = { path -> currentPath = path },
-                    onAddToFavorites = onAddMediaItemsToFavorites,
-                        onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
-                        onAddMediaItemsToQueue = onAddMediaItemsToQueue,
-                        animateIntro = animateIntro,
-                        parentChromeState = chromeState,
-                        folderKeyPrefix = "asmr-folder",
-                        fileKeyPrefix = "asmr-file",
-                    fileContent = { file, selectionMode, selected, enterSelectionMode, onSelectedChange ->
-                        val leaf = asmrLeafByRelPath[file.path]
-                        DirectoryFileRow(
-                            file = file.copy(showSubtitleStamp = file.subtitleSources.isNotEmpty()),
-                            loadRemoteFileSize = loadRemoteFileSize,
-                            onPrimary = {
-                                when (file.fileType) {
-                                    TreeFileType.Audio -> {
-                                        scope.launch {
-                                            val prepared = withContext(Dispatchers.Default) {
-                                                val start = asmrLeafByRelPath[file.path] ?: return@withContext null
-                                                val folderPath = file.path.substringBeforeLast('/', "")
-                                                val siblingLeaves = asmrLeafTracks.filter {
-                                                    it.relativePath.substringBeforeLast('/', "") == folderPath
-                                                }
-                                                val queueLeaves = siblingLeaves.ifEmpty { listOf(start) }
-                                                PreparedTrackPlayback(
-                                                    tracks = queueLeaves.sortedBy { SmartSortKey.of(it.title) }.map { it.toTrack() },
-                                                    startTrack = start.toTrack(),
-                                                    onlineLyrics = queueLeaves.associate { it.url to it.subtitles }
-                                                )
-                                            } ?: return@launch
-                                            com.asmr.player.util.OnlineLyricsStore.replaceAll(prepared.onlineLyrics)
-                                            onPlayTracks(album, prepared.tracks, prepared.startTrack)
-                                        }
-                                    }
-                                    TreeFileType.Video -> {
-                                        val item = file.playlistTarget?.toMediaItem()
-                                        if (item != null) {
-                                            onPlayMediaItems(listOf(item), 0)
-                                        } else {
-                                            onPreviewFile(
-                                                AsmrTreeUiEntry.File(
-                                                    path = file.path,
-                                                    title = file.title,
-                                                    depth = 0,
-                                                    fileType = file.fileType,
-                                                    isPlayable = false,
-                                                    url = file.url
-                                                )
-                                            )
-                                        }
-                                    }
-                                    TreeFileType.Image -> {
-                                        buildDirectoryImagePreviewRequest(
-                                            files = browserValue.files,
-                                            clickedPath = file.path,
-                                            toPreviewItem = { imageFile ->
-                                                val imageUrl = imageFile.url.takeIf { it.isNotBlank() } ?: return@buildDirectoryImagePreviewRequest null
-                                                ImagePreviewItem(
-                                                    key = imageFile.path,
-                                                    title = imageFile.title,
-                                                    openPathOrUrl = imageUrl,
-                                                    prepareImage = {
-                                                        ImagePreviewPreparedItem(
-                                                            imageModel = imageUrl,
-                                                            openPathOrUrl = imageUrl
+        val asmrOnePanelState = when {
+            asmrOneTree.isNotEmpty() && browser != null -> DirectoryTreePanelState.Content
+            isAsmrOnePending -> DirectoryTreePanelState.Loading
+            else -> DirectoryTreePanelState.Empty
+        }
+        item(key = "dlsite-one-content") {
+            Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
+                StableOneDirectoryTreeContent(
+                    targetState = asmrOnePanelState,
+                    modifier = Modifier.fillMaxWidth()
+                ) { panelState ->
+                    when (panelState) {
+                        DirectoryTreePanelState.Content -> {
+                            val browserValue = browser
+                            if (browserValue == null) {
+                                DlsiteDirectoryLoadingPanel()
+                            } else {
+                                DirectoryBrowserPanelV4(
+                                    panelKey = treeStateKey,
+                                    currentPath = currentPath,
+                                    breadcrumbs = browserValue.breadcrumbs,
+                                    batchTargets = browserValue.batchTargets,
+                                    folders = browserValue.folders,
+                                    files = browserValue.files,
+                                    onNavigate = { path -> currentPath = path },
+                                    onAddToFavorites = onAddMediaItemsToFavorites,
+                                    onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
+                                    onAddMediaItemsToQueue = onAddMediaItemsToQueue,
+                                    animateIntro = false,
+                                    parentChromeState = chromeState,
+                                    folderKeyPrefix = "asmr-folder",
+                                    fileKeyPrefix = "asmr-file",
+                                    fileContent = { file, selectionMode, selected, enterSelectionMode, onSelectedChange ->
+                                        val leaf = asmrLeafByRelPath[file.path]
+                                        DirectoryFileRow(
+                                            file = file.copy(showSubtitleStamp = file.subtitleSources.isNotEmpty()),
+                                            loadRemoteFileSize = loadRemoteFileSize,
+                                            onPrimary = {
+                                                when (file.fileType) {
+                                                    TreeFileType.Audio -> {
+                                                        scope.launch {
+                                                            val prepared = withContext(Dispatchers.Default) {
+                                                                val start = asmrLeafByRelPath[file.path] ?: return@withContext null
+                                                                val folderPath = file.path.substringBeforeLast('/', "")
+                                                                val siblingLeaves = asmrLeafTracks.filter {
+                                                                    it.relativePath.substringBeforeLast('/', "") == folderPath
+                                                                }
+                                                                val queueLeaves = siblingLeaves.ifEmpty { listOf(start) }
+                                                                PreparedTrackPlayback(
+                                                                    tracks = queueLeaves.sortedBy { SmartSortKey.of(it.title) }.map { it.toTrack() },
+                                                                    startTrack = start.toTrack(),
+                                                                    onlineLyrics = queueLeaves.associate { it.url to it.subtitles }
+                                                                )
+                                                            } ?: return@launch
+                                                            com.asmr.player.util.OnlineLyricsStore.replaceAll(prepared.onlineLyrics)
+                                                            onPlayTracks(album, prepared.tracks, prepared.startTrack)
+                                                        }
+                                                    }
+                                                    TreeFileType.Video -> {
+                                                        val item = file.playlistTarget?.toMediaItem()
+                                                        if (item != null) {
+                                                            onPlayMediaItems(listOf(item), 0)
+                                                        } else {
+                                                            onPreviewFile(
+                                                                AsmrTreeUiEntry.File(
+                                                                    path = file.path,
+                                                                    title = file.title,
+                                                                    depth = 0,
+                                                                    fileType = file.fileType,
+                                                                    isPlayable = false,
+                                                                    url = file.url
+                                                                )
+                                                            )
+                                                        }
+                                                    }
+                                                    TreeFileType.Image -> {
+                                                        buildDirectoryImagePreviewRequest(
+                                                            files = browserValue.files,
+                                                            clickedPath = file.path,
+                                                            toPreviewItem = { imageFile ->
+                                                                val imageUrl = imageFile.url.takeIf { it.isNotBlank() } ?: return@buildDirectoryImagePreviewRequest null
+                                                                ImagePreviewItem(
+                                                                    key = imageFile.path,
+                                                                    title = imageFile.title,
+                                                                    openPathOrUrl = imageUrl,
+                                                                    prepareImage = {
+                                                                        ImagePreviewPreparedItem(
+                                                                            imageModel = imageUrl,
+                                                                            openPathOrUrl = imageUrl
+                                                                        )
+                                                                    }
+                                                                )
+                                                            }
+                                                        )?.let(onPreviewImages) ?: onPreviewFile(
+                                                            AsmrTreeUiEntry.File(
+                                                                path = file.path,
+                                                                title = file.title,
+                                                                depth = 0,
+                                                                fileType = file.fileType,
+                                                                isPlayable = false,
+                                                                url = file.url
+                                                            )
                                                         )
                                                     }
-                                                )
-                                            }
-                                        )?.let(onPreviewImages) ?: onPreviewFile(
-                                            AsmrTreeUiEntry.File(
-                                                path = file.path,
-                                                title = file.title,
-                                                depth = 0,
-                                                fileType = file.fileType,
-                                                isPlayable = false,
-                                                url = file.url
-                                            )
+                                                    else -> onPreviewFile(
+                                                        AsmrTreeUiEntry.File(
+                                                            path = file.path,
+                                                            title = file.title,
+                                                            depth = 0,
+                                                            fileType = file.fileType,
+                                                            isPlayable = false,
+                                                            url = file.url
+                                                        )
+                                                    )
+                                                }
+                                            },
+                                            selectionMode = selectionMode,
+                                            selected = selected,
+                                            onEnterSelectionMode = enterSelectionMode,
+                                            onSelectedChange = onSelectedChange,
+                                            onDownload = if (isDownloadableTreeFileType(file.fileType)) ({ onDownloadOne(file.path) }) else null,
+                                            onAddToQueue = if (leaf != null) ({
+                                                com.asmr.player.util.OnlineLyricsStore.set(leaf.url, leaf.subtitles)
+                                                onAddToQueue(leaf.toTrack())
+                                            }) else null,
+                                            onAddToPlaylist = if (file.fileType == TreeFileType.Audio) ({ onAddToPlaylistOne(file.path) }) else null
                                         )
                                     }
-                                    else -> onPreviewFile(
-                                        AsmrTreeUiEntry.File(
-                                            path = file.path,
-                                            title = file.title,
-                                            depth = 0,
-                                            fileType = file.fileType,
-                                            isPlayable = false,
-                                            url = file.url
-                                        )
-                                    )
-                                }
-                            },
-                            selectionMode = selectionMode,
-                            selected = selected,
-                            onEnterSelectionMode = enterSelectionMode,
-                            onSelectedChange = onSelectedChange,
-                            onDownload = if (isDownloadableTreeFileType(file.fileType)) ({ onDownloadOne(file.path) }) else null,
-                            onAddToQueue = if (leaf != null) ({
-                                com.asmr.player.util.OnlineLyricsStore.set(leaf.url, leaf.subtitles)
-                                onAddToQueue(leaf.toTrack())
-                            }) else null,
-                            onAddToPlaylist = if (file.fileType == TreeFileType.Audio) ({ onAddToPlaylistOne(file.path) }) else null
+                                )
+                            }
+                        }
+                        DirectoryTreePanelState.Loading -> DlsiteDirectoryLoadingPanel()
+                        DirectoryTreePanelState.Empty -> DlsiteSectionEmptyState(
+                            text = "ONE 暂未收录",
+                            artworkKind = DlsiteEmptyArtworkKind.One,
+                            modifier = Modifier
                         )
+                        DirectoryTreePanelState.MissingRj -> Unit
                     }
-                    )
                 }
-            }
-        } else if (isAsmrOnePending) {
-            item(key = "dlsite-one-content") {
-                Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
-                    DlsiteDirectoryLoadingPanel()
-                }
-            }
-        } else {
-            item(key = "dlsite-one-content") {
-                DlsiteSectionEmptyState(
-                    text = "ONE 暂未收录",
-                    artworkKind = DlsiteEmptyArtworkKind.One,
-                    modifier = dlsiteAnimatedSectionModifier(Modifier, animateIntro)
-                )
             }
         }
         item(key = "dlsite-trial-header") {
@@ -1121,6 +1247,8 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
     tree: List<AsmrOneTrackNodeResponse>,
     isLoading: Boolean,
     shouldAutoLoad: Boolean,
+    isAwaitingInitialTarget: Boolean,
+    hasResolvedDlsitePlayContent: Boolean,
     onOpenLogin: () -> Unit,
     onEnsureLoaded: () -> Unit,
     onPlayMediaItems: (List<MediaItem>, Int) -> Unit,
@@ -1169,8 +1297,12 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
         return
     }
 
+    var autoLoadDispatched by remember(treeStateKey) { mutableStateOf(false) }
     LaunchedEffect(loggedIn, rjCode, shouldAutoLoad) {
-        if (loggedIn && shouldAutoLoad) onEnsureLoaded()
+        if (loggedIn && shouldAutoLoad && !autoLoadDispatched) {
+            autoLoadDispatched = true
+            onEnsureLoaded()
+        }
     }
 
     val headerItemCount = 2
@@ -1218,6 +1350,13 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
             withContext(Dispatchers.Default) { buildRemoteDirectoryBrowser(index, currentPath) }
         }
     }
+    val isDirectoryPending = shouldShowDlsitePlayDirectoryLoading(
+        isAwaitingInitialTarget = isAwaitingInitialTarget,
+        hasResolvedDlsitePlayContent = hasResolvedDlsitePlayContent,
+        isLoadingDlsitePlay = isLoading,
+        hasDlsitePlayTree = tree.isNotEmpty(),
+        hasDirectoryBrowser = browser != null
+    )
     LaunchedEffect(currentPath, treeStateKey) {
         onPersistCurrentPath(currentPath)
     }
@@ -1247,164 +1386,177 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
             }
         }
 
-        if (rj.isBlank()) {
-            item {
-                Box(modifier = Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
-                    Text("缺少 RJ 编号，无法加载")
-                }
-            }
-            return@LazyColumn
+        val dlsitePlayPanelState = when {
+            rj.isBlank() -> DirectoryTreePanelState.MissingRj
+            tree.isEmpty() && isDirectoryPending -> DirectoryTreePanelState.Loading
+            tree.isEmpty() -> DirectoryTreePanelState.Empty
+            isDirectoryPending || browser == null -> DirectoryTreePanelState.Loading
+            else -> DirectoryTreePanelState.Content
         }
-
-        if (tree.isEmpty()) {
-            item {
-                Box(modifier = Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
-                    if (isLoading) {
-                        EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
-                    } else {
+        item(key = "dlplay-content:$treeStateKey") {
+            DirectoryTreeAnimatedContent(
+                targetState = dlsitePlayPanelState,
+                label = "dlsitePlayDirectoryTree",
+                modifier = Modifier.fillMaxWidth()
+            ) { panelState ->
+                when (panelState) {
+                    DirectoryTreePanelState.MissingRj -> Box(
+                        modifier = Modifier.fillMaxWidth().height(220.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text("缺少 RJ 编号，无法加载")
+                    }
+                    DirectoryTreePanelState.Empty -> Box(
+                        modifier = Modifier.fillMaxWidth().height(220.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
                         Text("暂无可播放资源")
+                    }
+                    DirectoryTreePanelState.Loading -> Box(
+                        modifier = Modifier.fillMaxWidth().height(220.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
+                    }
+                    DirectoryTreePanelState.Content -> {
+                        val browserValue = browser
+                        if (browserValue == null) {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().height(220.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
+                            }
+                        } else {
+                            DirectoryBrowserPanelV4(
+                                panelKey = treeStateKey,
+                                currentPath = currentPath,
+                                breadcrumbs = browserValue.breadcrumbs,
+                                batchTargets = browserValue.batchTargets,
+                                folders = browserValue.folders,
+                                files = browserValue.files,
+                                onNavigate = { path -> currentPath = path },
+                                onAddToFavorites = onAddMediaItemsToFavorites,
+                                onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
+                                onAddMediaItemsToQueue = onAddMediaItemsToQueue,
+                                animateIntro = animateIntro,
+                                parentChromeState = chromeState,
+                                folderKeyPrefix = "dlplay-folder",
+                                fileKeyPrefix = "dlplay-file",
+                                fileContent = { file, selectionMode, selected, enterSelectionMode, onSelectedChange ->
+                                    val leaf = leafByRelPath[file.path]
+                                    DirectoryFileRow(
+                                        file = file.copy(showSubtitleStamp = file.subtitleSources.isNotEmpty()),
+                                        loadRemoteFileSize = loadRemoteFileSize,
+                                        onPrimary = {
+                                            when (file.fileType) {
+                                                TreeFileType.Audio, TreeFileType.Video -> {
+                                                    scope.launch {
+                                                        val prepared = withContext(Dispatchers.Default) {
+                                                            val folderPath = file.path.substringBeforeLast('/', "")
+                                                            val siblings = browserValue.files
+                                                                .filter { sibling ->
+                                                                    sibling.path.substringBeforeLast('/', "") == folderPath &&
+                                                                        (sibling.fileType == TreeFileType.Audio || sibling.fileType == TreeFileType.Video) &&
+                                                                        sibling.playlistTarget != null
+                                                                }
+                                                                .sortedBy { SmartSortKey.of(it.title) }
+                                                            val items = siblings.mapNotNull { it.playlistTarget?.toMediaItem() }
+                                                            if (items.isEmpty()) return@withContext null
+                                                            val clickedId = file.playlistTarget?.mediaId.orEmpty()
+                                                            val startIndex = items.indexOfFirst { it.mediaId == clickedId }
+                                                                .takeIf { it >= 0 } ?: 0
+                                                            PreparedMediaPlayback(items, startIndex)
+                                                        }
+                                                        if (prepared != null) {
+                                                            if (leaf != null) {
+                                                                com.asmr.player.util.OnlineLyricsStore.set(leaf.url, leaf.subtitles)
+                                                            }
+                                                            onPlayMediaItems(prepared.items, prepared.startIndex)
+                                                        } else {
+                                                            onPreviewFile(
+                                                                AsmrTreeUiEntry.File(
+                                                                    path = file.path,
+                                                                    title = file.title,
+                                                                    depth = 0,
+                                                                    fileType = file.fileType,
+                                                                    isPlayable = false,
+                                                                    url = file.url
+                                                                )
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                                TreeFileType.Image -> {
+                                                    val request = buildDirectoryImagePreviewRequest(
+                                                        files = browserValue.files,
+                                                        clickedPath = file.path,
+                                                        toPreviewItem = { imageFile ->
+                                                            val imageUrl = imageFile.url.takeIf { it.isNotBlank() } ?: return@buildDirectoryImagePreviewRequest null
+                                                            ImagePreviewItem(
+                                                                key = imageFile.path,
+                                                                title = imageFile.title,
+                                                                openPathOrUrl = imageUrl,
+                                                                prepareImage = {
+                                                                    val prepared = prepareImagePreview(
+                                                                        imageUrl,
+                                                                        imageFile.dlsitePlayOptimizedName,
+                                                                        imageFile.dlsitePlayImageCrypt,
+                                                                        imageFile.dlsitePlayImageWidth,
+                                                                        imageFile.dlsitePlayImageHeight
+                                                                    ) ?: imageUrl
+                                                                    ImagePreviewPreparedItem(
+                                                                        imageModel = prepared,
+                                                                        openPathOrUrl = prepared
+                                                                    )
+                                                                }
+                                                            )
+                                                        }
+                                                    )
+                                                    if (request != null) {
+                                                        onPreviewImages(request)
+                                                    } else {
+                                                        onPreviewFile(
+                                                            AsmrTreeUiEntry.File(
+                                                                path = file.path,
+                                                                title = file.title,
+                                                                depth = 0,
+                                                                fileType = file.fileType,
+                                                                isPlayable = false,
+                                                                url = file.url
+                                                            )
+                                                        )
+                                                    }
+                                                }
+                                                else -> onPreviewFile(
+                                                    AsmrTreeUiEntry.File(
+                                                        path = file.path,
+                                                        title = file.title,
+                                                        depth = 0,
+                                                        fileType = file.fileType,
+                                                        isPlayable = false,
+                                                        url = file.url
+                                                    )
+                                                )
+                                            }
+                                        },
+                                        selectionMode = selectionMode,
+                                        selected = selected,
+                                        onEnterSelectionMode = enterSelectionMode,
+                                        onSelectedChange = onSelectedChange,
+                                        onDownload = if (isDownloadableTreeFileType(file.fileType)) ({ onDownloadOne(file.path) }) else null,
+                                        onAddToQueue = if (leaf != null) ({
+                                            com.asmr.player.util.OnlineLyricsStore.set(leaf.url, leaf.subtitles)
+                                            onAddToQueue(leaf.toTrack())
+                                        }) else null,
+                                        onAddToPlaylist = null
+                                    )
+                                }
+                            )
+                        }
                     }
                 }
             }
-            return@LazyColumn
-        }
-
-        if (browser == null) {
-            item {
-                Box(modifier = Modifier.fillMaxWidth().height(220.dp), contentAlignment = Alignment.Center) {
-                    EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
-                }
-            }
-            return@LazyColumn
-        }
-
-        item {
-            val browserValue = browser ?: return@item
-            DirectoryBrowserPanelV4(
-                panelKey = treeStateKey,
-                currentPath = currentPath,
-                breadcrumbs = browserValue.breadcrumbs,
-                batchTargets = browserValue.batchTargets,
-                folders = browserValue.folders,
-                files = browserValue.files,
-                onNavigate = { path -> currentPath = path },
-                onAddToFavorites = onAddMediaItemsToFavorites,
-                onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
-                onAddMediaItemsToQueue = onAddMediaItemsToQueue,
-                animateIntro = animateIntro,
-                parentChromeState = chromeState,
-                folderKeyPrefix = "dlplay-folder",
-                fileKeyPrefix = "dlplay-file",
-                fileContent = { file, selectionMode, selected, enterSelectionMode, onSelectedChange ->
-                    val leaf = leafByRelPath[file.path]
-                    DirectoryFileRow(
-                        file = file.copy(showSubtitleStamp = file.subtitleSources.isNotEmpty()),
-                        loadRemoteFileSize = loadRemoteFileSize,
-                        onPrimary = {
-                            when (file.fileType) {
-                                TreeFileType.Audio, TreeFileType.Video -> {
-                                    scope.launch {
-                                        val prepared = withContext(Dispatchers.Default) {
-                                            val folderPath = file.path.substringBeforeLast('/', "")
-                                            val siblings = browserValue.files
-                                                .filter { sibling ->
-                                                    sibling.path.substringBeforeLast('/', "") == folderPath &&
-                                                        (sibling.fileType == TreeFileType.Audio || sibling.fileType == TreeFileType.Video) &&
-                                                        sibling.playlistTarget != null
-                                                }
-                                                .sortedBy { SmartSortKey.of(it.title) }
-                                            val items = siblings.mapNotNull { it.playlistTarget?.toMediaItem() }
-                                            if (items.isEmpty()) return@withContext null
-                                            val clickedId = file.playlistTarget?.mediaId.orEmpty()
-                                            val startIndex = items.indexOfFirst { it.mediaId == clickedId }
-                                                .takeIf { it >= 0 } ?: 0
-                                            PreparedMediaPlayback(items, startIndex)
-                                        }
-                                        if (prepared != null) {
-                                            if (leaf != null) {
-                                                com.asmr.player.util.OnlineLyricsStore.set(leaf.url, leaf.subtitles)
-                                            }
-                                            onPlayMediaItems(prepared.items, prepared.startIndex)
-                                        } else {
-                                            onPreviewFile(
-                                                AsmrTreeUiEntry.File(
-                                                    path = file.path,
-                                                    title = file.title,
-                                                    depth = 0,
-                                                    fileType = file.fileType,
-                                                    isPlayable = false,
-                                                    url = file.url
-                                                )
-                                            )
-                                        }
-                                    }
-                                }
-                                TreeFileType.Image -> {
-                                    val request = buildDirectoryImagePreviewRequest(
-                                        files = browserValue.files,
-                                        clickedPath = file.path,
-                                        toPreviewItem = { imageFile ->
-                                            val imageUrl = imageFile.url.takeIf { it.isNotBlank() } ?: return@buildDirectoryImagePreviewRequest null
-                                            ImagePreviewItem(
-                                                key = imageFile.path,
-                                                title = imageFile.title,
-                                                openPathOrUrl = imageUrl,
-                                                prepareImage = {
-                                                    val prepared = prepareImagePreview(
-                                                        imageUrl,
-                                                        imageFile.dlsitePlayOptimizedName,
-                                                        imageFile.dlsitePlayImageCrypt,
-                                                        imageFile.dlsitePlayImageWidth,
-                                                        imageFile.dlsitePlayImageHeight
-                                                    ) ?: imageUrl
-                                                    ImagePreviewPreparedItem(
-                                                        imageModel = prepared,
-                                                        openPathOrUrl = prepared
-                                                    )
-                                                }
-                                            )
-                                        }
-                                    )
-                                    if (request != null) {
-                                        onPreviewImages(request)
-                                    } else {
-                                        onPreviewFile(
-                                            AsmrTreeUiEntry.File(
-                                                path = file.path,
-                                                title = file.title,
-                                                depth = 0,
-                                                fileType = file.fileType,
-                                                isPlayable = false,
-                                                url = file.url
-                                            )
-                                        )
-                                    }
-                                }
-                                else -> onPreviewFile(
-                                    AsmrTreeUiEntry.File(
-                                        path = file.path,
-                                        title = file.title,
-                                        depth = 0,
-                                        fileType = file.fileType,
-                                        isPlayable = false,
-                                        url = file.url
-                                    )
-                                )
-                            }
-                        },
-                        selectionMode = selectionMode,
-                        selected = selected,
-                        onEnterSelectionMode = enterSelectionMode,
-                        onSelectedChange = onSelectedChange,
-                        onDownload = if (isDownloadableTreeFileType(file.fileType)) ({ onDownloadOne(file.path) }) else null,
-                        onAddToQueue = if (leaf != null) ({
-                            com.asmr.player.util.OnlineLyricsStore.set(leaf.url, leaf.subtitles)
-                            onAddToQueue(leaf.toTrack())
-                        }) else null,
-                        onAddToPlaylist = null
-                    )
-                }
-            )
         }
     }
 }

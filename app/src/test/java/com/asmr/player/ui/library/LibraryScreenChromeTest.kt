@@ -34,6 +34,7 @@ class LibraryScreenChromeTest {
                     searchText = "voice",
                     onSearchTextChange = {},
                     onClearSearch = {},
+                    currentSort = LibrarySort.AddedDesc,
                     sortMenuExpanded = false,
                     onSortMenuExpandedChange = {},
                     onSortLastPlayed = {},

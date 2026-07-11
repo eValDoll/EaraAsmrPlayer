@@ -447,7 +447,8 @@ fun CustomSearchBar(
 fun ActionButton(
     icon: ImageVector,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    active: Boolean = false
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val isDark = colorScheme.isDark
@@ -456,13 +457,18 @@ fun ActionButton(
     } else {
         lerp(colorScheme.surface, colorScheme.primarySoft, 0.08f)
     }
-    val containerColor = containerBaseColor.copy(alpha = if (isDark) 0.93f else 0.95f)
+    val inactiveContainerColor = containerBaseColor.copy(alpha = if (isDark) 0.93f else 0.95f)
         .compositeOver(colorScheme.background)
-    val borderColor = if (isDark) {
+    val activeContainerColor = colorScheme.primary.copy(alpha = if (isDark) 0.18f else 0.12f)
+        .compositeOver(inactiveContainerColor)
+    val containerColor = if (active) activeContainerColor else inactiveContainerColor
+    val inactiveBorderColor = if (isDark) {
         Color.White.copy(alpha = 0.14f)
     } else {
         colorScheme.primaryStrong.copy(alpha = 0.14f)
     }
+    val borderColor = if (active) colorScheme.primary.copy(alpha = 0.46f) else inactiveBorderColor
+    val iconTint = if (active) colorScheme.primary else colorScheme.onSurfaceVariant
     Box(
         modifier = modifier
             .size(50.dp)
@@ -487,7 +493,7 @@ fun ActionButton(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            tint = colorScheme.onSurfaceVariant,
+            tint = iconTint,
             modifier = Modifier.size(24.dp)
         )
     }

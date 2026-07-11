@@ -26,6 +26,9 @@ interface TagDao {
     @Query("SELECT * FROM tags WHERE id = :id LIMIT 1")
     suspend fun getTagById(id: Long): TagEntity?
 
+    @Query("SELECT id FROM tags WHERE id IN (:ids)")
+    suspend fun getExistingTagIds(ids: List<Long>): List<Long>
+
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAlbumTags(refs: List<AlbumTagEntity>)
 

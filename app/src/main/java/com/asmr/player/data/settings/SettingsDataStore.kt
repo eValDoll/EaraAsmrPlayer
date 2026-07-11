@@ -30,6 +30,7 @@ object SettingsKeys {
     val FLOATING_LYRICS_COLOR = intPreferencesKey("floating_lyrics_color")
     val FLOATING_LYRICS_SIZE = floatPreferencesKey("floating_lyrics_size")
     val FLOATING_LYRICS_OPACITY = floatPreferencesKey("floating_lyrics_opacity")
+    val FLOATING_LYRICS_X = intPreferencesKey("floating_lyrics_x")
     val FLOATING_LYRICS_Y = intPreferencesKey("floating_lyrics_y")
     val FLOATING_LYRICS_ALIGN = intPreferencesKey("floating_lyrics_align")
     val FLOATING_LYRICS_TOUCHABLE = booleanPreferencesKey("floating_lyrics_touchable")

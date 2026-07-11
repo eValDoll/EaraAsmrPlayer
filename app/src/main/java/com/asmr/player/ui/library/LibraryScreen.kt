@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.library
+package com.asmr.player.ui.library
 
 import android.content.Intent
 import androidx.activity.compose.BackHandler
@@ -7,6 +7,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.MutatePriority
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -58,6 +60,7 @@ import com.asmr.player.ui.common.AudioItemMenuAction
 import com.asmr.player.ui.common.AudioItemRow
 import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
+import com.asmr.player.ui.common.NoImageLoadingIndicator
 import com.asmr.player.ui.common.FlatActionDialog
 import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
@@ -65,6 +68,7 @@ import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.rememberAudioMeta
 import com.asmr.player.ui.common.rememberAudioMetaText
 import com.asmr.player.ui.common.rememberTrackMetaLine
+import com.asmr.player.ui.common.queryCachedTrackFileSize
 import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.withAddedBottomPadding
 import androidx.compose.material3.HorizontalDivider
@@ -75,7 +79,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.Surface
@@ -93,7 +96,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -165,6 +167,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import com.asmr.player.ui.common.CustomSearchBar
+import com.asmr.player.ui.common.ActiveDropdownMenuItem
 import com.asmr.player.ui.common.ActionButton
 import com.asmr.player.ui.common.clearFocusOnTapOutside
 import com.asmr.player.ui.common.collapsibleHeaderUiState
@@ -176,6 +179,9 @@ import com.asmr.player.util.DlsiteAntiHotlink
 internal const val LIBRARY_CHROME_TAG = "library_chrome"
 internal const val LIBRARY_SEARCH_INPUT_TAG = "library_search_input"
 internal const val LIBRARY_SORT_BUTTON_TAG = "library_sort_button"
+internal const val LIBRARY_SORT_LAST_PLAYED_ITEM_TAG = "library_sort_last_played_item"
+internal const val LIBRARY_SORT_ADDED_ITEM_TAG = "library_sort_added_item"
+internal const val LIBRARY_SORT_TITLE_ITEM_TAG = "library_sort_title_item"
 internal const val LIBRARY_FILTER_BUTTON_TAG = "library_filter_button"
 private val LibraryChromeContentGap = 20.dp
 private val LibraryChromeCollapseOvershoot = 12.dp
@@ -185,6 +191,7 @@ private val LibraryTrackListItemCornerRadius = 10.dp
 private val LibraryAlbumItemVerticalPadding = 2.dp
 private val LibraryAlbumGridInfoHorizontalPadding = 6.dp
 private val LibraryAlbumGridInfoVerticalPadding = 8.dp
+private const val LibraryTrackPagingHintDistance = 10
 
 private fun Album.withUserTags(userTags: List<String>): Album {
     if (userTags.isEmpty()) return this
@@ -265,6 +272,7 @@ private fun LibraryActionItem(
 @Composable
 fun LibraryScreen(
     windowSizeClass: WindowSizeClass,
+    isActive: Boolean = true,
     onAlbumClick: (Album) -> Unit,
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
     onOpenPlaylistPicker: (MediaItem) -> Unit = {},
@@ -279,6 +287,7 @@ fun LibraryScreen(
     val uiState by viewModel.uiState.collectAsState()
     val viewMode by viewModel.libraryViewMode.collectAsState()
     val querySpec by viewModel.querySpec.collectAsState()
+    val hasActiveFilters by viewModel.hasActiveFilters.collectAsState()
     val tags by viewModel.availableTags.collectAsState()
     val userTagsByAlbumId by viewModel.userTagsByAlbumId.collectAsState()
     val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsState()
@@ -309,8 +318,9 @@ fun LibraryScreen(
     val pagedTrackAlbumHeaders = viewModel.pagedTrackAlbumHeaders.collectAsLazyPagingItems()
     val pagedAlbumSnapshot = pagedAlbums.itemSnapshotList
     val pagedAlbumIndices = remember(pagedAlbumSnapshot.items.size) { List(pagedAlbumSnapshot.items.size) { it } }
+    val loadedTrackAlbumHeaders = pagedTrackAlbumHeaders.itemSnapshotList.items
     val expandedAlbumTracks by (if (isTrackList) viewModel.expandedTrackAlbumTracks else flowOf(emptyMap())).collectAsState(initial = emptyMap())
-    val expandedAlbumIds = remember { mutableStateListOf<Long>() }
+    val expandedAlbumIds by viewModel.expandedTrackAlbumIds.collectAsState()
     var actionAlbum by remember { mutableStateOf<Album?>(null) }
     var showAlbumActions by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -330,12 +340,8 @@ fun LibraryScreen(
 
     LaunchedEffect(isTrackList) {
         if (!isTrackList) {
-            expandedAlbumIds.clear()
-            viewModel.setExpandedTrackAlbums(emptySet())
-            return@LaunchedEffect
+            viewModel.clearExpandedTrackAlbums()
         }
-        snapshotFlow { expandedAlbumIds.toSet() }
-            .collect { ids -> viewModel.setExpandedTrackAlbums(ids) }
     }
     LaunchedEffect(showDeleteConfirm, actionAlbum) {
         if (showDeleteConfirm && (actionAlbum == null || actionAlbum?.id?.let { it <= 0L } == true)) {
@@ -375,6 +381,13 @@ fun LibraryScreen(
             else -> listState.smoothScrollToTop()
         }
         chromeState.expand()
+    }
+    LaunchedEffect(isActive, mode) {
+        if (isActive) return@LaunchedEffect
+        when (mode) {
+            1 -> gridState.stopScroll(MutatePriority.PreventUserInput)
+            else -> listState.stopScroll(MutatePriority.PreventUserInput)
+        }
     }
 
     Scaffold(
@@ -584,21 +597,35 @@ fun LibraryScreen(
                                         contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                                     ) {
-                                        val headerCount = pagedTrackAlbumHeaders.itemCount
+                                        val headerCount = loadedTrackAlbumHeaders.size
+                                        val lastLoadedHeader = loadedTrackAlbumHeaders.lastOrNull()
+                                        val appendState = pagedTrackAlbumHeaders.loadState.append
+                                        val pagingHintHeaderIndex =
+                                            (headerCount - LibraryTrackPagingHintDistance).coerceAtLeast(0)
+                                        val pagingHintHeader = lastLoadedHeader?.takeIf {
+                                            appendState is LoadState.NotLoading &&
+                                                !appendState.endOfPaginationReached
+                                        }
                                         for (headerIndex in 0 until headerCount) {
-                                            val header = pagedTrackAlbumHeaders[headerIndex]
-                                            if (header == null) {
-                                                item(key = "header:$headerIndex") {
-                                                    Box(
+                                            if (pagingHintHeader != null && headerIndex == pagingHintHeaderIndex) {
+                                                item(
+                                                    key = "trackPagingHint:${pagingHintHeader.albumId}:$headerCount",
+                                                    contentType = "trackPagingHint"
+                                                ) {
+                                                    LaunchedEffect(pagingHintHeader.albumId, headerCount, querySpec) {
+                                                        val hintIndex = headerCount - 1
+                                                        if (hintIndex in 0 until pagedTrackAlbumHeaders.itemCount) {
+                                                            pagedTrackAlbumHeaders[hintIndex]
+                                                        }
+                                                    }
+                                                    Spacer(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
-                                                            .padding(horizontal = LibraryPageHorizontalPadding, vertical = 10.dp)
-                                                    ) {
-                                                        Spacer(modifier = Modifier.height(50.dp))
-                                                    }
+                                                            .height(1.dp)
+                                                    )
                                                 }
-                                                continue
                                             }
+                                            val header = loadedTrackAlbumHeaders[headerIndex]
 
                                             val albumId = header.albumId
                                             val expanded = expandedAlbumIds.contains(albumId)
@@ -625,7 +652,10 @@ fun LibraryScreen(
                                                         trackCount = header.trackCount,
                                                         totalDurationSeconds = header.totalDuration,
                                                         totalSizeBytes = header.totalSizeBytes.takeIf { it > 0L }
-                                                            ?: rememberAlbumTrackListTotalSizeBytes(rows),
+                                                            ?: rememberAlbumTrackListTotalSizeBytes(
+                                                                rows = rows,
+                                                                loadFileSizes = !listState.isScrollInProgress
+                                                            ),
                                                         coverModel = albumCoverImageModel(
                                                             coverThumbPath = "",
                                                             coverPath = header.coverPath.takeIf { it != "null" }.orEmpty(),
@@ -634,9 +664,7 @@ fun LibraryScreen(
                                                         expanded = expanded,
                                                         isFirstInList = isFirstAlbumHeader,
                                                         isLastInList = isLastAlbumHeader,
-                                                        onToggle = {
-                                                            if (expanded) expandedAlbumIds.remove(albumId) else expandedAlbumIds.add(albumId)
-                                                        }
+                                                        onToggle = { viewModel.toggleExpandedTrackAlbum(albumId) }
                                                     )
                                                 }
                                             }
@@ -679,7 +707,8 @@ fun LibraryScreen(
                                                     val meta = rememberAudioMeta(
                                                         sourcePath = row.trackPath,
                                                         durationSeconds = row.duration,
-                                                        prefixSegments = listOf(row.cv)
+                                                        prefixSegments = listOf(row.cv),
+                                                        loadSize = !listState.isScrollInProgress
                                                     )
 
                                                     Column {
@@ -758,9 +787,10 @@ fun LibraryScreen(
                                     ) {
                                         staggeredItems(
                                             pagedAlbumIndices,
-                                            key = { idx -> pagedAlbumSnapshot.items.getOrNull(idx)?.id?.takeIf { it > 0L } ?: idx }
+                                            key = { idx -> pagedAlbumSnapshot.items.getOrNull(idx)?.id?.takeIf { it > 0L } ?: idx },
+                                            contentType = { "albumGridItem" },
                                         ) { idx ->
-                                            val album = pagedAlbumSnapshot.items.getOrNull(idx) ?: return@staggeredItems
+                                            val album = pagedAlbums[idx] ?: return@staggeredItems
                                             val mergedAlbum = album.withUserTags(userTagsByAlbumId[album.id].orEmpty())
                                             AlbumGridItem(
                                                 album = mergedAlbum,
@@ -791,7 +821,7 @@ fun LibraryScreen(
                                     LazyListPreloader(
                                         state = listState,
                                         itemCount = pagedAlbums.itemCount,
-                                        preloadNext = 10,
+                                        preloadNext = 4,
                                         preloadSize = preloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->
@@ -822,7 +852,7 @@ fun LibraryScreen(
                                             key = { idx -> pagedAlbums.itemSnapshotList.getOrNull(idx)?.id?.takeIf { it > 0L } ?: idx },
                                             contentType = { "albumListItem" }
                                         ) { idx ->
-                                            val album = pagedAlbums.itemSnapshotList.getOrNull(idx) ?: return@items
+                                            val album = pagedAlbums[idx] ?: return@items
                                             val mergedAlbum = album.withUserTags(userTagsByAlbumId[album.id].orEmpty())
                                             AlbumItem(
                                                 album = mergedAlbum,
@@ -852,12 +882,14 @@ fun LibraryScreen(
                                         searchText = ""
                                         viewModel.setSearchQuery("")
                                     },
+                                    currentSort = querySpec.sort,
                                     sortMenuExpanded = sortMenuExpanded,
                                     onSortMenuExpandedChange = { sortMenuExpanded = it },
                                     onSortLastPlayed = { viewModel.setSort(LibrarySort.LastPlayedDesc) },
                                     onSortAdded = { viewModel.setSort(LibrarySort.AddedDesc) },
                                     onSortTitle = { viewModel.setSort(LibrarySort.TitleAsc) },
                                     onOpenFilterScreen = onOpenFilterScreen,
+                                    filterActive = hasActiveFilters,
                                     rightPanelToggle = rightPanelToggle,
                                     dynamicContainerColor = dynamicContainerColor,
                                     materialColorScheme = materialColorScheme,
@@ -1047,12 +1079,14 @@ internal fun LibraryChrome(
     searchText: String,
     onSearchTextChange: (String) -> Unit,
     onClearSearch: () -> Unit,
+    currentSort: LibrarySort,
     sortMenuExpanded: Boolean,
     onSortMenuExpandedChange: (Boolean) -> Unit,
     onSortLastPlayed: () -> Unit,
     onSortAdded: () -> Unit,
     onSortTitle: () -> Unit,
     onOpenFilterScreen: () -> Unit,
+    filterActive: Boolean = false,
     rightPanelToggle: (@Composable (Modifier) -> Unit)?,
     dynamicContainerColor: Color,
     materialColorScheme: androidx.compose.material3.ColorScheme,
@@ -1133,8 +1167,12 @@ internal fun LibraryChrome(
                     onDismissRequest = { onSortMenuExpandedChange(false) },
                     modifier = Modifier.background(chromeActionContainerColor)
                 ) {
-                    DropdownMenuItem(
-                        text = { Text("最近播放") },
+                    ActiveDropdownMenuItem(
+                        label = "最近播放",
+                        selected = currentSort == LibrarySort.LastPlayedDesc,
+                        testTag = LIBRARY_SORT_LAST_PLAYED_ITEM_TAG,
+                        activeColor = materialColorScheme.primary,
+                        inactiveColor = materialColorScheme.onSurface,
                         onClick = {
                             onSortMenuExpandedChange(false)
                             onSortLastPlayed()
@@ -1145,8 +1183,12 @@ internal fun LibraryChrome(
                         thickness = 0.5.dp,
                         color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
                     )
-                    DropdownMenuItem(
-                        text = { Text("最近加入") },
+                    ActiveDropdownMenuItem(
+                        label = "最近加入",
+                        selected = currentSort == LibrarySort.AddedDesc,
+                        testTag = LIBRARY_SORT_ADDED_ITEM_TAG,
+                        activeColor = materialColorScheme.primary,
+                        inactiveColor = materialColorScheme.onSurface,
                         onClick = {
                             onSortMenuExpandedChange(false)
                             onSortAdded()
@@ -1157,8 +1199,12 @@ internal fun LibraryChrome(
                         thickness = 0.5.dp,
                         color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
                     )
-                    DropdownMenuItem(
-                        text = { Text("专辑标题") },
+                    ActiveDropdownMenuItem(
+                        label = "专辑标题",
+                        selected = currentSort == LibrarySort.TitleAsc,
+                        testTag = LIBRARY_SORT_TITLE_ITEM_TAG,
+                        activeColor = materialColorScheme.primary,
+                        inactiveColor = materialColorScheme.onSurface,
                         onClick = {
                             onSortMenuExpandedChange(false)
                             onSortTitle()
@@ -1171,7 +1217,10 @@ internal fun LibraryChrome(
         ActionButton(
             icon = Icons.Rounded.FilterList,
             onClick = onOpenFilterScreen,
-            modifier = Modifier.testTag(LIBRARY_FILTER_BUTTON_TAG)
+            modifier = Modifier
+                .testTag(LIBRARY_FILTER_BUTTON_TAG)
+                .semantics { stateDescription = if (filterActive) "筛选已启用" else "筛选未启用" },
+            active = filterActive
         )
         if (rightPanelToggle != null) {
             Spacer(modifier = Modifier.width(8.dp))
@@ -1239,6 +1288,8 @@ private fun TrackAlbumHeader(
             contentDescription = null,
             contentScale = ContentScale.Crop,
             placeholderCornerRadius = 8,
+            peekAnySizeForInitial = true,
+            loading = NoImageLoadingIndicator,
             modifier = Modifier
                 .size(50.dp)
                 .clip(RoundedCornerShape(8.dp)),
@@ -1273,13 +1324,17 @@ private fun TrackAlbumHeader(
 }
 
 @Composable
-private fun rememberAlbumTrackListTotalSizeBytes(rows: List<com.asmr.player.data.local.db.dao.LibraryTrackRow>): Long? {
+private fun rememberAlbumTrackListTotalSizeBytes(
+    rows: List<com.asmr.player.data.local.db.dao.LibraryTrackRow>,
+    loadFileSizes: Boolean
+): Long? {
+    if (rows.isEmpty() || !loadFileSizes) return null
     val context = LocalContext.current
     val paths = remember(rows) { rows.map { it.trackPath } }
-    return androidx.compose.runtime.produceState<Long?>(initialValue = null, paths) {
+    return androidx.compose.runtime.produceState<Long?>(initialValue = null, paths, loadFileSizes) {
         value = withContext(Dispatchers.IO) {
             val total = rows.sumOf { row ->
-                com.asmr.player.ui.common.queryTrackFileSize(context, row.trackPath) ?: 0L
+                queryCachedTrackFileSize(context, row.trackPath) ?: 0L
             }
             total.takeIf { it > 0L }
         }
@@ -1408,6 +1463,8 @@ private fun AlbumGridItem(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 placeholderCornerRadius = 0,
+                peekAnySizeForInitial = true,
+                loading = NoImageLoadingIndicator,
                 modifier = Modifier.fillMaxSize().clip(coverShape),
             )
             
@@ -1503,16 +1560,18 @@ private fun AlbumGridItem(
                 leadingVisual = AlbumMetaLeadingVisual.Icon,
             )
 
-            val statsText = buildString {
-                val rv = album.ratingValue
-                if (rv != null && rv > 0.0) {
-                    append("★")
-                    append(String.format("%.1f", rv))
-                    if (album.ratingCount > 0) append("(${album.ratingCount})")
-                }
-                if (album.priceJpy > 0) {
-                    if (isNotEmpty()) append(" · ")
-                    append("¥${album.priceJpy}")
+            val statsText = remember(album.ratingValue, album.ratingCount, album.priceJpy) {
+                buildString {
+                    val rv = album.ratingValue
+                    if (rv != null && rv > 0.0) {
+                        append("★")
+                        append(String.format("%.1f", rv))
+                        if (album.ratingCount > 0) append("(${album.ratingCount})")
+                    }
+                    if (album.priceJpy > 0) {
+                        if (isNotEmpty()) append(" · ")
+                        append("¥${album.priceJpy}")
+                    }
                 }
             }
             if (statsText.isNotBlank()) {
@@ -1598,6 +1657,8 @@ private fun AlbumItem(
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         placeholderCornerRadius = 0,
+                        peekAnySizeForInitial = true,
+                        loading = NoImageLoadingIndicator,
                         modifier = Modifier.fillMaxSize().clip(coverShape),
                     )
                     
@@ -1634,24 +1695,32 @@ private fun AlbumItem(
                 }
             },
             content = {
-                val statsText = buildString {
-                    val rv = album.ratingValue
-                    if (rv != null && rv > 0.0) {
-                        append("★")
-                        append(String.format("%.1f", rv))
-                        if (album.ratingCount > 0) append("(${album.ratingCount})")
-                    }
-                    if (album.dlCount > 0) {
-                        if (isNotEmpty()) append(" · ")
-                        append("DL ${album.dlCount}")
-                    }
-                    if (album.priceJpy > 0) {
-                        if (isNotEmpty()) append(" · ")
-                        append("¥${album.priceJpy}")
-                    }
-                    if (album.releaseDate.isNotBlank()) {
-                        if (isNotEmpty()) append(" · ")
-                        append(album.releaseDate)
+                val statsText = remember(
+                    album.ratingValue,
+                    album.ratingCount,
+                    album.dlCount,
+                    album.priceJpy,
+                    album.releaseDate
+                ) {
+                    buildString {
+                        val rv = album.ratingValue
+                        if (rv != null && rv > 0.0) {
+                            append("★")
+                            append(String.format("%.1f", rv))
+                            if (album.ratingCount > 0) append("(${album.ratingCount})")
+                        }
+                        if (album.dlCount > 0) {
+                            if (isNotEmpty()) append(" · ")
+                            append("DL ${album.dlCount}")
+                        }
+                        if (album.priceJpy > 0) {
+                            if (isNotEmpty()) append(" · ")
+                            append("¥${album.priceJpy}")
+                        }
+                        if (album.releaseDate.isNotBlank()) {
+                            if (isNotEmpty()) append(" · ")
+                            append(album.releaseDate)
+                        }
                     }
                 }
 

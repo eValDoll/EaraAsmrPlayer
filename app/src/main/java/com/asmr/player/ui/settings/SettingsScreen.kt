@@ -8,12 +8,14 @@ import android.provider.DocumentsContract
 import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -89,6 +91,7 @@ private const val MONOCHROME_THEME_SENTINEL = 0x01000000
 @Composable
 fun SettingsScreen(
     windowSizeClass: WindowSizeClass,
+    isActive: Boolean = true,
     viewModel: SettingsViewModel = hiltViewModel(),
     libraryViewModel: LibraryViewModel = hiltViewModel(),
     scrollToTopSignal: Long = 0L,
@@ -163,6 +166,10 @@ fun SettingsScreen(
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground
     ) { padding ->
+        LaunchedEffect(isActive) {
+            if (isActive) return@LaunchedEffect
+            listState.stopScroll(MutatePriority.PreventUserInput)
+        }
         LaunchedEffect(scrollToTopSignal) {
             if (scrollToTopSignal == 0L) return@LaunchedEffect
             listState.smoothScrollToTop()
@@ -677,10 +684,10 @@ fun SettingsScreen(
                             val presetColors = remember {
                                 listOf(
                                     0xFFFFFFFF.toInt(),
-                                    0xFFFFEB3B.toInt(),
-                                    0xFF00E5FF.toInt(),
-                                    0xFF69F0AE.toInt(),
-                                    0xFFFF4081.toInt()
+                                    0xFFFFE14D.toInt(),
+                                    0xFF39D5FF.toInt(),
+                                    0xFF5CFF95.toInt(),
+                                    0xFFFF5FA2.toInt()
                                 )
                             }
                             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {

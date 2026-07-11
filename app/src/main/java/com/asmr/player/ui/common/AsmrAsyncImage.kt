@@ -45,9 +45,10 @@ fun AsmrAsyncImage(
     },
     empty: @Composable (Modifier) -> Unit = placeholder,
     loading: @Composable (Modifier) -> Unit = { m ->
-        AsmrShimmerPlaceholder(modifier = m, cornerRadius = placeholderCornerRadius)
+        AsmrImageLoadingPlaceholder(modifier = m, cornerRadius = placeholderCornerRadius)
     },
     retainPainterDuringReload: Boolean = false,
+    reloadKey: Any? = null,
     loadWhenSizeStableForMillis: Long = 0L,
     fadeIn: Boolean = true,
     fadeInMillis: Int = 500,
@@ -69,23 +70,24 @@ fun AsmrAsyncImage(
     val measuredSize: MutableState<IntSize?> = remember { mutableStateOf(null) }
     // 跨尺寸即时占位：若该图片已被列表等处加载过，先用任意尺寸的缓存位图立即显示，
     // 同时仍按精确尺寸加载原图并在完成后无缝替换，避免详情大图等待网络重新请求。
-    val seededPainter = remember(normalizedModel) {
+    val seededPainter = remember(normalizedModel, reloadKey) {
         if (peekAnySizeForInitial) manager.peekAnySize(normalizedModel)?.let { BitmapPainter(it) } else null
     }
-    val painter: MutableState<Painter?> = remember(normalizedModel) { mutableStateOf(seededPainter) }
-    val seededPlaceholder = remember(normalizedModel) { mutableStateOf(seededPainter != null) }
+    val painter: MutableState<Painter?> = remember(normalizedModel, reloadKey) { mutableStateOf(seededPainter) }
+    val seededPlaceholder = remember(normalizedModel, reloadKey) { mutableStateOf(seededPainter != null) }
     val state: MutableState<AsmrAsyncImageState> =
-        remember(normalizedModel) {
+        remember(normalizedModel, reloadKey) {
             mutableStateOf(if (seededPainter != null) AsmrAsyncImageState.Success else AsmrAsyncImageState.Loading)
         }
-    val loadedSize: MutableState<IntSize?> = remember(normalizedModel) { mutableStateOf(null) }
-    val crossfade = remember(normalizedModel) { Animatable(if (seededPainter != null) 1f else 0f) }
+    val loadedSize: MutableState<IntSize?> = remember(normalizedModel, reloadKey) { mutableStateOf(null) }
+    val crossfade = remember(normalizedModel, reloadKey) { Animatable(if (seededPainter != null) 1f else 0f) }
+    val crossfadeRunning = remember(normalizedModel, reloadKey) { mutableStateOf(false) }
     val containerModifier = modifier.onSizeChanged { sz ->
         if (sz.width > 0 && sz.height > 0) measuredSize.value = IntSize(sz.width, sz.height)
     }
     val contentModifier = Modifier.fillMaxSize()
 
-    LaunchedEffect(normalizedModel, measuredSize.value) {
+    LaunchedEffect(normalizedModel, measuredSize.value, reloadKey) {
         val initialSize = measuredSize.value ?: return@LaunchedEffect
         if (loadWhenSizeStableForMillis > 0L) {
             delay(loadWhenSizeStableForMillis)
@@ -93,6 +95,7 @@ fun AsmrAsyncImage(
         val sz = measuredSize.value ?: initialSize
         suspend fun finishWithExistingPainter() {
             state.value = AsmrAsyncImageState.Success
+            crossfadeRunning.value = false
             crossfade.snapTo(1f)
         }
         // 原尺寸加载：load key 与显示尺寸无关，尺寸变化（如 hero 折叠）不应触发重载，
@@ -106,8 +109,10 @@ fun AsmrAsyncImage(
             return@LaunchedEffect
         }
         try {
+            crossfadeRunning.value = false
             val hasExistingPainter = painter.value != null
             val shouldRetainPainter = (retainPainterDuringReload || loadAtOriginalSize || seededPlaceholder.value) && hasExistingPainter
+            val requestSize = if (loadAtOriginalSize) null else sz
             if (!shouldRetainPainter) {
                 state.value = AsmrAsyncImageState.Loading
                 painter.value = null
@@ -119,7 +124,7 @@ fun AsmrAsyncImage(
             val img = withTimeoutOrNull(15_000) {
                 manager.loadImage(
                     model = normalizedModel,
-                    size = if (loadAtOriginalSize) null else sz,
+                    size = requestSize,
                     cachePolicy = CachePolicy.DEFAULT
                 )
             } ?: throw IllegalStateException("Image load timeout")
@@ -128,7 +133,12 @@ fun AsmrAsyncImage(
             seededPlaceholder.value = false
             state.value = AsmrAsyncImageState.Success
             if (fadeIn && !shouldRetainPainter) {
-                crossfade.animateTo(1f, tween(durationMillis = fadeInMillis))
+                crossfadeRunning.value = true
+                try {
+                    crossfade.animateTo(1f, tween(durationMillis = fadeInMillis))
+                } finally {
+                    crossfadeRunning.value = false
+                }
             } else {
                 crossfade.snapTo(1f)
             }
@@ -145,33 +155,40 @@ fun AsmrAsyncImage(
 
     val p = painter.value
     val currentState = state.value
-    val progress = crossfade.value.coerceIn(0f, 1f)
+    val hasSeededPainter = p != null && seededPlaceholder.value
     Box(modifier = containerModifier) {
         when {
             currentState == AsmrAsyncImageState.Error -> {
                 placeholder(contentModifier)
             }
             else -> {
-                if (currentState == AsmrAsyncImageState.Loading || (fadeIn && progress < 1f)) {
-                    val loadingAlpha = if (currentState == AsmrAsyncImageState.Loading) 1f else (1f - progress)
-                    val loadingModifier = if (loadingAlpha >= 0.999f) {
+                if (!hasSeededPainter && (currentState == AsmrAsyncImageState.Loading || crossfadeRunning.value)) {
+                    val loadingModifier = if (currentState == AsmrAsyncImageState.Loading) {
                         contentModifier
                     } else {
                         contentModifier.graphicsLayer {
-                            this.alpha = loadingAlpha
+                            this.alpha = (1f - crossfade.value).coerceIn(0f, 1f)
                             compositingStrategy = CompositingStrategy.ModulateAlpha
                         }
                     }
                     loading(loadingModifier)
                 }
                 if (p != null) {
+                    val imageModifier = if (fadeIn && !hasSeededPainter && crossfadeRunning.value) {
+                        contentModifier.graphicsLayer {
+                            this.alpha = crossfade.value.coerceIn(0f, 1f)
+                            compositingStrategy = CompositingStrategy.ModulateAlpha
+                        }
+                    } else {
+                        contentModifier
+                    }
                     Image(
                         painter = p,
                         contentDescription = contentDescription,
-                        modifier = contentModifier,
+                        modifier = imageModifier,
                         contentScale = contentScale,
                         alignment = alignment,
-                        alpha = if (fadeIn) alpha * progress else alpha,
+                        alpha = alpha,
                         colorFilter = colorFilter
                     )
                 }
@@ -179,6 +196,8 @@ fun AsmrAsyncImage(
         }
     }
 }
+
+internal val NoImageLoadingIndicator: @Composable (Modifier) -> Unit = {}
 
 private enum class AsmrAsyncImageState {
     Loading,

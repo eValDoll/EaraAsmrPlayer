@@ -67,6 +67,7 @@ import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.hotlistening.SearchSuggestionTerm
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
+import com.asmr.player.ui.common.NoImageLoadingIndicator
 import com.asmr.player.ui.common.FlatActionDialog
 import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
@@ -833,6 +834,7 @@ private fun SearchAssistWorkChip(
             contentDescription = null,
             contentScale = ContentScale.Crop,
             placeholderCornerRadius = 0,
+            loading = NoImageLoadingIndicator,
             modifier = Modifier
                 .aspectRatio(1f)
                 .height(if (compact) 76.dp else 84.dp)

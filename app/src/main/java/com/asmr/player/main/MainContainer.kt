@@ -1,4 +1,4 @@
-﻿package com.asmr.player
+package com.asmr.player
 
 import android.os.Bundle
 import android.view.KeyEvent
@@ -6,12 +6,15 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
+import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -241,6 +244,7 @@ internal data class BatchPlaylistPickerRequest(
 
 private const val SecondaryPageEnterDurationMs = 440
 private const val SecondaryPageExitDurationMs = 420
+private const val PrimaryPagerSnapThreshold = 0.16f
 private val SecondaryPageSlideEasing = CubicBezierEasing(0.215f, 0.61f, 0.355f, 1f)
 private val AlbumDetailTopBarButtonShape = CircleShape
 
@@ -548,6 +552,10 @@ fun MainContainer(
         initialPage = initialPrimaryPage,
         pageCount = { primaryPagerRoutes.size }
     )
+    val primaryPagerFlingBehavior = PagerDefaults.flingBehavior(
+        state = primaryPagerState,
+        snapPositionalThreshold = PrimaryPagerSnapThreshold
+    )
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val primaryContentStateHolder = rememberSaveableStateHolder()
@@ -769,6 +777,7 @@ fun MainContainer(
             primaryNavigationJob = scope.launch {
                 var completed = false
                 try {
+                    primaryPagerState.stopScroll(MutatePriority.PreventUserInput)
                     val currentPage = primaryPagerState.currentPage
                     resolvePrimaryPagerApproachPage(
                         currentPage = currentPage,
@@ -911,27 +920,57 @@ fun MainContainer(
         val route = currentPrimaryRoute ?: return@LaunchedEffect
         val pendingRoute = pendingPrimaryNavigationRoute
         if (pendingRoute != null) {
-            if (route == pendingRoute && primaryNavigationJob == null) {
+            val pendingPage = primaryPagerRoutes.indexOf(pendingRoute)
+            if (
+                shouldClearPendingPrimaryNavigationRoute(
+                    currentRoute = route,
+                    pendingRoute = pendingRoute,
+                    navigationInProgress = primaryNavigationJob != null,
+                    pendingPage = pendingPage,
+                    settledPage = primaryPagerState.settledPage
+                )
+            ) {
                 pendingPrimaryNavigationRoute = null
+            } else if (
+                route == pendingRoute &&
+                primaryNavigationJob == null &&
+                shouldSyncPrimaryPagerToRoute(
+                    targetPage = pendingPage,
+                    settledPage = primaryPagerState.settledPage
+                )
+            ) {
+                primaryPagerState.stopScroll(MutatePriority.PreventUserInput)
+                primaryPagerState.scrollToPage(pendingPage)
             }
             return@LaunchedEffect
         }
         val targetPage = primaryPagerRoutes.indexOf(route)
-        if (targetPage >= 0 && primaryPagerState.currentPage != targetPage) {
+        if (
+            shouldSyncPrimaryPagerToRoute(
+                targetPage = targetPage,
+                settledPage = primaryPagerState.settledPage
+            )
+        ) {
+            primaryPagerState.stopScroll(MutatePriority.PreventUserInput)
             primaryPagerState.scrollToPage(targetPage)
         }
     }
 
-    LaunchedEffect(primaryPagerState, primaryPagerRoutes) {
+    LaunchedEffect(primaryPagerState) {
         snapshotFlow { primaryPagerState.isScrollInProgress }
-            .collect { inProgress ->
-                if (inProgress) {
-                    focusManager.clearFocus(force = true)
-                    keyboardController?.hide()
-                    return@collect
-                }
+            .distinctUntilChanged()
+            .filter { it }
+            .collect {
+                focusManager.clearFocus(force = true)
+                keyboardController?.hide()
+            }
+    }
+
+    LaunchedEffect(primaryPagerState, primaryPagerRoutes) {
+        snapshotFlow { primaryPagerState.settledPage }
+            .distinctUntilChanged()
+            .collect { page ->
                 if (pendingPrimaryNavigationRouteState.value != null) return@collect
-                val page = primaryPagerState.currentPage
                 val currentPrimary = currentPrimaryRouteState.value ?: return@collect
                 val targetRoute = primaryPagerRoutes.getOrNull(page) ?: return@collect
                 if (targetRoute != currentPrimary) {
@@ -1284,7 +1323,12 @@ fun MainContainer(
             )
         }
         val useLargeBottomChrome = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && !isPhone
-        val bottomOverlayPadding = bottomChromeOverlayHeight(useLargeBottomChrome)
+        val navigationBarBottomPadding = StableWindowInsets.navigationBars
+            .only(WindowInsetsSides.Bottom)
+            .asPaddingValues()
+            .calculateBottomPadding()
+        val bottomChromeBottomPadding = 24.dp + navigationBarBottomPadding
+        val bottomOverlayPadding = bottomChromeOverlayHeight(useLargeBottomChrome) + navigationBarBottomPadding
         CompositionLocalProvider(
             LocalBottomOverlayPadding provides bottomOverlayPadding,
             LocalRightPanelExpandedState provides rightPanelExpandedState
@@ -1635,6 +1679,7 @@ fun MainContainer(
                                         .fillMaxSize()
                                         .padding(top = pagerTopContentPadding),
                                     beyondBoundsPageCount = primaryPagerBeyondBoundsPageCount,
+                                    flingBehavior = primaryPagerFlingBehavior,
                                     userScrollEnabled = !primaryPagerScrollLocked && !hasOverlayRoute,
                                     key = { primaryPagerRoutes[it] }
                                 ) { page ->
@@ -1644,6 +1689,7 @@ fun MainContainer(
                                         Routes.Library -> {
                                             LibraryScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                isActive = visualPrimaryRoute == route,
                                                 scrollToTopSignal = libraryScrollToTopSignal,
                                                 onAlbumClick = { album ->
                                                     AlbumCoverHintStore.record(
@@ -1680,6 +1726,7 @@ fun MainContainer(
                                         Routes.Search -> {
                                             SearchScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                isActive = visualPrimaryRoute == route,
                                                 scrollToTopSignal = searchScrollToTopSignal,
                                                 submittedSearchKeyword = submittedSearchKeyword,
                                                 submittedSearchOrderName = submittedSearchOrderName,
@@ -1690,6 +1737,9 @@ fun MainContainer(
                                                 submittedSearchCollectedSortName = submittedSearchCollectedSortName,
                                                 submittedSearchLocale = submittedSearchLocale,
                                                 submittedSearchSignal = submittedSearchSignal,
+                                                onHorizontalPagerScrollLockChanged = { active ->
+                                                    primaryPagerScrollLocked = active
+                                                },
                                                 onOpenSearchAssist = { request ->
                                                     searchAssistInitialRequest = request
                                                     navController.navigateSingleTop(Routes.searchAssist(request.keyword))
@@ -1725,6 +1775,7 @@ fun MainContainer(
                                         Routes.HotListening -> {
                                             HotListeningScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                isActive = visualPrimaryRoute == route,
                                                 scrollToTopSignal = hotListeningScrollToTopSignal,
                                                 onAlbumClick = { album ->
                                                     AlbumCoverHintStore.record(
@@ -1753,6 +1804,7 @@ fun MainContainer(
                                         "playlist_system/favorites" -> {
                                             SystemPlaylistScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                isActive = visualPrimaryRoute == route,
                                                 scrollToTopSignal = favoritesScrollToTopSignal,
                                                 onPlayAll = { items, startItem ->
                                                     playerViewModel.playPlaylistItems(items, startItem)
@@ -1765,6 +1817,7 @@ fun MainContainer(
                                         "playlists" -> {
                                             PlaylistsScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                isActive = visualPrimaryRoute == route,
                                                 scrollToTopSignal = playlistsScrollToTopSignal,
                                                 onPlaylistClick = { playlist ->
                                                     val encoded = URLEncoder.encode(playlist.name, "UTF-8")
@@ -1777,6 +1830,7 @@ fun MainContainer(
                                         "groups" -> {
                                             com.asmr.player.ui.groups.AlbumGroupsScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                isActive = visualPrimaryRoute == route,
                                                 scrollToTopSignal = groupsScrollToTopSignal,
                                                 onGroupClick = { group ->
                                                     val encoded = encodeRouteArg(group.name)
@@ -1789,6 +1843,7 @@ fun MainContainer(
                                         "settings" -> {
                                             SettingsScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                isActive = visualPrimaryRoute == route,
                                                 viewModel = settingsViewModel,
                                                 libraryViewModel = libraryViewModel,
                                                 scrollToTopSignal = settingsScrollToTopSignal,
@@ -2004,11 +2059,17 @@ fun MainContainer(
                         onOpenPlaylistPicker = { item ->
                             albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
                         },
-                        onOpenGroupPicker = { targetAlbumId ->
-                            navController.navigateSingleTop("group_picker?albumId=$targetAlbumId")
-                        },
                         onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
-                        onOpenAlbumByRj = { navigator.openAlbumDetailByRjStacked(it) }
+                        onOpenAlbumByRj = { targetRj, work ->
+                            AlbumCoverHintStore.record(
+                                albumId = null,
+                                rjCode = targetRj,
+                                title = work?.title,
+                                circle = null,
+                                coverUrl = work?.coverUrl
+                            )
+                            navigator.openAlbumDetailByRjStacked(targetRj)
+                        }
                     )
                 }
                 composable(
@@ -2052,11 +2113,17 @@ fun MainContainer(
                         onOpenPlaylistPicker = { item ->
                             albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
                         },
-                        onOpenGroupPicker = { targetAlbumId ->
-                            navController.navigateSingleTop("group_picker?albumId=$targetAlbumId")
-                        },
                         onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
-                        onOpenAlbumByRj = { navigator.openAlbumDetailByRjStacked(it) }
+                        onOpenAlbumByRj = { targetRj, work ->
+                            AlbumCoverHintStore.record(
+                                albumId = null,
+                                rjCode = targetRj,
+                                title = work?.title,
+                                circle = null,
+                                coverUrl = work?.coverUrl
+                            )
+                            navigator.openAlbumDetailByRjStacked(targetRj)
+                        }
                     )
                 }
                 composable(
@@ -2087,11 +2154,17 @@ fun MainContainer(
                         onOpenPlaylistPicker = { item ->
                             albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
                         },
-                        onOpenGroupPicker = { albumId ->
-                            navController.navigateSingleTop("group_picker?albumId=$albumId")
-                        },
                         onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
-                        onOpenAlbumByRj = { navigator.openAlbumDetailByRjStacked(it) }
+                        onOpenAlbumByRj = { targetRj, work ->
+                            AlbumCoverHintStore.record(
+                                albumId = null,
+                                rjCode = targetRj,
+                                title = work?.title,
+                                circle = null,
+                                coverUrl = work?.coverUrl
+                            )
+                            navigator.openAlbumDetailByRjStacked(targetRj)
+                        }
                     )
                 }
                 composable(
@@ -2287,7 +2360,7 @@ fun MainContainer(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .graphicsLayer { clip = false }
-                        .padding(start = bottomChromeHorizontalPadding, bottom = 24.dp)
+                        .padding(start = bottomChromeHorizontalPadding, bottom = bottomChromeBottomPadding)
                         .width(chromeWidth)
                 ) {
                     PrimaryBottomChrome(

@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.library
+package com.asmr.player.ui.library
 
 import android.content.Intent
 import android.graphics.RenderEffect
@@ -135,13 +135,14 @@ import com.asmr.player.data.lyrics.deriveLyricsRelativePathNoExt
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.AsmrAsyncImage
-import com.asmr.player.ui.common.AsmrShimmerPlaceholder
+import com.asmr.player.ui.common.AsmrImageLoadingPlaceholder
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.ImagePreviewDialog
 import com.asmr.player.ui.common.ImagePreviewRequest
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.consumeTapThrough
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
+import com.asmr.player.ui.groups.AlbumGroupPickerScreen
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
@@ -244,6 +245,46 @@ internal fun shouldExpandAlbumHeaderMetaReveal(
     return deferMetaRevealExpected || !presentInitially
 }
 
+internal data class AlbumDetailOnlineLoadPlan(
+    val loadDlsite: Boolean = false,
+    val loadAsmrOne: Boolean = false,
+    val loadDlsitePlay: Boolean = false
+)
+
+internal fun albumDetailOnlineLoadPlan(
+    selectedTab: Int,
+    hasResolvedInitialDlsiteTarget: Boolean
+): AlbumDetailOnlineLoadPlan {
+    return when (selectedTab) {
+        1 -> AlbumDetailOnlineLoadPlan(loadDlsite = true, loadAsmrOne = true)
+        2 -> AlbumDetailOnlineLoadPlan(
+            loadDlsite = true,
+            loadDlsitePlay = hasResolvedInitialDlsiteTarget
+        )
+        else -> AlbumDetailOnlineLoadPlan()
+    }
+}
+
+internal fun canUseAsmrOneOnlineTreeActions(
+    selectedTab: Int,
+    hasAsmrOneTree: Boolean
+): Boolean {
+    return selectedTab == 1 && hasAsmrOneTree
+}
+
+internal fun albumHeaderDownloadEnabled(
+    selectedTab: Int,
+    hasAsmrOneTree: Boolean,
+    hasDlsitePlayTree: Boolean,
+    hasResolvedInitialDlsiteTarget: Boolean
+): Boolean {
+    return when (selectedTab) {
+        1 -> canUseAsmrOneOnlineTreeActions(selectedTab, hasAsmrOneTree)
+        2 -> hasResolvedInitialDlsiteTarget && hasDlsitePlayTree
+        else -> false
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AlbumDetailScreen(
@@ -258,9 +299,8 @@ fun AlbumDetailScreen(
     onAddMediaItemsToQueue: (List<MediaItem>) -> Unit = {},
     onAddMediaItemsToFavorites: (List<MediaItem>) -> Unit = {},
     onOpenPlaylistPicker: (MediaItem) -> Unit = {},
-    onOpenGroupPicker: (albumId: Long) -> Unit = { _ -> },
     onOpenDlsiteLogin: () -> Unit = {},
-    onOpenAlbumByRj: (String) -> Unit = {},
+    onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit = { _, _ -> },
     initialTab: Int? = null,
     viewModel: AlbumDetailViewModel = hiltViewModel()
 ) {
@@ -283,6 +323,7 @@ fun AlbumDetailScreen(
     var showOnlineSaveDialog by remember { mutableStateOf(false) }
     var pendingOnlineSaveSelection by remember { mutableStateOf<Set<String>?>(null) }
     var batchPlaylistItems by remember { mutableStateOf<List<MediaItem>?>(null) }
+    var groupPickerAlbumId by remember { mutableStateOf<Long?>(null) }
     var downloadSource by remember { mutableStateOf(OnlineDownloadSource.AsmrOne) }
 
     LaunchedEffect(albumId, rjCode) {
@@ -567,7 +608,10 @@ fun AlbumDetailScreen(
                         val headerContent: @Composable (Int) -> Unit = { tab ->
                             val isLocalTab = tab == 0
                             val resolvedInitialTarget = model.hasResolvedInitialDlsiteTarget
-                            val canSaveOnlineForTab = tab == 1 && resolvedInitialTarget && asmrOneTree.isNotEmpty()
+                            val canUseAsmrOneTreeActions = canUseAsmrOneOnlineTreeActions(
+                                selectedTab = tab,
+                                hasAsmrOneTree = asmrOneTree.isNotEmpty()
+                            )
                             val headerAlbum = headerAlbumForTab(tab)
                             val headerDlsiteEditions = if (isLocalTab) {
                                 emptyList()
@@ -590,7 +634,7 @@ fun AlbumDetailScreen(
                                 dlsiteEditions = headerDlsiteEditions,
                                 dlsiteSelectedLang = model.dlsiteSelectedLang,
                                 onDlsiteLangSelected = { viewModel.selectDlsiteLanguage(it) },
-                                canSaveOnline = canSaveOnlineForTab,
+                                canSaveOnline = canUseAsmrOneTreeActions,
                                 onDownloadClick = {
                                     downloadSource = if (tab == 2) {
                                         OnlineDownloadSource.DlsitePlay
@@ -606,15 +650,16 @@ fun AlbumDetailScreen(
                                 onSaveClick = {
                                     showOnlineSaveDialog = true
                                 },
-                                downloadEnabled = when (tab) {
-                                    1 -> resolvedInitialTarget && asmrOneTree.isNotEmpty()
-                                    2 -> resolvedInitialTarget && model.dlsitePlayTree.isNotEmpty()
-                                    else -> false
-                                },
+                                downloadEnabled = albumHeaderDownloadEnabled(
+                                    selectedTab = tab,
+                                    hasAsmrOneTree = asmrOneTree.isNotEmpty(),
+                                    hasDlsitePlayTree = model.dlsitePlayTree.isNotEmpty(),
+                                    hasResolvedInitialDlsiteTarget = resolvedInitialTarget
+                                ),
                                 losslessDownloadEnabled = tab == 2 && resolvedInitialTarget && model.dlsitePlayTree.isNotEmpty(),
-                                saveEnabled = canSaveOnlineForTab,
+                                saveEnabled = canUseAsmrOneTreeActions,
                                 showGroupButton = isLocalTab && model.localAlbum != null,
-                                onOpenGroupPicker = onOpenGroupPicker,
+                                onOpenGroupPicker = { id -> groupPickerAlbumId = id },
                                 introSessionKey = introSessionKey,
                                 animateIntro = shouldAnimateHeaderIntro,
                                 deferMetaRevealExpected = !isLocalTab,
@@ -658,21 +703,24 @@ fun AlbumDetailScreen(
                                 model.dlsiteWorkno,
                                 model.hasResolvedInitialDlsiteTarget
                             ) {
-                                when (selectedTab) {
-                                    1 -> {
-                                        viewModel.ensureDlsiteLoaded()
-                                        if (model.hasResolvedInitialDlsiteTarget) {
-                                            viewModel.ensureAsmrOneLoaded()
-                                        }
-                                    }
-                                    2 -> {
-                                        viewModel.ensureDlsiteLoaded()
-                                        if (model.hasResolvedInitialDlsiteTarget) {
-                                            viewModel.ensureDlsitePlayLoaded()
-                                        }
-                                    }
+                                val loadPlan = albumDetailOnlineLoadPlan(
+                                    selectedTab = selectedTab,
+                                    hasResolvedInitialDlsiteTarget = model.hasResolvedInitialDlsiteTarget
+                                )
+                                if (loadPlan.loadDlsite) {
+                                    viewModel.ensureDlsiteLoaded()
+                                }
+                                if (loadPlan.loadAsmrOne) {
+                                    viewModel.ensureAsmrOneLoaded()
+                                }
+                                if (loadPlan.loadDlsitePlay) {
+                                    viewModel.ensureDlsitePlayLoaded()
                                 }
                             }
+
+                            val asmrOneTreeStableRj = model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()
+                            val asmrOneTreeStateKey = "tree:asmrOne:$asmrOneTreeStableRj"
+                            val asmrOneScrollStateKey = "scroll:$asmrOneTreeStateKey"
 
                             Box(
                                 modifier = Modifier
@@ -773,6 +821,7 @@ fun AlbumDetailScreen(
                                         isAwaitingInitialLoad = !model.hasLoadedInitialDlsiteContent,
                                         isAwaitingAsmrOneLoad = !model.hasResolvedAsmrOneContent &&
                                             asmrOneTree.isEmpty(),
+                                        hasResolvedAsmrOneContent = model.hasResolvedAsmrOneContent,
                                         asmrOneTree = asmrOneTree,
                                         isLoadingAsmrOne = model.isLoadingAsmrOne,
                                         isLoadingTrial = model.isLoadingDlsiteTrial,
@@ -803,18 +852,17 @@ fun AlbumDetailScreen(
                                         },
                                         onPreviewImages = { request -> imagePreviewRequest = request },
                                         onPreviewFile = { onlinePreviewFile = it },
-                                        treeStateKey = "tree:asmrOne:${model.rjCode.trim().uppercase()}",
-                                        initialCurrentPath = viewModel.getTreeCurrentPath("tree:asmrOne:${model.rjCode.trim().uppercase()}"),
+                                        treeStateKey = asmrOneTreeStateKey,
+                                        initialCurrentPath = viewModel.getTreeCurrentPath(asmrOneTreeStateKey),
                                         topContentPadding = 0.dp,
                                         chromeState = tabChromeState,
                                         animateIntro = shouldPlayInitialAnimations,
                                         onPersistCurrentPath = { path ->
-                                            val rj = model.rjCode.trim().uppercase()
-                                            viewModel.persistTreeCurrentPath("tree:asmrOne:$rj", path)
+                                            viewModel.persistTreeCurrentPath(asmrOneTreeStateKey, path)
                                         },
-                                        initialScroll = viewModel.getListScrollPosition("scroll:tree:asmrOne:${model.rjCode.trim().uppercase()}"),
+                                        initialScroll = viewModel.getListScrollPosition(asmrOneScrollStateKey),
                                         onPersistScroll = { index, offset ->
-                                            viewModel.persistListScrollPosition("scroll:tree:asmrOne:${model.rjCode.trim().uppercase()}", index, offset)
+                                            viewModel.persistListScrollPosition(asmrOneScrollStateKey, index, offset)
                                         },
                                         dlsiteRecommendations = model.dlsiteRecommendations,
                                         onOpenAlbumByRj = onOpenAlbumByRj,
@@ -827,6 +875,8 @@ fun AlbumDetailScreen(
                                         tree = model.dlsitePlayTree,
                                         isLoading = model.isLoadingDlsitePlay,
                                         shouldAutoLoad = selectedTab == 2 && model.hasResolvedInitialDlsiteTarget,
+                                        isAwaitingInitialTarget = selectedTab == 2 && !model.hasResolvedInitialDlsiteTarget,
+                                        hasResolvedDlsitePlayContent = model.hasResolvedDlsitePlayContent,
                                         onOpenLogin = onOpenDlsiteLogin,
                                         onEnsureLoaded = { viewModel.ensureDlsitePlayLoaded() },
                                         onPlayMediaItems = onPlayMediaItems,
@@ -862,7 +912,10 @@ fun AlbumDetailScreen(
                     }
                 }
 
-                val canSaveOnline = selectedTab == 1 && model.hasResolvedInitialDlsiteTarget && asmrOneTree.isNotEmpty()
+                val canSaveOnline = canUseAsmrOneOnlineTreeActions(
+                    selectedTab = selectedTab,
+                    hasAsmrOneTree = asmrOneTree.isNotEmpty()
+                )
                 if (showAsmrDownloadDialog) {
                     val downloadTree = when (downloadSource) {
                         OnlineDownloadSource.AsmrOne -> asmrOneTree
@@ -895,6 +948,25 @@ fun AlbumDetailScreen(
                             showOnlineSaveDialog = false
                         }
                     )
+                }
+
+                groupPickerAlbumId?.let { targetAlbumId ->
+                    Dialog(
+                        onDismissRequest = { groupPickerAlbumId = null },
+                        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+                    ) {
+                        AlbumDetailPickerSheetSurface(
+                            color = MaterialTheme.colorScheme.background,
+                            contentColor = colorScheme.textPrimary
+                        ) {
+                            AlbumGroupPickerScreen(
+                                windowSizeClass = windowSizeClass,
+                                albumId = targetAlbumId,
+                                onBack = { groupPickerAlbumId = null },
+                                embeddedInDialog = true
+                            )
+                        }
+                    }
                 }
 
                 batchPlaylistItems?.let { items ->
@@ -1111,10 +1183,10 @@ private fun AlbumDetailHeroBackground(
                     }
                 },
             placeholder = { m -> DiscPlaceholder(modifier = m, cornerRadius = 0) },
-            loading = { m -> AsmrShimmerPlaceholder(modifier = m, cornerRadius = 0) },
+            loading = { m -> AsmrImageLoadingPlaceholder(modifier = m, cornerRadius = 0, indicatorSize = 36.dp) },
             empty = { m ->
                 if (showCoverLoadingState) {
-                    AsmrShimmerPlaceholder(modifier = m, cornerRadius = 0)
+                    AsmrImageLoadingPlaceholder(modifier = m, cornerRadius = 0, indicatorSize = 36.dp)
                 } else {
                     DiscPlaceholder(modifier = m, cornerRadius = 0)
                 }
@@ -1344,12 +1416,15 @@ private fun rememberStableAlbumHeroIdentity(album: Album, identitySessionKey: St
 
 @Composable
 private fun rememberStableAlbumHeroCoverSource(album: Album, coverSessionKey: String): String {
-    val current = album.coverPath.trim().ifEmpty { album.coverUrl.trim() }
+    val currentLocal = album.coverPath.trim()
+    val current = currentLocal.ifEmpty { album.coverUrl.trim() }
     var stable by remember(coverSessionKey) { mutableStateOf(current) }
-    LaunchedEffect(current) {
-        if (stable.isBlank() && current.isNotBlank()) {
-            stable = current
-        }
+    LaunchedEffect(currentLocal, current) {
+        stable = resolveStableAlbumHeroCoverSource(
+            stable = stable,
+            currentLocal = currentLocal,
+            current = current
+        )
     }
     return stable
 }

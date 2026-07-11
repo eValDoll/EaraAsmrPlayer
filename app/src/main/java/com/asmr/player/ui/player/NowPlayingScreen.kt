@@ -1582,8 +1582,14 @@ internal fun NowPlayingScreen(
                         playbackPositionMs = progress.positionMs,
                         lyrics = lyricsState.lyrics,
                         lyricColors = lyricColors,
+                        accentColor = accentColor,
+                        onAccentColor = onAccentColor,
                         lyricsPageSettings = lyricsPageSettings,
                         onSeekTo = { viewModel.seekTo(it) },
+                        onTimelinePlay = { targetMs ->
+                            viewModel.seekTo(targetMs)
+                            viewModel.play()
+                        },
                         onAddLyrics = openManualLyricsAction,
                         modifier = Modifier
                             .fillMaxSize()

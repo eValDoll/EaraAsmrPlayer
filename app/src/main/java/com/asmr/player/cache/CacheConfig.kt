@@ -6,6 +6,8 @@ data class CacheConfig(
     val diskMaxSizeBytes: Long = 200L * 1024 * 1024,
     val diskTtlMs: Long = 14L * 24 * 60 * 60 * 1000,
     val decodeParallelism: Int = 3,
+    val loadParallelism: Int = 3,
+    val preloadParallelism: Int = 1,
     val logStats: Boolean = false
 )
 

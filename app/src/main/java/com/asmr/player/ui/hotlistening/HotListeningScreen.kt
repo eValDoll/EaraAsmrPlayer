@@ -1,5 +1,6 @@
-﻿package com.asmr.player.ui.hotlistening
+package com.asmr.player.ui.hotlistening
 
+import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed as lazyItemsIndexed
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
@@ -84,6 +86,7 @@ private fun hotListeningItemKey(section: String, index: Int, album: Album): Stri
 @Composable
 fun HotListeningScreen(
     windowSizeClass: WindowSizeClass,
+    isActive: Boolean = true,
     onAlbumClick: (Album) -> Unit,
     scrollToTopSignal: Long = 0L,
     viewModel: HotListeningViewModel = hiltViewModel()
@@ -161,6 +164,13 @@ fun HotListeningScreen(
         when (viewMode) {
             0 -> listState.smoothScrollToTop()
             else -> gridState.smoothScrollToTop()
+        }
+    }
+    LaunchedEffect(isActive, viewMode) {
+        if (isActive) return@LaunchedEffect
+        when (viewMode) {
+            0 -> listState.stopScroll(MutatePriority.PreventUserInput)
+            else -> gridState.stopScroll(MutatePriority.PreventUserInput)
         }
     }
 
@@ -375,7 +385,7 @@ private fun HotListeningListItem(
     AlbumItem(
         album = album,
         onClick = { onAlbumClick(album) },
-        emptyCoverUseShimmer = true,
+        coverRetainPainterDuringReload = true,
         coverBadge = entry.toCoverBadge(),
         onRjClick = { copyMeta("RJ", it) },
         onCircleClick = { copyMeta("社团", it) },
@@ -394,7 +404,7 @@ private fun HotListeningGridItem(
     AlbumGridItem(
         album = album,
         onClick = { onAlbumClick(album) },
-        emptyCoverUseShimmer = true,
+        coverRetainPainterDuringReload = true,
         coverBadge = entry.toCoverBadge(),
         onRjClick = { copyMeta("RJ", it) },
         onCircleClick = { copyMeta("社团", it) },
@@ -441,7 +451,13 @@ private fun HotListeningEntry.toCoverBadge(): AlbumCoverBadge {
         HotListeningSortMode.PlayCount -> Icons.Rounded.PlayArrow
         HotListeningSortMode.ListenDuration -> Icons.Rounded.AccessTime
     }
-    return AlbumCoverBadge(icon = icon, text = metricLabel)
+    return AlbumCoverBadge(
+        icon = icon,
+        text = metricLabel,
+        showContainer = false,
+        bottomScrim = true,
+        compactOffset = true
+    )
 }
 
 private val HotListeningSortMode.toggleLabel: String

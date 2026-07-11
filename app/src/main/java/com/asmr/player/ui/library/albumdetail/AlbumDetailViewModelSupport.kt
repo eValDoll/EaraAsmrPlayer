@@ -160,6 +160,7 @@ data class AlbumDetailModel(
     val hasResolvedInitialDlsiteTarget: Boolean,
     val hasLoadedInitialDlsiteContent: Boolean,
     val hasResolvedAsmrOneContent: Boolean,
+    val hasResolvedDlsitePlayContent: Boolean,
     val preserveHeaderAlbumMetadata: Boolean,
     val isDlsiteLanguageUserSelected: Boolean,
     val asmrOneWorkId: String?,
@@ -171,6 +172,43 @@ data class AlbumDetailModel(
     val isLoadingAsmrOne: Boolean,
     val isLoadingDlsitePlay: Boolean
 )
+
+internal fun AlbumDetailModel.withUpdatedLocalCover(
+    albumId: Long,
+    coverPath: String,
+    coverThumbPath: String
+): AlbumDetailModel {
+    val localMatches = localAlbum?.id == albumId
+    val displayMatches = displayAlbum.id == albumId || localMatches
+    if (!localMatches && !displayMatches) return this
+
+    return copy(
+        localAlbum = if (localMatches) {
+            localAlbum?.copy(coverPath = coverPath, coverThumbPath = coverThumbPath)
+        } else {
+            localAlbum
+        },
+        displayAlbum = if (displayMatches) {
+            displayAlbum.copy(coverPath = coverPath, coverThumbPath = coverThumbPath)
+        } else {
+            displayAlbum
+        }
+    )
+}
+
+internal fun resolveStableAlbumHeroCoverSource(
+    stable: String,
+    currentLocal: String,
+    current: String
+): String {
+    return if (currentLocal.isNotBlank() && currentLocal != stable) {
+        currentLocal
+    } else if (stable.isBlank() && current.isNotBlank()) {
+        current
+    } else {
+        stable
+    }
+}
 
 internal fun buildDisplayAlbum(
     rjCode: String,
@@ -370,10 +408,9 @@ internal fun buildDlsiteTrialDownloadTree(trialTracks: List<Track>): List<AsmrOn
     }
 }
 
-internal suspend fun fetchAsmrOneTracksBackendFirst(
+internal suspend fun fetchAsmrOneTracksFromBackend(
     backendRjs: List<String>,
-    fetchBackend: suspend (String) -> Pair<String, List<AsmrOneTrackNodeResponse>>?,
-    fetchFallback: suspend () -> Triple<String?, Int?, List<AsmrOneTrackNodeResponse>>
+    fetchBackend: suspend (String) -> Pair<String, List<AsmrOneTrackNodeResponse>>?
 ): Triple<String?, Int?, List<AsmrOneTrackNodeResponse>> {
     backendRjs
         .asSequence()
@@ -387,7 +424,7 @@ internal suspend fun fetchAsmrOneTracksBackendFirst(
                 return Triple(backendResult.first.takeIf { it.isNotBlank() }, null, tree)
             }
         }
-    return fetchFallback()
+    return Triple(null, null, emptyList())
 }
 
 private fun inferDlsiteTrialMediaType(title: String, url: String): TreeFileType? {

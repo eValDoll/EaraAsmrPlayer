@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.common
+package com.asmr.player.ui.common
 
 import android.content.Intent
 import android.net.Uri
@@ -425,7 +425,11 @@ private fun ImagePreviewPage(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                AsmrShimmerPlaceholder(modifier = Modifier.fillMaxSize(), cornerRadius = 0)
+                AsmrImageLoadingPlaceholder(
+                    modifier = Modifier.fillMaxSize(),
+                    cornerRadius = 0,
+                    indicatorSize = 40.dp
+                )
             }
             return
         }
@@ -477,12 +481,11 @@ private fun ImagePreviewPage(
                 )
             },
             loading = { modifier ->
-                Box(
+                AsmrImageLoadingPlaceholder(
                     modifier = modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    AsmrShimmerPlaceholder(modifier = Modifier.fillMaxSize(), cornerRadius = 0)
-                }
+                    cornerRadius = 0,
+                    indicatorSize = 40.dp
+                )
             }
         )
     }

@@ -84,12 +84,12 @@ import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
 import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
 import com.asmr.player.ui.common.AppVolumeSlider
 import com.asmr.player.ui.common.AppVolumeWarningSessionState
+import com.asmr.player.ui.common.AsmrImageLoadingPlaceholder
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.ui.common.EqualizerPanel
 import com.asmr.player.ui.common.rememberProtectedAppVolumeChangeState
-import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.smoothScrollToIndex
 import com.asmr.player.ui.library.TagAssignDialog
 import com.asmr.player.service.AudioOutputRouteKind
@@ -197,8 +197,11 @@ internal fun NowPlayingLyricsSurface(
     playbackPositionMs: Long,
     lyrics: List<SubtitleEntry>,
     lyricColors: LyricReadableColors,
+    accentColor: Color,
+    onAccentColor: Color,
     lyricsPageSettings: LyricsPageSettings,
     onSeekTo: (Long) -> Unit,
+    onTimelinePlay: ((Long) -> Unit)? = null,
     onAddLyrics: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
@@ -218,7 +221,13 @@ internal fun NowPlayingLyricsSurface(
                 )
                 if (onAddLyrics != null) {
                     Spacer(modifier = Modifier.height(14.dp))
-                    Button(onClick = onAddLyrics) {
+                    Button(
+                        onClick = onAddLyrics,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = accentColor,
+                            contentColor = onAccentColor
+                        )
+                    ) {
                         Text("添加歌词")
                     }
                 }
@@ -228,6 +237,8 @@ internal fun NowPlayingLyricsSurface(
                 lyrics = lyrics,
                 currentPosition = playbackPositionMs,
                 onSeekTo = onSeekTo,
+                onTimelinePlay = onTimelinePlay,
+                showPlaybackTimeline = true,
                 colors = lyricColors,
                 modifier = Modifier.fillMaxSize(),
                 isLandscape = isLandscape,
@@ -252,7 +263,6 @@ internal fun ArtworkBox(
     modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(28.dp)
-    val hasArtwork = metadata?.artworkUri != null
     val videoSurfaceHandle = remember(viewModel) {
         VideoSurfaceVisibilityHandle { visible -> viewModel.setVideoSurfaceVisible(visible) }
     }
@@ -266,10 +276,8 @@ internal fun ArtworkBox(
                 enabled = dragPreviewEnabled && dragPreviewState != null,
                 state = dragPreviewState ?: CoverDragPreviewState(),
                 minPointers = 2
-            )
-            .clip(shape)
-            .background(if (isVideo) videoBackdropColor else Color.Transparent)
-            .then(if (hasArtwork && !edgeBlendEnabled) Modifier.shadow(12.dp, shape) else Modifier)
+            ),
+        contentAlignment = Alignment.Center
     ) {
         if (isVideo) {
             var fullscreen by rememberSaveable { mutableStateOf(false) }
@@ -283,7 +291,11 @@ internal fun ArtworkBox(
                     onToggleFullscreen = { fullscreen = true },
                     viewKey = "inline",
                     backdropColor = videoBackdropColor,
-                    modifier = Modifier.fillMaxSize().clipToBounds()
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(shape)
+                        .background(videoBackdropColor)
+                        .clipToBounds()
                 )
             } else {
                 Box(modifier = Modifier.fillMaxSize().background(videoBackdropColor))
@@ -307,35 +319,46 @@ internal fun ArtworkBox(
                 }
             }
         } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .clickable { onOpenLyrics() }
-            ) {
-                if (edgeBlendEnabled) {
-                    val artwork = metadata?.artworkUri
-                    if (artwork != null) {
+            if (edgeBlendEnabled) {
+                val artwork = metadata?.artworkUri
+                if (artwork != null) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clickable { onOpenLyrics() }
+                    ) {
                         CoverArtworkEdgeBlend(
                             artworkModel = artwork,
                             blendColor = edgeBlendColor,
                             modifier = Modifier.fillMaxSize(),
                             artworkAlignment = artworkAlignment
                         )
-                    } else {
-                        DiscPlaceholder(modifier = Modifier.fillMaxSize(), cornerRadius = 28)
                     }
-                } else {
-                    AsmrAsyncImage(
-                        model = metadata?.artworkUri,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        alignment = artworkAlignment,
-                        placeholderCornerRadius = 28,
-                        retainPainterDuringReload = true,
-                        loadWhenSizeStableForMillis = 120L,
-                        modifier = Modifier.fillMaxSize(),
-                    )
                 }
+            } else {
+                AsmrAsyncImage(
+                    model = metadata?.artworkUri,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    alignment = artworkAlignment,
+                    placeholderCornerRadius = 28,
+                    placeholder = {},
+                    loading = { modifier ->
+                        AsmrImageLoadingPlaceholder(
+                            modifier = modifier,
+                            cornerRadius = 28,
+                            indicatorSize = 36.dp
+                        )
+                    },
+                    empty = {},
+                    peekAnySizeForInitial = true,
+                    retainPainterDuringReload = true,
+                    loadWhenSizeStableForMillis = 120L,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(shape)
+                        .clickable { onOpenLyrics() },
+                )
             }
         }
     }

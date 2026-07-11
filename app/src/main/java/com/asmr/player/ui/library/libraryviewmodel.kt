@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.library
+package com.asmr.player.ui.library
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -140,7 +140,7 @@ class LibraryViewModel @Inject constructor(
     }
 
     private val scanRootsStore = ScanRootsStore(context)
-    private val presetStore = LibraryPresetStore(context)
+    private val preferencesStore = LibraryPreferencesStore(context)
     private val _scanRoots = MutableStateFlow<Set<String>>(emptySet())
     val scanRoots: StateFlow<List<String>> = _scanRoots
         .map { it.toList().sorted() }
@@ -162,6 +162,7 @@ class LibraryViewModel @Inject constructor(
     private val _querySpec = MutableStateFlow(LibraryQuerySpec())
     val querySpec: StateFlow<LibraryQuerySpec> = _querySpec.asStateFlow()
     private val _expandedTrackAlbumIds = MutableStateFlow<Set<Long>>(emptySet())
+    val expandedTrackAlbumIds: StateFlow<Set<Long>> = _expandedTrackAlbumIds.asStateFlow()
 
     val availableTags: StateFlow<List<TagWithCount>> = database.tagDao()
         .getTagsWithCounts(TagSource.USER)
@@ -193,8 +194,13 @@ class LibraryViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    val filterPresets: StateFlow<List<LibraryFilterPreset>> = presetStore.presets
+    val filterPresets: StateFlow<List<LibraryFilterPreset>> = preferencesStore.presets
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val hasActiveFilters: StateFlow<Boolean> = _querySpec
+        .map { it.hasActiveFilters }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val userTagsByAlbumId: StateFlow<Map<Long, List<String>>> = database.tagDao()
         .getAlbumTagsBySource(TagSource.USER)
@@ -230,6 +236,8 @@ class LibraryViewModel @Inject constructor(
         _scanRoots.value = runCatching { scanRootsStore.getRoots() }.getOrDefault(emptySet())
         viewModelScope.launch(Dispatchers.IO) {
             ensureTagTablesInitialized()
+            restoreLibraryPreferences()
+            backfillLegacyOnlineSavedAlbumRoots()
         }
         viewModelScope.launch {
             val shouldAutoScan = withContext(Dispatchers.IO) {
@@ -379,8 +387,15 @@ class LibraryViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
-    fun setExpandedTrackAlbums(albumIds: Set<Long>) {
-        _expandedTrackAlbumIds.value = albumIds.asSequence().filter { it > 0L }.toSet()
+    fun toggleExpandedTrackAlbum(albumId: Long) {
+        if (albumId <= 0L) return
+        _expandedTrackAlbumIds.update { albumIds ->
+            if (albumId in albumIds) albumIds - albumId else albumIds + albumId
+        }
+    }
+
+    fun clearExpandedTrackAlbums() {
+        _expandedTrackAlbumIds.value = emptySet()
     }
 
     val libraryViewMode: StateFlow<Int?> = settingsRepository.libraryViewMode
@@ -399,70 +414,110 @@ class LibraryViewModel @Inject constructor(
         _querySpec.update { current ->
             if (current.sort == sort) current else current.copy(sort = sort)
         }
+        viewModelScope.launch(Dispatchers.IO) {
+            preferencesStore.setSort(sort)
+        }
     }
 
     fun setSourceFilter(filter: LibrarySourceFilter?) {
+        updateFilters { current -> current.copy(source = filter.takeUnless { it == LibrarySourceFilter.Both }) }
+    }
+
+    fun applyFilters(spec: LibraryQuerySpec) {
+        applyFilters(PersistedLibraryFilters.fromSpec(spec))
+    }
+
+    private fun applyFilters(filters: PersistedLibraryFilters) {
+        val sanitized = sanitizeFiltersAgainstAvailableTags(filters)
         _querySpec.update { current ->
-            if (current.source == filter) current else current.copy(source = filter)
+            sanitized.applyTo(current)
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            preferencesStore.setFilters(sanitized)
         }
     }
 
     fun toggleTag(tagId: Long) {
-        _querySpec.update { current ->
+        updateFilters { current ->
             val updated = current.includeTagIds.toMutableSet()
             if (!updated.add(tagId)) updated.remove(tagId)
-            if (updated == current.includeTagIds) current else current.copy(includeTagIds = updated)
+            current.copy(includeTagIds = updated)
         }
     }
 
     fun toggleCircle(circle: String) {
         val normalized = circle.trim()
         if (normalized.isBlank()) return
-        _querySpec.update { current ->
+        updateFilters { current ->
             val updated = current.circles.toMutableSet()
             if (!updated.add(normalized)) updated.remove(normalized)
-            if (updated == current.circles) current else current.copy(circles = updated)
+            current.copy(circles = updated)
         }
     }
 
     fun toggleCv(cv: String) {
         val normalized = cv.trim()
         if (normalized.isBlank()) return
-        _querySpec.update { current ->
+        updateFilters { current ->
             val updated = current.cvs.toMutableSet()
             if (!updated.add(normalized)) updated.remove(normalized)
-            if (updated == current.cvs) current else current.copy(cvs = updated)
+            current.copy(cvs = updated)
         }
     }
 
     fun clearFilters() {
-        _querySpec.update { current ->
-            current.copy(
-                includeTagIds = emptySet(),
-                excludeTagIds = emptySet(),
-                circles = emptySet(),
-                cvs = emptySet(),
-                source = null
-            )
-        }
+        applyFilters(PersistedLibraryFilters.Empty)
     }
 
     fun applyPreset(preset: LibraryFilterPreset) {
-        _querySpec.value = preset.spec
+        applyFilters(preset.spec)
     }
 
-    fun savePreset(name: String) {
+    fun savePreset(name: String, spec: LibraryQuerySpec = _querySpec.value) {
         val trimmed = name.trim()
         if (trimmed.isBlank()) return
         viewModelScope.launch(Dispatchers.IO) {
-            presetStore.savePreset(trimmed, _querySpec.value)
+            preferencesStore.savePreset(trimmed, spec)
         }
     }
 
     fun deletePreset(id: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            presetStore.deletePreset(id)
+            preferencesStore.deletePreset(id)
         }
+    }
+
+    private suspend fun restoreLibraryPreferences() {
+        val storedSort = runCatching { preferencesStore.sort.first() }.getOrDefault(LibrarySort.AddedDesc)
+        val storedFilters = runCatching { preferencesStore.filters.first() }.getOrDefault(PersistedLibraryFilters.Empty)
+        val sanitized = sanitizeFiltersAgainstDatabase(storedFilters)
+        _querySpec.update { current ->
+            sanitized.applyTo(current.copy(sort = storedSort))
+        }
+        if (sanitized != storedFilters.normalized()) {
+            preferencesStore.setFilters(sanitized)
+        }
+    }
+
+    private fun updateFilters(transform: (LibraryQuerySpec) -> LibraryQuerySpec) {
+        val nextFilters = transform(_querySpec.value).filterOnly()
+        applyFilters(nextFilters)
+    }
+
+    private fun sanitizeFiltersAgainstAvailableTags(filters: PersistedLibraryFilters): PersistedLibraryFilters {
+        val validTagIds = availableTags.value.map { it.id }.toSet()
+        if (validTagIds.isEmpty() && (filters.includeTagIds.isNotEmpty() || filters.excludeTagIds.isNotEmpty())) {
+            return filters.normalized()
+        }
+        return filters.normalized(validTagIds)
+    }
+
+    private suspend fun sanitizeFiltersAgainstDatabase(filters: PersistedLibraryFilters): PersistedLibraryFilters {
+        val normalized = filters.normalized()
+        val requestedTagIds = (normalized.includeTagIds + normalized.excludeTagIds).filter { it > 0L }
+        if (requestedTagIds.isEmpty()) return normalized
+        val existing = database.tagDao().getExistingTagIds(requestedTagIds).toSet()
+        return normalized.normalized(existing)
     }
 
     fun setUserTagsForAlbum(albumId: Long, tagsCsv: String) {
@@ -552,6 +607,15 @@ class LibraryViewModel @Inject constructor(
                 tagDao.deleteAlbumTagsByTagId(tagId)
                 database.trackTagDao().deleteTrackTagsByTagId(tagId)
                 tagDao.deleteTag(tagId)
+            }
+            val currentFilters = PersistedLibraryFilters.fromSpec(_querySpec.value)
+            if (currentFilters.includeTagIds.contains(tagId) || currentFilters.excludeTagIds.contains(tagId)) {
+                val updatedFilters = currentFilters.copy(
+                    includeTagIds = currentFilters.includeTagIds - tagId,
+                    excludeTagIds = currentFilters.excludeTagIds - tagId
+                )
+                _querySpec.update { current -> updatedFilters.applyTo(current) }
+                preferencesStore.setFilters(updatedFilters)
             }
             albumIds.forEach { albumId ->
                 val entity = albumDao.getAlbumById(albumId) ?: return@forEach
@@ -1681,6 +1745,34 @@ class LibraryViewModel @Inject constructor(
         return "web://rj/${workKey.uppercase()}"
     }
 
+    internal fun legacyOnlineSavedAlbumDir(entity: AlbumEntity): File {
+        val baseDir = File(context.getExternalFilesDir(null), "albums")
+        val folderName = legacyOnlineSavedAlbumFolderName(entity)
+        return File(baseDir, folderName)
+    }
+
+    private suspend fun backfillLegacyOnlineSavedAlbumRoots() {
+        val albums = runCatching { albumDao.getAllAlbumsOnce() }.getOrDefault(emptyList())
+        if (albums.isEmpty()) return
+
+        database.withTransaction {
+            albums.forEach { entity ->
+                if (entity.localPath?.trim().orEmpty().isNotBlank() || entity.downloadPath?.trim().orEmpty().isNotBlank()) {
+                    return@forEach
+                }
+                val tracks = trackDao.getTracksForAlbumOnce(entity.id)
+                if (!shouldBackfillLegacyOnlineSavedAlbumRoot(entity, tracks)) return@forEach
+
+                val albumDir = legacyOnlineSavedAlbumDir(entity)
+                ensureLibraryAlbumDir(albumDir)
+                val updated = entity.copy(localPath = albumDir.absolutePath)
+                albumDao.updateAlbum(updated)
+                runCatching { database.localTreeCacheDao().deleteByAlbum(entity.id) }
+                upsertAlbumFtsIndex(updated.id, updated)
+            }
+        }
+    }
+
     private fun buildTagsToken(tagsCsv: String): String {
         return tagsCsv.split(",")
             .map { TagNormalizer.normalize(it) }
@@ -2391,6 +2483,20 @@ class LibraryViewModel @Inject constructor(
                     val ts = cachedTracks ?: trackDao.getTracksForAlbumOnce(entity.id).also { cachedTracks = it }
                     ts.any { isOnlineTrackPath(it.path) }.also { cachedHasOnlineTracks = it }
                 }
+
+                if (updated.localPath.isNullOrBlank() &&
+                    updated.downloadPath.isNullOrBlank() &&
+                    shouldBackfillLegacyOnlineSavedAlbumRoot(
+                        updated,
+                        cachedTracks ?: trackDao.getTracksForAlbumOnce(entity.id).also { cachedTracks = it }
+                    )
+                ) {
+                    val albumDir = legacyOnlineSavedAlbumDir(updated)
+                    ensureLibraryAlbumDir(albumDir)
+                    updated = updated.copy(localPath = albumDir.absolutePath)
+                    runCatching { database.localTreeCacheDao().deleteByAlbum(updated.id) }
+                }
+
                 if (updated.path.isNotBlank() && !uriOrFileExists(updated.path) && hasOnlineTracks) {
                     val onlinePath = buildOnlineAlbumPath(updated)
                     if (!onlinePath.isNullOrBlank()) {
