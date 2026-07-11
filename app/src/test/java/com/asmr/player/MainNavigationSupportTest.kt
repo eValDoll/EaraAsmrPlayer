@@ -64,6 +64,47 @@ class MainNavigationSupportTest {
     }
 
     @Test
+    fun shouldSyncPrimaryPagerToRoute_onlyWhenSettledPageDiffersFromTarget() {
+        assertEquals(false, shouldSyncPrimaryPagerToRoute(targetPage = -1, settledPage = 0))
+        assertEquals(false, shouldSyncPrimaryPagerToRoute(targetPage = 2, settledPage = 2))
+        assertEquals(true, shouldSyncPrimaryPagerToRoute(targetPage = 2, settledPage = 1))
+    }
+
+    @Test
+    fun shouldClearPendingPrimaryNavigationRoute_waitsUntilPagerSettlesOnPendingPage() {
+        assertEquals(
+            false,
+            shouldClearPendingPrimaryNavigationRoute(
+                currentRoute = "search",
+                pendingRoute = "search",
+                navigationInProgress = false,
+                pendingPage = 1,
+                settledPage = 0
+            )
+        )
+        assertEquals(
+            false,
+            shouldClearPendingPrimaryNavigationRoute(
+                currentRoute = "search",
+                pendingRoute = "search",
+                navigationInProgress = true,
+                pendingPage = 1,
+                settledPage = 1
+            )
+        )
+        assertEquals(
+            true,
+            shouldClearPendingPrimaryNavigationRoute(
+                currentRoute = "search",
+                pendingRoute = "search",
+                navigationInProgress = false,
+                pendingPage = 1,
+                settledPage = 1
+            )
+        )
+    }
+
+    @Test
     fun resolvePrimaryPagerBeyondBoundsPageCount_keepsAllPrimaryPagesComposed() {
         assertEquals(0, resolvePrimaryPagerBeyondBoundsPageCount(0))
         assertEquals(0, resolvePrimaryPagerBeyondBoundsPageCount(1))

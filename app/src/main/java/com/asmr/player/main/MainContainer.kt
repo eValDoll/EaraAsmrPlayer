@@ -6,10 +6,12 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.PagerDefaults
@@ -775,6 +777,7 @@ fun MainContainer(
             primaryNavigationJob = scope.launch {
                 var completed = false
                 try {
+                    primaryPagerState.stopScroll(MutatePriority.PreventUserInput)
                     val currentPage = primaryPagerState.currentPage
                     resolvePrimaryPagerApproachPage(
                         currentPage = currentPage,
@@ -917,27 +920,57 @@ fun MainContainer(
         val route = currentPrimaryRoute ?: return@LaunchedEffect
         val pendingRoute = pendingPrimaryNavigationRoute
         if (pendingRoute != null) {
-            if (route == pendingRoute && primaryNavigationJob == null) {
+            val pendingPage = primaryPagerRoutes.indexOf(pendingRoute)
+            if (
+                shouldClearPendingPrimaryNavigationRoute(
+                    currentRoute = route,
+                    pendingRoute = pendingRoute,
+                    navigationInProgress = primaryNavigationJob != null,
+                    pendingPage = pendingPage,
+                    settledPage = primaryPagerState.settledPage
+                )
+            ) {
                 pendingPrimaryNavigationRoute = null
+            } else if (
+                route == pendingRoute &&
+                primaryNavigationJob == null &&
+                shouldSyncPrimaryPagerToRoute(
+                    targetPage = pendingPage,
+                    settledPage = primaryPagerState.settledPage
+                )
+            ) {
+                primaryPagerState.stopScroll(MutatePriority.PreventUserInput)
+                primaryPagerState.scrollToPage(pendingPage)
             }
             return@LaunchedEffect
         }
         val targetPage = primaryPagerRoutes.indexOf(route)
-        if (targetPage >= 0 && primaryPagerState.currentPage != targetPage) {
+        if (
+            shouldSyncPrimaryPagerToRoute(
+                targetPage = targetPage,
+                settledPage = primaryPagerState.settledPage
+            )
+        ) {
+            primaryPagerState.stopScroll(MutatePriority.PreventUserInput)
             primaryPagerState.scrollToPage(targetPage)
         }
     }
 
-    LaunchedEffect(primaryPagerState, primaryPagerRoutes) {
+    LaunchedEffect(primaryPagerState) {
         snapshotFlow { primaryPagerState.isScrollInProgress }
-            .collect { inProgress ->
-                if (inProgress) {
-                    focusManager.clearFocus(force = true)
-                    keyboardController?.hide()
-                    return@collect
-                }
+            .distinctUntilChanged()
+            .filter { it }
+            .collect {
+                focusManager.clearFocus(force = true)
+                keyboardController?.hide()
+            }
+    }
+
+    LaunchedEffect(primaryPagerState, primaryPagerRoutes) {
+        snapshotFlow { primaryPagerState.settledPage }
+            .distinctUntilChanged()
+            .collect { page ->
                 if (pendingPrimaryNavigationRouteState.value != null) return@collect
-                val page = primaryPagerState.currentPage
                 val currentPrimary = currentPrimaryRouteState.value ?: return@collect
                 val targetRoute = primaryPagerRoutes.getOrNull(page) ?: return@collect
                 if (targetRoute != currentPrimary) {
@@ -1656,6 +1689,7 @@ fun MainContainer(
                                         Routes.Library -> {
                                             LibraryScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                isActive = visualPrimaryRoute == route,
                                                 scrollToTopSignal = libraryScrollToTopSignal,
                                                 onAlbumClick = { album ->
                                                     AlbumCoverHintStore.record(
@@ -1692,6 +1726,7 @@ fun MainContainer(
                                         Routes.Search -> {
                                             SearchScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                isActive = visualPrimaryRoute == route,
                                                 scrollToTopSignal = searchScrollToTopSignal,
                                                 submittedSearchKeyword = submittedSearchKeyword,
                                                 submittedSearchOrderName = submittedSearchOrderName,
@@ -1740,6 +1775,7 @@ fun MainContainer(
                                         Routes.HotListening -> {
                                             HotListeningScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                isActive = visualPrimaryRoute == route,
                                                 scrollToTopSignal = hotListeningScrollToTopSignal,
                                                 onAlbumClick = { album ->
                                                     AlbumCoverHintStore.record(
@@ -1768,6 +1804,7 @@ fun MainContainer(
                                         "playlist_system/favorites" -> {
                                             SystemPlaylistScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                isActive = visualPrimaryRoute == route,
                                                 scrollToTopSignal = favoritesScrollToTopSignal,
                                                 onPlayAll = { items, startItem ->
                                                     playerViewModel.playPlaylistItems(items, startItem)
@@ -1780,6 +1817,7 @@ fun MainContainer(
                                         "playlists" -> {
                                             PlaylistsScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                isActive = visualPrimaryRoute == route,
                                                 scrollToTopSignal = playlistsScrollToTopSignal,
                                                 onPlaylistClick = { playlist ->
                                                     val encoded = URLEncoder.encode(playlist.name, "UTF-8")
@@ -1792,6 +1830,7 @@ fun MainContainer(
                                         "groups" -> {
                                             com.asmr.player.ui.groups.AlbumGroupsScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                isActive = visualPrimaryRoute == route,
                                                 scrollToTopSignal = groupsScrollToTopSignal,
                                                 onGroupClick = { group ->
                                                     val encoded = encodeRouteArg(group.name)
@@ -1804,6 +1843,7 @@ fun MainContainer(
                                         "settings" -> {
                                             SettingsScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                isActive = visualPrimaryRoute == route,
                                                 viewModel = settingsViewModel,
                                                 libraryViewModel = libraryViewModel,
                                                 scrollToTopSignal = settingsScrollToTopSignal,

@@ -1,5 +1,7 @@
 ﻿package com.asmr.player.ui.playlists
 
+import androidx.compose.foundation.MutatePriority
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -68,6 +70,7 @@ private val PlaylistRowActionIconSize = 18.dp
 @Composable
 fun PlaylistsScreen(
     windowSizeClass: WindowSizeClass,
+    isActive: Boolean = true,
     onPlaylistClick: (PlaylistEntity) -> Unit,
     scrollToTopSignal: Long = 0L,
     viewModel: PlaylistsViewModel = hiltViewModel()
@@ -86,6 +89,10 @@ fun PlaylistsScreen(
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground
     ) { padding ->
+        LaunchedEffect(isActive) {
+            if (isActive) return@LaunchedEffect
+            listState.stopScroll(MutatePriority.PreventUserInput)
+        }
         LaunchedEffect(scrollToTopSignal) {
             if (scrollToTopSignal == 0L) return@LaunchedEffect
             listState.smoothScrollToTop()

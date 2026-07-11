@@ -17,6 +17,7 @@ import com.asmr.player.ui.theme.AsmrTheme
 @Composable
 fun SystemPlaylistScreen(
     windowSizeClass: WindowSizeClass,
+    isActive: Boolean = true,
     onPlayAll: (List<PlaylistItemEntity>, PlaylistItemEntity) -> Unit,
     scrollToTopSignal: Long = 0L,
     viewModel: PlaylistsViewModel = hiltViewModel()
@@ -34,6 +35,7 @@ fun SystemPlaylistScreen(
 
     PlaylistDetailScreen(
         windowSizeClass = windowSizeClass,
+        isActive = isActive,
         playlistId = playlist.id,
         title = playlist.name,
         onPlayAll = onPlayAll,
