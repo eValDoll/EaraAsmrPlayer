@@ -133,6 +133,7 @@ import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.AudioItemMenuButtonSize
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.AsmrAsyncImage
+import com.asmr.player.ui.common.NoImageLoadingIndicator
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
 import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
@@ -969,6 +970,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 placeholderCornerRadius = DlsiteGalleryThumbCornerRadius,
+                                loading = NoImageLoadingIndicator,
                                 modifier = Modifier.fillMaxSize()
                             )
                         }

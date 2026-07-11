@@ -59,6 +59,7 @@ import com.asmr.player.domain.model.Album
 import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.CoverContentRow
+import com.asmr.player.ui.common.NoImageLoadingIndicator
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
 import com.asmr.player.ui.library.AlbumMetaLeadingVisual.Icon
 import com.asmr.player.util.DlsiteAntiHotlink
@@ -159,6 +160,7 @@ fun AlbumItem(
                         reloadKey = coverReloadKey,
                         retainPainterDuringReload = coverRetainPainterDuringReload,
                         peekAnySizeForInitial = true,
+                        loading = NoImageLoadingIndicator,
                         modifier = Modifier.fillMaxSize().clip(coverShape),
                     )
                     if (coverBadge?.bottomScrim == true) {
@@ -396,6 +398,7 @@ fun AlbumGridItem(
                 reloadKey = coverReloadKey,
                 retainPainterDuringReload = coverRetainPainterDuringReload,
                 peekAnySizeForInitial = true,
+                loading = NoImageLoadingIndicator,
                 modifier = Modifier.fillMaxSize().clip(coverShape),
             )
             if (coverBadge?.bottomScrim == true) {

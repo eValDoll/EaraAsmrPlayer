@@ -113,29 +113,6 @@ fun AsmrAsyncImage(
             val hasExistingPainter = painter.value != null
             val shouldRetainPainter = (retainPainterDuringReload || loadAtOriginalSize || seededPlaceholder.value) && hasExistingPainter
             val requestSize = if (loadAtOriginalSize) null else sz
-            val cachedImage = manager.loadImageFromCache(
-                model = normalizedModel,
-                size = requestSize,
-                cachePolicy = CachePolicy.MEMORY_ONLY
-            )
-            if (cachedImage != null) {
-                painter.value = BitmapPainter(cachedImage)
-                loadedSize.value = sz
-                seededPlaceholder.value = false
-                state.value = AsmrAsyncImageState.Success
-                if (fadeIn && !shouldRetainPainter) {
-                    crossfade.snapTo(0f)
-                    crossfadeRunning.value = true
-                    try {
-                        crossfade.animateTo(1f, tween(durationMillis = fadeInMillis))
-                    } finally {
-                        crossfadeRunning.value = false
-                    }
-                } else {
-                    crossfade.snapTo(1f)
-                }
-                return@LaunchedEffect
-            }
             if (!shouldRetainPainter) {
                 state.value = AsmrAsyncImageState.Loading
                 painter.value = null
@@ -219,6 +196,8 @@ fun AsmrAsyncImage(
         }
     }
 }
+
+internal val NoImageLoadingIndicator: @Composable (Modifier) -> Unit = {}
 
 private enum class AsmrAsyncImageState {
     Loading,

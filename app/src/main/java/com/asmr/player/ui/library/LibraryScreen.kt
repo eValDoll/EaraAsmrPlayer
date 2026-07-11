@@ -60,6 +60,7 @@ import com.asmr.player.ui.common.AudioItemMenuAction
 import com.asmr.player.ui.common.AudioItemRow
 import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
+import com.asmr.player.ui.common.NoImageLoadingIndicator
 import com.asmr.player.ui.common.FlatActionDialog
 import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
@@ -1288,6 +1289,7 @@ private fun TrackAlbumHeader(
             contentScale = ContentScale.Crop,
             placeholderCornerRadius = 8,
             peekAnySizeForInitial = true,
+            loading = NoImageLoadingIndicator,
             modifier = Modifier
                 .size(50.dp)
                 .clip(RoundedCornerShape(8.dp)),
@@ -1462,6 +1464,7 @@ private fun AlbumGridItem(
                 contentScale = ContentScale.Crop,
                 placeholderCornerRadius = 0,
                 peekAnySizeForInitial = true,
+                loading = NoImageLoadingIndicator,
                 modifier = Modifier.fillMaxSize().clip(coverShape),
             )
             
@@ -1655,6 +1658,7 @@ private fun AlbumItem(
                         contentScale = ContentScale.Crop,
                         placeholderCornerRadius = 0,
                         peekAnySizeForInitial = true,
+                        loading = NoImageLoadingIndicator,
                         modifier = Modifier.fillMaxSize().clip(coverShape),
                     )
                     
