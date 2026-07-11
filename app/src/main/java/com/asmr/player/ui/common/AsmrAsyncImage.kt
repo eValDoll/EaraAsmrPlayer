@@ -44,7 +44,9 @@ fun AsmrAsyncImage(
         DiscPlaceholder(modifier = m, cornerRadius = placeholderCornerRadius)
     },
     empty: @Composable (Modifier) -> Unit = placeholder,
-    loading: @Composable (Modifier) -> Unit = {},
+    loading: @Composable (Modifier) -> Unit = { m ->
+        AsmrImageLoadingPlaceholder(modifier = m, cornerRadius = placeholderCornerRadius)
+    },
     retainPainterDuringReload: Boolean = false,
     reloadKey: Any? = null,
     loadWhenSizeStableForMillis: Long = 0L,
@@ -114,7 +116,7 @@ fun AsmrAsyncImage(
             val cachedImage = manager.loadImageFromCache(
                 model = normalizedModel,
                 size = requestSize,
-                cachePolicy = CachePolicy.DEFAULT
+                cachePolicy = CachePolicy.MEMORY_ONLY
             )
             if (cachedImage != null) {
                 painter.value = BitmapPainter(cachedImage)

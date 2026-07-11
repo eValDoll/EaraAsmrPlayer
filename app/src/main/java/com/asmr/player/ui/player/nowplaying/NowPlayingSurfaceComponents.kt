@@ -84,12 +84,12 @@ import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
 import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
 import com.asmr.player.ui.common.AppVolumeSlider
 import com.asmr.player.ui.common.AppVolumeWarningSessionState
+import com.asmr.player.ui.common.AsmrImageLoadingPlaceholder
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.ui.common.EqualizerPanel
 import com.asmr.player.ui.common.rememberProtectedAppVolumeChangeState
-import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.smoothScrollToIndex
 import com.asmr.player.ui.library.TagAssignDialog
 import com.asmr.player.service.AudioOutputRouteKind
@@ -343,8 +343,15 @@ internal fun ArtworkBox(
                     alignment = artworkAlignment,
                     placeholderCornerRadius = 28,
                     placeholder = {},
-                    loading = {},
+                    loading = { modifier ->
+                        AsmrImageLoadingPlaceholder(
+                            modifier = modifier,
+                            cornerRadius = 28,
+                            indicatorSize = 36.dp
+                        )
+                    },
                     empty = {},
+                    peekAnySizeForInitial = true,
                     retainPainterDuringReload = true,
                     loadWhenSizeStableForMillis = 120L,
                     modifier = Modifier
