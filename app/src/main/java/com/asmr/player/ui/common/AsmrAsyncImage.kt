@@ -44,9 +44,7 @@ fun AsmrAsyncImage(
         DiscPlaceholder(modifier = m, cornerRadius = placeholderCornerRadius)
     },
     empty: @Composable (Modifier) -> Unit = placeholder,
-    loading: @Composable (Modifier) -> Unit = { m ->
-        AsmrImageLoadingPlaceholder(modifier = m, cornerRadius = placeholderCornerRadius)
-    },
+    loading: @Composable (Modifier) -> Unit = {},
     retainPainterDuringReload: Boolean = false,
     reloadKey: Any? = null,
     loadWhenSizeStableForMillis: Long = 0L,
@@ -112,6 +110,30 @@ fun AsmrAsyncImage(
             crossfadeRunning.value = false
             val hasExistingPainter = painter.value != null
             val shouldRetainPainter = (retainPainterDuringReload || loadAtOriginalSize || seededPlaceholder.value) && hasExistingPainter
+            val requestSize = if (loadAtOriginalSize) null else sz
+            val cachedImage = manager.loadImageFromCache(
+                model = normalizedModel,
+                size = requestSize,
+                cachePolicy = CachePolicy.DEFAULT
+            )
+            if (cachedImage != null) {
+                painter.value = BitmapPainter(cachedImage)
+                loadedSize.value = sz
+                seededPlaceholder.value = false
+                state.value = AsmrAsyncImageState.Success
+                if (fadeIn && !shouldRetainPainter) {
+                    crossfade.snapTo(0f)
+                    crossfadeRunning.value = true
+                    try {
+                        crossfade.animateTo(1f, tween(durationMillis = fadeInMillis))
+                    } finally {
+                        crossfadeRunning.value = false
+                    }
+                } else {
+                    crossfade.snapTo(1f)
+                }
+                return@LaunchedEffect
+            }
             if (!shouldRetainPainter) {
                 state.value = AsmrAsyncImageState.Loading
                 painter.value = null
@@ -123,7 +145,7 @@ fun AsmrAsyncImage(
             val img = withTimeoutOrNull(15_000) {
                 manager.loadImage(
                     model = normalizedModel,
-                    size = if (loadAtOriginalSize) null else sz,
+                    size = requestSize,
                     cachePolicy = CachePolicy.DEFAULT
                 )
             } ?: throw IllegalStateException("Image load timeout")

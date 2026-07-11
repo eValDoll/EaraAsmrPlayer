@@ -197,6 +197,8 @@ internal fun NowPlayingLyricsSurface(
     playbackPositionMs: Long,
     lyrics: List<SubtitleEntry>,
     lyricColors: LyricReadableColors,
+    accentColor: Color,
+    onAccentColor: Color,
     lyricsPageSettings: LyricsPageSettings,
     onSeekTo: (Long) -> Unit,
     onTimelinePlay: ((Long) -> Unit)? = null,
@@ -219,7 +221,13 @@ internal fun NowPlayingLyricsSurface(
                 )
                 if (onAddLyrics != null) {
                     Spacer(modifier = Modifier.height(14.dp))
-                    Button(onClick = onAddLyrics) {
+                    Button(
+                        onClick = onAddLyrics,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = accentColor,
+                            contentColor = onAccentColor
+                        )
+                    ) {
                         Text("添加歌词")
                     }
                 }
