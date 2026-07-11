@@ -408,10 +408,9 @@ internal fun buildDlsiteTrialDownloadTree(trialTracks: List<Track>): List<AsmrOn
     }
 }
 
-internal suspend fun fetchAsmrOneTracksBackendFirst(
+internal suspend fun fetchAsmrOneTracksFromBackend(
     backendRjs: List<String>,
-    fetchBackend: suspend (String) -> Pair<String, List<AsmrOneTrackNodeResponse>>?,
-    fetchFallback: suspend () -> Triple<String?, Int?, List<AsmrOneTrackNodeResponse>>
+    fetchBackend: suspend (String) -> Pair<String, List<AsmrOneTrackNodeResponse>>?
 ): Triple<String?, Int?, List<AsmrOneTrackNodeResponse>> {
     backendRjs
         .asSequence()
@@ -425,7 +424,7 @@ internal suspend fun fetchAsmrOneTracksBackendFirst(
                 return Triple(backendResult.first.takeIf { it.isNotBlank() }, null, tree)
             }
         }
-    return fetchFallback()
+    return Triple(null, null, emptyList())
 }
 
 private fun inferDlsiteTrialMediaType(title: String, url: String): TreeFileType? {
