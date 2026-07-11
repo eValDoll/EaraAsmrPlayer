@@ -451,7 +451,13 @@ private fun HotListeningEntry.toCoverBadge(): AlbumCoverBadge {
         HotListeningSortMode.PlayCount -> Icons.Rounded.PlayArrow
         HotListeningSortMode.ListenDuration -> Icons.Rounded.AccessTime
     }
-    return AlbumCoverBadge(icon = icon, text = metricLabel)
+    return AlbumCoverBadge(
+        icon = icon,
+        text = metricLabel,
+        showContainer = false,
+        bottomScrim = true,
+        compactOffset = true
+    )
 }
 
 private val HotListeningSortMode.toggleLabel: String

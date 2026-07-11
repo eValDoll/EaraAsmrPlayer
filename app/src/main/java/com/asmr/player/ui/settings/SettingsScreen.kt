@@ -684,10 +684,10 @@ fun SettingsScreen(
                             val presetColors = remember {
                                 listOf(
                                     0xFFFFFFFF.toInt(),
-                                    0xFFFFEB3B.toInt(),
-                                    0xFF00E5FF.toInt(),
-                                    0xFF69F0AE.toInt(),
-                                    0xFFFF4081.toInt()
+                                    0xFFFFE14D.toInt(),
+                                    0xFF39D5FF.toInt(),
+                                    0xFF5CFF95.toInt(),
+                                    0xFFFF5FA2.toInt()
                                 )
                             }
                             Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
