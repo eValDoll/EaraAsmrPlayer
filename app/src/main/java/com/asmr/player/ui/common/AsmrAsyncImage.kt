@@ -147,13 +147,14 @@ fun AsmrAsyncImage(
     val p = painter.value
     val currentState = state.value
     val progress = crossfade.value.coerceIn(0f, 1f)
+    val hasSeededPainter = p != null && seededPlaceholder.value
     Box(modifier = containerModifier) {
         when {
             currentState == AsmrAsyncImageState.Error -> {
                 placeholder(contentModifier)
             }
             else -> {
-                if (currentState == AsmrAsyncImageState.Loading || (fadeIn && progress < 1f)) {
+                if (!hasSeededPainter && (currentState == AsmrAsyncImageState.Loading || (fadeIn && progress < 1f))) {
                     val loadingAlpha = if (currentState == AsmrAsyncImageState.Loading) 1f else (1f - progress)
                     val loadingModifier = if (loadingAlpha >= 0.999f) {
                         contentModifier

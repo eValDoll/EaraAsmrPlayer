@@ -300,7 +300,7 @@ fun AlbumDetailScreen(
     onAddMediaItemsToFavorites: (List<MediaItem>) -> Unit = {},
     onOpenPlaylistPicker: (MediaItem) -> Unit = {},
     onOpenDlsiteLogin: () -> Unit = {},
-    onOpenAlbumByRj: (String) -> Unit = {},
+    onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit = { _, _ -> },
     initialTab: Int? = null,
     viewModel: AlbumDetailViewModel = hiltViewModel()
 ) {
@@ -821,6 +821,7 @@ fun AlbumDetailScreen(
                                         isAwaitingInitialLoad = !model.hasLoadedInitialDlsiteContent,
                                         isAwaitingAsmrOneLoad = !model.hasResolvedAsmrOneContent &&
                                             asmrOneTree.isEmpty(),
+                                        hasResolvedAsmrOneContent = model.hasResolvedAsmrOneContent,
                                         asmrOneTree = asmrOneTree,
                                         isLoadingAsmrOne = model.isLoadingAsmrOne,
                                         isLoadingTrial = model.isLoadingDlsiteTrial,
@@ -1147,7 +1148,7 @@ private fun AlbumDetailHeroBackground(
             contentScale = ContentScale.Crop,
             alignment = Alignment.TopCenter,
             placeholderCornerRadius = 0,
-            peekAnySizeForInitial = false,
+            peekAnySizeForInitial = true,
             loadAtOriginalSize = true,
             modifier = Modifier
                 .fillMaxSize()
@@ -1198,7 +1199,7 @@ private fun AlbumDetailHeroBackground(
             contentScale = ContentScale.Crop,
             alignment = Alignment.TopCenter,
             placeholderCornerRadius = 0,
-            peekAnySizeForInitial = false,
+            peekAnySizeForInitial = true,
             loadAtOriginalSize = true,
             modifier = Modifier
                 .fillMaxSize()

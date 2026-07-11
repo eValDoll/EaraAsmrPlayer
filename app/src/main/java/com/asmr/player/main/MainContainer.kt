@@ -2020,7 +2020,16 @@ fun MainContainer(
                             albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
                         },
                         onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
-                        onOpenAlbumByRj = { navigator.openAlbumDetailByRjStacked(it) }
+                        onOpenAlbumByRj = { targetRj, work ->
+                            AlbumCoverHintStore.record(
+                                albumId = null,
+                                rjCode = targetRj,
+                                title = work?.title,
+                                circle = null,
+                                coverUrl = work?.coverUrl
+                            )
+                            navigator.openAlbumDetailByRjStacked(targetRj)
+                        }
                     )
                 }
                 composable(
@@ -2065,7 +2074,16 @@ fun MainContainer(
                             albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
                         },
                         onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
-                        onOpenAlbumByRj = { navigator.openAlbumDetailByRjStacked(it) }
+                        onOpenAlbumByRj = { targetRj, work ->
+                            AlbumCoverHintStore.record(
+                                albumId = null,
+                                rjCode = targetRj,
+                                title = work?.title,
+                                circle = null,
+                                coverUrl = work?.coverUrl
+                            )
+                            navigator.openAlbumDetailByRjStacked(targetRj)
+                        }
                     )
                 }
                 composable(
@@ -2097,7 +2115,16 @@ fun MainContainer(
                             albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
                         },
                         onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
-                        onOpenAlbumByRj = { navigator.openAlbumDetailByRjStacked(it) }
+                        onOpenAlbumByRj = { targetRj, work ->
+                            AlbumCoverHintStore.record(
+                                albumId = null,
+                                rjCode = targetRj,
+                                title = work?.title,
+                                circle = null,
+                                coverUrl = work?.coverUrl
+                            )
+                            navigator.openAlbumDetailByRjStacked(targetRj)
+                        }
                     )
                 }
                 composable(
