@@ -8,6 +8,7 @@ import com.asmr.player.listentogether.XxHash64
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -108,7 +109,7 @@ class AsmrOneAvailabilityApi @Inject constructor(
             .toList()
         if (normalized.isEmpty() || backendBaseUrl.isBlank()) return emptyMap()
 
-        return runCatching {
+        return try {
             withContext(Dispatchers.IO) {
                 val request = Request.Builder()
                     .url(resolveUrl("api/asmr-one/availability"))
@@ -134,7 +135,11 @@ class AsmrOneAvailabilityApi @Inject constructor(
                     }
                 }
             }
-        }.getOrDefault(emptyMap())
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            emptyMap()
+        }
     }
 
     suspend fun search(keyword: String, limit: Int, offset: Int, sort: String): AsmrOneCollectedSearchResponse {

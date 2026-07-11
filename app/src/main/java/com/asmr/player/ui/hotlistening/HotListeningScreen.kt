@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.hotlistening
+package com.asmr.player.ui.hotlistening
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -375,7 +375,6 @@ private fun HotListeningListItem(
     AlbumItem(
         album = album,
         onClick = { onAlbumClick(album) },
-        emptyCoverUseShimmer = true,
         coverRetainPainterDuringReload = true,
         coverBadge = entry.toCoverBadge(),
         onRjClick = { copyMeta("RJ", it) },
@@ -395,7 +394,6 @@ private fun HotListeningGridItem(
     AlbumGridItem(
         album = album,
         onClick = { onAlbumClick(album) },
-        emptyCoverUseShimmer = true,
         coverRetainPainterDuringReload = true,
         coverBadge = entry.toCoverBadge(),
         onRjClick = { copyMeta("RJ", it) },

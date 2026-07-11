@@ -14,9 +14,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import com.asmr.player.ui.theme.AsmrTheme
@@ -63,31 +65,32 @@ fun AsmrShimmerPlaceholder(
             .drawWithCache {
                 val w = size.width.coerceAtLeast(1f)
                 val h = size.height.coerceAtLeast(1f)
-                val cycleT = shimmerT.value
-                val sweepProgress = if (cycleT <= ShimmerSweepFraction) {
-                    (cycleT / ShimmerSweepFraction).coerceIn(0f, 1f)
-                } else {
-                    null
-                }
                 val diagonal = sqrt((w * w) + (h * h))
                 val band = diagonal * 0.78f
+                val highlightBrush = Brush.linearGradient(
+                    colorStops = arrayOf(
+                        0.00f to Color.Transparent,
+                        0.42f to Color.Transparent,
+                        0.50f to highlightColor.copy(alpha = highlightColor.alpha * 0.96f),
+                        0.58f to Color.Transparent,
+                        1.00f to Color.Transparent
+                    ),
+                    start = Offset.Zero,
+                    end = Offset(band, h)
+                )
                 onDrawBehind {
                     drawRect(color = baseColor)
-                    sweepProgress?.let { progress ->
+                    val cycleT = shimmerT.value
+                    if (cycleT <= ShimmerSweepFraction) {
+                        val progress = (cycleT / ShimmerSweepFraction).coerceIn(0f, 1f)
                         val startX = -band + ((w + band) * progress)
-                        drawRect(
-                            brush = Brush.linearGradient(
-                                colorStops = arrayOf(
-                                    0.00f to Color.Transparent,
-                                    0.42f to Color.Transparent,
-                                    0.50f to highlightColor.copy(alpha = highlightColor.alpha * 0.96f),
-                                    0.58f to Color.Transparent,
-                                    1.00f to Color.Transparent
-                                ),
-                                start = Offset(startX, 0f),
-                                end = Offset(startX + band, h)
+                        translate(left = startX) {
+                            drawRect(
+                                brush = highlightBrush,
+                                topLeft = Offset(-startX, 0f),
+                                size = Size(w, h)
                             )
-                        )
+                        }
                     }
                 }
             }

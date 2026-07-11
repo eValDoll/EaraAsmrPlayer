@@ -1,4 +1,4 @@
-﻿package com.asmr.player
+package com.asmr.player
 
 import android.os.Bundle
 import android.view.KeyEvent

@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.library
+package com.asmr.player.ui.library
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -162,6 +162,7 @@ class LibraryViewModel @Inject constructor(
     private val _querySpec = MutableStateFlow(LibraryQuerySpec())
     val querySpec: StateFlow<LibraryQuerySpec> = _querySpec.asStateFlow()
     private val _expandedTrackAlbumIds = MutableStateFlow<Set<Long>>(emptySet())
+    val expandedTrackAlbumIds: StateFlow<Set<Long>> = _expandedTrackAlbumIds.asStateFlow()
 
     val availableTags: StateFlow<List<TagWithCount>> = database.tagDao()
         .getTagsWithCounts(TagSource.USER)
@@ -386,8 +387,15 @@ class LibraryViewModel @Inject constructor(
         }
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
-    fun setExpandedTrackAlbums(albumIds: Set<Long>) {
-        _expandedTrackAlbumIds.value = albumIds.asSequence().filter { it > 0L }.toSet()
+    fun toggleExpandedTrackAlbum(albumId: Long) {
+        if (albumId <= 0L) return
+        _expandedTrackAlbumIds.update { albumIds ->
+            if (albumId in albumIds) albumIds - albumId else albumIds + albumId
+        }
+    }
+
+    fun clearExpandedTrackAlbums() {
+        _expandedTrackAlbumIds.value = emptySet()
     }
 
     val libraryViewMode: StateFlow<Int?> = settingsRepository.libraryViewMode
