@@ -7,6 +7,8 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.MutatePriority
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -269,6 +271,7 @@ private fun LibraryActionItem(
 @Composable
 fun LibraryScreen(
     windowSizeClass: WindowSizeClass,
+    isActive: Boolean = true,
     onAlbumClick: (Album) -> Unit,
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
     onOpenPlaylistPicker: (MediaItem) -> Unit = {},
@@ -377,6 +380,13 @@ fun LibraryScreen(
             else -> listState.smoothScrollToTop()
         }
         chromeState.expand()
+    }
+    LaunchedEffect(isActive, mode) {
+        if (isActive) return@LaunchedEffect
+        when (mode) {
+            1 -> gridState.stopScroll(MutatePriority.PreventUserInput)
+            else -> listState.stopScroll(MutatePriority.PreventUserInput)
+        }
     }
 
     Scaffold(

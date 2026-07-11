@@ -1,7 +1,9 @@
 package com.asmr.player.ui.groups
 
+import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,6 +74,7 @@ private val AlbumGroupRowActionIconSize = 18.dp
 @Composable
 fun AlbumGroupsScreen(
     windowSizeClass: WindowSizeClass,
+    isActive: Boolean = true,
     onGroupClick: (AlbumGroupEntity) -> Unit,
     scrollToTopSignal: Long = 0L,
     viewModel: AlbumGroupsViewModel = hiltViewModel()
@@ -87,6 +90,10 @@ fun AlbumGroupsScreen(
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground
     ) { padding ->
+        LaunchedEffect(isActive) {
+            if (isActive) return@LaunchedEffect
+            listState.stopScroll(MutatePriority.PreventUserInput)
+        }
         LaunchedEffect(scrollToTopSignal) {
             if (scrollToTopSignal == 0L) return@LaunchedEffect
             listState.smoothScrollToTop()

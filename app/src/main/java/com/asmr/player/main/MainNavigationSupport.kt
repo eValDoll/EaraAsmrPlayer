@@ -259,6 +259,23 @@ internal fun resolvePrimaryPagerApproachPage(
     return targetPage + if (targetPage > currentPage) -1 else 1
 }
 
+internal fun shouldSyncPrimaryPagerToRoute(
+    targetPage: Int,
+    settledPage: Int
+): Boolean = targetPage >= 0 && settledPage != targetPage
+
+internal fun shouldClearPendingPrimaryNavigationRoute(
+    currentRoute: String?,
+    pendingRoute: String?,
+    navigationInProgress: Boolean,
+    pendingPage: Int,
+    settledPage: Int
+): Boolean {
+    if (pendingRoute.isNullOrBlank()) return false
+    if (currentRoute != pendingRoute || navigationInProgress) return false
+    return pendingPage >= 0 && settledPage == pendingPage
+}
+
 internal fun resolvePrimaryPagerBeyondBoundsPageCount(pageCount: Int): Int {
     return (pageCount - 1).coerceAtLeast(0)
 }

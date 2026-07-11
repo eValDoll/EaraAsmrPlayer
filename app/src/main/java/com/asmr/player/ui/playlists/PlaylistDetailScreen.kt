@@ -1,8 +1,10 @@
 package com.asmr.player.ui.playlists
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -94,6 +96,7 @@ private const val PLAYLIST_DETAIL_REORDER_SENTINEL_KEY = "__playlist_detail_reor
 @Composable
 fun PlaylistDetailScreen(
     windowSizeClass: WindowSizeClass,
+    isActive: Boolean = true,
     playlistId: Long,
     title: String,
     onPlayAll: (List<PlaylistItemEntity>, PlaylistItemEntity) -> Unit,
@@ -106,6 +109,7 @@ fun PlaylistDetailScreen(
     val items by viewModel.items.collectAsState()
     PlaylistDetailContent(
         windowSizeClass = windowSizeClass,
+        isActive = isActive,
         title = title,
         items = items,
         onPlayAll = onPlayAll,
@@ -120,6 +124,7 @@ fun PlaylistDetailScreen(
 @Composable
 internal fun PlaylistDetailContent(
     windowSizeClass: WindowSizeClass,
+    isActive: Boolean = true,
     title: String,
     items: List<PlaylistItemWithSubtitles>,
     onPlayAll: (List<PlaylistItemEntity>, PlaylistItemEntity) -> Unit,
@@ -156,6 +161,10 @@ internal fun PlaylistDetailContent(
     LaunchedEffect(scrollToTopSignal) {
         if (scrollToTopSignal == 0L) return@LaunchedEffect
         listState.smoothScrollToTop()
+    }
+    LaunchedEffect(isActive) {
+        if (isActive) return@LaunchedEffect
+        listState.stopScroll(MutatePriority.PreventUserInput)
     }
 
     val playItems by remember {

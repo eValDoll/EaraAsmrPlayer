@@ -7,11 +7,13 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -239,6 +241,7 @@ private fun SearchFilterIconView(
 @Composable
 fun SearchScreen(
     windowSizeClass: WindowSizeClass,
+    isActive: Boolean = true,
     onAlbumClick: (Album, Boolean, Boolean) -> Unit,
     onOpenSearchAssist: (SearchAssistSearchRequest) -> Unit = {},
     submittedSearchKeyword: String = "",
@@ -639,6 +642,15 @@ fun SearchScreen(
             else -> gridState.smoothScrollToTop()
         }
         chromeState.expand()
+    }
+    LaunchedEffect(isActive, viewMode) {
+        if (isActive) return@LaunchedEffect
+        when (viewMode) {
+            0 -> listState.stopScroll(MutatePriority.PreventUserInput)
+            else -> gridState.stopScroll(MutatePriority.PreventUserInput)
+        }
+        pullNextPageDragPx = 0f
+        latestHorizontalPagerScrollLockChanged.value(false)
     }
 
     Scaffold(
