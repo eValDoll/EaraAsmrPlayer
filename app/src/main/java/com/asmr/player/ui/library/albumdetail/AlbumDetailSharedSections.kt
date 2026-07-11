@@ -237,7 +237,7 @@ internal fun AlbumDescription(album: Album) {
 @Composable
 internal fun DlsiteRecommendationsBlocks(
     recommendations: DlsiteRecommendations,
-    onOpenAlbumByRj: (String) -> Unit
+    onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit
 ) {
     if (recommendations.circleWorks.isEmpty() && 
         recommendations.sameVoiceWorks.isEmpty() && 
@@ -271,7 +271,7 @@ internal fun DlsiteRecommendationsBlocks(
 private fun DlsiteRecommendationsBlock(
     title: String,
     items: List<DlsiteRecommendedWork>,
-    onOpenAlbumByRj: (String) -> Unit
+    onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit
 ) {
     if (items.isEmpty()) return
     val colorScheme = AsmrTheme.colorScheme
@@ -290,7 +290,7 @@ private fun DlsiteRecommendationsBlock(
                 }
             ) { _, w ->
                 val rj = sanitizeRj(w.rjCode).ifBlank { w.rjCode }
-                DlsiteRecommendedWorkCard(work = w, displayRj = rj, onClick = { onOpenAlbumByRj(rj) })
+                DlsiteRecommendedWorkCard(work = w, displayRj = rj, onClick = { onOpenAlbumByRj(rj, w) })
             }
         }
     }

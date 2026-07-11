@@ -11,6 +11,7 @@ class AlbumDetailOneStateTest {
         assertTrue(
             shouldShowAsmrOneDirectoryLoading(
                 isAwaitingAsmrOneLoad = true,
+                hasResolvedAsmrOneContent = false,
                 isLoadingAsmrOne = false,
                 hasAsmrOneTree = false,
                 hasDirectoryBrowser = false
@@ -19,6 +20,7 @@ class AlbumDetailOneStateTest {
         assertTrue(
             shouldShowAsmrOneDirectoryLoading(
                 isAwaitingAsmrOneLoad = false,
+                hasResolvedAsmrOneContent = true,
                 isLoadingAsmrOne = false,
                 hasAsmrOneTree = true,
                 hasDirectoryBrowser = false
@@ -27,6 +29,7 @@ class AlbumDetailOneStateTest {
         assertFalse(
             shouldShowAsmrOneDirectoryLoading(
                 isAwaitingAsmrOneLoad = false,
+                hasResolvedAsmrOneContent = true,
                 isLoadingAsmrOne = true,
                 hasAsmrOneTree = true,
                 hasDirectoryBrowser = true
@@ -35,9 +38,36 @@ class AlbumDetailOneStateTest {
         assertFalse(
             shouldShowAsmrOneDirectoryLoading(
                 isAwaitingAsmrOneLoad = false,
+                hasResolvedAsmrOneContent = true,
                 isLoadingAsmrOne = false,
                 hasAsmrOneTree = false,
                 hasDirectoryBrowser = false
+            )
+        )
+    }
+
+    @Test
+    fun shouldShowAsmrOneDirectoryLoading_waitsUntilFallbackCompletes() {
+        assertTrue(
+            shouldShowAsmrOneDirectoryLoading(
+                isAwaitingAsmrOneLoad = false,
+                hasResolvedAsmrOneContent = false,
+                isLoadingAsmrOne = false,
+                hasAsmrOneTree = false,
+                hasDirectoryBrowser = false
+            )
+        )
+    }
+
+    @Test
+    fun shouldShowAsmrOneDirectoryLoading_ignoresEmptyDirectoryBrowserBeforeResolved() {
+        assertTrue(
+            shouldShowAsmrOneDirectoryLoading(
+                isAwaitingAsmrOneLoad = false,
+                hasResolvedAsmrOneContent = false,
+                isLoadingAsmrOne = false,
+                hasAsmrOneTree = false,
+                hasDirectoryBrowser = true
             )
         )
     }

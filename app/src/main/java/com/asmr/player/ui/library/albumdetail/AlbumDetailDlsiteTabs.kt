@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -58,6 +59,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -189,11 +191,21 @@ private fun DlsiteSectionPlaceholderLine(
 }
 
 @Composable
-private fun DlsiteDirectoryLoadingPanel() {
+private fun rememberDlsiteDirectoryListHeight(): Dp {
     val screenHeight = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
-    val fixedHeight = remember(screenHeight) {
+    return remember(screenHeight) {
         (screenHeight * 0.48f).coerceIn(240.dp, 460.dp)
     }
+}
+
+@Composable
+private fun rememberStableOneDirectoryContainerHeight(): Dp {
+    return rememberDlsiteDirectoryListHeight() + 152.dp
+}
+
+@Composable
+private fun DlsiteDirectoryLoadingPanel() {
+    val fixedHeight = rememberDlsiteDirectoryListHeight()
     Surface(
         shape = RoundedCornerShape(12.dp),
         tonalElevation = 1.dp,
@@ -699,6 +711,47 @@ private fun LazyItemScope.dlsiteAnimatedSectionModifier(
 }
 
 @Composable
+private fun StableOneDirectoryTreeContent(
+    targetState: DirectoryTreePanelState,
+    modifier: Modifier = Modifier,
+    content: @Composable (DirectoryTreePanelState) -> Unit
+) {
+    val contentAlpha = remember { Animatable(if (targetState == DirectoryTreePanelState.Content) 0f else 1f) }
+    LaunchedEffect(targetState) {
+        if (targetState == DirectoryTreePanelState.Content) {
+            contentAlpha.snapTo(0f)
+            contentAlpha.animateTo(1f, animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing))
+        } else {
+            contentAlpha.snapTo(1f)
+        }
+    }
+    AnimatedContent(
+        targetState = targetState,
+        modifier = modifier
+            .height(rememberStableOneDirectoryContainerHeight())
+            .clipToBounds(),
+        transitionSpec = {
+            fadeIn(animationSpec = tween(durationMillis = 140))
+                .togetherWith(fadeOut(animationSpec = tween(durationMillis = 90)))
+        },
+        label = "stableAsmrOneDirectoryTree",
+        content = { state ->
+            val stateModifier = if (state == DirectoryTreePanelState.Content) {
+                Modifier.graphicsLayer {
+                    alpha = contentAlpha.value
+                    compositingStrategy = CompositingStrategy.ModulateAlpha
+                }
+            } else {
+                Modifier
+            }
+            Box(modifier = stateModifier.fillMaxSize()) {
+                content(state)
+            }
+        }
+    )
+}
+
+@Composable
 private fun DirectoryTreeAnimatedContent(
     targetState: DirectoryTreePanelState,
     label: String,
@@ -732,15 +785,16 @@ private fun DirectoryTreeAnimatedContent(
 
 internal fun shouldShowAsmrOneDirectoryLoading(
     isAwaitingAsmrOneLoad: Boolean,
+    hasResolvedAsmrOneContent: Boolean,
     isLoadingAsmrOne: Boolean,
     hasAsmrOneTree: Boolean,
     hasDirectoryBrowser: Boolean
 ): Boolean {
-    return !hasDirectoryBrowser && (
-        isAwaitingAsmrOneLoad ||
-            isLoadingAsmrOne ||
-            hasAsmrOneTree
-        )
+    if (hasDirectoryBrowser && hasAsmrOneTree) return false
+    return isAwaitingAsmrOneLoad ||
+        !hasResolvedAsmrOneContent ||
+        isLoadingAsmrOne ||
+        hasAsmrOneTree
 }
 
 internal fun shouldShowDlsitePlayDirectoryLoading(
@@ -768,6 +822,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     isLoading: Boolean,
     isAwaitingInitialLoad: Boolean,
     isAwaitingAsmrOneLoad: Boolean,
+    hasResolvedAsmrOneContent: Boolean,
     asmrOneTree: List<AsmrOneTrackNodeResponse>,
     isLoadingAsmrOne: Boolean,
     isLoadingTrial: Boolean,
@@ -794,7 +849,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     initialScroll: Pair<Int, Int>,
     onPersistScroll: (Int, Int) -> Unit,
     dlsiteRecommendations: DlsiteRecommendations,
-    onOpenAlbumByRj: (String) -> Unit,
+    onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit,
     loadRemoteFileSize: suspend (String) -> Long?
 ) {
     val scope = rememberCoroutineScope()
@@ -844,6 +899,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     val isInitialDlsiteLoading = isLoading || isAwaitingInitialLoad
     val isAsmrOnePending = shouldShowAsmrOneDirectoryLoading(
         isAwaitingAsmrOneLoad = isAwaitingAsmrOneLoad,
+        hasResolvedAsmrOneContent = hasResolvedAsmrOneContent,
         isLoadingAsmrOne = isLoadingAsmrOne,
         hasAsmrOneTree = asmrOneTree.isNotEmpty(),
         hasDirectoryBrowser = browser != null
@@ -947,9 +1003,8 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         }
         item(key = "dlsite-one-content") {
             Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
-                DirectoryTreeAnimatedContent(
+                StableOneDirectoryTreeContent(
                     targetState = asmrOnePanelState,
-                    label = "asmrOneDirectoryTree",
                     modifier = Modifier.fillMaxWidth()
                 ) { panelState ->
                     when (panelState) {
@@ -969,7 +1024,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                                     onAddToFavorites = onAddMediaItemsToFavorites,
                                     onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
                                     onAddMediaItemsToQueue = onAddMediaItemsToQueue,
-                                    animateIntro = animateIntro,
+                                    animateIntro = false,
                                     parentChromeState = chromeState,
                                     folderKeyPrefix = "asmr-folder",
                                     fileKeyPrefix = "asmr-file",
