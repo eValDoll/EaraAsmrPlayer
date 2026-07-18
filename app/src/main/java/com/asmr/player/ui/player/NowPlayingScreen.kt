@@ -50,6 +50,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
@@ -133,6 +134,7 @@ private enum class NowPlayingSurfaceMode {
 }
 
 private const val VideoProgressUiTickMs = 1_000L
+private const val NowPlayingHomeLayoutAnimationDurationMillis = 620
 
 private data class NowPlayingStaticPlayback(
     val isConnected: Boolean,
@@ -617,6 +619,98 @@ private fun ExpandedPlayerIdentityOverlay(
 }
 
 @Composable
+private fun NowPlayingHomeLayoutSwipeHint(
+    modifier: Modifier = Modifier
+) {
+    val transition = rememberInfiniteTransition(label = "nowPlayingHomeLayoutSwipeHint")
+    val waveProgress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2800, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "nowPlayingHomeLayoutSwipeHintProgress"
+    )
+    val textShadow = remember {
+        Shadow(
+            color = Color.Black.copy(alpha = 0.72f),
+            offset = Offset(0f, 1.2f),
+            blurRadius = 4f
+        )
+    }
+
+    Column(
+        modifier = modifier
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(1.dp)
+    ) {
+        Canvas(
+            modifier = Modifier
+                .width(44.dp)
+                .height(24.dp)
+        ) {
+            repeat(4) { index ->
+                val phase = (waveProgress + index * 0.25f) % 1f
+                val edgeFade = when {
+                    phase < 0.22f -> phase / 0.22f
+                    phase > 0.78f -> (1f - phase) / 0.22f
+                    else -> 1f
+                }.coerceIn(0f, 1f)
+                val pulse = edgeFade * edgeFade * (3f - 2f * edgeFade)
+                val centerX = size.width / 2f
+                val centerY = size.height * (0.88f - phase * 0.70f)
+                val halfWidth = size.width * 0.15f
+                val halfHeight = size.height * 0.14f
+                val color = Color.White.copy(alpha = pulse * 0.66f)
+                val shadowColor = Color.Black.copy(alpha = pulse * 0.24f)
+                val strokeWidth = 1.45.dp.toPx()
+                drawLine(
+                    color = shadowColor,
+                    start = Offset(centerX - halfWidth, centerY + halfHeight + 1.2f),
+                    end = Offset(centerX, centerY - halfHeight + 1.2f),
+                    strokeWidth = strokeWidth + 1.2f,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = shadowColor,
+                    start = Offset(centerX + halfWidth, centerY + halfHeight + 1.2f),
+                    end = Offset(centerX, centerY - halfHeight + 1.2f),
+                    strokeWidth = strokeWidth + 1.2f,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(centerX - halfWidth, centerY + halfHeight),
+                    end = Offset(centerX, centerY - halfHeight),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(centerX + halfWidth, centerY + halfHeight),
+                    end = Offset(centerX, centerY - halfHeight),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+        }
+        Text(
+            text = "上滑切换封面排布",
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = FontWeight.SemiBold,
+                shadow = textShadow
+            ),
+            color = Color.White.copy(alpha = 0.86f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
 @androidx.media3.common.util.UnstableApi
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 internal fun NowPlayingScreen(
@@ -634,6 +728,7 @@ internal fun NowPlayingScreen(
     coverBackgroundClarity: Float,
     coverPreviewMode: CoverPreviewMode,
     nowPlayingHomeLayoutMode: NowPlayingHomeLayoutMode,
+    nowPlayingHomeLayoutHintDismissed: Boolean,
     onNowPlayingHomeLayoutModeChange: (NowPlayingHomeLayoutMode) -> Unit,
     lyricsPageSettings: LyricsPageSettings,
     audioOutputRouteKind: AudioOutputRouteKind,
@@ -698,13 +793,29 @@ internal fun NowPlayingScreen(
 
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
+    var homeLayoutHintDismissedInSession by rememberSaveable { mutableStateOf(false) }
+    val homeLayoutHintScope = rememberCoroutineScope()
+    LaunchedEffect(nowPlayingHomeLayoutHintDismissed) {
+        if (nowPlayingHomeLayoutHintDismissed) {
+            homeLayoutHintDismissedInSession = true
+        }
+    }
     val changeNowPlayingHomeLayoutMode = remember(
         haptic,
         nowPlayingHomeLayoutMode,
+        nowPlayingHomeLayoutHintDismissed,
+        homeLayoutHintDismissedInSession,
+        homeLayoutHintScope,
         onNowPlayingHomeLayoutModeChange
     ) {
         { mode: NowPlayingHomeLayoutMode ->
             if (mode != nowPlayingHomeLayoutMode) {
+                if (!nowPlayingHomeLayoutHintDismissed && !homeLayoutHintDismissedInSession) {
+                    homeLayoutHintScope.launch {
+                        delay(NowPlayingHomeLayoutAnimationDurationMillis.toLong())
+                        homeLayoutHintDismissedInSession = true
+                    }
+                }
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                 onNowPlayingHomeLayoutModeChange(mode)
             }
@@ -1468,9 +1579,12 @@ internal fun NowPlayingScreen(
             val controlsMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.CONTROLS)
             val volumeMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.VOLUME)
             val expandedHomeLayout = nowPlayingHomeLayoutMode == NowPlayingHomeLayoutMode.Expanded && !isVideo
+            val homeLayoutSwipeHintAllowed = !nowPlayingHomeLayoutHintDismissed &&
+                !homeLayoutHintDismissedInSession &&
+                !isVideo
             val portraitContentHorizontalPadding = 24.dp
             val homeBezier = remember { CubicBezierEasing(0.20f, 0f, 0f, 1f) }
-            val homeLayoutDurationMillis = 620
+            val homeLayoutDurationMillis = NowPlayingHomeLayoutAnimationDurationMillis
             val homeFadeInDurationMillis = 240
             val homeFadeOutDurationMillis = 160
             val expandedHomeLyricsSettings = remember(lyricsPageSettings) {
@@ -1481,6 +1595,8 @@ internal fun NowPlayingScreen(
                 targetState = expandedHomeLayout,
                 label = "nowPlayingHomeLayoutMode"
             )
+            val showHomeLayoutSwipeHint = homeLayoutSwipeHintAllowed &&
+                !homeLayoutTransition.currentState
             val portraitTopPadding by homeLayoutTransition.animateDp(
                 transitionSpec = {
                     tween(durationMillis = homeLayoutDurationMillis, easing = homeBezier)
@@ -1504,6 +1620,14 @@ internal fun NowPlayingScreen(
                 label = "nowPlayingHomeLyricsTopPadding"
             ) { expanded ->
                 if (expanded) 14.dp else 6.dp
+            }
+            val lyricsHorizontalPadding by homeLayoutTransition.animateDp(
+                transitionSpec = {
+                    tween(durationMillis = homeLayoutDurationMillis, easing = homeBezier)
+                },
+                label = "nowPlayingHomeLyricsHorizontalPadding"
+            ) { expanded ->
+                if (expanded) 0.dp else portraitContentHorizontalPadding
             }
             val homeCoverAspectRatio by homeLayoutTransition.animateFloat(
                 transitionSpec = {
@@ -1697,6 +1821,14 @@ internal fun NowPlayingScreen(
                                             dragPreviewEnabled = useDragPreview,
                                             dragPreviewState = coverDragPreviewState
                                         )
+                                        if (showHomeLayoutSwipeHint) {
+                                            NowPlayingHomeLayoutSwipeHint(
+                                                modifier = Modifier
+                                                    .align(Alignment.BottomCenter)
+                                                    .padding(bottom = 16.dp)
+                                                    .graphicsLayer { alpha = classicIdentityAlpha }
+                                            )
+                                        }
                                         if (expandedIdentityAlpha > 0.001f) {
                                             Box(
                                                 modifier = Modifier
@@ -1721,7 +1853,7 @@ internal fun NowPlayingScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .weight(1f)
-                                        .padding(horizontal = portraitContentHorizontalPadding)
+                                        .padding(horizontal = lyricsHorizontalPadding)
                                         .then(lyricsMotion),
                                     contentAlignment = Alignment.TopCenter
                                 ) {
@@ -1748,6 +1880,8 @@ internal fun NowPlayingScreen(
                                                 onAddLyrics = openManualLyricsAction,
                                                 interactionEnabled = lyricsExpandedInteractionEnabled,
                                                 stableFocusAnchor = true,
+                                                lyricItemOuterHorizontalPadding = 6.dp,
+                                                lyricItemInnerHorizontalPadding = 8.dp,
                                                 modifier = Modifier.fillMaxSize()
                                             )
                                         }

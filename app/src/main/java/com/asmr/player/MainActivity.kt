@@ -148,6 +148,7 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import com.asmr.player.ui.player.QueueSheetContent
 import com.asmr.player.ui.player.SleepTimerSheetContent
 import com.asmr.player.ui.player.MiniPlayerDisplayMode
+import kotlinx.coroutines.flow.first
 
 import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.data.local.datastore.ThemeBootstrapPreferences
@@ -284,6 +285,9 @@ class MainActivity : ComponentActivity() {
             val nowPlayingHomeLayoutMode by settingsDataStore.nowPlayingHomeLayoutMode.collectAsState(
                 initial = NowPlayingHomeLayoutMode.Classic
             )
+            val nowPlayingHomeLayoutHintDismissed by produceState(initialValue = false, settingsDataStore) {
+                value = settingsDataStore.nowPlayingHomeLayoutHintDismissed.first()
+            }
             val lyricsPageSettings by settingsDataStore.lyricsPageSettings.collectAsState(initial = LyricsPageSettings())
             val showMiniPlayerBar by settingsRepository.showMiniPlayerBar.collectAsState(initial = true)
             val neutral = remember(mode) { neutralPaletteForMode(mode) }
@@ -581,6 +585,7 @@ class MainActivity : ComponentActivity() {
                         coverBackgroundClarity = coverBackgroundClarity,
                         coverPreviewMode = coverPreviewMode,
                         nowPlayingHomeLayoutMode = nowPlayingHomeLayoutMode,
+                        nowPlayingHomeLayoutHintDismissed = nowPlayingHomeLayoutHintDismissed,
                         lyricsPageSettings = lyricsPageSettings,
                         forceImmersive = showSplash,
                         volumeKeyEventTick = volumeKeyTick

@@ -205,6 +205,8 @@ internal fun NowPlayingLyricsSurface(
     onAddLyrics: (() -> Unit)? = null,
     interactionEnabled: Boolean = true,
     stableFocusAnchor: Boolean = false,
+    lyricItemOuterHorizontalPadding: Dp = if (isLandscape) 10.dp else 14.dp,
+    lyricItemInnerHorizontalPadding: Dp = if (isLandscape) 8.dp else 10.dp,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier) {
@@ -246,7 +248,9 @@ internal fun NowPlayingLyricsSurface(
                 isLandscape = isLandscape,
                 settings = lyricsPageSettings,
                 interactionEnabled = interactionEnabled,
-                stableFocusAnchor = stableFocusAnchor
+                stableFocusAnchor = stableFocusAnchor,
+                itemOuterHorizontalPadding = lyricItemOuterHorizontalPadding,
+                itemInnerHorizontalPadding = lyricItemInnerHorizontalPadding
             )
         }
     }

@@ -68,6 +68,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.asmr.player.data.settings.LyricsPageSettings
@@ -95,7 +96,9 @@ internal fun AppleLyricsView(
     isLandscape: Boolean = false,
     settings: LyricsPageSettings = LyricsPageSettings(),
     interactionEnabled: Boolean = true,
-    stableFocusAnchor: Boolean = false
+    stableFocusAnchor: Boolean = false,
+    itemOuterHorizontalPadding: Dp = if (isLandscape) 10.dp else 14.dp,
+    itemInnerHorizontalPadding: Dp = if (isLandscape) 8.dp else 10.dp
 ) {
     val indexFinder = remember(lyrics) { SubtitleIndexFinder(lyrics) }
     val activeIndex = remember(currentPosition, indexFinder) {
@@ -105,8 +108,6 @@ internal fun AppleLyricsView(
     val density = LocalDensity.current
     val itemOuterVerticalPadding = 0.dp
     val itemInnerVerticalPadding = if (isLandscape) 2.dp else 3.dp
-    val itemOuterHorizontalPadding = if (isLandscape) 10.dp else 14.dp
-    val itemInnerHorizontalPadding = if (isLandscape) 8.dp else 10.dp
     val fontSize = settings.fontSizeSp.sp
     val wrappedLineHeight = (settings.fontSizeSp * 1.2f).sp
     val fontSizePx = with(density) { fontSize.toPx() }
