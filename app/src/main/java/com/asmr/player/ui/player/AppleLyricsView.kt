@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.asmr.player.data.settings.LyricsPageSettings
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.util.Formatting
@@ -384,6 +385,7 @@ internal fun AppleLyricsView(
                     .fillMaxSize()
                     .nestedScroll(nestedScrollConnection)
                     .thinScrollbar(listState),
+                flingBehavior = rememberCalmScrollableFlingBehavior(),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 contentPadding = PaddingValues(
                     bottom = centeredActiveBottomDp

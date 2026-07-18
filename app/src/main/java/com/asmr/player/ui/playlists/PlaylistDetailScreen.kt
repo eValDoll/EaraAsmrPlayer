@@ -70,6 +70,7 @@ import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.rememberAudioMeta
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.thinScrollbar
@@ -218,6 +219,7 @@ internal fun PlaylistDetailContent(
                     modifier = contentModifier
                         .reorderable(reorderState)
                         .thinScrollbar(listState),
+                    flingBehavior = rememberCalmScrollableFlingBehavior(),
                     contentPadding = PaddingValues(top = 6.dp, bottom = LocalBottomOverlayPadding.current)
                 ) {
                     item(key = PLAYLIST_DETAIL_REORDER_SENTINEL_KEY) {

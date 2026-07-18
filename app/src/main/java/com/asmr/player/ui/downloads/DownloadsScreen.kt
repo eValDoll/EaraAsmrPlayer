@@ -74,6 +74,7 @@ import com.asmr.player.ui.common.FlatActionDialog
 import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrTheme
@@ -173,6 +174,7 @@ fun DownloadsScreen(
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.thinScrollbar(listState),
+                    flingBehavior = rememberCalmScrollableFlingBehavior(),
                     verticalArrangement = Arrangement.spacedBy(6.dp),
                     contentPadding = PaddingValues(
                         top = 4.dp,

@@ -92,6 +92,7 @@ import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AudioOutputRouteIcon
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
 import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
@@ -1685,6 +1686,7 @@ internal fun NowPlayingScreen(
                                 .fillMaxWidth()
                                 .weight(1f, fill = true)
                                 .thinScrollbar(sliceListState),
+                            flingBehavior = rememberCalmScrollableFlingBehavior(),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             itemsIndexed(sliceUiState.slices, key = { _, s -> s.id }) { index, slice ->
@@ -1855,7 +1857,10 @@ internal fun NowPlayingScreen(
                         onPlaybackParametersChanged = { speed, pitch -> viewModel.setPlaybackParameters(speed, pitch) },
                         modifier = Modifier
                             .fillMaxSize()
-                            .verticalScroll(scrollState)
+                            .verticalScroll(
+                                state = scrollState,
+                                flingBehavior = rememberCalmScrollableFlingBehavior()
+                            )
                             .padding(bottom = 32.dp)
                     )
                     if (showEqualizerVolumeOverlay) {

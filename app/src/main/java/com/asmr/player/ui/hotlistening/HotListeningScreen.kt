@@ -56,6 +56,7 @@ import com.asmr.player.hotlistening.HotListeningSortMode
 import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
@@ -273,6 +274,7 @@ fun HotListeningScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .thinScrollbar(listState),
+                        flingBehavior = rememberCalmScrollableFlingBehavior(),
                         contentPadding = PaddingValues(bottom = 8.dp)
                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                     ) {
@@ -321,6 +323,7 @@ fun HotListeningScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .thinScrollbar(gridState),
+                        flingBehavior = rememberCalmScrollableFlingBehavior(),
                         contentPadding = PaddingValues(
                             start = 8.dp,
                             end = 8.dp,

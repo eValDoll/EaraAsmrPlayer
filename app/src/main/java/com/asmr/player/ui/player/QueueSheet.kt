@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrTheme
 
@@ -70,6 +71,7 @@ fun QueueSheetContent(
                 .fillMaxWidth()
                 .weight(1f, fill = true)
                 .thinScrollbar(listState),
+            flingBehavior = rememberCalmScrollableFlingBehavior(),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {
             itemsIndexed(queue, key = { idx, it -> "${it.mediaId}#$idx" }) { index, mediaItem ->

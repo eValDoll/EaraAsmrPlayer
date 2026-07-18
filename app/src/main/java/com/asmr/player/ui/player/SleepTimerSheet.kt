@@ -34,6 +34,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.asmr.player.ui.common.FlatTextFieldDialog
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.theme.AsmrTheme
 import kotlinx.coroutines.delay
 import java.util.Locale
@@ -74,7 +75,10 @@ fun SleepTimerSheetContent(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .verticalScroll(rememberScrollState())
+            .verticalScroll(
+                state = rememberScrollState(),
+                flingBehavior = rememberCalmScrollableFlingBehavior()
+            )
             .padding(bottom = 24.dp)
     ) {
         Row(
