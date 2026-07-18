@@ -126,6 +126,7 @@ import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
@@ -225,6 +226,7 @@ internal fun AsmrOneDownloadDialog(
                         LazyColumn(
                             state = listState,
                             modifier = Modifier.fillMaxSize().thinScrollbar(listState),
+                            flingBehavior = rememberCalmScrollableFlingBehavior(),
                             contentPadding = PaddingValues(vertical = 2.dp)
                         ) {
                             itemsIndexed(items = entries, key = { _, it -> it.path }) { index, entry ->
@@ -474,6 +476,7 @@ internal fun OnlineSaveDialog(
                         LazyColumn(
                             state = listState,
                             modifier = Modifier.fillMaxSize().thinScrollbar(listState),
+                            flingBehavior = rememberCalmScrollableFlingBehavior(),
                             contentPadding = PaddingValues(vertical = 2.dp)
                         ) {
                             itemsIndexed(items = entries, key = { _, it -> it.path }) { index, entry ->
@@ -1037,7 +1040,14 @@ internal fun FilePreviewDialog(
                                     }.getOrNull() ?: "读取失败"
                                 }
                             }
-                            Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .verticalScroll(
+                                        state = rememberScrollState(),
+                                        flingBehavior = rememberCalmScrollableFlingBehavior()
+                                    )
+                            ) {
                                 Text(
                                     text = textContent ?: "",
                                     style = MaterialTheme.typography.bodySmall,

@@ -138,6 +138,7 @@ import com.asmr.player.ui.nav.bottomChromeOverlayHeight
 import com.asmr.player.ui.nav.isPrimaryRoute
 import com.asmr.player.ui.nav.resolvePrimaryRoute
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.splash.EaraSplashOverlay
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
@@ -1234,6 +1235,7 @@ fun MainContainer(
                         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                             LazyColumn(
                                 modifier = Modifier.fillMaxSize(),
+                                flingBehavior = rememberCalmScrollableFlingBehavior(),
                                 contentPadding = PaddingValues(top = 10.dp, bottom = 32.dp)
                             ) {
                                 items(navItems, key = { it.third }) { (icon, label, route) ->

@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 
 @Composable
 fun LandscapeSidePanelsHost(
@@ -54,7 +55,10 @@ fun LandscapeSidePanelsHost(
                     .width(sideColumnWidth)
                     .fillMaxHeight()
                     .padding(start = sidePadding, top = sidePadding, bottom = sidePadding)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(
+                        state = rememberScrollState(),
+                        flingBehavior = rememberCalmScrollableFlingBehavior()
+                    ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 left()
@@ -67,7 +71,10 @@ fun LandscapeSidePanelsHost(
                     .width(sideColumnWidth)
                     .fillMaxHeight()
                     .padding(end = sidePadding, top = sidePadding, bottom = sidePadding)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(
+                        state = rememberScrollState(),
+                        flingBehavior = rememberCalmScrollableFlingBehavior()
+                    ),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 right()

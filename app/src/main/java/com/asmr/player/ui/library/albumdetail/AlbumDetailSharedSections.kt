@@ -89,6 +89,7 @@ import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
 import com.asmr.player.ui.dlsite.DlsitePlayViewModel
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.util.DlsiteAntiHotlink
 import com.asmr.player.util.SmartSortKey
 import com.google.gson.Gson
@@ -437,6 +438,7 @@ internal fun AlbumTracks(album: Album, onTrackClick: (Track) -> Unit) {
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize().thinScrollbar(listState),
+            flingBehavior = rememberCalmScrollableFlingBehavior(),
             contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
         ) {
             groupedTracks.forEach { (group, tracks) ->

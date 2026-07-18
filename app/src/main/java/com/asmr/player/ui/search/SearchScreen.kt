@@ -115,6 +115,7 @@ import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.clearFocusOnTapOutside
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.consumeTapThrough
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.thinScrollbar
@@ -830,7 +831,10 @@ fun SearchScreen(
                             is SearchUiState.Loading -> Column(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .verticalScroll(rememberScrollState())
+                                    .verticalScroll(
+                                        state = rememberScrollState(),
+                                        flingBehavior = rememberCalmScrollableFlingBehavior()
+                                    )
                                     .padding(top = topPadding),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
@@ -857,6 +861,7 @@ fun SearchScreen(
                                             .fillMaxSize()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(listState),
+                                        flingBehavior = rememberCalmScrollableFlingBehavior(),
                                         contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                                     ) {
@@ -890,6 +895,7 @@ fun SearchScreen(
                                             .fillMaxSize()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(gridState),
+                                        flingBehavior = rememberCalmScrollableFlingBehavior(),
                                         contentPadding = PaddingValues(
                                             top = topPadding,
                                             start = SearchPageHorizontalPadding,
@@ -950,7 +956,10 @@ fun SearchScreen(
                             else -> Column(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .verticalScroll(rememberScrollState())
+                                    .verticalScroll(
+                                        state = rememberScrollState(),
+                                        flingBehavior = rememberCalmScrollableFlingBehavior()
+                                    )
                             ) {}
                             }
                         }

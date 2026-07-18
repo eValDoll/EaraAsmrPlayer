@@ -184,6 +184,7 @@ import com.asmr.player.ui.common.rememberAppVolumeWarningSessionState
 import com.asmr.player.ui.common.rememberCurrentAudioOutputRouteKind
 import com.asmr.player.ui.common.rememberProtectedAppVolumeChangeState
 import com.asmr.player.ui.common.AudioOutputRouteIcon
+import com.asmr.player.ui.common.calmVerticalFling
 import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
 import com.asmr.player.service.AudioOutputRouteKind
 import javax.inject.Inject
@@ -552,7 +553,11 @@ class MainActivity : ComponentActivity() {
             AsmrPlayerTheme(mode = mode, hue = globalHue) {
                 var showSplash by rememberSaveable { mutableStateOf(true) }
                 var contentReady by remember { mutableStateOf(false) }
-                Box(modifier = Modifier.fillMaxSize()) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .calmVerticalFling()
+                ) {
                     val visibleMessagesSnapshot = visibleMessages.toList()
                     MainContainer(
                         windowSizeClass = windowSizeClass,

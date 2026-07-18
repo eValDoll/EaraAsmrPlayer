@@ -78,6 +78,7 @@ import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.queryCachedTrackFileSize
 import com.asmr.player.ui.common.rememberAudioMeta
 import com.asmr.player.ui.common.rememberAudioMetaText
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.thinScrollbar
@@ -248,6 +249,7 @@ internal fun AlbumGroupDetailContent(
                         .fillMaxSize()
                         .reorderable(reorderState)
                         .thinScrollbar(listState),
+                    flingBehavior = rememberCalmScrollableFlingBehavior(),
                     contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
                 ) {
                     item(key = GROUP_DETAIL_REORDER_SENTINEL_KEY) {

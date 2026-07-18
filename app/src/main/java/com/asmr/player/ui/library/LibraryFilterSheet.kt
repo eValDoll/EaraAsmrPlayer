@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import com.asmr.player.data.local.db.dao.TagWithCount
 import com.asmr.player.ui.common.FlatTextFieldDialog
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.theme.AsmrTheme
@@ -155,6 +156,7 @@ fun LibraryFilterSheet(
                 .weight(1f)
                 .fillMaxWidth()
                 .thinScrollbar(listState),
+            flingBehavior = rememberCalmScrollableFlingBehavior(),
             contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp)
                 .withAddedBottomPadding(LocalBottomOverlayPadding.current),
             verticalArrangement = Arrangement.spacedBy(12.dp)
