@@ -134,7 +134,7 @@ import com.asmr.player.ui.sidepanel.LandscapeRightPanelHost
 import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
 import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.cache.LazyListPreloader
-import com.asmr.player.cache.CacheImageModel
+import com.asmr.player.cache.LazyStaggeredGridPreloader
 import dagger.hilt.android.EntryPointAccessors
 
 import androidx.compose.foundation.combinedClickable
@@ -172,10 +172,11 @@ import com.asmr.player.ui.common.ActiveDropdownMenuItem
 import com.asmr.player.ui.common.ActionButton
 import com.asmr.player.ui.common.clearFocusOnTapOutside
 import com.asmr.player.ui.common.collapsibleHeaderUiState
+import com.asmr.player.ui.common.albumCoverImageModel
+import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.playback.MediaItemFactory
-import com.asmr.player.util.DlsiteAntiHotlink
 
 internal const val LIBRARY_CHROME_TAG = "library_chrome"
 internal const val LIBRARY_SEARCH_INPUT_TAG = "library_search_input"
@@ -197,34 +198,6 @@ private const val LibraryTrackPagingHintDistance = 10
 private fun Album.withUserTags(userTags: List<String>): Album {
     if (userTags.isEmpty()) return this
     return copy(tags = (tags + userTags).distinct())
-}
-
-private fun albumCoverData(
-    coverThumbPath: String,
-    coverPath: String,
-    coverUrl: String
-): String? {
-    return coverThumbPath.takeIf { it.isNotBlank() && it.contains("_v2") }
-        ?: coverPath.takeIf { it.isNotBlank() }
-        ?: coverUrl.takeIf { it.isNotBlank() }
-}
-
-private fun albumCoverImageModel(
-    coverThumbPath: String,
-    coverPath: String,
-    coverUrl: String
-): Any? {
-    val data = albumCoverData(
-        coverThumbPath = coverThumbPath,
-        coverPath = coverPath,
-        coverUrl = coverUrl
-    ) ?: return null
-    val headers = if (data.startsWith("http", ignoreCase = true)) {
-        DlsiteAntiHotlink.headersForImageUrl(data)
-    } else {
-        emptyMap()
-    }
-    return if (headers.isEmpty()) data else CacheImageModel(data = data, headers = headers, keyTag = "dlsite")
 }
 
 @Composable
@@ -774,8 +747,29 @@ fun LibraryScreen(
                                         }
                                     }
                                 } else if (isGrid) {
+                                    val app = LocalContext.current.applicationContext
+                                    val cacheManager = remember(app) {
+                                        EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
+                                            .imageCacheManager()
+                                    }
+                                    val density = LocalDensity.current
+                                    val gridCellSize = if (isCompact) 150.dp else 200.dp
+                                    val gridCoverPx = remember(gridCellSize, density) { with(density) { gridCellSize.roundToPx() } }
+                                    val gridPreloadSize = remember(gridCoverPx) { IntSize(gridCoverPx, gridCoverPx) }
+                                    val coverFadeIn = shouldFadeInCover(gridState.isScrollInProgress)
+                                    LazyStaggeredGridPreloader(
+                                        state = gridState,
+                                        itemCount = pagedAlbums.itemCount,
+                                        preloadNext = 24,
+                                        preloadNextWhileScrolling = 16,
+                                        preloadSize = gridPreloadSize,
+                                        cacheManagerProvider = { cacheManager },
+                                        modelAt = { idx ->
+                                            pagedAlbums.itemSnapshotList.getOrNull(idx)?.let { albumCoverImageModel(it) }
+                                        }
+                                    )
                                     LazyVerticalStaggeredGrid(
-                                        columns = StaggeredGridCells.Adaptive(if (isCompact) 150.dp else 200.dp),
+                                        columns = StaggeredGridCells.Adaptive(gridCellSize),
                                         state = gridState,
                                         modifier = Modifier
                                             .fillMaxSize()
@@ -807,6 +801,7 @@ fun LibraryScreen(
                                                 onCircleClick = { copyMeta("社团", it) },
                                                 onCvClick = { copyMeta("CV", it) },
                                                 onTagClick = { copyMeta("标签", it) },
+                                                coverFadeIn = coverFadeIn,
                                             )
                                         }
                                     }
@@ -821,23 +816,16 @@ fun LibraryScreen(
                                     val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
                                     val coverPx = remember(listItemHeight, density) { with(density) { listItemHeight.roundToPx() } }
                                     val preloadSize = remember(coverPx) { IntSize(coverPx, coverPx) }
+                                    val coverFadeIn = shouldFadeInCover(listState.isScrollInProgress)
                                     LazyListPreloader(
                                         state = listState,
                                         itemCount = pagedAlbums.itemCount,
-                                        preloadNext = 4,
+                                        preloadNext = 24,
+                                        preloadNextWhileScrolling = 16,
                                         preloadSize = preloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->
-                                            val a = pagedAlbums.itemSnapshotList.getOrNull(idx)
-                                            if (a == null) {
-                                                null
-                                            } else {
-                                                albumCoverImageModel(
-                                                    coverThumbPath = a.coverThumbPath,
-                                                    coverPath = a.coverPath,
-                                                    coverUrl = a.coverUrl
-                                                )
-                                            }
+                                            pagedAlbums.itemSnapshotList.getOrNull(idx)?.let { albumCoverImageModel(it) }
                                         }
                                     )
                                     LazyColumn(
@@ -870,6 +858,7 @@ fun LibraryScreen(
                                                 onCircleClick = { copyMeta("社团", it) },
                                                 onCvClick = { copyMeta("CV", it) },
                                                 onTagClick = { copyMeta("标签", it) },
+                                                coverFadeIn = coverFadeIn,
                                             )
                                         }
                                     }
@@ -1434,6 +1423,7 @@ private fun AlbumGridItem(
     onCircleClick: ((String) -> Unit)? = null,
     onCvClick: ((String) -> Unit)? = null,
     onTagClick: ((String) -> Unit)? = null,
+    coverFadeIn: Boolean = true,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val coverShape = remember {
@@ -1467,6 +1457,7 @@ private fun AlbumGridItem(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 placeholderCornerRadius = 0,
+                fadeIn = coverFadeIn,
                 peekAnySizeForInitial = true,
                 loading = NoImageLoadingIndicator,
                 modifier = Modifier.fillMaxSize().clip(coverShape),
@@ -1611,6 +1602,7 @@ private fun AlbumItem(
     onCircleClick: ((String) -> Unit)? = null,
     onCvClick: ((String) -> Unit)? = null,
     onTagClick: ((String) -> Unit)? = null,
+    coverFadeIn: Boolean = true,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val coverShape = remember {
@@ -1661,6 +1653,7 @@ private fun AlbumItem(
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         placeholderCornerRadius = 0,
+                        fadeIn = coverFadeIn,
                         peekAnySizeForInitial = true,
                         loading = NoImageLoadingIndicator,
                         modifier = Modifier.fillMaxSize().clip(coverShape),

@@ -56,14 +56,12 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.asmr.player.domain.model.Album
-import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.CoverContentRow
+import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.NoImageLoadingIndicator
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
 import com.asmr.player.ui.library.AlbumMetaLeadingVisual.Icon
-import com.asmr.player.util.DlsiteAntiHotlink
-
 import com.asmr.player.ui.theme.AsmrTheme
 import kotlinx.coroutines.delay
 
@@ -102,6 +100,7 @@ fun AlbumItem(
     coverBadge: AlbumCoverBadge? = null,
     onlineDetailLoading: Boolean = false,
     onlineCvLoading: Boolean = onlineDetailLoading,
+    coverFadeIn: Boolean = true,
     coverReloadKey: Any? = null,
     coverRetainPainterDuringReload: Boolean = false,
 ) {
@@ -115,13 +114,8 @@ fun AlbumItem(
             bottomEnd = 0.dp
         )
     }
-    val data = album.coverThumbPath.takeIf { it.isNotBlank() && it.contains("_v2") }
-        .orEmpty()
-        .ifBlank { album.coverPath }
-        .ifEmpty { album.coverUrl }
-    val imageModel = remember(data) {
-        val headers = if (data.startsWith("http", ignoreCase = true)) DlsiteAntiHotlink.headersForImageUrl(data) else emptyMap()
-        if (headers.isEmpty()) data else CacheImageModel(data = data, headers = headers, keyTag = "dlsite")
+    val imageModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
+        albumCoverImageModel(album)
     }
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
@@ -157,6 +151,7 @@ fun AlbumItem(
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         placeholderCornerRadius = 0,
+                        fadeIn = coverFadeIn,
                         reloadKey = coverReloadKey,
                         retainPainterDuringReload = coverRetainPainterDuringReload,
                         peekAnySizeForInitial = true,
@@ -359,6 +354,7 @@ fun AlbumGridItem(
     coverBadge: AlbumCoverBadge? = null,
     onlineDetailLoading: Boolean = false,
     onlineCvLoading: Boolean = onlineDetailLoading,
+    coverFadeIn: Boolean = true,
     coverReloadKey: Any? = null,
     coverRetainPainterDuringReload: Boolean = false,
 ) {
@@ -372,13 +368,8 @@ fun AlbumGridItem(
             bottomEnd = 0.dp
         )
     }
-    val data = album.coverThumbPath.takeIf { it.isNotBlank() && it.contains("_v2") }
-        .orEmpty()
-        .ifBlank { album.coverPath }
-        .ifEmpty { album.coverUrl }
-    val imageModel = remember(data) {
-        val headers = if (data.startsWith("http", ignoreCase = true)) DlsiteAntiHotlink.headersForImageUrl(data) else emptyMap()
-        if (headers.isEmpty()) data else CacheImageModel(data = data, headers = headers, keyTag = "dlsite")
+    val imageModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
+        albumCoverImageModel(album)
     }
     Column(
         modifier = modifier
@@ -395,6 +386,7 @@ fun AlbumGridItem(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 placeholderCornerRadius = 0,
+                fadeIn = coverFadeIn,
                 reloadKey = coverReloadKey,
                 retainPainterDuringReload = coverRetainPainterDuringReload,
                 peekAnySizeForInitial = true,

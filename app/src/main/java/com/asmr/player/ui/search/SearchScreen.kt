@@ -93,6 +93,9 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -106,11 +109,16 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.domain.model.Album
+import com.asmr.player.cache.ImageCacheEntryPoint
+import com.asmr.player.cache.LazyListPreloader
+import com.asmr.player.cache.LazyStaggeredGridPreloader
 import com.asmr.player.ui.common.CustomSearchBar
 import com.asmr.player.ui.common.ActiveDropdownMenuItem
 import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.albumCoverImageModel
+import com.asmr.player.ui.common.albumStableKey
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.clearFocusOnTapOutside
 import com.asmr.player.ui.common.collapsibleHeaderUiState
@@ -118,6 +126,7 @@ import com.asmr.player.ui.common.consumeTapThrough
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.smoothScrollToTop
+import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.library.AlbumGridItem
@@ -127,6 +136,7 @@ import com.asmr.player.ui.library.rememberAlbumMetaCopyAction
 import com.asmr.player.ui.sidepanel.LandscapeRightPanelHost
 import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
 import com.asmr.player.ui.theme.AsmrTheme
+import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.runtime.snapshotFlow
@@ -166,15 +176,8 @@ private val SearchResultPlacementSpring = spring<IntOffset>(
     stiffness = Spring.StiffnessMediumLow
 )
 
-private fun stableAlbumKey(album: Album): String {
-    val id = album.rjCode.ifBlank { album.workId }.trim()
-    if (id.isNotEmpty()) return id
-    val seed = "${album.coverUrl}|${album.title}|${album.circle}|${album.cv}"
-    return "h${seed.hashCode().absoluteValue}"
-}
-
-private fun searchResultItemKey(index: Int, album: Album): String {
-    return "search-result:${stableAlbumKey(album)}:$index"
+private fun searchResultItemKey(album: Album): String {
+    return "search-result:${albumStableKey(album)}"
 }
 
 private fun onlineDetailLoadingFor(album: Album, state: SearchUiState.Success): Boolean {
@@ -855,6 +858,28 @@ fun SearchScreen(
                                         )
                                     )
                                 } else if (viewMode == 0) {
+                                    val app = LocalContext.current.applicationContext
+                                    val cacheManager = remember(app) {
+                                        EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
+                                            .imageCacheManager()
+                                    }
+                                    val density = LocalDensity.current
+                                    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+                                    val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
+                                    val coverPx = remember(listItemHeight, density) { with(density) { listItemHeight.roundToPx() } }
+                                    val preloadSize = remember(coverPx) { IntSize(coverPx, coverPx) }
+                                    val coverFadeIn = shouldFadeInCover(listState.isScrollInProgress)
+                                    LazyListPreloader(
+                                        state = listState,
+                                        itemCount = state.results.size,
+                                        preloadNext = 24,
+                                        preloadNextWhileScrolling = 16,
+                                        preloadSize = preloadSize,
+                                        cacheManagerProvider = { cacheManager },
+                                        modelAt = { idx ->
+                                            state.results.getOrNull(idx)?.let { albumCoverImageModel(it) }
+                                        }
+                                    )
                                     LazyColumn(
                                         state = listState,
                                         modifier = Modifier
@@ -867,7 +892,7 @@ fun SearchScreen(
                                     ) {
                                         lazyItemsIndexed(
                                             items = state.results,
-                                            key = { index, album -> searchResultItemKey(index, album) },
+                                            key = { _, album -> searchResultItemKey(album) },
                                             contentType = { _, _ -> "album" }
                                         ) { _, album ->
                                             val onlineDetailLoading = onlineDetailLoadingFor(album, state)
@@ -879,6 +904,7 @@ fun SearchScreen(
                                                 modifier = Modifier.animateItemPlacement(SearchResultPlacementSpring),
                                                 onlineDetailLoading = onlineDetailLoading,
                                                 onlineCvLoading = onlineDetailLoading,
+                                                coverFadeIn = coverFadeIn,
                                                 coverReloadKey = state.resultRevision,
                                                 onRjClick = { copyMeta("RJ", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
@@ -888,8 +914,29 @@ fun SearchScreen(
                                         }
                                     }
                                 } else {
+                                    val app = LocalContext.current.applicationContext
+                                    val cacheManager = remember(app) {
+                                        EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
+                                            .imageCacheManager()
+                                    }
+                                    val density = LocalDensity.current
+                                    val gridCellSize = if (isCompact) 150.dp else 200.dp
+                                    val gridCoverPx = remember(gridCellSize, density) { with(density) { gridCellSize.roundToPx() } }
+                                    val gridPreloadSize = remember(gridCoverPx) { IntSize(gridCoverPx, gridCoverPx) }
+                                    val coverFadeIn = shouldFadeInCover(gridState.isScrollInProgress)
+                                    LazyStaggeredGridPreloader(
+                                        state = gridState,
+                                        itemCount = state.results.size,
+                                        preloadNext = 24,
+                                        preloadNextWhileScrolling = 16,
+                                        preloadSize = gridPreloadSize,
+                                        cacheManagerProvider = { cacheManager },
+                                        modelAt = { idx ->
+                                            state.results.getOrNull(idx)?.let { albumCoverImageModel(it) }
+                                        }
+                                    )
                                     LazyVerticalStaggeredGrid(
-                                        columns = StaggeredGridCells.Adaptive(if (isCompact) 150.dp else 200.dp),
+                                        columns = StaggeredGridCells.Adaptive(gridCellSize),
                                         state = gridState,
                                         modifier = Modifier
                                             .fillMaxSize()
@@ -907,7 +954,7 @@ fun SearchScreen(
                                     ) {
                                         items(
                                             state.results.size,
-                                            key = { index -> searchResultItemKey(index, state.results[index]) },
+                                            key = { index -> searchResultItemKey(state.results[index]) },
                                             contentType = { "albumGrid" }
                                         ) { index ->
                                             val album = state.results[index]
@@ -920,6 +967,7 @@ fun SearchScreen(
                                                 modifier = Modifier.animateItemPlacement(SearchResultPlacementSpring),
                                                 onlineDetailLoading = onlineDetailLoading,
                                                 onlineCvLoading = onlineDetailLoading,
+                                                coverFadeIn = coverFadeIn,
                                                 coverReloadKey = state.resultRevision,
                                                 onRjClick = { copyMeta("RJ", it) },
                                                 onCircleClick = { copyMeta("社团", it) },

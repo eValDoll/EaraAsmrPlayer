@@ -269,7 +269,7 @@ class ImageCacheManager(
         models.forEach { m ->
             scope.launch {
                 preloadSemaphore.withPermit {
-                    runCatching { loadImageFromCache(model = m, size = size, cachePolicy = CachePolicy.CACHE_WARMUP) }
+                    runCatching { loadImage(model = m, size = size, cachePolicy = CachePolicy.CACHE_WARMUP) }
                 }
             }
         }
@@ -283,7 +283,7 @@ class ImageCacheManager(
         return scope.launch(Dispatchers.IO) {
             models.forEach { m ->
                 preloadSemaphore.withPermit {
-                    runCatching { loadImageFromCache(model = m, size = size, cachePolicy = CachePolicy.CACHE_WARMUP) }
+                    runCatching { loadImage(model = m, size = size, cachePolicy = CachePolicy.CACHE_WARMUP) }
                 }
             }
         }
@@ -316,6 +316,7 @@ class ImageCacheManager(
 
     private suspend fun decodeBytes(bytes: ByteArray): Bitmap = withContext(decodeDispatcher) {
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            ?.also { it.prepareToDraw() }
             ?: throw IllegalStateException("Disk cache decode failed")
     }
 

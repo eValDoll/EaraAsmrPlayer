@@ -48,16 +48,26 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.asmr.player.cache.ImageCacheEntryPoint
+import com.asmr.player.cache.LazyListPreloader
+import com.asmr.player.cache.LazyStaggeredGridPreloader
 import com.asmr.player.domain.model.Album
 import com.asmr.player.hotlistening.HotListeningSortMode
 import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.albumCoverImageModel
+import com.asmr.player.ui.common.albumStableKey
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.smoothScrollToTop
+import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.library.AlbumGridItem
@@ -66,21 +76,14 @@ import com.asmr.player.ui.library.AlbumCoverBadge
 import com.asmr.player.ui.library.AlbumItem
 import com.asmr.player.ui.library.rememberAlbumMetaCopyAction
 import com.asmr.player.ui.theme.AsmrTheme
+import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
-import kotlin.math.absoluteValue
 
-private fun stableAlbumKey(album: Album): String {
-    val id = album.rjCode.ifBlank { album.workId }.trim()
-    if (id.isNotEmpty()) return id
-    val seed = "${album.coverUrl}|${album.title}|${album.circle}|${album.cv}"
-    return "h${seed.hashCode().absoluteValue}"
-}
-
-private fun hotListeningItemKey(section: String, index: Int, album: Album): String {
-    return "hot-listening:$section:${stableAlbumKey(album)}:$index"
+private fun hotListeningItemKey(section: String, album: Album): String {
+    return "hot-listening:$section:${albumStableKey(album)}"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -269,6 +272,28 @@ fun HotListeningScreen(
                         contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current + 24.dp)
                     )
                 } else if (viewMode == 0) {
+                    val app = LocalContext.current.applicationContext
+                    val cacheManager = remember(app) {
+                        EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
+                            .imageCacheManager()
+                    }
+                    val density = LocalDensity.current
+                    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+                    val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
+                    val coverPx = remember(listItemHeight, density) { with(density) { listItemHeight.roundToPx() } }
+                    val preloadSize = remember(coverPx) { IntSize(coverPx, coverPx) }
+                    val listCoverFadeIn = shouldFadeInCover(listState.isScrollInProgress)
+                    LazyListPreloader(
+                        state = listState,
+                        itemCount = state.entries.size,
+                        preloadNext = 24,
+                        preloadNextWhileScrolling = 16,
+                        preloadSize = preloadSize,
+                        cacheManagerProvider = { cacheManager },
+                        modelAt = { idx ->
+                            state.entries.getOrNull(idx)?.album?.let { albumCoverImageModel(it) }
+                        }
+                    )
                     LazyColumn(
                         state = listState,
                         modifier = Modifier
@@ -280,13 +305,14 @@ fun HotListeningScreen(
                     ) {
                         lazyItemsIndexed(
                             items = state.entries,
-                            key = { index, entry -> hotListeningItemKey("visible", index, entry.album) },
+                            key = { _, entry -> hotListeningItemKey("visible", entry.album) },
                             contentType = { _, _ -> "album" }
                         ) { _, entry ->
                             HotListeningListItem(
                                 entry = entry,
                                 onAlbumClick = onAlbumClick,
-                                copyMeta = copyMeta
+                                copyMeta = copyMeta,
+                                coverFadeIn = listCoverFadeIn
                             )
                         }
                         if (state.blockedEntries.isNotEmpty()) {
@@ -303,13 +329,14 @@ fun HotListeningScreen(
                             if (showBlockedEntries) {
                                 lazyItemsIndexed(
                                     items = state.blockedEntries,
-                                    key = { index, entry -> hotListeningItemKey("blocked", index, entry.album) },
+                                    key = { _, entry -> hotListeningItemKey("blocked", entry.album) },
                                     contentType = { _, _ -> "album" }
                                 ) { _, entry ->
                                     HotListeningListItem(
                                         entry = entry,
                                         onAlbumClick = onAlbumClick,
-                                        copyMeta = copyMeta
+                                        copyMeta = copyMeta,
+                                        coverFadeIn = listCoverFadeIn
                                     )
                                 }
                             }
@@ -317,6 +344,26 @@ fun HotListeningScreen(
                     }
                 } else {
                     val adaptiveCellSize = if (isCompactWidth) 150.dp else 200.dp
+                    val app = LocalContext.current.applicationContext
+                    val cacheManager = remember(app) {
+                        EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
+                            .imageCacheManager()
+                    }
+                    val density = LocalDensity.current
+                    val gridCoverPx = remember(adaptiveCellSize, density) { with(density) { adaptiveCellSize.roundToPx() } }
+                    val gridPreloadSize = remember(gridCoverPx) { IntSize(gridCoverPx, gridCoverPx) }
+                    val gridCoverFadeIn = shouldFadeInCover(gridState.isScrollInProgress)
+                    LazyStaggeredGridPreloader(
+                        state = gridState,
+                        itemCount = state.entries.size,
+                        preloadNext = 24,
+                        preloadNextWhileScrolling = 16,
+                        preloadSize = gridPreloadSize,
+                        cacheManagerProvider = { cacheManager },
+                        modelAt = { idx ->
+                            state.entries.getOrNull(idx)?.album?.let { albumCoverImageModel(it) }
+                        }
+                    )
                     LazyVerticalStaggeredGrid(
                         columns = StaggeredGridCells.Adaptive(adaptiveCellSize),
                         state = gridState,
@@ -334,13 +381,14 @@ fun HotListeningScreen(
                     ) {
                         items(
                             state.entries.size,
-                            key = { index -> hotListeningItemKey("visible", index, state.entries[index].album) },
+                            key = { index -> hotListeningItemKey("visible", state.entries[index].album) },
                             contentType = { "albumGrid" }
                         ) { index ->
                             HotListeningGridItem(
                                 entry = state.entries[index],
                                 onAlbumClick = onAlbumClick,
-                                copyMeta = copyMeta
+                                copyMeta = copyMeta,
+                                coverFadeIn = gridCoverFadeIn
                             )
                         }
                         if (state.blockedEntries.isNotEmpty()) {
@@ -359,14 +407,15 @@ fun HotListeningScreen(
                                 items(
                                     state.blockedEntries.size,
                                     key = { index ->
-                                        hotListeningItemKey("blocked", index, state.blockedEntries[index].album)
+                                        hotListeningItemKey("blocked", state.blockedEntries[index].album)
                                     },
                                     contentType = { "albumGrid" }
                                 ) { index ->
                                     HotListeningGridItem(
                                         entry = state.blockedEntries[index],
                                         onAlbumClick = onAlbumClick,
-                                        copyMeta = copyMeta
+                                        copyMeta = copyMeta,
+                                        coverFadeIn = gridCoverFadeIn
                                     )
                                 }
                             }
@@ -382,7 +431,8 @@ fun HotListeningScreen(
 private fun HotListeningListItem(
     entry: HotListeningEntry,
     onAlbumClick: (Album) -> Unit,
-    copyMeta: (String, String) -> Unit
+    copyMeta: (String, String) -> Unit,
+    coverFadeIn: Boolean = true
 ) {
     val album = entry.album
     AlbumItem(
@@ -390,6 +440,7 @@ private fun HotListeningListItem(
         onClick = { onAlbumClick(album) },
         coverRetainPainterDuringReload = true,
         coverBadge = entry.toCoverBadge(),
+        coverFadeIn = coverFadeIn,
         onRjClick = { copyMeta("RJ", it) },
         onCircleClick = { copyMeta("社团", it) },
         onCvClick = { copyMeta("CV", it) },
@@ -401,7 +452,8 @@ private fun HotListeningListItem(
 private fun HotListeningGridItem(
     entry: HotListeningEntry,
     onAlbumClick: (Album) -> Unit,
-    copyMeta: (String, String) -> Unit
+    copyMeta: (String, String) -> Unit,
+    coverFadeIn: Boolean = true
 ) {
     val album = entry.album
     AlbumGridItem(
@@ -409,6 +461,7 @@ private fun HotListeningGridItem(
         onClick = { onAlbumClick(album) },
         coverRetainPainterDuringReload = true,
         coverBadge = entry.toCoverBadge(),
+        coverFadeIn = coverFadeIn,
         onRjClick = { copyMeta("RJ", it) },
         onCircleClick = { copyMeta("社团", it) },
         onCvClick = { copyMeta("CV", it) },
