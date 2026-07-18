@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.ColorFilter
@@ -82,6 +84,7 @@ fun AsmrAsyncImage(
     val loadedSize: MutableState<IntSize?> = remember(normalizedModel, reloadKey) { mutableStateOf(null) }
     val crossfade = remember(normalizedModel, reloadKey) { Animatable(if (seededPainter != null) 1f else 0f) }
     val crossfadeRunning = remember(normalizedModel, reloadKey) { mutableStateOf(false) }
+    val latestFadeIn by rememberUpdatedState(fadeIn)
     val containerModifier = modifier.onSizeChanged { sz ->
         if (sz.width > 0 && sz.height > 0) measuredSize.value = IntSize(sz.width, sz.height)
     }
@@ -132,7 +135,7 @@ fun AsmrAsyncImage(
             loadedSize.value = sz
             seededPlaceholder.value = false
             state.value = AsmrAsyncImageState.Success
-            if (fadeIn && !shouldRetainPainter) {
+            if (latestFadeIn && !shouldRetainPainter) {
                 crossfadeRunning.value = true
                 try {
                     crossfade.animateTo(1f, tween(durationMillis = fadeInMillis))
@@ -154,6 +157,12 @@ fun AsmrAsyncImage(
     }
 
     val p = painter.value
+    LaunchedEffect(fadeIn, p) {
+        if (!fadeIn && p != null) {
+            crossfadeRunning.value = false
+            crossfade.snapTo(1f)
+        }
+    }
     val currentState = state.value
     val hasSeededPainter = p != null && seededPlaceholder.value
     Box(modifier = containerModifier) {
