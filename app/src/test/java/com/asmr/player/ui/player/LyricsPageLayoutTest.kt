@@ -14,6 +14,39 @@ class LyricsPageLayoutTest {
     }
 
     @Test
+    fun centeredLyricFocusTop_usesActiveHeightByDefault() {
+        assertEquals(
+            210f,
+            centeredLyricFocusTop(
+                viewportWindowHeightPx = 520f,
+                activeItemHeightPx = 100f,
+                nominalItemHeightPx = 60f,
+                stableFocusAnchor = false
+            ),
+            0.001f
+        )
+    }
+
+    @Test
+    fun centeredLyricFocusTop_canKeepStableAnchorForVariableLineCounts() {
+        val singleLineTop = centeredLyricFocusTop(
+            viewportWindowHeightPx = 520f,
+            activeItemHeightPx = 60f,
+            nominalItemHeightPx = 60f,
+            stableFocusAnchor = true
+        )
+        val multiLineTop = centeredLyricFocusTop(
+            viewportWindowHeightPx = 520f,
+            activeItemHeightPx = 132f,
+            nominalItemHeightPx = 60f,
+            stableFocusAnchor = true
+        )
+
+        assertEquals(singleLineTop, multiLineTop, 0.001f)
+        assertEquals(230f, multiLineTop, 0.001f)
+    }
+
+    @Test
     fun viewportLayout_clampsVisibleLinesAndTopOffset() {
         val layout = buildLyricsViewportLayout(
             settings = LyricsPageSettings(

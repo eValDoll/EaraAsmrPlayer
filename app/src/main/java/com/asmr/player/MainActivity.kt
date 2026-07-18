@@ -148,11 +148,13 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import com.asmr.player.ui.player.QueueSheetContent
 import com.asmr.player.ui.player.SleepTimerSheetContent
 import com.asmr.player.ui.player.MiniPlayerDisplayMode
+import kotlinx.coroutines.flow.first
 
 import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.data.local.datastore.ThemeBootstrapPreferences
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
+import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
 import com.asmr.player.util.MessageManager
 import com.asmr.player.ui.common.NonTouchableAppMessageOverlay
 import com.asmr.player.ui.common.StableWindowInsets
@@ -280,6 +282,12 @@ class MainActivity : ComponentActivity() {
             val coverBackgroundEnabled by settingsDataStore.coverBackgroundEnabled.collectAsState(initial = true)
             val coverBackgroundClarity by settingsDataStore.coverBackgroundClarity.collectAsState(initial = 0.35f)
             val coverPreviewMode by settingsDataStore.coverPreviewMode.collectAsState(initial = CoverPreviewMode.Disabled)
+            val nowPlayingHomeLayoutMode by settingsDataStore.nowPlayingHomeLayoutMode.collectAsState(
+                initial = NowPlayingHomeLayoutMode.Classic
+            )
+            val nowPlayingHomeLayoutHintDismissed by produceState(initialValue = false, settingsDataStore) {
+                value = settingsDataStore.nowPlayingHomeLayoutHintDismissed.first()
+            }
             val lyricsPageSettings by settingsDataStore.lyricsPageSettings.collectAsState(initial = LyricsPageSettings())
             val showMiniPlayerBar by settingsRepository.showMiniPlayerBar.collectAsState(initial = true)
             val neutral = remember(mode) { neutralPaletteForMode(mode) }
@@ -576,6 +584,8 @@ class MainActivity : ComponentActivity() {
                         coverBackgroundEnabled = coverBackgroundEnabled,
                         coverBackgroundClarity = coverBackgroundClarity,
                         coverPreviewMode = coverPreviewMode,
+                        nowPlayingHomeLayoutMode = nowPlayingHomeLayoutMode,
+                        nowPlayingHomeLayoutHintDismissed = nowPlayingHomeLayoutHintDismissed,
                         lyricsPageSettings = lyricsPageSettings,
                         forceImmersive = showSplash,
                         volumeKeyEventTick = volumeKeyTick

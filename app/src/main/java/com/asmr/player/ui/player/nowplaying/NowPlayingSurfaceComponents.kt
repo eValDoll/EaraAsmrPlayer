@@ -203,6 +203,10 @@ internal fun NowPlayingLyricsSurface(
     onSeekTo: (Long) -> Unit,
     onTimelinePlay: ((Long) -> Unit)? = null,
     onAddLyrics: (() -> Unit)? = null,
+    interactionEnabled: Boolean = true,
+    stableFocusAnchor: Boolean = false,
+    lyricItemOuterHorizontalPadding: Dp = if (isLandscape) 10.dp else 14.dp,
+    lyricItemInnerHorizontalPadding: Dp = if (isLandscape) 8.dp else 10.dp,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier) {
@@ -242,7 +246,11 @@ internal fun NowPlayingLyricsSurface(
                 colors = lyricColors,
                 modifier = Modifier.fillMaxSize(),
                 isLandscape = isLandscape,
-                settings = lyricsPageSettings
+                settings = lyricsPageSettings,
+                interactionEnabled = interactionEnabled,
+                stableFocusAnchor = stableFocusAnchor,
+                itemOuterHorizontalPadding = lyricItemOuterHorizontalPadding,
+                itemInnerHorizontalPadding = lyricItemInnerHorizontalPadding
             )
         }
     }
@@ -258,11 +266,15 @@ internal fun ArtworkBox(
     edgeBlendColor: Color,
     videoBackdropColor: Color,
     artworkAlignment: Alignment = Alignment.Center,
+    artworkContentScale: ContentScale = ContentScale.Crop,
+    artworkCornerRadius: Dp = 28.dp,
+    artworkLoadAtOriginalSize: Boolean = false,
     dragPreviewEnabled: Boolean = false,
     dragPreviewState: CoverDragPreviewState? = null,
     modifier: Modifier = Modifier
 ) {
-    val shape = RoundedCornerShape(28.dp)
+    val shape = RoundedCornerShape(artworkCornerRadius)
+    val placeholderCornerRadius = artworkCornerRadius.value.roundToInt()
     val videoSurfaceHandle = remember(viewModel) {
         VideoSurfaceVisibilityHandle { visible -> viewModel.setVideoSurfaceVisible(visible) }
     }
@@ -331,6 +343,7 @@ internal fun ArtworkBox(
                             artworkModel = artwork,
                             blendColor = edgeBlendColor,
                             modifier = Modifier.fillMaxSize(),
+                            cornerRadius = artworkCornerRadius,
                             artworkAlignment = artworkAlignment
                         )
                     }
@@ -339,20 +352,21 @@ internal fun ArtworkBox(
                 AsmrAsyncImage(
                     model = metadata?.artworkUri,
                     contentDescription = null,
-                    contentScale = ContentScale.Crop,
+                    contentScale = artworkContentScale,
                     alignment = artworkAlignment,
-                    placeholderCornerRadius = 28,
+                    placeholderCornerRadius = placeholderCornerRadius,
                     placeholder = {},
                     loading = { modifier ->
                         AsmrImageLoadingPlaceholder(
                             modifier = modifier,
-                            cornerRadius = 28,
+                            cornerRadius = placeholderCornerRadius,
                             indicatorSize = 36.dp
                         )
                     },
                     empty = {},
                     peekAnySizeForInitial = true,
                     retainPainterDuringReload = true,
+                    loadAtOriginalSize = artworkLoadAtOriginalSize,
                     loadWhenSizeStableForMillis = 120L,
                     modifier = Modifier
                         .fillMaxSize()
