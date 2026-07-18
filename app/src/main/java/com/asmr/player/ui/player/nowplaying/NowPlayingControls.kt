@@ -339,6 +339,7 @@ internal fun SingleLineLyrics(
     currentPosition: Long,
     onOpenLyrics: () -> Unit,
     colors: LyricReadableColors,
+    interactionEnabled: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val sortedLyrics = remember(lyrics) {
@@ -377,7 +378,7 @@ internal fun SingleLineLyrics(
 
     Column(
         modifier = modifier
-            .clickable { onOpenLyrics() }
+            .clickable(enabled = interactionEnabled) { onOpenLyrics() }
             .padding(horizontal = 16.dp, vertical = 4.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally

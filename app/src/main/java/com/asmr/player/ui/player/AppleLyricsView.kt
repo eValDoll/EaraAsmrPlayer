@@ -47,6 +47,7 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -76,10 +77,8 @@ import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.util.Formatting
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.SubtitleIndexFinder
-import androidx.compose.runtime.withFrameNanos
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.absoluteValue
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -94,7 +93,9 @@ internal fun AppleLyricsView(
     colors: LyricReadableColors,
     modifier: Modifier = Modifier,
     isLandscape: Boolean = false,
-    settings: LyricsPageSettings = LyricsPageSettings()
+    settings: LyricsPageSettings = LyricsPageSettings(),
+    interactionEnabled: Boolean = true,
+    stableFocusAnchor: Boolean = false
 ) {
     val indexFinder = remember(lyrics) { SubtitleIndexFinder(lyrics) }
     val activeIndex = remember(currentPosition, indexFinder) {
@@ -118,7 +119,6 @@ internal fun AppleLyricsView(
     val baseLyricTextStyle = MaterialTheme.typography.titleLarge
     val itemOffsets = remember { mutableStateMapOf<Int, Animatable<Float, AnimationVector1D>>() }
     val textMeasurer = rememberTextMeasurer()
-    var previousActiveIndex by remember { mutableIntStateOf(activeIndex) }
     var autoFocusSuspended by remember { mutableStateOf(false) }
     var lastUserScrollAt by remember { mutableLongStateOf(0L) }
     var pendingAnimatedRefocus by remember { mutableStateOf(false) }
@@ -159,7 +159,7 @@ internal fun AppleLyricsView(
         }
         val measurementStyle = remember(baseLyricTextStyle, fontSize, wrappedLineHeight, textAlign) {
             baseLyricTextStyle.copy(
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.ExtraBold,
                 fontSize = fontSize,
                 lineHeight = wrappedLineHeight,
                 textAlign = textAlign
@@ -222,9 +222,7 @@ internal fun AppleLyricsView(
         }
         val viewportWindowHeightDp = with(density) { viewportLayout.viewportWindowHeightPx.toDp() }
         val viewportTopOffsetDp = with(density) { viewportLayout.viewportTopOffsetPx.toDp() }
-        val centeredActiveTopPx = ((viewportLayout.viewportWindowHeightPx - activeItemHeightPx) / 2f).coerceAtLeast(0f)
         val centeredActiveBottomDp = viewportWindowHeightDp / 2f
-        val viewportCenterY = viewportLayout.viewportWindowHeightPx / 2f
         val timelineCenterInViewportPx = (viewportHeightPx / 2f - viewportLayout.viewportTopOffsetPx)
             .coerceIn(0f, viewportLayout.viewportWindowHeightPx)
         val maxWaveOffsetPx = viewportLayout.viewportWindowHeightPx * 0.22f
@@ -257,41 +255,43 @@ internal fun AppleLyricsView(
         }
 
         LaunchedEffect(lyrics) {
-            previousActiveIndex = activeIndex
             pendingSmoothFocusIndex = -1
         }
 
-        LaunchedEffect(activeIndex, autoFocusSuspended, lyricItemHeightsPx, viewportLayout, pendingSmoothFocusIndex) {
+        LaunchedEffect(activeIndex, autoFocusSuspended, lyricItemHeightsPx, viewportLayout, pendingSmoothFocusIndex, stableFocusAnchor) {
             if (lyrics.isEmpty() || activeIndex < 0 || autoFocusSuspended) return@LaunchedEffect
 
-            val targetScrollOffset = -centeredActiveTopPx.roundToInt()
             var didReposition = false
-            val indexDelta = activeIndex - previousActiveIndex
+            var repositionDeltaPx: Float? = null
             val visibleItems = listState.layoutInfo.visibleItemsInfo
             val activeItemInfo = visibleItems.firstOrNull { it.index == activeIndex }
             val activeTopPx = activeItemInfo?.offset?.toFloat()
+            val activeFocusHeightPx = if (stableFocusAnchor) {
+                nominalItemHeightPx
+            } else {
+                activeItemInfo?.size?.toFloat() ?: activeItemHeightPx
+            }
+            val centeredActiveTopPx = centeredLyricFocusTop(
+                viewportWindowHeightPx = viewportLayout.viewportWindowHeightPx,
+                activeItemHeightPx = activeFocusHeightPx,
+                nominalItemHeightPx = nominalItemHeightPx,
+                stableFocusAnchor = false
+            )
+            val targetScrollOffset = -centeredActiveTopPx.roundToInt()
             val isPinnedAtTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
-            val hasReachedViewportCenter = activeTopPx?.let { top ->
-                top + activeItemHeightPx / 2f >= viewportCenterY
-            } ?: false
-            val isFirstCenterTransition = indexDelta != 0 &&
-                indexDelta.absoluteValue <= 2 &&
-                isPinnedAtTop &&
-                hasReachedViewportCenter &&
-                activeTopPx != null
-            val shouldUseSmoothFocus = pendingAnimatedRefocus || pendingSmoothFocusIndex == activeIndex
+            val shouldUseSmoothFocus = stableFocusAnchor ||
+                pendingAnimatedRefocus ||
+                pendingSmoothFocusIndex == activeIndex
             val defaultAffectedIndices = (
                 visibleItems.map { it.index } +
                     targetWindowRange.toList()
                 ).distinct().sorted()
-            val shouldPlayNeighborWave = !shouldUseSmoothFocus &&
-                indexDelta != 0 &&
-                indexDelta.absoluteValue <= 2
 
             if (activeTopPx != null) {
                 if (!(isPinnedAtTop && activeTopPx <= centeredActiveTopPx)) {
                     val desiredTopPx = centeredActiveTopPx
                     if (kotlin.math.abs(activeTopPx - desiredTopPx) > 1f) {
+                        repositionDeltaPx = activeTopPx - desiredTopPx
                         if (shouldUseSmoothFocus) {
                             listState.animateLyricFocusToIndex(
                                 index = activeIndex,
@@ -319,17 +319,11 @@ internal fun AppleLyricsView(
                 didReposition = true
             }
 
-            val resolvedWave = when {
-                !didReposition || shouldUseSmoothFocus -> null
-                isFirstCenterTransition -> activeTopPx?.plus(activeItemHeightPx / 2f)?.minus(viewportCenterY)
-                shouldPlayNeighborWave -> lyricCenterDistancePx(
-                    lyricItemHeightsPx = lyricItemHeightsPx,
-                    fromIndex = previousActiveIndex,
-                    toIndex = activeIndex,
-                    nominalItemHeightPx = nominalItemHeightPx
-                )
-                else -> null
-            }?.coerceIn(-maxWaveOffsetPx, maxWaveOffsetPx)
+            val resolvedWave = if (didReposition && !shouldUseSmoothFocus) {
+                repositionDeltaPx?.coerceIn(-maxWaveOffsetPx, maxWaveOffsetPx)
+            } else {
+                null
+            }
 
             if (resolvedWave != null) {
                 resetLyricWaveOffsets(
@@ -369,7 +363,6 @@ internal fun AppleLyricsView(
             if (pendingSmoothFocusIndex == activeIndex) {
                 pendingSmoothFocusIndex = -1
             }
-            previousActiveIndex = activeIndex
         }
 
         Box(
@@ -383,9 +376,10 @@ internal fun AppleLyricsView(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .nestedScroll(nestedScrollConnection)
+                    .then(if (interactionEnabled) Modifier.nestedScroll(nestedScrollConnection) else Modifier)
                     .thinScrollbar(listState),
                 flingBehavior = rememberCalmScrollableFlingBehavior(),
+                userScrollEnabled = interactionEnabled,
                 horizontalAlignment = Alignment.CenterHorizontally,
                 contentPadding = PaddingValues(
                     bottom = centeredActiveBottomDp
@@ -396,6 +390,9 @@ internal fun AppleLyricsView(
                     key = { index, entry -> lyricItemKey(index, entry) },
                     contentType = { _, _ -> "appleLyricLine" }
                 ) { index, entry ->
+                    val reservedItemHeightDp = with(density) {
+                        (lyricItemHeightsPx.getOrNull(index) ?: nominalItemHeightPx).toDp()
+                    }
                     val isActive = index == activeIndex
                     val scale by animateFloatAsState(
                         targetValue = 1f,
@@ -425,6 +422,7 @@ internal fun AppleLyricsView(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .height(reservedItemHeightDp)
                             .padding(
                                 start = itemOuterHorizontalPadding,
                                 top = itemOuterVerticalPadding,
@@ -437,7 +435,7 @@ internal fun AppleLyricsView(
                                 this.scaleY = scale
                                 this.alpha = alpha
                             }
-                            .clickable {
+                            .clickable(enabled = interactionEnabled) {
                                 pendingSmoothFocusIndex = if (activeIndex >= 0 && activeIndex != index) index else -1
                                 autoFocusSuspended = false
                                 pendingAnimatedRefocus = false
@@ -523,26 +521,6 @@ private fun measuredWindowHeight(
     return targetRange.sumOf { index ->
         lyricItemHeightsPx.getOrNull(index)?.toDouble() ?: nominalItemHeightPx.toDouble()
     }.toFloat()
-}
-
-private fun lyricCenterDistancePx(
-    lyricItemHeightsPx: List<Float>,
-    fromIndex: Int,
-    toIndex: Int,
-    nominalItemHeightPx: Float
-): Float {
-    if (fromIndex == toIndex) return 0f
-    val step = if (toIndex > fromIndex) 1 else -1
-    var distancePx = 0f
-    var currentIndex = fromIndex
-    while (currentIndex != toIndex) {
-        val nextIndex = currentIndex + step
-        val currentHeight = lyricItemHeightsPx.getOrNull(currentIndex) ?: nominalItemHeightPx
-        val nextHeight = lyricItemHeightsPx.getOrNull(nextIndex) ?: nominalItemHeightPx
-        distancePx += (currentHeight + nextHeight) / 2f * step
-        currentIndex = nextIndex
-    }
-    return distancePx
 }
 
 private fun buildLyricItemOffsets(

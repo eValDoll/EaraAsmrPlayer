@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.*
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
+import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
 import com.asmr.player.data.settings.settingsDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +39,7 @@ class SettingsDataStore @Inject constructor(
     private val coverBackgroundEnabledKey = booleanPreferencesKey("cover_background_enabled")
     private val coverBackgroundClarityKey = floatPreferencesKey("cover_background_clarity")
     private val coverPreviewModeKey = stringPreferencesKey("cover_preview_mode")
+    private val nowPlayingHomeLayoutModeKey = stringPreferencesKey("now_playing_home_layout_mode")
     private val lyricsPageFontSizeKey = floatPreferencesKey("lyrics_page_font_size")
     private val lyricsPageStrokeWidthKey = floatPreferencesKey("lyrics_page_stroke_width")
     private val lyricsPageLineHeightMultiplierKey = floatPreferencesKey("lyrics_page_line_height_multiplier")
@@ -84,6 +86,9 @@ class SettingsDataStore @Inject constructor(
     val coverBackgroundClarity: Flow<Float> = context.settingsDataStore.data.map { it[coverBackgroundClarityKey] ?: 0.35f }
     val coverPreviewMode: Flow<CoverPreviewMode> = context.settingsDataStore.data.map {
         CoverPreviewMode.fromStorageValue(it[coverPreviewModeKey])
+    }
+    val nowPlayingHomeLayoutMode: Flow<NowPlayingHomeLayoutMode> = context.settingsDataStore.data.map {
+        NowPlayingHomeLayoutMode.fromStorageValue(it[nowPlayingHomeLayoutModeKey])
     }
     val lyricsPageSettings: Flow<LyricsPageSettings> = context.settingsDataStore.data.map { prefs ->
         LyricsPageSettings(
@@ -162,6 +167,10 @@ class SettingsDataStore @Inject constructor(
 
     suspend fun setCoverPreviewMode(mode: CoverPreviewMode) {
         context.settingsDataStore.edit { it[coverPreviewModeKey] = mode.storageValue }
+    }
+
+    suspend fun setNowPlayingHomeLayoutMode(mode: NowPlayingHomeLayoutMode) {
+        context.settingsDataStore.edit { it[nowPlayingHomeLayoutModeKey] = mode.storageValue }
     }
 
     suspend fun setLyricsPageSettings(settings: LyricsPageSettings) {
