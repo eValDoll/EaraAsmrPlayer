@@ -2,6 +2,7 @@ package com.asmr.player.listentogether
 
 import android.os.Build
 import com.asmr.player.BuildConfig
+import com.asmr.player.data.local.DeviceIdentityStore
 import com.asmr.player.data.remote.NetworkHeaders
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
@@ -20,7 +21,8 @@ import javax.inject.Singleton
 @Singleton
 class ListenTogetherRepository @Inject constructor(
     private val okHttpClient: OkHttpClient,
-    private val gson: Gson
+    private val gson: Gson,
+    private val deviceIdentityStore: DeviceIdentityStore
 ) {
     private val clientSessionId = UUID.randomUUID().toString()
     private val appHeaderValue = "com.asmr.player/${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})"
@@ -36,6 +38,7 @@ class ListenTogetherRepository @Inject constructor(
         isPlaying: Boolean
     ): ListenTogetherPresenceResponse? {
         if (!isBackendConfigured) return null
+        val deviceId = deviceIdentityStore.getOrCreateDeviceId()
         val payload = ListenTogetherPresencePayload(
             sessionKey = identity.sessionKey,
             albumKey = identity.albumKey,
@@ -52,19 +55,22 @@ class ListenTogetherRepository @Inject constructor(
             isPlaying = isPlaying,
             sentAtEpochMs = System.currentTimeMillis(),
             clientSessionId = clientSessionId,
+            deviceId = deviceId,
             appVersion = "${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}) / Android ${Build.VERSION.SDK_INT}"
         )
-        return postJson("presence/upsert", payload, ListenTogetherPresenceResponse::class.java)
+        return postJson("presence/upsert", payload, ListenTogetherPresenceResponse::class.java, deviceId)
     }
 
     suspend fun leave(identity: ListenTogetherTrackIdentity) {
         if (!isBackendConfigured) return
+        val deviceId = deviceIdentityStore.getOrCreateDeviceId()
         val payload = ListenTogetherLeavePayload(
             sessionKey = identity.sessionKey,
             clientSessionId = clientSessionId,
+            deviceId = deviceId,
             sentAtEpochMs = System.currentTimeMillis()
         )
-        postJson<Unit>("presence/leave", payload, null)
+        postJson<Unit>("presence/leave", payload, null, deviceId)
     }
 
     suspend fun getRjSummary(rjCode: String): ListenTogetherRjSummaryResponse? {
@@ -78,11 +84,17 @@ class ListenTogetherRepository @Inject constructor(
         )
     }
 
-    private suspend fun <T : Any> postJson(path: String, body: Any, responseClass: Class<T>?): T? {
+    private suspend fun <T : Any> postJson(
+        path: String,
+        body: Any,
+        responseClass: Class<T>?,
+        deviceId: String
+    ): T? {
         return withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url(resolveUrl(path))
                 .header("User-Agent", userAgent)
+                .header(NetworkHeaders.HEADER_EARA_DEVICE_ID, deviceId)
                 .header("X-Listen-Together-App", appHeaderValue)
                 .header("X-Listen-Together-Client-Session-Id", clientSessionId)
                 .header("X-Listen-Together-Device-Fingerprint", deviceFingerprint)
@@ -121,6 +133,7 @@ class ListenTogetherRepository @Inject constructor(
             val request = Request.Builder()
                 .url(url)
                 .header("User-Agent", userAgent)
+                .header(NetworkHeaders.HEADER_EARA_DEVICE_ID, deviceIdentityStore.getOrCreateDeviceId())
                 .header("X-Listen-Together-App", appHeaderValue)
                 .header("X-Listen-Together-Client-Session-Id", clientSessionId)
                 .header("X-Listen-Together-Device-Fingerprint", deviceFingerprint)

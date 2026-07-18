@@ -16,8 +16,10 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
+import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -1353,46 +1355,66 @@ private fun AlbumHeroIdentityOverlay(
                         appearance = AlbumMetaAppearance.OnImage,
                         leadingVisual = AlbumMetaLeadingVisual.Icon,
                     )
-                    if (listenTogetherRjListenerCount != null && rj.isNotBlank()) {
-                        Spacer(modifier = Modifier.width(8.dp))
-                        val listenerContainer = colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.36f else 0.30f)
-                        val listenerContent = if (colorScheme.isDark) {
-                            Color.White.copy(alpha = 0.96f)
-                        } else {
-                            colorScheme.textPrimary.copy(alpha = 0.88f)
-                        }
-                        val listenerBorder = colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.52f else 0.42f)
-                        Surface(
-                            color = listenerContainer,
-                            contentColor = listenerContent,
-                            shape = RoundedCornerShape(999.dp),
-                            border = androidx.compose.foundation.BorderStroke(
-                                width = 0.5.dp,
-                                color = listenerBorder
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    painter = painterResource(id = com.asmr.player.R.drawable.ic_users_round),
-                                    contentDescription = null,
-                                    tint = listenerContent,
-                                    modifier = Modifier.size(12.dp)
-                                )
-                                Text(
-                                    text = "${listenTogetherRjListenerCount.coerceAtLeast(0)} 人正在听",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = listenerContent,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis,
-                                )
-                            }
-                        }
-                    }
+                    AlbumOnlineListenerInfo(
+                        listenerCount = listenTogetherRjListenerCount,
+                        visible = rj.isNotBlank(),
+                        modifier = Modifier.padding(start = 8.dp)
+                    )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlbumOnlineListenerInfo(
+    listenerCount: Int?,
+    visible: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val count = listenerCount?.coerceAtLeast(0)
+    val colorScheme = AsmrTheme.colorScheme
+    val contentColor = if (colorScheme.isDark) {
+        Color.White.copy(alpha = 0.96f)
+    } else {
+        colorScheme.textPrimary.copy(alpha = 0.90f)
+    }
+    val textShadow = Shadow(
+        color = if (colorScheme.isDark) Color.Black.copy(alpha = 0.42f) else Color.White.copy(alpha = 0.58f),
+        offset = Offset(0f, 1f),
+        blurRadius = 5f
+    )
+
+    AnimatedVisibility(
+        visible = visible && count != null,
+        enter = fadeIn(animationSpec = AlbumHeaderEnterTweenSpec) + expandHorizontally(
+            animationSpec = AlbumHeaderExpandTweenSpec,
+            expandFrom = Alignment.Start
+        ),
+        exit = fadeOut(animationSpec = tween(durationMillis = 120)) + shrinkHorizontally(
+            animationSpec = tween(durationMillis = 160, easing = FastOutLinearInEasing),
+            shrinkTowards = Alignment.Start
+        )
+    ) {
+        if (count != null) {
+            Row(
+                modifier = modifier,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    painter = painterResource(id = com.asmr.player.R.drawable.ic_users_round),
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(12.dp)
+                )
+                Text(
+                    text = "$count 人正在听",
+                    style = MaterialTheme.typography.labelSmall.copy(shadow = textShadow),
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
         }
     }

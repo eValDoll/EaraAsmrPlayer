@@ -37,12 +37,14 @@ data class ListenTogetherPresencePayload(
     val isPlaying: Boolean,
     val sentAtEpochMs: Long,
     val clientSessionId: String,
+    val deviceId: String,
     val appVersion: String? = null
 )
 
 data class ListenTogetherLeavePayload(
     val sessionKey: String,
     val clientSessionId: String,
+    val deviceId: String,
     val sentAtEpochMs: Long
 )
 
