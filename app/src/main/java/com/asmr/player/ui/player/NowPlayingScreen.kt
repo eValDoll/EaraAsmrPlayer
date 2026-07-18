@@ -371,16 +371,7 @@ private fun ListenTogetherAudienceCountText(
     modifier: Modifier = Modifier
 ) {
     val textStyle = MaterialTheme.typography.labelSmall
-    var lastNonZeroCount by remember { mutableIntStateOf(0) }
-
-    val displayCount = when {
-        companionCount > 0 -> {
-            lastNonZeroCount = companionCount
-            companionCount
-        }
-        lastNonZeroCount > 0 -> lastNonZeroCount
-        else -> 0
-    }
+    val displayCount = companionCount.coerceAtLeast(0)
 
     AnimatedContent(
         targetState = displayCount > 0,

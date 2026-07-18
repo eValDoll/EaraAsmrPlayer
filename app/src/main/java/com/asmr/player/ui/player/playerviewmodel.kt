@@ -15,6 +15,7 @@ import com.asmr.player.domain.model.Track
 import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.listentogether.ListenTogetherIdentityResolver
+import com.asmr.player.listentogether.ListenTogetherPresenceResponse
 import com.asmr.player.listentogether.ListenTogetherRepository
 import com.asmr.player.listentogether.ListenTogetherStatus
 import com.asmr.player.listentogether.ListenTogetherTrackIdentity
@@ -72,6 +73,21 @@ import java.util.Locale
 
 private const val ONLINE_MANUAL_LYRICS_MESSAGE = "在线音频如需替换歌词，请先下载音频到本地"
 private const val LISTEN_TOGETHER_POLL_INTERVAL_MS = 60_000L
+private const val LISTEN_TOGETHER_MIN_POLL_INTERVAL_MS = 5_000L
+
+internal fun resolveListenTogetherHeartbeatDelayMs(response: ListenTogetherPresenceResponse?): Long {
+    val requestedInterval = response?.heartbeatIntervalMs
+        ?.takeIf { it > 0L }
+        ?: LISTEN_TOGETHER_POLL_INTERVAL_MS
+    val boundedInterval = requestedInterval.coerceIn(
+        LISTEN_TOGETHER_MIN_POLL_INTERVAL_MS,
+        LISTEN_TOGETHER_POLL_INTERVAL_MS
+    )
+    val expiryBound = response?.expiresInMs
+        ?.takeIf { it > 0L }
+        ?.let { (it * 2L / 3L).coerceIn(LISTEN_TOGETHER_MIN_POLL_INTERVAL_MS, LISTEN_TOGETHER_POLL_INTERVAL_MS) }
+    return expiryBound?.let { minOf(boundedInterval, it) } ?: boundedInterval
+}
 
 @HiltViewModel
 @OptIn(FlowPreview::class)
@@ -937,7 +953,7 @@ class PlayerViewModel @Inject constructor(
                         backendConfigured = true,
                         status = ListenTogetherStatus.Ready
                     )
-                    delay(response?.heartbeatIntervalMs?.coerceAtLeast(LISTEN_TOGETHER_POLL_INTERVAL_MS) ?: LISTEN_TOGETHER_POLL_INTERVAL_MS)
+                    delay(resolveListenTogetherHeartbeatDelayMs(response))
                 }.onFailure {
                     _listenTogetherUiState.value = _listenTogetherUiState.value.copy(
                         available = true,
