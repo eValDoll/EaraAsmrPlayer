@@ -138,6 +138,28 @@ class MainNavigationSupportTest {
     }
 
     @Test
+    fun shouldTriggerPrimaryRouteScrollToTop_whenVisualRouteIsAlreadySelected() {
+        assertEquals(
+            true,
+            shouldTriggerPrimaryRouteScrollToTop(
+                requestedRoute = "hot",
+                visualPrimaryRoute = "hot",
+                activePrimaryRoute = "library",
+                currentPrimaryRoute = "library"
+            )
+        )
+        assertEquals(
+            false,
+            shouldTriggerPrimaryRouteScrollToTop(
+                requestedRoute = "groups",
+                visualPrimaryRoute = "hot",
+                activePrimaryRoute = "library",
+                currentPrimaryRoute = "library"
+            )
+        )
+    }
+
+    @Test
     fun shouldHideStatusBarForImmersivePage_hidesAlbumDetailRoutes() {
         assertEquals(true, shouldHideStatusBarForImmersivePage("album_detail/{albumId}?rjCode={rjCode}", false))
         assertEquals(true, shouldHideStatusBarForImmersivePage("album_detail_rj/{rj}?initialTab={initialTab}", false))

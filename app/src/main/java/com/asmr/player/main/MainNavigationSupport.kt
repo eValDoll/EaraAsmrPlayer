@@ -338,6 +338,20 @@ internal fun shouldScrollPrimaryRouteToTop(
 ): Boolean = requestedRoute == activePrimaryRoute &&
     (currentPrimaryRoute == requestedRoute || currentPrimaryRoute == null)
 
+internal fun shouldTriggerPrimaryRouteScrollToTop(
+    requestedRoute: String,
+    visualPrimaryRoute: String,
+    activePrimaryRoute: String,
+    currentPrimaryRoute: String?
+): Boolean {
+    if (requestedRoute == visualPrimaryRoute) return true
+    return shouldScrollPrimaryRouteToTop(
+        requestedRoute = requestedRoute,
+        activePrimaryRoute = activePrimaryRoute,
+        currentPrimaryRoute = currentPrimaryRoute
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PrimaryTopBarBrand(

@@ -2389,8 +2389,9 @@ fun MainContainer(
                         },
                         onOpenQueue = onShowQueue,
                         onNavigate = { route ->
-                            if (pendingPrimaryNavigationRoute == null && shouldScrollPrimaryRouteToTop(
+                            if (pendingPrimaryNavigationRoute == null && shouldTriggerPrimaryRouteScrollToTop(
                                     requestedRoute = route,
+                                    visualPrimaryRoute = visualPrimaryRoute,
                                     activePrimaryRoute = activePrimaryRoute,
                                     currentPrimaryRoute = currentPrimaryRoute
                                 )) {
