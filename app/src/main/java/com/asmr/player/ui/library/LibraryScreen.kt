@@ -308,8 +308,8 @@ fun LibraryScreen(
     fun stopActiveScroll() {
         scope.launch {
             when (mode) {
-                1 -> gridState.stopScroll(MutatePriority.UserInput)
-                else -> listState.stopScroll(MutatePriority.UserInput)
+                1 -> gridState.stopScroll(MutatePriority.PreventUserInput)
+                else -> listState.stopScroll(MutatePriority.PreventUserInput)
             }
         }
     }
@@ -359,8 +359,8 @@ fun LibraryScreen(
     LaunchedEffect(scrollToTopSignal) {
         if (scrollToTopSignal == 0L) return@LaunchedEffect
         when (mode) {
-            1 -> gridState.stopScroll(MutatePriority.UserInput)
-            else -> listState.stopScroll(MutatePriority.UserInput)
+            1 -> gridState.stopScroll(MutatePriority.PreventUserInput)
+            else -> listState.stopScroll(MutatePriority.PreventUserInput)
         }
         when (mode) {
             1 -> gridState.scrollToItem(0)
@@ -578,7 +578,6 @@ fun LibraryScreen(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .clearFocusOnTapOutside()
-                                            .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(listState),
                                         flingBehavior = rememberCalmScrollableFlingBehavior(),
@@ -787,7 +786,6 @@ fun LibraryScreen(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .clearFocusOnTapOutside()
-                                            .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(gridState),
                                         flingBehavior = rememberCalmScrollableFlingBehavior(),
@@ -847,7 +845,6 @@ fun LibraryScreen(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .clearFocusOnTapOutside()
-                                            .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(listState),
                                         flingBehavior = rememberCalmScrollableFlingBehavior(),

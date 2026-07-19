@@ -127,16 +127,16 @@ fun HotListeningScreen(
     }
 
     suspend fun stopScrollAndJumpToTop() {
-        runCatching { listState.stopScroll(MutatePriority.UserInput) }
-        runCatching { gridState.stopScroll(MutatePriority.UserInput) }
+        runCatching { listState.stopScroll(MutatePriority.PreventUserInput) }
+        runCatching { gridState.stopScroll(MutatePriority.PreventUserInput) }
         runCatching { listState.scrollToItem(0) }
         runCatching { gridState.scrollToItem(0) }
     }
 
     fun stopActiveScroll() {
         scope.launch {
-            runCatching { listState.stopScroll(MutatePriority.UserInput) }
-            runCatching { gridState.stopScroll(MutatePriority.UserInput) }
+            runCatching { listState.stopScroll(MutatePriority.PreventUserInput) }
+            runCatching { gridState.stopScroll(MutatePriority.PreventUserInput) }
         }
     }
 
@@ -323,7 +323,6 @@ fun HotListeningScreen(
                         state = listState,
                         modifier = Modifier
                             .fillMaxSize()
-                            .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
                             .thinScrollbar(listState),
                         flingBehavior = rememberCalmScrollableFlingBehavior(),
                         contentPadding = PaddingValues(bottom = 8.dp)
@@ -395,7 +394,6 @@ fun HotListeningScreen(
                         state = gridState,
                         modifier = Modifier
                             .fillMaxSize()
-                            .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
                             .thinScrollbar(gridState),
                         flingBehavior = rememberCalmScrollableFlingBehavior(),
                         contentPadding = PaddingValues(

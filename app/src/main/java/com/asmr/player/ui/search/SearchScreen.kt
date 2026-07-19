@@ -120,7 +120,6 @@ import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.albumStableKey
 import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
-import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.clearFocusOnTapOutside
 import com.asmr.player.ui.common.collapsibleHeaderUiState
@@ -373,8 +372,8 @@ fun SearchScreen(
 
     fun scrollResultsToTop() {
         scope.launch {
-            runCatching { listState.stopScroll(MutatePriority.UserInput) }
-            runCatching { gridState.stopScroll(MutatePriority.UserInput) }
+            runCatching { listState.stopScroll(MutatePriority.PreventUserInput) }
+            runCatching { gridState.stopScroll(MutatePriority.PreventUserInput) }
             runCatching { listState.scrollToItem(0) }
             runCatching { gridState.scrollToItem(0) }
         }
@@ -575,8 +574,8 @@ fun SearchScreen(
     val latestHorizontalPagerScrollLockChanged = rememberUpdatedState(onHorizontalPagerScrollLockChanged)
     fun stopActiveScroll() {
         scope.launch {
-            runCatching { listState.stopScroll(MutatePriority.UserInput) }
-            runCatching { gridState.stopScroll(MutatePriority.UserInput) }
+            runCatching { listState.stopScroll(MutatePriority.PreventUserInput) }
+            runCatching { gridState.stopScroll(MutatePriority.PreventUserInput) }
             pullNextPageDragPx = 0f
             latestHorizontalPagerScrollLockChanged.value(false)
         }
@@ -653,8 +652,14 @@ fun SearchScreen(
         if (scrollToTopSignal == 0L) return@LaunchedEffect
         pullNextPageDragPx = 0f
         when (viewMode) {
-            0 -> listState.smoothScrollToTop()
-            else -> gridState.smoothScrollToTop()
+            0 -> {
+                runCatching { listState.stopScroll(MutatePriority.PreventUserInput) }
+                runCatching { listState.scrollToItem(0) }
+            }
+            else -> {
+                runCatching { gridState.stopScroll(MutatePriority.PreventUserInput) }
+                runCatching { gridState.scrollToItem(0) }
+            }
         }
         chromeState.expand()
     }
@@ -895,7 +900,6 @@ fun SearchScreen(
                                         state = listState,
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(listState),
                                         flingBehavior = rememberCalmScrollableFlingBehavior(),
@@ -952,7 +956,6 @@ fun SearchScreen(
                                         state = gridState,
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(gridState),
                                         flingBehavior = rememberCalmScrollableFlingBehavior(),

@@ -1030,7 +1030,7 @@ private fun BottomNavigationPillSurface(
                             Modifier
                         },
                         onClick = {
-                            if (!expanded && !entry.isOverflow) {
+                            if (!expanded && !entry.isOverflow && entry.item.route != activeRoute) {
                                 onExpandRequest()
                             } else if (entry.isOverflow) {
                                 if (navGroups.size > 1) {
