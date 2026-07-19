@@ -120,11 +120,6 @@ fun HotListeningScreen(
     }
 
     val periods = listOf("day" to "过去一天", "week" to "过去一周", "month" to "过去一月")
-    var pendingScrollToTopKey by rememberSaveable { mutableStateOf<String?>(null) }
-
-    fun scrollToTopKey(period: String, sortMode: HotListeningSortMode): String {
-        return "$period:${sortMode.name}"
-    }
 
     suspend fun stopScrollAndJumpToTop() {
         runCatching { listState.stopScroll(MutatePriority.PreventUserInput) }
@@ -140,8 +135,7 @@ fun HotListeningScreen(
         }
     }
 
-    fun requestScrollToTop(period: String, sortMode: HotListeningSortMode) {
-        pendingScrollToTopKey = scrollToTopKey(period, sortMode)
+    fun requestScrollToTop() {
         viewModel.resetScrollPosition()
         scope.launch {
             stopScrollAndJumpToTop()
@@ -214,7 +208,7 @@ fun HotListeningScreen(
                         selected = selectedPeriod == period,
                         onClick = {
                             viewModel.selectPeriod(period)
-                            requestScrollToTop(period, selectedSortMode)
+                            requestScrollToTop()
                         },
                         label = { Text(label) },
                         colors = FilterChipDefaults.filterChipColors(
@@ -233,7 +227,7 @@ fun HotListeningScreen(
                         ) {
                             val nextMode = selectedSortMode.nextMode
                             viewModel.selectSortMode(nextMode)
-                            requestScrollToTop(selectedPeriod, nextMode)
+                            requestScrollToTop()
                         }
                         .padding(horizontal = 4.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
@@ -279,13 +273,8 @@ fun HotListeningScreen(
             )
 
             is HotListeningUiState.Success -> {
-                LaunchedEffect(state.period, state.sortMode, pendingScrollToTopKey) {
+                LaunchedEffect(state.period, state.sortMode) {
                     showBlockedEntries = false
-                    if (pendingScrollToTopKey == scrollToTopKey(state.period, state.sortMode)) {
-                        viewModel.resetScrollPosition()
-                        stopScrollAndJumpToTop()
-                        pendingScrollToTopKey = null
-                    }
                 }
 
                 if (state.entries.isEmpty() && state.blockedEntries.isEmpty()) {
