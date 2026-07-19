@@ -65,8 +65,8 @@ import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.albumStableKey
+import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
-import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
@@ -120,12 +120,31 @@ fun HotListeningScreen(
     }
 
     val periods = listOf("day" to "过去一天", "week" to "过去一周", "month" to "过去一月")
+    var pendingScrollToTopKey by rememberSaveable { mutableStateOf<String?>(null) }
 
-    fun scrollToTop() {
+    fun scrollToTopKey(period: String, sortMode: HotListeningSortMode): String {
+        return "$period:${sortMode.name}"
+    }
+
+    suspend fun stopScrollAndJumpToTop() {
+        runCatching { listState.stopScroll(MutatePriority.UserInput) }
+        runCatching { gridState.stopScroll(MutatePriority.UserInput) }
+        runCatching { listState.scrollToItem(0) }
+        runCatching { gridState.scrollToItem(0) }
+    }
+
+    fun stopActiveScroll() {
+        scope.launch {
+            runCatching { listState.stopScroll(MutatePriority.UserInput) }
+            runCatching { gridState.stopScroll(MutatePriority.UserInput) }
+        }
+    }
+
+    fun requestScrollToTop(period: String, sortMode: HotListeningSortMode) {
+        pendingScrollToTopKey = scrollToTopKey(period, sortMode)
         viewModel.resetScrollPosition()
         scope.launch {
-            runCatching { listState.scrollToItem(0) }
-            runCatching { gridState.scrollToItem(0) }
+            stopScrollAndJumpToTop()
         }
     }
 
@@ -165,10 +184,7 @@ fun HotListeningScreen(
     LaunchedEffect(scrollToTopSignal) {
         if (scrollToTopSignal == 0L) return@LaunchedEffect
         viewModel.resetScrollPosition()
-        when (viewMode) {
-            0 -> listState.smoothScrollToTop()
-            else -> gridState.smoothScrollToTop()
-        }
+        stopScrollAndJumpToTop()
     }
     LaunchedEffect(isActive, viewMode) {
         if (isActive) return@LaunchedEffect
@@ -182,7 +198,10 @@ fun HotListeningScreen(
         modifier = Modifier.fillMaxSize()
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
+                .padding(horizontal = 8.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -195,7 +214,7 @@ fun HotListeningScreen(
                         selected = selectedPeriod == period,
                         onClick = {
                             viewModel.selectPeriod(period)
-                            scrollToTop()
+                            requestScrollToTop(period, selectedSortMode)
                         },
                         label = { Text(label) },
                         colors = FilterChipDefaults.filterChipColors(
@@ -212,8 +231,9 @@ fun HotListeningScreen(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null
                         ) {
-                            viewModel.selectSortMode(selectedSortMode.nextMode)
-                            scrollToTop()
+                            val nextMode = selectedSortMode.nextMode
+                            viewModel.selectSortMode(nextMode)
+                            requestScrollToTop(selectedPeriod, nextMode)
                         }
                         .padding(horizontal = 4.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
@@ -259,8 +279,13 @@ fun HotListeningScreen(
             )
 
             is HotListeningUiState.Success -> {
-                LaunchedEffect(state.period, state.sortMode) {
+                LaunchedEffect(state.period, state.sortMode, pendingScrollToTopKey) {
                     showBlockedEntries = false
+                    if (pendingScrollToTopKey == scrollToTopKey(state.period, state.sortMode)) {
+                        viewModel.resetScrollPosition()
+                        stopScrollAndJumpToTop()
+                        pendingScrollToTopKey = null
+                    }
                 }
 
                 if (state.entries.isEmpty() && state.blockedEntries.isEmpty()) {
@@ -298,6 +323,7 @@ fun HotListeningScreen(
                         state = listState,
                         modifier = Modifier
                             .fillMaxSize()
+                            .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
                             .thinScrollbar(listState),
                         flingBehavior = rememberCalmScrollableFlingBehavior(),
                         contentPadding = PaddingValues(bottom = 8.dp)
@@ -369,6 +395,7 @@ fun HotListeningScreen(
                         state = gridState,
                         modifier = Modifier
                             .fillMaxSize()
+                            .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
                             .thinScrollbar(gridState),
                         flingBehavior = rememberCalmScrollableFlingBehavior(),
                         contentPadding = PaddingValues(

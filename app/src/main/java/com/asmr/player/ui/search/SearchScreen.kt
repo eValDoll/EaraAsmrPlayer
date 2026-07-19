@@ -119,13 +119,14 @@ import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.albumStableKey
+import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
+import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.clearFocusOnTapOutside
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.consumeTapThrough
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
-import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
@@ -372,6 +373,8 @@ fun SearchScreen(
 
     fun scrollResultsToTop() {
         scope.launch {
+            runCatching { listState.stopScroll(MutatePriority.UserInput) }
+            runCatching { gridState.stopScroll(MutatePriority.UserInput) }
             runCatching { listState.scrollToItem(0) }
             runCatching { gridState.scrollToItem(0) }
         }
@@ -570,6 +573,14 @@ fun SearchScreen(
     val pullRefreshHintEdgeOffsetPx = topPaddingPx + pullContentOffsetPx - pullRefreshHintHeightPx
     val latestKeyword by rememberUpdatedState(keyword)
     val latestHorizontalPagerScrollLockChanged = rememberUpdatedState(onHorizontalPagerScrollLockChanged)
+    fun stopActiveScroll() {
+        scope.launch {
+            runCatching { listState.stopScroll(MutatePriority.UserInput) }
+            runCatching { gridState.stopScroll(MutatePriority.UserInput) }
+            pullNextPageDragPx = 0f
+            latestHorizontalPagerScrollLockChanged.value(false)
+        }
+    }
     LaunchedEffect(pullToRefreshState.isRefreshing) {
         if (!pullToRefreshState.isRefreshing) return@LaunchedEffect
         when (val state = uiState) {
@@ -884,6 +895,7 @@ fun SearchScreen(
                                         state = listState,
                                         modifier = Modifier
                                             .fillMaxSize()
+                                            .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(listState),
                                         flingBehavior = rememberCalmScrollableFlingBehavior(),
@@ -940,6 +952,7 @@ fun SearchScreen(
                                         state = gridState,
                                         modifier = Modifier
                                             .fillMaxSize()
+                                            .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(gridState),
                                         flingBehavior = rememberCalmScrollableFlingBehavior(),
@@ -1043,7 +1056,9 @@ fun SearchScreen(
                     }
 
                     SearchChrome(
-                        modifier = Modifier.align(Alignment.TopCenter),
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .interruptScrollableFlingOnPointerDown { stopActiveScroll() },
                         keyword = keyword,
                         onKeywordChange = { keyword = it },
                         placeholder = hotKeywordCarouselItem.placeholder,

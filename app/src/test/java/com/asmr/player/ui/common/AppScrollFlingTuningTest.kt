@@ -5,6 +5,28 @@ import org.junit.Test
 
 class AppScrollFlingTuningTest {
     @Test
+    fun shouldStartCalmFling_ignoresTinyLiftVelocity() {
+        assertEquals(
+            false,
+            shouldStartCalmFling(
+                velocity = 180f,
+                startVelocityPxPerSecond = 260f
+            )
+        )
+    }
+
+    @Test
+    fun shouldStartCalmFling_allowsIntentionalSwipeVelocity() {
+        assertEquals(
+            true,
+            shouldStartCalmFling(
+                velocity = -700f,
+                startVelocityPxPerSecond = 260f
+            )
+        )
+    }
+
+    @Test
     fun calmVerticalFlingVelocity_keepsGentleFlingUnchanged() {
         assertEquals(
             700f,

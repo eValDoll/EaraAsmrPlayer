@@ -2,12 +2,15 @@ package com.asmr.player.ui.common
 
 import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.gestures.ScrollScope
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
@@ -19,12 +22,13 @@ import kotlinx.coroutines.CancellationException
 private const val VerticalFlingDampingStartDpPerSecond = 850f
 private const val MaxVerticalFlingVelocityDpPerSecond = 3200f
 private const val VerticalFlingVelocityScale = 0.6f
+private const val CalmFlingStartVelocityDpPerSecond = 260f
 private const val FastFlingVelocityDpPerSecond = 1800f
 private const val LowMidFlingVelocityDpPerSecond = 360f
 private const val FastFlingDecayRatePerSecond = 2.6f
 private const val MidFlingDecayRatePerSecond = 0.95f
-private const val LowFlingDecayRatePerSecond = 1.25f
-private const val CalmFlingStopVelocityDpPerSecond = 10f
+private const val LowFlingDecayRatePerSecond = 2.0f
+private const val CalmFlingStopVelocityDpPerSecond = 32f
 private const val MaxFlingFrameSeconds = 1f / 30f
 
 @Composable
@@ -53,11 +57,23 @@ fun Modifier.calmVerticalFling(): Modifier {
     return nestedScroll(nestedScrollConnection)
 }
 
+fun Modifier.interruptScrollableFlingOnPointerDown(onPointerDown: () -> Unit): Modifier {
+    return pointerInput(onPointerDown) {
+        awaitEachGesture {
+            awaitFirstDown(requireUnconsumed = false)
+            onPointerDown()
+        }
+    }
+}
+
 @Composable
 fun rememberCalmScrollableFlingBehavior(): FlingBehavior {
     val density = LocalDensity.current
     return remember(density) {
         CalmScrollableFlingBehavior(
+            startVelocityPxPerSecond = with(density) {
+                CalmFlingStartVelocityDpPerSecond.dp.toPx()
+            },
             stopVelocityPxPerSecond = with(density) {
                 CalmFlingStopVelocityDpPerSecond.dp.toPx()
             },
@@ -69,6 +85,14 @@ fun rememberCalmScrollableFlingBehavior(): FlingBehavior {
             }
         )
     }
+}
+
+internal fun shouldStartCalmFling(
+    velocity: Float,
+    startVelocityPxPerSecond: Float
+): Boolean {
+    if (!velocity.isFinite()) return false
+    return abs(velocity) > startVelocityPxPerSecond.coerceAtLeast(0f)
 }
 
 internal fun calmVerticalFlingVelocity(
@@ -119,6 +143,7 @@ internal fun calmFlingDecayRateForVelocity(
 }
 
 private class CalmScrollableFlingBehavior(
+    private val startVelocityPxPerSecond: Float,
     private val stopVelocityPxPerSecond: Float,
     private val fastVelocityPxPerSecond: Float,
     private val lowMidVelocityPxPerSecond: Float
@@ -127,6 +152,7 @@ private class CalmScrollableFlingBehavior(
         if (!initialVelocity.isFinite()) return initialVelocity
         var velocity = initialVelocity
         val stopVelocity = stopVelocityPxPerSecond.coerceAtLeast(0f)
+        if (!shouldStartCalmFling(velocity, startVelocityPxPerSecond)) return 0f
         if (abs(velocity) <= stopVelocity) return velocity
 
         try {

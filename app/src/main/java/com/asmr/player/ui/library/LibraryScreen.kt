@@ -65,12 +65,12 @@ import com.asmr.player.ui.common.FlatActionDialog
 import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.StableWindowInsets
+import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
 import com.asmr.player.ui.common.rememberAudioMeta
 import com.asmr.player.ui.common.rememberAudioMetaText
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberTrackMetaLine
 import com.asmr.player.ui.common.queryCachedTrackFileSize
-import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.withAddedBottomPadding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
@@ -305,6 +305,14 @@ fun LibraryScreen(
         animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
         label = "libraryChromeOffset"
     )
+    fun stopActiveScroll() {
+        scope.launch {
+            when (mode) {
+                1 -> gridState.stopScroll(MutatePriority.UserInput)
+                else -> listState.stopScroll(MutatePriority.UserInput)
+            }
+        }
+    }
     val chromeReservedHeightPx = if (chromeState.heightPx > 0f) {
         chromeState.heightPx
     } else {
@@ -351,8 +359,12 @@ fun LibraryScreen(
     LaunchedEffect(scrollToTopSignal) {
         if (scrollToTopSignal == 0L) return@LaunchedEffect
         when (mode) {
-            1 -> gridState.smoothScrollToTop()
-            else -> listState.smoothScrollToTop()
+            1 -> gridState.stopScroll(MutatePriority.UserInput)
+            else -> listState.stopScroll(MutatePriority.UserInput)
+        }
+        when (mode) {
+            1 -> gridState.scrollToItem(0)
+            else -> listState.scrollToItem(0)
         }
         chromeState.expand()
     }
@@ -566,6 +578,7 @@ fun LibraryScreen(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .clearFocusOnTapOutside()
+                                            .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(listState),
                                         flingBehavior = rememberCalmScrollableFlingBehavior(),
@@ -774,6 +787,7 @@ fun LibraryScreen(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .clearFocusOnTapOutside()
+                                            .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(gridState),
                                         flingBehavior = rememberCalmScrollableFlingBehavior(),
@@ -833,6 +847,7 @@ fun LibraryScreen(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .clearFocusOnTapOutside()
+                                            .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(listState),
                                         flingBehavior = rememberCalmScrollableFlingBehavior(),
@@ -865,7 +880,9 @@ fun LibraryScreen(
                                 }
 
                                 LibraryChrome(
-                                    modifier = Modifier.align(Alignment.TopCenter),
+                                    modifier = Modifier
+                                        .align(Alignment.TopCenter)
+                                        .interruptScrollableFlingOnPointerDown { stopActiveScroll() },
                                     searchText = searchText,
                                     onSearchTextChange = {
                                         searchText = it
