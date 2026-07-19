@@ -576,8 +576,8 @@ class AlbumDetailViewModel @Inject constructor(
             model = createInitialAlbumDetailModel(
                 rj = initialRj,
                 displayAlbum = initialHintAlbum,
-                dlsiteInfo = initialHintAlbum.takeIf { initialHint?.hasResolvedDlsiteInfo == true },
-                preserveHeaderAlbumMetadata = initialHint != null
+                dlsiteInfo = initialHintAlbum.takeIf { shouldPreserveHeaderAlbumMetadata(initialHint) },
+                preserveHeaderAlbumMetadata = shouldPreserveHeaderAlbumMetadata(initialHint)
             )
         )
         viewModelScope.launch {
@@ -596,7 +596,8 @@ class AlbumDetailViewModel @Inject constructor(
 
                 val hint = AlbumCoverHintStore.peekHint(albumId, rj) ?: initialHint
                 val hintAlbum = albumFromInitialHint(rj, hint)
-                val dlsiteInfo = hintAlbum.takeIf { hint?.hasResolvedDlsiteInfo == true }
+                val preserveHeaderAlbumMetadata = shouldPreserveHeaderAlbumMetadata(hint)
+                val dlsiteInfo = hintAlbum.takeIf { preserveHeaderAlbumMetadata }
                 // 种入列表点击时记录的封面与元信息：让 hero 与列表卡片使用相同图片 model，
                 // 在网络解析完成前即可命中跨尺寸内存缓存，避免重复请求封面。
                 val displayAlbum = if (hint != null) hintAlbum else localAlbum ?: hintAlbum
@@ -606,7 +607,7 @@ class AlbumDetailViewModel @Inject constructor(
                         displayAlbum = displayAlbum,
                         localAlbum = localAlbum,
                         dlsiteInfo = dlsiteInfo,
-                        preserveHeaderAlbumMetadata = hint != null
+                        preserveHeaderAlbumMetadata = preserveHeaderAlbumMetadata
                     )
                 )
                 localTracksObserveJob?.cancel()
