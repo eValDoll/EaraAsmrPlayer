@@ -76,6 +76,7 @@ import com.asmr.player.ui.library.AlbumItem
 import com.asmr.player.ui.library.rememberAlbumMetaCopyAction
 import com.asmr.player.ui.theme.AsmrTheme
 import dagger.hilt.android.EntryPointAccessors
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 
 private fun hotListeningItemKey(section: String, album: Album): String {
@@ -114,9 +115,9 @@ fun HotListeningScreen(
     val periods = listOf("day" to "过去一天", "week" to "过去一周", "month" to "过去一月")
 
     fun stopActiveScroll() {
-        scope.launch {
-            runCatching { listState.stopScroll(MutatePriority.PreventUserInput) }
-            runCatching { gridState.stopScroll(MutatePriority.PreventUserInput) }
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            runCatching { listState.stopScroll(MutatePriority.UserInput) }
+            runCatching { gridState.stopScroll(MutatePriority.UserInput) }
         }
     }
 

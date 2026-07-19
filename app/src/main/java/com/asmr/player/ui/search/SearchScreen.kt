@@ -137,6 +137,7 @@ import com.asmr.player.ui.sidepanel.LandscapeRightPanelHost
 import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
 import com.asmr.player.ui.theme.AsmrTheme
 import dagger.hilt.android.EntryPointAccessors
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.runtime.snapshotFlow
@@ -178,6 +179,32 @@ private val SearchResultPlacementSpring = spring<IntOffset>(
 
 private fun searchResultItemKey(album: Album): String {
     return "search-result:${albumStableKey(album)}"
+}
+
+internal fun searchResultScrollKey(success: SearchUiState.Success?): String {
+    if (success == null) return "search-results:none"
+    return buildString {
+        append("search-results:")
+        append(success.resultRevision)
+        append(':')
+        append(success.page)
+        append(':')
+        append(success.keyword)
+        append(':')
+        append(success.order.name)
+        append(':')
+        append(success.collectedSort.name)
+        append(':')
+        append(success.purchasedOnly)
+        append(':')
+        append(success.presaleOnly)
+        append(':')
+        append(success.chineseTranslatedOnly)
+        append(':')
+        append(success.collectedOnly)
+        append(':')
+        append(success.locale.orEmpty())
+    }
 }
 
 private fun onlineDetailLoadingFor(album: Album, state: SearchUiState.Success): Boolean {
@@ -293,16 +320,16 @@ fun SearchScreen(
         showFallback = showHotKeywordFallback
     )
     val success = uiState as? SearchUiState.Success
-    val currentPageKey = success?.page ?: 0
-    val listState = rememberSaveable(currentPageKey, saver = LazyListState.Saver) { LazyListState(0, 0) }
-    val gridState = rememberSaveable(currentPageKey, saver = LazyStaggeredGridState.Saver) { LazyStaggeredGridState() }
+    val resultScrollKey = searchResultScrollKey(success)
+    val listState = rememberSaveable(resultScrollKey, saver = LazyListState.Saver) { LazyListState(0, 0) }
+    val gridState = rememberSaveable(resultScrollKey, saver = LazyStaggeredGridState.Saver) { LazyStaggeredGridState() }
     val colorScheme = AsmrTheme.colorScheme
     val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
     val scope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
     val chromeState = rememberCollapsibleHeaderState()
-    val chromeResetKey = remember(currentPageKey, viewMode) { "$currentPageKey:$viewMode" }
+    val chromeResetKey = remember(resultScrollKey, viewMode) { "$resultScrollKey:$viewMode" }
     var lastChromeResetKey by rememberSaveable { mutableStateOf(chromeResetKey) }
 
     var keywordSyncedFromState by rememberSaveable { mutableStateOf(false) }
@@ -481,7 +508,7 @@ fun SearchScreen(
         with(androidx.compose.ui.platform.LocalDensity.current) { SearchPullNextPageMaxDistance.toPx() }
     val pullNextPageMaxLiftPx =
         with(androidx.compose.ui.platform.LocalDensity.current) { SearchPullNextPageMaxLift.toPx() }
-    var pullNextPageDragPx by remember(currentPageKey, viewMode) { mutableFloatStateOf(0f) }
+    var pullNextPageDragPx by remember(resultScrollKey, viewMode) { mutableFloatStateOf(0f) }
     val pullNextPageArmed = pullNextPageDragPx >= pullNextPageTriggerDistancePx
     val latestPullNextPageEnabled = rememberUpdatedState(pullNextPageEnabled)
     val latestIsAtBottom = rememberUpdatedState(
@@ -573,11 +600,11 @@ fun SearchScreen(
     val latestKeyword by rememberUpdatedState(keyword)
     val latestHorizontalPagerScrollLockChanged = rememberUpdatedState(onHorizontalPagerScrollLockChanged)
     fun stopActiveScroll() {
-        scope.launch {
-            runCatching { listState.stopScroll(MutatePriority.PreventUserInput) }
-            runCatching { gridState.stopScroll(MutatePriority.PreventUserInput) }
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
             pullNextPageDragPx = 0f
             latestHorizontalPagerScrollLockChanged.value(false)
+            runCatching { listState.stopScroll(MutatePriority.UserInput) }
+            runCatching { gridState.stopScroll(MutatePriority.UserInput) }
         }
     }
     LaunchedEffect(pullToRefreshState.isRefreshing) {
@@ -604,7 +631,7 @@ fun SearchScreen(
         }
         if (canEnd) pullToRefreshState.endRefresh()
     }
-    LaunchedEffect(currentPageKey, pullNextPageEnabled) {
+    LaunchedEffect(resultScrollKey, pullNextPageEnabled) {
         if (!pullNextPageEnabled) {
             if (pullNextPageDragPx != 0f) {
                 pullNextPageDragPx = 0f
@@ -729,7 +756,7 @@ fun SearchScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .pointerInput(currentPageKey, viewMode) {
+                            .pointerInput(resultScrollKey, viewMode) {
                                 awaitEachGesture {
                                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                                     var trackedPointerId = down.id
@@ -1110,7 +1137,7 @@ fun SearchScreen(
                         },
                         onLocaleSelected = { locale ->
                             selectedLocale = locale
-                            viewModel.updateSearchOptions(
+                            val accepted = viewModel.updateSearchOptions(
                                 order = selectedOrder,
                                 collectedSort = selectedCollectedSort,
                                 purchasedOnly = purchasedOnly,
@@ -1119,6 +1146,10 @@ fun SearchScreen(
                                 collectedOnly = collectedOnly,
                                 locale = locale
                             )
+                            if (accepted) {
+                                scrollResultsToTop()
+                                chromeState.expand()
+                            }
                         },
                         onCollectedSortSelected = { sort ->
                             selectedCollectedSortName = sort.name

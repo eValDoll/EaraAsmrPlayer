@@ -157,6 +157,7 @@ import com.asmr.player.ui.common.AsmrAsyncImage
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
 import com.asmr.player.ui.theme.dynamicPageContainerColor
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -306,10 +307,10 @@ fun LibraryScreen(
         label = "libraryChromeOffset"
     )
     fun stopActiveScroll() {
-        scope.launch {
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
             when (mode) {
-                1 -> gridState.stopScroll(MutatePriority.PreventUserInput)
-                else -> listState.stopScroll(MutatePriority.PreventUserInput)
+                1 -> runCatching { gridState.stopScroll(MutatePriority.UserInput) }
+                else -> runCatching { listState.stopScroll(MutatePriority.UserInput) }
             }
         }
     }

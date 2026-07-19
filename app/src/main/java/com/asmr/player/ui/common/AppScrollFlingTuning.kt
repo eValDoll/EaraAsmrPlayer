@@ -10,6 +10,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Velocity
@@ -60,7 +61,7 @@ fun Modifier.calmVerticalFling(): Modifier {
 fun Modifier.interruptScrollableFlingOnPointerDown(onPointerDown: () -> Unit): Modifier {
     return pointerInput(onPointerDown) {
         awaitEachGesture {
-            awaitFirstDown(requireUnconsumed = false)
+            awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             onPointerDown()
         }
     }
