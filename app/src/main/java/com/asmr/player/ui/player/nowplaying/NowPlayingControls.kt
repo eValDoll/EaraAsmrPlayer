@@ -463,62 +463,49 @@ private fun SlowMarqueeText(
         modifier = modifier.fillMaxWidth().clipToBounds(),
         contentAlignment = Alignment.Center
     ) {
+        val density = LocalDensity.current
         val containerWidth = constraints.maxWidth
-        val velocity = remember(textWidth, containerWidth, durationMs) {
-            if (textWidth <= containerWidth) {
-                30.dp // Default slow velocity if no scroll needed
+        val horizontalPaddingPx = with(density) { 10.dp.roundToPx() * 2 }
+        val availableWidth = (containerWidth - horizontalPaddingPx).coerceAtLeast(0)
+        val needsMarquee = textWidth > availableWidth
+        val finalVelocity = remember(textWidth, availableWidth, durationMs, density, needsMarquee) {
+            if (!needsMarquee) {
+                0.dp
             } else {
-                // Velocity = Distance / Time. basicMarquee expects Dp (implicitly Dp/s).
-                // We need to convert px/s to dp/s.
-                // 1 dp = density * px. 1 px = 1/density dp.
-                // Wait, velocity in basicMarquee is Dp. It means Dp per second.
-                // So: velocityDp = (distancePx / density) / timeSeconds
-                // Actually we can't easily access density here inside remember block without LocalDensity
-                // But we can do it outside.
-                null // Return null to signal calculation needed
+                val distancePx = (textWidth - availableWidth).toFloat()
+                val targetTimeSeconds = (durationMs - 1000).coerceAtLeast(2000) / 1000f
+                val distanceDp = with(density) { distancePx.toDp() }
+                (distanceDp / targetTimeSeconds)
             }
         }
-        
-        val density = LocalDensity.current
-        val finalVelocity = remember(velocity, density, textWidth, containerWidth, durationMs) {
-             velocity ?: run {
-                 val distancePx = (textWidth - containerWidth).toFloat()
-                 val targetTimeSeconds = (durationMs - 1000).coerceAtLeast(2000) / 1000f
-                 val distanceDp = with(density) { distancePx.toDp() }
-                 // BasicMarquee velocity is in Dp/s.
-                 // We want to cover 'distanceDp' in 'targetTimeSeconds'.
-                 // BUT basicMarquee scrolls the WHOLE content width + gap?
-                 // No, basicMarquee scrolls until the end is visible, then repeats.
-                 // The distance it travels is (ContentWidth - ContainerWidth) per cycle?
-                 // Actually basicMarquee behavior:
-                 // It scrolls the content.
-                 // If velocity is 50.dp, it moves 50dp per second.
-                 // We want to finish the scroll in `targetTimeSeconds`.
-                 // So velocity = distanceDp / targetTimeSeconds.
-                 // We add a small buffer to velocity to ensure it finishes.
-                 (distanceDp / targetTimeSeconds)
-             }
-        }
 
-        Text(
-            text = content,
-            style = style.copy(
-                fontWeight = fontWeight,
-                shadow = shadow
-            ),
-            color = colors.activeText,
-            maxLines = 1,
-            softWrap = false,
-            overflow = TextOverflow.Clip,
-            textAlign = TextAlign.Center,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 2.dp)
-                .basicMarquee(
-                    iterations = Int.MAX_VALUE,
-                    velocity = finalVelocity.coerceAtLeast(10.dp)
-                )
-        )
+        key(content, availableWidth, needsMarquee, finalVelocity) {
+            Text(
+                text = content,
+                style = style.copy(
+                    fontWeight = fontWeight,
+                    shadow = shadow
+                ),
+                color = colors.activeText,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Clip,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 2.dp)
+                    .then(
+                        if (needsMarquee) {
+                            Modifier.basicMarquee(
+                                iterations = Int.MAX_VALUE,
+                                velocity = finalVelocity.coerceAtLeast(10.dp)
+                            )
+                        } else {
+                            Modifier
+                        }
+                    )
+            )
+        }
     }
 }
 

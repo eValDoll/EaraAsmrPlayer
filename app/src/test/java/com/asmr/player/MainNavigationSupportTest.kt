@@ -131,10 +131,32 @@ class MainNavigationSupportTest {
     }
 
     @Test
-    fun shouldScrollPrimaryRouteToTop_onlyWhenAlreadyAtPrimaryRoot() {
+    fun shouldScrollPrimaryRouteToTop_whenRequestedRouteIsCurrentPrimaryRoute() {
         assertEquals(true, shouldScrollPrimaryRouteToTop("playlists", "playlists", "playlists"))
-        assertEquals(false, shouldScrollPrimaryRouteToTop("playlists", "playlists", null))
+        assertEquals(true, shouldScrollPrimaryRouteToTop("playlists", "playlists", null))
         assertEquals(false, shouldScrollPrimaryRouteToTop("groups", "playlists", "playlists"))
+    }
+
+    @Test
+    fun shouldTriggerPrimaryRouteScrollToTop_whenVisualRouteIsAlreadySelected() {
+        assertEquals(
+            true,
+            shouldTriggerPrimaryRouteScrollToTop(
+                requestedRoute = "hot",
+                visualPrimaryRoute = "hot",
+                activePrimaryRoute = "library",
+                currentPrimaryRoute = "library"
+            )
+        )
+        assertEquals(
+            false,
+            shouldTriggerPrimaryRouteScrollToTop(
+                requestedRoute = "groups",
+                visualPrimaryRoute = "hot",
+                activePrimaryRoute = "library",
+                currentPrimaryRoute = "library"
+            )
+        )
     }
 
     @Test

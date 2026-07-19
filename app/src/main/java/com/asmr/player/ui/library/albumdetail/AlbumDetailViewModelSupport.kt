@@ -36,6 +36,7 @@ import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.lyrics.LyricsLoader
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
+import com.asmr.player.ui.nav.AlbumCoverHint
 import com.asmr.player.util.OnlineLyricsStore
 import com.asmr.player.util.RemoteSubtitleSource
 import com.asmr.player.util.SyncCoordinator
@@ -267,6 +268,10 @@ internal fun mergeDetailHeaderAlbum(
             asmrOneWorkId = asmrOneWorkId
         )
     }
+}
+
+internal fun shouldPreserveHeaderAlbumMetadata(hint: AlbumCoverHint?): Boolean {
+    return hint?.hasResolvedDlsiteInfo == true
 }
 
 internal enum class DlsiteChinesePreference {

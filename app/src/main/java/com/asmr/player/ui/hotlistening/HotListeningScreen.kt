@@ -10,10 +10,10 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed as lazyItemsIndexed
-import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
@@ -36,16 +36,15 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
@@ -65,8 +64,8 @@ import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.albumStableKey
+import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
-import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
@@ -77,10 +76,8 @@ import com.asmr.player.ui.library.AlbumItem
 import com.asmr.player.ui.library.rememberAlbumMetaCopyAction
 import com.asmr.player.ui.theme.AsmrTheme
 import dagger.hilt.android.EntryPointAccessors
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.filter
-import kotlinx.coroutines.flow.map
 
 private fun hotListeningItemKey(section: String, album: Album): String {
     return "hot-listening:$section:${albumStableKey(album)}"
@@ -104,71 +101,37 @@ fun HotListeningScreen(
     val scope = rememberCoroutineScope()
     val isCompactWidth = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
     var showBlockedEntries by rememberSaveable { mutableStateOf(false) }
-
-    val savedScrollPosition = viewModel.scrollPosition
-    val listState = rememberSaveable(saver = LazyListState.Saver) {
-        LazyListState(
-            savedScrollPosition.listFirstVisibleItemIndex,
-            savedScrollPosition.listFirstVisibleItemScrollOffset
-        )
+    var scrollResetNonce by rememberSaveable { mutableIntStateOf(0) }
+    val contentScrollKey = remember(selectedPeriod, selectedSortMode, scrollResetNonce) {
+        "hot-listening:$selectedPeriod:${selectedSortMode.name}:$scrollResetNonce"
     }
-    val gridState = rememberSaveable(saver = LazyStaggeredGridState.Saver) {
-        LazyStaggeredGridState(
-            savedScrollPosition.gridFirstVisibleItemIndex,
-            savedScrollPosition.gridFirstVisibleItemScrollOffset
-        )
+    val listState = rememberSaveable(contentScrollKey, saver = LazyListState.Saver) {
+        LazyListState(0, 0)
+    }
+    val gridState = rememberSaveable(contentScrollKey, saver = LazyStaggeredGridState.Saver) {
+        LazyStaggeredGridState()
     }
 
     val periods = listOf("day" to "过去一天", "week" to "过去一周", "month" to "过去一月")
 
-    fun scrollToTop() {
-        viewModel.resetScrollPosition()
-        scope.launch {
-            runCatching { listState.scrollToItem(0) }
-            runCatching { gridState.scrollToItem(0) }
+    fun stopActiveScroll() {
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            runCatching { listState.stopScroll(MutatePriority.UserInput) }
+            runCatching { gridState.stopScroll(MutatePriority.UserInput) }
         }
     }
 
-    LaunchedEffect(listState) {
-        snapshotFlow { listState.isScrollInProgress }
-            .filter { scrolling -> !scrolling }
-            .map { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-            .distinctUntilChanged()
-            .collect { (index, offset) ->
-                viewModel.updateListScrollPosition(index, offset)
-            }
-    }
-
-    LaunchedEffect(gridState) {
-        snapshotFlow { gridState.isScrollInProgress }
-            .filter { scrolling -> !scrolling }
-            .map { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
-            .distinctUntilChanged()
-            .collect { (index, offset) ->
-                viewModel.updateGridScrollPosition(index, offset)
-            }
-    }
-
-    DisposableEffect(listState, gridState, viewModel) {
-        onDispose {
-            viewModel.updateListScrollPosition(
-                listState.firstVisibleItemIndex,
-                listState.firstVisibleItemScrollOffset
-            )
-            viewModel.updateGridScrollPosition(
-                gridState.firstVisibleItemIndex,
-                gridState.firstVisibleItemScrollOffset
-            )
+    fun requestScrollToTop() {
+        scrollResetNonce += 1
+        scope.launch {
+            runCatching { listState.stopScroll(MutatePriority.PreventUserInput) }
+            runCatching { gridState.stopScroll(MutatePriority.PreventUserInput) }
         }
     }
 
     LaunchedEffect(scrollToTopSignal) {
         if (scrollToTopSignal == 0L) return@LaunchedEffect
-        viewModel.resetScrollPosition()
-        when (viewMode) {
-            0 -> listState.smoothScrollToTop()
-            else -> gridState.smoothScrollToTop()
-        }
+        requestScrollToTop()
     }
     LaunchedEffect(isActive, viewMode) {
         if (isActive) return@LaunchedEffect
@@ -182,7 +145,10 @@ fun HotListeningScreen(
         modifier = Modifier.fillMaxSize()
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp),
+            modifier = Modifier
+                .fillMaxWidth()
+                .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
+                .padding(horizontal = 8.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -195,7 +161,7 @@ fun HotListeningScreen(
                         selected = selectedPeriod == period,
                         onClick = {
                             viewModel.selectPeriod(period)
-                            scrollToTop()
+                            requestScrollToTop()
                         },
                         label = { Text(label) },
                         colors = FilterChipDefaults.filterChipColors(
@@ -212,8 +178,9 @@ fun HotListeningScreen(
                             interactionSource = remember { MutableInteractionSource() },
                             indication = null
                         ) {
-                            viewModel.selectSortMode(selectedSortMode.nextMode)
-                            scrollToTop()
+                            val nextMode = selectedSortMode.nextMode
+                            viewModel.selectSortMode(nextMode)
+                            requestScrollToTop()
                         }
                         .padding(horizontal = 4.dp, vertical = 4.dp),
                     horizontalArrangement = Arrangement.spacedBy(3.dp),
