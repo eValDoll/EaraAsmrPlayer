@@ -101,6 +101,42 @@ class BottomChromeTest {
     }
 
     @Test
+    fun collapsedActiveNavItemTap_expandsWithoutNavigation() {
+        val displayMode = mutableStateOf(MiniPlayerDisplayMode.Expanded)
+        var navigationCalls = 0
+
+        composeRule.setContent {
+            AsmrPlayerTheme {
+                BottomChrome(
+                    activeRoute = Routes.Library,
+                    miniPlayerVisible = true,
+                    miniPlayerDisplayMode = displayMode.value,
+                    onMiniPlayerDisplayModeChange = { displayMode.value = it },
+                    onOpenNowPlaying = {},
+                    onOpenQueue = {},
+                    onNavigate = { navigationCalls++ },
+                    modifier = Modifier.size(width = 360.dp, height = 120.dp),
+                    miniPlayerContent = { miniModifier ->
+                        Box(
+                            modifier = miniModifier.height(56.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("Mini")
+                        }
+                    }
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("bottomNavItem:${Routes.Library}").performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(MiniPlayerDisplayMode.CoverOnly, displayMode.value)
+            assertEquals(0, navigationCalls)
+        }
+    }
+
+    @Test
     fun compactWidthWithMiniPlayer_scalesChromeWithoutChangingVisibleNavCount_336dp() {
         compactWidthWithMiniPlayer_scalesChromeWithoutChangingVisibleNavCount(336.dp)
     }
