@@ -381,4 +381,36 @@ object AppDatabaseMigrations {
             db.execSQL("ALTER TABLE albums ADD COLUMN `audioTotalSizeBytes` INTEGER NOT NULL DEFAULT 0")
         }
     }
+
+    val MIGRATION_22_23: Migration = object : Migration(22, 23) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `listening_sessions` (" +
+                    "`id` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
+                    "`albumId` INTEGER NOT NULL DEFAULT -1, " +
+                    "`rjCode` TEXT NOT NULL DEFAULT '', " +
+                    "`title` TEXT NOT NULL DEFAULT '', " +
+                    "`circle` TEXT NOT NULL DEFAULT '', " +
+                    "`cv` TEXT NOT NULL DEFAULT '', " +
+                    "`tags` TEXT NOT NULL DEFAULT '', " +
+                    "`coverUrl` TEXT NOT NULL DEFAULT '', " +
+                    "`coverPath` TEXT NOT NULL DEFAULT '', " +
+                    "`coverThumbPath` TEXT NOT NULL DEFAULT '', " +
+                    "`listeningDate` TEXT NOT NULL, " +
+                    "`startAtMs` INTEGER NOT NULL, " +
+                    "`lastActiveAtMs` INTEGER NOT NULL, " +
+                    "`durationMs` INTEGER NOT NULL DEFAULT 0, " +
+                    "`trafficBytes` INTEGER NOT NULL DEFAULT 0, " +
+                    "`trackCount` INTEGER NOT NULL DEFAULT 0)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_listening_sessions_listeningDate` " +
+                    "ON `listening_sessions` (`listeningDate`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_listening_sessions_albumId` " +
+                    "ON `listening_sessions` (`albumId`)"
+            )
+        }
+    }
 }

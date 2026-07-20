@@ -616,6 +616,7 @@ fun MainContainer(
     val downloadsViewModel: DownloadsViewModel = hiltViewModel()
     val settingsViewModel: SettingsViewModel = hiltViewModel()
     val dlsiteLoginViewModel: DlsiteLoginViewModel = hiltViewModel()
+    val listeningCalendarViewModel: com.asmr.player.ui.calendar.ListeningCalendarViewModel = hiltViewModel()
     val hotListeningViewModel: HotListeningViewModel = hiltViewModel()
     val hasCurrentMediaItem by remember(playerViewModel) {
         playerViewModel.playback
@@ -1211,7 +1212,7 @@ fun MainContainer(
                         Triple(Icons.Rounded.Folder, "我的分组", "groups"),
                         Triple(Icons.Rounded.Download, "下载管理", "downloads"),
                         Triple(Icons.Rounded.Settings, "设置", "settings"),
-                        Triple(Icons.Rounded.Person, "DLsite 登录", "dlsite_login")
+                        Triple(Icons.Rounded.CalendarMonth, "Eara 日历", "listening_calendar")
                     )
 
                     Column(modifier = Modifier.fillMaxSize()) {
@@ -1373,6 +1374,7 @@ fun MainContainer(
                                             currentRoute == "settings" ||
                                             currentRoute == "downloads" ||
                                             currentRoute == "dlsite_login" ||
+                                            currentRoute == "listening_calendar" ||
                                             currentRoute?.startsWith("album_detail") == true
                                     val topBarHeight = when {
                                         isAlbumDetailRoute -> 56.dp
@@ -1415,6 +1417,7 @@ fun MainContainer(
                                                     groupName.ifBlank { "我的分组" }
                                                 resolvedTitleRoute == "settings" -> "设置"
                                                 resolvedTitleRoute == "downloads" -> "下载管理"
+                                                resolvedTitleRoute == "listening_calendar" -> "Eara 日历"
                                                 resolvedTitleRoute == "dlsite_login" -> "DLsite 登录"
                                                 resolvedTitleRoute?.startsWith("playlist_picker") == true -> "添加到我的列表"
                                                 resolvedTitleRoute?.startsWith("album_detail") == true -> "专辑详情"
@@ -1858,13 +1861,21 @@ fun MainContainer(
                                             )
                                         }
 
-                                        "dlsite_login" -> {
-                                            DlsiteLoginScreen(
+                                        "listening_calendar" -> {
+                                            com.asmr.player.ui.calendar.ListeningCalendarScreen(
                                                 windowSizeClass = windowSizeClass,
-                                                onDone = { navController.popBackStack() },
-                                                viewModel = dlsiteLoginViewModel
+                                                onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
+                                                onOpenAlbum = { albumId, rjCode ->
+                                                    if (albumId > 0L) {
+                                                        navigator.openAlbumDetail(albumId = albumId, rj = rjCode.ifBlank { null })
+                                                    } else if (rjCode.isNotBlank()) {
+                                                        navigator.openAlbumDetailByRjStacked(rjCode)
+                                                    }
+                                                },
+                                                viewModel = listeningCalendarViewModel
                                             )
                                         }
+
                                     }
                                 }
                             }
@@ -2285,6 +2296,15 @@ fun MainContainer(
                     }
                 }
                 composable("dlsite_login") {
+                    SecondaryPageBackground(topPadding = topContentPadding) {
+                        DlsiteLoginScreen(
+                            windowSizeClass = windowSizeClass,
+                            onDone = { navController.popBackStack() },
+                            viewModel = dlsiteLoginViewModel
+                        )
+                    }
+                }
+                composable("listening_calendar") {
                     Box(modifier = Modifier.fillMaxSize())
                 }
             }

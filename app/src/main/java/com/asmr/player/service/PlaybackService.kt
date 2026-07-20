@@ -45,6 +45,8 @@ import com.asmr.player.data.settings.AudioEffectController
 import com.asmr.player.data.settings.EqualizerSettings
 import com.asmr.player.data.settings.PlaybackRuntimeSettings
 import com.asmr.player.data.repository.StatisticsRepository
+import com.asmr.player.data.repository.ListeningRecordRepository
+import com.asmr.player.data.repository.ListeningTrackContext
 import com.asmr.player.playback.AsmrRenderersFactory
 import com.asmr.player.playback.BalanceAudioProcessor
 import com.asmr.player.playback.ChannelModeAudioProcessor
@@ -202,6 +204,9 @@ class PlaybackService : MediaSessionService() {
     @Inject
     lateinit var statisticsRepository: StatisticsRepository
 
+    @Inject
+    lateinit var listeningRecordRepository: ListeningRecordRepository
+
     private var lastMarkedMediaId: String? = null
     private var lastMarkedElapsedMs: Long = 0L
 
@@ -248,8 +253,11 @@ class PlaybackService : MediaSessionService() {
             override fun onTransferStart(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {}
             override fun onBytesTransferred(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean, bytesTransferred: Int) {
                 if (isNetwork) {
+                    val bytes = bytesTransferred.toLong()
                     serviceScope.launch {
-                        statisticsRepository.addNetworkTraffic(bytesTransferred.toLong())
+                        statisticsRepository.addNetworkTraffic(bytes)
+                        // 音频流量归入当前收听会话（若存在）。
+                        listeningRecordRepository.addTraffic(bytes)
                     }
                 }
             }
@@ -354,6 +362,7 @@ class PlaybackService : MediaSessionService() {
                 } else {
                     abandonPlaybackAudioFocus()
                     serviceScope.launch { persistCurrentTrackProgressIfNeeded(force = true) }
+                    serviceScope.launch { listeningRecordRepository.flush() }
                 }
                 refreshMediaNotification()
             }
@@ -391,11 +400,18 @@ class PlaybackService : MediaSessionService() {
             while (isActive) {
                 if (exoPlayer.isPlaying) {
                     statisticsRepository.addListeningDuration(1000L)
-                    
+
+                    // 会话级记录：把这一秒计入当前作品的收听会话。
+                    val trackContext = currentListeningTrackContext()
+                    if (trackContext != null) {
+                        listeningRecordRepository.recordTick(trackContext, 1000L)
+                    }
+
                     currentTrackListenedMs += 1000L
                     val totalDuration = exoPlayer.duration
                     if (!isCurrentTrackCounted && totalDuration > 0 && currentTrackListenedMs > totalDuration * 0.25) {
                         statisticsRepository.incrementTrackCount()
+                        listeningRecordRepository.incrementTrackCount()
                         isCurrentTrackCounted = true
                     }
                     persistCurrentTrackProgressIfNeeded(force = false)
@@ -554,6 +570,28 @@ class PlaybackService : MediaSessionService() {
         serviceScope.launch(Dispatchers.IO) {
             runCatching { database.playStatDao().markAlbumPlayed(albumId, playedAt) }
         }
+    }
+
+    /**
+     * 采集当前播放项的作品上下文快照（供会话级收听记录使用）。
+     * 必须在主线程调用（[serviceScope] 使用 Main.immediate）。
+     * 无有效作品标识（albumId / rjCode 均为空）时返回 null。
+     */
+    private fun currentListeningTrackContext(): ListeningTrackContext? {
+        val item = exoPlayer.currentMediaItem ?: return null
+        val metadata = item.mediaMetadata
+        val extras = metadata.extras
+        val albumId = extras?.getLong("album_id", -1L) ?: -1L
+        val rjCode = extras?.getString("rj_code").orEmpty()
+        if (albumId <= 0L && rjCode.isBlank()) return null
+        return ListeningTrackContext(
+            albumId = albumId,
+            rjCode = rjCode,
+            title = metadata.title?.toString().orEmpty(),
+            cv = metadata.artist?.toString().orEmpty(),
+            albumTitle = metadata.albumTitle?.toString().orEmpty(),
+            artworkUri = metadata.artworkUri?.toString()
+        )
     }
 
     private suspend fun persistCurrentTrackProgressIfNeeded(force: Boolean) {

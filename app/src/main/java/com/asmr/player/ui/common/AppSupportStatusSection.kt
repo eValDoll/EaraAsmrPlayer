@@ -61,11 +61,10 @@ import com.asmr.player.ui.theme.AsmrTheme
 @Composable
 fun AppSupportStatusSection(
     modifier: Modifier = Modifier,
-    statisticsViewModel: StatisticsViewModel = hiltViewModel(),
     drawerStatusViewModel: DrawerStatusViewModel = hiltViewModel()
 ) {
+    // 今日收听统计已迁移至「Eara 日历」页面，这里仅保留站点状态测试。
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        DailyStatisticsSection(viewModel = statisticsViewModel)
         SiteStatusSection(viewModel = drawerStatusViewModel)
     }
 }

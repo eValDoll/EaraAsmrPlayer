@@ -291,7 +291,7 @@ internal fun resolveCurrentPrimaryDestinationRoute(
         currentRoute == "playlists" -> "playlists"
         currentRoute == "groups" -> "groups"
         currentRoute == "settings" -> "settings"
-        currentRoute == "dlsite_login" -> "dlsite_login"
+        currentRoute == "listening_calendar" -> "listening_calendar"
         currentRoute == "playlist_system/{type}" && playlistSystemType == "favorites" -> "playlist_system/favorites"
         else -> null
     }
