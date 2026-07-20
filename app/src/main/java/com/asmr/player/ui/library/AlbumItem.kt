@@ -81,6 +81,7 @@ private val AlbumOnlineDetailResizeSpring = spring<IntSize>(
 private const val AlbumOnlineDetailExitSettleMillis = 320L
 internal const val ALBUM_ITEM_CARD_TAG = "album_item_card"
 internal const val ALBUM_ITEM_STATS_TAG = "album_item_stats"
+internal const val ALBUM_ITEM_TAGS_TAG = "album_item_tags"
 
 private fun Album.hasRatingInfo(): Boolean {
     return (ratingValue?.let { it > 0.0 } == true) || ratingCount > 0
@@ -221,7 +222,7 @@ fun AlbumItem(
 
                 BalancedColumn(
                     modifier = Modifier
-                        .padding(top = 4.dp, bottom = 4.dp, end = 12.dp),
+                        .padding(top = 4.dp, bottom = 4.dp),
                     minGap = 4.dp,
                     maxGap = 12.dp,
                 ) {
@@ -264,7 +265,9 @@ fun AlbumItem(
                     ) {
                         AlbumTagsSingleLine(
                             tags = album.tags,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag(ALBUM_ITEM_TAGS_TAG),
                             onTagClick = onTagClick,
                             leadingVisual = Icon,
                         )

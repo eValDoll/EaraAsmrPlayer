@@ -135,6 +135,24 @@ private enum class NowPlayingSurfaceMode {
 
 private const val VideoProgressUiTickMs = 1_000L
 private const val NowPlayingHomeLayoutAnimationDurationMillis = 620
+private val NowPlayingPortraitMaxContentWidth = 600.dp
+
+internal fun nowPlayingHomeCoverWidth(
+    expanded: Boolean,
+    availableWidth: Dp,
+    widthClass: WindowWidthSizeClass,
+    contentHorizontalPadding: Dp
+): Dp {
+    val fullWidth = availableWidth.coerceAtLeast(1.dp)
+    if (expanded) return fullWidth
+
+    val paddedWidth = (fullWidth - contentHorizontalPadding * 2).coerceAtLeast(1.dp)
+    return if (widthClass == WindowWidthSizeClass.Compact) {
+        paddedWidth
+    } else {
+        paddedWidth.coerceAtMost(400.dp)
+    }
+}
 
 private data class NowPlayingStaticPlayback(
     val isConnected: Boolean,
@@ -1590,6 +1608,13 @@ internal fun NowPlayingScreen(
             val expandedHomeLyricsSettings = remember(lyricsPageSettings) {
                 lyricsPageSettings.copy(displayAreaMode = 0)
             }
+            val portraitContentWidthModifier = if (widthClass == WindowWidthSizeClass.Compact) {
+                Modifier.fillMaxWidth()
+            } else {
+                Modifier
+                    .widthIn(max = NowPlayingPortraitMaxContentWidth)
+                    .fillMaxWidth()
+            }
             val artworkAspectRatio = rememberArtworkAspectRatio(artworkModel)
             val homeLayoutTransition = updateTransition(
                 targetState = expandedHomeLayout,
@@ -1709,16 +1734,8 @@ internal fun NowPlayingScreen(
                 contentAlignment = Alignment.TopCenter
             ) {
                 Column(
-                    modifier = if (widthClass == WindowWidthSizeClass.Compact) {
-                        Modifier.fillMaxSize()
-                    } else {
-                        // 平板竖屏：限制最大宽度
-                        Modifier
-                            .fillMaxHeight()
-                            .widthIn(max = 600.dp)
-                            .fillMaxWidth()
-                    }
-                    .padding(horizontal = 0.dp)
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Box(
                         modifier = Modifier
@@ -1733,8 +1750,7 @@ internal fun NowPlayingScreen(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
+                                modifier = portraitContentWidthModifier
                                     .height(classicIdentityHeight)
                                     .graphicsLayer { alpha = classicIdentityAlpha }
                             ) {
@@ -1777,20 +1793,18 @@ internal fun NowPlayingScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     contentAlignment = Alignment.Center
                                 ) {
-                                    val classicCoverWidth = if (widthClass == WindowWidthSizeClass.Compact) {
-                                        (maxWidth - portraitContentHorizontalPadding * 2).coerceAtLeast(1.dp)
-                                    } else {
-                                        (maxWidth - portraitContentHorizontalPadding * 2)
-                                            .coerceAtMost(400.dp)
-                                            .coerceAtLeast(1.dp)
-                                    }
                                     val homeCoverWidth by homeLayoutTransition.animateDp(
                                         transitionSpec = {
                                             tween(durationMillis = homeLayoutDurationMillis, easing = homeBezier)
                                         },
                                         label = "nowPlayingHomeCoverWidth"
                                     ) { expanded ->
-                                        if (expanded) maxWidth else classicCoverWidth
+                                        nowPlayingHomeCoverWidth(
+                                            expanded = expanded,
+                                            availableWidth = maxWidth,
+                                            widthClass = widthClass,
+                                            contentHorizontalPadding = portraitContentHorizontalPadding
+                                        )
                                     }
                                     Box(
                                         modifier = Modifier
@@ -1850,8 +1864,7 @@ internal fun NowPlayingScreen(
 
                             if (!isVideo) {
                                 Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
+                                    modifier = portraitContentWidthModifier
                                         .weight(1f)
                                         .padding(horizontal = lyricsHorizontalPadding)
                                         .then(lyricsMotion),
@@ -1914,8 +1927,7 @@ internal fun NowPlayingScreen(
                     }
 
                     Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
+                        modifier = portraitContentWidthModifier
                             .padding(bottom = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
