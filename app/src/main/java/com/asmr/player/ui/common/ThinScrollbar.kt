@@ -135,8 +135,11 @@ private fun Modifier.drawThinScrollbar(
             val trackHeight = (trackBottom - trackTop).coerceAtLeast(0f)
             if (trackHeight <= 0f) return@drawWithContent
 
-            val thumbHeight = (trackHeight * resolvedMetrics.thumbFraction)
-                .coerceIn(minThumbLength.toPx(), trackHeight)
+            val thumbHeight = resolveThinScrollbarThumbHeight(
+                trackHeight = trackHeight,
+                thumbFraction = resolvedMetrics.thumbFraction,
+                minThumbLengthPx = minThumbLength.toPx()
+            ) ?: return@drawWithContent
             val thumbOffsetY = trackTop + (trackHeight - thumbHeight) * resolvedMetrics.offsetFraction
 
             drawRoundRect(
@@ -147,6 +150,18 @@ private fun Modifier.drawThinScrollbar(
             )
         }
     )
+}
+
+internal fun resolveThinScrollbarThumbHeight(
+    trackHeight: Float,
+    thumbFraction: Float,
+    minThumbLengthPx: Float,
+): Float? {
+    if (!trackHeight.isFinite() || !thumbFraction.isFinite() || !minThumbLengthPx.isFinite()) return null
+    if (trackHeight <= 0f) return null
+    val resolvedMinThumbLength = minThumbLengthPx.coerceAtLeast(0f).coerceAtMost(trackHeight)
+    return (trackHeight * thumbFraction.coerceIn(0f, 1f))
+        .coerceIn(resolvedMinThumbLength, trackHeight)
 }
 
 private fun LazyListState.thinScrollbarMetrics(): ThinScrollbarMetrics? {
