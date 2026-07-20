@@ -1865,11 +1865,23 @@ fun MainContainer(
                                             com.asmr.player.ui.calendar.ListeningCalendarScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
-                                                onOpenAlbum = { albumId, rjCode ->
-                                                    if (albumId > 0L) {
-                                                        navigator.openAlbumDetail(albumId = albumId, rj = rjCode.ifBlank { null })
-                                                    } else if (rjCode.isNotBlank()) {
-                                                        navigator.openAlbumDetailByRjStacked(rjCode)
+                                                onOpenAlbum = { session ->
+                                                    AlbumCoverHintStore.record(
+                                                        albumId = session.albumId.takeIf { it > 0L },
+                                                        rjCode = session.rjCode,
+                                                        title = session.title,
+                                                        circle = session.circle,
+                                                        cv = session.cv,
+                                                        coverUrl = session.coverUrl,
+                                                        tags = session.tags
+                                                            .split(',')
+                                                            .map { it.trim() }
+                                                            .filter { it.isNotBlank() }
+                                                    )
+                                                    if (session.albumId > 0L) {
+                                                        navigator.openAlbumDetail(albumId = session.albumId, rj = null)
+                                                    } else if (session.rjCode.isNotBlank()) {
+                                                        navigator.openAlbumDetailByRjStacked(session.rjCode)
                                                     }
                                                 },
                                                 viewModel = listeningCalendarViewModel

@@ -588,7 +588,7 @@ class PlaybackService : MediaSessionService() {
             albumId = albumId,
             rjCode = rjCode,
             title = metadata.title?.toString().orEmpty(),
-            cv = metadata.artist?.toString().orEmpty(),
+            artist = metadata.artist?.toString().orEmpty(),
             albumTitle = metadata.albumTitle?.toString().orEmpty(),
             artworkUri = metadata.artworkUri?.toString()
         )

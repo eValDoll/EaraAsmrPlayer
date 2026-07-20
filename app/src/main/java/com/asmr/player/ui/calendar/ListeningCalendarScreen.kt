@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,9 +23,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.IntrinsicSize
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -32,29 +30,33 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccessTime
 import androidx.compose.material.icons.rounded.Audiotrack
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.EventAvailable
+import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.Person
-import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -65,7 +67,6 @@ import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.theme.AsmrColorScheme
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.util.ListeningDay
-import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -76,23 +77,21 @@ import java.util.Locale
  * 由原"DLsite 登录"页扩展而来：登录能力弱化为二级入口（顶部按钮），
  * 主体是收听热度图（贡献图）+ 汇总统计，点击某天可查看当日的垂直时间线。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ListeningCalendarScreen(
     windowSizeClass: WindowSizeClass,
     onOpenDlsiteLogin: () -> Unit,
-    onOpenAlbum: (albumId: Long, rjCode: String) -> Unit,
+    onOpenAlbum: (ListeningSessionEntity) -> Unit,
     viewModel: ListeningCalendarViewModel = hiltViewModel()
 ) {
     val summary by viewModel.summary.collectAsState()
     val heatmap by viewModel.heatmap.collectAsState()
+    val availableYears by viewModel.availableYears.collectAsState()
+    val selectedYear by viewModel.selectedYear.collectAsState()
     val selectedDate by viewModel.selectedDate.collectAsState()
     val selectedSessions by viewModel.selectedSessions.collectAsState()
     val colorScheme = AsmrTheme.colorScheme
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
-
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val scope = rememberCoroutineScope()
 
     Box(
         modifier = Modifier
@@ -119,27 +118,27 @@ fun ListeningCalendarScreen(
 
             HeatmapSection(
                 days = heatmap,
+                selectedDate = selectedDate,
+                availableYears = availableYears,
+                selectedYear = selectedYear,
                 colorScheme = colorScheme,
-                onDayClick = { viewModel.selectDate(it) }
-            )
-        }
-    }
-
-    if (selectedDate != null) {
-        ModalBottomSheet(
-            onDismissRequest = { viewModel.selectDate(null) },
-            sheetState = sheetState
-        ) {
-            DayTimeline(
-                date = selectedDate!!,
-                sessions = selectedSessions,
-                colorScheme = colorScheme,
-                onOpenAlbum = { albumId, rjCode ->
-                    scope.launch { sheetState.hide() }
-                    viewModel.selectDate(null)
-                    onOpenAlbum(albumId, rjCode)
+                onYearSelected = { viewModel.selectYear(it) },
+                onDayClick = { date ->
+                    viewModel.selectDate(if (selectedDate == date) null else date)
                 }
             )
+
+            selectedDate?.let { date ->
+                DayTimeline(
+                    date = date,
+                    sessions = selectedSessions,
+                    colorScheme = colorScheme,
+                    onOpenAlbum = { session ->
+                        viewModel.selectDate(null)
+                        onOpenAlbum(session)
+                    }
+                )
+            }
         }
     }
 }
@@ -280,15 +279,32 @@ private fun SummaryCell(
 @Composable
 private fun HeatmapSection(
     days: List<HeatmapDay>,
+    selectedDate: String?,
+    availableYears: List<Int>,
+    selectedYear: Int,
     colorScheme: AsmrColorScheme,
+    onYearSelected: (Int) -> Unit,
     onDayClick: (String) -> Unit
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text(
-            text = "收听热度",
-            style = MaterialTheme.typography.labelSmall,
-            color = colorScheme.textSecondary
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "收听热度",
+                style = MaterialTheme.typography.labelSmall,
+                color = colorScheme.textSecondary,
+                modifier = Modifier.weight(1f)
+            )
+            YearSelector(
+                years = availableYears,
+                selectedYear = selectedYear,
+                colorScheme = colorScheme,
+                onYearSelected = onYearSelected
+            )
+        }
         if (days.isEmpty()) {
             Text(
                 text = "还没有收听记录，去听点什么吧～",
@@ -297,21 +313,33 @@ private fun HeatmapSection(
             )
         } else {
             val columns = remember(days) { buildHeatmapColumns(days) }
-            val listState = rememberLazyListState()
-            // 默认滚动到最新（最右侧）。
-            LaunchedEffect(columns.size) {
-                if (columns.isNotEmpty()) listState.scrollToItem(columns.size - 1)
+            val monthLabels = remember(columns) { buildHeatmapMonthLabels(columns) }
+            val scrollState = rememberScrollState()
+            LaunchedEffect(selectedYear, columns.size) {
+                if (columns.isNotEmpty()) {
+                    withFrameNanos { }
+                    scrollState.scrollTo(scrollState.maxValue)
+                }
             }
 
-            LazyRow(
-                state = listState,
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(CELL_GAP)
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(scrollState),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                items(columns.size) { columnIndex ->
-                    Column(verticalArrangement = Arrangement.spacedBy(CELL_GAP)) {
-                        columns[columnIndex].forEach { day ->
-                            HeatmapCell(day = day, colorScheme = colorScheme, onDayClick = onDayClick)
+                HeatmapMonthLabelRow(labels = monthLabels, colorScheme = colorScheme)
+                Row(horizontalArrangement = Arrangement.spacedBy(CELL_GAP)) {
+                    columns.forEach { column ->
+                        Column(verticalArrangement = Arrangement.spacedBy(CELL_GAP)) {
+                            column.forEach { day ->
+                                HeatmapCell(
+                                    day = day,
+                                    selected = day?.date == selectedDate,
+                                    colorScheme = colorScheme,
+                                    onDayClick = onDayClick
+                                )
+                            }
                         }
                     }
                 }
@@ -323,8 +351,88 @@ private fun HeatmapSection(
 }
 
 @Composable
+private fun YearSelector(
+    years: List<Int>,
+    selectedYear: Int,
+    colorScheme: AsmrColorScheme,
+    onYearSelected: (Int) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    Box {
+        OutlinedButton(
+            onClick = { expanded = true },
+            enabled = years.size > 1,
+            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+        ) {
+            Text(
+                text = "${selectedYear} 年",
+                style = MaterialTheme.typography.labelMedium,
+                color = if (years.size > 1) colorScheme.textPrimary else colorScheme.textSecondary
+            )
+            Icon(
+                imageVector = Icons.Rounded.KeyboardArrowDown,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp),
+                tint = colorScheme.textSecondary
+            )
+        }
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            years.forEach { year ->
+                DropdownMenuItem(
+                    text = { Text("${year} 年") },
+                    leadingIcon = if (year == selectedYear) {
+                        {
+                            Icon(
+                                imageVector = Icons.Rounded.Check,
+                                contentDescription = null,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    } else {
+                        null
+                    },
+                    onClick = {
+                        expanded = false
+                        onYearSelected(year)
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun HeatmapMonthLabelRow(
+    labels: List<HeatmapMonthLabel>,
+    colorScheme: AsmrColorScheme
+) {
+    Row(horizontalArrangement = Arrangement.spacedBy(CELL_GAP)) {
+        labels.forEach { label ->
+            Box(
+                modifier = Modifier
+                    .width(heatmapSpanWidth(label.span))
+                    .height(16.dp),
+                contentAlignment = Alignment.CenterStart
+            ) {
+                Text(
+                    text = label.text,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = colorScheme.textSecondary,
+                    fontSize = 10.sp,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun HeatmapCell(
     day: HeatmapDay?,
+    selected: Boolean,
     colorScheme: AsmrColorScheme,
     onDayClick: (String) -> Unit
 ) {
@@ -333,15 +441,18 @@ private fun HeatmapCell(
         Spacer(modifier = Modifier.size(CELL_SIZE))
     } else {
         val color = heatColorForLevel(day.level, colorScheme)
+        val borderStroke = when {
+            selected -> BorderStroke(1.4.dp, colorScheme.primary)
+            day.level == 0 -> BorderStroke(0.5.dp, colorScheme.onSurface.copy(alpha = 0.08f))
+            else -> null
+        }
         Box(
             modifier = Modifier
                 .size(CELL_SIZE)
                 .clip(shape)
                 .background(color)
                 .then(
-                    if (day.level == 0) {
-                        Modifier.border(BorderStroke(0.5.dp, colorScheme.onSurface.copy(alpha = 0.08f)), shape)
-                    } else Modifier
+                    if (borderStroke != null) Modifier.border(borderStroke, shape) else Modifier
                 )
                 .clickable { onDayClick(day.date) }
         )
@@ -382,12 +493,12 @@ private fun DayTimeline(
     date: String,
     sessions: List<ListeningSessionEntity>,
     colorScheme: AsmrColorScheme,
-    onOpenAlbum: (albumId: Long, rjCode: String) -> Unit
+    onOpenAlbum: (ListeningSessionEntity) -> Unit
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp)
+            .padding(top = 4.dp)
             .padding(bottom = 24.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
     ) {
@@ -420,7 +531,7 @@ private fun DayTimeline(
                     session = session,
                     isLast = index == sessions.lastIndex,
                     colorScheme = colorScheme,
-                    onClick = { onOpenAlbum(session.albumId, session.rjCode) }
+                    onClick = { onOpenAlbum(session) }
                 )
             }
         }
@@ -434,6 +545,13 @@ private fun TimelineRow(
     colorScheme: AsmrColorScheme,
     onClick: () -> Unit
 ) {
+    val metaLine = remember(session.circle, session.cv) {
+        listOf(session.circle, session.cv)
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+            .joinToString(" / ")
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -468,7 +586,7 @@ private fun TimelineRow(
             }
         }
 
-        // 右侧作品简要卡片：封面 + 小字号标题 + cv
+        // 右侧作品简要卡片：封面 + 小字号标题 + 社团/CV
         Row(
             modifier = Modifier
                 .weight(1f)
@@ -500,9 +618,9 @@ private fun TimelineRow(
                     color = colorScheme.textPrimary,
                     maxLines = 2
                 )
-                if (session.cv.isNotBlank()) {
+                if (metaLine.isNotBlank()) {
                     Text(
-                        text = session.cv,
+                        text = metaLine,
                         style = MaterialTheme.typography.labelSmall,
                         color = colorScheme.textSecondary,
                         fontSize = 10.sp,
@@ -537,6 +655,39 @@ fun buildHeatmapColumns(days: List<HeatmapDay>): List<List<HeatmapDay?>> {
     // 尾部补齐到 7 的整数倍
     while (cells.size % 7 != 0) cells.add(null)
     return cells.chunked(7)
+}
+
+internal data class HeatmapMonthLabel(
+    val text: String,
+    val span: Int
+)
+
+internal fun buildHeatmapMonthLabels(columns: List<List<HeatmapDay?>>): List<HeatmapMonthLabel> {
+    if (columns.isEmpty()) return emptyList()
+    val markers = ArrayList<Pair<Int, String>>()
+    columns.forEachIndexed { columnIndex, column ->
+        val realDays = column.filterNotNull()
+        val firstDay = realDays.firstOrNull() ?: return@forEachIndexed
+        val monthStartDay = realDays.firstOrNull { it.date.length >= 10 && it.date.substring(8, 10) == "01" }
+        if (columnIndex == 0 || monthStartDay != null) {
+            val label = formatMonthLabel((monthStartDay ?: firstDay).date)
+            if (label.isNotBlank() && markers.lastOrNull()?.second != label) {
+                markers.add(columnIndex to label)
+            }
+        }
+    }
+    return markers.mapIndexed { index, marker ->
+        val nextColumnIndex = markers.getOrNull(index + 1)?.first ?: columns.size
+        HeatmapMonthLabel(
+            text = marker.second,
+            span = (nextColumnIndex - marker.first).coerceAtLeast(1)
+        )
+    }
+}
+
+private fun heatmapSpanWidth(span: Int): Dp {
+    val safeSpan = span.coerceAtLeast(1)
+    return CELL_SIZE * safeSpan.toFloat() + CELL_GAP * (safeSpan - 1).toFloat()
 }
 
 private fun heatColorForLevel(level: Int, colorScheme: AsmrColorScheme): Color {
@@ -579,4 +730,18 @@ private fun formatDateHeader(date: String): String {
         val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(date) ?: return date
         SimpleDateFormat("yyyy 年 M 月 d 日", Locale.getDefault()).format(parsed)
     }.getOrDefault(date)
+}
+
+private fun formatMonthLabel(date: String): String {
+    return runCatching {
+        val parsed = SimpleDateFormat("yyyy-MM-dd", Locale.US).parse(date)
+            ?: return@runCatching fallbackMonthLabel(date)
+        SimpleDateFormat("M月", Locale.getDefault()).format(parsed)
+    }.getOrElse { fallbackMonthLabel(date) }
+}
+
+private fun fallbackMonthLabel(date: String): String {
+    if (date.length < 7) return date
+    val month = date.substring(5, 7).trimStart('0').ifBlank { date.substring(5, 7) }
+    return "${month}月"
 }

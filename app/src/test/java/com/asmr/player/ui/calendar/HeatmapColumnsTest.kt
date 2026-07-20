@@ -3,8 +3,10 @@ package com.asmr.player.ui.calendar
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import com.asmr.player.util.ListeningDay
 import java.util.TimeZone
 
 class HeatmapColumnsTest {
@@ -59,5 +61,15 @@ class HeatmapColumnsTest {
         assertEquals("2026-07-26", columns[1][0]?.date)
         assertNull(columns[1][1])
         assertNull(columns[1][6])
+    }
+
+    @Test
+    fun monthLabelsSpanMonthlyBoundaries() {
+        val days = ListeningDay.datesBetween("2026-01-01", "2026-02-10").map(::day)
+        val columns = buildHeatmapColumns(days)
+        val labels = buildHeatmapMonthLabels(columns)
+        assertEquals(listOf("1月", "2月"), labels.map { it.text })
+        assertTrue(labels.all { it.span > 0 })
+        assertEquals(columns.size, labels.sumOf { it.span })
     }
 }

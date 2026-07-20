@@ -27,4 +27,31 @@ class ListeningCalendarViewModelTest {
         assertEquals(4, ListeningCalendarViewModel.levelFor(90L, peak)) // 0.90
         assertEquals(4, ListeningCalendarViewModel.levelFor(100L, peak)) // peak -> level 4
     }
+
+    @Test
+    fun dateRangeForYear_usesCurrentDayForCurrentYear() {
+        assertEquals(
+            "2026-01-01" to "2026-07-20",
+            ListeningCalendarViewModel.dateRangeForYear(2026, "2026-07-20")
+        )
+    }
+
+    @Test
+    fun dateRangeForYear_usesFullYearForPastYears() {
+        assertEquals(
+            "2025-01-01" to "2025-12-31",
+            ListeningCalendarViewModel.dateRangeForYear(2025, "2026-07-20")
+        )
+    }
+
+    @Test
+    fun availableYearsForDates_includesCurrentYearAndHistoricalYears() {
+        assertEquals(
+            listOf(2026, 2025, 2024),
+            ListeningCalendarViewModel.availableYearsForDates(
+                listOf("2024-04-01", "2026-01-01"),
+                currentYear = 2026
+            )
+        )
+    }
 }

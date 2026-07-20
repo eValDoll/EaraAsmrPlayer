@@ -20,10 +20,26 @@ data class ListeningTrackContext(
     val albumId: Long,
     val rjCode: String,
     val title: String,
-    val cv: String,
+    val artist: String,
     val albumTitle: String,
     val artworkUri: String?
 )
+
+internal data class ListeningArtistMeta(
+    val circle: String,
+    val cv: String
+)
+
+internal fun parseListeningArtistMeta(artist: String): ListeningArtistMeta {
+    val normalized = artist.trim()
+    if (normalized.isBlank()) return ListeningArtistMeta(circle = "", cv = "")
+    val parts = normalized.split(" / ", limit = 2).map { it.trim() }
+    return if (parts.size == 2) {
+        ListeningArtistMeta(circle = parts[0], cv = parts[1])
+    } else {
+        ListeningArtistMeta(circle = "", cv = normalized)
+    }
+}
 
 /**
  * 会话级收听记录仓库。
@@ -134,12 +150,14 @@ class ListeningRecordRepository @Inject constructor(
     /** 用作品上下文 + 本地作品表补齐 circle/tags/cover 等快照信息。 */
     private suspend fun buildSnapshot(context: ListeningTrackContext): ListeningSessionEntity {
         val album = if (context.albumId > 0L) runCatching { albumDao.getAlbumById(context.albumId) }.getOrNull() else null
+        val artistMeta = parseListeningArtistMeta(context.artist)
+        val fallbackTitle = context.albumTitle.ifBlank { context.title }
         return ListeningSessionEntity(
             albumId = context.albumId,
             rjCode = context.rjCode.ifBlank { album?.rjCode.orEmpty() },
-            title = album?.title?.ifBlank { context.albumTitle } ?: context.albumTitle.ifBlank { context.title },
-            circle = album?.circle.orEmpty(),
-            cv = album?.cv?.ifBlank { context.cv } ?: context.cv,
+            title = album?.title?.ifBlank { fallbackTitle } ?: fallbackTitle,
+            circle = album?.circle?.ifBlank { artistMeta.circle } ?: artistMeta.circle,
+            cv = album?.cv?.ifBlank { artistMeta.cv } ?: artistMeta.cv,
             tags = album?.tags.orEmpty(),
             coverUrl = album?.coverUrl?.ifBlank { context.artworkUri.orEmpty() } ?: context.artworkUri.orEmpty(),
             coverPath = album?.coverPath.orEmpty(),

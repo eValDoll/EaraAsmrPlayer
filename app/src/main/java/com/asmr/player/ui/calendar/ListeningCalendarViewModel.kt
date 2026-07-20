@@ -13,8 +13,10 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
+import java.util.Locale
 
 /** 热度图中单个格子的数据（一天）。 */
 data class HeatmapDay(
@@ -39,11 +41,8 @@ class ListeningCalendarViewModel @Inject constructor(
     private val listeningRecordRepository: ListeningRecordRepository
 ) : ViewModel() {
 
-    /** 热度图展示的时间跨度（天）。默认最近一年。 */
-    private val rangeDays = 371 // 53 周 * 7，保证整周对齐
-
-    private val startDate = ListeningDay.dateDaysAgo(rangeDays - 1)
-    private val endDate = ListeningDay.currentDate()
+    private val currentDate = ListeningDay.currentDate()
+    private val currentYear = yearOf(currentDate) ?: 0
 
     /** 全部历史每日统计，用于汇总。 */
     val summary: StateFlow<ListeningSummary> =
@@ -58,16 +57,29 @@ class ListeningCalendarViewModel @Inject constructor(
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ListeningSummary())
 
+    /** 可切换的年份列表，默认包含当前年，按新到旧排序。 */
+    val availableYears: StateFlow<List<Int>> =
+        statisticsRepository.observeAllStats()
+            .map { stats -> availableYearsForDates(stats.map { it.date }, currentYear) }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf(currentYear))
+
+    private val _selectedYear = MutableStateFlow(currentYear)
+    val selectedYear: StateFlow<Int> = _selectedYear
+
     /** 热度图数据：区间内每一天（补齐无数据的日子）。 */
     val heatmap: StateFlow<List<HeatmapDay>> =
-        statisticsRepository.observeStatsBetween(startDate, endDate)
-            .map { stats ->
-                val byDate = stats.associateBy { it.date }
-                val maxDuration = stats.maxOfOrNull { it.listeningDurationMs } ?: 0L
-                ListeningDay.datesBetween(startDate, endDate).map { date ->
-                    val duration = byDate[date]?.listeningDurationMs ?: 0L
-                    HeatmapDay(date = date, durationMs = duration, level = levelFor(duration, maxDuration))
-                }
+        _selectedYear
+            .flatMapLatest { year ->
+                val (startDate, endDate) = dateRangeForYear(year, currentDate)
+                statisticsRepository.observeStatsBetween(startDate, endDate)
+                    .map { stats ->
+                        val byDate = stats.associateBy { it.date }
+                        val maxDuration = stats.maxOfOrNull { it.listeningDurationMs } ?: 0L
+                        ListeningDay.datesBetween(startDate, endDate).map { date ->
+                            val duration = byDate[date]?.listeningDurationMs ?: 0L
+                            HeatmapDay(date = date, durationMs = duration, level = levelFor(duration, maxDuration))
+                        }
+                    }
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -79,7 +91,7 @@ class ListeningCalendarViewModel @Inject constructor(
         _selectedDate
             .flatMapLatest { date ->
                 if (date == null) {
-                    MutableStateFlow(emptyList())
+                    flowOf(emptyList())
                 } else {
                     listeningRecordRepository.observeSessionsForDate(date)
                 }
@@ -88,6 +100,13 @@ class ListeningCalendarViewModel @Inject constructor(
 
     fun selectDate(date: String?) {
         _selectedDate.value = date
+    }
+
+    fun selectYear(year: Int) {
+        if (year <= 0 || year > currentYear) return
+        if (_selectedYear.value == year) return
+        _selectedDate.value = null
+        _selectedYear.value = year
     }
 
     companion object {
@@ -105,6 +124,30 @@ class ListeningCalendarViewModel @Inject constructor(
                 ratio <= 0.75 -> 3
                 else -> 4
             }
+        }
+
+        internal fun dateRangeForYear(year: Int, currentDate: String): Pair<String, String> {
+            val safeCurrentYear = yearOf(currentDate) ?: year
+            val targetYear = year.coerceAtMost(safeCurrentYear)
+            val startDate = formatYearDate(targetYear, 1, 1)
+            val endDate = if (targetYear == safeCurrentYear) currentDate else formatYearDate(targetYear, 12, 31)
+            return startDate to endDate
+        }
+
+        internal fun availableYearsForDates(dates: List<String>, currentYear: Int): List<Int> {
+            val earliestYear = dates.mapNotNull { yearOf(it) }
+                .filter { it <= currentYear }
+                .minOrNull()
+                ?: currentYear
+            return (currentYear downTo earliestYear).toList()
+        }
+
+        internal fun yearOf(date: String): Int? {
+            return date.take(4).toIntOrNull()
+        }
+
+        private fun formatYearDate(year: Int, month: Int, day: Int): String {
+            return String.format(Locale.US, "%04d-%02d-%02d", year, month, day)
         }
     }
 }
