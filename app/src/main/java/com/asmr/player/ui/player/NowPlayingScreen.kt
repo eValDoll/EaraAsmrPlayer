@@ -136,23 +136,89 @@ private enum class NowPlayingSurfaceMode {
 private const val VideoProgressUiTickMs = 1_000L
 private const val NowPlayingHomeLayoutAnimationDurationMillis = 620
 private val NowPlayingPortraitMaxContentWidth = 600.dp
+private val NowPlayingCompactShortScreenHeight = 620.dp
+private val NowPlayingHomeAudienceTopSafePadding = 20.dp
+private val NowPlayingHomeClassicIdentityHeight = 28.dp
+private val NowPlayingHomeClassicLyricsReserveHeight = 72.dp
+private val NowPlayingHomeExpandedLyricsReserveHeight = 118.dp
+private val NowPlayingHomeCompactMinCoverWidth = 180.dp
+private val NowPlayingHomeRegularMinCoverWidth = 240.dp
+
+internal fun nowPlayingHomeTopPadding(
+    expanded: Boolean,
+    screenHeight: Dp,
+    widthClass: WindowWidthSizeClass
+): Dp {
+    if (expanded) return 0.dp
+    return if (widthClass == WindowWidthSizeClass.Compact && screenHeight.isFiniteDp() &&
+        screenHeight < NowPlayingCompactShortScreenHeight
+    ) {
+        NowPlayingHomeAudienceTopSafePadding
+    } else {
+        24.dp
+    }
+}
+
+internal fun nowPlayingHomeCoverVerticalPadding(
+    expanded: Boolean,
+    screenHeight: Dp,
+    widthClass: WindowWidthSizeClass
+): Dp {
+    if (expanded) return 0.dp
+    return when {
+        widthClass != WindowWidthSizeClass.Compact -> 32.dp
+        screenHeight.isFiniteDp() && screenHeight < NowPlayingCompactShortScreenHeight -> 8.dp
+        else -> 16.dp
+    }
+}
 
 internal fun nowPlayingHomeCoverWidth(
     expanded: Boolean,
     availableWidth: Dp,
+    availableHeight: Dp = Dp.Unspecified,
     widthClass: WindowWidthSizeClass,
-    contentHorizontalPadding: Dp
+    contentHorizontalPadding: Dp,
+    coverAspectRatio: Float = 1f,
+    topPadding: Dp = if (expanded) 0.dp else 24.dp,
+    coverVerticalPadding: Dp = if (expanded) 0.dp else if (widthClass == WindowWidthSizeClass.Compact) 16.dp else 32.dp,
+    identityHeight: Dp = if (expanded) 0.dp else NowPlayingHomeClassicIdentityHeight,
+    lyricsReserveHeight: Dp = if (expanded) NowPlayingHomeExpandedLyricsReserveHeight else NowPlayingHomeClassicLyricsReserveHeight
 ): Dp {
     val fullWidth = availableWidth.coerceAtLeast(1.dp)
-    if (expanded) return fullWidth
-
-    val paddedWidth = (fullWidth - contentHorizontalPadding * 2).coerceAtLeast(1.dp)
-    return if (widthClass == WindowWidthSizeClass.Compact) {
-        paddedWidth
+    val widthBound = if (expanded) {
+        fullWidth
     } else {
-        paddedWidth.coerceAtMost(400.dp)
+        val paddedWidth = (fullWidth - contentHorizontalPadding * 2).coerceAtLeast(1.dp)
+        if (widthClass == WindowWidthSizeClass.Compact) {
+            paddedWidth
+        } else {
+            paddedWidth.coerceAtMost(400.dp)
+        }
+    }
+    if (!availableHeight.isFiniteDp()) return widthBound
+
+    val safeAspectRatio = coverAspectRatio
+        .takeIf { it.isFinite() && it > 0f }
+        ?.coerceIn(0.5f, 3f)
+        ?: 1f
+    val reservedHeight = topPadding +
+        coverVerticalPadding * 2 +
+        identityHeight +
+        lyricsReserveHeight
+    val heightLimitedWidth = ((availableHeight - reservedHeight).coerceAtLeast(1.dp) * safeAspectRatio)
+        .coerceAtLeast(nowPlayingHomeMinCoverWidth(widthClass).coerceAtMost(widthBound))
+    return widthBound.coerceAtMost(heightLimitedWidth)
+}
+
+private fun nowPlayingHomeMinCoverWidth(widthClass: WindowWidthSizeClass): Dp {
+    return if (widthClass == WindowWidthSizeClass.Compact) {
+        NowPlayingHomeCompactMinCoverWidth
+    } else {
+        NowPlayingHomeRegularMinCoverWidth
     }
 }
+
+private fun Dp.isFiniteDp(): Boolean = value.isFinite()
 
 private data class NowPlayingStaticPlayback(
     val isConnected: Boolean,
@@ -1601,6 +1667,7 @@ internal fun NowPlayingScreen(
                 !homeLayoutHintDismissedInSession &&
                 !isVideo
             val portraitContentHorizontalPadding = 24.dp
+            val portraitScreenHeight = configuration.screenHeightDp.dp
             val homeBezier = remember { CubicBezierEasing(0.20f, 0f, 0f, 1f) }
             val homeLayoutDurationMillis = NowPlayingHomeLayoutAnimationDurationMillis
             val homeFadeInDurationMillis = 240
@@ -1628,7 +1695,11 @@ internal fun NowPlayingScreen(
                 },
                 label = "nowPlayingHomeTopPadding"
             ) { expanded ->
-                if (expanded) 0.dp else 24.dp
+                nowPlayingHomeTopPadding(
+                    expanded = expanded,
+                    screenHeight = portraitScreenHeight,
+                    widthClass = widthClass
+                )
             }
             val coverVerticalPadding by homeLayoutTransition.animateDp(
                 transitionSpec = {
@@ -1636,7 +1707,11 @@ internal fun NowPlayingScreen(
                 },
                 label = "nowPlayingHomeCoverVerticalPadding"
             ) { expanded ->
-                if (expanded) 0.dp else if (widthClass == WindowWidthSizeClass.Compact) 16.dp else 32.dp
+                nowPlayingHomeCoverVerticalPadding(
+                    expanded = expanded,
+                    screenHeight = portraitScreenHeight,
+                    widthClass = widthClass
+                )
             }
             val lyricsTopPadding by homeLayoutTransition.animateDp(
                 transitionSpec = {
@@ -1676,7 +1751,7 @@ internal fun NowPlayingScreen(
                 },
                 label = "nowPlayingHomeClassicIdentityHeight"
             ) { expanded ->
-                if (expanded) 0.dp else 28.dp
+                if (expanded) 0.dp else NowPlayingHomeClassicIdentityHeight
             }
             val classicIdentityAlpha by homeLayoutTransition.animateFloat(
                 transitionSpec = {
@@ -1737,12 +1812,13 @@ internal fun NowPlayingScreen(
                     modifier = Modifier.fillMaxSize(),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Box(
+                    BoxWithConstraints(
                         modifier = Modifier
                             .fillMaxWidth()
                             .weight(1f)
                             .clipToBounds()
                     ) {
+                        val portraitTopContentMaxHeight = maxHeight
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -1802,8 +1878,20 @@ internal fun NowPlayingScreen(
                                         nowPlayingHomeCoverWidth(
                                             expanded = expanded,
                                             availableWidth = maxWidth,
+                                            availableHeight = portraitTopContentMaxHeight,
                                             widthClass = widthClass,
-                                            contentHorizontalPadding = portraitContentHorizontalPadding
+                                            contentHorizontalPadding = portraitContentHorizontalPadding,
+                                            coverAspectRatio = if (expanded) artworkAspectRatio else 1f,
+                                            topPadding = nowPlayingHomeTopPadding(
+                                                expanded = expanded,
+                                                screenHeight = portraitScreenHeight,
+                                                widthClass = widthClass
+                                            ),
+                                            coverVerticalPadding = nowPlayingHomeCoverVerticalPadding(
+                                                expanded = expanded,
+                                                screenHeight = portraitScreenHeight,
+                                                widthClass = widthClass
+                                            )
                                         )
                                     }
                                     Box(

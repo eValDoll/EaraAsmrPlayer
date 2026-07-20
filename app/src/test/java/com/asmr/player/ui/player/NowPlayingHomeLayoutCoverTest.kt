@@ -31,4 +31,69 @@ class NowPlayingHomeLayoutCoverTest {
             )
         )
     }
+
+    @Test
+    fun compactClassicCoverShrinksWhenTopContentHeightIsShort() {
+        val screenHeight = 592.dp
+
+        assertEquals(
+            224.dp,
+            nowPlayingHomeCoverWidth(
+                expanded = false,
+                availableWidth = 360.dp,
+                availableHeight = 360.dp,
+                widthClass = WindowWidthSizeClass.Compact,
+                contentHorizontalPadding = 24.dp,
+                topPadding = nowPlayingHomeTopPadding(
+                    expanded = false,
+                    screenHeight = screenHeight,
+                    widthClass = WindowWidthSizeClass.Compact
+                ),
+                coverVerticalPadding = nowPlayingHomeCoverVerticalPadding(
+                    expanded = false,
+                    screenHeight = screenHeight,
+                    widthClass = WindowWidthSizeClass.Compact
+                )
+            )
+        )
+    }
+
+    @Test
+    fun compactClassicTopPaddingKeepsAudienceLineVisible() {
+        assertEquals(
+            20.dp,
+            nowPlayingHomeTopPadding(
+                expanded = false,
+                screenHeight = 592.dp,
+                widthClass = WindowWidthSizeClass.Compact
+            )
+        )
+    }
+
+    @Test
+    fun compactExpandedCoverReservesLyricsRoomWhenTopContentHeightIsShort() {
+        val screenHeight = 592.dp
+
+        assertEquals(
+            242.dp,
+            nowPlayingHomeCoverWidth(
+                expanded = true,
+                availableWidth = 360.dp,
+                availableHeight = 360.dp,
+                widthClass = WindowWidthSizeClass.Compact,
+                contentHorizontalPadding = 24.dp,
+                coverAspectRatio = 1f,
+                topPadding = nowPlayingHomeTopPadding(
+                    expanded = true,
+                    screenHeight = screenHeight,
+                    widthClass = WindowWidthSizeClass.Compact
+                ),
+                coverVerticalPadding = nowPlayingHomeCoverVerticalPadding(
+                    expanded = true,
+                    screenHeight = screenHeight,
+                    widthClass = WindowWidthSizeClass.Compact
+                )
+            )
+        )
+    }
 }
