@@ -46,11 +46,11 @@ interface ListeningSessionDao {
     @Query("SELECT * FROM listening_sessions WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): ListeningSessionEntity?
 
-    /** 某收听日的全部会话，按开始时间升序（用于垂直时间线）。 */
-    @Query("SELECT * FROM listening_sessions WHERE listeningDate = :date ORDER BY startAtMs ASC")
+    /** 某收听日的全部会话，按开始时间降序（用于顶部最新、底部最旧的垂直时间线）。 */
+    @Query("SELECT * FROM listening_sessions WHERE listeningDate = :date ORDER BY startAtMs DESC")
     fun observeSessionsForDate(date: String): Flow<List<ListeningSessionEntity>>
 
-    @Query("SELECT * FROM listening_sessions WHERE listeningDate = :date ORDER BY startAtMs ASC")
+    @Query("SELECT * FROM listening_sessions WHERE listeningDate = :date ORDER BY startAtMs DESC")
     suspend fun getSessionsForDate(date: String): List<ListeningSessionEntity>
 
     // ---- 年度报告数据基础：聚合查询 ----

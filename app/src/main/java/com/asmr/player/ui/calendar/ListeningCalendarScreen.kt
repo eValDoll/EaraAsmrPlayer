@@ -5,23 +5,20 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -39,11 +36,11 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -55,14 +52,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.asmr.player.data.local.db.entities.ListeningSessionEntity
 import com.asmr.player.ui.common.AsmrAsyncImage
-import com.asmr.player.ui.common.StableWindowInsets
+import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.theme.AsmrColorScheme
 import com.asmr.player.ui.theme.AsmrTheme
@@ -90,13 +91,28 @@ fun ListeningCalendarScreen(
     val selectedYear by viewModel.selectedYear.collectAsState()
     val selectedDate by viewModel.selectedDate.collectAsState()
     val selectedSessions by viewModel.selectedSessions.collectAsState()
+    val isDlsiteLoggedIn by viewModel.isDlsiteLoggedIn.collectAsState()
     val colorScheme = AsmrTheme.colorScheme
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
+    val bottomOverlayPadding = LocalBottomOverlayPadding.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    LaunchedEffect(Unit) {
+        viewModel.refreshDlsiteLoginState()
+    }
+
+    DisposableEffect(lifecycleOwner, viewModel) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshDlsiteLoginState()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(StableWindowInsets.navigationBars.only(WindowInsetsSides.Bottom)),
+        modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.TopCenter
     ) {
         Column(
@@ -109,10 +125,19 @@ fun ListeningCalendarScreen(
                     .fillMaxWidth()
             })
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp),
+                .padding(
+                    start = 16.dp,
+                    top = 16.dp,
+                    end = 16.dp,
+                    bottom = bottomOverlayPadding + 24.dp
+                ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            DlsiteAccountRow(onOpenDlsiteLogin = onOpenDlsiteLogin, colorScheme = colorScheme)
+            DlsiteAccountRow(
+                onOpenDlsiteLogin = onOpenDlsiteLogin,
+                isLoggedIn = isDlsiteLoggedIn,
+                colorScheme = colorScheme
+            )
 
             SummaryCards(summary = summary, colorScheme = colorScheme)
 
@@ -124,7 +149,7 @@ fun ListeningCalendarScreen(
                 colorScheme = colorScheme,
                 onYearSelected = { viewModel.selectYear(it) },
                 onDayClick = { date ->
-                    viewModel.selectDate(if (selectedDate == date) null else date)
+                    viewModel.selectDate(date)
                 }
             )
 
@@ -146,6 +171,7 @@ fun ListeningCalendarScreen(
 @Composable
 private fun DlsiteAccountRow(
     onOpenDlsiteLogin: () -> Unit,
+    isLoggedIn: Boolean,
     colorScheme: AsmrColorScheme
 ) {
     Row(
@@ -160,21 +186,54 @@ private fun DlsiteAccountRow(
             tint = colorScheme.textSecondary
         )
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = "DLsite 账号",
-                style = MaterialTheme.typography.bodyMedium,
-                color = colorScheme.textPrimary,
-                fontWeight = FontWeight.Medium
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = "DLsite 账号",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colorScheme.textPrimary,
+                    fontWeight = FontWeight.Medium
+                )
+                DlsiteLoginStatusTag(isLoggedIn = isLoggedIn, colorScheme = colorScheme)
+            }
             Text(
                 text = "用于「已购」搜索鉴权",
                 style = MaterialTheme.typography.labelSmall,
                 color = colorScheme.textSecondary
             )
         }
-        OutlinedButton(onClick = onOpenDlsiteLogin) {
-            Text("管理")
-        }
+        SmallCalendarButton(
+            label = "管理",
+            colorScheme = colorScheme,
+            onClick = onOpenDlsiteLogin
+        )
+    }
+}
+
+@Composable
+private fun DlsiteLoginStatusTag(
+    isLoggedIn: Boolean,
+    colorScheme: AsmrColorScheme
+) {
+    val statusColor = if (isLoggedIn) colorScheme.primaryStrong else colorScheme.danger
+    val shape = RoundedCornerShape(6.dp)
+    Box(
+        modifier = Modifier
+            .clip(shape)
+            .background(statusColor.copy(alpha = if (colorScheme.isDark) 0.18f else 0.10f))
+            .border(BorderStroke(0.6.dp, statusColor.copy(alpha = 0.35f)), shape)
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = if (isLoggedIn) "已登录" else "未登录",
+            style = MaterialTheme.typography.labelSmall,
+            color = statusColor,
+            fontSize = 10.sp,
+            maxLines = 1
+        )
     }
 }
 
@@ -185,7 +244,7 @@ private fun SummaryCards(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(
-            text = "累计收听",
+            text = "今日收听",
             style = MaterialTheme.typography.labelSmall,
             color = colorScheme.textSecondary
         )
@@ -239,17 +298,22 @@ private fun SummaryCell(
     modifier: Modifier = Modifier
 ) {
     val isDark = colorScheme.isDark
-    val containerColor = if (isDark) Color(0xFF1E1E1E) else Color(0xFFF3F4F6)
+    val containerColor = if (isDark) {
+        colorScheme.surfaceVariant.copy(alpha = 0.46f)
+    } else {
+        colorScheme.primarySoft.copy(alpha = 0.52f)
+    }
+    val borderColor = if (isDark) {
+        Color.White.copy(alpha = 0.16f)
+    } else {
+        colorScheme.primaryStrong.copy(alpha = 0.14f)
+    }
     val shape = RoundedCornerShape(14.dp)
     Row(
         modifier = modifier
             .clip(shape)
-            .then(
-                if (isDark) {
-                    Modifier.border(BorderStroke(1.dp, Color.White.copy(alpha = 0.18f)), shape)
-                } else Modifier
-            )
             .background(containerColor)
+            .border(BorderStroke(1.dp, borderColor), shape)
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(10.dp)
@@ -359,23 +423,13 @@ private fun YearSelector(
 ) {
     var expanded by remember { mutableStateOf(false) }
     Box {
-        OutlinedButton(
+        SmallCalendarButton(
+            label = "${selectedYear} 年",
             onClick = { expanded = true },
             enabled = years.size > 1,
-            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
-        ) {
-            Text(
-                text = "${selectedYear} 年",
-                style = MaterialTheme.typography.labelMedium,
-                color = if (years.size > 1) colorScheme.textPrimary else colorScheme.textSecondary
-            )
-            Icon(
-                imageVector = Icons.Rounded.KeyboardArrowDown,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                tint = colorScheme.textSecondary
-            )
-        }
+            colorScheme = colorScheme,
+            trailingIcon = true
+        )
         DropdownMenu(
             expanded = expanded,
             onDismissRequest = { expanded = false }
@@ -400,6 +454,62 @@ private fun YearSelector(
                     }
                 )
             }
+        }
+    }
+}
+
+@Composable
+private fun SmallCalendarButton(
+    label: String,
+    colorScheme: AsmrColorScheme,
+    onClick: () -> Unit,
+    enabled: Boolean = true,
+    trailingIcon: Boolean = false
+) {
+    val shape = RoundedCornerShape(8.dp)
+    val contentColor = if (enabled) colorScheme.primaryStrong else colorScheme.textSecondary
+    val containerColor = if (enabled) {
+        colorScheme.primarySoft.copy(alpha = if (colorScheme.isDark) 0.24f else 0.44f)
+    } else {
+        colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.32f else 0.56f)
+    }
+    val borderColor = if (enabled) {
+        colorScheme.primaryStrong.copy(alpha = 0.24f)
+    } else {
+        colorScheme.onSurface.copy(alpha = 0.10f)
+    }
+
+    Row(
+        modifier = Modifier
+            .height(30.dp)
+            .widthIn(min = 44.dp)
+            .clip(shape)
+            .background(containerColor)
+            .border(BorderStroke(1.dp, borderColor), shape)
+            .clickable(
+                enabled = enabled,
+                role = Role.Button,
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .padding(horizontal = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(3.dp)
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall,
+            color = contentColor,
+            maxLines = 1
+        )
+        if (trailingIcon) {
+            Icon(
+                imageVector = Icons.Rounded.KeyboardArrowDown,
+                contentDescription = null,
+                modifier = Modifier.size(14.dp),
+                tint = contentColor.copy(alpha = 0.82f)
+            )
         }
     }
 }

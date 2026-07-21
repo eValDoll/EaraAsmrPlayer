@@ -1,12 +1,16 @@
 package com.asmr.player.ui.calendar
 
+import android.content.Context
+import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.asmr.player.data.local.db.entities.ListeningSessionEntity
+import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.repository.ListeningRecordRepository
 import com.asmr.player.data.repository.StatisticsRepository
 import com.asmr.player.util.ListeningDay
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -38,22 +42,35 @@ data class ListeningSummary(
 @HiltViewModel
 class ListeningCalendarViewModel @Inject constructor(
     private val statisticsRepository: StatisticsRepository,
-    private val listeningRecordRepository: ListeningRecordRepository
+    private val listeningRecordRepository: ListeningRecordRepository,
+    @ApplicationContext context: Context
 ) : ViewModel() {
 
+    private val authStore = DlsiteAuthStore(context)
+    private val authPreferenceListener = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+        refreshDlsiteLoginState()
+    }
     private val currentDate = ListeningDay.currentDate()
     private val currentYear = yearOf(currentDate) ?: 0
 
-    /** 全部历史每日统计，用于汇总。 */
+    init {
+        authStore.registerListener(authPreferenceListener)
+    }
+
+    /** 今日收听统计，按 [ListeningDay] 的凌晨 5 点重置口径。 */
     val summary: StateFlow<ListeningSummary> =
-        statisticsRepository.observeAllStats()
-            .map { stats ->
-                ListeningSummary(
-                    totalDurationMs = stats.sumOf { it.listeningDurationMs },
-                    totalTrackCount = stats.sumOf { it.trackCount },
-                    totalTrafficBytes = stats.sumOf { it.networkTrafficBytes },
-                    activeDayCount = stats.count { it.listeningDurationMs > 0L }
-                )
+        statisticsRepository.observeTodayStats()
+            .map { stat ->
+                if (stat == null) {
+                    ListeningSummary()
+                } else {
+                    ListeningSummary(
+                        totalDurationMs = stat.listeningDurationMs,
+                        totalTrackCount = stat.trackCount,
+                        totalTrafficBytes = stat.networkTrafficBytes,
+                        activeDayCount = if (stat.listeningDurationMs > 0L) 1 else 0
+                    )
+                }
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ListeningSummary())
 
@@ -74,17 +91,19 @@ class ListeningCalendarViewModel @Inject constructor(
                 statisticsRepository.observeStatsBetween(startDate, endDate)
                     .map { stats ->
                         val byDate = stats.associateBy { it.date }
-                        val maxDuration = stats.maxOfOrNull { it.listeningDurationMs } ?: 0L
                         ListeningDay.datesBetween(startDate, endDate).map { date ->
                             val duration = byDate[date]?.listeningDurationMs ?: 0L
-                            HeatmapDay(date = date, durationMs = duration, level = levelFor(duration, maxDuration))
+                            HeatmapDay(date = date, durationMs = duration, level = levelFor(duration))
                         }
                     }
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    private val _selectedDate = MutableStateFlow<String?>(null)
+    private val _selectedDate = MutableStateFlow<String?>(currentDate)
     val selectedDate: StateFlow<String?> = _selectedDate
+
+    private val _isDlsiteLoggedIn = MutableStateFlow(authStore.isLoggedIn())
+    val isDlsiteLoggedIn: StateFlow<Boolean> = _isDlsiteLoggedIn
 
     /** 选中日期的会话列表（垂直时间线数据）。 */
     val selectedSessions: StateFlow<List<ListeningSessionEntity>> =
@@ -102,26 +121,34 @@ class ListeningCalendarViewModel @Inject constructor(
         _selectedDate.value = date
     }
 
+    fun refreshDlsiteLoginState() {
+        _isDlsiteLoggedIn.value = authStore.isLoggedIn()
+    }
+
     fun selectYear(year: Int) {
         if (year <= 0 || year > currentYear) return
         if (_selectedYear.value == year) return
-        _selectedDate.value = null
+        _selectedDate.value = if (year == currentYear) currentDate else null
         _selectedYear.value = year
+    }
+
+    override fun onCleared() {
+        authStore.unregisterListener(authPreferenceListener)
+        super.onCleared()
     }
 
     companion object {
         /**
-         * 把某日收听时长映射到 0..4 的强度分级（相对当前区间峰值）。
-         * 0 表示无收听；1..4 按峰值分位递增。
+         * 把某日收听时长映射到 0..4 的固定强度分级。
+         * 0 表示无收听；1..4 分别对应 1-9、10-59、60-120、121+ 分钟。
          */
-        fun levelFor(durationMs: Long, maxDurationMs: Long): Int {
+        fun levelFor(durationMs: Long): Int {
             if (durationMs <= 0L) return 0
-            if (maxDurationMs <= 0L) return 1
-            val ratio = durationMs.toDouble() / maxDurationMs.toDouble()
+            val totalMinutes = (durationMs + MILLIS_PER_MINUTE - 1L) / MILLIS_PER_MINUTE
             return when {
-                ratio <= 0.25 -> 1
-                ratio <= 0.50 -> 2
-                ratio <= 0.75 -> 3
+                totalMinutes <= 9L -> 1
+                totalMinutes <= 59L -> 2
+                totalMinutes <= 120L -> 3
                 else -> 4
             }
         }
@@ -149,5 +176,7 @@ class ListeningCalendarViewModel @Inject constructor(
         private fun formatYearDate(year: Int, month: Int, day: Int): String {
             return String.format(Locale.US, "%04d-%02d-%02d", year, month, day)
         }
+
+        private const val MILLIS_PER_MINUTE = 60_000L
     }
 }
