@@ -8,6 +8,7 @@ import com.asmr.player.data.local.db.dao.AlbumGroupDao
 import com.asmr.player.data.local.db.dao.AlbumGroupItemDao
 import com.asmr.player.data.local.db.dao.DailyStatDao
 import com.asmr.player.data.local.db.dao.DownloadDao
+import com.asmr.player.data.local.db.dao.ListeningSessionDao
 import com.asmr.player.data.local.db.dao.LocalTreeCacheDao
 import com.asmr.player.data.local.db.dao.ManualLyricsSourceDao
 import com.asmr.player.data.local.db.dao.PlaylistDao
@@ -28,6 +29,7 @@ import com.asmr.player.data.local.db.entities.AlbumTagEntity
 import com.asmr.player.data.local.db.entities.DailyStatEntity
 import com.asmr.player.data.local.db.entities.DownloadItemEntity
 import com.asmr.player.data.local.db.entities.DownloadTaskEntity
+import com.asmr.player.data.local.db.entities.ListeningSessionEntity
 import com.asmr.player.data.local.db.entities.LocalTreeCacheEntity
 import com.asmr.player.data.local.db.entities.ManualLyricsSourceEntity
 import com.asmr.player.data.local.db.entities.PlaylistEntity
@@ -63,9 +65,10 @@ import com.asmr.player.data.local.db.entities.TrackPlaybackProgressEntity
         RemoteSubtitleSourceEntity::class,
         ManualLyricsSourceEntity::class,
         TrackSliceEntity::class,
-        TrackPlaybackProgressEntity::class
+        TrackPlaybackProgressEntity::class,
+        ListeningSessionEntity::class
     ],
-    version = 22,
+    version = 23,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -86,6 +89,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun manualLyricsSourceDao(): ManualLyricsSourceDao
     abstract fun trackSliceDao(): TrackSliceDao
     abstract fun trackPlaybackProgressDao(): TrackPlaybackProgressDao
+    abstract fun listeningSessionDao(): ListeningSessionDao
 
     companion object {
         const val DATABASE_NAME = "asmr_player.db"

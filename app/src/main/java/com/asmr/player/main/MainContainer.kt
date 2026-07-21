@@ -125,7 +125,6 @@ import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.FlatTextFieldDialog
 import com.asmr.player.ui.common.glassMenu
 import com.asmr.player.ui.drawer.DrawerStatusViewModel
-import com.asmr.player.ui.drawer.StatisticsViewModel
 import com.asmr.player.ui.drawer.SiteStatus
 import com.asmr.player.ui.drawer.SiteStatusType
 import com.asmr.player.ui.nav.AlbumCoverHintStore
@@ -616,6 +615,7 @@ fun MainContainer(
     val downloadsViewModel: DownloadsViewModel = hiltViewModel()
     val settingsViewModel: SettingsViewModel = hiltViewModel()
     val dlsiteLoginViewModel: DlsiteLoginViewModel = hiltViewModel()
+    val listeningCalendarViewModel: com.asmr.player.ui.calendar.ListeningCalendarViewModel = hiltViewModel()
     val hotListeningViewModel: HotListeningViewModel = hiltViewModel()
     val hasCurrentMediaItem by remember(playerViewModel) {
         playerViewModel.playback
@@ -632,7 +632,6 @@ fun MainContainer(
             }
     }.collectAsState(initial = null)
     val drawerStatusViewModel: DrawerStatusViewModel = hiltViewModel()
-    val statisticsViewModel: StatisticsViewModel = hiltViewModel()
     val bulkProgress by libraryViewModel.bulkProgress.collectAsState()
     val cloudSyncSelectionDialogState by libraryViewModel.cloudSyncSelectionDialogState.collectAsState()
     val appVolumePercent by playerViewModel.appVolumePercent.collectAsState()
@@ -1211,7 +1210,7 @@ fun MainContainer(
                         Triple(Icons.Rounded.Folder, "我的分组", "groups"),
                         Triple(Icons.Rounded.Download, "下载管理", "downloads"),
                         Triple(Icons.Rounded.Settings, "设置", "settings"),
-                        Triple(Icons.Rounded.Person, "DLsite 登录", "dlsite_login")
+                        Triple(Icons.Rounded.Route, "我的足迹", "listening_calendar")
                     )
 
                     Column(modifier = Modifier.fillMaxSize()) {
@@ -1295,8 +1294,6 @@ fun MainContainer(
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))
-                        DailyStatisticsFooter(statisticsViewModel, modifier = Modifier.padding(horizontal = 18.dp))
-                        Spacer(modifier = Modifier.height(10.dp))
                         DrawerSiteStatusFooter(drawerStatusViewModel, modifier = Modifier.padding(horizontal = 18.dp))
                         Spacer(modifier = Modifier.height(18.dp))
                     }
@@ -1373,6 +1370,7 @@ fun MainContainer(
                                             currentRoute == "settings" ||
                                             currentRoute == "downloads" ||
                                             currentRoute == "dlsite_login" ||
+                                            currentRoute == "listening_calendar" ||
                                             currentRoute?.startsWith("album_detail") == true
                                     val topBarHeight = when {
                                         isAlbumDetailRoute -> 56.dp
@@ -1415,6 +1413,7 @@ fun MainContainer(
                                                     groupName.ifBlank { "我的分组" }
                                                 resolvedTitleRoute == "settings" -> "设置"
                                                 resolvedTitleRoute == "downloads" -> "下载管理"
+                                                resolvedTitleRoute == "listening_calendar" -> "我的足迹"
                                                 resolvedTitleRoute == "dlsite_login" -> "DLsite 登录"
                                                 resolvedTitleRoute?.startsWith("playlist_picker") == true -> "添加到我的列表"
                                                 resolvedTitleRoute?.startsWith("album_detail") == true -> "专辑详情"
@@ -1858,13 +1857,33 @@ fun MainContainer(
                                             )
                                         }
 
-                                        "dlsite_login" -> {
-                                            DlsiteLoginScreen(
+                                        "listening_calendar" -> {
+                                            com.asmr.player.ui.calendar.ListeningCalendarScreen(
                                                 windowSizeClass = windowSizeClass,
-                                                onDone = { navController.popBackStack() },
-                                                viewModel = dlsiteLoginViewModel
+                                                onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
+                                                onOpenAlbum = { session ->
+                                                    AlbumCoverHintStore.record(
+                                                        albumId = session.albumId.takeIf { it > 0L },
+                                                        rjCode = session.rjCode,
+                                                        title = session.title,
+                                                        circle = session.circle,
+                                                        cv = session.cv,
+                                                        coverUrl = session.coverUrl,
+                                                        tags = session.tags
+                                                            .split(',')
+                                                            .map { it.trim() }
+                                                            .filter { it.isNotBlank() }
+                                                    )
+                                                    if (session.albumId > 0L) {
+                                                        navigator.openAlbumDetail(albumId = session.albumId, rj = null)
+                                                    } else if (session.rjCode.isNotBlank()) {
+                                                        navigator.openAlbumDetailByRjStacked(session.rjCode)
+                                                    }
+                                                },
+                                                viewModel = listeningCalendarViewModel
                                             )
                                         }
+
                                     }
                                 }
                             }
@@ -2285,6 +2304,15 @@ fun MainContainer(
                     }
                 }
                 composable("dlsite_login") {
+                    SecondaryPageBackground(topPadding = topContentPadding) {
+                        DlsiteLoginScreen(
+                            windowSizeClass = windowSizeClass,
+                            onDone = { navController.popBackStack() },
+                            viewModel = dlsiteLoginViewModel
+                        )
+                    }
+                }
+                composable("listening_calendar") {
                     Box(modifier = Modifier.fillMaxSize())
                 }
             }

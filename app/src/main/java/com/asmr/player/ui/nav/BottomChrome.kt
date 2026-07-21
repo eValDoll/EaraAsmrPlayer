@@ -33,7 +33,7 @@ import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.MoreHoriz
-import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Route
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SwapHoriz
@@ -291,7 +291,7 @@ fun bottomChromeNavItems(): List<BottomChromeNavItem> = listOf(
     BottomChromeNavItem(Icons.AutoMirrored.Rounded.QueueMusic, "我的列表", "playlists"),
     BottomChromeNavItem(Icons.Rounded.Folder, "我的分组", "groups"),
     BottomChromeNavItem(Icons.Rounded.Settings, "设置", "settings"),
-    BottomChromeNavItem(Icons.Rounded.Person, "DLsite 登录", "dlsite_login")
+    BottomChromeNavItem(Icons.Rounded.Route, "我的足迹", "listening_calendar")
 )
 
 fun isPrimaryRoute(route: String?): Boolean {
@@ -304,7 +304,7 @@ fun isPrimaryRoute(route: String?): Boolean {
         "playlists",
         "groups",
         "settings",
-        "dlsite_login"
+        "listening_calendar"
     )
 }
 
@@ -322,7 +322,7 @@ fun resolvePrimaryRoute(
         currentRoute == "playlists" -> "playlists"
         currentRoute == "groups" -> "groups"
         currentRoute == "settings" -> "settings"
-        currentRoute == "dlsite_login" -> "dlsite_login"
+        currentRoute == "listening_calendar" -> "listening_calendar"
         currentRoute == "playlist_system/{type}" && playlistSystemType == "favorites" -> "playlist_system/favorites"
         currentRoute == "playlist/{playlistId}/{playlistName}" -> "playlists"
         currentRoute == "group/{groupId}/{groupName}" -> "groups"

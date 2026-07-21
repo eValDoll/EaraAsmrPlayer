@@ -4,6 +4,9 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import com.asmr.player.ui.nav.bottomChromeNavItems
+import com.asmr.player.ui.nav.isPrimaryRoute
+import com.asmr.player.ui.nav.resolvePrimaryRoute
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -122,6 +125,27 @@ class MainNavigationSupportTest {
         )
         assertEquals("settings", resolveCurrentPrimaryDestinationRoute("settings"))
         assertEquals(null, resolveCurrentPrimaryDestinationRoute("playlist_system/{type}", "recent"))
+    }
+
+    @Test
+    fun bottomChromeNavItems_useListeningCalendarAsPrimaryEntry() {
+        val items = bottomChromeNavItems()
+        val routes = items.map { it.route }
+
+        assertEquals("我的足迹", items.last().label)
+        assertEquals("listening_calendar", items.last().route)
+        assertEquals(true, routes.contains("listening_calendar"))
+        assertEquals(false, routes.contains("dlsite_login"))
+    }
+
+    @Test
+    fun primaryRouteResolution_treatsCalendarAsPrimaryAndDlsiteLoginAsSecondary() {
+        assertEquals(true, isPrimaryRoute("listening_calendar"))
+        assertEquals(false, isPrimaryRoute("dlsite_login"))
+        assertEquals("listening_calendar", resolvePrimaryRoute("listening_calendar", "library"))
+        assertEquals("library", resolvePrimaryRoute("dlsite_login", "library"))
+        assertEquals("listening_calendar", resolveCurrentPrimaryDestinationRoute("listening_calendar"))
+        assertEquals(null, resolveCurrentPrimaryDestinationRoute("dlsite_login"))
     }
 
     @Test
