@@ -91,7 +91,6 @@ import com.asmr.player.ui.settings.SettingsScreen
 import com.asmr.player.ui.settings.SettingsViewModel
 import com.asmr.player.ui.common.glassMenu
 import com.asmr.player.ui.drawer.DrawerStatusViewModel
-import com.asmr.player.ui.drawer.StatisticsViewModel
 import com.asmr.player.ui.drawer.SiteStatus
 import com.asmr.player.ui.drawer.SiteStatusType
 import com.asmr.player.ui.nav.AppNavigator

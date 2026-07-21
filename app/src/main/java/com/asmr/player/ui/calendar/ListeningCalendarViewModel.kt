@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.asmr.player.data.local.db.entities.DailyStatEntity
 import com.asmr.player.data.local.db.entities.ListeningSessionEntity
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.repository.ListeningRecordRepository
@@ -15,12 +16,18 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
+import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Locale
+import java.util.TimeZone
+import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 /** 热度图中单个格子的数据（一天）。 */
 data class HeatmapDay(
@@ -38,6 +45,28 @@ data class ListeningSummary(
     val activeDayCount: Int = 0
 )
 
+enum class ListeningComparisonGranularity(val label: String) {
+    Day("日"),
+    Week("周"),
+    Month("月")
+}
+
+data class ListeningMetricDelta(
+    val current: Double = 0.0,
+    val reference: Double = 0.0
+) {
+    val difference: Double
+        get() = current - reference
+}
+
+data class ListeningSummaryComparison(
+    val referenceLabel: String = "昨日",
+    val usesDailyAverage: Boolean = false,
+    val durationMs: ListeningMetricDelta = ListeningMetricDelta(),
+    val trackCount: ListeningMetricDelta = ListeningMetricDelta(),
+    val trafficBytes: ListeningMetricDelta = ListeningMetricDelta()
+)
+
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ListeningCalendarViewModel @Inject constructor(
@@ -52,25 +81,23 @@ class ListeningCalendarViewModel @Inject constructor(
     }
     private val currentDate = ListeningDay.currentDate()
     private val currentYear = yearOf(currentDate) ?: 0
+    private val _comparisonGranularity = MutableStateFlow(ListeningComparisonGranularity.Day)
 
     init {
         authStore.registerListener(authPreferenceListener)
     }
 
-    /** 今日收听统计，按 [ListeningDay] 的凌晨 5 点重置口径。 */
+    /** 当前维度的收听数据，按 [ListeningDay] 的凌晨 5 点重置口径。 */
     val summary: StateFlow<ListeningSummary> =
-        statisticsRepository.observeTodayStats()
-            .map { stat ->
-                if (stat == null) {
-                    ListeningSummary()
-                } else {
-                    ListeningSummary(
-                        totalDurationMs = stat.listeningDurationMs,
-                        totalTrackCount = stat.trackCount,
-                        totalTrafficBytes = stat.networkTrafficBytes,
-                        activeDayCount = if (stat.listeningDurationMs > 0L) 1 else 0
-                    )
-                }
+        combine(
+            statisticsRepository.observeAllStats(),
+            _comparisonGranularity
+        ) { stats, granularity ->
+            buildCurrentSummary(
+                stats = stats,
+                currentDate = currentDate,
+                granularity = granularity
+            )
             }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ListeningSummary())
 
@@ -102,8 +129,28 @@ class ListeningCalendarViewModel @Inject constructor(
     private val _selectedDate = MutableStateFlow<String?>(currentDate)
     val selectedDate: StateFlow<String?> = _selectedDate
 
+    val comparisonGranularity: StateFlow<ListeningComparisonGranularity> = _comparisonGranularity
+
     private val _isDlsiteLoggedIn = MutableStateFlow(authStore.isLoggedIn())
     val isDlsiteLoggedIn: StateFlow<Boolean> = _isDlsiteLoggedIn
+
+    val summaryComparison: StateFlow<ListeningSummaryComparison> =
+        combine(
+            statisticsRepository.observeAllStats(),
+            _selectedDate,
+            _comparisonGranularity
+        ) { stats, selectedDate, granularity ->
+            buildSummaryComparison(
+                stats = stats,
+                currentDate = currentDate,
+                selectedDate = selectedDate,
+                granularity = granularity
+            )
+        }.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            ListeningSummaryComparison()
+        )
 
     /** 选中日期的会话列表（垂直时间线数据）。 */
     val selectedSessions: StateFlow<List<ListeningSessionEntity>> =
@@ -119,6 +166,10 @@ class ListeningCalendarViewModel @Inject constructor(
 
     fun selectDate(date: String?) {
         _selectedDate.value = date
+    }
+
+    fun selectComparisonGranularity(granularity: ListeningComparisonGranularity) {
+        _comparisonGranularity.value = granularity
     }
 
     fun refreshDlsiteLoginState() {
@@ -173,9 +224,272 @@ class ListeningCalendarViewModel @Inject constructor(
             return date.take(4).toIntOrNull()
         }
 
+        internal fun buildSummaryComparison(
+            stats: List<DailyStatEntity>,
+            currentDate: String,
+            selectedDate: String?,
+            granularity: ListeningComparisonGranularity
+        ): ListeningSummaryComparison {
+            val window = comparisonWindow(currentDate, selectedDate, granularity)
+                ?: return ListeningSummaryComparison()
+            val byDate = stats.associateBy { it.date }
+            val current = summaryValuesForRange(byDate, window.currentRange, window.usesDailyAverage)
+            val reference = summaryValuesForRange(byDate, window.referenceRange, window.usesDailyAverage)
+            return ListeningSummaryComparison(
+                referenceLabel = window.referenceLabel,
+                usesDailyAverage = window.usesDailyAverage,
+                durationMs = ListeningMetricDelta(current.durationMs, reference.durationMs),
+                trackCount = ListeningMetricDelta(current.trackCount, reference.trackCount),
+                trafficBytes = ListeningMetricDelta(current.trafficBytes, reference.trafficBytes)
+            )
+        }
+
+        internal fun buildCurrentSummary(
+            stats: List<DailyStatEntity>,
+            currentDate: String,
+            granularity: ListeningComparisonGranularity
+        ): ListeningSummary {
+            val range = currentSummaryRange(currentDate, granularity) ?: return ListeningSummary()
+            val values = summaryValuesForRange(
+                byDate = stats.associateBy { it.date },
+                range = range,
+                usesDailyAverage = false
+            )
+            return ListeningSummary(
+                totalDurationMs = values.durationMs.roundToLong(),
+                totalTrackCount = values.trackCount.roundToInt(),
+                totalTrafficBytes = values.trafficBytes.roundToLong(),
+                activeDayCount = values.activeDayCount.roundToInt()
+            )
+        }
+
+        private fun currentSummaryRange(
+            currentDate: String,
+            granularity: ListeningComparisonGranularity
+        ): DateRange? {
+            return when (granularity) {
+                ListeningComparisonGranularity.Day -> DateRange(currentDate, currentDate)
+                ListeningComparisonGranularity.Week -> DateRange(
+                    startDate = startOfWeek(currentDate) ?: return null,
+                    endDate = currentDate
+                )
+                ListeningComparisonGranularity.Month -> DateRange(
+                    startDate = startOfMonth(currentDate) ?: return null,
+                    endDate = currentDate
+                )
+            }
+        }
+
+        private fun comparisonWindow(
+            currentDate: String,
+            selectedDate: String?,
+            granularity: ListeningComparisonGranularity
+        ): SummaryComparisonWindow? {
+            return when (granularity) {
+                ListeningComparisonGranularity.Day -> dayComparisonWindow(currentDate, selectedDate)
+                ListeningComparisonGranularity.Week -> weekComparisonWindow(currentDate, selectedDate)
+                ListeningComparisonGranularity.Month -> monthComparisonWindow(currentDate, selectedDate)
+            }
+        }
+
+        private fun dayComparisonWindow(
+            currentDate: String,
+            selectedDate: String?
+        ): SummaryComparisonWindow? {
+            val yesterday = addDays(currentDate, -1) ?: return null
+            val referenceDate = selectedDate
+                ?.takeIf { it != currentDate }
+                ?: yesterday
+            return SummaryComparisonWindow(
+                currentRange = DateRange(currentDate, currentDate),
+                referenceRange = DateRange(referenceDate, referenceDate),
+                referenceLabel = if (referenceDate == yesterday) "昨日" else shortDateLabel(referenceDate),
+                usesDailyAverage = false
+            )
+        }
+
+        private fun weekComparisonWindow(
+            currentDate: String,
+            selectedDate: String?
+        ): SummaryComparisonWindow? {
+            val currentStart = startOfWeek(currentDate) ?: return null
+            val currentElapsedDays = (dayDistance(currentStart, currentDate) ?: return null) + 1
+            val weeksBack = weeksBackForSelection(currentDate, selectedDate)
+            val referenceStart = addDays(currentStart, -weeksBack * 7) ?: return null
+            val referenceEnd = addDays(referenceStart, currentElapsedDays - 1) ?: return null
+            return SummaryComparisonWindow(
+                currentRange = DateRange(currentStart, currentDate),
+                referenceRange = DateRange(referenceStart, referenceEnd),
+                referenceLabel = if (weeksBack == 1) "上周" else "${weeksBack}周前",
+                usesDailyAverage = true
+            )
+        }
+
+        private fun monthComparisonWindow(
+            currentDate: String,
+            selectedDate: String?
+        ): SummaryComparisonWindow? {
+            val currentStart = startOfMonth(currentDate) ?: return null
+            val monthsBack = monthsBackForSelection(currentDate, selectedDate)
+            val referenceStart = addMonths(currentStart, -monthsBack) ?: return null
+            val currentDay = dayOfMonth(currentDate) ?: return null
+            val referenceDays = daysInMonth(referenceStart) ?: return null
+            val alignedDays = minOf(currentDay, referenceDays).coerceAtLeast(1)
+            val currentEnd = addDays(currentStart, alignedDays - 1) ?: return null
+            val referenceEnd = addDays(referenceStart, alignedDays - 1) ?: return null
+            return SummaryComparisonWindow(
+                currentRange = DateRange(currentStart, currentEnd),
+                referenceRange = DateRange(referenceStart, referenceEnd),
+                referenceLabel = if (monthsBack == 1) "上月" else "${monthsBack}个月前",
+                usesDailyAverage = true
+            )
+        }
+
+        private fun weeksBackForSelection(currentDate: String, selectedDate: String?): Int {
+            val selected = selectedDate ?: return 1
+            val currentWeekStart = startOfWeek(currentDate) ?: return 1
+            val selectedWeekStart = startOfWeek(selected) ?: return 1
+            val days = dayDistance(selectedWeekStart, currentWeekStart) ?: return 1
+            return (days / 7).coerceAtLeast(1)
+        }
+
+        private fun monthsBackForSelection(currentDate: String, selectedDate: String?): Int {
+            val selected = selectedDate ?: return 1
+            val currentStart = calendarFor(startOfMonth(currentDate) ?: return 1) ?: return 1
+            val selectedStart = calendarFor(startOfMonth(selected) ?: return 1) ?: return 1
+            val currentIndex = currentStart.get(Calendar.YEAR) * 12 + currentStart.get(Calendar.MONTH)
+            val selectedIndex = selectedStart.get(Calendar.YEAR) * 12 + selectedStart.get(Calendar.MONTH)
+            return (currentIndex - selectedIndex).coerceAtLeast(1)
+        }
+
+        private fun summaryValuesForRange(
+            byDate: Map<String, DailyStatEntity>,
+            range: DateRange,
+            usesDailyAverage: Boolean
+        ): SummaryValues {
+            val dates = ListeningDay.datesBetween(range.startDate, range.endDate)
+            if (dates.isEmpty()) return SummaryValues()
+            var durationMs = 0L
+            var trackCount = 0
+            var trafficBytes = 0L
+            var activeDayCount = 0
+            dates.forEach { date ->
+                val stat = byDate[date]
+                if (stat != null) {
+                    durationMs += stat.listeningDurationMs
+                    trackCount += stat.trackCount
+                    trafficBytes += stat.networkTrafficBytes
+                    if (stat.listeningDurationMs > 0L || stat.trackCount > 0 || stat.networkTrafficBytes > 0L) {
+                        activeDayCount += 1
+                    }
+                }
+            }
+            val divisor = if (usesDailyAverage) dates.size.toDouble() else 1.0
+            return SummaryValues(
+                durationMs = durationMs / divisor,
+                trackCount = trackCount / divisor,
+                activeDayCount = activeDayCount.toDouble(),
+                trafficBytes = trafficBytes / divisor
+            )
+        }
+
+        private fun startOfWeek(date: String): String? {
+            val cal = calendarFor(date) ?: return null
+            val daysSinceMonday = when (cal.get(Calendar.DAY_OF_WEEK)) {
+                Calendar.MONDAY -> 0
+                Calendar.TUESDAY -> 1
+                Calendar.WEDNESDAY -> 2
+                Calendar.THURSDAY -> 3
+                Calendar.FRIDAY -> 4
+                Calendar.SATURDAY -> 5
+                else -> 6
+            }
+            cal.add(Calendar.DAY_OF_MONTH, -daysSinceMonday)
+            return formatCalendar(cal)
+        }
+
+        private fun startOfMonth(date: String): String? {
+            val cal = calendarFor(date) ?: return null
+            cal.set(Calendar.DAY_OF_MONTH, 1)
+            return formatCalendar(cal)
+        }
+
+        private fun dayOfMonth(date: String): Int? {
+            return calendarFor(date)?.get(Calendar.DAY_OF_MONTH)
+        }
+
+        private fun daysInMonth(date: String): Int? {
+            return calendarFor(date)?.getActualMaximum(Calendar.DAY_OF_MONTH)
+        }
+
+        private fun addDays(date: String, days: Int): String? {
+            val cal = calendarFor(date) ?: return null
+            cal.add(Calendar.DAY_OF_MONTH, days)
+            return formatCalendar(cal)
+        }
+
+        private fun addMonths(date: String, months: Int): String? {
+            val cal = calendarFor(date) ?: return null
+            cal.add(Calendar.MONTH, months)
+            return formatCalendar(cal)
+        }
+
+        private fun dayDistance(startDate: String, endDate: String): Int? {
+            if (startDate == endDate) return 0
+            val ascending = startDate < endDate
+            val dates = if (ascending) {
+                ListeningDay.datesBetween(startDate, endDate)
+            } else {
+                ListeningDay.datesBetween(endDate, startDate)
+            }
+            if (dates.isEmpty()) return null
+            val distance = dates.size - 1
+            return if (ascending) distance else -distance
+        }
+
+        private fun calendarFor(date: String): Calendar? {
+            val parsed = dateFormat.parse(date) ?: return null
+            return Calendar.getInstance(TimeZone.getDefault()).apply {
+                time = parsed
+            }
+        }
+
+        private fun formatCalendar(calendar: Calendar): String {
+            return dateFormat.format(calendar.time)
+        }
+
+        private fun shortDateLabel(date: String): String {
+            val cal = calendarFor(date) ?: return date
+            return "${cal.get(Calendar.MONTH) + 1}月${cal.get(Calendar.DAY_OF_MONTH)}日"
+        }
+
         private fun formatYearDate(year: Int, month: Int, day: Int): String {
             return String.format(Locale.US, "%04d-%02d-%02d", year, month, day)
         }
+
+        private val dateFormat: SimpleDateFormat
+            get() = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+                timeZone = TimeZone.getDefault()
+            }
+
+        private data class DateRange(
+            val startDate: String,
+            val endDate: String
+        )
+
+        private data class SummaryComparisonWindow(
+            val currentRange: DateRange,
+            val referenceRange: DateRange,
+            val referenceLabel: String,
+            val usesDailyAverage: Boolean
+        )
+
+        private data class SummaryValues(
+            val durationMs: Double = 0.0,
+            val trackCount: Double = 0.0,
+            val activeDayCount: Double = 0.0,
+            val trafficBytes: Double = 0.0
+        )
 
         private const val MILLIS_PER_MINUTE = 60_000L
     }

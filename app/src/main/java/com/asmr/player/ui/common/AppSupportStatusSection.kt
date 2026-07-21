@@ -19,11 +19,8 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.AccessTime
 import androidx.compose.material.icons.rounded.ArrowDropDown
-import androidx.compose.material.icons.rounded.Audiotrack
 import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.CloudDownload
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.CardDefaults
@@ -45,17 +42,13 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.ui.drawer.DrawerStatusViewModel
 import com.asmr.player.ui.drawer.SiteStatus
 import com.asmr.player.ui.drawer.SiteStatusType
-import com.asmr.player.ui.drawer.StatisticsViewModel
 import com.asmr.player.ui.theme.AsmrTheme
 
 @Composable
@@ -63,74 +56,9 @@ fun AppSupportStatusSection(
     modifier: Modifier = Modifier,
     drawerStatusViewModel: DrawerStatusViewModel = hiltViewModel()
 ) {
-    // 今日收听统计已迁移至「Eara 日历」页面，这里仅保留站点状态测试。
+    // 完整收听数据集中在「Eara 日历」页面，这里仅保留站点状态测试。
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SiteStatusSection(viewModel = drawerStatusViewModel)
-    }
-}
-
-@Composable
-fun DailyStatisticsSection(
-    viewModel: StatisticsViewModel = hiltViewModel(),
-    modifier: Modifier = Modifier
-) {
-    val stats by viewModel.todayStats.collectAsState()
-    val colorScheme = AsmrTheme.colorScheme
-    val isDark = colorScheme.isDark
-    val shape = RoundedCornerShape(16.dp)
-    val elevation = if (isDark) 0.dp else 1.dp
-    val containerColor = if (isDark) Color(0xFF1E1E1E) else Color(0xFFF3F4F6)
-
-    ElevatedCard(
-        modifier = modifier
-            .fillMaxWidth()
-            .then(
-                if (isDark) {
-                    Modifier.border(
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
-                        shape = shape
-                    )
-                } else {
-                    Modifier
-                }
-            ),
-        shape = shape,
-        colors = CardDefaults.elevatedCardColors(containerColor = containerColor),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = elevation)
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = "今日收听统计",
-                style = MaterialTheme.typography.labelSmall,
-                color = colorScheme.textSecondary,
-                modifier = Modifier.padding(start = 16.dp, top = 12.dp)
-            )
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceAround
-            ) {
-                StatItem(
-                    icon = Icons.Rounded.AccessTime,
-                    label = "时长",
-                    value = formatStatsDuration(stats?.listeningDurationMs ?: 0L)
-                )
-                StatItem(
-                    icon = Icons.Rounded.Audiotrack,
-                    label = "音轨",
-                    value = "${stats?.trackCount ?: 0}"
-                )
-                StatItem(
-                    icon = Icons.Rounded.CloudDownload,
-                    label = "流量",
-                    value = formatStatsTraffic(stats?.networkTrafficBytes ?: 0L)
-                )
-            }
-        }
     }
 }
 
@@ -320,71 +248,5 @@ private fun SiteStatusRow(
                 Text(text = "测试", style = MaterialTheme.typography.labelSmall, maxLines = 1)
             }
         }
-    }
-}
-
-@Composable
-private fun StatItem(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    value: String
-) {
-    val colorScheme = AsmrTheme.colorScheme
-    val isDark = colorScheme.isDark
-    val iconBackground = if (isDark) Color(0xFF1E1E1E) else Color.White
-
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Box(
-            modifier = Modifier
-                .size(28.dp)
-                .then(
-                    if (isDark) {
-                        Modifier
-                    } else {
-                        Modifier.shadow(elevation = 1.dp, shape = CircleShape, clip = false)
-                    }
-                )
-                .clip(CircleShape)
-                .background(iconBackground),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(16.dp),
-                tint = colorScheme.textSecondary
-            )
-        }
-        Text(
-            text = value,
-            style = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Bold),
-            color = colorScheme.textPrimary
-        )
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = colorScheme.textSecondary,
-            fontSize = 10.sp
-        )
-    }
-}
-
-private fun formatStatsDuration(ms: Long): String {
-    val totalSeconds = ms / 1000
-    val minutes = totalSeconds / 60
-    val hours = minutes / 60
-    return if (hours > 0) {
-        "${hours}h${minutes % 60}m"
-    } else {
-        "${minutes}m"
-    }
-}
-
-private fun formatStatsTraffic(bytes: Long): String {
-    return when {
-        bytes >= 1024 * 1024 * 1024 -> String.format("%.1fG", bytes / (1024.0 * 1024 * 1024))
-        bytes >= 1024 * 1024 -> String.format("%.1fM", bytes / (1024.0 * 1024))
-        bytes >= 1024 -> String.format("%.1fK", bytes / 1024.0)
-        else -> "${bytes}B"
     }
 }

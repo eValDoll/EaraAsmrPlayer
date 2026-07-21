@@ -125,7 +125,6 @@ import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.FlatTextFieldDialog
 import com.asmr.player.ui.common.glassMenu
 import com.asmr.player.ui.drawer.DrawerStatusViewModel
-import com.asmr.player.ui.drawer.StatisticsViewModel
 import com.asmr.player.ui.drawer.SiteStatus
 import com.asmr.player.ui.drawer.SiteStatusType
 import com.asmr.player.ui.nav.AlbumCoverHintStore
@@ -633,7 +632,6 @@ fun MainContainer(
             }
     }.collectAsState(initial = null)
     val drawerStatusViewModel: DrawerStatusViewModel = hiltViewModel()
-    val statisticsViewModel: StatisticsViewModel = hiltViewModel()
     val bulkProgress by libraryViewModel.bulkProgress.collectAsState()
     val cloudSyncSelectionDialogState by libraryViewModel.cloudSyncSelectionDialogState.collectAsState()
     val appVolumePercent by playerViewModel.appVolumePercent.collectAsState()
@@ -1296,8 +1294,6 @@ fun MainContainer(
                         }
 
                         Spacer(modifier = Modifier.height(12.dp))
-                        DailyStatisticsFooter(statisticsViewModel, modifier = Modifier.padding(horizontal = 18.dp))
-                        Spacer(modifier = Modifier.height(10.dp))
                         DrawerSiteStatusFooter(drawerStatusViewModel, modifier = Modifier.padding(horizontal = 18.dp))
                         Spacer(modifier = Modifier.height(18.dp))
                     }
