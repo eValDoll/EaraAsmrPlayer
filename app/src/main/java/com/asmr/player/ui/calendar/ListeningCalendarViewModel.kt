@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.asmr.player.data.local.db.dao.AlbumListeningRow
 import com.asmr.player.data.local.db.entities.DailyStatEntity
 import com.asmr.player.data.local.db.entities.ListeningSessionEntity
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
@@ -13,10 +14,12 @@ import com.asmr.player.util.ListeningDay
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOf
@@ -48,8 +51,16 @@ data class ListeningSummary(
 enum class ListeningComparisonGranularity(val label: String) {
     Day("日"),
     Week("周"),
-    Month("月")
+    Month("月"),
+    Year("年")
 }
+
+data class ListeningSummaryArtwork(
+    val title: String = "",
+    val coverUrl: String = "",
+    val coverPath: String = "",
+    val coverThumbPath: String = ""
+)
 
 data class ListeningMetricDelta(
     val current: Double = 0.0,
@@ -61,13 +72,13 @@ data class ListeningMetricDelta(
 
 data class ListeningSummaryComparison(
     val referenceLabel: String = "昨日",
-    val usesDailyAverage: Boolean = false,
     val durationMs: ListeningMetricDelta = ListeningMetricDelta(),
     val trackCount: ListeningMetricDelta = ListeningMetricDelta(),
+    val activeDayCount: ListeningMetricDelta = ListeningMetricDelta(),
     val trafficBytes: ListeningMetricDelta = ListeningMetricDelta()
 )
 
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, FlowPreview::class)
 @HiltViewModel
 class ListeningCalendarViewModel @Inject constructor(
     private val statisticsRepository: StatisticsRepository,
@@ -98,7 +109,8 @@ class ListeningCalendarViewModel @Inject constructor(
                 currentDate = currentDate,
                 granularity = granularity
             )
-            }
+        }
+            .debounce(SUMMARY_UPDATE_DEBOUNCE_MS)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ListeningSummary())
 
     /** 可切换的年份列表，默认包含当前年，按新到旧排序。 */
@@ -131,6 +143,16 @@ class ListeningCalendarViewModel @Inject constructor(
 
     val comparisonGranularity: StateFlow<ListeningComparisonGranularity> = _comparisonGranularity
 
+    val summaryArtwork: StateFlow<ListeningSummaryArtwork?> =
+        _comparisonGranularity
+            .flatMapLatest { granularity ->
+                val range = currentSummaryRange(currentDate, granularity)
+                    ?: return@flatMapLatest flowOf(null)
+                listeningRecordRepository.observeTopAlbum(range.startDate, range.endDate)
+                    .map { row -> row?.toSummaryArtwork() }
+            }
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
     private val _isDlsiteLoggedIn = MutableStateFlow(authStore.isLoggedIn())
     val isDlsiteLoggedIn: StateFlow<Boolean> = _isDlsiteLoggedIn
 
@@ -146,11 +168,13 @@ class ListeningCalendarViewModel @Inject constructor(
                 selectedDate = selectedDate,
                 granularity = granularity
             )
-        }.stateIn(
-            viewModelScope,
-            SharingStarted.WhileSubscribed(5000),
-            ListeningSummaryComparison()
-        )
+        }
+            .debounce(SUMMARY_UPDATE_DEBOUNCE_MS)
+            .stateIn(
+                viewModelScope,
+                SharingStarted.WhileSubscribed(5000),
+                ListeningSummaryComparison()
+            )
 
     /** 选中日期的会话列表（垂直时间线数据）。 */
     val selectedSessions: StateFlow<List<ListeningSessionEntity>> =
@@ -233,13 +257,13 @@ class ListeningCalendarViewModel @Inject constructor(
             val window = comparisonWindow(currentDate, selectedDate, granularity)
                 ?: return ListeningSummaryComparison()
             val byDate = stats.associateBy { it.date }
-            val current = summaryValuesForRange(byDate, window.currentRange, window.usesDailyAverage)
-            val reference = summaryValuesForRange(byDate, window.referenceRange, window.usesDailyAverage)
+            val current = summaryValuesForRange(byDate, window.currentRange)
+            val reference = summaryValuesForRange(byDate, window.referenceRange)
             return ListeningSummaryComparison(
                 referenceLabel = window.referenceLabel,
-                usesDailyAverage = window.usesDailyAverage,
                 durationMs = ListeningMetricDelta(current.durationMs, reference.durationMs),
                 trackCount = ListeningMetricDelta(current.trackCount, reference.trackCount),
+                activeDayCount = ListeningMetricDelta(current.activeDayCount, reference.activeDayCount),
                 trafficBytes = ListeningMetricDelta(current.trafficBytes, reference.trafficBytes)
             )
         }
@@ -252,8 +276,7 @@ class ListeningCalendarViewModel @Inject constructor(
             val range = currentSummaryRange(currentDate, granularity) ?: return ListeningSummary()
             val values = summaryValuesForRange(
                 byDate = stats.associateBy { it.date },
-                range = range,
-                usesDailyAverage = false
+                range = range
             )
             return ListeningSummary(
                 totalDurationMs = values.durationMs.roundToLong(),
@@ -277,6 +300,10 @@ class ListeningCalendarViewModel @Inject constructor(
                     startDate = startOfMonth(currentDate) ?: return null,
                     endDate = currentDate
                 )
+                ListeningComparisonGranularity.Year -> DateRange(
+                    startDate = startOfYear(currentDate) ?: return null,
+                    endDate = currentDate
+                )
             }
         }
 
@@ -289,6 +316,7 @@ class ListeningCalendarViewModel @Inject constructor(
                 ListeningComparisonGranularity.Day -> dayComparisonWindow(currentDate, selectedDate)
                 ListeningComparisonGranularity.Week -> weekComparisonWindow(currentDate, selectedDate)
                 ListeningComparisonGranularity.Month -> monthComparisonWindow(currentDate, selectedDate)
+                ListeningComparisonGranularity.Year -> yearComparisonWindow(currentDate, selectedDate)
             }
         }
 
@@ -303,8 +331,7 @@ class ListeningCalendarViewModel @Inject constructor(
             return SummaryComparisonWindow(
                 currentRange = DateRange(currentDate, currentDate),
                 referenceRange = DateRange(referenceDate, referenceDate),
-                referenceLabel = if (referenceDate == yesterday) "昨日" else shortDateLabel(referenceDate),
-                usesDailyAverage = false
+                referenceLabel = if (referenceDate == yesterday) "昨日" else shortDateLabel(referenceDate)
             )
         }
 
@@ -320,8 +347,7 @@ class ListeningCalendarViewModel @Inject constructor(
             return SummaryComparisonWindow(
                 currentRange = DateRange(currentStart, currentDate),
                 referenceRange = DateRange(referenceStart, referenceEnd),
-                referenceLabel = if (weeksBack == 1) "上周" else "${weeksBack}周前",
-                usesDailyAverage = true
+                referenceLabel = if (weeksBack == 1) "上周" else "${weeksBack}周前"
             )
         }
 
@@ -340,8 +366,22 @@ class ListeningCalendarViewModel @Inject constructor(
             return SummaryComparisonWindow(
                 currentRange = DateRange(currentStart, currentEnd),
                 referenceRange = DateRange(referenceStart, referenceEnd),
-                referenceLabel = if (monthsBack == 1) "上月" else "${monthsBack}个月前",
-                usesDailyAverage = true
+                referenceLabel = if (monthsBack == 1) "上月" else "${monthsBack}个月前"
+            )
+        }
+
+        private fun yearComparisonWindow(
+            currentDate: String,
+            selectedDate: String?
+        ): SummaryComparisonWindow? {
+            val currentStart = startOfYear(currentDate) ?: return null
+            val yearsBack = yearsBackForSelection(currentDate, selectedDate)
+            val referenceStart = addYears(currentStart, -yearsBack) ?: return null
+            val referenceEnd = addYears(currentDate, -yearsBack) ?: return null
+            return SummaryComparisonWindow(
+                currentRange = DateRange(currentStart, currentDate),
+                referenceRange = DateRange(referenceStart, referenceEnd),
+                referenceLabel = if (yearsBack == 1) "去年" else "${yearsBack}年前"
             )
         }
 
@@ -362,10 +402,16 @@ class ListeningCalendarViewModel @Inject constructor(
             return (currentIndex - selectedIndex).coerceAtLeast(1)
         }
 
+        private fun yearsBackForSelection(currentDate: String, selectedDate: String?): Int {
+            val selected = selectedDate ?: return 1
+            val currentYear = yearOf(currentDate) ?: return 1
+            val selectedYear = yearOf(selected) ?: return 1
+            return (currentYear - selectedYear).coerceAtLeast(1)
+        }
+
         private fun summaryValuesForRange(
             byDate: Map<String, DailyStatEntity>,
-            range: DateRange,
-            usesDailyAverage: Boolean
+            range: DateRange
         ): SummaryValues {
             val dates = ListeningDay.datesBetween(range.startDate, range.endDate)
             if (dates.isEmpty()) return SummaryValues()
@@ -384,12 +430,11 @@ class ListeningCalendarViewModel @Inject constructor(
                     }
                 }
             }
-            val divisor = if (usesDailyAverage) dates.size.toDouble() else 1.0
             return SummaryValues(
-                durationMs = durationMs / divisor,
-                trackCount = trackCount / divisor,
+                durationMs = durationMs.toDouble(),
+                trackCount = trackCount.toDouble(),
                 activeDayCount = activeDayCount.toDouble(),
-                trafficBytes = trafficBytes / divisor
+                trafficBytes = trafficBytes.toDouble()
             )
         }
 
@@ -414,6 +459,13 @@ class ListeningCalendarViewModel @Inject constructor(
             return formatCalendar(cal)
         }
 
+        private fun startOfYear(date: String): String? {
+            val cal = calendarFor(date) ?: return null
+            cal.set(Calendar.MONTH, Calendar.JANUARY)
+            cal.set(Calendar.DAY_OF_MONTH, 1)
+            return formatCalendar(cal)
+        }
+
         private fun dayOfMonth(date: String): Int? {
             return calendarFor(date)?.get(Calendar.DAY_OF_MONTH)
         }
@@ -431,6 +483,12 @@ class ListeningCalendarViewModel @Inject constructor(
         private fun addMonths(date: String, months: Int): String? {
             val cal = calendarFor(date) ?: return null
             cal.add(Calendar.MONTH, months)
+            return formatCalendar(cal)
+        }
+
+        private fun addYears(date: String, years: Int): String? {
+            val cal = calendarFor(date) ?: return null
+            cal.add(Calendar.YEAR, years)
             return formatCalendar(cal)
         }
 
@@ -480,8 +538,7 @@ class ListeningCalendarViewModel @Inject constructor(
         private data class SummaryComparisonWindow(
             val currentRange: DateRange,
             val referenceRange: DateRange,
-            val referenceLabel: String,
-            val usesDailyAverage: Boolean
+            val referenceLabel: String
         )
 
         private data class SummaryValues(
@@ -492,5 +549,14 @@ class ListeningCalendarViewModel @Inject constructor(
         )
 
         private const val MILLIS_PER_MINUTE = 60_000L
+        private const val SUMMARY_UPDATE_DEBOUNCE_MS = 600L
     }
 }
+
+private fun AlbumListeningRow.toSummaryArtwork(): ListeningSummaryArtwork =
+    ListeningSummaryArtwork(
+        title = title,
+        coverUrl = coverUrl,
+        coverPath = coverPath,
+        coverThumbPath = coverThumbPath
+    )

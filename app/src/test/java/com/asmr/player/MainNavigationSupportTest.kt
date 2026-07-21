@@ -132,7 +132,7 @@ class MainNavigationSupportTest {
         val items = bottomChromeNavItems()
         val routes = items.map { it.route }
 
-        assertEquals("Eara 日历", items.last().label)
+        assertEquals("我的足迹", items.last().label)
         assertEquals("listening_calendar", items.last().route)
         assertEquals(true, routes.contains("listening_calendar"))
         assertEquals(false, routes.contains("dlsite_login"))

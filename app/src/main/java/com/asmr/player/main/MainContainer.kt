@@ -1210,7 +1210,7 @@ fun MainContainer(
                         Triple(Icons.Rounded.Folder, "我的分组", "groups"),
                         Triple(Icons.Rounded.Download, "下载管理", "downloads"),
                         Triple(Icons.Rounded.Settings, "设置", "settings"),
-                        Triple(Icons.Rounded.CalendarMonth, "Eara 日历", "listening_calendar")
+                        Triple(Icons.Rounded.Route, "我的足迹", "listening_calendar")
                     )
 
                     Column(modifier = Modifier.fillMaxSize()) {
@@ -1413,7 +1413,7 @@ fun MainContainer(
                                                     groupName.ifBlank { "我的分组" }
                                                 resolvedTitleRoute == "settings" -> "设置"
                                                 resolvedTitleRoute == "downloads" -> "下载管理"
-                                                resolvedTitleRoute == "listening_calendar" -> "Eara 日历"
+                                                resolvedTitleRoute == "listening_calendar" -> "我的足迹"
                                                 resolvedTitleRoute == "dlsite_login" -> "DLsite 登录"
                                                 resolvedTitleRoute?.startsWith("playlist_picker") == true -> "添加到我的列表"
                                                 resolvedTitleRoute?.startsWith("album_detail") == true -> "专辑详情"

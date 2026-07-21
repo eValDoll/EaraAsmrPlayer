@@ -193,6 +193,9 @@ class ListeningRecordRepository @Inject constructor(
     suspend fun topAlbums(startDate: String, endDate: String, limit: Int): List<AlbumListeningRow> =
         withContext(Dispatchers.IO) { sessionDao.topAlbums(startDate, endDate, limit) }
 
+    fun observeTopAlbum(startDate: String, endDate: String): Flow<AlbumListeningRow?> =
+        sessionDao.observeTopAlbum(startDate, endDate)
+
     suspend fun hourDurationTotals(startDate: String, endDate: String): List<HourDurationRow> =
         withContext(Dispatchers.IO) { sessionDao.hourDurationTotals(startDate, endDate) }
 

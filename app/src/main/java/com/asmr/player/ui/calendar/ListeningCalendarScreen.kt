@@ -63,6 +63,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -88,7 +89,7 @@ import kotlin.math.abs
 import kotlin.math.roundToLong
 
 /**
- * "Eara 日历"：用户的本地收听记录 / 日记面板。
+ * "我的足迹"：用户的本地收听记录 / 日记面板。
  *
  * 由原"DLsite 登录"页扩展而来：登录能力弱化为二级入口（顶部按钮），
  * 主体是收听热度图（贡献图）+ 汇总统计，点击某天可查看当日的垂直时间线。
@@ -101,6 +102,7 @@ fun ListeningCalendarScreen(
     viewModel: ListeningCalendarViewModel = hiltViewModel()
 ) {
     val summary by viewModel.summary.collectAsState()
+    val summaryArtwork by viewModel.summaryArtwork.collectAsState()
     val summaryComparison by viewModel.summaryComparison.collectAsState()
     val comparisonGranularity by viewModel.comparisonGranularity.collectAsState()
     val heatmap by viewModel.heatmap.collectAsState()
@@ -158,6 +160,7 @@ fun ListeningCalendarScreen(
 
             SummaryCards(
                 summary = summary,
+                artwork = summaryArtwork,
                 comparison = summaryComparison,
                 selectedGranularity = comparisonGranularity,
                 colorScheme = colorScheme,
@@ -228,7 +231,7 @@ private fun DlsiteAccountRow(
             )
         }
         SmallCalendarButton(
-            label = "管理",
+            label = if (isLoggedIn) "管理" else "登录",
             colorScheme = colorScheme,
             minWidth = 58.dp,
             onClick = onOpenDlsiteLogin
@@ -264,6 +267,7 @@ private fun DlsiteLoginStatusTag(
 @Composable
 private fun SummaryCards(
     summary: ListeningSummary,
+    artwork: ListeningSummaryArtwork?,
     comparison: ListeningSummaryComparison,
     selectedGranularity: ListeningComparisonGranularity,
     onGranularitySelected: (ListeningComparisonGranularity) -> Unit,
@@ -287,17 +291,23 @@ private fun SummaryCards(
                 onGranularitySelected = onGranularitySelected
             )
         }
-        BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
-            val singleColumn = maxWidth < 360.dp
-            if (singleColumn) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SummaryArtworkPanel(
+            artwork = artwork,
+            colorScheme = colorScheme,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     SummaryCell(
                         icon = Icons.Rounded.AccessTime,
                         label = "总时长",
                         value = formatDurationLong(summary.totalDurationMs),
                         comparisonDisplay = summaryComparisonDisplay(SummaryMetric.Duration, comparison, colorScheme),
                         colorScheme = colorScheme,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.weight(1f)
                     )
                     SummaryCell(
                         icon = Icons.Rounded.Audiotrack,
@@ -305,14 +315,25 @@ private fun SummaryCards(
                         value = "${summary.totalTrackCount}",
                         comparisonDisplay = summaryComparisonDisplay(SummaryMetric.TrackCount, comparison, colorScheme),
                         colorScheme = colorScheme,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.weight(1f)
                     )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     SummaryCell(
                         icon = Icons.Rounded.EventAvailable,
                         label = "活跃天数",
                         value = "${summary.activeDayCount}",
+                        comparisonDisplay = summaryComparisonDisplay(
+                            metric = SummaryMetric.ActiveDayCount,
+                            comparison = comparison,
+                            colorScheme = colorScheme,
+                            selectedGranularity = selectedGranularity
+                        ),
                         colorScheme = colorScheme,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.weight(1f)
                     )
                     SummaryCell(
                         icon = Icons.Rounded.CloudDownload,
@@ -320,54 +341,80 @@ private fun SummaryCards(
                         value = formatTraffic(summary.totalTrafficBytes),
                         comparisonDisplay = summaryComparisonDisplay(SummaryMetric.Traffic, comparison, colorScheme),
                         colorScheme = colorScheme,
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.weight(1f)
                     )
                 }
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        SummaryCell(
-                            icon = Icons.Rounded.AccessTime,
-                            label = "总时长",
-                            value = formatDurationLong(summary.totalDurationMs),
-                            comparisonDisplay = summaryComparisonDisplay(SummaryMetric.Duration, comparison, colorScheme),
-                            colorScheme = colorScheme,
-                            modifier = Modifier.weight(1f)
-                        )
-                        SummaryCell(
-                            icon = Icons.Rounded.Audiotrack,
-                            label = "音轨",
-                            value = "${summary.totalTrackCount}",
-                            comparisonDisplay = summaryComparisonDisplay(SummaryMetric.TrackCount, comparison, colorScheme),
-                            colorScheme = colorScheme,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        SummaryCell(
-                            icon = Icons.Rounded.EventAvailable,
-                            label = "活跃天数",
-                            value = "${summary.activeDayCount}",
-                            colorScheme = colorScheme,
-                            modifier = Modifier.weight(1f)
-                        )
-                        SummaryCell(
-                            icon = Icons.Rounded.CloudDownload,
-                            label = "流量",
-                            value = formatTraffic(summary.totalTrafficBytes),
-                            comparisonDisplay = summaryComparisonDisplay(SummaryMetric.Traffic, comparison, colorScheme),
-                            colorScheme = colorScheme,
-                            modifier = Modifier.weight(1f)
-                        )
-                    }
-                }
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalAnimationApi::class)
+@Composable
+private fun SummaryArtworkPanel(
+    artwork: ListeningSummaryArtwork?,
+    colorScheme: AsmrColorScheme,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    val backgroundModel = remember(artwork?.coverThumbPath, artwork?.coverPath, artwork?.coverUrl) {
+        artwork?.let {
+            albumCoverImageModel(
+                coverThumbPath = it.coverThumbPath,
+                coverPath = it.coverPath,
+                coverUrl = it.coverUrl
+            )
+        }
+    }
+    val shape = RoundedCornerShape(16.dp)
+    val fallbackColor = if (colorScheme.isDark) {
+        colorScheme.surfaceVariant.copy(alpha = 0.36f)
+    } else {
+        colorScheme.surfaceVariant.copy(alpha = 0.26f)
+    }
+    Box(
+        modifier = modifier
+            .clip(shape)
+            .background(fallbackColor)
+    ) {
+        AnimatedContent(
+            targetState = backgroundModel,
+            transitionSpec = {
+                fadeIn(animationSpec = tween(260))
+                    .togetherWith(fadeOut(animationSpec = tween(180)))
+            },
+            label = "ListeningSummaryArtwork",
+            modifier = Modifier.matchParentSize()
+        ) { targetModel ->
+            if (targetModel != null) {
+                AsmrAsyncImage(
+                    model = targetModel,
+                    contentDescription = null,
+                    modifier = Modifier.matchParentSize(),
+                    contentScale = ContentScale.FillWidth,
+                    alignment = Alignment.TopCenter,
+                    alpha = if (colorScheme.isDark) 0.54f else 0.62f,
+                    placeholder = { _ -> },
+                    loading = { _ -> },
+                    empty = { _ -> },
+                    loadAtOriginalSize = true,
+                    peekAnySizeForInitial = true
+                )
+            }
+        }
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .background(
+                    if (colorScheme.isDark) {
+                        Color.Black.copy(alpha = 0.22f)
+                    } else {
+                        colorScheme.surface.copy(alpha = 0.14f)
+                    }
+                )
+        )
+        Box(modifier = Modifier.padding(8.dp)) {
+            content()
         }
     }
 }
@@ -440,12 +487,12 @@ private fun SummaryCell(
     val containerColor = if (isDark) {
         colorScheme.surfaceVariant.copy(alpha = 0.46f)
     } else {
-        colorScheme.primarySoft.copy(alpha = 0.52f)
+        colorScheme.surface.copy(alpha = 0.48f)
     }
     val borderColor = if (isDark) {
         Color.White.copy(alpha = 0.16f)
     } else {
-        colorScheme.primaryStrong.copy(alpha = 0.14f)
+        colorScheme.onSurface.copy(alpha = 0.08f)
     }
     val shape = RoundedCornerShape(14.dp)
     BoxWithConstraints(
@@ -453,21 +500,21 @@ private fun SummaryCell(
             .clip(shape)
             .background(containerColor)
             .border(BorderStroke(1.dp, borderColor), shape)
-            .heightIn(min = 84.dp)
-            .padding(horizontal = 9.dp, vertical = 9.dp)
+            .height(72.dp)
+            .padding(horizontal = 8.dp, vertical = 7.dp)
     ) {
         val useStackedLayout = maxWidth < 170.dp
         if (useStackedLayout) {
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                modifier = Modifier.fillMaxSize(),
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    SummaryIcon(icon = icon, colorScheme = colorScheme, size = 16.dp)
+                    SummaryIcon(icon = icon, colorScheme = colorScheme, size = 15.dp)
                     SummaryValueText(
                         value = value,
                         colorScheme = colorScheme,
@@ -477,7 +524,7 @@ private fun SummaryCell(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.Bottom,
-                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     SummaryLabelText(
                         label = label,
@@ -487,7 +534,7 @@ private fun SummaryCell(
                     if (comparisonDisplay != null) {
                         AnimatedComparisonSummary(
                             display = comparisonDisplay,
-                            modifier = Modifier.widthIn(min = 48.dp, max = 78.dp)
+                            modifier = Modifier.widthIn(min = 48.dp, max = 72.dp)
                         )
                     }
                 }
@@ -496,9 +543,9 @@ private fun SummaryCell(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(7.dp)
             ) {
-                SummaryIcon(icon = icon, colorScheme = colorScheme, size = 18.dp)
+                SummaryIcon(icon = icon, colorScheme = colorScheme, size = 17.dp)
                 Column(modifier = Modifier.weight(1f)) {
                     SummaryValueText(value = value, colorScheme = colorScheme)
                     SummaryLabelText(label = label, colorScheme = colorScheme)
@@ -506,7 +553,7 @@ private fun SummaryCell(
                 if (comparisonDisplay != null) {
                     AnimatedComparisonSummary(
                         display = comparisonDisplay,
-                        modifier = Modifier.widthIn(min = 52.dp, max = 80.dp)
+                        modifier = Modifier.widthIn(min = 50.dp, max = 74.dp)
                     )
                 }
             }
@@ -543,7 +590,8 @@ private fun SummaryValueText(
         text = value,
         style = MaterialTheme.typography.titleSmall.copy(
             fontWeight = FontWeight.Bold,
-            fontSize = fontSize
+            fontSize = fontSize,
+            fontFeatureSettings = "tnum"
         ),
         color = colorScheme.textPrimary,
         maxLines = 1,
@@ -597,7 +645,8 @@ private fun AnimatedComparisonSummary(
                 text = targetDisplay.headline,
                 style = MaterialTheme.typography.titleSmall.copy(
                     fontWeight = FontWeight.Bold,
-                    fontSize = if (targetDisplay.headline.length >= 8) 12.sp else 14.sp
+                    fontSize = if (targetDisplay.headline.length >= 8) 12.sp else 14.sp,
+                    fontFeatureSettings = "tnum"
                 ),
                 color = targetDisplay.color,
                 textAlign = TextAlign.End,
@@ -606,17 +655,19 @@ private fun AnimatedComparisonSummary(
                 overflow = TextOverflow.Clip,
                 modifier = Modifier.fillMaxWidth()
             )
-            Text(
-                text = targetDisplay.caption,
-                style = MaterialTheme.typography.labelSmall.copy(lineHeight = 11.sp),
-                color = targetDisplay.captionColor,
-                fontSize = 9.sp,
-                textAlign = TextAlign.End,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Clip,
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (targetDisplay.caption.isNotBlank()) {
+                Text(
+                    text = targetDisplay.caption,
+                    style = MaterialTheme.typography.labelSmall.copy(lineHeight = 11.sp),
+                    color = targetDisplay.captionColor,
+                    fontSize = 9.sp,
+                    textAlign = TextAlign.End,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Clip,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
         }
     }
 }
@@ -1123,14 +1174,24 @@ private data class SummaryComparisonDisplay(
 private enum class SummaryMetric {
     Duration,
     TrackCount,
+    ActiveDayCount,
     Traffic
 }
 
 private fun summaryComparisonDisplay(
     metric: SummaryMetric,
     comparison: ListeningSummaryComparison,
-    colorScheme: AsmrColorScheme
+    colorScheme: AsmrColorScheme,
+    selectedGranularity: ListeningComparisonGranularity? = null
 ): SummaryComparisonDisplay {
+    if (metric == SummaryMetric.ActiveDayCount && selectedGranularity == ListeningComparisonGranularity.Day) {
+        return SummaryComparisonDisplay(
+            headline = "-",
+            caption = "相比${comparison.referenceLabel}",
+            color = colorScheme.textSecondary,
+            captionColor = Color.Transparent
+        )
+    }
     val delta = metricDelta(metric, comparison)
     return SummaryComparisonDisplay(
         headline = formatComparisonHeadline(metric, delta),
@@ -1145,6 +1206,7 @@ private fun summaryTitleFor(granularity: ListeningComparisonGranularity): String
         ListeningComparisonGranularity.Day -> "今日收听"
         ListeningComparisonGranularity.Week -> "本周收听"
         ListeningComparisonGranularity.Month -> "本月收听"
+        ListeningComparisonGranularity.Year -> "本年收听"
     }
 }
 
@@ -1163,6 +1225,7 @@ private fun formatComparisonAmount(metric: SummaryMetric, value: Double): String
     return when (metric) {
         SummaryMetric.Duration -> formatDurationLong(value.roundToLong())
         SummaryMetric.TrackCount -> "${formatDecimalAmount(value)}个"
+        SummaryMetric.ActiveDayCount -> "${formatDecimalAmount(value)}天"
         SummaryMetric.Traffic -> formatTraffic(value.roundToLong())
     }
 }
@@ -1174,6 +1237,7 @@ private fun metricDelta(
     return when (metric) {
         SummaryMetric.Duration -> comparison.durationMs
         SummaryMetric.TrackCount -> comparison.trackCount
+        SummaryMetric.ActiveDayCount -> comparison.activeDayCount
         SummaryMetric.Traffic -> comparison.trafficBytes
     }
 }

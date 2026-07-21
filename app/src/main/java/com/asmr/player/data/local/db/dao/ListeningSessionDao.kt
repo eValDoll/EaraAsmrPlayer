@@ -108,4 +108,18 @@ interface ListeningSessionDao {
             "GROUP BY rjCode ORDER BY durationMs DESC LIMIT :limit"
     )
     suspend fun topAlbums(startDate: String, endDate: String, limit: Int): List<AlbumListeningRow>
+
+    /** 区间内累计收听时长最高的作品，用于当前收听面板封面背景。 */
+    @Query(
+        "SELECT albumId AS albumId, rjCode AS rjCode, title AS title, circle AS circle, cv AS cv, " +
+            "coverUrl AS coverUrl, coverPath AS coverPath, coverThumbPath AS coverThumbPath, " +
+            "SUM(durationMs) AS durationMs, COUNT(*) AS sessionCount FROM listening_sessions " +
+            "WHERE listeningDate BETWEEN :startDate AND :endDate AND durationMs > 0 " +
+            "GROUP BY CASE " +
+            "WHEN rjCode != '' THEN rjCode " +
+            "WHEN albumId > 0 THEN 'album:' || albumId " +
+            "ELSE title END " +
+            "ORDER BY durationMs DESC LIMIT 1"
+    )
+    fun observeTopAlbum(startDate: String, endDate: String): Flow<AlbumListeningRow?>
 }

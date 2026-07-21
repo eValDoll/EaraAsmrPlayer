@@ -28,12 +28,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
-import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.MoreHoriz
+import androidx.compose.material.icons.rounded.Route
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SwapHoriz
@@ -291,7 +291,7 @@ fun bottomChromeNavItems(): List<BottomChromeNavItem> = listOf(
     BottomChromeNavItem(Icons.AutoMirrored.Rounded.QueueMusic, "我的列表", "playlists"),
     BottomChromeNavItem(Icons.Rounded.Folder, "我的分组", "groups"),
     BottomChromeNavItem(Icons.Rounded.Settings, "设置", "settings"),
-    BottomChromeNavItem(Icons.Rounded.CalendarMonth, "Eara 日历", "listening_calendar")
+    BottomChromeNavItem(Icons.Rounded.Route, "我的足迹", "listening_calendar")
 )
 
 fun isPrimaryRoute(route: String?): Boolean {

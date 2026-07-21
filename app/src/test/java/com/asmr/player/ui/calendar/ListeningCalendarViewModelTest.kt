@@ -92,6 +92,11 @@ class ListeningCalendarViewModelTest {
             currentDate = "2026-07-21",
             granularity = ListeningComparisonGranularity.Month
         )
+        val year = ListeningCalendarViewModel.buildCurrentSummary(
+            stats = stats,
+            currentDate = "2026-07-21",
+            granularity = ListeningComparisonGranularity.Year
+        )
 
         assertEquals(40L * minute, day.totalDurationMs)
         assertEquals(4, day.totalTrackCount)
@@ -101,6 +106,10 @@ class ListeningCalendarViewModelTest {
         assertEquals(10, month.totalTrackCount)
         assertEquals(4, month.activeDayCount)
         assertEquals(1024L, month.totalTrafficBytes)
+        assertEquals(100L * minute, year.totalDurationMs)
+        assertEquals(10, year.totalTrackCount)
+        assertEquals(4, year.activeDayCount)
+        assertEquals(1024L, year.totalTrafficBytes)
     }
 
     @Test
@@ -117,14 +126,13 @@ class ListeningCalendarViewModelTest {
         )
 
         assertEquals("7月10日", comparison.referenceLabel)
-        assertEquals(false, comparison.usesDailyAverage)
         assertEquals(120.0 * minute, comparison.durationMs.current, 0.1)
         assertEquals(60.0 * minute, comparison.durationMs.reference, 0.1)
         assertEquals(3.0, comparison.trackCount.difference, 0.1)
     }
 
     @Test
-    fun buildSummaryComparison_weekUsesSelectedWeekOffsetAndElapsedDaysAverage() {
+    fun buildSummaryComparison_weekUsesSelectedWeekOffsetAndTotals() {
         val minute = 60_000L
         val comparison = ListeningCalendarViewModel.buildSummaryComparison(
             stats = listOf(
@@ -141,14 +149,14 @@ class ListeningCalendarViewModelTest {
         )
 
         assertEquals("2周前", comparison.referenceLabel)
-        assertEquals(true, comparison.usesDailyAverage)
-        assertEquals(80.0 * minute, comparison.durationMs.current, 0.1)
-        assertEquals(30.0 * minute, comparison.durationMs.reference, 0.1)
-        assertEquals(1.0, comparison.trackCount.difference, 0.1)
+        assertEquals(240.0 * minute, comparison.durationMs.current, 0.1)
+        assertEquals(90.0 * minute, comparison.durationMs.reference, 0.1)
+        assertEquals(3.0, comparison.trackCount.difference, 0.1)
+        assertEquals(0.0, comparison.activeDayCount.difference, 0.1)
     }
 
     @Test
-    fun buildSummaryComparison_monthUsesSelectedMonthOffsetAndDailyAverage() {
+    fun buildSummaryComparison_monthUsesSelectedMonthOffsetAndTotals() {
         val currentStats = ListeningDay.datesBetween("2026-07-01", "2026-07-20")
             .map { DailyStatEntity(it, listeningDurationMs = 60_000L, trackCount = 1) }
         val referenceStats = ListeningDay.datesBetween("2026-05-01", "2026-05-20")
@@ -162,9 +170,30 @@ class ListeningCalendarViewModelTest {
         )
 
         assertEquals("2个月前", comparison.referenceLabel)
-        assertEquals(true, comparison.usesDailyAverage)
-        assertEquals(60_000.0, comparison.durationMs.current, 0.1)
-        assertEquals(30_000.0, comparison.durationMs.reference, 0.1)
-        assertEquals(-1.0, comparison.trackCount.difference, 0.1)
+        assertEquals(20.0 * 60_000.0, comparison.durationMs.current, 0.1)
+        assertEquals(20.0 * 30_000.0, comparison.durationMs.reference, 0.1)
+        assertEquals(-20.0, comparison.trackCount.difference, 0.1)
+        assertEquals(0.0, comparison.activeDayCount.difference, 0.1)
+    }
+
+    @Test
+    fun buildSummaryComparison_yearUsesSelectedYearOffsetAndTotals() {
+        val currentStats = ListeningDay.datesBetween("2026-01-01", "2026-07-20")
+            .map { DailyStatEntity(it, listeningDurationMs = 60_000L, trackCount = 1) }
+        val referenceStats = ListeningDay.datesBetween("2024-01-01", "2024-07-20")
+            .map { DailyStatEntity(it, listeningDurationMs = 30_000L, trackCount = 2) }
+
+        val comparison = ListeningCalendarViewModel.buildSummaryComparison(
+            stats = currentStats + referenceStats,
+            currentDate = "2026-07-20",
+            selectedDate = "2024-03-01",
+            granularity = ListeningComparisonGranularity.Year
+        )
+
+        assertEquals("2年前", comparison.referenceLabel)
+        assertEquals(201.0 * 60_000.0, comparison.durationMs.current, 0.1)
+        assertEquals(202.0 * 30_000.0, comparison.durationMs.reference, 0.1)
+        assertEquals(-203.0, comparison.trackCount.difference, 0.1)
+        assertEquals(-1.0, comparison.activeDayCount.difference, 0.1)
     }
 }
