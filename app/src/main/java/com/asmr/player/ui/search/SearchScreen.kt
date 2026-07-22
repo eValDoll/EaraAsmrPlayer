@@ -132,7 +132,11 @@ import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.library.AlbumGridItem
 import com.asmr.player.ui.library.AlbumGridItemSpacing
 import com.asmr.player.ui.library.AlbumItem
+import com.asmr.player.ui.library.AlbumMetaActionDialog
 import com.asmr.player.ui.library.rememberAlbumMetaCopyAction
+import com.asmr.player.ui.groups.AlbumGroupsViewModel
+import com.asmr.player.ui.playlists.PlaylistsViewModel
+import com.asmr.player.ui.settings.SettingsViewModel
 import com.asmr.player.ui.sidepanel.LandscapeRightPanelHost
 import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
 import com.asmr.player.ui.theme.AsmrTheme
@@ -325,6 +329,10 @@ fun SearchScreen(
     val gridState = rememberSaveable(resultScrollKey, saver = LazyStaggeredGridState.Saver) { LazyStaggeredGridState() }
     val colorScheme = AsmrTheme.colorScheme
     val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
+    val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
+    val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
+    val settingsViewModel: SettingsViewModel = hiltViewModel()
+    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsState()
     val scope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
@@ -335,6 +343,24 @@ fun SearchScreen(
     var keywordSyncedFromState by rememberSaveable { mutableStateOf(false) }
     var optionsSyncedFromState by rememberSaveable { mutableStateOf(false) }
     var lastHandledSubmittedSearchSignal by rememberSaveable { mutableStateOf(0L) }
+    var metaActionKeyword by rememberSaveable { mutableStateOf<String?>(null) }
+
+    fun openMetaActions(value: String) {
+        val normalized = value.trim()
+        if (normalized.isNotBlank()) metaActionKeyword = normalized
+    }
+
+    fun addMetaBlockedKeyword(value: String) {
+        val normalized = value.trim()
+        if (normalized.isBlank()) return
+        val exists = searchBlockedKeywords.any { it.equals(normalized, ignoreCase = true) }
+        settingsViewModel.addSearchBlockedKeyword(normalized)
+        if (exists) {
+            viewModel.messageManager.showInfo("屏蔽词已存在：$normalized")
+        } else {
+            viewModel.messageManager.showSuccess("已添加屏蔽词：$normalized")
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.bootstrap(
@@ -429,6 +455,30 @@ fun SearchScreen(
         keyboardController?.hide()
         val accepted = viewModel.search("")
         if (!accepted) return
+        scrollResultsToTop()
+        chromeState.expand()
+    }
+
+    fun searchMetaKeyword(value: String) {
+        if (searchSubmitLocked) {
+            viewModel.messageManager.showInfo("搜索处理中，请稍后再试")
+            return
+        }
+        val normalized = value.trim()
+        if (normalized.isBlank()) return
+        keyboardController?.hide()
+        val accepted = viewModel.search(
+            keyword = normalized,
+            order = selectedOrder,
+            collectedSort = selectedCollectedSort,
+            purchasedOnly = purchasedOnly,
+            presaleOnly = presaleOnly,
+            chineseTranslatedOnly = chineseTranslatedOnly,
+            collectedOnly = collectedOnly,
+            locale = selectedLocale
+        )
+        if (!accepted) return
+        keyword = normalized
         scrollResultsToTop()
         chromeState.expand()
     }
@@ -951,8 +1001,11 @@ fun SearchScreen(
                                                 coverReloadKey = state.resultRevision,
                                                 onRjClick = { copyMeta("RJ", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
+                                                onCircleLongClick = ::openMetaActions,
                                                 onCvClick = { copyMeta("CV", it) },
+                                                onCvLongClick = ::openMetaActions,
                                                 onTagClick = { copyMeta("标签", it) },
+                                                onTagLongClick = ::openMetaActions,
                                             )
                                         }
                                     }
@@ -1014,8 +1067,11 @@ fun SearchScreen(
                                                 coverReloadKey = state.resultRevision,
                                                 onRjClick = { copyMeta("RJ", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
+                                                onCircleLongClick = ::openMetaActions,
                                                 onCvClick = { copyMeta("CV", it) },
+                                                onCvLongClick = ::openMetaActions,
                                                 onTagClick = { copyMeta("标签", it) },
+                                                onTagLongClick = ::openMetaActions,
                                             )
                                         }
                                     }
@@ -1182,6 +1238,17 @@ fun SearchScreen(
                 }
             }
         }
+    }
+
+    metaActionKeyword?.let { targetKeyword ->
+        AlbumMetaActionDialog(
+            keyword = targetKeyword,
+            onDismissRequest = { metaActionKeyword = null },
+            onSearch = ::searchMetaKeyword,
+            onCreatePlaylist = playlistsViewModel::createPlaylist,
+            onCreateGroup = albumGroupsViewModel::createGroup,
+            onAddBlockedKeyword = ::addMetaBlockedKeyword,
+        )
     }
 }
 

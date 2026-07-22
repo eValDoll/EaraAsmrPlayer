@@ -96,8 +96,11 @@ fun AlbumItem(
     modifier: Modifier = Modifier,
     onRjClick: ((String) -> Unit)? = null,
     onCircleClick: ((String) -> Unit)? = null,
+    onCircleLongClick: ((String) -> Unit)? = null,
     onCvClick: ((String) -> Unit)? = null,
+    onCvLongClick: ((String) -> Unit)? = null,
     onTagClick: ((String) -> Unit)? = null,
+    onTagLongClick: ((String) -> Unit)? = null,
     coverBadge: AlbumCoverBadge? = null,
     onlineDetailLoading: Boolean = false,
     onlineCvLoading: Boolean = onlineDetailLoading,
@@ -241,6 +244,7 @@ fun AlbumItem(
                         modifier = Modifier.fillMaxWidth(),
                         rjOnClick = onRjClick?.let { click -> { click(rj) } },
                         circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
+                        circleOnLongClick = onCircleLongClick?.let { longClick -> { longClick(album.circle) } },
                         leadingVisual = Icon,
                         order = AlbumPrimaryMetaOrder.CircleThenRj,
                     )
@@ -253,6 +257,7 @@ fun AlbumItem(
                             cvText = album.cv,
                             modifier = Modifier.fillMaxWidth(),
                             onCvClick = onCvClick,
+                            onCvLongClick = onCvLongClick,
                             leadingVisual = Icon,
                         )
                     }
@@ -269,6 +274,7 @@ fun AlbumItem(
                                 .fillMaxWidth()
                                 .testTag(ALBUM_ITEM_TAGS_TAG),
                             onTagClick = onTagClick,
+                            onTagLongClick = onTagLongClick,
                             leadingVisual = Icon,
                         )
                     }
@@ -352,8 +358,11 @@ fun AlbumGridItem(
     modifier: Modifier = Modifier,
     onRjClick: ((String) -> Unit)? = null,
     onCircleClick: ((String) -> Unit)? = null,
+    onCircleLongClick: ((String) -> Unit)? = null,
     onCvClick: ((String) -> Unit)? = null,
+    onCvLongClick: ((String) -> Unit)? = null,
     onTagClick: ((String) -> Unit)? = null,
+    onTagLongClick: ((String) -> Unit)? = null,
     coverBadge: AlbumCoverBadge? = null,
     onlineDetailLoading: Boolean = false,
     onlineCvLoading: Boolean = onlineDetailLoading,
@@ -490,6 +499,7 @@ fun AlbumGridItem(
                 circle = album.circle,
                 modifier = Modifier.fillMaxWidth(),
                 circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
+                circleOnLongClick = onCircleLongClick?.let { longClick -> { longClick(album.circle) } },
                 leadingVisual = Icon,
             )
 
@@ -503,6 +513,7 @@ fun AlbumGridItem(
                 AlbumCvChipsFlow(
                     cvText = album.cv,
                     onCvClick = onCvClick,
+                    onCvLongClick = onCvLongClick,
                     leadingVisual = Icon,
                 )
             }
@@ -533,6 +544,7 @@ fun AlbumGridItem(
                     tags = album.tags,
                     modifier = Modifier.padding(top = 2.dp),
                     onTagClick = onTagClick,
+                    onTagLongClick = onTagLongClick,
                     leadingVisual = Icon,
                 )
             }

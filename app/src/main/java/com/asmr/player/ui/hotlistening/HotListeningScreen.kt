@@ -73,7 +73,11 @@ import com.asmr.player.ui.library.AlbumGridItem
 import com.asmr.player.ui.library.AlbumGridItemSpacing
 import com.asmr.player.ui.library.AlbumCoverBadge
 import com.asmr.player.ui.library.AlbumItem
+import com.asmr.player.ui.library.AlbumMetaActionDialog
 import com.asmr.player.ui.library.rememberAlbumMetaCopyAction
+import com.asmr.player.ui.groups.AlbumGroupsViewModel
+import com.asmr.player.ui.playlists.PlaylistsViewModel
+import com.asmr.player.ui.settings.SettingsViewModel
 import com.asmr.player.ui.theme.AsmrTheme
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.CoroutineStart
@@ -89,6 +93,7 @@ fun HotListeningScreen(
     windowSizeClass: WindowSizeClass,
     isActive: Boolean = true,
     onAlbumClick: (Album) -> Unit,
+    onSearchKeyword: (String) -> Unit = {},
     scrollToTopSignal: Long = 0L,
     viewModel: HotListeningViewModel = hiltViewModel()
 ) {
@@ -98,10 +103,15 @@ fun HotListeningScreen(
     val selectedPeriod by viewModel.selectedPeriod.collectAsState()
     val colorScheme = AsmrTheme.colorScheme
     val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
+    val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
+    val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
+    val settingsViewModel: SettingsViewModel = hiltViewModel()
+    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsState()
     val scope = rememberCoroutineScope()
     val isCompactWidth = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
     var showBlockedEntries by rememberSaveable { mutableStateOf(false) }
     var scrollResetNonce by rememberSaveable { mutableIntStateOf(0) }
+    var metaActionKeyword by rememberSaveable { mutableStateOf<String?>(null) }
     val contentScrollKey = remember(selectedPeriod, selectedSortMode, scrollResetNonce) {
         "hot-listening:$selectedPeriod:${selectedSortMode.name}:$scrollResetNonce"
     }
@@ -126,6 +136,23 @@ fun HotListeningScreen(
         scope.launch {
             runCatching { listState.stopScroll(MutatePriority.PreventUserInput) }
             runCatching { gridState.stopScroll(MutatePriority.PreventUserInput) }
+        }
+    }
+
+    fun openMetaActions(value: String) {
+        val normalized = value.trim()
+        if (normalized.isNotBlank()) metaActionKeyword = normalized
+    }
+
+    fun addMetaBlockedKeyword(value: String) {
+        val normalized = value.trim()
+        if (normalized.isBlank()) return
+        val exists = searchBlockedKeywords.any { it.equals(normalized, ignoreCase = true) }
+        settingsViewModel.addSearchBlockedKeyword(normalized)
+        if (exists) {
+            viewModel.messageManager.showInfo("屏蔽词已存在：$normalized")
+        } else {
+            viewModel.messageManager.showSuccess("已添加屏蔽词：$normalized")
         }
     }
 
@@ -279,6 +306,7 @@ fun HotListeningScreen(
                                 entry = entry,
                                 onAlbumClick = onAlbumClick,
                                 copyMeta = copyMeta,
+                                onMetaLongClick = ::openMetaActions,
                                 coverFadeIn = listCoverFadeIn
                             )
                         }
@@ -303,6 +331,7 @@ fun HotListeningScreen(
                                         entry = entry,
                                         onAlbumClick = onAlbumClick,
                                         copyMeta = copyMeta,
+                                        onMetaLongClick = ::openMetaActions,
                                         coverFadeIn = listCoverFadeIn
                                     )
                                 }
@@ -355,6 +384,7 @@ fun HotListeningScreen(
                                 entry = state.entries[index],
                                 onAlbumClick = onAlbumClick,
                                 copyMeta = copyMeta,
+                                onMetaLongClick = ::openMetaActions,
                                 coverFadeIn = gridCoverFadeIn
                             )
                         }
@@ -382,6 +412,7 @@ fun HotListeningScreen(
                                         entry = state.blockedEntries[index],
                                         onAlbumClick = onAlbumClick,
                                         copyMeta = copyMeta,
+                                        onMetaLongClick = ::openMetaActions,
                                         coverFadeIn = gridCoverFadeIn
                                     )
                                 }
@@ -392,6 +423,17 @@ fun HotListeningScreen(
             }
         }
     }
+
+    metaActionKeyword?.let { keyword ->
+        AlbumMetaActionDialog(
+            keyword = keyword,
+            onDismissRequest = { metaActionKeyword = null },
+            onSearch = onSearchKeyword,
+            onCreatePlaylist = playlistsViewModel::createPlaylist,
+            onCreateGroup = albumGroupsViewModel::createGroup,
+            onAddBlockedKeyword = ::addMetaBlockedKeyword,
+        )
+    }
 }
 
 @Composable
@@ -399,6 +441,7 @@ private fun HotListeningListItem(
     entry: HotListeningEntry,
     onAlbumClick: (Album) -> Unit,
     copyMeta: (String, String) -> Unit,
+    onMetaLongClick: (String) -> Unit,
     coverFadeIn: Boolean = true
 ) {
     val album = entry.album
@@ -410,8 +453,11 @@ private fun HotListeningListItem(
         coverFadeIn = coverFadeIn,
         onRjClick = { copyMeta("RJ", it) },
         onCircleClick = { copyMeta("社团", it) },
+        onCircleLongClick = onMetaLongClick,
         onCvClick = { copyMeta("CV", it) },
+        onCvLongClick = onMetaLongClick,
         onTagClick = { copyMeta("标签", it) },
+        onTagLongClick = onMetaLongClick,
     )
 }
 
@@ -420,6 +466,7 @@ private fun HotListeningGridItem(
     entry: HotListeningEntry,
     onAlbumClick: (Album) -> Unit,
     copyMeta: (String, String) -> Unit,
+    onMetaLongClick: (String) -> Unit,
     coverFadeIn: Boolean = true
 ) {
     val album = entry.album
@@ -431,8 +478,11 @@ private fun HotListeningGridItem(
         coverFadeIn = coverFadeIn,
         onRjClick = { copyMeta("RJ", it) },
         onCircleClick = { copyMeta("社团", it) },
+        onCircleLongClick = onMetaLongClick,
         onCvClick = { copyMeta("CV", it) },
+        onCvLongClick = onMetaLongClick,
         onTagClick = { copyMeta("标签", it) },
+        onTagLongClick = onMetaLongClick,
     )
 }
 

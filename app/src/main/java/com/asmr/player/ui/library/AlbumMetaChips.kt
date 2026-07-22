@@ -2,7 +2,8 @@ package com.asmr.player.ui.library
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -99,6 +100,7 @@ internal fun AlbumPrimaryMetaRow(
     modifier: Modifier = Modifier,
     rjOnClick: (() -> Unit)? = null,
     circleOnClick: (() -> Unit)? = null,
+    circleOnLongClick: (() -> Unit)? = null,
     appearance: AlbumMetaAppearance = AlbumMetaAppearance.Default,
     leadingVisual: AlbumMetaLeadingVisual = AlbumMetaLeadingVisual.None,
     order: AlbumPrimaryMetaOrder = AlbumPrimaryMetaOrder.RjThenCircle,
@@ -125,6 +127,7 @@ internal fun AlbumPrimaryMetaRow(
                 tone = AlbumMetaTone.Circle,
                 shape = AlbumMetaPillShape,
                 onClick = circleOnClick,
+                onLongClick = circleOnLongClick,
                 appearance = appearance,
                 leadingIcon = if (leadingVisual == AlbumMetaLeadingVisual.Icon) AlbumMetaLeadingIconKind.Club else null,
             )
@@ -157,6 +160,7 @@ internal fun AlbumCvChipsSingleLine(
     modifier: Modifier = Modifier,
     showLabel: Boolean = true,
     onCvClick: ((String) -> Unit)? = null,
+    onCvLongClick: ((String) -> Unit)? = null,
     leadingVisual: AlbumMetaLeadingVisual = AlbumMetaLeadingVisual.None,
 ) {
     val cvs = remember(cvText) { parseAlbumCvNames(cvText) }
@@ -193,6 +197,7 @@ internal fun AlbumCvChipsSingleLine(
                 shape = AlbumMetaPillShape,
                 maxWidth = 200.dp,
                 onClick = { onCvClick?.invoke(cv) },
+                onLongClick = onCvLongClick?.let { longClick -> { longClick(cv) } },
             )
         }
     }
@@ -207,6 +212,7 @@ internal fun AlbumCvChipsFlow(
     verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(4.dp),
     showLabel: Boolean = true,
     onCvClick: ((String) -> Unit)? = null,
+    onCvLongClick: ((String) -> Unit)? = null,
     leadingVisual: AlbumMetaLeadingVisual = AlbumMetaLeadingVisual.None,
 ) {
     val cvs = remember(cvText) { parseAlbumCvNames(cvText) }
@@ -241,6 +247,7 @@ internal fun AlbumCvChipsFlow(
                 shape = AlbumMetaPillShape,
                 maxWidth = 200.dp,
                 onClick = { onCvClick?.invoke(cv) },
+                onLongClick = onCvLongClick?.let { longClick -> { longClick(cv) } },
             )
         }
     }
@@ -251,6 +258,7 @@ internal fun AlbumTagsSingleLine(
     tags: List<String>,
     modifier: Modifier = Modifier,
     onTagClick: ((String) -> Unit)? = null,
+    onTagLongClick: ((String) -> Unit)? = null,
     leadingVisual: AlbumMetaLeadingVisual = AlbumMetaLeadingVisual.None,
 ) {
     val normalizedTags = remember(tags) { normalizeAlbumTags(tags) }
@@ -278,6 +286,7 @@ internal fun AlbumTagsSingleLine(
                 shape = AlbumMetaTagShape,
                 maxWidth = 220.dp,
                 onClick = { onTagClick?.invoke(tag) },
+                onLongClick = onTagLongClick?.let { longClick -> { longClick(tag) } },
             )
         }
     }
@@ -291,6 +300,7 @@ internal fun AlbumTagsFlow(
     horizontalArrangement: Arrangement.Horizontal = Arrangement.spacedBy(4.dp),
     verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(4.dp),
     onTagClick: ((String) -> Unit)? = null,
+    onTagLongClick: ((String) -> Unit)? = null,
     leadingVisual: AlbumMetaLeadingVisual = AlbumMetaLeadingVisual.None,
 ) {
     val normalizedTags = remember(tags) { normalizeAlbumTags(tags) }
@@ -316,6 +326,7 @@ internal fun AlbumTagsFlow(
                 shape = AlbumMetaTagShape,
                 maxWidth = 220.dp,
                 onClick = { onTagClick?.invoke(tag) },
+                onLongClick = onTagLongClick?.let { longClick -> { longClick(tag) } },
             )
         }
     }
@@ -358,6 +369,7 @@ private fun AlbumMetaLeadingIcon(
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AlbumMetaBadge(
     text: String,
@@ -366,6 +378,7 @@ private fun AlbumMetaBadge(
     modifier: Modifier = Modifier,
     maxWidth: androidx.compose.ui.unit.Dp? = null,
     onClick: (() -> Unit)? = null,
+    onLongClick: (() -> Unit)? = null,
     textWeight: FontWeight? = null,
     appearance: AlbumMetaAppearance = AlbumMetaAppearance.Default,
     leadingIcon: AlbumMetaLeadingIconKind? = null,
@@ -375,7 +388,16 @@ private fun AlbumMetaBadge(
     val styledModifier = modifier
         .then(if (maxWidth != null) Modifier.widthIn(max = maxWidth) else Modifier)
         .clip(shape)
-        .let { if (onClick != null) it.clickable(onClick = onClick) else it }
+        .let {
+            if (onClick != null || onLongClick != null) {
+                it.combinedClickable(
+                    onClick = { onClick?.invoke() },
+                    onLongClick = onLongClick,
+                )
+            } else {
+                it
+            }
+        }
         .background(palette.container, shape)
         .border(0.5.dp, palette.border, shape)
         .padding(

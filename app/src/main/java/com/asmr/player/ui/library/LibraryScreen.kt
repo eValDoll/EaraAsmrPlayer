@@ -135,6 +135,9 @@ import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
 import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.cache.LazyListPreloader
 import com.asmr.player.cache.LazyStaggeredGridPreloader
+import com.asmr.player.ui.groups.AlbumGroupsViewModel
+import com.asmr.player.ui.playlists.PlaylistsViewModel
+import com.asmr.player.ui.settings.SettingsViewModel
 import dagger.hilt.android.EntryPointAccessors
 
 import androidx.compose.foundation.combinedClickable
@@ -253,6 +256,7 @@ fun LibraryScreen(
     onOpenPlaylistPicker: (MediaItem) -> Unit = {},
     onOpenGroupPicker: (albumId: Long) -> Unit = { _ -> },
     onOpenFilterScreen: () -> Unit = {},
+    onSearchKeyword: (String) -> Unit = {},
     scrollToTopSignal: Long = 0L,
     viewModel: LibraryViewModel = hiltViewModel()
 ) {
@@ -268,12 +272,34 @@ fun LibraryScreen(
     val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsState()
     val isGlobalSyncRunning by viewModel.isGlobalSyncRunning.collectAsState()
     val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
+    val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
+    val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
+    val settingsViewModel: SettingsViewModel = hiltViewModel()
+    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsState()
     val playerViewModel: PlayerViewModel = hiltViewModel()
     val scope = rememberCoroutineScope()
     var searchText by rememberSaveable { mutableStateOf(querySpec.textQuery.orEmpty()) }
     var sortMenuExpanded by remember { mutableStateOf(false) }
     var showTagManager by remember { mutableStateOf(false) }
     var tagAssignTarget by remember { mutableStateOf<TagAssignTarget?>(null) }
+    var metaActionKeyword by rememberSaveable { mutableStateOf<String?>(null) }
+
+    fun openMetaActions(value: String) {
+        val keyword = value.trim()
+        if (keyword.isNotBlank()) metaActionKeyword = keyword
+    }
+
+    fun addMetaBlockedKeyword(value: String) {
+        val keyword = value.trim()
+        if (keyword.isBlank()) return
+        val exists = searchBlockedKeywords.any { it.equals(keyword, ignoreCase = true) }
+        settingsViewModel.addSearchBlockedKeyword(keyword)
+        if (exists) {
+            viewModel.messageManager.showInfo("屏蔽词已存在：$keyword")
+        } else {
+            viewModel.messageManager.showSuccess("已添加屏蔽词：$keyword")
+        }
+    }
 
     LaunchedEffect(querySpec.textQuery) {
         val newText = querySpec.textQuery.orEmpty()
@@ -812,8 +838,11 @@ fun LibraryScreen(
                                                 },
                                                 onRjClick = { copyMeta("RJ", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
+                                                onCircleLongClick = ::openMetaActions,
                                                 onCvClick = { copyMeta("CV", it) },
+                                                onCvLongClick = ::openMetaActions,
                                                 onTagClick = { copyMeta("标签", it) },
+                                                onTagLongClick = ::openMetaActions,
                                                 coverFadeIn = coverFadeIn,
                                             )
                                         }
@@ -869,8 +898,11 @@ fun LibraryScreen(
                                                 },
                                                 onRjClick = { copyMeta("RJ", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
+                                                onCircleLongClick = ::openMetaActions,
                                                 onCvClick = { copyMeta("CV", it) },
+                                                onCvLongClick = ::openMetaActions,
                                                 onTagClick = { copyMeta("标签", it) },
+                                                onTagLongClick = ::openMetaActions,
                                                 coverFadeIn = coverFadeIn,
                                             )
                                         }
@@ -1077,6 +1109,17 @@ fun LibraryScreen(
                 )
             }
         }
+    }
+
+    metaActionKeyword?.let { keyword ->
+        AlbumMetaActionDialog(
+            keyword = keyword,
+            onDismissRequest = { metaActionKeyword = null },
+            onSearch = onSearchKeyword,
+            onCreatePlaylist = playlistsViewModel::createPlaylist,
+            onCreateGroup = albumGroupsViewModel::createGroup,
+            onAddBlockedKeyword = ::addMetaBlockedKeyword,
+        )
     }
 
 }
@@ -1329,6 +1372,7 @@ private fun TrackAlbumHeader(
             }
         }
     }
+
 }
 
 @Composable
@@ -1436,8 +1480,11 @@ private fun AlbumGridItem(
     onLongClick: () -> Unit,
     onRjClick: ((String) -> Unit)? = null,
     onCircleClick: ((String) -> Unit)? = null,
+    onCircleLongClick: ((String) -> Unit)? = null,
     onCvClick: ((String) -> Unit)? = null,
+    onCvLongClick: ((String) -> Unit)? = null,
     onTagClick: ((String) -> Unit)? = null,
+    onTagLongClick: ((String) -> Unit)? = null,
     coverFadeIn: Boolean = true,
 ) {
     val colorScheme = AsmrTheme.colorScheme
@@ -1561,12 +1608,14 @@ private fun AlbumGridItem(
                 circle = album.circle,
                 modifier = Modifier.fillMaxWidth(),
                 circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
+                circleOnLongClick = onCircleLongClick?.let { longClick -> { longClick(album.circle) } },
                 leadingVisual = AlbumMetaLeadingVisual.Icon,
             )
 
             AlbumCvChipsFlow(
                 cvText = album.cv,
                 onCvClick = onCvClick,
+                onCvLongClick = onCvLongClick,
                 leadingVisual = AlbumMetaLeadingVisual.Icon,
             )
 
@@ -1599,6 +1648,7 @@ private fun AlbumGridItem(
                     tags = album.tags,
                     modifier = Modifier.padding(top = 2.dp),
                     onTagClick = onTagClick,
+                    onTagLongClick = onTagLongClick,
                     leadingVisual = AlbumMetaLeadingVisual.Icon,
                 )
             }
@@ -1615,8 +1665,11 @@ private fun AlbumItem(
     onLongClick: () -> Unit,
     onRjClick: ((String) -> Unit)? = null,
     onCircleClick: ((String) -> Unit)? = null,
+    onCircleLongClick: ((String) -> Unit)? = null,
     onCvClick: ((String) -> Unit)? = null,
+    onCvLongClick: ((String) -> Unit)? = null,
     onTagClick: ((String) -> Unit)? = null,
+    onTagLongClick: ((String) -> Unit)? = null,
     coverFadeIn: Boolean = true,
 ) {
     val colorScheme = AsmrTheme.colorScheme
@@ -1757,6 +1810,7 @@ private fun AlbumItem(
                         modifier = Modifier.fillMaxWidth(),
                         rjOnClick = onRjClick?.let { click -> { click(rj) } },
                         circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
+                        circleOnLongClick = onCircleLongClick?.let { longClick -> { longClick(album.circle) } },
                         leadingVisual = AlbumMetaLeadingVisual.Icon,
                         order = AlbumPrimaryMetaOrder.CircleThenRj,
                     )
@@ -1766,6 +1820,7 @@ private fun AlbumItem(
                             cvText = album.cv,
                             modifier = Modifier.fillMaxWidth(),
                             onCvClick = onCvClick,
+                            onCvLongClick = onCvLongClick,
                             leadingVisual = AlbumMetaLeadingVisual.Icon,
                         )
                     }
@@ -1785,6 +1840,7 @@ private fun AlbumItem(
                             tags = album.tags,
                             modifier = Modifier.fillMaxWidth(),
                             onTagClick = onTagClick,
+                            onTagLongClick = onTagLongClick,
                             leadingVisual = AlbumMetaLeadingVisual.Icon,
                         )
                     }
