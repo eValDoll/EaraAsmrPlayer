@@ -144,8 +144,11 @@ import com.asmr.player.ui.common.ImagePreviewRequest
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.consumeTapThrough
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
+import com.asmr.player.ui.groups.AlbumGroupsViewModel
 import com.asmr.player.ui.groups.AlbumGroupPickerScreen
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
+import com.asmr.player.ui.playlists.PlaylistsViewModel
+import com.asmr.player.ui.settings.SettingsViewModel
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.thinScrollbar
@@ -303,11 +306,16 @@ fun AlbumDetailScreen(
     onOpenPlaylistPicker: (MediaItem) -> Unit = {},
     onOpenDlsiteLogin: () -> Unit = {},
     onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit = { _, _ -> },
+    onSearchKeyword: (String) -> Unit = {},
     initialTab: Int? = null,
     viewModel: AlbumDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val cloudSyncSelectionDialogState by viewModel.cloudSyncSelectionDialogState.collectAsState()
+    val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
+    val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
+    val settingsViewModel: SettingsViewModel = hiltViewModel()
+    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsState()
     val colorScheme = AsmrTheme.colorScheme
     val screenKey = remember(albumId, rjCode) {
         val idPart = albumId?.takeIf { it > 0 }?.toString().orEmpty()
@@ -327,6 +335,24 @@ fun AlbumDetailScreen(
     var batchPlaylistItems by remember { mutableStateOf<List<MediaItem>?>(null) }
     var groupPickerAlbumId by remember { mutableStateOf<Long?>(null) }
     var downloadSource by remember { mutableStateOf(OnlineDownloadSource.AsmrOne) }
+    var metaActionKeyword by rememberSaveable { mutableStateOf<String?>(null) }
+
+    fun openMetaActions(value: String) {
+        val keyword = value.trim()
+        if (keyword.isNotBlank()) metaActionKeyword = keyword
+    }
+
+    fun addMetaBlockedKeyword(value: String) {
+        val keyword = value.trim()
+        if (keyword.isBlank()) return
+        val exists = searchBlockedKeywords.any { it.equals(keyword, ignoreCase = true) }
+        settingsViewModel.addSearchBlockedKeyword(keyword)
+        if (exists) {
+            viewModel.messageManager.showInfo("屏蔽词已存在：$keyword")
+        } else {
+            viewModel.messageManager.showSuccess("已添加屏蔽词：$keyword")
+        }
+    }
 
     LaunchedEffect(albumId, rjCode) {
         viewModel.loadAlbum(albumId, rjCode, force = false)
@@ -670,7 +696,8 @@ fun AlbumDetailScreen(
                                 introSessionKey = introSessionKey,
                                 animateIntro = shouldAnimateHeaderIntro,
                                 deferMetaRevealExpected = !isLocalTab,
-                                messageManager = viewModel.messageManager
+                                messageManager = viewModel.messageManager,
+                                onMetaLongClick = ::openMetaActions
                             )
                         }
 
@@ -697,6 +724,7 @@ fun AlbumDetailScreen(
                                 listenTogetherRjListenerCount = model.listenTogetherRjListenerCount,
                                 showCoverLoadingState = showHeroCoverLoadingState,
                                 messageManager = viewModel.messageManager,
+                                onMetaLongClick = ::openMetaActions,
                                 collapsePx = { heroCollapsePx },
                                 collapseMaxPx = heroCollapseMaxPx,
                                 visualOvershootPx = { heroVisualOvershootPx },
@@ -1032,6 +1060,17 @@ fun AlbumDetailScreen(
                     )
                 }
 
+                metaActionKeyword?.let { keyword ->
+                    AlbumMetaActionDialog(
+                        keyword = keyword,
+                        onDismissRequest = { metaActionKeyword = null },
+                        onSearch = onSearchKeyword,
+                        onCreatePlaylist = playlistsViewModel::createPlaylist,
+                        onCreateGroup = albumGroupsViewModel::createGroup,
+                        onAddBlockedKeyword = ::addMetaBlockedKeyword,
+                    )
+                }
+
                 val track = tagManageTrack
                 if (track != null && track.id > 0L) {
                     TagAssignDialog(
@@ -1096,6 +1135,7 @@ private fun AlbumDetailHeroBackground(
     listenTogetherRjListenerCount: Int?,
     showCoverLoadingState: Boolean,
     messageManager: MessageManager,
+    onMetaLongClick: (String) -> Unit,
     modifier: Modifier = Modifier,
     collapsePx: () -> Float = { 0f },
     collapseMaxPx: Float = 0f,
@@ -1283,6 +1323,7 @@ private fun AlbumDetailHeroBackground(
             animateIntro = animateIntro,
             listenTogetherRjListenerCount = listenTogetherRjListenerCount,
             messageManager = messageManager,
+            onMetaLongClick = onMetaLongClick,
             modifier = Modifier.align(Alignment.BottomStart)
         )
     }
@@ -1295,6 +1336,7 @@ private fun AlbumHeroIdentityOverlay(
     animateIntro: Boolean,
     listenTogetherRjListenerCount: Int?,
     messageManager: MessageManager,
+    onMetaLongClick: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colorScheme = AsmrTheme.colorScheme
@@ -1357,6 +1399,7 @@ private fun AlbumHeroIdentityOverlay(
                         modifier = Modifier.weight(1f),
                         rjOnClick = { copyMeta("RJ", rj) },
                         circleOnClick = { copyMeta("社团", circle) },
+                        circleOnLongClick = { onMetaLongClick(circle) },
                         appearance = AlbumMetaAppearance.OnImage,
                         leadingVisual = AlbumMetaLeadingVisual.Icon,
                     )
@@ -1533,7 +1576,8 @@ private fun AlbumHeader(
     introSessionKey: String,
     animateIntro: Boolean,
     deferMetaRevealExpected: Boolean,
-    messageManager: MessageManager
+    messageManager: MessageManager,
+    onMetaLongClick: (String) -> Unit
 ) {
     val context = LocalContext.current
     val colorScheme = AsmrTheme.colorScheme
@@ -1602,6 +1646,7 @@ private fun AlbumHeader(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp),
                                 onCvClick = { cv -> copyMeta("CV", cv) },
+                                onCvLongClick = onMetaLongClick,
                                 leadingVisual = AlbumMetaLeadingVisual.Icon,
                             )
                         }
@@ -1621,6 +1666,7 @@ private fun AlbumHeader(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalArrangement = Arrangement.spacedBy(6.dp),
                                 onTagClick = { tag -> copyMeta("标签", tag) },
+                                onTagLongClick = onMetaLongClick,
                                 leadingVisual = AlbumMetaLeadingVisual.Icon,
                             )
                         }

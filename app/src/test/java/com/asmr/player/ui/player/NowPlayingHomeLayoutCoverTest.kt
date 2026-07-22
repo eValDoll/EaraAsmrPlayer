@@ -22,13 +22,27 @@ class NowPlayingHomeLayoutCoverTest {
     @Test
     fun classicCoverKeepsComfortableWidthOnWidePortrait() {
         assertEquals(
-            400.dp,
+            360.dp,
             nowPlayingHomeCoverWidth(
                 expanded = false,
                 availableWidth = 720.dp,
                 widthClass = WindowWidthSizeClass.Medium,
                 contentHorizontalPadding = 24.dp
             )
+        )
+    }
+
+    @Test
+    fun compactClassicCoverUsesReducedPaddedWidth() {
+        assertEquals(
+            287.04f,
+            nowPlayingHomeCoverWidth(
+                expanded = false,
+                availableWidth = 360.dp,
+                widthClass = WindowWidthSizeClass.Compact,
+                contentHorizontalPadding = 24.dp
+            ).value,
+            0.001f
         )
     }
 

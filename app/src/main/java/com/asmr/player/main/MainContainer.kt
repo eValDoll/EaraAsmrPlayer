@@ -856,6 +856,22 @@ fun MainContainer(
         navController.popBackStack(Routes.Search, false)
     }
 
+    fun submitMetaSearchKeyword(keyword: String) {
+        val normalized = keyword.trim()
+        if (normalized.isBlank()) return
+        val request = SearchAssistSearchRequest(keyword = normalized)
+        submittedSearchKeyword = request.keyword
+        submittedSearchOrderName = request.orderName
+        submittedSearchPurchasedOnly = request.purchasedOnly
+        submittedSearchPresaleOnly = request.presaleOnly
+        submittedSearchChineseTranslatedOnly = request.chineseTranslatedOnly
+        submittedSearchCollectedOnly = request.collectedOnly
+        submittedSearchCollectedSortName = request.collectedSortName
+        submittedSearchLocale = request.locale
+        submittedSearchSignal = System.currentTimeMillis()
+        openPrimaryRoute(Routes.Search)
+    }
+
     fun handleAutomaticInstallResult(result: AppUpdateInstallResult, apkPath: String) {
         when (result) {
             AppUpdateInstallResult.Started -> {
@@ -1723,6 +1739,7 @@ fun MainContainer(
                                                     navController.navigateSingleTop("group_picker?albumId=$albumId")
                                                 },
                                                 onOpenFilterScreen = { navController.navigateSingleTop("library_filter") },
+                                                onSearchKeyword = ::submitMetaSearchKeyword,
                                                 viewModel = libraryViewModel
                                             )
                                         }
@@ -1801,6 +1818,7 @@ fun MainContainer(
                                                     )
                                                     navigator.openAlbumDetailByRj(album.rjCode.ifBlank { album.workId })
                                                 },
+                                                onSearchKeyword = ::submitMetaSearchKeyword,
                                                 viewModel = hotListeningViewModel
                                             )
                                         }
@@ -2093,7 +2111,8 @@ fun MainContainer(
                                 coverUrl = work?.coverUrl
                             )
                             navigator.openAlbumDetailByRjStacked(targetRj)
-                        }
+                        },
+                        onSearchKeyword = ::submitMetaSearchKeyword
                     )
                 }
                 composable(
@@ -2147,7 +2166,8 @@ fun MainContainer(
                                 coverUrl = work?.coverUrl
                             )
                             navigator.openAlbumDetailByRjStacked(targetRj)
-                        }
+                        },
+                        onSearchKeyword = ::submitMetaSearchKeyword
                     )
                 }
                 composable(
@@ -2188,7 +2208,8 @@ fun MainContainer(
                                 coverUrl = work?.coverUrl
                             )
                             navigator.openAlbumDetailByRjStacked(targetRj)
-                        }
+                        },
+                        onSearchKeyword = ::submitMetaSearchKeyword
                     )
                 }
                 composable(

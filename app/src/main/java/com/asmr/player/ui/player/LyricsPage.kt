@@ -153,7 +153,9 @@ internal fun LyricsPage(
                     colors = lyricColors,
                     modifier = Modifier.fillMaxSize(),
                     isLandscape = isLandscape,
-                    settings = lyricsPageSettings
+                    settings = lyricsPageSettings,
+                    contentKey = uiState.contentKey,
+                    contentVisible = !uiState.isLoading
                 )
             }
         }
