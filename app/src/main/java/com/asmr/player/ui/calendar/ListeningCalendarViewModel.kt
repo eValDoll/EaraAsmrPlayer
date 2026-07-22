@@ -176,7 +176,7 @@ class ListeningCalendarViewModel @Inject constructor(
                 ListeningSummaryComparison()
             )
 
-    /** 选中日期的会话列表（垂直时间线数据）。 */
+    /** 选中日期的会话列表（垂直时间线数据），相邻同作品会合并显示。 */
     val selectedSessions: StateFlow<List<ListeningSessionEntity>> =
         _selectedDate
             .flatMapLatest { date ->
@@ -186,6 +186,7 @@ class ListeningCalendarViewModel @Inject constructor(
                     listeningRecordRepository.observeSessionsForDate(date)
                 }
             }
+            .map { sessions -> mergeAdjacentListeningSessions(sessions) }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun selectDate(date: String?) {
@@ -284,6 +285,56 @@ class ListeningCalendarViewModel @Inject constructor(
                 totalTrafficBytes = values.trafficBytes.roundToLong(),
                 activeDayCount = values.activeDayCount.roundToInt()
             )
+        }
+
+        internal fun mergeAdjacentListeningSessions(
+            sessions: List<ListeningSessionEntity>
+        ): List<ListeningSessionEntity> {
+            if (sessions.size <= 1) return sessions
+
+            val merged = ArrayList<ListeningSessionEntity>(sessions.size)
+            var current = sessions.first()
+            sessions.drop(1).forEach { next ->
+                if (isSameListeningWork(current, next)) {
+                    current = current.copy(
+                        durationMs = current.durationMs + next.durationMs,
+                        trafficBytes = current.trafficBytes + next.trafficBytes,
+                        trackCount = current.trackCount + next.trackCount,
+                        lastActiveAtMs = maxOf(current.lastActiveAtMs, next.lastActiveAtMs)
+                    )
+                } else {
+                    merged += current
+                    current = next
+                }
+            }
+            merged += current
+            return merged
+        }
+
+        private fun isSameListeningWork(
+            first: ListeningSessionEntity,
+            second: ListeningSessionEntity
+        ): Boolean {
+            val firstRj = first.rjCode.normalizedRjCode()
+            val secondRj = second.rjCode.normalizedRjCode()
+            if (firstRj != null && secondRj != null) return firstRj == secondRj
+            if (first.albumId > 0L && second.albumId > 0L) return first.albumId == second.albumId
+            if (firstRj != null || secondRj != null || first.albumId > 0L || second.albumId > 0L) return false
+
+            val firstMeta = first.normalizedFallbackWorkMeta() ?: return false
+            val secondMeta = second.normalizedFallbackWorkMeta() ?: return false
+            return firstMeta == secondMeta
+        }
+
+        private fun String.normalizedRjCode(): String? =
+            trim().uppercase(Locale.US).takeIf { it.isNotBlank() }
+
+        private fun ListeningSessionEntity.normalizedFallbackWorkMeta(): String? {
+            val normalizedTitle = title.trim().lowercase(Locale.ROOT)
+            if (normalizedTitle.isBlank()) return null
+            val normalizedCircle = circle.trim().lowercase(Locale.ROOT)
+            val normalizedCv = cv.trim().lowercase(Locale.ROOT)
+            return "$normalizedTitle|$normalizedCircle|$normalizedCv"
         }
 
         private fun currentSummaryRange(

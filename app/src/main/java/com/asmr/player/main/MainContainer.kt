@@ -1209,8 +1209,8 @@ fun MainContainer(
                         Triple(Icons.AutoMirrored.Rounded.QueueMusic, "我的列表", "playlists"),
                         Triple(Icons.Rounded.Folder, "我的分组", "groups"),
                         Triple(Icons.Rounded.Download, "下载管理", "downloads"),
-                        Triple(Icons.Rounded.Settings, "设置", "settings"),
-                        Triple(Icons.Rounded.Route, "我的足迹", "listening_calendar")
+                        Triple(Icons.Rounded.Route, "我的足迹", "listening_calendar"),
+                        Triple(Icons.Rounded.Settings, "设置", "settings")
                     )
 
                     Column(modifier = Modifier.fillMaxSize()) {
