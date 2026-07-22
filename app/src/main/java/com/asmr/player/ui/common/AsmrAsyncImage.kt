@@ -90,12 +90,14 @@ fun AsmrAsyncImage(
     }
     val contentModifier = Modifier.fillMaxSize()
 
-    LaunchedEffect(normalizedModel, measuredSize.value, reloadKey) {
-        val initialSize = measuredSize.value ?: return@LaunchedEffect
-        if (loadWhenSizeStableForMillis > 0L) {
+    val loadSizeKey = if (loadAtOriginalSize) Unit else measuredSize.value
+    LaunchedEffect(normalizedModel, loadSizeKey, reloadKey) {
+        val initialSize = measuredSize.value
+        if (!loadAtOriginalSize && initialSize == null) return@LaunchedEffect
+        if (!loadAtOriginalSize && loadWhenSizeStableForMillis > 0L) {
             delay(loadWhenSizeStableForMillis)
         }
-        val sz = measuredSize.value ?: initialSize
+        val sz = measuredSize.value ?: initialSize ?: IntSize.Zero
         suspend fun finishWithExistingPainter() {
             state.value = AsmrAsyncImageState.Success
             crossfadeRunning.value = false
