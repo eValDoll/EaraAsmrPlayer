@@ -131,6 +131,13 @@ class LyricsPageLayoutTest {
     }
 
     @Test
+    fun lyricDisplayActiveIndex_fallsBackToFirstLineBeforePlaybackStarts() {
+        assertEquals(0, lyricDisplayActiveIndex(activeIndex = -1, totalCount = 4))
+        assertEquals(3, lyricDisplayActiveIndex(activeIndex = 7, totalCount = 4))
+        assertEquals(-1, lyricDisplayActiveIndex(activeIndex = -1, totalCount = 0))
+    }
+
+    @Test
     fun centeredLyricIndexForTimeline_picksNearestVisibleItemCenter() {
         val frames = listOf(
             LyricVisibleItemFrame(index = 0, offsetPx = -20, sizePx = 60),

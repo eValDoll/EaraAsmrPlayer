@@ -154,7 +154,8 @@ internal fun LyricsPage(
                     modifier = Modifier.fillMaxSize(),
                     isLandscape = isLandscape,
                     settings = lyricsPageSettings,
-                    contentKey = playback.currentMediaItem?.mediaId
+                    contentKey = uiState.contentKey,
+                    contentVisible = !uiState.isLoading
                 )
             }
         }

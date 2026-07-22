@@ -147,6 +147,7 @@ private val NowPlayingHomeExpandedLyricsReserveHeight = 118.dp
 private val NowPlayingHomeCompactMinCoverWidth = 180.dp
 private val NowPlayingHomeRegularMinCoverWidth = 240.dp
 private val NowPlayingHomeClassicRegularMaxCoverWidth = 360.dp
+private val NowPlayingHomeClassicLyricsBottomPadding = 6.dp
 private const val NowPlayingHomeClassicCompactCoverScale = 0.92f
 
 internal fun nowPlayingHomeTopPadding(
@@ -283,6 +284,15 @@ private fun PlaybackProgressContent(
     isVideo: Boolean,
     content: @Composable (NowPlayingProgressState) -> Unit
 ) {
+    val initialProgressState = remember(viewModel, isVideo) {
+        val snapshot = viewModel.playback.value
+        val positionMs = if (isVideo) {
+            (snapshot.positionMs / VideoProgressUiTickMs) * VideoProgressUiTickMs
+        } else {
+            snapshot.positionMs
+        }
+        NowPlayingProgressState(positionMs, snapshot.durationMs)
+    }
     val progressState by remember(viewModel, isVideo) {
         viewModel.playback
             .map { snapshot ->
@@ -294,7 +304,7 @@ private fun PlaybackProgressContent(
                 NowPlayingProgressState(positionMs, snapshot.durationMs)
             }
             .distinctUntilChanged()
-    }.collectAsState(initial = NowPlayingProgressState())
+    }.collectAsState(initial = initialProgressState)
 
     content(progressState)
 }
@@ -1399,7 +1409,8 @@ internal fun NowPlayingScreen(
                                             colors = lyricColors,
                                             modifier = Modifier.fillMaxSize(),
                                             isLandscape = true,
-                                            contentKey = item?.mediaId
+                                            contentKey = lyricsState.contentKey,
+                                            contentVisible = !lyricsState.isLoading
                                         )
                                     }
                                 }
@@ -1626,7 +1637,8 @@ internal fun NowPlayingScreen(
                                             colors = lyricColors,
                                             modifier = Modifier.fillMaxSize(),
                                             isLandscape = true,
-                                            contentKey = item?.mediaId
+                                            contentKey = lyricsState.contentKey,
+                                            contentVisible = !lyricsState.isLoading
                                         )
                                     }
                                 }
@@ -1735,7 +1747,6 @@ internal fun NowPlayingScreen(
                 )
             }
             val expandedLyricsTopPadding = 14.dp
-            val classicLyricsTopPadding = 6.dp
             val homeCoverAspectRatio by homeLayoutTransition.animateFloat(
                 transitionSpec = {
                     tween(durationMillis = homeLayoutDurationMillis, easing = homeBezier)
@@ -1996,7 +2007,8 @@ internal fun NowPlayingScreen(
                                                     expandedHomeVisualEffects = true,
                                                     lyricItemOuterHorizontalPadding = 6.dp,
                                                     lyricItemInnerHorizontalPadding = 8.dp,
-                                                    contentKey = item?.mediaId,
+                                                    contentKey = lyricsState.contentKey,
+                                                    contentVisible = !lyricsState.isLoading,
                                                     modifier = Modifier.fillMaxSize()
                                                 )
                                             }
@@ -2007,9 +2019,9 @@ internal fun NowPlayingScreen(
                                             modifier = Modifier
                                                 .fillMaxWidth()
                                                 .height(58.dp)
-                                                .align(Alignment.TopCenter)
+                                                .align(Alignment.BottomCenter)
                                                 .padding(horizontal = portraitContentHorizontalPadding)
-                                                .padding(top = classicLyricsTopPadding)
+                                                .padding(bottom = NowPlayingHomeClassicLyricsBottomPadding)
                                                 .graphicsLayer { alpha = classicLyricsAlpha },
                                             contentAlignment = Alignment.Center
                                         ) {
@@ -2126,7 +2138,8 @@ internal fun NowPlayingScreen(
                             viewModel.play()
                         },
                         onAddLyrics = openManualLyricsAction,
-                        contentKey = item?.mediaId,
+                        contentKey = lyricsState.contentKey,
+                        contentVisible = !lyricsState.isLoading,
                         modifier = Modifier
                             .fillMaxSize()
                             .then(routeTransition.nowPlayingMotionModifier(currentMotionLayout, NowPlayingMotionSlot.COVER))

@@ -130,6 +130,11 @@ internal fun lyricContentKey(lyrics: List<SubtitleEntry>, contentKey: String? = 
     return result
 }
 
+internal fun lyricDisplayActiveIndex(activeIndex: Int, totalCount: Int): Int {
+    if (totalCount <= 0) return -1
+    return activeIndex.coerceIn(0, totalCount - 1)
+}
+
 @Composable
 internal fun AppleLyricsView(
     lyrics: List<SubtitleEntry>,
@@ -147,6 +152,7 @@ internal fun AppleLyricsView(
     itemOuterHorizontalPadding: Dp = if (isLandscape) 10.dp else 14.dp,
     itemInnerHorizontalPadding: Dp = if (isLandscape) 8.dp else 10.dp,
     contentKey: String? = null,
+    contentVisible: Boolean = true,
     expandedHomeVisualEffects: Boolean = false
 ) {
     var displayedLyrics by remember { mutableStateOf(lyrics) }
@@ -170,14 +176,21 @@ internal fun AppleLyricsView(
         lyricContentKey(renderedLyrics, renderedContentKey)
     }
     val indexFinder = remember(renderedLyrics) { SubtitleIndexFinder(renderedLyrics) }
-    val activeIndex = remember(currentPosition, indexFinder) {
+    val playbackActiveIndex = remember(currentPosition, indexFinder) {
         indexFinder.findActiveIndex(currentPosition)
     }
-    val listState = remember(lyricsContentKey) { LazyListState() }
+    val activeIndex = remember(playbackActiveIndex, renderedLyrics.size) {
+        lyricDisplayActiveIndex(playbackActiveIndex, renderedLyrics.size)
+    }
+    val listState = remember(lyricsContentKey) {
+        LazyListState(firstVisibleItemIndex = activeIndex.coerceAtLeast(0))
+    }
     var pendingInitialFocus by remember(lyricsContentKey) { mutableStateOf(true) }
+    val lyricsRenderVisible = contentVisible && lyricsVisible
+    val effectiveInteractionEnabled = interactionEnabled && lyricsRenderVisible
     val lyricsContentAlpha by animateFloatAsState(
-        targetValue = if (lyricsVisible && !pendingInitialFocus) 1f else 0f,
-        animationSpec = tween(durationMillis = if (lyricsVisible) 220 else 120),
+        targetValue = if (lyricsRenderVisible && !pendingInitialFocus) 1f else 0f,
+        animationSpec = tween(durationMillis = if (lyricsRenderVisible) 220 else 120),
         label = "lyricsContentAlpha"
     )
     val density = LocalDensity.current
@@ -353,7 +366,7 @@ internal fun AppleLyricsView(
             }
         }
         val timelineTargetPositionMs = renderedLyrics.getOrNull(timelineTargetIndex)?.startMs
-        val timelineVisible = showPlaybackTimeline && renderedLyrics.isNotEmpty() && autoFocusSuspended
+        val timelineVisible = showPlaybackTimeline && renderedLyrics.isNotEmpty() && lyricsRenderVisible && autoFocusSuspended
         LaunchedEffect(lastUserScrollAt, autoFocusSuspended) {
             if (autoFocusSuspended) {
                 val scheduledAt = lastUserScrollAt
@@ -380,9 +393,9 @@ internal fun AppleLyricsView(
             pendingSmoothFocusIndex,
             stableFocusAnchor,
             lyricsContentKey,
-            lyricsVisible
+            lyricsRenderVisible
         ) {
-            if (!lyricsVisible) return@LaunchedEffect
+            if (!lyricsRenderVisible) return@LaunchedEffect
             if (renderedLyrics.isEmpty() || activeIndex < 0 || autoFocusSuspended) {
                 if (pendingInitialFocus && (renderedLyrics.isEmpty() || activeIndex < 0)) {
                     pendingInitialFocus = false
@@ -408,6 +421,7 @@ internal fun AppleLyricsView(
             )
             val targetScrollOffset = -centeredActiveTopPx.roundToInt()
             val isPinnedAtTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
+            val isInitialFocus = pendingInitialFocus
             val shouldUseSmoothFocus = !pendingInitialFocus && (
                 stableFocusAnchor ||
                     pendingAnimatedRefocus ||
@@ -450,7 +464,7 @@ internal fun AppleLyricsView(
                 didReposition = true
             }
 
-            val resolvedWave = if (didReposition && !shouldUseSmoothFocus) {
+            val resolvedWave = if (didReposition && !shouldUseSmoothFocus && !isInitialFocus) {
                 repositionDeltaPx?.coerceIn(-maxWaveOffsetPx, maxWaveOffsetPx)
             } else {
                 null
@@ -517,10 +531,10 @@ internal fun AppleLyricsView(
                     .then(edgeFadeModifier)
                     .then(if (expandedHomeVisualEffects) Modifier.graphicsLayer { clip = false } else Modifier)
                     .graphicsLayer { alpha = lyricsContentAlpha }
-                    .then(if (interactionEnabled) Modifier.nestedScroll(nestedScrollConnection) else Modifier)
+                    .then(if (effectiveInteractionEnabled) Modifier.nestedScroll(nestedScrollConnection) else Modifier)
                     .thinScrollbar(listState),
                 flingBehavior = rememberCalmScrollableFlingBehavior(),
-                userScrollEnabled = interactionEnabled,
+                userScrollEnabled = effectiveInteractionEnabled,
                 horizontalAlignment = Alignment.CenterHorizontally,
                 contentPadding = PaddingValues(
                     bottom = centeredActiveBottomDp
@@ -588,7 +602,7 @@ internal fun AppleLyricsView(
                                     Modifier
                                 }
                             )
-                            .clickable(enabled = interactionEnabled) {
+                            .clickable(enabled = effectiveInteractionEnabled) {
                                 pendingSmoothFocusIndex = if (activeIndex >= 0 && activeIndex != index) index else -1
                                 autoFocusSuspended = false
                                 pendingAnimatedRefocus = false

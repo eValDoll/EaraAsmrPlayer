@@ -209,9 +209,20 @@ internal fun NowPlayingLyricsSurface(
     lyricItemOuterHorizontalPadding: Dp = if (isLandscape) 10.dp else 14.dp,
     lyricItemInnerHorizontalPadding: Dp = if (isLandscape) 8.dp else 10.dp,
     contentKey: String? = null,
+    contentVisible: Boolean = true,
     modifier: Modifier = Modifier
 ) {
-    Box(modifier = modifier) {
+    val surfaceAlpha by animateFloatAsState(
+        targetValue = if (contentVisible) 1f else 0f,
+        animationSpec = tween(durationMillis = if (contentVisible) 220 else 120),
+        label = "nowPlayingLyricsSurfaceAlpha"
+    )
+    val effectiveInteractionEnabled = interactionEnabled && contentVisible
+    Box(
+        modifier = modifier.graphicsLayer {
+            alpha = surfaceAlpha
+        }
+    ) {
         if (lyrics.isEmpty()) {
             Column(
                 modifier = Modifier
@@ -229,6 +240,7 @@ internal fun NowPlayingLyricsSurface(
                     Spacer(modifier = Modifier.height(14.dp))
                     Button(
                         onClick = onAddLyrics,
+                        enabled = effectiveInteractionEnabled,
                         colors = ButtonDefaults.buttonColors(
                             containerColor = accentColor,
                             contentColor = onAccentColor
@@ -249,12 +261,13 @@ internal fun NowPlayingLyricsSurface(
                 modifier = Modifier.fillMaxSize(),
                 isLandscape = isLandscape,
                 settings = lyricsPageSettings,
-                interactionEnabled = interactionEnabled,
+                interactionEnabled = effectiveInteractionEnabled,
                 stableFocusAnchor = stableFocusAnchor,
                 expandedHomeVisualEffects = expandedHomeVisualEffects,
                 itemOuterHorizontalPadding = lyricItemOuterHorizontalPadding,
                 itemInnerHorizontalPadding = lyricItemInnerHorizontalPadding,
-                contentKey = contentKey
+                contentKey = contentKey,
+                contentVisible = contentVisible
             )
         }
     }
