@@ -92,4 +92,30 @@ class LazyListPreloaderTest {
             )
         )
     }
+
+    @Test
+    fun preloadRequest_pausesWhileListIsScrolling() {
+        assertNull(
+            resolveLazyListPreloadRequest(
+                lastVisibleIndex = 4,
+                visibleItemCount = 6,
+                itemCount = 30,
+                preloadNext = 24,
+                preloadNextWhileScrolling = 16,
+                isScrolling = true
+            )
+        )
+
+        assertEquals(
+            5..28,
+            resolveLazyListPreloadRequest(
+                lastVisibleIndex = 4,
+                visibleItemCount = 6,
+                itemCount = 30,
+                preloadNext = 24,
+                preloadNextWhileScrolling = 16,
+                isScrolling = false
+            )
+        )
+    }
 }

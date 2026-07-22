@@ -290,8 +290,8 @@ fun bottomChromeNavItems(): List<BottomChromeNavItem> = listOf(
     BottomChromeNavItem(Icons.Rounded.Favorite, "我的收藏", "playlist_system/favorites"),
     BottomChromeNavItem(Icons.AutoMirrored.Rounded.QueueMusic, "我的列表", "playlists"),
     BottomChromeNavItem(Icons.Rounded.Folder, "我的分组", "groups"),
-    BottomChromeNavItem(Icons.Rounded.Settings, "设置", "settings"),
-    BottomChromeNavItem(Icons.Rounded.Route, "我的足迹", "listening_calendar")
+    BottomChromeNavItem(Icons.Rounded.Route, "我的足迹", "listening_calendar"),
+    BottomChromeNavItem(Icons.Rounded.Settings, "设置", "settings")
 )
 
 fun isPrimaryRoute(route: String?): Boolean {

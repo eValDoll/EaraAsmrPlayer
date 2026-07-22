@@ -336,6 +336,11 @@ fun AlbumDetailScreen(
         viewModel.loadAlbum(albumId, rjCode, force = true)
         onConsumeRefreshToken?.invoke()
     }
+    DisposableEffect(screenKey, viewModel) {
+        onDispose {
+            viewModel.cancelActiveLoads()
+        }
+    }
     LaunchedEffect(pendingOnlineSaveSelection) {
         val selected = pendingOnlineSaveSelection ?: return@LaunchedEffect
         pendingOnlineSaveSelection = null

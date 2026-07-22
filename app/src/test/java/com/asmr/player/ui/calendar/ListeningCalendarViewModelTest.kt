@@ -1,5 +1,6 @@
 package com.asmr.player.ui.calendar
 
+import com.asmr.player.data.local.db.entities.ListeningSessionEntity
 import com.asmr.player.data.local.db.entities.DailyStatEntity
 import com.asmr.player.util.ListeningDay
 import org.junit.After
@@ -113,6 +114,55 @@ class ListeningCalendarViewModelTest {
     }
 
     @Test
+    fun mergeAdjacentListeningSessions_combinesOnlyNeighboringSameWorks() {
+        val minute = 60_000L
+        val firstA = listeningSession(
+            id = 1L,
+            rjCode = "RJ123456",
+            title = "作品 A",
+            startAtMs = 3_000L,
+            durationMs = 3L * minute,
+            trafficBytes = 300L,
+            trackCount = 1
+        )
+        val secondA = listeningSession(
+            id = 2L,
+            rjCode = "rj123456",
+            title = "作品 A",
+            startAtMs = 2_000L,
+            durationMs = 2L * minute,
+            trafficBytes = 200L,
+            trackCount = 2
+        )
+        val workB = listeningSession(
+            id = 3L,
+            rjCode = "RJ654321",
+            title = "作品 B",
+            startAtMs = 1_000L,
+            durationMs = minute
+        )
+        val laterA = listeningSession(
+            id = 4L,
+            rjCode = "RJ123456",
+            title = "作品 A",
+            startAtMs = 500L,
+            durationMs = minute
+        )
+
+        val merged = ListeningCalendarViewModel.mergeAdjacentListeningSessions(
+            listOf(firstA, secondA, workB, laterA)
+        )
+
+        assertEquals(3, merged.size)
+        assertEquals(1L, merged[0].id)
+        assertEquals(5L * minute, merged[0].durationMs)
+        assertEquals(500L, merged[0].trafficBytes)
+        assertEquals(3, merged[0].trackCount)
+        assertEquals(workB.id, merged[1].id)
+        assertEquals(laterA.id, merged[2].id)
+    }
+
+    @Test
     fun buildSummaryComparison_dayUsesSelectedHeatmapDate() {
         val minute = 60_000L
         val comparison = ListeningCalendarViewModel.buildSummaryComparison(
@@ -197,3 +247,30 @@ class ListeningCalendarViewModelTest {
         assertEquals(-1.0, comparison.activeDayCount.difference, 0.1)
     }
 }
+
+private fun listeningSession(
+    id: Long,
+    rjCode: String = "",
+    title: String = "",
+    albumId: Long = -1L,
+    circle: String = "",
+    cv: String = "",
+    startAtMs: Long,
+    durationMs: Long,
+    trafficBytes: Long = 0L,
+    trackCount: Int = 0
+): ListeningSessionEntity =
+    ListeningSessionEntity(
+        id = id,
+        albumId = albumId,
+        rjCode = rjCode,
+        title = title,
+        circle = circle,
+        cv = cv,
+        listeningDate = "2026-07-22",
+        startAtMs = startAtMs,
+        lastActiveAtMs = startAtMs + durationMs,
+        durationMs = durationMs,
+        trafficBytes = trafficBytes,
+        trackCount = trackCount
+    )
