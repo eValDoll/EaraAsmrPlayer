@@ -50,14 +50,19 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -83,6 +88,37 @@ import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
+internal data class LyricFocusVisualEffect(
+    val blurDp: Float,
+    val dispersionProgress: Float,
+    val dispersionOffsetXDp: Float,
+    val dispersionOffsetYDp: Float
+)
+
+private val NoLyricFocusVisualEffect = LyricFocusVisualEffect(
+    blurDp = 0f,
+    dispersionProgress = 0f,
+    dispersionOffsetXDp = 0f,
+    dispersionOffsetYDp = 0f
+)
+
+internal fun lyricFocusVisualEffectForLine(
+    index: Int,
+    activeIndex: Int,
+    enabled: Boolean
+): LyricFocusVisualEffect {
+    if (!enabled || activeIndex < 0 || index == activeIndex) return NoLyricFocusVisualEffect
+    val distance = abs(index - activeIndex).coerceAtMost(4)
+    val progress = (distance / 4f).coerceIn(0.18f, 1f)
+    val direction = if (index < activeIndex) -1f else 1f
+    return LyricFocusVisualEffect(
+        blurDp = 0.25f + progress * 2.15f,
+        dispersionProgress = progress,
+        dispersionOffsetXDp = 0.45f + progress * 1.35f,
+        dispersionOffsetYDp = direction * (0.2f + progress * 0.8f)
+    )
+}
+
 @Composable
 internal fun AppleLyricsView(
     lyrics: List<SubtitleEntry>,
@@ -98,7 +134,8 @@ internal fun AppleLyricsView(
     interactionEnabled: Boolean = true,
     stableFocusAnchor: Boolean = false,
     itemOuterHorizontalPadding: Dp = if (isLandscape) 10.dp else 14.dp,
-    itemInnerHorizontalPadding: Dp = if (isLandscape) 8.dp else 10.dp
+    itemInnerHorizontalPadding: Dp = if (isLandscape) 8.dp else 10.dp,
+    expandedHomeVisualEffects: Boolean = false
 ) {
     val indexFinder = remember(lyrics) { SubtitleIndexFinder(lyrics) }
     val activeIndex = remember(currentPosition, indexFinder) {
@@ -224,6 +261,41 @@ internal fun AppleLyricsView(
         val viewportWindowHeightDp = with(density) { viewportLayout.viewportWindowHeightPx.toDp() }
         val viewportTopOffsetDp = with(density) { viewportLayout.viewportTopOffsetPx.toDp() }
         val centeredActiveBottomDp = viewportWindowHeightDp / 2f
+        val edgeFadeHeightPx = if (expandedHomeVisualEffects) {
+            with(density) { 40.dp.toPx() }
+        } else {
+            0f
+        }
+        val edgeFadeModifier = if (expandedHomeVisualEffects) {
+            Modifier
+                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                .drawWithCache {
+                    if (size.height <= 0f) {
+                        return@drawWithCache onDrawWithContent { drawContent() }
+                    }
+                    val fadeHeight = edgeFadeHeightPx
+                        .coerceAtMost(size.height * 0.42f)
+                        .coerceAtLeast(1f)
+                    val fadeStop = (fadeHeight / size.height).coerceIn(0.01f, 0.48f)
+                    val shoulder = (fadeStop * 0.42f).coerceIn(0.005f, fadeStop)
+                    val brush = Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0f to Color.Transparent,
+                            shoulder to Color.White.copy(alpha = 0.42f),
+                            fadeStop to Color.White,
+                            (1f - fadeStop) to Color.White,
+                            (1f - shoulder) to Color.White.copy(alpha = 0.42f),
+                            1f to Color.Transparent
+                        )
+                    )
+                    onDrawWithContent {
+                        drawContent()
+                        drawRect(brush = brush, blendMode = BlendMode.DstIn)
+                    }
+                }
+        } else {
+            Modifier
+        }
         val timelineCenterInViewportPx = (viewportHeightPx / 2f - viewportLayout.viewportTopOffsetPx)
             .coerceIn(0f, viewportLayout.viewportWindowHeightPx)
         val maxWaveOffsetPx = viewportLayout.viewportWindowHeightPx * 0.22f
@@ -371,12 +443,20 @@ internal fun AppleLyricsView(
                 .fillMaxWidth()
                 .height(viewportWindowHeightDp)
                 .offset(y = viewportTopOffsetDp)
-                .clip(RoundedCornerShape(12.dp))
+                .then(
+                    if (expandedHomeVisualEffects) {
+                        Modifier.graphicsLayer { clip = false }
+                    } else {
+                        Modifier.clip(RoundedCornerShape(12.dp))
+                    }
+                )
         ) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
+                    .then(edgeFadeModifier)
+                    .then(if (expandedHomeVisualEffects) Modifier.graphicsLayer { clip = false } else Modifier)
                     .then(if (interactionEnabled) Modifier.nestedScroll(nestedScrollConnection) else Modifier)
                     .thinScrollbar(listState),
                 flingBehavior = rememberCalmScrollableFlingBehavior(),
@@ -419,6 +499,11 @@ internal fun AppleLyricsView(
                     } else {
                         null
                     }
+                    val focusEffect = lyricFocusVisualEffectForLine(
+                        index = index,
+                        activeIndex = activeIndex,
+                        enabled = expandedHomeVisualEffects
+                    )
 
                     Box(
                         modifier = Modifier
@@ -434,8 +519,15 @@ internal fun AppleLyricsView(
                                 this.translationY = itemOffsets[index]?.value ?: 0f
                                 this.scaleX = scale
                                 this.scaleY = scale
-                                this.alpha = alpha
+                                this.alpha = alpha * (1f - focusEffect.dispersionProgress * 0.08f)
                             }
+                            .then(
+                                if (focusEffect.blurDp > 0f) {
+                                    Modifier.blur(focusEffect.blurDp.dp)
+                                } else {
+                                    Modifier
+                                }
+                            )
                             .clickable(enabled = interactionEnabled) {
                                 pendingSmoothFocusIndex = if (activeIndex >= 0 && activeIndex != index) index else -1
                                 autoFocusSuspended = false
@@ -451,6 +543,9 @@ internal fun AppleLyricsView(
                             color = color,
                             shadowColor = shadowColor,
                             strokeWidthPx = strokeWidthPx,
+                            dispersionProgress = focusEffect.dispersionProgress,
+                            dispersionOffsetX = focusEffect.dispersionOffsetXDp.dp,
+                            dispersionOffsetY = focusEffect.dispersionOffsetYDp.dp,
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.Bold,
                                 fontSize = fontSize,
@@ -736,6 +831,9 @@ private fun LyricLineText(
     color: Color,
     shadowColor: Color,
     strokeWidthPx: Float,
+    dispersionProgress: Float,
+    dispersionOffsetX: Dp,
+    dispersionOffsetY: Dp,
     style: TextStyle,
     textAlign: TextAlign
 ) {
@@ -746,13 +844,36 @@ private fun LyricLineText(
             shadowStrengthPx = strokeWidthPx
         )
     }
-    Text(
-        text = text,
-        modifier = Modifier.fillMaxWidth(),
-        style = style.copy(shadow = effectiveShadow),
-        color = color,
-        textAlign = textAlign
-    )
+    Box(modifier = Modifier.fillMaxWidth()) {
+        if (dispersionProgress > 0.01f) {
+            val ghostStyle = style.copy(shadow = null)
+            Text(
+                text = text,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .offset(x = -dispersionOffsetX, y = -dispersionOffsetY),
+                style = ghostStyle,
+                color = Color(0xFFFF5D7A).copy(alpha = 0.16f * dispersionProgress),
+                textAlign = textAlign
+            )
+            Text(
+                text = text,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .offset(x = dispersionOffsetX, y = dispersionOffsetY),
+                style = ghostStyle,
+                color = Color(0xFF42E8FF).copy(alpha = 0.18f * dispersionProgress),
+                textAlign = textAlign
+            )
+        }
+        Text(
+            text = text,
+            modifier = Modifier.fillMaxWidth(),
+            style = style.copy(shadow = effectiveShadow),
+            color = color,
+            textAlign = textAlign
+        )
+    }
 }
 
 private fun lyricTextShadow(

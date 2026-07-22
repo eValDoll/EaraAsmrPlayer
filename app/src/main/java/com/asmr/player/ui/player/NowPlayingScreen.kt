@@ -1961,7 +1961,7 @@ internal fun NowPlayingScreen(
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .offset(y = lyricsTopPadding)
+                                            .padding(top = lyricsTopPadding)
                                             .graphicsLayer { alpha = expandedLyricsAlpha }
                                     ) {
                                         PlaybackProgressContent(viewModel, isVideo) { progress ->
@@ -1981,6 +1981,7 @@ internal fun NowPlayingScreen(
                                                 onAddLyrics = openManualLyricsAction,
                                                 interactionEnabled = lyricsExpandedInteractionEnabled,
                                                 stableFocusAnchor = true,
+                                                expandedHomeVisualEffects = true,
                                                 lyricItemOuterHorizontalPadding = 6.dp,
                                                 lyricItemInnerHorizontalPadding = 8.dp,
                                                 modifier = Modifier.fillMaxSize()

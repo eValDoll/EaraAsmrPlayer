@@ -3,6 +3,7 @@ package com.asmr.player.ui.player
 import androidx.compose.ui.text.style.TextAlign
 import com.asmr.player.data.settings.LyricsPageSettings
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LyricsPageLayoutTest {
@@ -93,6 +94,24 @@ class LyricsPageLayoutTest {
         assertEquals(TextAlign.Center, lyricTextAlign(1))
         assertEquals(TextAlign.End, lyricTextAlign(2))
         assertEquals(TextAlign.Center, lyricTextAlign(999))
+    }
+
+    @Test
+    fun lyricFocusVisualEffect_disabledOrActiveLineHasNoEffect() {
+        assertEquals(0f, lyricFocusVisualEffectForLine(index = 2, activeIndex = 2, enabled = true).blurDp, 0.001f)
+        assertEquals(0f, lyricFocusVisualEffectForLine(index = 1, activeIndex = 2, enabled = false).blurDp, 0.001f)
+    }
+
+    @Test
+    fun lyricFocusVisualEffect_addsDirectionalDispersionAwayFromCenter() {
+        val above = lyricFocusVisualEffectForLine(index = 3, activeIndex = 5, enabled = true)
+        val below = lyricFocusVisualEffectForLine(index = 7, activeIndex = 5, enabled = true)
+        val farBelow = lyricFocusVisualEffectForLine(index = 9, activeIndex = 5, enabled = true)
+
+        assertTrue(above.blurDp > 0f)
+        assertTrue(farBelow.blurDp > below.blurDp)
+        assertTrue(above.dispersionOffsetYDp < 0f)
+        assertTrue(below.dispersionOffsetYDp > 0f)
     }
 
     @Test

@@ -205,6 +205,7 @@ internal fun NowPlayingLyricsSurface(
     onAddLyrics: (() -> Unit)? = null,
     interactionEnabled: Boolean = true,
     stableFocusAnchor: Boolean = false,
+    expandedHomeVisualEffects: Boolean = false,
     lyricItemOuterHorizontalPadding: Dp = if (isLandscape) 10.dp else 14.dp,
     lyricItemInnerHorizontalPadding: Dp = if (isLandscape) 8.dp else 10.dp,
     modifier: Modifier = Modifier
@@ -249,6 +250,7 @@ internal fun NowPlayingLyricsSurface(
                 settings = lyricsPageSettings,
                 interactionEnabled = interactionEnabled,
                 stableFocusAnchor = stableFocusAnchor,
+                expandedHomeVisualEffects = expandedHomeVisualEffects,
                 itemOuterHorizontalPadding = lyricItemOuterHorizontalPadding,
                 itemInnerHorizontalPadding = lyricItemInnerHorizontalPadding
             )
