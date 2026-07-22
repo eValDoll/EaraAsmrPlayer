@@ -153,7 +153,8 @@ internal fun LyricsPage(
                     colors = lyricColors,
                     modifier = Modifier.fillMaxSize(),
                     isLandscape = isLandscape,
-                    settings = lyricsPageSettings
+                    settings = lyricsPageSettings,
+                    contentKey = playback.currentMediaItem?.mediaId
                 )
             }
         }

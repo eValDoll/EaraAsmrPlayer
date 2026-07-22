@@ -208,6 +208,7 @@ internal fun NowPlayingLyricsSurface(
     expandedHomeVisualEffects: Boolean = false,
     lyricItemOuterHorizontalPadding: Dp = if (isLandscape) 10.dp else 14.dp,
     lyricItemInnerHorizontalPadding: Dp = if (isLandscape) 8.dp else 10.dp,
+    contentKey: String? = null,
     modifier: Modifier = Modifier
 ) {
     Box(modifier = modifier) {
@@ -252,7 +253,8 @@ internal fun NowPlayingLyricsSurface(
                 stableFocusAnchor = stableFocusAnchor,
                 expandedHomeVisualEffects = expandedHomeVisualEffects,
                 itemOuterHorizontalPadding = lyricItemOuterHorizontalPadding,
-                itemInnerHorizontalPadding = lyricItemInnerHorizontalPadding
+                itemInnerHorizontalPadding = lyricItemInnerHorizontalPadding,
+                contentKey = contentKey
             )
         }
     }

@@ -2,6 +2,7 @@ package com.asmr.player.ui.player
 
 import androidx.compose.ui.text.style.TextAlign
 import com.asmr.player.data.settings.LyricsPageSettings
+import com.asmr.player.util.SubtitleEntry
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -112,6 +113,21 @@ class LyricsPageLayoutTest {
         assertTrue(farBelow.blurDp > below.blurDp)
         assertTrue(above.dispersionOffsetYDp < 0f)
         assertTrue(below.dispersionOffsetYDp > 0f)
+    }
+
+    @Test
+    fun lyricContentKey_changesWhenAudioLyricsChange() {
+        val first = listOf(
+            SubtitleEntry(startMs = 0L, endMs = 1000L, text = "第一首"),
+            SubtitleEntry(startMs = 1200L, endMs = 2000L, text = "尾句")
+        )
+        val second = listOf(
+            SubtitleEntry(startMs = 0L, endMs = 1000L, text = "第二首"),
+            SubtitleEntry(startMs = 1200L, endMs = 2000L, text = "尾句")
+        )
+
+        assertTrue(lyricContentKey(first) != lyricContentKey(second))
+        assertTrue(lyricContentKey(first, contentKey = "track-a") != lyricContentKey(first, contentKey = "track-b"))
     }
 
     @Test

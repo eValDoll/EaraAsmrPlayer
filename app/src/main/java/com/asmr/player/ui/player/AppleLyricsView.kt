@@ -26,8 +26,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -119,6 +119,17 @@ internal fun lyricFocusVisualEffectForLine(
     )
 }
 
+internal fun lyricContentKey(lyrics: List<SubtitleEntry>, contentKey: String? = null): Int {
+    var result = contentKey?.hashCode() ?: 0
+    result = 31 * result + lyrics.size
+    lyrics.forEach { entry ->
+        result = 31 * result + entry.startMs.hashCode()
+        result = 31 * result + entry.endMs.hashCode()
+        result = 31 * result + entry.text.hashCode()
+    }
+    return result
+}
+
 @Composable
 internal fun AppleLyricsView(
     lyrics: List<SubtitleEntry>,
@@ -135,13 +146,40 @@ internal fun AppleLyricsView(
     stableFocusAnchor: Boolean = false,
     itemOuterHorizontalPadding: Dp = if (isLandscape) 10.dp else 14.dp,
     itemInnerHorizontalPadding: Dp = if (isLandscape) 8.dp else 10.dp,
+    contentKey: String? = null,
     expandedHomeVisualEffects: Boolean = false
 ) {
-    val indexFinder = remember(lyrics) { SubtitleIndexFinder(lyrics) }
+    var displayedLyrics by remember { mutableStateOf(lyrics) }
+    var displayedContentKey by remember { mutableStateOf(contentKey) }
+    var lyricsVisible by remember { mutableStateOf(true) }
+    LaunchedEffect(lyrics, contentKey) {
+        if (lyrics == displayedLyrics && contentKey == displayedContentKey) {
+            lyricsVisible = true
+            return@LaunchedEffect
+        }
+        lyricsVisible = false
+        delay(120)
+        displayedLyrics = lyrics
+        displayedContentKey = contentKey
+        lyricsVisible = true
+    }
+
+    val renderedLyrics = displayedLyrics
+    val renderedContentKey = displayedContentKey
+    val lyricsContentKey = remember(renderedLyrics, renderedContentKey) {
+        lyricContentKey(renderedLyrics, renderedContentKey)
+    }
+    val indexFinder = remember(renderedLyrics) { SubtitleIndexFinder(renderedLyrics) }
     val activeIndex = remember(currentPosition, indexFinder) {
         indexFinder.findActiveIndex(currentPosition)
     }
-    val listState = rememberLazyListState()
+    val listState = remember(lyricsContentKey) { LazyListState() }
+    var pendingInitialFocus by remember(lyricsContentKey) { mutableStateOf(true) }
+    val lyricsContentAlpha by animateFloatAsState(
+        targetValue = if (lyricsVisible && !pendingInitialFocus) 1f else 0f,
+        animationSpec = tween(durationMillis = if (lyricsVisible) 220 else 120),
+        label = "lyricsContentAlpha"
+    )
     val density = LocalDensity.current
     val itemOuterVerticalPadding = 0.dp
     val itemInnerVerticalPadding = if (isLandscape) 2.dp else 3.dp
@@ -185,9 +223,9 @@ internal fun AppleLyricsView(
             viewportHeightPx = estimatedViewportHeightPx,
             lineBlockHeightPx = nominalItemHeightPx
         ).coerceAtLeast(1) + 1
-        val targetWindowRange = remember(lyrics.size, activeIndex, effectiveVisibleLines) {
+        val targetWindowRange = remember(renderedLyrics.size, activeIndex, effectiveVisibleLines) {
             targetLyricsWindowRange(
-                totalCount = lyrics.size,
+                totalCount = renderedLyrics.size,
                 activeIndex = activeIndex,
                 visibleItemCount = effectiveVisibleLines
             )
@@ -204,7 +242,7 @@ internal fun AppleLyricsView(
             )
         }
         val lyricItemHeightsPx = remember(
-            lyrics,
+            renderedLyrics,
             itemTextMaxWidthPx,
             measurementStyle,
             nominalItemHeightPx,
@@ -215,7 +253,7 @@ internal fun AppleLyricsView(
         ) {
             val innerVerticalPaddingPx = with(density) { itemInnerVerticalPadding.toPx() }
             val outerVerticalPaddingPx = with(density) { itemOuterVerticalPadding.toPx() }
-            lyrics.map { entry ->
+            renderedLyrics.map { entry ->
                 measuredLyricItemHeight(
                     entry = entry,
                     textMeasurer = textMeasurer,
@@ -299,7 +337,7 @@ internal fun AppleLyricsView(
         val timelineCenterInViewportPx = (viewportHeightPx / 2f - viewportLayout.viewportTopOffsetPx)
             .coerceIn(0f, viewportLayout.viewportWindowHeightPx)
         val maxWaveOffsetPx = viewportLayout.viewportWindowHeightPx * 0.22f
-        val timelineTargetIndex by remember(lyrics.size, timelineCenterInViewportPx, listState) {
+        val timelineTargetIndex by remember(renderedLyrics.size, timelineCenterInViewportPx, listState) {
             derivedStateOf {
                 centeredLyricIndexForTimeline(
                     visibleItems = listState.layoutInfo.visibleItemsInfo.map { item ->
@@ -310,12 +348,12 @@ internal fun AppleLyricsView(
                         )
                     },
                     viewportCenterPx = timelineCenterInViewportPx,
-                    totalCount = lyrics.size
+                    totalCount = renderedLyrics.size
                 )
             }
         }
-        val timelineTargetPositionMs = lyrics.getOrNull(timelineTargetIndex)?.startMs
-        val timelineVisible = showPlaybackTimeline && lyrics.isNotEmpty() && autoFocusSuspended
+        val timelineTargetPositionMs = renderedLyrics.getOrNull(timelineTargetIndex)?.startMs
+        val timelineVisible = showPlaybackTimeline && renderedLyrics.isNotEmpty() && autoFocusSuspended
         LaunchedEffect(lastUserScrollAt, autoFocusSuspended) {
             if (autoFocusSuspended) {
                 val scheduledAt = lastUserScrollAt
@@ -327,12 +365,30 @@ internal fun AppleLyricsView(
             }
         }
 
-        LaunchedEffect(lyrics) {
+        LaunchedEffect(lyricsContentKey) {
             pendingSmoothFocusIndex = -1
+            autoFocusSuspended = false
+            pendingAnimatedRefocus = false
+            itemOffsets.clear()
         }
 
-        LaunchedEffect(activeIndex, autoFocusSuspended, lyricItemHeightsPx, viewportLayout, pendingSmoothFocusIndex, stableFocusAnchor) {
-            if (lyrics.isEmpty() || activeIndex < 0 || autoFocusSuspended) return@LaunchedEffect
+        LaunchedEffect(
+            activeIndex,
+            autoFocusSuspended,
+            lyricItemHeightsPx,
+            viewportLayout,
+            pendingSmoothFocusIndex,
+            stableFocusAnchor,
+            lyricsContentKey,
+            lyricsVisible
+        ) {
+            if (!lyricsVisible) return@LaunchedEffect
+            if (renderedLyrics.isEmpty() || activeIndex < 0 || autoFocusSuspended) {
+                if (pendingInitialFocus && (renderedLyrics.isEmpty() || activeIndex < 0)) {
+                    pendingInitialFocus = false
+                }
+                return@LaunchedEffect
+            }
 
             var didReposition = false
             var repositionDeltaPx: Float? = null
@@ -352,9 +408,11 @@ internal fun AppleLyricsView(
             )
             val targetScrollOffset = -centeredActiveTopPx.roundToInt()
             val isPinnedAtTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
-            val shouldUseSmoothFocus = stableFocusAnchor ||
-                pendingAnimatedRefocus ||
-                pendingSmoothFocusIndex == activeIndex
+            val shouldUseSmoothFocus = !pendingInitialFocus && (
+                stableFocusAnchor ||
+                    pendingAnimatedRefocus ||
+                    pendingSmoothFocusIndex == activeIndex
+                )
             val defaultAffectedIndices = (
                 visibleItems.map { it.index } +
                     targetWindowRange.toList()
@@ -436,6 +494,7 @@ internal fun AppleLyricsView(
             if (pendingSmoothFocusIndex == activeIndex) {
                 pendingSmoothFocusIndex = -1
             }
+            pendingInitialFocus = false
         }
 
         Box(
@@ -457,6 +516,7 @@ internal fun AppleLyricsView(
                     .fillMaxSize()
                     .then(edgeFadeModifier)
                     .then(if (expandedHomeVisualEffects) Modifier.graphicsLayer { clip = false } else Modifier)
+                    .graphicsLayer { alpha = lyricsContentAlpha }
                     .then(if (interactionEnabled) Modifier.nestedScroll(nestedScrollConnection) else Modifier)
                     .thinScrollbar(listState),
                 flingBehavior = rememberCalmScrollableFlingBehavior(),
@@ -467,7 +527,7 @@ internal fun AppleLyricsView(
                 )
             ) {
                 itemsIndexed(
-                    items = lyrics,
+                    items = renderedLyrics,
                     key = { index, entry -> lyricItemKey(index, entry) },
                     contentType = { _, _ -> "appleLyricLine" }
                 ) { index, entry ->
@@ -577,7 +637,7 @@ internal fun AppleLyricsView(
                 colors = colors,
                 isLandscape = isLandscape,
                 onPlayClick = { targetMs ->
-                    if (timelineTargetIndex in lyrics.indices) {
+                    if (timelineTargetIndex in renderedLyrics.indices) {
                         pendingSmoothFocusIndex = timelineTargetIndex
                     }
                     autoFocusSuspended = false

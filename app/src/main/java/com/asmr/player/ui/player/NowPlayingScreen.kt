@@ -123,6 +123,7 @@ import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -135,6 +136,8 @@ private enum class NowPlayingSurfaceMode {
 
 private const val VideoProgressUiTickMs = 1_000L
 private const val NowPlayingHomeLayoutAnimationDurationMillis = 620
+private const val NowPlayingHomeLyricsFadeInDurationMillis = 240
+private const val NowPlayingHomeLyricsFadeOutDurationMillis = 160
 private val NowPlayingPortraitMaxContentWidth = 600.dp
 private val NowPlayingCompactShortScreenHeight = 620.dp
 private val NowPlayingHomeAudienceTopSafePadding = 20.dp
@@ -143,6 +146,8 @@ private val NowPlayingHomeClassicLyricsReserveHeight = 72.dp
 private val NowPlayingHomeExpandedLyricsReserveHeight = 118.dp
 private val NowPlayingHomeCompactMinCoverWidth = 180.dp
 private val NowPlayingHomeRegularMinCoverWidth = 240.dp
+private val NowPlayingHomeClassicRegularMaxCoverWidth = 360.dp
+private const val NowPlayingHomeClassicCompactCoverScale = 0.92f
 
 internal fun nowPlayingHomeTopPadding(
     expanded: Boolean,
@@ -190,9 +195,9 @@ internal fun nowPlayingHomeCoverWidth(
     } else {
         val paddedWidth = (fullWidth - contentHorizontalPadding * 2).coerceAtLeast(1.dp)
         if (widthClass == WindowWidthSizeClass.Compact) {
-            paddedWidth
+            paddedWidth * NowPlayingHomeClassicCompactCoverScale
         } else {
-            paddedWidth.coerceAtMost(400.dp)
+            paddedWidth.coerceAtMost(NowPlayingHomeClassicRegularMaxCoverWidth)
         }
     }
     if (!availableHeight.isFiniteDp()) return widthBound
@@ -878,7 +883,14 @@ internal fun NowPlayingScreen(
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
     var homeLayoutHintDismissedInSession by rememberSaveable { mutableStateOf(false) }
+    var homeLayoutLyricsVisible by remember { mutableStateOf(true) }
+    var homeLayoutChangeJob by remember { mutableStateOf<Job?>(null) }
     val homeLayoutHintScope = rememberCoroutineScope()
+    DisposableEffect(Unit) {
+        onDispose {
+            homeLayoutChangeJob?.cancel()
+        }
+    }
     LaunchedEffect(nowPlayingHomeLayoutHintDismissed) {
         if (nowPlayingHomeLayoutHintDismissed) {
             homeLayoutHintDismissedInSession = true
@@ -894,6 +906,7 @@ internal fun NowPlayingScreen(
     ) {
         { mode: NowPlayingHomeLayoutMode ->
             if (mode != nowPlayingHomeLayoutMode) {
+                homeLayoutChangeJob?.cancel()
                 if (!nowPlayingHomeLayoutHintDismissed && !homeLayoutHintDismissedInSession) {
                     homeLayoutHintScope.launch {
                         delay(NowPlayingHomeLayoutAnimationDurationMillis.toLong())
@@ -901,7 +914,13 @@ internal fun NowPlayingScreen(
                     }
                 }
                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                onNowPlayingHomeLayoutModeChange(mode)
+                homeLayoutChangeJob = homeLayoutHintScope.launch {
+                    homeLayoutLyricsVisible = false
+                    delay(NowPlayingHomeLyricsFadeOutDurationMillis.toLong())
+                    onNowPlayingHomeLayoutModeChange(mode)
+                    delay(NowPlayingHomeLayoutAnimationDurationMillis.toLong())
+                    homeLayoutLyricsVisible = true
+                }
             }
         }
     }
@@ -1379,7 +1398,8 @@ internal fun NowPlayingScreen(
                                             onOpenLyrics = showLyricsSurface,
                                             colors = lyricColors,
                                             modifier = Modifier.fillMaxSize(),
-                                            isLandscape = true
+                                            isLandscape = true,
+                                            contentKey = item?.mediaId
                                         )
                                     }
                                 }
@@ -1605,7 +1625,8 @@ internal fun NowPlayingScreen(
                                             onOpenLyrics = showLyricsSurface,
                                             colors = lyricColors,
                                             modifier = Modifier.fillMaxSize(),
-                                            isLandscape = true
+                                            isLandscape = true,
+                                            contentKey = item?.mediaId
                                         )
                                     }
                                 }
@@ -1670,8 +1691,8 @@ internal fun NowPlayingScreen(
             val portraitScreenHeight = configuration.screenHeightDp.dp
             val homeBezier = remember { CubicBezierEasing(0.20f, 0f, 0f, 1f) }
             val homeLayoutDurationMillis = NowPlayingHomeLayoutAnimationDurationMillis
-            val homeFadeInDurationMillis = 240
-            val homeFadeOutDurationMillis = 160
+            val homeFadeInDurationMillis = NowPlayingHomeLyricsFadeInDurationMillis
+            val homeFadeOutDurationMillis = NowPlayingHomeLyricsFadeOutDurationMillis
             val expandedHomeLyricsSettings = remember(lyricsPageSettings) {
                 lyricsPageSettings.copy(displayAreaMode = 0)
             }
@@ -1713,22 +1734,8 @@ internal fun NowPlayingScreen(
                     widthClass = widthClass
                 )
             }
-            val lyricsTopPadding by homeLayoutTransition.animateDp(
-                transitionSpec = {
-                    tween(durationMillis = homeLayoutDurationMillis, easing = homeBezier)
-                },
-                label = "nowPlayingHomeLyricsTopPadding"
-            ) { expanded ->
-                if (expanded) 14.dp else 6.dp
-            }
-            val lyricsHorizontalPadding by homeLayoutTransition.animateDp(
-                transitionSpec = {
-                    tween(durationMillis = homeLayoutDurationMillis, easing = homeBezier)
-                },
-                label = "nowPlayingHomeLyricsHorizontalPadding"
-            ) { expanded ->
-                if (expanded) 0.dp else portraitContentHorizontalPadding
-            }
+            val expandedLyricsTopPadding = 14.dp
+            val classicLyricsTopPadding = 6.dp
             val homeCoverAspectRatio by homeLayoutTransition.animateFloat(
                 transitionSpec = {
                     tween(durationMillis = homeLayoutDurationMillis, easing = homeBezier)
@@ -1777,30 +1784,35 @@ internal fun NowPlayingScreen(
             ) { expanded ->
                 if (expanded) 1f else 0f
             }
-            val expandedLyricsAlpha by homeLayoutTransition.animateFloat(
-                transitionSpec = {
-                    if (targetState) {
-                        tween(durationMillis = homeFadeInDurationMillis, easing = LinearOutSlowInEasing)
-                    } else {
-                        tween(durationMillis = homeFadeOutDurationMillis, easing = FastOutLinearInEasing)
-                    }
-                },
+            val homeLayoutSettled = homeLayoutTransition.currentState == homeLayoutTransition.targetState
+            LaunchedEffect(expandedHomeLayout) {
+                if (!homeLayoutSettled) {
+                    homeLayoutLyricsVisible = false
+                }
+            }
+            LaunchedEffect(homeLayoutSettled) {
+                if (homeLayoutSettled) {
+                    homeLayoutLyricsVisible = true
+                }
+            }
+            val expandedLyricsActive = expandedHomeLayout && homeLayoutSettled && homeLayoutLyricsVisible
+            val classicLyricsActive = !expandedHomeLayout && homeLayoutSettled && homeLayoutLyricsVisible
+            val expandedLyricsAlpha by animateFloatAsState(
+                targetValue = if (expandedLyricsActive) 1f else 0f,
+                animationSpec = tween(
+                    durationMillis = if (expandedLyricsActive) homeFadeInDurationMillis else homeFadeOutDurationMillis,
+                    easing = if (expandedLyricsActive) LinearOutSlowInEasing else FastOutLinearInEasing
+                ),
                 label = "nowPlayingHomeExpandedLyricsAlpha"
-            ) { expanded ->
-                if (expanded) 1f else 0f
-            }
-            val classicLyricsAlpha by homeLayoutTransition.animateFloat(
-                transitionSpec = {
-                    if (targetState) {
-                        tween(durationMillis = homeFadeOutDurationMillis, easing = FastOutLinearInEasing)
-                    } else {
-                        tween(durationMillis = homeFadeInDurationMillis, easing = LinearOutSlowInEasing)
-                    }
-                },
+            )
+            val classicLyricsAlpha by animateFloatAsState(
+                targetValue = if (classicLyricsActive) 1f else 0f,
+                animationSpec = tween(
+                    durationMillis = if (classicLyricsActive) homeFadeInDurationMillis else homeFadeOutDurationMillis,
+                    easing = if (classicLyricsActive) LinearOutSlowInEasing else FastOutLinearInEasing
+                ),
                 label = "nowPlayingHomeClassicLyricsAlpha"
-            ) { expanded ->
-                if (expanded) 0f else 1f
-            }
+            )
             val lyricsExpandedInteractionEnabled = expandedLyricsAlpha > 0.5f
             val lyricsClassicInteractionEnabled = classicLyricsAlpha > 0.5f
             // --- 垂直布局 (手机 或 平板竖屏) ---
@@ -1954,58 +1966,63 @@ internal fun NowPlayingScreen(
                                 Box(
                                     modifier = portraitContentWidthModifier
                                         .weight(1f)
-                                        .padding(horizontal = lyricsHorizontalPadding)
                                         .then(lyricsMotion),
                                     contentAlignment = Alignment.TopCenter
                                 ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(top = lyricsTopPadding)
-                                            .graphicsLayer { alpha = expandedLyricsAlpha }
-                                    ) {
-                                        PlaybackProgressContent(viewModel, isVideo) { progress ->
-                                            NowPlayingLyricsSurface(
-                                                isLandscape = false,
-                                                playbackPositionMs = progress.positionMs,
-                                                lyrics = lyricsState.lyrics,
-                                                lyricColors = lyricColors,
-                                                accentColor = accentColor,
-                                                onAccentColor = onAccentColor,
-                                                lyricsPageSettings = expandedHomeLyricsSettings,
-                                                onSeekTo = { viewModel.seekTo(it) },
-                                                onTimelinePlay = { targetMs ->
-                                                    viewModel.seekTo(targetMs)
-                                                    viewModel.play()
-                                                },
-                                                onAddLyrics = openManualLyricsAction,
-                                                interactionEnabled = lyricsExpandedInteractionEnabled,
-                                                stableFocusAnchor = true,
-                                                expandedHomeVisualEffects = true,
-                                                lyricItemOuterHorizontalPadding = 6.dp,
-                                                lyricItemInnerHorizontalPadding = 8.dp,
-                                                modifier = Modifier.fillMaxSize()
-                                            )
+                                    if (expandedLyricsActive || expandedLyricsAlpha > 0.001f) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(top = expandedLyricsTopPadding)
+                                                .graphicsLayer { alpha = expandedLyricsAlpha }
+                                        ) {
+                                            PlaybackProgressContent(viewModel, isVideo) { progress ->
+                                                NowPlayingLyricsSurface(
+                                                    isLandscape = false,
+                                                    playbackPositionMs = progress.positionMs,
+                                                    lyrics = lyricsState.lyrics,
+                                                    lyricColors = lyricColors,
+                                                    accentColor = accentColor,
+                                                    onAccentColor = onAccentColor,
+                                                    lyricsPageSettings = expandedHomeLyricsSettings,
+                                                    onSeekTo = { viewModel.seekTo(it) },
+                                                    onTimelinePlay = { targetMs ->
+                                                        viewModel.seekTo(targetMs)
+                                                        viewModel.play()
+                                                    },
+                                                    onAddLyrics = openManualLyricsAction,
+                                                    interactionEnabled = lyricsExpandedInteractionEnabled,
+                                                    stableFocusAnchor = true,
+                                                    expandedHomeVisualEffects = true,
+                                                    lyricItemOuterHorizontalPadding = 6.dp,
+                                                    lyricItemInnerHorizontalPadding = 8.dp,
+                                                    contentKey = item?.mediaId,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            }
                                         }
                                     }
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .height(58.dp)
-                                            .align(Alignment.TopCenter)
-                                            .offset(y = lyricsTopPadding)
-                                            .graphicsLayer { alpha = classicLyricsAlpha },
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        PlaybackProgressContent(viewModel, isVideo) { progress ->
-                                            SingleLineLyrics(
-                                                lyrics = lyricsState.lyrics,
-                                                currentPosition = progress.positionMs,
-                                                onOpenLyrics = showLyricsSurface,
-                                                colors = lyricColors,
-                                                interactionEnabled = lyricsClassicInteractionEnabled,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
+                                    if (classicLyricsActive || classicLyricsAlpha > 0.001f) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(58.dp)
+                                                .align(Alignment.TopCenter)
+                                                .padding(horizontal = portraitContentHorizontalPadding)
+                                                .padding(top = classicLyricsTopPadding)
+                                                .graphicsLayer { alpha = classicLyricsAlpha },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            PlaybackProgressContent(viewModel, isVideo) { progress ->
+                                                SingleLineLyrics(
+                                                    lyrics = lyricsState.lyrics,
+                                                    currentPosition = progress.positionMs,
+                                                    onOpenLyrics = showLyricsSurface,
+                                                    colors = lyricColors,
+                                                    interactionEnabled = lyricsClassicInteractionEnabled,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -2109,6 +2126,7 @@ internal fun NowPlayingScreen(
                             viewModel.play()
                         },
                         onAddLyrics = openManualLyricsAction,
+                        contentKey = item?.mediaId,
                         modifier = Modifier
                             .fillMaxSize()
                             .then(routeTransition.nowPlayingMotionModifier(currentMotionLayout, NowPlayingMotionSlot.COVER))
