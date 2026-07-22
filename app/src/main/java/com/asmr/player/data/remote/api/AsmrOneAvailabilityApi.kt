@@ -3,6 +3,7 @@ package com.asmr.player.data.remote.api
 import android.os.Build
 import com.asmr.player.BuildConfig
 import com.asmr.player.data.remote.NetworkHeaders
+import com.asmr.player.data.remote.awaitResponse
 import com.asmr.player.data.remote.withSearchTimeouts
 import com.asmr.player.listentogether.XxHash64
 import com.google.gson.Gson
@@ -120,7 +121,7 @@ class AsmrOneAvailabilityApi @Inject constructor(
                     .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
                     .post(gson.toJson(AsmrOneAvailabilityRequest(normalized)).toRequestBody(JSON_MEDIA_TYPE))
                     .build()
-                requestClient.newCall(request).execute().use { response ->
+                requestClient.newCall(request).awaitResponse().use { response ->
                     if (!response.isSuccessful) return@withContext emptyMap()
                     val raw = response.body?.string().orEmpty()
                     if (raw.isBlank()) return@withContext emptyMap()
@@ -163,7 +164,7 @@ class AsmrOneAvailabilityApi @Inject constructor(
                 .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
                 .get()
                 .build()
-            requestClient.newCall(request).execute().use { response ->
+            requestClient.newCall(request).awaitResponse().use { response ->
                 if (!response.isSuccessful) {
                     throw IOException("asmr.one search failed: HTTP ${response.code}")
                 }
@@ -195,7 +196,7 @@ class AsmrOneAvailabilityApi @Inject constructor(
                 .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
                 .get()
                 .build()
-            trackTreeClient.newCall(request).execute().use { response ->
+            trackTreeClient.newCall(request).awaitResponse().use { response ->
                 val raw = response.body?.string().orEmpty()
                 if (response.code == 404 && raw.contains("\"tracks_not_found\"", ignoreCase = true)) {
                     throw IOException("asmr.one tracks backend not found")

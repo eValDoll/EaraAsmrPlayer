@@ -4,6 +4,7 @@ import android.content.Context
 import android.util.Log
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
+import com.asmr.player.data.remote.awaitResponse
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.util.DlsiteWorkNo
 import com.asmr.player.util.RemoteSubtitleSource
@@ -230,7 +231,7 @@ class DlsitePlayWorkClient @Inject constructor(
         )
     }
 
-    private fun fetchDownloadSign(workno: String, cookie: String): Triple<String, Map<String, String>, String> {
+    private suspend fun fetchDownloadSign(workno: String, cookie: String): Triple<String, Map<String, String>, String> {
         val request = Request.Builder()
             .url("https://play.dlsite.com/api/v3/download/sign/url?workno=${URLEncoder.encode(workno, Charsets.UTF_8.name())}")
             .header("Cookie", cookie)
@@ -241,7 +242,7 @@ class DlsitePlayWorkClient @Inject constructor(
             .get()
             .build()
 
-        okHttpClient.newCall(request).execute().use { resp ->
+        okHttpClient.newCall(request).awaitResponse().use { resp ->
             if (!resp.isSuccessful) {
                 val body = resp.body?.string().orEmpty()
                 Log.w(TAG, "sign/url failed: ${resp.code}, body=${body.take(300)}")
@@ -271,7 +272,7 @@ class DlsitePlayWorkClient @Inject constructor(
         }
     }
 
-    private fun fetchZiptree(baseUrl: String, params: Map<String, String>, cookie: String): Map<String, Any?> {
+    private suspend fun fetchZiptree(baseUrl: String, params: Map<String, String>, cookie: String): Map<String, Any?> {
         val nowSec = TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis())
         val ziptreeV = (nowSec - (nowSec % 60)).toString()
         val q = buildQuery(mapOf("v" to ziptreeV) + params)
@@ -286,7 +287,7 @@ class DlsitePlayWorkClient @Inject constructor(
             .get()
             .build()
 
-        okHttpClient.newCall(request).execute().use { resp ->
+        okHttpClient.newCall(request).awaitResponse().use { resp ->
             if (!resp.isSuccessful) {
                 val body = resp.body?.string().orEmpty()
                 Log.w(TAG, "ziptree.json failed: ${resp.code}, body=${body.take(300)}")
