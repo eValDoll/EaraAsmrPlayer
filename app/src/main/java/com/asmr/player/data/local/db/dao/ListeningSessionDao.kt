@@ -53,6 +53,14 @@ interface ListeningSessionDao {
     @Query("SELECT * FROM listening_sessions WHERE listeningDate = :date ORDER BY startAtMs DESC")
     suspend fun getSessionsForDate(date: String): List<ListeningSessionEntity>
 
+    @Query(
+        "SELECT UPPER(TRIM(rjCode)) FROM listening_sessions " +
+            "WHERE TRIM(rjCode) != '' " +
+            "GROUP BY UPPER(TRIM(rjCode)) " +
+            "ORDER BY MAX(lastActiveAtMs) DESC LIMIT :limit"
+    )
+    suspend fun getRecentDistinctRjs(limit: Int): List<String>
+
     // ---- 年度报告数据基础：聚合查询 ----
 
     /** 区间内不同作品数量（按 rjCode 去重，忽略空 rjCode）。 */

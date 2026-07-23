@@ -68,7 +68,6 @@ data class SearchSuggestionTerm(
 data class SearchSuggestionsResponse(
     val hotCvs: List<SearchSuggestionTerm> = emptyList(),
     val hotTags: List<SearchSuggestionTerm> = emptyList(),
-    val hotWorks: List<HotListeningItem> = emptyList(),
     val serverTimeEpochMs: Long = 0L
 )
 

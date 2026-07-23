@@ -24,7 +24,7 @@ import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
-import androidx.compose.material.icons.rounded.Leaderboard
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -82,8 +82,8 @@ internal const val SEARCH_ASSIST_INPUT_TAG = "search_assist_input"
 internal const val SEARCH_ASSIST_SUBMIT_TAG = "search_assist_submit"
 internal const val SEARCH_ASSIST_CLEAR_TAG = "search_assist_clear"
 internal const val SEARCH_ASSIST_HISTORY_CLEAR_TAG = "search_assist_history_clear"
-internal const val SEARCH_ASSIST_HOT_WORK_CARD_TAG = "search_assist_hot_work_card"
-internal const val SEARCH_ASSIST_FULL_RANKING_TAG = "search_assist_full_ranking"
+internal const val SEARCH_ASSIST_RECOMMENDATION_CARD_TAG = "search_assist_recommendation_card"
+internal const val SEARCH_ASSIST_RECOMMENDATION_REFRESH_TAG = "search_assist_recommendation_refresh"
 internal const val SEARCH_ASSIST_CHROME_TAG = "search_assist_chrome"
 private const val SearchAssistCollapsedRows = 2
 private val SearchAssistChromeContentGap = 8.dp
@@ -96,7 +96,6 @@ fun SearchAssistScreen(
     windowSizeClass: WindowSizeClass,
     initialRequest: SearchAssistSearchRequest,
     onSubmitSearch: (SearchAssistSearchRequest) -> Unit,
-    onOpenFullRanking: () -> Unit,
     viewModel: SearchAssistViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -112,7 +111,7 @@ fun SearchAssistScreen(
             uiState = uiState,
             onSubmitSearch = { request -> viewModel.submitSearch(request, onSubmitSearch) },
             onClearHistory = viewModel::clearHistory,
-            onOpenFullRanking = onOpenFullRanking
+            onRefreshRecommendations = viewModel::refreshRecommendations
         )
     }
 }
@@ -124,7 +123,7 @@ internal fun SearchAssistContent(
     uiState: SearchAssistUiState,
     onSubmitSearch: (SearchAssistSearchRequest) -> Unit,
     onClearHistory: () -> Unit,
-    onOpenFullRanking: () -> Unit
+    onRefreshRecommendations: () -> Unit
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
     val inputFocusRequester = remember { FocusRequester() }
@@ -326,68 +325,72 @@ internal fun SearchAssistContent(
                 item(contentType = "hotTagsLoading") {
                     SearchAssistTermSectionSkeleton(title = "热门标签")
                 }
-                item(contentType = "hotWorksLoading") {
+            } else {
+                if (uiState.suggestions.hotCvs.isNotEmpty()) {
+                    item(contentType = "hotCvs") {
+                        SearchAssistTermSection(
+                            title = "热门声优",
+                            terms = uiState.suggestions.hotCvs,
+                            expanded = hotCvsExpanded,
+                            onExpandedChange = { hotCvsExpanded = it },
+                            onTermClick = { submit(it) }
+                        )
+                    }
+                }
+                if (uiState.suggestions.hotTags.isNotEmpty()) {
+                    item(contentType = "hotTags") {
+                        SearchAssistTermSection(
+                            title = "热门标签",
+                            terms = uiState.suggestions.hotTags,
+                            expanded = hotTagsExpanded,
+                            onExpandedChange = { hotTagsExpanded = it },
+                            onTermClick = { submit(it) }
+                        )
+                    }
+                }
+            }
+
+            if (uiState.isLoadingRecommendations && uiState.suggestions.recommendations.isEmpty()) {
+                item(contentType = "recommendationsLoading") {
                     SearchAssistWorkSectionSkeleton(
-                        title = "热门作品",
+                        title = "猜你喜欢",
                         compact = isCompact
                     )
                 }
-            } else if (uiState.suggestions.hotCvs.isNotEmpty()) {
-                item(contentType = "hotCvs") {
-                    SearchAssistTermSection(
-                        title = "热门声优",
-                        terms = uiState.suggestions.hotCvs,
-                        expanded = hotCvsExpanded,
-                        onExpandedChange = { hotCvsExpanded = it },
-                        onTermClick = { submit(it) }
-                    )
-                }
-            }
-
-            if (uiState.suggestions.hotTags.isNotEmpty()) {
-                item(contentType = "hotTags") {
-                    SearchAssistTermSection(
-                        title = "热门标签",
-                        terms = uiState.suggestions.hotTags,
-                        expanded = hotTagsExpanded,
-                        onExpandedChange = { hotTagsExpanded = it },
-                        onTermClick = { submit(it) }
-                    )
-                }
-            }
-
-            if (uiState.suggestions.hotWorks.isNotEmpty()) {
-                item(contentType = "hotWorks") {
+            } else if (uiState.suggestions.recommendations.isNotEmpty()) {
+                item(contentType = "recommendations") {
                     SearchAssistSection(
-                        title = "热门作品",
+                        title = "猜你喜欢",
                         trailing = {
                             TextButton(
-                                onClick = onOpenFullRanking,
-                                modifier = Modifier.testTag(SEARCH_ASSIST_FULL_RANKING_TAG)
+                                onClick = onRefreshRecommendations,
+                                enabled = !uiState.isLoadingRecommendations,
+                                modifier = Modifier.testTag(SEARCH_ASSIST_RECOMMENDATION_REFRESH_TAG)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Rounded.Leaderboard,
+                                    imageVector = Icons.Rounded.Refresh,
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp)
                                 )
-                                Text("查看完整榜单")
+                                Text(if (uiState.isLoadingRecommendations) "推荐中" else "换一批")
                             }
                         }
                     ) {
-                        val rows = uiState.suggestions.hotWorks.chunked(2)
+                        val rows = uiState.suggestions.recommendations.chunked(2)
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             rows.forEach { row ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    row.forEach { work ->
-                                        SearchAssistWorkChip(
-                                            work = work,
+                                    row.forEach { recommendation ->
+                                        SearchAssistRecommendationCard(
+                                            recommendation = recommendation,
                                             modifier = Modifier.weight(1f),
                                             compact = isCompact,
                                             onClick = {
-                                                val rj = work.album.rjCode.ifBlank { work.album.workId }
+                                                val album = recommendation.album
+                                                val rj = album.rjCode.ifBlank { album.workId }
                                                 submit(rj)
                                             }
                                         )
@@ -780,14 +783,14 @@ private fun HeaderIconButton(
 }
 
 @Composable
-private fun SearchAssistWorkChip(
-    work: SearchAssistHotWork,
+private fun SearchAssistRecommendationCard(
+    recommendation: SearchAssistRecommendation,
     compact: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val album = work.album
+    val album = recommendation.album
     val shape = RoundedCornerShape(8.dp)
     val coverData = album.coverThumbPath.takeIf { it.isNotBlank() && it.contains("_v2") }
         .orEmpty()
@@ -803,10 +806,7 @@ private fun SearchAssistWorkChip(
     }
     val containerColor = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.72f else 0.82f)
         .compositeOver(colorScheme.background)
-    val meta = listOf(album.cv, album.circle)
-        .map { it.trim() }
-        .firstOrNull { it.isNotBlank() }
-        .orEmpty()
+    val cv = album.cv.trim()
 
     Row(
         modifier = modifier
@@ -819,7 +819,7 @@ private fun SearchAssistWorkChip(
                 shape = shape
             )
             .clickable(onClick = onClick)
-            .testTag(SEARCH_ASSIST_HOT_WORK_CARD_TAG),
+            .testTag(SEARCH_ASSIST_RECOMMENDATION_CARD_TAG),
         verticalAlignment = Alignment.CenterVertically
     ) {
         AsmrAsyncImage(
@@ -840,15 +840,15 @@ private fun SearchAssistWorkChip(
             verticalArrangement = Arrangement.spacedBy(4.dp)
         ) {
             Text(
-                text = album.title.ifBlank { "热门作品" },
+                text = album.title.ifBlank { "推荐作品" },
                 style = MaterialTheme.typography.labelMedium,
                 color = colorScheme.textPrimary,
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis
             )
-            if (meta.isNotBlank()) {
+            if (cv.isNotBlank()) {
                 Text(
-                    text = meta,
+                    text = cv,
                     style = MaterialTheme.typography.labelSmall,
                     color = colorScheme.textSecondary,
                     maxLines = 1,

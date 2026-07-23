@@ -69,6 +69,29 @@ data class AsmrOneCollectedSearchItem(
     val rateAverage2dp: Double? = null
 )
 
+data class AsmrOneRecommendationRequest(
+    val seedRjs: List<String>,
+    val excludeRjs: List<String>,
+    val limit: Int
+)
+
+data class AsmrOneRecommendationResponse(
+    val items: List<AsmrOneRecommendationItem>? = emptyList(),
+    val matchedSeedRjs: List<String>? = emptyList(),
+    val unmatchedSeedRjs: List<String>? = emptyList(),
+    val limit: Int = 0,
+    val serverTimeEpochMs: Long = 0L
+)
+
+data class AsmrOneRecommendationItem(
+    val rj: String = "",
+    val title: String = "",
+    val cvs: List<String>? = emptyList(),
+    val matchedRjs: List<String>? = emptyList(),
+    val originalWorkno: String = "",
+    val mainCoverUrl: String = ""
+)
+
 data class AsmrOneBackendTrackTreeResponse(
     val rj: String = "",
     val workId: Int = 0,
@@ -99,6 +122,9 @@ class AsmrOneAvailabilityApi @Inject constructor(
     private val userAgent = buildUserAgent()
     private val requestClient by lazy { okHttpClient.withSearchTimeouts() }
     private val trackTreeClient by lazy { okHttpClient.withBackendTrackTreeTimeouts() }
+
+    val isBackendConfigured: Boolean
+        get() = backendBaseUrl.isNotBlank()
 
     suspend fun check(rjs: List<String>): Map<String, Boolean> {
         val normalized = rjs
@@ -176,6 +202,41 @@ class AsmrOneAvailabilityApi @Inject constructor(
         }
     }
 
+    suspend fun getRecommendations(
+        seedRjs: List<String>,
+        excludeRjs: List<String>,
+        limit: Int
+    ): AsmrOneRecommendationResponse {
+        if (!isBackendConfigured) throw IOException("asmr.one backend is not configured")
+        val normalizedSeeds = normalizeRecommendationRjs(seedRjs, MAX_RECOMMENDATION_SEEDS)
+        if (normalizedSeeds.isEmpty()) return AsmrOneRecommendationResponse()
+        val requestBody = AsmrOneRecommendationRequest(
+            seedRjs = normalizedSeeds,
+            excludeRjs = normalizeRecommendationRjs(excludeRjs, MAX_RECOMMENDATION_EXCLUDES),
+            limit = limit.coerceIn(1, MAX_RECOMMENDATION_LIMIT)
+        )
+        return withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url(resolveUrl("api/asmr-one/recommendations"))
+                .header("User-Agent", userAgent)
+                .header("X-Listen-Together-App", appHeaderValue)
+                .header("X-Listen-Together-Client-Session-Id", clientSessionId)
+                .header("X-Listen-Together-Device-Fingerprint", deviceFingerprint)
+                .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
+                .post(gson.toJson(requestBody).toRequestBody(JSON_MEDIA_TYPE))
+                .build()
+            requestClient.newCall(request).awaitResponse().use { response ->
+                if (!response.isSuccessful) {
+                    throw IOException("asmr.one recommendations failed: HTTP ${response.code}")
+                }
+                val raw = response.body?.string().orEmpty()
+                if (raw.isBlank()) return@withContext AsmrOneRecommendationResponse()
+                gson.fromJson(raw, AsmrOneRecommendationResponse::class.java)
+                    ?: AsmrOneRecommendationResponse()
+            }
+        }
+    }
+
     suspend fun getTrackTreeByRj(rj: String): AsmrOneBackendTrackTreeResponse {
         if (backendBaseUrl.isBlank()) throw IOException("asmr.one backend is not configured")
         val normalizedRj = rj.trim().uppercase()
@@ -248,8 +309,21 @@ class AsmrOneAvailabilityApi @Inject constructor(
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
         private val RJ_CODE_REGEX = Regex("""RJ\d{6,}""")
         private const val MAX_RJS = 100
+        private const val MAX_RECOMMENDATION_SEEDS = 20
+        private const val MAX_RECOMMENDATION_EXCLUDES = 200
+        private const val MAX_RECOMMENDATION_LIMIT = 50
     }
 }
+
+internal fun normalizeRecommendationRjs(values: List<String>, limit: Int): List<String> =
+    values.asSequence()
+        .map { it.trim().uppercase() }
+        .filter { RECOMMENDATION_RJ_CODE_REGEX.matches(it) }
+        .distinct()
+        .take(limit.coerceAtLeast(0))
+        .toList()
+
+private val RECOMMENDATION_RJ_CODE_REGEX = Regex("""RJ\d{6,}""")
 
 private fun AsmrOneAvailabilityItem.matchedRequestRjs(requested: Set<String>): List<String> {
     if (requested.isEmpty()) return emptyList()
