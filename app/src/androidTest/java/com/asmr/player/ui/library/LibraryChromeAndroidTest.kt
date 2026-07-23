@@ -1,6 +1,7 @@
 package com.asmr.player.ui.library
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
@@ -8,6 +9,7 @@ import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.asmr.player.ui.common.CollapsibleHeaderState
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import org.junit.Rule
 import org.junit.Test
@@ -36,10 +38,8 @@ class LibraryChromeAndroidTest {
                     onOpenFilterScreen = {},
                     filterActive = true,
                     rightPanelToggle = null,
-                    dynamicContainerColor = MaterialTheme.colorScheme.surface,
                     materialColorScheme = MaterialTheme.colorScheme,
-                    chromeOffsetPx = 0f,
-                    collapseFraction = 0f,
+                    chromeState = remember { CollapsibleHeaderState() },
                     onMeasured = {}
                 )
             }
@@ -68,10 +68,8 @@ class LibraryChromeAndroidTest {
                     onOpenFilterScreen = {},
                     filterActive = false,
                     rightPanelToggle = null,
-                    dynamicContainerColor = MaterialTheme.colorScheme.surface,
                     materialColorScheme = MaterialTheme.colorScheme,
-                    chromeOffsetPx = 0f,
-                    collapseFraction = 0f,
+                    chromeState = remember { CollapsibleHeaderState() },
                     onMeasured = {}
                 )
             }

@@ -32,6 +32,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -281,9 +282,19 @@ class ImageCacheManager(
 
     fun preload(scope: CoroutineScope, models: List<Any>, size: IntSize?): Job {
         return scope.launch(Dispatchers.IO) {
-            models.forEach { m ->
-                preloadSemaphore.withPermit {
-                    runCatching { loadImage(model = m, size = size, cachePolicy = CachePolicy.CACHE_WARMUP) }
+            coroutineScope {
+                models.forEach { model ->
+                    launch {
+                        preloadSemaphore.withPermit {
+                            runCatching {
+                                loadImage(
+                                    model = model,
+                                    size = size,
+                                    cachePolicy = CachePolicy.CACHE_WARMUP
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }

@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.player
+package com.asmr.player.ui.player
 
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -42,6 +42,13 @@ import androidx.compose.ui.unit.dp
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrTheme
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
+
+private data class QueuePlaybackPresentation(
+    val currentMediaId: String = "",
+    val isPlaying: Boolean = false
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -50,13 +57,23 @@ fun QueueSheetContent(
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val playback by viewModel.playback.collectAsState()
+    val playback by remember(viewModel) {
+        viewModel.playback
+            .map { snapshot ->
+                QueuePlaybackPresentation(
+                    currentMediaId = snapshot.currentMediaItem?.mediaId.orEmpty(),
+                    isPlaying = snapshot.isPlaying
+                )
+            }
+            .distinctUntilChanged()
+    }.collectAsState(initial = QueuePlaybackPresentation())
     val queue by viewModel.queue.collectAsState()
     val colorScheme = AsmrTheme.colorScheme
     val listState = rememberLazyListState()
 
-    val currentId = playback.currentMediaItem?.mediaId.orEmpty()
-    val currentIndex = remember(queue, currentId) { queue.indexOfFirst { it.mediaId == currentId } }
+    val currentIndex = remember(queue, playback.currentMediaId) {
+        queue.indexOfFirst { it.mediaId == playback.currentMediaId }
+    }
 
     Column(modifier = modifier.fillMaxWidth()) {
         Text(
@@ -151,9 +168,9 @@ private fun PlayingWaveIndicator(
     color: Color,
     modifier: Modifier = Modifier
 ) {
-    val fractions = if (isPlaying) {
+    val animatedFractions = if (isPlaying) {
         val transition = rememberInfiniteTransition(label = "playingWave")
-        listOf(
+        arrayOf(
             transition.animateFloat(
                 initialValue = 0.25f,
                 targetValue = 1f,
@@ -162,7 +179,7 @@ private fun PlayingWaveIndicator(
                     repeatMode = RepeatMode.Reverse
                 ),
                 label = "bar0"
-            ).value,
+            ),
             transition.animateFloat(
                 initialValue = 0.35f,
                 targetValue = 0.95f,
@@ -171,7 +188,7 @@ private fun PlayingWaveIndicator(
                     repeatMode = RepeatMode.Reverse
                 ),
                 label = "bar1"
-            ).value,
+            ),
             transition.animateFloat(
                 initialValue = 0.2f,
                 targetValue = 0.9f,
@@ -180,10 +197,10 @@ private fun PlayingWaveIndicator(
                     repeatMode = RepeatMode.Reverse
                 ),
                 label = "bar2"
-            ).value
+            )
         )
     } else {
-        listOf(0.35f, 0.7f, 0.45f)
+        null
     }
 
     Canvas(modifier = modifier) {
@@ -193,7 +210,12 @@ private fun PlayingWaveIndicator(
         val radius = barWidth / 2f
 
         for (i in 0 until barCount) {
-            val height = (size.height * fractions[i].coerceIn(0f, 1f)).coerceAtLeast(1f)
+            val fraction = animatedFractions?.get(i)?.value ?: when (i) {
+                0 -> 0.35f
+                1 -> 0.7f
+                else -> 0.45f
+            }
+            val height = (size.height * fraction.coerceIn(0f, 1f)).coerceAtLeast(1f)
             val left = i * (barWidth + gap)
             val top = size.height - height
             drawRoundRect(

@@ -16,7 +16,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import java.io.File
 import javax.inject.Inject
@@ -24,6 +23,7 @@ import javax.inject.Named
 
 @HiltAndroidApp
 class AsmrApp : Application(), ImageLoaderFactory, Configuration.Provider {
+    private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     @Inject
     @Named("image")
@@ -34,10 +34,8 @@ class AsmrApp : Application(), ImageLoaderFactory, Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
-        runBlocking {
+        applicationScope.launch {
             runCatching { settingsRepository.clearSleepTimer() }
-        }
-        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             runCatching { AppDatabaseProvider.get(applicationContext) }
             runCatching { DownloadQueueCoordinator.recoverDownloadsOnAppLaunch(applicationContext) }
         }

@@ -42,10 +42,8 @@ class LibraryScreenChromeTest {
                     onSortTitle = {},
                     onOpenFilterScreen = {},
                     rightPanelToggle = null,
-                    dynamicContainerColor = MaterialTheme.colorScheme.surface,
                     materialColorScheme = MaterialTheme.colorScheme,
-                    chromeOffsetPx = chromeState.offsetPx,
-                    collapseFraction = chromeState.collapseFraction,
+                    chromeState = chromeState,
                     onMeasured = { chromeState.updateHeight(it.height.toFloat()) }
                 )
             }
