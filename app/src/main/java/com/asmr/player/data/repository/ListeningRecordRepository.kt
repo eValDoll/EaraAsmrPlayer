@@ -181,6 +181,15 @@ class ListeningRecordRepository @Inject constructor(
     fun observeSessionsForDate(date: String): Flow<List<ListeningSessionEntity>> =
         sessionDao.observeSessionsForDate(date)
 
+    suspend fun recentRjs(limit: Int): List<String> =
+        if (limit <= 0) {
+            emptyList()
+        } else {
+            withContext(Dispatchers.IO) {
+                sessionDao.getRecentDistinctRjs(limit.coerceAtMost(MAX_RECENT_RJS))
+            }
+        }
+
     suspend fun distinctWorkCount(startDate: String, endDate: String): Int =
         withContext(Dispatchers.IO) { sessionDao.distinctWorkCount(startDate, endDate) }
 
@@ -221,5 +230,6 @@ class ListeningRecordRepository @Inject constructor(
         private const val SESSION_GAP_MS = 30L * 60L * 1000L
         /** 写回数据库的节流间隔（5 秒）。 */
         private const val PERSIST_INTERVAL_MS = 5_000L
+        private const val MAX_RECENT_RJS = 200
     }
 }

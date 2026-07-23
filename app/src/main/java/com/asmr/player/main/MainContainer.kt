@@ -2022,11 +2022,7 @@ fun MainContainer(
                         SearchAssistScreen(
                             windowSizeClass = windowSizeClass,
                             initialRequest = searchAssistInitialRequest,
-                            onSubmitSearch = ::submitSearchAssistRequest,
-                            onOpenFullRanking = {
-                                navController.popBackStack(Routes.Search, false)
-                                openPrimaryRoute(Routes.HotListening)
-                            }
+                            onSubmitSearch = ::submitSearchAssistRequest
                         )
                     }
                 }
@@ -2052,11 +2048,7 @@ fun MainContainer(
                         SearchAssistScreen(
                             windowSizeClass = windowSizeClass,
                             initialRequest = initialRequest,
-                            onSubmitSearch = ::submitSearchAssistRequest,
-                            onOpenFullRanking = {
-                                navController.popBackStack(Routes.Search, false)
-                                openPrimaryRoute(Routes.HotListening)
-                            }
+                            onSubmitSearch = ::submitSearchAssistRequest
                         )
                     }
                 }
