@@ -5,6 +5,7 @@ import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.coroutineScope
@@ -81,6 +82,7 @@ fun LazyListPreloader(
 ) {
     val manager = remember { cacheManagerProvider() }
     val preloadedModels = remember { LinkedHashSet<Any>() }
+    val latestModelAt = rememberUpdatedState(modelAt)
     LaunchedEffect(state, itemCount, preloadNext, preloadNextWhileScrolling, preloadSize) {
         preloadedModels.clear()
         snapshotFlow {
@@ -103,7 +105,7 @@ fun LazyListPreloader(
                 ) ?: return@collectLatest
                 delay(IdlePreloadDelayMs)
                 val toPreload = range.mapNotNull { index ->
-                    modelAt(index)?.takeUnless { model -> model in preloadedModels }
+                    latestModelAt.value(index)?.takeUnless { model -> model in preloadedModels }
                 }
                 if (toPreload.isNotEmpty()) {
                     coroutineScope {
@@ -128,6 +130,7 @@ fun LazyStaggeredGridPreloader(
 ) {
     val manager = remember { cacheManagerProvider() }
     val preloadedModels = remember { LinkedHashSet<Any>() }
+    val latestModelAt = rememberUpdatedState(modelAt)
     LaunchedEffect(state, itemCount, preloadNext, preloadNextWhileScrolling, preloadSize) {
         preloadedModels.clear()
         snapshotFlow {
@@ -150,7 +153,7 @@ fun LazyStaggeredGridPreloader(
                 ) ?: return@collectLatest
                 delay(IdlePreloadDelayMs)
                 val toPreload = range.mapNotNull { index ->
-                    modelAt(index)?.takeUnless { model -> model in preloadedModels }
+                    latestModelAt.value(index)?.takeUnless { model -> model in preloadedModels }
                 }
                 if (toPreload.isNotEmpty()) {
                     coroutineScope {

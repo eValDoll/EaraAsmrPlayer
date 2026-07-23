@@ -6,21 +6,19 @@ import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.State
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.asmr.player.ui.theme.AsmrTheme
 import kotlin.math.ceil
 
-private data class ThinScrollbarMetrics(
-    val offsetFraction: Float,
-    val thumbFraction: Float,
-)
+private const val InvalidThinScrollbarMetrics = Long.MIN_VALUE
 
 @Composable
 fun Modifier.thinScrollbar(
@@ -32,15 +30,13 @@ fun Modifier.thinScrollbar(
     minThumbLength: Dp = 32.dp,
 ): Modifier {
     val scrollbarColor = AsmrTheme.colorScheme.textSecondary
-    val alpha by animateFloatAsState(
+    val alpha = animateFloatAsState(
         targetValue = if (state.isScrollInProgress) 0.72f else 0.34f,
         animationSpec = tween(durationMillis = 180),
         label = "lazyListThinScrollbarAlpha"
     )
     return drawThinScrollbar(
-        metricsProvider = {
-            if (!state.canScrollBackward && !state.canScrollForward) null else state.thinScrollbarMetrics()
-        },
+        state = state,
         color = scrollbarColor,
         alpha = alpha,
         thickness = thickness,
@@ -61,15 +57,13 @@ fun Modifier.thinScrollbar(
     minThumbLength: Dp = 32.dp,
 ): Modifier {
     val scrollbarColor = AsmrTheme.colorScheme.textSecondary
-    val alpha by animateFloatAsState(
+    val alpha = animateFloatAsState(
         targetValue = if (state.isScrollInProgress) 0.72f else 0.34f,
         animationSpec = tween(durationMillis = 180),
         label = "lazyGridThinScrollbarAlpha"
     )
     return drawThinScrollbar(
-        metricsProvider = {
-            if (!state.canScrollBackward && !state.canScrollForward) null else state.thinScrollbarMetrics()
-        },
+        state = state,
         color = scrollbarColor,
         alpha = alpha,
         thickness = thickness,
@@ -90,15 +84,13 @@ fun Modifier.thinScrollbar(
     minThumbLength: Dp = 32.dp,
 ): Modifier {
     val scrollbarColor = AsmrTheme.colorScheme.textSecondary
-    val alpha by animateFloatAsState(
+    val alpha = animateFloatAsState(
         targetValue = if (state.isScrollInProgress) 0.72f else 0.34f,
         animationSpec = tween(durationMillis = 180),
         label = "scrollStateThinScrollbarAlpha"
     )
     return drawThinScrollbar(
-        metricsProvider = {
-            if (!state.canScrollBackward && !state.canScrollForward) null else state.thinScrollbarMetrics()
-        },
+        state = state,
         color = scrollbarColor,
         alpha = alpha,
         thickness = thickness,
@@ -110,9 +102,9 @@ fun Modifier.thinScrollbar(
 }
 
 private fun Modifier.drawThinScrollbar(
-    metricsProvider: () -> ThinScrollbarMetrics?,
+    state: LazyListState,
     color: androidx.compose.ui.graphics.Color,
-    alpha: Float,
+    alpha: State<Float>,
     thickness: Dp,
     endPadding: Dp,
     topPadding: Dp,
@@ -122,33 +114,110 @@ private fun Modifier.drawThinScrollbar(
     return then(
         Modifier.drawWithContent {
             drawContent()
-            val resolvedMetrics = metricsProvider() ?: return@drawWithContent
-            if (alpha <= 0f) return@drawWithContent
-
-            val resolvedColor = color.copy(alpha = alpha)
-            val barWidth = thickness.toPx()
-            val barX = size.width - endPadding.toPx() - barWidth
-            if (barWidth <= 0f || barX < 0f) return@drawWithContent
-
-            val trackTop = topPadding.toPx()
-            val trackBottom = size.height - bottomPadding.toPx()
-            val trackHeight = (trackBottom - trackTop).coerceAtLeast(0f)
-            if (trackHeight <= 0f) return@drawWithContent
-
-            val thumbHeight = resolveThinScrollbarThumbHeight(
-                trackHeight = trackHeight,
-                thumbFraction = resolvedMetrics.thumbFraction,
-                minThumbLengthPx = minThumbLength.toPx()
-            ) ?: return@drawWithContent
-            val thumbOffsetY = trackTop + (trackHeight - thumbHeight) * resolvedMetrics.offsetFraction
-
-            drawRoundRect(
-                color = resolvedColor,
-                topLeft = Offset(barX, thumbOffsetY),
-                size = Size(barWidth, thumbHeight),
-                cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
+            if (!state.canScrollBackward && !state.canScrollForward) return@drawWithContent
+            drawThinScrollbarThumb(
+                packedMetrics = state.thinScrollbarMetrics(),
+                color = color,
+                alpha = alpha.value,
+                thickness = thickness,
+                endPadding = endPadding,
+                topPadding = topPadding,
+                bottomPadding = bottomPadding,
+                minThumbLength = minThumbLength
             )
         }
+    )
+}
+
+private fun Modifier.drawThinScrollbar(
+    state: LazyStaggeredGridState,
+    color: androidx.compose.ui.graphics.Color,
+    alpha: State<Float>,
+    thickness: Dp,
+    endPadding: Dp,
+    topPadding: Dp,
+    bottomPadding: Dp,
+    minThumbLength: Dp,
+): Modifier {
+    return then(
+        Modifier.drawWithContent {
+            drawContent()
+            if (!state.canScrollBackward && !state.canScrollForward) return@drawWithContent
+            drawThinScrollbarThumb(
+                packedMetrics = state.thinScrollbarMetrics(),
+                color = color,
+                alpha = alpha.value,
+                thickness = thickness,
+                endPadding = endPadding,
+                topPadding = topPadding,
+                bottomPadding = bottomPadding,
+                minThumbLength = minThumbLength
+            )
+        }
+    )
+}
+
+private fun Modifier.drawThinScrollbar(
+    state: ScrollState,
+    color: androidx.compose.ui.graphics.Color,
+    alpha: State<Float>,
+    thickness: Dp,
+    endPadding: Dp,
+    topPadding: Dp,
+    bottomPadding: Dp,
+    minThumbLength: Dp,
+): Modifier {
+    return then(
+        Modifier.drawWithContent {
+            drawContent()
+            if (!state.canScrollBackward && !state.canScrollForward) return@drawWithContent
+            drawThinScrollbarThumb(
+                packedMetrics = state.thinScrollbarMetrics(),
+                color = color,
+                alpha = alpha.value,
+                thickness = thickness,
+                endPadding = endPadding,
+                topPadding = topPadding,
+                bottomPadding = bottomPadding,
+                minThumbLength = minThumbLength
+            )
+        }
+    )
+}
+
+private fun DrawScope.drawThinScrollbarThumb(
+    packedMetrics: Long,
+    color: androidx.compose.ui.graphics.Color,
+    alpha: Float,
+    thickness: Dp,
+    endPadding: Dp,
+    topPadding: Dp,
+    bottomPadding: Dp,
+    minThumbLength: Dp,
+) {
+    if (packedMetrics == InvalidThinScrollbarMetrics || alpha <= 0f) return
+    val offsetFraction = Float.fromBits((packedMetrics ushr 32).toInt())
+    val thumbFraction = Float.fromBits(packedMetrics.toInt())
+    val barWidth = thickness.toPx()
+    val barX = size.width - endPadding.toPx() - barWidth
+    if (barWidth <= 0f || barX < 0f) return
+
+    val trackTop = topPadding.toPx()
+    val trackBottom = size.height - bottomPadding.toPx()
+    val trackHeight = (trackBottom - trackTop).coerceAtLeast(0f)
+    if (trackHeight <= 0f) return
+
+    val thumbHeight = resolveThinScrollbarThumbHeight(
+        trackHeight = trackHeight,
+        thumbFraction = thumbFraction,
+        minThumbLengthPx = minThumbLength.toPx()
+    ) ?: return
+    val thumbOffsetY = trackTop + (trackHeight - thumbHeight) * offsetFraction
+    drawRoundRect(
+        color = color.copy(alpha = alpha),
+        topLeft = Offset(barX, thumbOffsetY),
+        size = Size(barWidth, thumbHeight),
+        cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
     )
 }
 
@@ -164,11 +233,11 @@ internal fun resolveThinScrollbarThumbHeight(
         .coerceIn(resolvedMinThumbLength, trackHeight)
 }
 
-private fun LazyListState.thinScrollbarMetrics(): ThinScrollbarMetrics? {
+private fun LazyListState.thinScrollbarMetrics(): Long {
     val layoutInfo = layoutInfo
     val totalItems = layoutInfo.totalItemsCount
     val visibleItems = layoutInfo.visibleItemsInfo
-    if (totalItems <= 0 || visibleItems.isEmpty()) return null
+    if (totalItems <= 0 || visibleItems.isEmpty()) return InvalidThinScrollbarMetrics
 
     val viewportHeight = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat()
         .coerceAtLeast(1f)
@@ -179,7 +248,7 @@ private fun LazyListState.thinScrollbarMetrics(): ThinScrollbarMetrics? {
     val averageItemSize = totalVisibleSize.toFloat() / visibleItems.size
     val estimatedContentHeight =
         averageItemSize * totalItems + layoutInfo.beforeContentPadding + layoutInfo.afterContentPadding
-    if (estimatedContentHeight <= viewportHeight) return null
+    if (estimatedContentHeight <= viewportHeight) return InvalidThinScrollbarMetrics
 
     val estimatedScrollOffset = firstVisibleItemIndex * averageItemSize + firstVisibleItemScrollOffset
     return buildThinScrollbarMetrics(
@@ -189,11 +258,11 @@ private fun LazyListState.thinScrollbarMetrics(): ThinScrollbarMetrics? {
     )
 }
 
-private fun LazyStaggeredGridState.thinScrollbarMetrics(): ThinScrollbarMetrics? {
+private fun LazyStaggeredGridState.thinScrollbarMetrics(): Long {
     val layoutInfo = layoutInfo
     val totalItems = layoutInfo.totalItemsCount
     val visibleItems = layoutInfo.visibleItemsInfo
-    if (totalItems <= 0 || visibleItems.isEmpty()) return null
+    if (totalItems <= 0 || visibleItems.isEmpty()) return InvalidThinScrollbarMetrics
 
     val viewportHeight = (layoutInfo.viewportEndOffset - layoutInfo.viewportStartOffset).toFloat()
         .coerceAtLeast(1f)
@@ -219,7 +288,7 @@ private fun LazyStaggeredGridState.thinScrollbarMetrics(): ThinScrollbarMetrics?
     val estimatedRowCount = ceil(totalItems / laneCount.toFloat())
     val estimatedContentHeight =
         averageItemHeight * estimatedRowCount + layoutInfo.beforeContentPadding + layoutInfo.afterContentPadding
-    if (estimatedContentHeight <= viewportHeight) return null
+    if (estimatedContentHeight <= viewportHeight) return InvalidThinScrollbarMetrics
 
     val estimatedScrollOffset =
         (firstVisibleItemIndex / laneCount.toFloat()) * averageItemHeight + firstVisibleItemScrollOffset
@@ -230,10 +299,10 @@ private fun LazyStaggeredGridState.thinScrollbarMetrics(): ThinScrollbarMetrics?
     )
 }
 
-private fun ScrollState.thinScrollbarMetrics(): ThinScrollbarMetrics? {
+private fun ScrollState.thinScrollbarMetrics(): Long {
     val viewportHeight = viewportSize.toFloat().coerceAtLeast(1f)
     val contentHeight = viewportHeight + maxValue
-    if (contentHeight <= viewportHeight) return null
+    if (contentHeight <= viewportHeight) return InvalidThinScrollbarMetrics
     return buildThinScrollbarMetrics(
         scrollOffset = value.toFloat(),
         viewportHeight = viewportHeight,
@@ -245,13 +314,11 @@ private fun buildThinScrollbarMetrics(
     scrollOffset: Float,
     viewportHeight: Float,
     contentHeight: Float,
-): ThinScrollbarMetrics {
+): Long {
     val resolvedContentHeight = contentHeight.coerceAtLeast(viewportHeight)
     val maxScroll = (resolvedContentHeight - viewportHeight).coerceAtLeast(1f)
     val resolvedThumbFraction = (viewportHeight / resolvedContentHeight).coerceIn(0.08f, 1f)
     val resolvedOffsetFraction = (scrollOffset / maxScroll).coerceIn(0f, 1f)
-    return ThinScrollbarMetrics(
-        offsetFraction = resolvedOffsetFraction,
-        thumbFraction = resolvedThumbFraction
-    )
+    return (resolvedOffsetFraction.toRawBits().toLong() shl 32) or
+        (resolvedThumbFraction.toRawBits().toLong() and 0xFFFF_FFFFL)
 }

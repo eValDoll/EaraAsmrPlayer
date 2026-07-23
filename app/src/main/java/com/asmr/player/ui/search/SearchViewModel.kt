@@ -16,6 +16,7 @@ import com.asmr.player.util.AppErrorMessageFormatter
 import com.asmr.player.util.MessageManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.compose.runtime.Immutable
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -1027,6 +1028,7 @@ internal fun appendBlockedKeywordsForOnlineSearch(
     }
 }
 
+@Immutable
 sealed class SearchUiState {
     object Idle : SearchUiState()
     object Loading : SearchUiState()

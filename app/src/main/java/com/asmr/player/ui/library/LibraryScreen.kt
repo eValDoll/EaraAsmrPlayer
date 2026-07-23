@@ -95,6 +95,7 @@ import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -159,7 +160,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.asmr.player.ui.common.AsmrAsyncImage
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
-import com.asmr.player.ui.theme.dynamicPageContainerColor
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.flowOf
@@ -175,6 +175,7 @@ import com.asmr.player.ui.common.CustomSearchBar
 import com.asmr.player.ui.common.ActiveDropdownMenuItem
 import com.asmr.player.ui.common.ActionButton
 import com.asmr.player.ui.common.clearFocusOnTapOutside
+import com.asmr.player.ui.common.CollapsibleHeaderState
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.shouldFadeInCover
@@ -262,7 +263,6 @@ fun LibraryScreen(
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val materialColorScheme = MaterialTheme.colorScheme
-    val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
     val uiState by viewModel.uiState.collectAsState()
     val viewMode by viewModel.libraryViewMode.collectAsState()
     val querySpec by viewModel.querySpec.collectAsState()
@@ -327,11 +327,6 @@ fun LibraryScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val chromeState = rememberCollapsibleHeaderState()
-    val animatedChromeOffsetPx by animateFloatAsState(
-        targetValue = chromeState.offsetPx,
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-        label = "libraryChromeOffset"
-    )
     fun stopActiveScroll() {
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
             when (mode) {
@@ -827,7 +822,10 @@ fun LibraryScreen(
                                             contentType = { "albumGridItem" },
                                         ) { idx ->
                                             val album = pagedAlbums[idx] ?: return@staggeredItems
-                                            val mergedAlbum = album.withUserTags(userTagsByAlbumId[album.id].orEmpty())
+                                            val userTags = userTagsByAlbumId[album.id].orEmpty()
+                                            val mergedAlbum = remember(album, userTags) {
+                                                album.withUserTags(userTags)
+                                            }
                                             AlbumGridItem(
                                                 album = mergedAlbum,
                                                 syncStatus = state.syncingAlbums[album.id] ?: SyncStatus.Idle,
@@ -887,7 +885,10 @@ fun LibraryScreen(
                                             contentType = { "albumListItem" }
                                         ) { idx ->
                                             val album = pagedAlbums[idx] ?: return@items
-                                            val mergedAlbum = album.withUserTags(userTagsByAlbumId[album.id].orEmpty())
+                                            val userTags = userTagsByAlbumId[album.id].orEmpty()
+                                            val mergedAlbum = remember(album, userTags) {
+                                                album.withUserTags(userTags)
+                                            }
                                             AlbumItem(
                                                 album = mergedAlbum,
                                                 syncStatus = state.syncingAlbums[album.id] ?: SyncStatus.Idle,
@@ -931,10 +932,8 @@ fun LibraryScreen(
                                     onOpenFilterScreen = onOpenFilterScreen,
                                     filterActive = hasActiveFilters,
                                     rightPanelToggle = rightPanelToggle,
-                                    dynamicContainerColor = dynamicContainerColor,
                                     materialColorScheme = materialColorScheme,
-                                    chromeOffsetPx = animatedChromeOffsetPx,
-                                    collapseFraction = chromeState.collapseFraction,
+                                    chromeState = chromeState,
                                     onMeasured = { chromeState.updateHeight(it.height.toFloat()) }
                                 )
                             }
@@ -1139,14 +1138,20 @@ internal fun LibraryChrome(
     onOpenFilterScreen: () -> Unit,
     filterActive: Boolean = false,
     rightPanelToggle: (@Composable (Modifier) -> Unit)?,
-    dynamicContainerColor: Color,
     materialColorScheme: androidx.compose.material3.ColorScheme,
-    chromeOffsetPx: Float,
-    collapseFraction: Float,
+    chromeState: CollapsibleHeaderState,
     onMeasured: (IntSize) -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val collapseOvershootPx = with(LocalDensity.current) { LibraryChromeCollapseOvershoot.toPx() }
+    val animatedChromeOffsetPx = animateFloatAsState(
+        targetValue = chromeState.offsetPx,
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "libraryChromeOffset"
+    )
+    val collapseStateDescription by remember(chromeState) {
+        derivedStateOf { collapsibleHeaderUiState(chromeState.collapseFraction) }
+    }
     val chromeActionContainerColor = lerp(
         colorScheme.surface,
         colorScheme.primarySoft,
@@ -1160,10 +1165,11 @@ internal fun LibraryChrome(
             .padding(horizontal = LibraryPageHorizontalPadding, vertical = 8.dp)
             .onSizeChanged(onMeasured)
             .graphicsLayer {
-                translationY = chromeOffsetPx - (collapseFraction.coerceIn(0f, 1f) * collapseOvershootPx)
-                alpha = 1f - (collapseFraction.coerceIn(0f, 1f) * 0.1f)
+                val collapseFraction = chromeState.collapseFraction.coerceIn(0f, 1f)
+                translationY = animatedChromeOffsetPx.value - (collapseFraction * collapseOvershootPx)
+                alpha = 1f - (collapseFraction * 0.1f)
             }
-            .semantics { stateDescription = collapsibleHeaderUiState(collapseFraction) }
+            .semantics { stateDescription = collapseStateDescription }
             .testTag(LIBRARY_CHROME_TAG),
         verticalAlignment = Alignment.CenterVertically
     ) {

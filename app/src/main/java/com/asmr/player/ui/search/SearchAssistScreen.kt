@@ -1,8 +1,5 @@
 package com.asmr.player.ui.search
 
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -190,11 +187,6 @@ internal fun SearchAssistContent(
     )
     val chromeState = rememberCollapsibleHeaderState()
     val density = LocalDensity.current
-    val animatedChromeOffsetPx by animateFloatAsState(
-        targetValue = chromeState.offsetPx,
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-        label = "searchAssistChromeOffset"
-    )
     val chromeReservedHeightPx = if (chromeState.heightPx > 0f) {
         chromeState.heightPx
     } else {
@@ -428,8 +420,7 @@ internal fun SearchAssistContent(
             canGoNext = false,
             controlsLocked = false,
             rightPanelToggle = null,
-            animatedOffsetPx = animatedChromeOffsetPx,
-            collapseFraction = chromeState.collapseFraction,
+            chromeState = chromeState,
             chromeTestTag = SEARCH_ASSIST_CHROME_TAG,
             inputTestTag = SEARCH_ASSIST_INPUT_TAG,
             clearButtonTestTag = SEARCH_ASSIST_CLEAR_TAG,

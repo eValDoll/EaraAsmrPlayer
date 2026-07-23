@@ -20,7 +20,10 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import kotlin.random.Random
+import java.util.ArrayDeque
 import java.util.Arrays
+
+private const val MaxSpectrumParticleCount = 201
 
 @UnstableApi
 class ChannelSpectrumView @JvmOverloads constructor(
@@ -41,8 +44,7 @@ class ChannelSpectrumView @JvmOverloads constructor(
         var alpha: Float,
         var size: Float,
         var life: Float,
-        var maxLife: Float,
-        val color: Int
+        var maxLife: Float
     )
 
     private val sourceBins = FloatArray(StereoSpectrumBus.DefaultBinCount) // 原始频谱 bins（来自 StereoSpectrumBus），长度固定（默认 128）
@@ -67,7 +69,9 @@ class ChannelSpectrumView @JvmOverloads constructor(
     
     private var baseColor: Int = 0xFFFFFFFF.toInt()
     private val particles = ArrayList<Particle>()
+    private val recycledParticles = ArrayDeque<Particle>(MaxSpectrumParticleCount)
     private val random = Random(System.currentTimeMillis())
+    private val particleDensity = resources.displayMetrics.density
 
     private var channel: Channel = Channel.Left // 当前视图显示哪个声道（Left/Right）
     private var running: Boolean = false // 是否在用 Choreographer 驱动重绘
@@ -475,30 +479,38 @@ class ChannelSpectrumView @JvmOverloads constructor(
     }
     
     private fun updateParticles(dt: Float) {
-        val iter = particles.iterator()
-        while (iter.hasNext()) {
-            val p = iter.next()
+        var writeIndex = 0
+        for (readIndex in particles.indices) {
+            val p = particles[readIndex]
             p.life -= dt
             if (p.life <= 0) {
-                iter.remove()
+                recycledParticles.addLast(p)
                 continue
             }
-            
+
             p.x += p.vx * dt
             p.y += p.vy * dt
             p.alpha = (p.life / p.maxLife).coerceIn(0f, 1f)
-            
+
             // Simple gravity/drag
             p.vx *= 0.95f
             // Drift up
-            p.vy -= 10f * dt 
+            p.vy -= 10f * dt
+
+            if (writeIndex != readIndex) {
+                particles[writeIndex] = p
+            }
+            writeIndex += 1
+        }
+        while (particles.size > writeIndex) {
+            particles.removeAt(particles.lastIndex)
         }
     }
     
     private fun spawnParticle(x: Float, y: Float, intensity: Float) {
-        if (particles.size > 200) return // Limit count
+        if (particles.size >= MaxSpectrumParticleCount) return
         
-        val size = (random.nextFloat() * 4f + 2f) * resources.displayMetrics.density
+        val size = (random.nextFloat() * 4f + 2f) * particleDensity
         val life = random.nextFloat() * 0.5f + 0.3f
         
         // Random velocity
@@ -507,22 +519,36 @@ class ChannelSpectrumView @JvmOverloads constructor(
         val vxDir = if (isLeft) -1f else 1f
         val vx = (random.nextFloat() * 100f + 20f) * vxDir * intensity
         val vy = (random.nextFloat() - 0.5f) * 100f
-        
-        particles.add(Particle(
-            x = x,
-            y = y,
-            vx = vx,
-            vy = vy,
-            alpha = 1f,
-            size = size,
-            life = life,
-            maxLife = life,
-            color = particlePaint.color
-        ))
+
+        val particle = if (recycledParticles.isEmpty()) {
+            Particle(
+                x = x,
+                y = y,
+                vx = vx,
+                vy = vy,
+                alpha = 1f,
+                size = size,
+                life = life,
+                maxLife = life
+            )
+        } else {
+            recycledParticles.removeFirst().apply {
+                this.x = x
+                this.y = y
+                this.vx = vx
+                this.vy = vy
+                alpha = 1f
+                this.size = size
+                this.life = life
+                maxLife = life
+            }
+        }
+        particles.add(particle)
     }
     
     private fun drawParticles(canvas: Canvas) {
-        for (p in particles) {
+        for (index in particles.indices) {
+            val p = particles[index]
             particlePaint.alpha = (p.alpha * 255).toInt()
             canvas.drawCircle(p.x, p.y, p.size, particlePaint)
         }

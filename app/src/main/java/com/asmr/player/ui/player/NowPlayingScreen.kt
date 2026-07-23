@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.player
+package com.asmr.player.ui.player
 
 import android.app.Activity
 import android.content.Context
@@ -722,7 +722,7 @@ private fun NowPlayingHomeLayoutSwipeHint(
     modifier: Modifier = Modifier
 ) {
     val transition = rememberInfiniteTransition(label = "nowPlayingHomeLayoutSwipeHint")
-    val waveProgress by transition.animateFloat(
+    val waveProgress = transition.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -751,7 +751,7 @@ private fun NowPlayingHomeLayoutSwipeHint(
                 .height(24.dp)
         ) {
             repeat(4) { index ->
-                val phase = (waveProgress + index * 0.25f) % 1f
+                val phase = (waveProgress.value + index * 0.25f) % 1f
                 val edgeFade = when {
                     phase < 0.22f -> phase / 0.22f
                     phase > 0.78f -> (1f - phase) / 0.22f

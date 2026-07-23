@@ -2,6 +2,7 @@ package com.asmr.player.ui.hotlistening
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.compose.runtime.Immutable
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.domain.model.Album
 import com.asmr.player.hotlistening.HotListeningApi
@@ -139,6 +140,7 @@ private sealed class HotListeningRawUiState {
     data class Error(val message: String) : HotListeningRawUiState()
 }
 
+@Immutable
 data class HotListeningEntry(
     val album: Album,
     val playCount: Int,
@@ -185,6 +187,7 @@ data class HotListeningEntry(
     }
 }
 
+@Immutable
 sealed class HotListeningUiState {
     data object Loading : HotListeningUiState()
     data class Success(
@@ -196,6 +199,7 @@ sealed class HotListeningUiState {
     data class Error(val message: String) : HotListeningUiState()
 }
 
+@Immutable
 internal data class HotListeningBlockedEntries(
     val visibleEntries: List<HotListeningEntry>,
     val blockedEntries: List<HotListeningEntry>

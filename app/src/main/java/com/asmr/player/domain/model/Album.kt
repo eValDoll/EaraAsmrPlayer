@@ -1,5 +1,8 @@
 package com.asmr.player.domain.model
 
+import androidx.compose.runtime.Immutable
+
+@Immutable
 data class Album(
     val id: Long = 0L,
     val title: String,

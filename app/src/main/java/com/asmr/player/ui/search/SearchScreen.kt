@@ -69,6 +69,7 @@ import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -122,6 +123,7 @@ import com.asmr.player.ui.common.albumStableKey
 import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.clearFocusOnTapOutside
+import com.asmr.player.ui.common.CollapsibleHeaderState
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.consumeTapThrough
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
@@ -411,11 +413,6 @@ fun SearchScreen(
     val highlightedPage = success?.page ?: 1
     val canGoPrev = success?.canGoPrev == true && !success.isSearching
     val canGoNext = success?.canGoNext == true && !success.isSearching
-    val animatedChromeOffsetPx by animateFloatAsState(
-        targetValue = chromeState.offsetPx,
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-        label = "searchChromeOffset"
-    )
     val chromeReservedHeightPx = when {
         chromeState.heightPx > 0f -> chromeState.heightPx
         success != null -> with(androidx.compose.ui.platform.LocalDensity.current) { 120.dp.toPx() }
@@ -1162,8 +1159,7 @@ fun SearchScreen(
                         canGoNext = canGoNext,
                         controlsLocked = interactionLocked,
                         rightPanelToggle = rightPanelToggle,
-                        animatedOffsetPx = animatedChromeOffsetPx,
-                        collapseFraction = chromeState.collapseFraction,
+                        chromeState = chromeState,
                         onMeasured = { size: IntSize -> chromeState.updateHeight(size.height.toFloat()) },
                         onSearchSubmit = { submitSearch() },
                         onClearKeyword = { clearKeywordAndSearch() },
@@ -1350,8 +1346,7 @@ internal fun SearchChrome(
     canGoNext: Boolean,
     controlsLocked: Boolean,
     rightPanelToggle: (@Composable (Modifier) -> Unit)?,
-    animatedOffsetPx: Float,
-    collapseFraction: Float,
+    chromeState: CollapsibleHeaderState,
     chromeTestTag: String = SEARCH_CHROME_TAG,
     inputTestTag: String = SEARCH_INPUT_TAG,
     clearButtonTestTag: String = SEARCH_CLEAR_BUTTON_TAG,
@@ -1367,13 +1362,21 @@ internal fun SearchChrome(
     onPrev: () -> Unit,
     onNext: () -> Unit
 ) {
+    val animatedOffsetPx = animateFloatAsState(
+        targetValue = chromeState.offsetPx,
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "searchChromeOffset"
+    )
+    val collapseStateDescription by remember(chromeState) {
+        derivedStateOf { collapsibleHeaderUiState(chromeState.collapseFraction) }
+    }
     Column(
         modifier = modifier
             .onSizeChanged(onMeasured)
             // Use layout offset instead of a graphics layer so Android text selection
             // toolbars anchor to the real on-screen position of the editable field.
-            .offset { IntOffset(x = 0, y = animatedOffsetPx.roundToInt()) }
-            .semantics { stateDescription = collapsibleHeaderUiState(collapseFraction) }
+            .offset { IntOffset(x = 0, y = animatedOffsetPx.value.roundToInt()) }
+            .semantics { stateDescription = collapseStateDescription }
             .testTag(chromeTestTag)
     ) {
         SearchToolbar(
