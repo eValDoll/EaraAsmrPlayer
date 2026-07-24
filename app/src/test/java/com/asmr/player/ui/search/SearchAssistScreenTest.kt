@@ -269,7 +269,8 @@ class SearchAssistScreenTest {
                                 SearchAssistRecommendation(album = secondAlbum)
                             )
                         ),
-                        isLoadingRecommendations = false
+                        isLoadingRecommendations = false,
+                        hasMoreRecommendations = true
                     ),
                     onSubmitSearch = { submitted += it },
                     onClearHistory = { clearHistoryCount += 1 },

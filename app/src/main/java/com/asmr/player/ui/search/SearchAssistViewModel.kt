@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.asmr.player.data.local.datastore.SearchCacheStore
 import com.asmr.player.data.remote.api.AsmrOneAvailabilityApi
+import com.asmr.player.data.remote.api.AsmrOneRecommendationCursorExpiredException
 import com.asmr.player.data.remote.api.AsmrOneRecommendationItem
 import com.asmr.player.data.remote.api.AsmrOneRecommendationResponse
 import com.asmr.player.data.remote.api.normalizeRecommendationRjs
@@ -66,7 +67,7 @@ class SearchAssistViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(SearchAssistUiState())
     val uiState: StateFlow<SearchAssistUiState> = _uiState.asStateFlow()
     private var listenedRjs: List<String> = emptyList()
-    private val recommendationSeenRjs = linkedSetOf<String>()
+    private var recommendationCursor: String = ""
 
     init {
         refresh()
@@ -129,10 +130,16 @@ class SearchAssistViewModel @Inject constructor(
     }
 
     fun refreshRecommendations() {
-        if (_uiState.value.isLoadingRecommendations || listenedRjs.isEmpty()) return
+        if (
+            _uiState.value.isLoadingRecommendations ||
+            listenedRjs.isEmpty() ||
+            recommendationCursor.isBlank()
+        ) {
+            return
+        }
         _uiState.update { it.copy(isLoadingRecommendations = true) }
         viewModelScope.launch {
-            loadRecommendationBatch(retryWithoutSeenWhenEmpty = true)
+            loadRecommendationBatch()
         }
     }
 
@@ -141,6 +148,7 @@ class SearchAssistViewModel @Inject constructor(
             _uiState.update {
                 it.copy(
                     isLoadingRecommendations = false,
+                    hasMoreRecommendations = false,
                     suggestions = it.suggestions.copy(recommendations = emptyList())
                 )
             }
@@ -157,45 +165,29 @@ class SearchAssistViewModel @Inject constructor(
             },
             limit = MAX_RECOMMENDATION_EXCLUDES
         )
-        recommendationSeenRjs.clear()
+        recommendationCursor = ""
         if (listenedRjs.isEmpty()) {
             _uiState.update {
                 it.copy(
                     isLoadingRecommendations = false,
+                    hasMoreRecommendations = false,
                     suggestions = it.suggestions.copy(recommendations = emptyList())
                 )
             }
             return
         }
-        loadRecommendationBatch(retryWithoutSeenWhenEmpty = false)
+        loadRecommendationBatch()
     }
 
-    private suspend fun loadRecommendationBatch(retryWithoutSeenWhenEmpty: Boolean) {
+    private suspend fun loadRecommendationBatch() {
         _uiState.update { it.copy(isLoadingRecommendations = true) }
-        val exclusionPlan = planRecommendationExclusions(
-            listenedRjs = listenedRjs,
-            recommendationSeenRjs = recommendationSeenRjs.toList(),
-            maxExcludes = MAX_RECOMMENDATION_EXCLUDES
-        )
-        if (exclusionPlan.resetRecommendationSeen) {
-            recommendationSeenRjs.clear()
-        }
-        var response = requestRecommendations(exclusionPlan.excludeRjs)
-        if (
-            retryWithoutSeenWhenEmpty &&
-            response != null &&
-            response.items.orEmpty().isEmpty() &&
-            recommendationSeenRjs.isNotEmpty()
-        ) {
-            recommendationSeenRjs.clear()
-            response = requestRecommendations(listenedRjs)
-        }
+        val response = requestRecommendationPageWithRecovery()
         if (response == null) {
             _uiState.update { it.copy(isLoadingRecommendations = false) }
             return
         }
         val items = response.items.orEmpty()
-        items.flatMapTo(recommendationSeenRjs) { item -> item.recommendationExclusionRjs() }
+        recommendationCursor = response.recommendationContinuationCursor()
         val recommendations = items
             .map { item -> item.toSearchAssistRecommendation() }
             .filter { recommendation -> recommendation.album.rjCode.isNotBlank() }
@@ -203,28 +195,48 @@ class SearchAssistViewModel @Inject constructor(
         _uiState.update {
             it.copy(
                 isLoadingRecommendations = false,
+                hasMoreRecommendations = recommendationCursor.isNotBlank(),
                 suggestions = it.suggestions.copy(recommendations = recommendations)
             )
         }
     }
 
-    private suspend fun requestRecommendations(excludeRjs: List<String>): AsmrOneRecommendationResponse? =
+    private suspend fun requestRecommendationPageWithRecovery(): AsmrOneRecommendationResponse? =
         try {
-            asmrOneAvailabilityApi.getRecommendations(
-                seedRjs = listenedRjs.take(MAX_RECOMMENDATION_SEEDS),
-                excludeRjs = excludeRjs,
-                limit = RECOMMENDATION_DISPLAY_LIMIT
-            )
+            requestRecommendationPage()
+        } catch (error: AsmrOneRecommendationCursorExpiredException) {
+            recommendationCursor = ""
+            try {
+                requestRecommendationPage()
+            } catch (retryError: CancellationException) {
+                throw retryError
+            } catch (_: Throwable) {
+                null
+            }
         } catch (error: CancellationException) {
             throw error
         } catch (_: Throwable) {
             null
         }
 
+    private suspend fun requestRecommendationPage(): AsmrOneRecommendationResponse =
+        if (recommendationCursor.isBlank()) {
+            asmrOneAvailabilityApi.getRecommendations(
+                seedRjs = listenedRjs.take(MAX_RECOMMENDATION_SEEDS),
+                excludeRjs = listenedRjs,
+                limit = RECOMMENDATION_DISPLAY_LIMIT
+            )
+        } else {
+            asmrOneAvailabilityApi.continueRecommendations(
+                cursor = recommendationCursor,
+                limit = RECOMMENDATION_DISPLAY_LIMIT
+            )
+        }
+
     private companion object {
         const val MAX_RECOMMENDATION_SEEDS = 20
         const val MAX_RECOMMENDATION_EXCLUDES = 200
-        const val RECOMMENDATION_DISPLAY_LIMIT = 20
+        const val RECOMMENDATION_DISPLAY_LIMIT = 10
     }
 }
 
@@ -232,7 +244,8 @@ data class SearchAssistUiState(
     val history: List<String> = emptyList(),
     val suggestions: SearchSuggestionsUiData = SearchSuggestionsUiData(),
     val isLoadingSuggestions: Boolean = true,
-    val isLoadingRecommendations: Boolean = true
+    val isLoadingRecommendations: Boolean = true,
+    val hasMoreRecommendations: Boolean = false
 )
 
 data class SearchSuggestionsUiData(
@@ -268,35 +281,7 @@ internal fun AsmrOneRecommendationItem.toSearchAssistRecommendation(): SearchAss
     )
 }
 
-internal data class RecommendationExclusionPlan(
-    val excludeRjs: List<String>,
-    val resetRecommendationSeen: Boolean
-)
-
-internal fun planRecommendationExclusions(
-    listenedRjs: List<String>,
-    recommendationSeenRjs: List<String>,
-    maxExcludes: Int
-): RecommendationExclusionPlan {
-    val normalizedListened = normalizeRecommendationRjs(listenedRjs, maxExcludes)
-    val listenedSet = normalizedListened.toSet()
-    val normalizedSeen = normalizeRecommendationRjs(recommendationSeenRjs, Int.MAX_VALUE)
-        .filterNot(listenedSet::contains)
-    val shouldResetSeen = normalizedListened.size + normalizedSeen.size > maxExcludes
-    return RecommendationExclusionPlan(
-        excludeRjs = if (shouldResetSeen) normalizedListened else normalizedListened + normalizedSeen,
-        resetRecommendationSeen = shouldResetSeen
-    )
-}
-
-internal fun AsmrOneRecommendationItem.recommendationExclusionRjs(): List<String> =
-    normalizeRecommendationRjs(
-        values = buildList {
-            add(rj)
-            add(originalWorkno)
-            addAll(matchedRjs.orEmpty())
-        },
-        limit = Int.MAX_VALUE
-    )
+internal fun AsmrOneRecommendationResponse.recommendationContinuationCursor(): String =
+    nextCursor.trim().takeIf { hasMore }.orEmpty()
 
 private val RECOMMENDATION_RJ_REGEX = Regex("""RJ\d{6,}""")
