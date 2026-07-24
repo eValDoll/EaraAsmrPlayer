@@ -1,6 +1,7 @@
 package com.asmr.player.data.remote.dlsite
 
 import com.asmr.player.data.remote.NetworkHeaders
+import com.asmr.player.data.remote.awaitResponse
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -71,7 +72,7 @@ class DlsiteProductInfoClient @Inject constructor(
             .get()
             .build()
 
-        okHttpClient.newCall(request).execute().use { resp ->
+        okHttpClient.newCall(request).awaitResponse().use { resp ->
             val body = resp.body?.string().orEmpty()
             if (!resp.isSuccessful || body.isBlank()) return@withContext emptyList()
             parseLanguageEditions(clean, body)

@@ -2,6 +2,7 @@ package com.asmr.player.ui.hotlistening
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.compose.runtime.Immutable
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.domain.model.Album
 import com.asmr.player.hotlistening.HotListeningApi
@@ -39,9 +40,6 @@ class HotListeningViewModel @Inject constructor(
     private val _selectedPeriod = MutableStateFlow("day")
     val selectedPeriod: StateFlow<String> = _selectedPeriod.asStateFlow()
 
-    var scrollPosition: HotListeningScrollPosition = HotListeningScrollPosition()
-        private set
-
     val viewMode: StateFlow<Int> = settingsRepository.hotListeningViewMode
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 1)
 
@@ -71,24 +69,6 @@ class HotListeningViewModel @Inject constructor(
         viewModelScope.launch {
             settingsRepository.setHotListeningViewMode(mode.coerceIn(0, 1))
         }
-    }
-
-    fun updateListScrollPosition(firstVisibleItemIndex: Int, firstVisibleItemScrollOffset: Int) {
-        scrollPosition = scrollPosition.copy(
-            listFirstVisibleItemIndex = firstVisibleItemIndex.coerceAtLeast(0),
-            listFirstVisibleItemScrollOffset = firstVisibleItemScrollOffset.coerceAtLeast(0)
-        )
-    }
-
-    fun updateGridScrollPosition(firstVisibleItemIndex: Int, firstVisibleItemScrollOffset: Int) {
-        scrollPosition = scrollPosition.copy(
-            gridFirstVisibleItemIndex = firstVisibleItemIndex.coerceAtLeast(0),
-            gridFirstVisibleItemScrollOffset = firstVisibleItemScrollOffset.coerceAtLeast(0)
-        )
-    }
-
-    fun resetScrollPosition() {
-        scrollPosition = HotListeningScrollPosition()
     }
 
     fun refresh() {
@@ -160,13 +140,7 @@ private sealed class HotListeningRawUiState {
     data class Error(val message: String) : HotListeningRawUiState()
 }
 
-data class HotListeningScrollPosition(
-    val listFirstVisibleItemIndex: Int = 0,
-    val listFirstVisibleItemScrollOffset: Int = 0,
-    val gridFirstVisibleItemIndex: Int = 0,
-    val gridFirstVisibleItemScrollOffset: Int = 0
-)
-
+@Immutable
 data class HotListeningEntry(
     val album: Album,
     val playCount: Int,
@@ -213,6 +187,7 @@ data class HotListeningEntry(
     }
 }
 
+@Immutable
 sealed class HotListeningUiState {
     data object Loading : HotListeningUiState()
     data class Success(
@@ -224,6 +199,7 @@ sealed class HotListeningUiState {
     data class Error(val message: String) : HotListeningUiState()
 }
 
+@Immutable
 internal data class HotListeningBlockedEntries(
     val visibleEntries: List<HotListeningEntry>,
     val blockedEntries: List<HotListeningEntry>

@@ -2,6 +2,9 @@ package com.asmr.player.ui.player
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.media3.common.MediaItem
+import com.asmr.player.data.lyrics.EXTRA_ALBUM_WORK_ID
+import com.asmr.player.data.lyrics.EXTRA_LYRICS_RELATIVE_PATH_NO_EXT
 import com.asmr.player.data.lyrics.LyricsLoader
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.playback.PlayerConnection
@@ -14,6 +17,8 @@ import javax.inject.Inject
 
 data class LyricsUiState(
     val title: String = "",
+    val contentKey: String = "",
+    val isLoading: Boolean = false,
     val lyrics: List<SubtitleEntry> = emptyList()
 )
 
@@ -27,14 +32,21 @@ class LyricsViewModel @Inject constructor(
 
     val playback = playerConnection.snapshot
 
-    private suspend fun reloadForItem(item: androidx.media3.common.MediaItem?) {
+    private suspend fun reloadForItem(item: MediaItem?) {
         val mediaId = item?.mediaId.orEmpty()
         if (mediaId.isBlank()) {
-            _uiState.value = _uiState.value.copy(title = "", lyrics = emptyList())
+            _uiState.value = LyricsUiState()
             return
         }
+        val mediaKey = lyricsContentKeyForItem(item)
+        _uiState.value = _uiState.value.copy(isLoading = true)
         val result = lyricsLoader.load(item)
-        _uiState.value = _uiState.value.copy(title = result.title, lyrics = result.lyrics)
+        _uiState.value = LyricsUiState(
+            title = result.title,
+            contentKey = mediaKey,
+            isLoading = false,
+            lyrics = result.lyrics
+        )
     }
 
     fun refreshCurrentLyrics() {
@@ -54,15 +66,9 @@ class LyricsViewModel @Inject constructor(
             playerConnection.snapshot.collect { snap ->
                 val item = snap.currentMediaItem
                 val mediaId = item?.mediaId.orEmpty()
-                val extras = item?.mediaMetadata?.extras
-                val mediaKey = listOf(
-                    mediaId,
-                    extras?.getString(com.asmr.player.data.lyrics.EXTRA_LYRICS_RELATIVE_PATH_NO_EXT).orEmpty(),
-                    extras?.getString("rj_code").orEmpty(),
-                    extras?.getString(com.asmr.player.data.lyrics.EXTRA_ALBUM_WORK_ID).orEmpty()
-                ).joinToString("|")
+                val mediaKey = lyricsContentKeyForItem(item)
                 if (mediaId.isBlank()) {
-                    _uiState.value = _uiState.value.copy(title = "", lyrics = emptyList())
+                    _uiState.value = LyricsUiState()
                     return@collect
                 }
                 if (lastMediaKey == mediaKey) return@collect
@@ -70,5 +76,16 @@ class LyricsViewModel @Inject constructor(
                 reloadForItem(item)
             }
         }
+    }
+
+    private fun lyricsContentKeyForItem(item: MediaItem?): String {
+        val mediaId = item?.mediaId.orEmpty()
+        val extras = item?.mediaMetadata?.extras
+        return listOf(
+            mediaId,
+            extras?.getString(EXTRA_LYRICS_RELATIVE_PATH_NO_EXT).orEmpty(),
+            extras?.getString("rj_code").orEmpty(),
+            extras?.getString(EXTRA_ALBUM_WORK_ID).orEmpty()
+        ).joinToString("|")
     }
 }

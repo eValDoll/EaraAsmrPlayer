@@ -140,6 +140,7 @@ import com.asmr.player.ui.common.ImagePreviewRequest
 import com.asmr.player.ui.common.CollapsibleHeaderState
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.theme.AsmrColorScheme
 import com.asmr.player.ui.theme.AsmrTheme
@@ -1878,6 +1879,7 @@ internal fun DirectoryBrowserPanel(
                     .fillMaxWidth()
                     .heightIn(max = maxHeight)
                     .thinScrollbar(browserListState),
+                flingBehavior = rememberCalmScrollableFlingBehavior(),
                 contentPadding = PaddingValues(vertical = 6.dp)
             ) {
                 if (folders.isEmpty() && files.isEmpty()) {
@@ -2275,6 +2277,7 @@ internal fun DirectoryBrowserPanelV2(
                     .fillMaxWidth()
                     .heightIn(max = maxHeight)
                     .thinScrollbar(browserListState),
+                flingBehavior = rememberCalmScrollableFlingBehavior(),
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
             ) {
                 if (folders.isEmpty() && files.isEmpty()) {
@@ -2821,6 +2824,7 @@ internal fun DirectoryBrowserPanelV4(
                     .height(fixedHeight)
                     .nestedScroll(listNestedScrollConnection)
                     .thinScrollbar(browserListState),
+                flingBehavior = rememberCalmScrollableFlingBehavior(),
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp)
             ) {
                     if (folders.isEmpty() && files.isEmpty()) {

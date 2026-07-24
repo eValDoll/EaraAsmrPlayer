@@ -170,6 +170,7 @@ internal fun ManualReorderDialog(
                         .reorderable(reorderState)
                         .detectReorderAfterLongPress(reorderState)
                         .thinScrollbar(listState),
+                    flingBehavior = rememberCalmScrollableFlingBehavior(),
                     contentPadding = PaddingValues(
                         start = 16.dp,
                         top = 12.dp,

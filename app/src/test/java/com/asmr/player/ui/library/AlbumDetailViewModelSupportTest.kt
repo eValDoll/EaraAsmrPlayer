@@ -1,8 +1,10 @@
 package com.asmr.player.ui.library
 
 import com.asmr.player.domain.model.Album
+import com.asmr.player.ui.nav.AlbumCoverHint
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 
 class AlbumDetailViewModelSupportTest {
@@ -88,6 +90,30 @@ class AlbumDetailViewModelSupportTest {
         assertEquals("抓取标题", result.title)
         assertEquals("抓取CV", result.cv)
         assertEquals(listOf("抓取标签"), result.tags)
+    }
+
+    @Test
+    fun shouldPreserveHeaderAlbumMetadata_requiresResolvedDlsiteHint() {
+        val partialHint = AlbumCoverHint(
+            title = "列表标题",
+            rjCode = "RJ123456",
+            circle = "社团",
+            cv = "CV",
+            tags = listOf("标签"),
+            coverUrl = "https://example.com/list.jpg",
+            ratingValue = null,
+            ratingCount = 0,
+            releaseDate = "",
+            dlCount = 0,
+            priceJpy = 0,
+            hasAsmrOne = false,
+            description = "",
+            hasResolvedDlsiteInfo = false
+        )
+        val resolvedHint = partialHint.copy(hasResolvedDlsiteInfo = true)
+
+        assertFalse(shouldPreserveHeaderAlbumMetadata(partialHint))
+        assertTrue(shouldPreserveHeaderAlbumMetadata(resolvedHint))
     }
 
     @Test

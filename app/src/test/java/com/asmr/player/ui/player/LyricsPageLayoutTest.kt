@@ -2,7 +2,9 @@ package com.asmr.player.ui.player
 
 import androidx.compose.ui.text.style.TextAlign
 import com.asmr.player.data.settings.LyricsPageSettings
+import com.asmr.player.util.SubtitleEntry
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LyricsPageLayoutTest {
@@ -11,6 +13,39 @@ class LyricsPageLayoutTest {
         assertEquals(5, calculateRuntimeMaxVisibleLines(viewportHeightPx = 520f, lineBlockHeightPx = 100f))
         assertEquals(1, calculateRuntimeMaxVisibleLines(viewportHeightPx = 0f, lineBlockHeightPx = 100f))
         assertEquals(1, calculateRuntimeMaxVisibleLines(viewportHeightPx = 520f, lineBlockHeightPx = 0f))
+    }
+
+    @Test
+    fun centeredLyricFocusTop_usesActiveHeightByDefault() {
+        assertEquals(
+            210f,
+            centeredLyricFocusTop(
+                viewportWindowHeightPx = 520f,
+                activeItemHeightPx = 100f,
+                nominalItemHeightPx = 60f,
+                stableFocusAnchor = false
+            ),
+            0.001f
+        )
+    }
+
+    @Test
+    fun centeredLyricFocusTop_canKeepStableAnchorForVariableLineCounts() {
+        val singleLineTop = centeredLyricFocusTop(
+            viewportWindowHeightPx = 520f,
+            activeItemHeightPx = 60f,
+            nominalItemHeightPx = 60f,
+            stableFocusAnchor = true
+        )
+        val multiLineTop = centeredLyricFocusTop(
+            viewportWindowHeightPx = 520f,
+            activeItemHeightPx = 132f,
+            nominalItemHeightPx = 60f,
+            stableFocusAnchor = true
+        )
+
+        assertEquals(singleLineTop, multiLineTop, 0.001f)
+        assertEquals(230f, multiLineTop, 0.001f)
     }
 
     @Test
@@ -60,6 +95,46 @@ class LyricsPageLayoutTest {
         assertEquals(TextAlign.Center, lyricTextAlign(1))
         assertEquals(TextAlign.End, lyricTextAlign(2))
         assertEquals(TextAlign.Center, lyricTextAlign(999))
+    }
+
+    @Test
+    fun lyricFocusVisualEffect_disabledOrActiveLineHasNoEffect() {
+        assertEquals(0f, lyricFocusVisualEffectForLine(index = 2, activeIndex = 2, enabled = true).blurDp, 0.001f)
+        assertEquals(0f, lyricFocusVisualEffectForLine(index = 1, activeIndex = 2, enabled = false).blurDp, 0.001f)
+    }
+
+    @Test
+    fun lyricFocusVisualEffect_addsDirectionalDispersionAwayFromCenter() {
+        val above = lyricFocusVisualEffectForLine(index = 3, activeIndex = 5, enabled = true)
+        val below = lyricFocusVisualEffectForLine(index = 7, activeIndex = 5, enabled = true)
+        val farBelow = lyricFocusVisualEffectForLine(index = 9, activeIndex = 5, enabled = true)
+
+        assertTrue(above.blurDp > 0f)
+        assertTrue(farBelow.blurDp > below.blurDp)
+        assertTrue(above.dispersionOffsetYDp < 0f)
+        assertTrue(below.dispersionOffsetYDp > 0f)
+    }
+
+    @Test
+    fun lyricContentKey_changesWhenAudioLyricsChange() {
+        val first = listOf(
+            SubtitleEntry(startMs = 0L, endMs = 1000L, text = "第一首"),
+            SubtitleEntry(startMs = 1200L, endMs = 2000L, text = "尾句")
+        )
+        val second = listOf(
+            SubtitleEntry(startMs = 0L, endMs = 1000L, text = "第二首"),
+            SubtitleEntry(startMs = 1200L, endMs = 2000L, text = "尾句")
+        )
+
+        assertTrue(lyricContentKey(first) != lyricContentKey(second))
+        assertTrue(lyricContentKey(first, contentKey = "track-a") != lyricContentKey(first, contentKey = "track-b"))
+    }
+
+    @Test
+    fun lyricDisplayActiveIndex_fallsBackToFirstLineBeforePlaybackStarts() {
+        assertEquals(0, lyricDisplayActiveIndex(activeIndex = -1, totalCount = 4))
+        assertEquals(3, lyricDisplayActiveIndex(activeIndex = 7, totalCount = 4))
+        assertEquals(-1, lyricDisplayActiveIndex(activeIndex = -1, totalCount = 0))
     }
 
     @Test

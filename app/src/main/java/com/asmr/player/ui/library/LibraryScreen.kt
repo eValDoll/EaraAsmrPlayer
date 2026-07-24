@@ -65,11 +65,12 @@ import com.asmr.player.ui.common.FlatActionDialog
 import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.StableWindowInsets
+import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
 import com.asmr.player.ui.common.rememberAudioMeta
 import com.asmr.player.ui.common.rememberAudioMetaText
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberTrackMetaLine
 import com.asmr.player.ui.common.queryCachedTrackFileSize
-import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.withAddedBottomPadding
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.ListItem
@@ -94,6 +95,7 @@ import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
@@ -133,7 +135,10 @@ import com.asmr.player.ui.sidepanel.LandscapeRightPanelHost
 import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
 import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.cache.LazyListPreloader
-import com.asmr.player.cache.CacheImageModel
+import com.asmr.player.cache.LazyStaggeredGridPreloader
+import com.asmr.player.ui.groups.AlbumGroupsViewModel
+import com.asmr.player.ui.playlists.PlaylistsViewModel
+import com.asmr.player.ui.settings.SettingsViewModel
 import dagger.hilt.android.EntryPointAccessors
 
 import androidx.compose.foundation.combinedClickable
@@ -155,7 +160,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.asmr.player.ui.common.AsmrAsyncImage
 import androidx.paging.LoadState
 import androidx.paging.compose.collectAsLazyPagingItems
-import com.asmr.player.ui.theme.dynamicPageContainerColor
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -170,11 +175,13 @@ import com.asmr.player.ui.common.CustomSearchBar
 import com.asmr.player.ui.common.ActiveDropdownMenuItem
 import com.asmr.player.ui.common.ActionButton
 import com.asmr.player.ui.common.clearFocusOnTapOutside
+import com.asmr.player.ui.common.CollapsibleHeaderState
 import com.asmr.player.ui.common.collapsibleHeaderUiState
+import com.asmr.player.ui.common.albumCoverImageModel
+import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.playback.MediaItemFactory
-import com.asmr.player.util.DlsiteAntiHotlink
 
 internal const val LIBRARY_CHROME_TAG = "library_chrome"
 internal const val LIBRARY_SEARCH_INPUT_TAG = "library_search_input"
@@ -196,34 +203,6 @@ private const val LibraryTrackPagingHintDistance = 10
 private fun Album.withUserTags(userTags: List<String>): Album {
     if (userTags.isEmpty()) return this
     return copy(tags = (tags + userTags).distinct())
-}
-
-private fun albumCoverData(
-    coverThumbPath: String,
-    coverPath: String,
-    coverUrl: String
-): String? {
-    return coverThumbPath.takeIf { it.isNotBlank() && it.contains("_v2") }
-        ?: coverPath.takeIf { it.isNotBlank() }
-        ?: coverUrl.takeIf { it.isNotBlank() }
-}
-
-private fun albumCoverImageModel(
-    coverThumbPath: String,
-    coverPath: String,
-    coverUrl: String
-): Any? {
-    val data = albumCoverData(
-        coverThumbPath = coverThumbPath,
-        coverPath = coverPath,
-        coverUrl = coverUrl
-    ) ?: return null
-    val headers = if (data.startsWith("http", ignoreCase = true)) {
-        DlsiteAntiHotlink.headersForImageUrl(data)
-    } else {
-        emptyMap()
-    }
-    return if (headers.isEmpty()) data else CacheImageModel(data = data, headers = headers, keyTag = "dlsite")
 }
 
 @Composable
@@ -278,12 +257,12 @@ fun LibraryScreen(
     onOpenPlaylistPicker: (MediaItem) -> Unit = {},
     onOpenGroupPicker: (albumId: Long) -> Unit = { _ -> },
     onOpenFilterScreen: () -> Unit = {},
+    onSearchKeyword: (String) -> Unit = {},
     scrollToTopSignal: Long = 0L,
     viewModel: LibraryViewModel = hiltViewModel()
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val materialColorScheme = MaterialTheme.colorScheme
-    val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
     val uiState by viewModel.uiState.collectAsState()
     val viewMode by viewModel.libraryViewMode.collectAsState()
     val querySpec by viewModel.querySpec.collectAsState()
@@ -293,12 +272,34 @@ fun LibraryScreen(
     val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsState()
     val isGlobalSyncRunning by viewModel.isGlobalSyncRunning.collectAsState()
     val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
+    val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
+    val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
+    val settingsViewModel: SettingsViewModel = hiltViewModel()
+    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsState()
     val playerViewModel: PlayerViewModel = hiltViewModel()
     val scope = rememberCoroutineScope()
     var searchText by rememberSaveable { mutableStateOf(querySpec.textQuery.orEmpty()) }
     var sortMenuExpanded by remember { mutableStateOf(false) }
     var showTagManager by remember { mutableStateOf(false) }
     var tagAssignTarget by remember { mutableStateOf<TagAssignTarget?>(null) }
+    var metaActionKeyword by rememberSaveable { mutableStateOf<String?>(null) }
+
+    fun openMetaActions(value: String) {
+        val keyword = value.trim()
+        if (keyword.isNotBlank()) metaActionKeyword = keyword
+    }
+
+    fun addMetaBlockedKeyword(value: String) {
+        val keyword = value.trim()
+        if (keyword.isBlank()) return
+        val exists = searchBlockedKeywords.any { it.equals(keyword, ignoreCase = true) }
+        settingsViewModel.addSearchBlockedKeyword(keyword)
+        if (exists) {
+            viewModel.messageManager.showInfo("屏蔽词已存在：$keyword")
+        } else {
+            viewModel.messageManager.showSuccess("已添加屏蔽词：$keyword")
+        }
+    }
 
     LaunchedEffect(querySpec.textQuery) {
         val newText = querySpec.textQuery.orEmpty()
@@ -326,11 +327,14 @@ fun LibraryScreen(
     var showDeleteConfirm by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val chromeState = rememberCollapsibleHeaderState()
-    val animatedChromeOffsetPx by animateFloatAsState(
-        targetValue = chromeState.offsetPx,
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-        label = "libraryChromeOffset"
-    )
+    fun stopActiveScroll() {
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            when (mode) {
+                1 -> runCatching { gridState.stopScroll(MutatePriority.UserInput) }
+                else -> runCatching { listState.stopScroll(MutatePriority.UserInput) }
+            }
+        }
+    }
     val chromeReservedHeightPx = if (chromeState.heightPx > 0f) {
         chromeState.heightPx
     } else {
@@ -377,8 +381,12 @@ fun LibraryScreen(
     LaunchedEffect(scrollToTopSignal) {
         if (scrollToTopSignal == 0L) return@LaunchedEffect
         when (mode) {
-            1 -> gridState.smoothScrollToTop()
-            else -> listState.smoothScrollToTop()
+            1 -> gridState.stopScroll(MutatePriority.PreventUserInput)
+            else -> listState.stopScroll(MutatePriority.PreventUserInput)
+        }
+        when (mode) {
+            1 -> gridState.scrollToItem(0)
+            else -> listState.scrollToItem(0)
         }
         chromeState.expand()
     }
@@ -594,6 +602,7 @@ fun LibraryScreen(
                                             .clearFocusOnTapOutside()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(listState),
+                                        flingBehavior = rememberCalmScrollableFlingBehavior(),
                                         contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                                     ) {
@@ -772,14 +781,36 @@ fun LibraryScreen(
                                         }
                                     }
                                 } else if (isGrid) {
+                                    val app = LocalContext.current.applicationContext
+                                    val cacheManager = remember(app) {
+                                        EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
+                                            .imageCacheManager()
+                                    }
+                                    val density = LocalDensity.current
+                                    val gridCellSize = if (isCompact) 150.dp else 200.dp
+                                    val gridCoverPx = remember(gridCellSize, density) { with(density) { gridCellSize.roundToPx() } }
+                                    val gridPreloadSize = remember(gridCoverPx) { IntSize(gridCoverPx, gridCoverPx) }
+                                    val coverFadeIn = shouldFadeInCover(gridState.isScrollInProgress)
+                                    LazyStaggeredGridPreloader(
+                                        state = gridState,
+                                        itemCount = pagedAlbums.itemCount,
+                                        preloadNext = 24,
+                                        preloadNextWhileScrolling = 16,
+                                        preloadSize = gridPreloadSize,
+                                        cacheManagerProvider = { cacheManager },
+                                        modelAt = { idx ->
+                                            pagedAlbums.itemSnapshotList.getOrNull(idx)?.let { albumCoverImageModel(it) }
+                                        }
+                                    )
                                     LazyVerticalStaggeredGrid(
-                                        columns = StaggeredGridCells.Adaptive(if (isCompact) 150.dp else 200.dp),
+                                        columns = StaggeredGridCells.Adaptive(gridCellSize),
                                         state = gridState,
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .clearFocusOnTapOutside()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(gridState),
+                                        flingBehavior = rememberCalmScrollableFlingBehavior(),
                                         contentPadding = PaddingValues(top = topPadding, start = LibraryPageHorizontalPadding, end = LibraryPageHorizontalPadding, bottom = 16.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current),
                                         verticalItemSpacing = AlbumGridItemSpacing,
@@ -791,7 +822,10 @@ fun LibraryScreen(
                                             contentType = { "albumGridItem" },
                                         ) { idx ->
                                             val album = pagedAlbums[idx] ?: return@staggeredItems
-                                            val mergedAlbum = album.withUserTags(userTagsByAlbumId[album.id].orEmpty())
+                                            val userTags = userTagsByAlbumId[album.id].orEmpty()
+                                            val mergedAlbum = remember(album, userTags) {
+                                                album.withUserTags(userTags)
+                                            }
                                             AlbumGridItem(
                                                 album = mergedAlbum,
                                                 syncStatus = state.syncingAlbums[album.id] ?: SyncStatus.Idle,
@@ -802,8 +836,12 @@ fun LibraryScreen(
                                                 },
                                                 onRjClick = { copyMeta("RJ", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
+                                                onCircleLongClick = ::openMetaActions,
                                                 onCvClick = { copyMeta("CV", it) },
+                                                onCvLongClick = ::openMetaActions,
                                                 onTagClick = { copyMeta("标签", it) },
+                                                onTagLongClick = ::openMetaActions,
+                                                coverFadeIn = coverFadeIn,
                                             )
                                         }
                                     }
@@ -818,23 +856,16 @@ fun LibraryScreen(
                                     val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
                                     val coverPx = remember(listItemHeight, density) { with(density) { listItemHeight.roundToPx() } }
                                     val preloadSize = remember(coverPx) { IntSize(coverPx, coverPx) }
+                                    val coverFadeIn = shouldFadeInCover(listState.isScrollInProgress)
                                     LazyListPreloader(
                                         state = listState,
                                         itemCount = pagedAlbums.itemCount,
-                                        preloadNext = 4,
+                                        preloadNext = 24,
+                                        preloadNextWhileScrolling = 16,
                                         preloadSize = preloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->
-                                            val a = pagedAlbums.itemSnapshotList.getOrNull(idx)
-                                            if (a == null) {
-                                                null
-                                            } else {
-                                                albumCoverImageModel(
-                                                    coverThumbPath = a.coverThumbPath,
-                                                    coverPath = a.coverPath,
-                                                    coverUrl = a.coverUrl
-                                                )
-                                            }
+                                            pagedAlbums.itemSnapshotList.getOrNull(idx)?.let { albumCoverImageModel(it) }
                                         }
                                     )
                                     LazyColumn(
@@ -844,6 +875,7 @@ fun LibraryScreen(
                                             .clearFocusOnTapOutside()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(listState),
+                                        flingBehavior = rememberCalmScrollableFlingBehavior(),
                                         contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                                     ) {
@@ -853,7 +885,10 @@ fun LibraryScreen(
                                             contentType = { "albumListItem" }
                                         ) { idx ->
                                             val album = pagedAlbums[idx] ?: return@items
-                                            val mergedAlbum = album.withUserTags(userTagsByAlbumId[album.id].orEmpty())
+                                            val userTags = userTagsByAlbumId[album.id].orEmpty()
+                                            val mergedAlbum = remember(album, userTags) {
+                                                album.withUserTags(userTags)
+                                            }
                                             AlbumItem(
                                                 album = mergedAlbum,
                                                 syncStatus = state.syncingAlbums[album.id] ?: SyncStatus.Idle,
@@ -864,15 +899,21 @@ fun LibraryScreen(
                                                 },
                                                 onRjClick = { copyMeta("RJ", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
+                                                onCircleLongClick = ::openMetaActions,
                                                 onCvClick = { copyMeta("CV", it) },
+                                                onCvLongClick = ::openMetaActions,
                                                 onTagClick = { copyMeta("标签", it) },
+                                                onTagLongClick = ::openMetaActions,
+                                                coverFadeIn = coverFadeIn,
                                             )
                                         }
                                     }
                                 }
 
                                 LibraryChrome(
-                                    modifier = Modifier.align(Alignment.TopCenter),
+                                    modifier = Modifier
+                                        .align(Alignment.TopCenter)
+                                        .interruptScrollableFlingOnPointerDown { stopActiveScroll() },
                                     searchText = searchText,
                                     onSearchTextChange = {
                                         searchText = it
@@ -891,10 +932,8 @@ fun LibraryScreen(
                                     onOpenFilterScreen = onOpenFilterScreen,
                                     filterActive = hasActiveFilters,
                                     rightPanelToggle = rightPanelToggle,
-                                    dynamicContainerColor = dynamicContainerColor,
                                     materialColorScheme = materialColorScheme,
-                                    chromeOffsetPx = animatedChromeOffsetPx,
-                                    collapseFraction = chromeState.collapseFraction,
+                                    chromeState = chromeState,
                                     onMeasured = { chromeState.updateHeight(it.height.toFloat()) }
                                 )
                             }
@@ -1071,6 +1110,17 @@ fun LibraryScreen(
         }
     }
 
+    metaActionKeyword?.let { keyword ->
+        AlbumMetaActionDialog(
+            keyword = keyword,
+            onDismissRequest = { metaActionKeyword = null },
+            onSearch = onSearchKeyword,
+            onCreatePlaylist = playlistsViewModel::createPlaylist,
+            onCreateGroup = albumGroupsViewModel::createGroup,
+            onAddBlockedKeyword = ::addMetaBlockedKeyword,
+        )
+    }
+
 }
 
 @Composable
@@ -1088,14 +1138,20 @@ internal fun LibraryChrome(
     onOpenFilterScreen: () -> Unit,
     filterActive: Boolean = false,
     rightPanelToggle: (@Composable (Modifier) -> Unit)?,
-    dynamicContainerColor: Color,
     materialColorScheme: androidx.compose.material3.ColorScheme,
-    chromeOffsetPx: Float,
-    collapseFraction: Float,
+    chromeState: CollapsibleHeaderState,
     onMeasured: (IntSize) -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val collapseOvershootPx = with(LocalDensity.current) { LibraryChromeCollapseOvershoot.toPx() }
+    val animatedChromeOffsetPx = animateFloatAsState(
+        targetValue = chromeState.offsetPx,
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "libraryChromeOffset"
+    )
+    val collapseStateDescription by remember(chromeState) {
+        derivedStateOf { collapsibleHeaderUiState(chromeState.collapseFraction) }
+    }
     val chromeActionContainerColor = lerp(
         colorScheme.surface,
         colorScheme.primarySoft,
@@ -1109,10 +1165,11 @@ internal fun LibraryChrome(
             .padding(horizontal = LibraryPageHorizontalPadding, vertical = 8.dp)
             .onSizeChanged(onMeasured)
             .graphicsLayer {
-                translationY = chromeOffsetPx - (collapseFraction.coerceIn(0f, 1f) * collapseOvershootPx)
-                alpha = 1f - (collapseFraction.coerceIn(0f, 1f) * 0.1f)
+                val collapseFraction = chromeState.collapseFraction.coerceIn(0f, 1f)
+                translationY = animatedChromeOffsetPx.value - (collapseFraction * collapseOvershootPx)
+                alpha = 1f - (collapseFraction * 0.1f)
             }
-            .semantics { stateDescription = collapsibleHeaderUiState(collapseFraction) }
+            .semantics { stateDescription = collapseStateDescription }
             .testTag(LIBRARY_CHROME_TAG),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -1321,6 +1378,7 @@ private fun TrackAlbumHeader(
             }
         }
     }
+
 }
 
 @Composable
@@ -1428,8 +1486,12 @@ private fun AlbumGridItem(
     onLongClick: () -> Unit,
     onRjClick: ((String) -> Unit)? = null,
     onCircleClick: ((String) -> Unit)? = null,
+    onCircleLongClick: ((String) -> Unit)? = null,
     onCvClick: ((String) -> Unit)? = null,
+    onCvLongClick: ((String) -> Unit)? = null,
     onTagClick: ((String) -> Unit)? = null,
+    onTagLongClick: ((String) -> Unit)? = null,
+    coverFadeIn: Boolean = true,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val coverShape = remember {
@@ -1463,6 +1525,7 @@ private fun AlbumGridItem(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 placeholderCornerRadius = 0,
+                fadeIn = coverFadeIn,
                 peekAnySizeForInitial = true,
                 loading = NoImageLoadingIndicator,
                 modifier = Modifier.fillMaxSize().clip(coverShape),
@@ -1551,12 +1614,14 @@ private fun AlbumGridItem(
                 circle = album.circle,
                 modifier = Modifier.fillMaxWidth(),
                 circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
+                circleOnLongClick = onCircleLongClick?.let { longClick -> { longClick(album.circle) } },
                 leadingVisual = AlbumMetaLeadingVisual.Icon,
             )
 
             AlbumCvChipsFlow(
                 cvText = album.cv,
                 onCvClick = onCvClick,
+                onCvLongClick = onCvLongClick,
                 leadingVisual = AlbumMetaLeadingVisual.Icon,
             )
 
@@ -1589,6 +1654,7 @@ private fun AlbumGridItem(
                     tags = album.tags,
                     modifier = Modifier.padding(top = 2.dp),
                     onTagClick = onTagClick,
+                    onTagLongClick = onTagLongClick,
                     leadingVisual = AlbumMetaLeadingVisual.Icon,
                 )
             }
@@ -1605,8 +1671,12 @@ private fun AlbumItem(
     onLongClick: () -> Unit,
     onRjClick: ((String) -> Unit)? = null,
     onCircleClick: ((String) -> Unit)? = null,
+    onCircleLongClick: ((String) -> Unit)? = null,
     onCvClick: ((String) -> Unit)? = null,
+    onCvLongClick: ((String) -> Unit)? = null,
     onTagClick: ((String) -> Unit)? = null,
+    onTagLongClick: ((String) -> Unit)? = null,
+    coverFadeIn: Boolean = true,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val coverShape = remember {
@@ -1657,6 +1727,7 @@ private fun AlbumItem(
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         placeholderCornerRadius = 0,
+                        fadeIn = coverFadeIn,
                         peekAnySizeForInitial = true,
                         loading = NoImageLoadingIndicator,
                         modifier = Modifier.fillMaxSize().clip(coverShape),
@@ -1745,6 +1816,7 @@ private fun AlbumItem(
                         modifier = Modifier.fillMaxWidth(),
                         rjOnClick = onRjClick?.let { click -> { click(rj) } },
                         circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
+                        circleOnLongClick = onCircleLongClick?.let { longClick -> { longClick(album.circle) } },
                         leadingVisual = AlbumMetaLeadingVisual.Icon,
                         order = AlbumPrimaryMetaOrder.CircleThenRj,
                     )
@@ -1754,6 +1826,7 @@ private fun AlbumItem(
                             cvText = album.cv,
                             modifier = Modifier.fillMaxWidth(),
                             onCvClick = onCvClick,
+                            onCvLongClick = onCvLongClick,
                             leadingVisual = AlbumMetaLeadingVisual.Icon,
                         )
                     }
@@ -1773,6 +1846,7 @@ private fun AlbumItem(
                             tags = album.tags,
                             modifier = Modifier.fillMaxWidth(),
                             onTagClick = onTagClick,
+                            onTagLongClick = onTagLongClick,
                             leadingVisual = AlbumMetaLeadingVisual.Icon,
                         )
                     }

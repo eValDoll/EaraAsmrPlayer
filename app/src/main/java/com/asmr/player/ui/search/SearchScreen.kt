@@ -69,6 +69,7 @@ import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -93,6 +94,9 @@ import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
@@ -106,26 +110,40 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.domain.model.Album
+import com.asmr.player.cache.ImageCacheEntryPoint
+import com.asmr.player.cache.LazyListPreloader
+import com.asmr.player.cache.LazyStaggeredGridPreloader
 import com.asmr.player.ui.common.CustomSearchBar
 import com.asmr.player.ui.common.ActiveDropdownMenuItem
 import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.albumCoverImageModel
+import com.asmr.player.ui.common.albumStableKey
+import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.clearFocusOnTapOutside
+import com.asmr.player.ui.common.CollapsibleHeaderState
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.consumeTapThrough
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
-import com.asmr.player.ui.common.smoothScrollToTop
+import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.library.AlbumGridItem
 import com.asmr.player.ui.library.AlbumGridItemSpacing
 import com.asmr.player.ui.library.AlbumItem
+import com.asmr.player.ui.library.AlbumMetaActionDialog
 import com.asmr.player.ui.library.rememberAlbumMetaCopyAction
+import com.asmr.player.ui.groups.AlbumGroupsViewModel
+import com.asmr.player.ui.playlists.PlaylistsViewModel
+import com.asmr.player.ui.settings.SettingsViewModel
 import com.asmr.player.ui.sidepanel.LandscapeRightPanelHost
 import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
 import com.asmr.player.ui.theme.AsmrTheme
+import dagger.hilt.android.EntryPointAccessors
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.runtime.snapshotFlow
@@ -165,15 +183,34 @@ private val SearchResultPlacementSpring = spring<IntOffset>(
     stiffness = Spring.StiffnessMediumLow
 )
 
-private fun stableAlbumKey(album: Album): String {
-    val id = album.rjCode.ifBlank { album.workId }.trim()
-    if (id.isNotEmpty()) return id
-    val seed = "${album.coverUrl}|${album.title}|${album.circle}|${album.cv}"
-    return "h${seed.hashCode().absoluteValue}"
+private fun searchResultItemKey(album: Album): String {
+    return "search-result:${albumStableKey(album)}"
 }
 
-private fun searchResultItemKey(index: Int, album: Album): String {
-    return "search-result:${stableAlbumKey(album)}:$index"
+internal fun searchResultScrollKey(success: SearchUiState.Success?): String {
+    if (success == null) return "search-results:none"
+    return buildString {
+        append("search-results:")
+        append(success.resultRevision)
+        append(':')
+        append(success.page)
+        append(':')
+        append(success.keyword)
+        append(':')
+        append(success.order.name)
+        append(':')
+        append(success.collectedSort.name)
+        append(':')
+        append(success.purchasedOnly)
+        append(':')
+        append(success.presaleOnly)
+        append(':')
+        append(success.chineseTranslatedOnly)
+        append(':')
+        append(success.collectedOnly)
+        append(':')
+        append(success.locale.orEmpty())
+    }
 }
 
 private fun onlineDetailLoadingFor(album: Album, state: SearchUiState.Success): Boolean {
@@ -289,21 +326,43 @@ fun SearchScreen(
         showFallback = showHotKeywordFallback
     )
     val success = uiState as? SearchUiState.Success
-    val currentPageKey = success?.page ?: 0
-    val listState = rememberSaveable(currentPageKey, saver = LazyListState.Saver) { LazyListState(0, 0) }
-    val gridState = rememberSaveable(currentPageKey, saver = LazyStaggeredGridState.Saver) { LazyStaggeredGridState() }
+    val resultScrollKey = searchResultScrollKey(success)
+    val listState = rememberSaveable(resultScrollKey, saver = LazyListState.Saver) { LazyListState(0, 0) }
+    val gridState = rememberSaveable(resultScrollKey, saver = LazyStaggeredGridState.Saver) { LazyStaggeredGridState() }
     val colorScheme = AsmrTheme.colorScheme
     val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
+    val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
+    val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
+    val settingsViewModel: SettingsViewModel = hiltViewModel()
+    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsState()
     val scope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
     val chromeState = rememberCollapsibleHeaderState()
-    val chromeResetKey = remember(currentPageKey, viewMode) { "$currentPageKey:$viewMode" }
+    val chromeResetKey = remember(resultScrollKey, viewMode) { "$resultScrollKey:$viewMode" }
     var lastChromeResetKey by rememberSaveable { mutableStateOf(chromeResetKey) }
 
     var keywordSyncedFromState by rememberSaveable { mutableStateOf(false) }
     var optionsSyncedFromState by rememberSaveable { mutableStateOf(false) }
     var lastHandledSubmittedSearchSignal by rememberSaveable { mutableStateOf(0L) }
+    var metaActionKeyword by rememberSaveable { mutableStateOf<String?>(null) }
+
+    fun openMetaActions(value: String) {
+        val normalized = value.trim()
+        if (normalized.isNotBlank()) metaActionKeyword = normalized
+    }
+
+    fun addMetaBlockedKeyword(value: String) {
+        val normalized = value.trim()
+        if (normalized.isBlank()) return
+        val exists = searchBlockedKeywords.any { it.equals(normalized, ignoreCase = true) }
+        settingsViewModel.addSearchBlockedKeyword(normalized)
+        if (exists) {
+            viewModel.messageManager.showInfo("屏蔽词已存在：$normalized")
+        } else {
+            viewModel.messageManager.showSuccess("已添加屏蔽词：$normalized")
+        }
+    }
 
     LaunchedEffect(Unit) {
         viewModel.bootstrap(
@@ -354,11 +413,6 @@ fun SearchScreen(
     val highlightedPage = success?.page ?: 1
     val canGoPrev = success?.canGoPrev == true && !success.isSearching
     val canGoNext = success?.canGoNext == true && !success.isSearching
-    val animatedChromeOffsetPx by animateFloatAsState(
-        targetValue = chromeState.offsetPx,
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-        label = "searchChromeOffset"
-    )
     val chromeReservedHeightPx = when {
         chromeState.heightPx > 0f -> chromeState.heightPx
         success != null -> with(androidx.compose.ui.platform.LocalDensity.current) { 120.dp.toPx() }
@@ -368,6 +422,8 @@ fun SearchScreen(
 
     fun scrollResultsToTop() {
         scope.launch {
+            runCatching { listState.stopScroll(MutatePriority.PreventUserInput) }
+            runCatching { gridState.stopScroll(MutatePriority.PreventUserInput) }
             runCatching { listState.scrollToItem(0) }
             runCatching { gridState.scrollToItem(0) }
         }
@@ -396,6 +452,30 @@ fun SearchScreen(
         keyboardController?.hide()
         val accepted = viewModel.search("")
         if (!accepted) return
+        scrollResultsToTop()
+        chromeState.expand()
+    }
+
+    fun searchMetaKeyword(value: String) {
+        if (searchSubmitLocked) {
+            viewModel.messageManager.showInfo("搜索处理中，请稍后再试")
+            return
+        }
+        val normalized = value.trim()
+        if (normalized.isBlank()) return
+        keyboardController?.hide()
+        val accepted = viewModel.search(
+            keyword = normalized,
+            order = selectedOrder,
+            collectedSort = selectedCollectedSort,
+            purchasedOnly = purchasedOnly,
+            presaleOnly = presaleOnly,
+            chineseTranslatedOnly = chineseTranslatedOnly,
+            collectedOnly = collectedOnly,
+            locale = selectedLocale
+        )
+        if (!accepted) return
+        keyword = normalized
         scrollResultsToTop()
         chromeState.expand()
     }
@@ -475,7 +555,7 @@ fun SearchScreen(
         with(androidx.compose.ui.platform.LocalDensity.current) { SearchPullNextPageMaxDistance.toPx() }
     val pullNextPageMaxLiftPx =
         with(androidx.compose.ui.platform.LocalDensity.current) { SearchPullNextPageMaxLift.toPx() }
-    var pullNextPageDragPx by remember(currentPageKey, viewMode) { mutableFloatStateOf(0f) }
+    var pullNextPageDragPx by remember(resultScrollKey, viewMode) { mutableFloatStateOf(0f) }
     val pullNextPageArmed = pullNextPageDragPx >= pullNextPageTriggerDistancePx
     val latestPullNextPageEnabled = rememberUpdatedState(pullNextPageEnabled)
     val latestIsAtBottom = rememberUpdatedState(
@@ -566,6 +646,14 @@ fun SearchScreen(
     val pullRefreshHintEdgeOffsetPx = topPaddingPx + pullContentOffsetPx - pullRefreshHintHeightPx
     val latestKeyword by rememberUpdatedState(keyword)
     val latestHorizontalPagerScrollLockChanged = rememberUpdatedState(onHorizontalPagerScrollLockChanged)
+    fun stopActiveScroll() {
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            pullNextPageDragPx = 0f
+            latestHorizontalPagerScrollLockChanged.value(false)
+            runCatching { listState.stopScroll(MutatePriority.UserInput) }
+            runCatching { gridState.stopScroll(MutatePriority.UserInput) }
+        }
+    }
     LaunchedEffect(pullToRefreshState.isRefreshing) {
         if (!pullToRefreshState.isRefreshing) return@LaunchedEffect
         when (val state = uiState) {
@@ -590,7 +678,7 @@ fun SearchScreen(
         }
         if (canEnd) pullToRefreshState.endRefresh()
     }
-    LaunchedEffect(currentPageKey, pullNextPageEnabled) {
+    LaunchedEffect(resultScrollKey, pullNextPageEnabled) {
         if (!pullNextPageEnabled) {
             if (pullNextPageDragPx != 0f) {
                 pullNextPageDragPx = 0f
@@ -638,8 +726,14 @@ fun SearchScreen(
         if (scrollToTopSignal == 0L) return@LaunchedEffect
         pullNextPageDragPx = 0f
         when (viewMode) {
-            0 -> listState.smoothScrollToTop()
-            else -> gridState.smoothScrollToTop()
+            0 -> {
+                runCatching { listState.stopScroll(MutatePriority.PreventUserInput) }
+                runCatching { listState.scrollToItem(0) }
+            }
+            else -> {
+                runCatching { gridState.stopScroll(MutatePriority.PreventUserInput) }
+                runCatching { gridState.scrollToItem(0) }
+            }
         }
         chromeState.expand()
     }
@@ -709,7 +803,7 @@ fun SearchScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .pointerInput(currentPageKey, viewMode) {
+                            .pointerInput(resultScrollKey, viewMode) {
                                 awaitEachGesture {
                                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                                     var trackedPointerId = down.id
@@ -830,7 +924,10 @@ fun SearchScreen(
                             is SearchUiState.Loading -> Column(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .verticalScroll(rememberScrollState())
+                                    .verticalScroll(
+                                        state = rememberScrollState(),
+                                        flingBehavior = rememberCalmScrollableFlingBehavior()
+                                    )
                                     .padding(top = topPadding),
                                 horizontalAlignment = Alignment.CenterHorizontally,
                                 verticalArrangement = Arrangement.Center
@@ -851,18 +948,41 @@ fun SearchScreen(
                                         )
                                     )
                                 } else if (viewMode == 0) {
+                                    val app = LocalContext.current.applicationContext
+                                    val cacheManager = remember(app) {
+                                        EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
+                                            .imageCacheManager()
+                                    }
+                                    val density = LocalDensity.current
+                                    val screenWidthDp = LocalConfiguration.current.screenWidthDp
+                                    val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
+                                    val coverPx = remember(listItemHeight, density) { with(density) { listItemHeight.roundToPx() } }
+                                    val preloadSize = remember(coverPx) { IntSize(coverPx, coverPx) }
+                                    val coverFadeIn = shouldFadeInCover(listState.isScrollInProgress)
+                                    LazyListPreloader(
+                                        state = listState,
+                                        itemCount = state.results.size,
+                                        preloadNext = 24,
+                                        preloadNextWhileScrolling = 16,
+                                        preloadSize = preloadSize,
+                                        cacheManagerProvider = { cacheManager },
+                                        modelAt = { idx ->
+                                            state.results.getOrNull(idx)?.let { albumCoverImageModel(it) }
+                                        }
+                                    )
                                     LazyColumn(
                                         state = listState,
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(listState),
+                                        flingBehavior = rememberCalmScrollableFlingBehavior(),
                                         contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                                     ) {
                                         lazyItemsIndexed(
                                             items = state.results,
-                                            key = { index, album -> searchResultItemKey(index, album) },
+                                            key = { _, album -> searchResultItemKey(album) },
                                             contentType = { _, _ -> "album" }
                                         ) { _, album ->
                                             val onlineDetailLoading = onlineDetailLoadingFor(album, state)
@@ -874,22 +994,48 @@ fun SearchScreen(
                                                 modifier = Modifier.animateItemPlacement(SearchResultPlacementSpring),
                                                 onlineDetailLoading = onlineDetailLoading,
                                                 onlineCvLoading = onlineDetailLoading,
+                                                coverFadeIn = coverFadeIn,
                                                 coverReloadKey = state.resultRevision,
                                                 onRjClick = { copyMeta("RJ", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
+                                                onCircleLongClick = ::openMetaActions,
                                                 onCvClick = { copyMeta("CV", it) },
+                                                onCvLongClick = ::openMetaActions,
                                                 onTagClick = { copyMeta("标签", it) },
+                                                onTagLongClick = ::openMetaActions,
                                             )
                                         }
                                     }
                                 } else {
+                                    val app = LocalContext.current.applicationContext
+                                    val cacheManager = remember(app) {
+                                        EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
+                                            .imageCacheManager()
+                                    }
+                                    val density = LocalDensity.current
+                                    val gridCellSize = if (isCompact) 150.dp else 200.dp
+                                    val gridCoverPx = remember(gridCellSize, density) { with(density) { gridCellSize.roundToPx() } }
+                                    val gridPreloadSize = remember(gridCoverPx) { IntSize(gridCoverPx, gridCoverPx) }
+                                    val coverFadeIn = shouldFadeInCover(gridState.isScrollInProgress)
+                                    LazyStaggeredGridPreloader(
+                                        state = gridState,
+                                        itemCount = state.results.size,
+                                        preloadNext = 24,
+                                        preloadNextWhileScrolling = 16,
+                                        preloadSize = gridPreloadSize,
+                                        cacheManagerProvider = { cacheManager },
+                                        modelAt = { idx ->
+                                            state.results.getOrNull(idx)?.let { albumCoverImageModel(it) }
+                                        }
+                                    )
                                     LazyVerticalStaggeredGrid(
-                                        columns = StaggeredGridCells.Adaptive(if (isCompact) 150.dp else 200.dp),
+                                        columns = StaggeredGridCells.Adaptive(gridCellSize),
                                         state = gridState,
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(gridState),
+                                        flingBehavior = rememberCalmScrollableFlingBehavior(),
                                         contentPadding = PaddingValues(
                                             top = topPadding,
                                             start = SearchPageHorizontalPadding,
@@ -901,7 +1047,7 @@ fun SearchScreen(
                                     ) {
                                         items(
                                             state.results.size,
-                                            key = { index -> searchResultItemKey(index, state.results[index]) },
+                                            key = { index -> searchResultItemKey(state.results[index]) },
                                             contentType = { "albumGrid" }
                                         ) { index ->
                                             val album = state.results[index]
@@ -914,11 +1060,15 @@ fun SearchScreen(
                                                 modifier = Modifier.animateItemPlacement(SearchResultPlacementSpring),
                                                 onlineDetailLoading = onlineDetailLoading,
                                                 onlineCvLoading = onlineDetailLoading,
+                                                coverFadeIn = coverFadeIn,
                                                 coverReloadKey = state.resultRevision,
                                                 onRjClick = { copyMeta("RJ", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
+                                                onCircleLongClick = ::openMetaActions,
                                                 onCvClick = { copyMeta("CV", it) },
+                                                onCvLongClick = ::openMetaActions,
                                                 onTagClick = { copyMeta("标签", it) },
+                                                onTagLongClick = ::openMetaActions,
                                             )
                                         }
                                     }
@@ -950,7 +1100,10 @@ fun SearchScreen(
                             else -> Column(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .verticalScroll(rememberScrollState())
+                                    .verticalScroll(
+                                        state = rememberScrollState(),
+                                        flingBehavior = rememberCalmScrollableFlingBehavior()
+                                    )
                             ) {}
                             }
                         }
@@ -986,7 +1139,9 @@ fun SearchScreen(
                     }
 
                     SearchChrome(
-                        modifier = Modifier.align(Alignment.TopCenter),
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .interruptScrollableFlingOnPointerDown { stopActiveScroll() },
                         keyword = keyword,
                         onKeywordChange = { keyword = it },
                         placeholder = hotKeywordCarouselItem.placeholder,
@@ -1004,8 +1159,7 @@ fun SearchScreen(
                         canGoNext = canGoNext,
                         controlsLocked = interactionLocked,
                         rightPanelToggle = rightPanelToggle,
-                        animatedOffsetPx = animatedChromeOffsetPx,
-                        collapseFraction = chromeState.collapseFraction,
+                        chromeState = chromeState,
                         onMeasured = { size: IntSize -> chromeState.updateHeight(size.height.toFloat()) },
                         onSearchSubmit = { submitSearch() },
                         onClearKeyword = { clearKeywordAndSearch() },
@@ -1035,7 +1189,7 @@ fun SearchScreen(
                         },
                         onLocaleSelected = { locale ->
                             selectedLocale = locale
-                            viewModel.updateSearchOptions(
+                            val accepted = viewModel.updateSearchOptions(
                                 order = selectedOrder,
                                 collectedSort = selectedCollectedSort,
                                 purchasedOnly = purchasedOnly,
@@ -1044,6 +1198,10 @@ fun SearchScreen(
                                 collectedOnly = collectedOnly,
                                 locale = locale
                             )
+                            if (accepted) {
+                                scrollResultsToTop()
+                                chromeState.expand()
+                            }
                         },
                         onCollectedSortSelected = { sort ->
                             selectedCollectedSortName = sort.name
@@ -1076,6 +1234,17 @@ fun SearchScreen(
                 }
             }
         }
+    }
+
+    metaActionKeyword?.let { targetKeyword ->
+        AlbumMetaActionDialog(
+            keyword = targetKeyword,
+            onDismissRequest = { metaActionKeyword = null },
+            onSearch = ::searchMetaKeyword,
+            onCreatePlaylist = playlistsViewModel::createPlaylist,
+            onCreateGroup = albumGroupsViewModel::createGroup,
+            onAddBlockedKeyword = ::addMetaBlockedKeyword,
+        )
     }
 }
 
@@ -1177,8 +1346,7 @@ internal fun SearchChrome(
     canGoNext: Boolean,
     controlsLocked: Boolean,
     rightPanelToggle: (@Composable (Modifier) -> Unit)?,
-    animatedOffsetPx: Float,
-    collapseFraction: Float,
+    chromeState: CollapsibleHeaderState,
     chromeTestTag: String = SEARCH_CHROME_TAG,
     inputTestTag: String = SEARCH_INPUT_TAG,
     clearButtonTestTag: String = SEARCH_CLEAR_BUTTON_TAG,
@@ -1194,13 +1362,21 @@ internal fun SearchChrome(
     onPrev: () -> Unit,
     onNext: () -> Unit
 ) {
+    val animatedOffsetPx = animateFloatAsState(
+        targetValue = chromeState.offsetPx,
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "searchChromeOffset"
+    )
+    val collapseStateDescription by remember(chromeState) {
+        derivedStateOf { collapsibleHeaderUiState(chromeState.collapseFraction) }
+    }
     Column(
         modifier = modifier
             .onSizeChanged(onMeasured)
             // Use layout offset instead of a graphics layer so Android text selection
             // toolbars anchor to the real on-screen position of the editable field.
-            .offset { IntOffset(x = 0, y = animatedOffsetPx.roundToInt()) }
-            .semantics { stateDescription = collapsibleHeaderUiState(collapseFraction) }
+            .offset { IntOffset(x = 0, y = animatedOffsetPx.value.roundToInt()) }
+            .semantics { stateDescription = collapseStateDescription }
             .testTag(chromeTestTag)
     ) {
         SearchToolbar(

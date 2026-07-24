@@ -127,6 +127,7 @@ import com.asmr.player.ui.common.ImagePreviewItem
 import com.asmr.player.ui.common.ImagePreviewRequest
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
@@ -237,6 +238,7 @@ internal fun AlbumLocalBreadcrumbTabV2(
             .nestedScroll(chromeState.nestedScrollConnection)
             .thinScrollbar(listState),
         state = listState,
+        flingBehavior = rememberCalmScrollableFlingBehavior(),
         contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
     ) {
         item(key = "local-header:$stateKey") { header() }

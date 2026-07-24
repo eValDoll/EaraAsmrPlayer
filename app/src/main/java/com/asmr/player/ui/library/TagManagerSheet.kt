@@ -46,6 +46,7 @@ import com.asmr.player.data.local.db.dao.TagWithCount
 import com.asmr.player.ui.common.FlatActionDialog
 import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrTheme
 
@@ -112,7 +113,8 @@ fun TagManagerSheet(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f, fill = true)
-                .thinScrollbar(listState)
+                .thinScrollbar(listState),
+            flingBehavior = rememberCalmScrollableFlingBehavior()
         ) {
             items(visibleTags, key = { it.id }) { tag ->
                 ListItem(

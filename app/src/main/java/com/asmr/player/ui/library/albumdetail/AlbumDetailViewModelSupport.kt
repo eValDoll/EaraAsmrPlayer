@@ -18,6 +18,7 @@ import com.asmr.player.data.local.db.entities.TagEntity
 import com.asmr.player.data.local.db.entities.TagSource
 import com.asmr.player.data.local.db.entities.TrackTagEntity
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
+import com.asmr.player.data.remote.api.WorkDetailsResponse
 import com.asmr.player.data.remote.crawler.AsmrOneCrawler
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncResolveResult
@@ -36,6 +37,7 @@ import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.lyrics.LyricsLoader
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
+import com.asmr.player.ui.nav.AlbumCoverHint
 import com.asmr.player.util.OnlineLyricsStore
 import com.asmr.player.util.RemoteSubtitleSource
 import com.asmr.player.util.SyncCoordinator
@@ -269,6 +271,10 @@ internal fun mergeDetailHeaderAlbum(
     }
 }
 
+internal fun shouldPreserveHeaderAlbumMetadata(hint: AlbumCoverHint?): Boolean {
+    return hint?.hasResolvedDlsiteInfo == true
+}
+
 internal enum class DlsiteChinesePreference {
     None,
     Hans,
@@ -352,6 +358,85 @@ internal fun resolveInitialDlsiteLoadTarget(
         workno = selectedWorkno
     )
 }
+
+internal fun asmrOneTrackRjCandidates(
+    baseRj: String,
+    currentRj: String,
+    dlsiteWorkno: String,
+    originalRj: String,
+    selectedLang: String,
+    preferInitialCollectedRj: Boolean
+): List<String> {
+    val normalizedLang = selectedLang.trim().uppercase().ifBlank { "JPN" }
+    return buildList {
+        if (preferInitialCollectedRj) add(baseRj)
+        add(currentRj)
+        add(dlsiteWorkno)
+        if (normalizedLang == "JPN") {
+            add(originalRj)
+            add(baseRj)
+        }
+    }
+        .map { it.trim().uppercase() }
+        .filter { ALBUM_DETAIL_RJ_CODE_REGEX.matches(it) }
+        .distinct()
+}
+
+internal fun resolveAsmrOneTrackWorkId(
+    resolvedWorkId: String,
+    resolvedDetails: WorkDetailsResponse?,
+    selectedLang: String,
+    selectedRjs: List<String>
+): String? {
+    val normalizedWorkId = resolvedWorkId.trim().ifBlank { return null }
+    val normalizedLang = selectedLang.trim().uppercase().ifBlank { "JPN" }
+    if (normalizedLang == "JPN") return normalizedWorkId
+
+    val exactRjs = selectedRjs
+        .map { it.trim().uppercase() }
+        .filter { ALBUM_DETAIL_RJ_CODE_REGEX.matches(it) }
+        .toSet()
+    val details = resolvedDetails ?: return null
+    val resolvedSourceRj = details.source_id.trim().uppercase()
+    if (resolvedSourceRj in exactRjs) return normalizedWorkId
+
+    val otherEditions = details.other_language_editions_in_db.orEmpty()
+    val exactEdition = otherEditions.firstOrNull { edition ->
+        edition.source_id.orEmpty().trim().uppercase() in exactRjs
+    }
+    val languageEdition = exactEdition ?: otherEditions.firstOrNull { edition ->
+        asmrOneEditionMatchesLanguage(edition.lang.orEmpty(), normalizedLang)
+    }
+    return languageEdition?.id?.takeIf { it > 0 }?.toString()
+}
+
+private fun asmrOneEditionMatchesLanguage(languageLabel: String, selectedLang: String): Boolean {
+    val normalizedLabel = languageLabel.trim().uppercase()
+    return when (selectedLang) {
+        "CHI_HANS" -> normalizedLabel.contains("CHI_HANS") ||
+            normalizedLabel.contains("简体") ||
+            normalizedLabel.contains("簡体") ||
+            normalizedLabel.contains("简中") ||
+            normalizedLabel.contains("簡中")
+
+        "CHI_HANT" -> normalizedLabel.contains("CHI_HANT") ||
+            normalizedLabel.contains("繁体") ||
+            normalizedLabel.contains("繁體") ||
+            normalizedLabel.contains("繁中")
+
+        "KO_KR" -> normalizedLabel.contains("KO_KR") ||
+            normalizedLabel.contains("韩") ||
+            normalizedLabel.contains("韓")
+
+        "ENG" -> normalizedLabel.contains("ENG") ||
+            normalizedLabel.contains("英语") ||
+            normalizedLabel.contains("英語")
+
+        else -> normalizedLabel == selectedLang
+    }
+}
+
+private val ALBUM_DETAIL_RJ_CODE_REGEX = Regex("""RJ\d{6,}""")
 
 internal data class AsmrOneLeafDownload(
     val url: String,

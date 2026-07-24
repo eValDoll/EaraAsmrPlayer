@@ -91,7 +91,6 @@ import com.asmr.player.ui.settings.SettingsScreen
 import com.asmr.player.ui.settings.SettingsViewModel
 import com.asmr.player.ui.common.glassMenu
 import com.asmr.player.ui.drawer.DrawerStatusViewModel
-import com.asmr.player.ui.drawer.StatisticsViewModel
 import com.asmr.player.ui.drawer.SiteStatus
 import com.asmr.player.ui.drawer.SiteStatusType
 import com.asmr.player.ui.nav.AppNavigator
@@ -291,7 +290,7 @@ internal fun resolveCurrentPrimaryDestinationRoute(
         currentRoute == "playlists" -> "playlists"
         currentRoute == "groups" -> "groups"
         currentRoute == "settings" -> "settings"
-        currentRoute == "dlsite_login" -> "dlsite_login"
+        currentRoute == "listening_calendar" -> "listening_calendar"
         currentRoute == "playlist_system/{type}" && playlistSystemType == "favorites" -> "playlist_system/favorites"
         else -> null
     }
@@ -335,7 +334,22 @@ internal fun shouldScrollPrimaryRouteToTop(
     requestedRoute: String,
     activePrimaryRoute: String,
     currentPrimaryRoute: String?
-): Boolean = requestedRoute == activePrimaryRoute && currentPrimaryRoute == requestedRoute
+): Boolean = requestedRoute == activePrimaryRoute &&
+    (currentPrimaryRoute == requestedRoute || currentPrimaryRoute == null)
+
+internal fun shouldTriggerPrimaryRouteScrollToTop(
+    requestedRoute: String,
+    visualPrimaryRoute: String,
+    activePrimaryRoute: String,
+    currentPrimaryRoute: String?
+): Boolean {
+    if (requestedRoute == visualPrimaryRoute) return true
+    return shouldScrollPrimaryRouteToTop(
+        requestedRoute = requestedRoute,
+        activePrimaryRoute = activePrimaryRoute,
+        currentPrimaryRoute = currentPrimaryRoute
+    )
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

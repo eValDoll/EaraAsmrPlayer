@@ -26,8 +26,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -47,16 +47,22 @@ import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -67,20 +73,67 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Constraints
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.asmr.player.data.settings.LyricsPageSettings
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.util.Formatting
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.SubtitleIndexFinder
-import androidx.compose.runtime.withFrameNanos
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import kotlin.math.absoluteValue
 import kotlin.math.abs
 import kotlin.math.roundToInt
+
+internal data class LyricFocusVisualEffect(
+    val blurDp: Float,
+    val dispersionProgress: Float,
+    val dispersionOffsetXDp: Float,
+    val dispersionOffsetYDp: Float
+)
+
+private val NoLyricFocusVisualEffect = LyricFocusVisualEffect(
+    blurDp = 0f,
+    dispersionProgress = 0f,
+    dispersionOffsetXDp = 0f,
+    dispersionOffsetYDp = 0f
+)
+
+internal fun lyricFocusVisualEffectForLine(
+    index: Int,
+    activeIndex: Int,
+    enabled: Boolean
+): LyricFocusVisualEffect {
+    if (!enabled || activeIndex < 0 || index == activeIndex) return NoLyricFocusVisualEffect
+    val distance = abs(index - activeIndex).coerceAtMost(4)
+    val progress = (distance / 4f).coerceIn(0.18f, 1f)
+    val direction = if (index < activeIndex) -1f else 1f
+    return LyricFocusVisualEffect(
+        blurDp = 0.25f + progress * 2.15f,
+        dispersionProgress = progress,
+        dispersionOffsetXDp = 0.45f + progress * 1.35f,
+        dispersionOffsetYDp = direction * (0.2f + progress * 0.8f)
+    )
+}
+
+internal fun lyricContentKey(lyrics: List<SubtitleEntry>, contentKey: String? = null): Int {
+    var result = contentKey?.hashCode() ?: 0
+    result = 31 * result + lyrics.size
+    lyrics.forEach { entry ->
+        result = 31 * result + entry.startMs.hashCode()
+        result = 31 * result + entry.endMs.hashCode()
+        result = 31 * result + entry.text.hashCode()
+    }
+    return result
+}
+
+internal fun lyricDisplayActiveIndex(activeIndex: Int, totalCount: Int): Int {
+    if (totalCount <= 0) return -1
+    return activeIndex.coerceIn(0, totalCount - 1)
+}
 
 @Composable
 internal fun AppleLyricsView(
@@ -93,18 +146,56 @@ internal fun AppleLyricsView(
     colors: LyricReadableColors,
     modifier: Modifier = Modifier,
     isLandscape: Boolean = false,
-    settings: LyricsPageSettings = LyricsPageSettings()
+    settings: LyricsPageSettings = LyricsPageSettings(),
+    interactionEnabled: Boolean = true,
+    stableFocusAnchor: Boolean = false,
+    itemOuterHorizontalPadding: Dp = if (isLandscape) 10.dp else 14.dp,
+    itemInnerHorizontalPadding: Dp = if (isLandscape) 8.dp else 10.dp,
+    contentKey: String? = null,
+    contentVisible: Boolean = true,
+    expandedHomeVisualEffects: Boolean = false
 ) {
-    val indexFinder = remember(lyrics) { SubtitleIndexFinder(lyrics) }
-    val activeIndex = remember(currentPosition, indexFinder) {
+    var displayedLyrics by remember { mutableStateOf(lyrics) }
+    var displayedContentKey by remember { mutableStateOf(contentKey) }
+    var lyricsVisible by remember { mutableStateOf(true) }
+    LaunchedEffect(lyrics, contentKey) {
+        if (lyrics == displayedLyrics && contentKey == displayedContentKey) {
+            lyricsVisible = true
+            return@LaunchedEffect
+        }
+        lyricsVisible = false
+        delay(120)
+        displayedLyrics = lyrics
+        displayedContentKey = contentKey
+        lyricsVisible = true
+    }
+
+    val renderedLyrics = displayedLyrics
+    val renderedContentKey = displayedContentKey
+    val lyricsContentKey = remember(renderedLyrics, renderedContentKey) {
+        lyricContentKey(renderedLyrics, renderedContentKey)
+    }
+    val indexFinder = remember(renderedLyrics) { SubtitleIndexFinder(renderedLyrics) }
+    val playbackActiveIndex = remember(currentPosition, indexFinder) {
         indexFinder.findActiveIndex(currentPosition)
     }
-    val listState = rememberLazyListState()
+    val activeIndex = remember(playbackActiveIndex, renderedLyrics.size) {
+        lyricDisplayActiveIndex(playbackActiveIndex, renderedLyrics.size)
+    }
+    val listState = remember(lyricsContentKey) {
+        LazyListState(firstVisibleItemIndex = activeIndex.coerceAtLeast(0))
+    }
+    var pendingInitialFocus by remember(lyricsContentKey) { mutableStateOf(true) }
+    val lyricsRenderVisible = contentVisible && lyricsVisible
+    val effectiveInteractionEnabled = interactionEnabled && lyricsRenderVisible
+    val lyricsContentAlpha by animateFloatAsState(
+        targetValue = if (lyricsRenderVisible && !pendingInitialFocus) 1f else 0f,
+        animationSpec = tween(durationMillis = if (lyricsRenderVisible) 220 else 120),
+        label = "lyricsContentAlpha"
+    )
     val density = LocalDensity.current
     val itemOuterVerticalPadding = 0.dp
     val itemInnerVerticalPadding = if (isLandscape) 2.dp else 3.dp
-    val itemOuterHorizontalPadding = if (isLandscape) 10.dp else 14.dp
-    val itemInnerHorizontalPadding = if (isLandscape) 8.dp else 10.dp
     val fontSize = settings.fontSizeSp.sp
     val wrappedLineHeight = (settings.fontSizeSp * 1.2f).sp
     val fontSizePx = with(density) { fontSize.toPx() }
@@ -117,7 +208,6 @@ internal fun AppleLyricsView(
     val baseLyricTextStyle = MaterialTheme.typography.titleLarge
     val itemOffsets = remember { mutableStateMapOf<Int, Animatable<Float, AnimationVector1D>>() }
     val textMeasurer = rememberTextMeasurer()
-    var previousActiveIndex by remember { mutableIntStateOf(activeIndex) }
     var autoFocusSuspended by remember { mutableStateOf(false) }
     var lastUserScrollAt by remember { mutableLongStateOf(0L) }
     var pendingAnimatedRefocus by remember { mutableStateOf(false) }
@@ -146,9 +236,9 @@ internal fun AppleLyricsView(
             viewportHeightPx = estimatedViewportHeightPx,
             lineBlockHeightPx = nominalItemHeightPx
         ).coerceAtLeast(1) + 1
-        val targetWindowRange = remember(lyrics.size, activeIndex, effectiveVisibleLines) {
+        val targetWindowRange = remember(renderedLyrics.size, activeIndex, effectiveVisibleLines) {
             targetLyricsWindowRange(
-                totalCount = lyrics.size,
+                totalCount = renderedLyrics.size,
                 activeIndex = activeIndex,
                 visibleItemCount = effectiveVisibleLines
             )
@@ -158,14 +248,14 @@ internal fun AppleLyricsView(
         }
         val measurementStyle = remember(baseLyricTextStyle, fontSize, wrappedLineHeight, textAlign) {
             baseLyricTextStyle.copy(
-                fontWeight = FontWeight.Bold,
+                fontWeight = FontWeight.ExtraBold,
                 fontSize = fontSize,
                 lineHeight = wrappedLineHeight,
                 textAlign = textAlign
             )
         }
         val lyricItemHeightsPx = remember(
-            lyrics,
+            renderedLyrics,
             itemTextMaxWidthPx,
             measurementStyle,
             nominalItemHeightPx,
@@ -176,7 +266,7 @@ internal fun AppleLyricsView(
         ) {
             val innerVerticalPaddingPx = with(density) { itemInnerVerticalPadding.toPx() }
             val outerVerticalPaddingPx = with(density) { itemOuterVerticalPadding.toPx() }
-            lyrics.map { entry ->
+            renderedLyrics.map { entry ->
                 measuredLyricItemHeight(
                     entry = entry,
                     textMeasurer = textMeasurer,
@@ -221,13 +311,46 @@ internal fun AppleLyricsView(
         }
         val viewportWindowHeightDp = with(density) { viewportLayout.viewportWindowHeightPx.toDp() }
         val viewportTopOffsetDp = with(density) { viewportLayout.viewportTopOffsetPx.toDp() }
-        val centeredActiveTopPx = ((viewportLayout.viewportWindowHeightPx - activeItemHeightPx) / 2f).coerceAtLeast(0f)
         val centeredActiveBottomDp = viewportWindowHeightDp / 2f
-        val viewportCenterY = viewportLayout.viewportWindowHeightPx / 2f
+        val edgeFadeHeightPx = if (expandedHomeVisualEffects) {
+            with(density) { 40.dp.toPx() }
+        } else {
+            0f
+        }
+        val edgeFadeModifier = if (expandedHomeVisualEffects) {
+            Modifier
+                .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
+                .drawWithCache {
+                    if (size.height <= 0f) {
+                        return@drawWithCache onDrawWithContent { drawContent() }
+                    }
+                    val fadeHeight = edgeFadeHeightPx
+                        .coerceAtMost(size.height * 0.42f)
+                        .coerceAtLeast(1f)
+                    val fadeStop = (fadeHeight / size.height).coerceIn(0.01f, 0.48f)
+                    val shoulder = (fadeStop * 0.42f).coerceIn(0.005f, fadeStop)
+                    val brush = Brush.verticalGradient(
+                        colorStops = arrayOf(
+                            0f to Color.Transparent,
+                            shoulder to Color.White.copy(alpha = 0.42f),
+                            fadeStop to Color.White,
+                            (1f - fadeStop) to Color.White,
+                            (1f - shoulder) to Color.White.copy(alpha = 0.42f),
+                            1f to Color.Transparent
+                        )
+                    )
+                    onDrawWithContent {
+                        drawContent()
+                        drawRect(brush = brush, blendMode = BlendMode.DstIn)
+                    }
+                }
+        } else {
+            Modifier
+        }
         val timelineCenterInViewportPx = (viewportHeightPx / 2f - viewportLayout.viewportTopOffsetPx)
             .coerceIn(0f, viewportLayout.viewportWindowHeightPx)
         val maxWaveOffsetPx = viewportLayout.viewportWindowHeightPx * 0.22f
-        val timelineTargetIndex by remember(lyrics.size, timelineCenterInViewportPx, listState) {
+        val timelineTargetIndex by remember(renderedLyrics.size, timelineCenterInViewportPx, listState) {
             derivedStateOf {
                 centeredLyricIndexForTimeline(
                     visibleItems = listState.layoutInfo.visibleItemsInfo.map { item ->
@@ -238,12 +361,12 @@ internal fun AppleLyricsView(
                         )
                     },
                     viewportCenterPx = timelineCenterInViewportPx,
-                    totalCount = lyrics.size
+                    totalCount = renderedLyrics.size
                 )
             }
         }
-        val timelineTargetPositionMs = lyrics.getOrNull(timelineTargetIndex)?.startMs
-        val timelineVisible = showPlaybackTimeline && lyrics.isNotEmpty() && autoFocusSuspended
+        val timelineTargetPositionMs = renderedLyrics.getOrNull(timelineTargetIndex)?.startMs
+        val timelineVisible = showPlaybackTimeline && renderedLyrics.isNotEmpty() && lyricsRenderVisible && autoFocusSuspended
         LaunchedEffect(lastUserScrollAt, autoFocusSuspended) {
             if (autoFocusSuspended) {
                 val scheduledAt = lastUserScrollAt
@@ -255,42 +378,65 @@ internal fun AppleLyricsView(
             }
         }
 
-        LaunchedEffect(lyrics) {
-            previousActiveIndex = activeIndex
+        LaunchedEffect(lyricsContentKey) {
             pendingSmoothFocusIndex = -1
+            autoFocusSuspended = false
+            pendingAnimatedRefocus = false
+            itemOffsets.clear()
         }
 
-        LaunchedEffect(activeIndex, autoFocusSuspended, lyricItemHeightsPx, viewportLayout, pendingSmoothFocusIndex) {
-            if (lyrics.isEmpty() || activeIndex < 0 || autoFocusSuspended) return@LaunchedEffect
+        LaunchedEffect(
+            activeIndex,
+            autoFocusSuspended,
+            lyricItemHeightsPx,
+            viewportLayout,
+            pendingSmoothFocusIndex,
+            stableFocusAnchor,
+            lyricsContentKey,
+            lyricsRenderVisible
+        ) {
+            if (!lyricsRenderVisible) return@LaunchedEffect
+            if (renderedLyrics.isEmpty() || activeIndex < 0 || autoFocusSuspended) {
+                if (pendingInitialFocus && (renderedLyrics.isEmpty() || activeIndex < 0)) {
+                    pendingInitialFocus = false
+                }
+                return@LaunchedEffect
+            }
 
-            val targetScrollOffset = -centeredActiveTopPx.roundToInt()
             var didReposition = false
-            val indexDelta = activeIndex - previousActiveIndex
+            var repositionDeltaPx: Float? = null
             val visibleItems = listState.layoutInfo.visibleItemsInfo
             val activeItemInfo = visibleItems.firstOrNull { it.index == activeIndex }
             val activeTopPx = activeItemInfo?.offset?.toFloat()
+            val activeFocusHeightPx = if (stableFocusAnchor) {
+                nominalItemHeightPx
+            } else {
+                activeItemInfo?.size?.toFloat() ?: activeItemHeightPx
+            }
+            val centeredActiveTopPx = centeredLyricFocusTop(
+                viewportWindowHeightPx = viewportLayout.viewportWindowHeightPx,
+                activeItemHeightPx = activeFocusHeightPx,
+                nominalItemHeightPx = nominalItemHeightPx,
+                stableFocusAnchor = false
+            )
+            val targetScrollOffset = -centeredActiveTopPx.roundToInt()
             val isPinnedAtTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
-            val hasReachedViewportCenter = activeTopPx?.let { top ->
-                top + activeItemHeightPx / 2f >= viewportCenterY
-            } ?: false
-            val isFirstCenterTransition = indexDelta != 0 &&
-                indexDelta.absoluteValue <= 2 &&
-                isPinnedAtTop &&
-                hasReachedViewportCenter &&
-                activeTopPx != null
-            val shouldUseSmoothFocus = pendingAnimatedRefocus || pendingSmoothFocusIndex == activeIndex
+            val isInitialFocus = pendingInitialFocus
+            val shouldUseSmoothFocus = !pendingInitialFocus && (
+                stableFocusAnchor ||
+                    pendingAnimatedRefocus ||
+                    pendingSmoothFocusIndex == activeIndex
+                )
             val defaultAffectedIndices = (
                 visibleItems.map { it.index } +
                     targetWindowRange.toList()
                 ).distinct().sorted()
-            val shouldPlayNeighborWave = !shouldUseSmoothFocus &&
-                indexDelta != 0 &&
-                indexDelta.absoluteValue <= 2
 
             if (activeTopPx != null) {
                 if (!(isPinnedAtTop && activeTopPx <= centeredActiveTopPx)) {
                     val desiredTopPx = centeredActiveTopPx
                     if (kotlin.math.abs(activeTopPx - desiredTopPx) > 1f) {
+                        repositionDeltaPx = activeTopPx - desiredTopPx
                         if (shouldUseSmoothFocus) {
                             listState.animateLyricFocusToIndex(
                                 index = activeIndex,
@@ -318,17 +464,11 @@ internal fun AppleLyricsView(
                 didReposition = true
             }
 
-            val resolvedWave = when {
-                !didReposition || shouldUseSmoothFocus -> null
-                isFirstCenterTransition -> activeTopPx?.plus(activeItemHeightPx / 2f)?.minus(viewportCenterY)
-                shouldPlayNeighborWave -> lyricCenterDistancePx(
-                    lyricItemHeightsPx = lyricItemHeightsPx,
-                    fromIndex = previousActiveIndex,
-                    toIndex = activeIndex,
-                    nominalItemHeightPx = nominalItemHeightPx
-                )
-                else -> null
-            }?.coerceIn(-maxWaveOffsetPx, maxWaveOffsetPx)
+            val resolvedWave = if (didReposition && !shouldUseSmoothFocus && !isInitialFocus) {
+                repositionDeltaPx?.coerceIn(-maxWaveOffsetPx, maxWaveOffsetPx)
+            } else {
+                null
+            }
 
             if (resolvedWave != null) {
                 resetLyricWaveOffsets(
@@ -368,7 +508,7 @@ internal fun AppleLyricsView(
             if (pendingSmoothFocusIndex == activeIndex) {
                 pendingSmoothFocusIndex = -1
             }
-            previousActiveIndex = activeIndex
+            pendingInitialFocus = false
         }
 
         Box(
@@ -376,24 +516,38 @@ internal fun AppleLyricsView(
                 .fillMaxWidth()
                 .height(viewportWindowHeightDp)
                 .offset(y = viewportTopOffsetDp)
-                .clip(RoundedCornerShape(12.dp))
+                .then(
+                    if (expandedHomeVisualEffects) {
+                        Modifier.graphicsLayer { clip = false }
+                    } else {
+                        Modifier.clip(RoundedCornerShape(12.dp))
+                    }
+                )
         ) {
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
-                    .nestedScroll(nestedScrollConnection)
+                    .then(edgeFadeModifier)
+                    .then(if (expandedHomeVisualEffects) Modifier.graphicsLayer { clip = false } else Modifier)
+                    .graphicsLayer { alpha = lyricsContentAlpha }
+                    .then(if (effectiveInteractionEnabled) Modifier.nestedScroll(nestedScrollConnection) else Modifier)
                     .thinScrollbar(listState),
+                flingBehavior = rememberCalmScrollableFlingBehavior(),
+                userScrollEnabled = effectiveInteractionEnabled,
                 horizontalAlignment = Alignment.CenterHorizontally,
                 contentPadding = PaddingValues(
                     bottom = centeredActiveBottomDp
                 )
             ) {
                 itemsIndexed(
-                    items = lyrics,
+                    items = renderedLyrics,
                     key = { index, entry -> lyricItemKey(index, entry) },
                     contentType = { _, _ -> "appleLyricLine" }
                 ) { index, entry ->
+                    val reservedItemHeightDp = with(density) {
+                        (lyricItemHeightsPx.getOrNull(index) ?: nominalItemHeightPx).toDp()
+                    }
                     val isActive = index == activeIndex
                     val scale by animateFloatAsState(
                         targetValue = 1f,
@@ -419,10 +573,16 @@ internal fun AppleLyricsView(
                     } else {
                         null
                     }
+                    val focusEffect = lyricFocusVisualEffectForLine(
+                        index = index,
+                        activeIndex = activeIndex,
+                        enabled = expandedHomeVisualEffects
+                    )
 
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
+                            .height(reservedItemHeightDp)
                             .padding(
                                 start = itemOuterHorizontalPadding,
                                 top = itemOuterVerticalPadding,
@@ -433,9 +593,16 @@ internal fun AppleLyricsView(
                                 this.translationY = itemOffsets[index]?.value ?: 0f
                                 this.scaleX = scale
                                 this.scaleY = scale
-                                this.alpha = alpha
+                                this.alpha = alpha * (1f - focusEffect.dispersionProgress * 0.08f)
                             }
-                            .clickable {
+                            .then(
+                                if (focusEffect.blurDp > 0f) {
+                                    Modifier.blur(focusEffect.blurDp.dp)
+                                } else {
+                                    Modifier
+                                }
+                            )
+                            .clickable(enabled = effectiveInteractionEnabled) {
                                 pendingSmoothFocusIndex = if (activeIndex >= 0 && activeIndex != index) index else -1
                                 autoFocusSuspended = false
                                 pendingAnimatedRefocus = false
@@ -450,6 +617,9 @@ internal fun AppleLyricsView(
                             color = color,
                             shadowColor = shadowColor,
                             strokeWidthPx = strokeWidthPx,
+                            dispersionProgress = focusEffect.dispersionProgress,
+                            dispersionOffsetX = focusEffect.dispersionOffsetXDp.dp,
+                            dispersionOffsetY = focusEffect.dispersionOffsetYDp.dp,
                             style = MaterialTheme.typography.titleLarge.copy(
                                 fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.Bold,
                                 fontSize = fontSize,
@@ -481,7 +651,7 @@ internal fun AppleLyricsView(
                 colors = colors,
                 isLandscape = isLandscape,
                 onPlayClick = { targetMs ->
-                    if (timelineTargetIndex in lyrics.indices) {
+                    if (timelineTargetIndex in renderedLyrics.indices) {
                         pendingSmoothFocusIndex = timelineTargetIndex
                     }
                     autoFocusSuspended = false
@@ -521,26 +691,6 @@ private fun measuredWindowHeight(
     return targetRange.sumOf { index ->
         lyricItemHeightsPx.getOrNull(index)?.toDouble() ?: nominalItemHeightPx.toDouble()
     }.toFloat()
-}
-
-private fun lyricCenterDistancePx(
-    lyricItemHeightsPx: List<Float>,
-    fromIndex: Int,
-    toIndex: Int,
-    nominalItemHeightPx: Float
-): Float {
-    if (fromIndex == toIndex) return 0f
-    val step = if (toIndex > fromIndex) 1 else -1
-    var distancePx = 0f
-    var currentIndex = fromIndex
-    while (currentIndex != toIndex) {
-        val nextIndex = currentIndex + step
-        val currentHeight = lyricItemHeightsPx.getOrNull(currentIndex) ?: nominalItemHeightPx
-        val nextHeight = lyricItemHeightsPx.getOrNull(nextIndex) ?: nominalItemHeightPx
-        distancePx += (currentHeight + nextHeight) / 2f * step
-        currentIndex = nextIndex
-    }
-    return distancePx
 }
 
 private fun buildLyricItemOffsets(
@@ -755,6 +905,9 @@ private fun LyricLineText(
     color: Color,
     shadowColor: Color,
     strokeWidthPx: Float,
+    dispersionProgress: Float,
+    dispersionOffsetX: Dp,
+    dispersionOffsetY: Dp,
     style: TextStyle,
     textAlign: TextAlign
 ) {
@@ -765,13 +918,36 @@ private fun LyricLineText(
             shadowStrengthPx = strokeWidthPx
         )
     }
-    Text(
-        text = text,
-        modifier = Modifier.fillMaxWidth(),
-        style = style.copy(shadow = effectiveShadow),
-        color = color,
-        textAlign = textAlign
-    )
+    Box(modifier = Modifier.fillMaxWidth()) {
+        if (dispersionProgress > 0.01f) {
+            val ghostStyle = style.copy(shadow = null)
+            Text(
+                text = text,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .offset(x = -dispersionOffsetX, y = -dispersionOffsetY),
+                style = ghostStyle,
+                color = Color(0xFFFF5D7A).copy(alpha = 0.16f * dispersionProgress),
+                textAlign = textAlign
+            )
+            Text(
+                text = text,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .offset(x = dispersionOffsetX, y = dispersionOffsetY),
+                style = ghostStyle,
+                color = Color(0xFF42E8FF).copy(alpha = 0.18f * dispersionProgress),
+                textAlign = textAlign
+            )
+        }
+        Text(
+            text = text,
+            modifier = Modifier.fillMaxWidth(),
+            style = style.copy(shadow = effectiveShadow),
+            color = color,
+            textAlign = textAlign
+        )
+    }
 }
 
 private fun lyricTextShadow(

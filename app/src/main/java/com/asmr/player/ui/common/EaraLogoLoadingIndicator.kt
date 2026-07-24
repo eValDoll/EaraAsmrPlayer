@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -75,7 +74,7 @@ fun EaraLogoLoadingIndicator(
     }
 
     val infinite = rememberInfiniteTransition(label = "eara_logo_loading")
-    val wavePhase by infinite.animateFloat(
+    val wavePhase = infinite.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -84,7 +83,7 @@ fun EaraLogoLoadingIndicator(
         ),
         label = "wave_phase"
     )
-    val glowPulse by infinite.animateFloat(
+    val glowPulse = infinite.animateFloat(
         initialValue = 0f,
         targetValue = 1f,
         animationSpec = infiniteRepeatable(
@@ -102,11 +101,16 @@ fun EaraLogoLoadingIndicator(
             Box(
                 modifier = Modifier
                     .fillMaxSize(0.92f)
-                    .graphicsLayer(
-                        alpha = if (colorScheme.isDark) 0.14f + glowPulse * 0.18f else 0.10f + glowPulse * 0.12f,
-                        scaleX = 0.86f + glowPulse * 0.18f,
-                        scaleY = 0.86f + glowPulse * 0.18f
-                    )
+                    .graphicsLayer {
+                        val pulse = glowPulse.value
+                        alpha = if (colorScheme.isDark) {
+                            0.14f + pulse * 0.18f
+                        } else {
+                            0.10f + pulse * 0.12f
+                        }
+                        scaleX = 0.86f + pulse * 0.18f
+                        scaleY = 0.86f + pulse * 0.18f
+                    }
                     .background(
                         brush = Brush.radialGradient(
                             colors = listOf(
@@ -122,10 +126,10 @@ fun EaraLogoLoadingIndicator(
         Canvas(
             modifier = Modifier
                 .fillMaxSize(if (size <= 18.dp) 0.94f else 0.82f)
-                .graphicsLayer(alpha = 0.86f + glowPulse * 0.14f)
+                .graphicsLayer { alpha = 0.86f + glowPulse.value * 0.14f }
         ) {
             drawEaraLogoBars(
-                phase = wavePhase,
+                phase = wavePhase.value,
                 tint = resolvedTint,
                 trackColor = resolvedTrackColor
             )

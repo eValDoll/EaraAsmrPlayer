@@ -38,8 +38,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import com.asmr.player.data.local.db.dao.TagWithCount
-import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
+import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.util.TagNormalizer
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -105,7 +106,10 @@ fun TagAssignDialog(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = 16.dp)
-                        .verticalScroll(rememberScrollState())
+                        .verticalScroll(
+                            state = rememberScrollState(),
+                            flingBehavior = rememberCalmScrollableFlingBehavior()
+                        )
                         .padding(bottom = LocalBottomOverlayPadding.current),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {

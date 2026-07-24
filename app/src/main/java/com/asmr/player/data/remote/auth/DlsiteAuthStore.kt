@@ -1,6 +1,7 @@
 package com.asmr.player.data.remote.auth
 
 import android.content.Context
+import android.content.SharedPreferences
 
 class DlsiteAuthStore(context: Context) {
     private val prefs = context.getSharedPreferences("dlsite_auth", Context.MODE_PRIVATE)
@@ -34,6 +35,14 @@ class DlsiteAuthStore(context: Context) {
     fun isDlsiteLoggedIn(): Boolean = getDlsiteCookie().isNotBlank()
     fun isPlayLoggedIn(): Boolean = getPlayCookie().isNotBlank()
     fun isLoggedIn(): Boolean = isDlsiteLoggedIn() || isPlayLoggedIn()
+
+    fun registerListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+    }
+
+    fun unregisterListener(listener: SharedPreferences.OnSharedPreferenceChangeListener) {
+        prefs.unregisterOnSharedPreferenceChangeListener(listener)
+    }
 
     fun clear() {
         prefs.edit().clear().apply()

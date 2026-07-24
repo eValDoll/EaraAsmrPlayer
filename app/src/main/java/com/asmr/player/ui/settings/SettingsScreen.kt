@@ -77,6 +77,7 @@ import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.thinScrollbar
@@ -192,6 +193,7 @@ fun SettingsScreen(
             LazyColumn(
                 state = listState,
                 modifier = contentModifier.thinScrollbar(listState),
+                flingBehavior = rememberCalmScrollableFlingBehavior(),
                 contentPadding = PaddingValues(horizontal = SettingsPageHorizontalPadding, vertical = 10.dp)
                     .withAddedBottomPadding(LocalBottomOverlayPadding.current),
                 verticalArrangement = Arrangement.spacedBy(16.dp)

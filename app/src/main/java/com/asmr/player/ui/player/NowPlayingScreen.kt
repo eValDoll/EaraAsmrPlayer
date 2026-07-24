@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.player
+package com.asmr.player.ui.player
 
 import android.app.Activity
 import android.content.Context
@@ -50,9 +50,11 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -87,11 +89,15 @@ import androidx.media3.common.VideoSize
 import androidx.media3.ui.PlayerView
 import com.asmr.player.R
 import com.asmr.player.HardwareVolumeOverlay
+import com.asmr.player.cache.CachePolicy
+import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.data.lyrics.lyricsTargetContextFromMediaItem
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
+import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AudioOutputRouteIcon
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
 import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
@@ -112,10 +118,12 @@ import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.SubtitleIndexFinder
 import com.asmr.player.listentogether.ListenTogetherStatus
 import com.asmr.player.listentogether.ListenTogetherUiState
+import dagger.hilt.android.EntryPointAccessors
 import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
 
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -127,6 +135,96 @@ private enum class NowPlayingSurfaceMode {
 }
 
 private const val VideoProgressUiTickMs = 1_000L
+private const val NowPlayingHomeLayoutAnimationDurationMillis = 620
+private const val NowPlayingHomeLyricsFadeInDurationMillis = 240
+private const val NowPlayingHomeLyricsFadeOutDurationMillis = 160
+private val NowPlayingPortraitMaxContentWidth = 600.dp
+private val NowPlayingCompactShortScreenHeight = 620.dp
+private val NowPlayingHomeAudienceTopSafePadding = 20.dp
+private val NowPlayingHomeClassicIdentityHeight = 28.dp
+private val NowPlayingHomeClassicLyricsReserveHeight = 72.dp
+private val NowPlayingHomeExpandedLyricsReserveHeight = 118.dp
+private val NowPlayingHomeCompactMinCoverWidth = 180.dp
+private val NowPlayingHomeRegularMinCoverWidth = 240.dp
+private val NowPlayingHomeClassicRegularMaxCoverWidth = 360.dp
+private val NowPlayingHomeClassicLyricsBottomPadding = 6.dp
+private const val NowPlayingHomeClassicCompactCoverScale = 0.92f
+
+internal fun nowPlayingHomeTopPadding(
+    expanded: Boolean,
+    screenHeight: Dp,
+    widthClass: WindowWidthSizeClass
+): Dp {
+    if (expanded) return 0.dp
+    return if (widthClass == WindowWidthSizeClass.Compact && screenHeight.isFiniteDp() &&
+        screenHeight < NowPlayingCompactShortScreenHeight
+    ) {
+        NowPlayingHomeAudienceTopSafePadding
+    } else {
+        24.dp
+    }
+}
+
+internal fun nowPlayingHomeCoverVerticalPadding(
+    expanded: Boolean,
+    screenHeight: Dp,
+    widthClass: WindowWidthSizeClass
+): Dp {
+    if (expanded) return 0.dp
+    return when {
+        widthClass != WindowWidthSizeClass.Compact -> 32.dp
+        screenHeight.isFiniteDp() && screenHeight < NowPlayingCompactShortScreenHeight -> 8.dp
+        else -> 16.dp
+    }
+}
+
+internal fun nowPlayingHomeCoverWidth(
+    expanded: Boolean,
+    availableWidth: Dp,
+    availableHeight: Dp = Dp.Unspecified,
+    widthClass: WindowWidthSizeClass,
+    contentHorizontalPadding: Dp,
+    coverAspectRatio: Float = 1f,
+    topPadding: Dp = if (expanded) 0.dp else 24.dp,
+    coverVerticalPadding: Dp = if (expanded) 0.dp else if (widthClass == WindowWidthSizeClass.Compact) 16.dp else 32.dp,
+    identityHeight: Dp = if (expanded) 0.dp else NowPlayingHomeClassicIdentityHeight,
+    lyricsReserveHeight: Dp = if (expanded) NowPlayingHomeExpandedLyricsReserveHeight else NowPlayingHomeClassicLyricsReserveHeight
+): Dp {
+    val fullWidth = availableWidth.coerceAtLeast(1.dp)
+    val widthBound = if (expanded) {
+        fullWidth
+    } else {
+        val paddedWidth = (fullWidth - contentHorizontalPadding * 2).coerceAtLeast(1.dp)
+        if (widthClass == WindowWidthSizeClass.Compact) {
+            paddedWidth * NowPlayingHomeClassicCompactCoverScale
+        } else {
+            paddedWidth.coerceAtMost(NowPlayingHomeClassicRegularMaxCoverWidth)
+        }
+    }
+    if (!availableHeight.isFiniteDp()) return widthBound
+
+    val safeAspectRatio = coverAspectRatio
+        .takeIf { it.isFinite() && it > 0f }
+        ?.coerceIn(0.5f, 3f)
+        ?: 1f
+    val reservedHeight = topPadding +
+        coverVerticalPadding * 2 +
+        identityHeight +
+        lyricsReserveHeight
+    val heightLimitedWidth = ((availableHeight - reservedHeight).coerceAtLeast(1.dp) * safeAspectRatio)
+        .coerceAtLeast(nowPlayingHomeMinCoverWidth(widthClass).coerceAtMost(widthBound))
+    return widthBound.coerceAtMost(heightLimitedWidth)
+}
+
+private fun nowPlayingHomeMinCoverWidth(widthClass: WindowWidthSizeClass): Dp {
+    return if (widthClass == WindowWidthSizeClass.Compact) {
+        NowPlayingHomeCompactMinCoverWidth
+    } else {
+        NowPlayingHomeRegularMinCoverWidth
+    }
+}
+
+private fun Dp.isFiniteDp(): Boolean = value.isFinite()
 
 private data class NowPlayingStaticPlayback(
     val isConnected: Boolean,
@@ -186,6 +284,15 @@ private fun PlaybackProgressContent(
     isVideo: Boolean,
     content: @Composable (NowPlayingProgressState) -> Unit
 ) {
+    val initialProgressState = remember(viewModel, isVideo) {
+        val snapshot = viewModel.playback.value
+        val positionMs = if (isVideo) {
+            (snapshot.positionMs / VideoProgressUiTickMs) * VideoProgressUiTickMs
+        } else {
+            snapshot.positionMs
+        }
+        NowPlayingProgressState(positionMs, snapshot.durationMs)
+    }
     val progressState by remember(viewModel, isVideo) {
         viewModel.playback
             .map { snapshot ->
@@ -197,7 +304,7 @@ private fun PlaybackProgressContent(
                 NowPlayingProgressState(positionMs, snapshot.durationMs)
             }
             .distinctUntilChanged()
-    }.collectAsState(initial = NowPlayingProgressState())
+    }.collectAsState(initial = initialProgressState)
 
     content(progressState)
 }
@@ -253,6 +360,34 @@ private fun Modifier.fitVideoPreviewAspectRatio(
     }
 }
 
+@Composable
+private fun rememberArtworkAspectRatio(artworkModel: Any?): Float {
+    val context = LocalContext.current.applicationContext
+    val manager = remember(context) {
+        EntryPointAccessors.fromApplication(context, ImageCacheEntryPoint::class.java)
+            .imageCacheManager()
+    }
+    var aspectRatio by remember(artworkModel) { mutableFloatStateOf(1f) }
+
+    LaunchedEffect(artworkModel, manager) {
+        val model = artworkModel ?: run {
+            aspectRatio = 1f
+            return@LaunchedEffect
+        }
+        runCatching {
+            manager.loadImage(model = model, size = null, cachePolicy = CachePolicy.DEFAULT)
+        }.onSuccess { image ->
+            val width = image.width
+            val height = image.height
+            if (width > 0 && height > 0) {
+                aspectRatio = (width.toFloat() / height.toFloat()).coerceIn(0.25f, 4f)
+            }
+        }
+    }
+
+    return aspectRatio
+}
+
 private fun AnimatedContentTransitionScope<NowPlayingSurfaceMode>.nowPlayingSurfaceTransform(): ContentTransform {
     val enter = fadeIn(
         animationSpec = tween(
@@ -295,6 +430,27 @@ private fun AnimatedContentTransitionScope<NowPlayingSurfaceMode>.nowPlayingSurf
         )
     )
     return enter togetherWith exit using SizeTransform(clip = false)
+}
+
+private fun coverOverlayTextColor(backdropColor: Color): Color {
+    return if (backdropColor.luminance() < 0.5f) {
+        Color.White.copy(alpha = 0.94f)
+    } else {
+        Color.Black.copy(alpha = 0.88f)
+    }
+}
+
+private fun coverOverlayTextShadow(textColor: Color): Shadow {
+    val shadowColor = if (textColor.luminance() > 0.5f) {
+        Color.Black.copy(alpha = 0.74f)
+    } else {
+        Color.White.copy(alpha = 0.62f)
+    }
+    return Shadow(
+        color = shadowColor,
+        offset = Offset(0f, 1.5f),
+        blurRadius = 5f
+    )
 }
 
 internal sealed interface ListenTogetherAudiencePresentation {
@@ -367,19 +523,11 @@ private fun AnimatedContentTransitionScope<Int>.listenTogetherCounterTransform()
 private fun ListenTogetherAudienceCountText(
     companionCount: Int,
     color: Color,
+    textShadow: Shadow?,
     modifier: Modifier = Modifier
 ) {
-    val textStyle = MaterialTheme.typography.labelSmall
-    var lastNonZeroCount by remember { mutableIntStateOf(0) }
-
-    val displayCount = when {
-        companionCount > 0 -> {
-            lastNonZeroCount = companionCount
-            companionCount
-        }
-        lastNonZeroCount > 0 -> lastNonZeroCount
-        else -> 0
-    }
+    val textStyle = MaterialTheme.typography.labelSmall.copy(shadow = textShadow)
+    val displayCount = companionCount.coerceAtLeast(0)
 
     AnimatedContent(
         targetState = displayCount > 0,
@@ -430,9 +578,10 @@ private fun ListenTogetherAudienceLine(
     state: ListenTogetherUiState,
     modifier: Modifier = Modifier,
     accentColor: Color = AsmrTheme.colorScheme.primary,
+    textColor: Color = AsmrTheme.colorScheme.textTertiary,
+    textShadow: Shadow? = null,
     pageEntranceSettled: Boolean = true
 ) {
-    val colorScheme = AsmrTheme.colorScheme
     val presentation = resolveListenTogetherAudiencePresentation(state)
 
     val displayTarget = if (pageEntranceSettled) presentation else null
@@ -468,14 +617,15 @@ private fun ListenTogetherAudienceLine(
                 when (target) {
                     is ListenTogetherAudiencePresentation.Status -> Text(
                         text = target.text,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = colorScheme.textTertiary,
+                        style = MaterialTheme.typography.labelSmall.copy(shadow = textShadow),
+                        color = textColor,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
                     is ListenTogetherAudiencePresentation.Audience -> ListenTogetherAudienceCountText(
                         companionCount = target.companionCount,
-                        color = colorScheme.textTertiary
+                        color = textColor,
+                        textShadow = textShadow
                     )
                     null -> {}
                 }
@@ -519,6 +669,147 @@ private fun ArtistWithListenTogetherInfo(
 }
 
 @Composable
+private fun ExpandedPlayerIdentityOverlay(
+    artist: String,
+    listenTogetherState: ListenTogetherUiState,
+    accentColor: Color,
+    backdropColor: Color,
+    pageEntranceSettled: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val textColor = remember(backdropColor) { coverOverlayTextColor(backdropColor) }
+    val textShadow = remember(textColor) { coverOverlayTextShadow(textColor) }
+    val overlayAccentColor = remember(textColor, accentColor) {
+        if (textColor.luminance() > 0.5f) {
+            accentColor.copy(alpha = 0.90f)
+        } else {
+            Color.Black.copy(alpha = 0.76f)
+        }
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(start = 24.dp, end = 24.dp, top = 8.dp, bottom = 10.dp),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(2.dp)
+        ) {
+            ListenTogetherAudienceLine(
+                state = listenTogetherState,
+                accentColor = overlayAccentColor,
+                textColor = textColor.copy(alpha = 0.84f),
+                textShadow = textShadow,
+                pageEntranceSettled = pageEntranceSettled
+            )
+            Text(
+                text = artist,
+                style = MaterialTheme.typography.bodySmall.copy(shadow = textShadow),
+                color = textColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth()
+            )
+        }
+    }
+}
+
+@Composable
+private fun NowPlayingHomeLayoutSwipeHint(
+    modifier: Modifier = Modifier
+) {
+    val transition = rememberInfiniteTransition(label = "nowPlayingHomeLayoutSwipeHint")
+    val waveProgress = transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 2800, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "nowPlayingHomeLayoutSwipeHintProgress"
+    )
+    val textShadow = remember {
+        Shadow(
+            color = Color.Black.copy(alpha = 0.72f),
+            offset = Offset(0f, 1.2f),
+            blurRadius = 4f
+        )
+    }
+
+    Column(
+        modifier = modifier
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(1.dp)
+    ) {
+        Canvas(
+            modifier = Modifier
+                .width(44.dp)
+                .height(24.dp)
+        ) {
+            repeat(4) { index ->
+                val phase = (waveProgress.value + index * 0.25f) % 1f
+                val edgeFade = when {
+                    phase < 0.22f -> phase / 0.22f
+                    phase > 0.78f -> (1f - phase) / 0.22f
+                    else -> 1f
+                }.coerceIn(0f, 1f)
+                val pulse = edgeFade * edgeFade * (3f - 2f * edgeFade)
+                val centerX = size.width / 2f
+                val centerY = size.height * (0.88f - phase * 0.70f)
+                val halfWidth = size.width * 0.15f
+                val halfHeight = size.height * 0.14f
+                val color = Color.White.copy(alpha = pulse * 0.66f)
+                val shadowColor = Color.Black.copy(alpha = pulse * 0.24f)
+                val strokeWidth = 1.45.dp.toPx()
+                drawLine(
+                    color = shadowColor,
+                    start = Offset(centerX - halfWidth, centerY + halfHeight + 1.2f),
+                    end = Offset(centerX, centerY - halfHeight + 1.2f),
+                    strokeWidth = strokeWidth + 1.2f,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = shadowColor,
+                    start = Offset(centerX + halfWidth, centerY + halfHeight + 1.2f),
+                    end = Offset(centerX, centerY - halfHeight + 1.2f),
+                    strokeWidth = strokeWidth + 1.2f,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(centerX - halfWidth, centerY + halfHeight),
+                    end = Offset(centerX, centerY - halfHeight),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+                drawLine(
+                    color = color,
+                    start = Offset(centerX + halfWidth, centerY + halfHeight),
+                    end = Offset(centerX, centerY - halfHeight),
+                    strokeWidth = strokeWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+        }
+        Text(
+            text = "上滑切换封面排布",
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = FontWeight.SemiBold,
+                shadow = textShadow
+            ),
+            color = Color.White.copy(alpha = 0.86f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
 @androidx.media3.common.util.UnstableApi
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 internal fun NowPlayingScreen(
@@ -535,6 +826,9 @@ internal fun NowPlayingScreen(
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
     coverPreviewMode: CoverPreviewMode,
+    nowPlayingHomeLayoutMode: NowPlayingHomeLayoutMode,
+    nowPlayingHomeLayoutHintDismissed: Boolean,
+    onNowPlayingHomeLayoutModeChange: (NowPlayingHomeLayoutMode) -> Unit,
     lyricsPageSettings: LyricsPageSettings,
     audioOutputRouteKind: AudioOutputRouteKind,
     warningSessionState: AppVolumeWarningSessionState,
@@ -598,6 +892,48 @@ internal fun NowPlayingScreen(
 
     val haptic = LocalHapticFeedback.current
     val context = LocalContext.current
+    var homeLayoutHintDismissedInSession by rememberSaveable { mutableStateOf(false) }
+    var homeLayoutLyricsVisible by remember { mutableStateOf(true) }
+    var homeLayoutChangeJob by remember { mutableStateOf<Job?>(null) }
+    val homeLayoutHintScope = rememberCoroutineScope()
+    DisposableEffect(Unit) {
+        onDispose {
+            homeLayoutChangeJob?.cancel()
+        }
+    }
+    LaunchedEffect(nowPlayingHomeLayoutHintDismissed) {
+        if (nowPlayingHomeLayoutHintDismissed) {
+            homeLayoutHintDismissedInSession = true
+        }
+    }
+    val changeNowPlayingHomeLayoutMode = remember(
+        haptic,
+        nowPlayingHomeLayoutMode,
+        nowPlayingHomeLayoutHintDismissed,
+        homeLayoutHintDismissedInSession,
+        homeLayoutHintScope,
+        onNowPlayingHomeLayoutModeChange
+    ) {
+        { mode: NowPlayingHomeLayoutMode ->
+            if (mode != nowPlayingHomeLayoutMode) {
+                homeLayoutChangeJob?.cancel()
+                if (!nowPlayingHomeLayoutHintDismissed && !homeLayoutHintDismissedInSession) {
+                    homeLayoutHintScope.launch {
+                        delay(NowPlayingHomeLayoutAnimationDurationMillis.toLong())
+                        homeLayoutHintDismissedInSession = true
+                    }
+                }
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                homeLayoutChangeJob = homeLayoutHintScope.launch {
+                    homeLayoutLyricsVisible = false
+                    delay(NowPlayingHomeLyricsFadeOutDurationMillis.toLong())
+                    onNowPlayingHomeLayoutModeChange(mode)
+                    delay(NowPlayingHomeLayoutAnimationDurationMillis.toLong())
+                    homeLayoutLyricsVisible = true
+                }
+            }
+        }
+    }
     val lyricsPickerMimeTypes = remember {
         arrayOf(
             "*/*",
@@ -1072,7 +1408,9 @@ internal fun NowPlayingScreen(
                                             onOpenLyrics = showLyricsSurface,
                                             colors = lyricColors,
                                             modifier = Modifier.fillMaxSize(),
-                                            isLandscape = true
+                                            isLandscape = true,
+                                            contentKey = lyricsState.contentKey,
+                                            contentVisible = !lyricsState.isLoading
                                         )
                                     }
                                 }
@@ -1298,7 +1636,9 @@ internal fun NowPlayingScreen(
                                             onOpenLyrics = showLyricsSurface,
                                             colors = lyricColors,
                                             modifier = Modifier.fillMaxSize(),
-                                            isLandscape = true
+                                            isLandscape = true,
+                                            contentKey = lyricsState.contentKey,
+                                            contentVisible = !lyricsState.isLoading
                                         )
                                     }
                                 }
@@ -1349,228 +1689,435 @@ internal fun NowPlayingScreen(
                 }
             }
         } else {
-            val headerMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.HEADER)
             val coverMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.COVER)
             val lyricsMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.LYRICS)
             val progressMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.PROGRESS)
             val actionRowMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.ACTION_ROW)
             val controlsMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.CONTROLS)
             val volumeMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.VOLUME)
+            val expandedHomeLayout = nowPlayingHomeLayoutMode == NowPlayingHomeLayoutMode.Expanded && !isVideo
+            val homeLayoutSwipeHintAllowed = !nowPlayingHomeLayoutHintDismissed &&
+                !homeLayoutHintDismissedInSession &&
+                !isVideo
+            val portraitContentHorizontalPadding = 24.dp
+            val portraitScreenHeight = configuration.screenHeightDp.dp
+            val homeBezier = remember { CubicBezierEasing(0.20f, 0f, 0f, 1f) }
+            val homeLayoutDurationMillis = NowPlayingHomeLayoutAnimationDurationMillis
+            val homeFadeInDurationMillis = NowPlayingHomeLyricsFadeInDurationMillis
+            val homeFadeOutDurationMillis = NowPlayingHomeLyricsFadeOutDurationMillis
+            val expandedHomeLyricsSettings = remember(lyricsPageSettings) {
+                lyricsPageSettings.copy(displayAreaMode = 0)
+            }
+            val portraitContentWidthModifier = if (widthClass == WindowWidthSizeClass.Compact) {
+                Modifier.fillMaxWidth()
+            } else {
+                Modifier
+                    .widthIn(max = NowPlayingPortraitMaxContentWidth)
+                    .fillMaxWidth()
+            }
+            val artworkAspectRatio = rememberArtworkAspectRatio(artworkModel)
+            val homeLayoutTransition = updateTransition(
+                targetState = expandedHomeLayout,
+                label = "nowPlayingHomeLayoutMode"
+            )
+            val showHomeLayoutSwipeHint = homeLayoutSwipeHintAllowed &&
+                !homeLayoutTransition.currentState
+            val portraitTopPadding by homeLayoutTransition.animateDp(
+                transitionSpec = {
+                    tween(durationMillis = homeLayoutDurationMillis, easing = homeBezier)
+                },
+                label = "nowPlayingHomeTopPadding"
+            ) { expanded ->
+                nowPlayingHomeTopPadding(
+                    expanded = expanded,
+                    screenHeight = portraitScreenHeight,
+                    widthClass = widthClass
+                )
+            }
+            val coverVerticalPadding by homeLayoutTransition.animateDp(
+                transitionSpec = {
+                    tween(durationMillis = homeLayoutDurationMillis, easing = homeBezier)
+                },
+                label = "nowPlayingHomeCoverVerticalPadding"
+            ) { expanded ->
+                nowPlayingHomeCoverVerticalPadding(
+                    expanded = expanded,
+                    screenHeight = portraitScreenHeight,
+                    widthClass = widthClass
+                )
+            }
+            val expandedLyricsTopPadding = 14.dp
+            val homeCoverAspectRatio by homeLayoutTransition.animateFloat(
+                transitionSpec = {
+                    tween(durationMillis = homeLayoutDurationMillis, easing = homeBezier)
+                },
+                label = "nowPlayingHomeCoverAspectRatio"
+            ) { expanded ->
+                if (expanded) artworkAspectRatio else 1f
+            }
+            val homeCoverCornerRadius by homeLayoutTransition.animateDp(
+                transitionSpec = {
+                    tween(durationMillis = homeLayoutDurationMillis, easing = homeBezier)
+                },
+                label = "nowPlayingHomeCoverCornerRadius"
+            ) { expanded ->
+                if (expanded) 0.dp else 28.dp
+            }
+            val classicIdentityHeight by homeLayoutTransition.animateDp(
+                transitionSpec = {
+                    tween(durationMillis = homeLayoutDurationMillis, easing = homeBezier)
+                },
+                label = "nowPlayingHomeClassicIdentityHeight"
+            ) { expanded ->
+                if (expanded) 0.dp else NowPlayingHomeClassicIdentityHeight
+            }
+            val classicIdentityAlpha by homeLayoutTransition.animateFloat(
+                transitionSpec = {
+                    if (targetState) {
+                        tween(durationMillis = homeFadeOutDurationMillis, easing = FastOutLinearInEasing)
+                    } else {
+                        tween(durationMillis = homeFadeInDurationMillis, easing = LinearOutSlowInEasing)
+                    }
+                },
+                label = "nowPlayingHomeClassicIdentityAlpha"
+            ) { expanded ->
+                if (expanded) 0f else 1f
+            }
+            val expandedIdentityAlpha by homeLayoutTransition.animateFloat(
+                transitionSpec = {
+                    if (targetState) {
+                        tween(durationMillis = homeFadeInDurationMillis, easing = LinearOutSlowInEasing)
+                    } else {
+                        tween(durationMillis = homeFadeOutDurationMillis, easing = FastOutLinearInEasing)
+                    }
+                },
+                label = "nowPlayingHomeExpandedIdentityAlpha"
+            ) { expanded ->
+                if (expanded) 1f else 0f
+            }
+            val homeLayoutSettled = homeLayoutTransition.currentState == homeLayoutTransition.targetState
+            LaunchedEffect(expandedHomeLayout) {
+                if (!homeLayoutSettled) {
+                    homeLayoutLyricsVisible = false
+                }
+            }
+            LaunchedEffect(homeLayoutSettled) {
+                if (homeLayoutSettled) {
+                    homeLayoutLyricsVisible = true
+                }
+            }
+            val expandedLyricsActive = expandedHomeLayout && homeLayoutSettled && homeLayoutLyricsVisible
+            val classicLyricsActive = !expandedHomeLayout && homeLayoutSettled && homeLayoutLyricsVisible
+            val expandedLyricsAlpha by animateFloatAsState(
+                targetValue = if (expandedLyricsActive) 1f else 0f,
+                animationSpec = tween(
+                    durationMillis = if (expandedLyricsActive) homeFadeInDurationMillis else homeFadeOutDurationMillis,
+                    easing = if (expandedLyricsActive) LinearOutSlowInEasing else FastOutLinearInEasing
+                ),
+                label = "nowPlayingHomeExpandedLyricsAlpha"
+            )
+            val classicLyricsAlpha by animateFloatAsState(
+                targetValue = if (classicLyricsActive) 1f else 0f,
+                animationSpec = tween(
+                    durationMillis = if (classicLyricsActive) homeFadeInDurationMillis else homeFadeOutDurationMillis,
+                    easing = if (classicLyricsActive) LinearOutSlowInEasing else FastOutLinearInEasing
+                ),
+                label = "nowPlayingHomeClassicLyricsAlpha"
+            )
+            val lyricsExpandedInteractionEnabled = expandedLyricsAlpha > 0.5f
+            val lyricsClassicInteractionEnabled = classicLyricsAlpha > 0.5f
             // --- 垂直布局 (手机 或 平板竖屏) ---
             Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.TopCenter
             ) {
                 Column(
-                    modifier = if (widthClass == WindowWidthSizeClass.Compact) {
-                        Modifier.fillMaxSize()
-                    } else {
-                        // 平板竖屏：限制最大宽度
-                        Modifier
-                            .fillMaxHeight()
-                            .widthIn(max = 600.dp)
-                            .fillMaxWidth()
-                    }
-                    .padding(horizontal = 24.dp, vertical = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // 顶部导航栏
-                    Row(
+                    BoxWithConstraints(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 4.dp, vertical = 8.dp)
-                            .then(headerMotion)
-                            .requiredHeight(0.dp)
-                            .alpha(0f),
-                        verticalAlignment = Alignment.CenterVertically
+                            .weight(1f)
+                            .clipToBounds()
                     ) {
-                        IconButton(onClick = requestClose, enabled = !pendingRouteExit) {
-                            Icon(
-                                Icons.Rounded.KeyboardArrowDown,
-                                contentDescription = null,
-                                tint = colorScheme.onSurface,
-                                modifier = Modifier.size(32.dp)
-                            )
-                        }
-                        val textShadow = if (colorScheme.isDark) {
-                            Shadow(color = Color.Black.copy(alpha = 0.5f), offset = Offset(0f, 2f), blurRadius = 4f)
-                        } else {
-                            Shadow(color = Color.Black.copy(alpha = 0.15f), offset = Offset(0f, 1f), blurRadius = 2f)
-                        }
-
-                        Text(
-                            text = metadata?.title?.toString().orEmpty().ifBlank { "未播放" },
+                        val portraitTopContentMaxHeight = maxHeight
+                        Column(
                             modifier = Modifier
-                                .weight(1f)
-                                .basicMarquee(),
-                            style = MaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.Bold,
-                                shadow = textShadow
-                            ),
-                            color = colorScheme.textPrimary,
-                            maxLines = 1,
-                            textAlign = TextAlign.Center
-                        )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            IconButton(onClick = onShowSleepTimer) {
-                                Icon(
-                                    Icons.Rounded.Timer,
-                                    contentDescription = null,
-                                    tint = colorScheme.onSurface,
-                                    modifier = Modifier.size(26.dp)
-                                )
-                            }
-                            IconButton(onClick = onShowQueue) {
-                                Icon(
-                                    Icons.AutoMirrored.Rounded.PlaylistPlay,
-                                    contentDescription = null,
-                                    tint = colorScheme.onSurface,
-                                    modifier = Modifier.size(28.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    // 艺术家
-                    ArtistWithListenTogetherInfo(
-                        artist = metadata?.artist?.toString().orEmpty(),
-                        listenTogetherState = listenTogetherUiState,
-                        style = MaterialTheme.typography.bodySmall.copy(
-                            shadow = if (colorScheme.isDark) {
-                                Shadow(color = Color.Black.copy(alpha = 0.4f), offset = Offset(0f, 1f), blurRadius = 2f)
-                            } else {
-                                Shadow(color = Color.Black.copy(alpha = 0.12f), offset = Offset(0f, 0.5f), blurRadius = 1.5f)
-                            }
-                        ),
-                        color = colorScheme.textSecondary,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .then(coverMotion),
-                        textAlign = TextAlign.Center,
-                        badgeAlignment = Alignment.TopCenter,
-                        textAlignment = Alignment.Center,
-                        accentColor = accentColor,
-                        pageEntranceSettled = pageEntranceSettled
-                    )
-
-                    // 封面
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .weight(1f) // 让封面占据剩余可用空间，自动收缩
-                            .padding(vertical = if (widthClass == WindowWidthSizeClass.Compact) 16.dp else 32.dp)
-                            .then(coverMotion),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .then(
-                                    if (isVideo) {
-                                        Modifier
-                                            .widthIn(max = if (widthClass == WindowWidthSizeClass.Compact) 1000.dp else 400.dp)
-                                            .fitVideoPreviewAspectRatio(videoAspectRatio)
-                                    } else {
-                                        Modifier
-                                            .fillMaxHeight()
-                                            .aspectRatio(1f)
-                                            .widthIn(max = if (widthClass == WindowWidthSizeClass.Compact) 1000.dp else 400.dp)
-                                    }
-                                ) // 平板竖屏限制最大宽度
+                                .fillMaxSize()
+                                .padding(top = portraitTopPadding),
+                            horizontalAlignment = Alignment.CenterHorizontally
                         ) {
-                            ArtworkBox(
-                                isVideo = isVideo,
-                                metadata = metadata,
-                                viewModel = viewModel,
-                                onOpenLyrics = showLyricsSurface,
-                                edgeBlendEnabled = false,
-                                edgeBlendColor = if (playerArtworkBackdropEnabled) playerThemeColors.backdropTintColor else colorScheme.background,
-                                videoBackdropColor = videoBackdropColor,
-                                artworkAlignment = coverPreviewAlignment,
-                                dragPreviewEnabled = useDragPreview,
-                                dragPreviewState = coverDragPreviewState
-                            )
-                        }
-                    }
+                            Box(
+                                modifier = portraitContentWidthModifier
+                                    .height(classicIdentityHeight)
+                                    .graphicsLayer { alpha = classicIdentityAlpha }
+                            ) {
+                                ArtistWithListenTogetherInfo(
+                                    artist = metadata?.artist?.toString().orEmpty(),
+                                    listenTogetherState = listenTogetherUiState,
+                                    style = MaterialTheme.typography.bodySmall.copy(
+                                        shadow = if (colorScheme.isDark) {
+                                            Shadow(color = Color.Black.copy(alpha = 0.4f), offset = Offset(0f, 1f), blurRadius = 2f)
+                                        } else {
+                                            Shadow(color = Color.Black.copy(alpha = 0.12f), offset = Offset(0f, 0.5f), blurRadius = 1.5f)
+                                        }
+                                    ),
+                                    color = colorScheme.textSecondary,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .then(coverMotion),
+                                    textAlign = TextAlign.Center,
+                                    badgeAlignment = Alignment.TopCenter,
+                                    textAlignment = Alignment.Center,
+                                    accentColor = accentColor,
+                                    pageEntranceSettled = pageEntranceSettled
+                                )
+                            }
 
-                    if (!isVideo) {
-                        PlaybackProgressContent(viewModel, isVideo) { progress ->
-                            SingleLineLyrics(
-                                lyrics = lyricsState.lyrics,
-                                currentPosition = progress.positionMs,
-                                onOpenLyrics = showLyricsSurface,
-                                colors = lyricColors,
+                            // 封面
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .then(lyricsMotion)
-                            )
-                        }
-                    }
+                                    .padding(vertical = coverVerticalPadding)
+                                    .then(coverMotion)
+                                    .nowPlayingHomeLayoutSwipeGesture(
+                                        enabled = !isVideo && !pendingRouteExit,
+                                        currentMode = nowPlayingHomeLayoutMode,
+                                        onModeChange = changeNowPlayingHomeLayoutMode
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                BoxWithConstraints(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    val homeCoverWidth by homeLayoutTransition.animateDp(
+                                        transitionSpec = {
+                                            tween(durationMillis = homeLayoutDurationMillis, easing = homeBezier)
+                                        },
+                                        label = "nowPlayingHomeCoverWidth"
+                                    ) { expanded ->
+                                        nowPlayingHomeCoverWidth(
+                                            expanded = expanded,
+                                            availableWidth = maxWidth,
+                                            availableHeight = portraitTopContentMaxHeight,
+                                            widthClass = widthClass,
+                                            contentHorizontalPadding = portraitContentHorizontalPadding,
+                                            coverAspectRatio = if (expanded) artworkAspectRatio else 1f,
+                                            topPadding = nowPlayingHomeTopPadding(
+                                                expanded = expanded,
+                                                screenHeight = portraitScreenHeight,
+                                                widthClass = widthClass
+                                            ),
+                                            coverVerticalPadding = nowPlayingHomeCoverVerticalPadding(
+                                                expanded = expanded,
+                                                screenHeight = portraitScreenHeight,
+                                                widthClass = widthClass
+                                            )
+                                        )
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .then(
+                                                if (isVideo) {
+                                                    Modifier
+                                                        .widthIn(max = if (widthClass == WindowWidthSizeClass.Compact) 1000.dp else 400.dp)
+                                                        .fitVideoPreviewAspectRatio(videoAspectRatio)
+                                                } else {
+                                                    Modifier
+                                                        .width(homeCoverWidth)
+                                                        .aspectRatio(homeCoverAspectRatio)
+                                                }
+                                            )
+                                    ) {
+                                        ArtworkBox(
+                                            isVideo = isVideo,
+                                            metadata = metadata,
+                                            viewModel = viewModel,
+                                            onOpenLyrics = showLyricsSurface,
+                                            edgeBlendEnabled = false,
+                                            edgeBlendColor = if (playerArtworkBackdropEnabled) playerThemeColors.backdropTintColor else colorScheme.background,
+                                            videoBackdropColor = videoBackdropColor,
+                                            artworkAlignment = coverPreviewAlignment,
+                                            artworkContentScale = ContentScale.Crop,
+                                            artworkCornerRadius = homeCoverCornerRadius,
+                                            artworkLoadAtOriginalSize = true,
+                                            dragPreviewEnabled = useDragPreview,
+                                            dragPreviewState = coverDragPreviewState
+                                        )
+                                        if (showHomeLayoutSwipeHint) {
+                                            NowPlayingHomeLayoutSwipeHint(
+                                                modifier = Modifier
+                                                    .align(Alignment.BottomCenter)
+                                                    .padding(bottom = 16.dp)
+                                                    .graphicsLayer { alpha = classicIdentityAlpha }
+                                            )
+                                        }
+                                        if (expandedIdentityAlpha > 0.001f) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .align(Alignment.BottomCenter)
+                                                    .graphicsLayer { alpha = expandedIdentityAlpha }
+                                            ) {
+                                                ExpandedPlayerIdentityOverlay(
+                                                    artist = metadata?.artist?.toString().orEmpty(),
+                                                    listenTogetherState = listenTogetherUiState,
+                                                    accentColor = accentColor,
+                                                    backdropColor = playerThemeColors.backdropTintColor,
+                                                    pageEntranceSettled = pageEntranceSettled
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
 
-                    key(item?.mediaId) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .then(progressMotion)
-                        ) {
-                            PlaybackProgressContent(viewModel, isVideo) { progress ->
-                                PlayerProgress(
-                                    positionMs = progress.positionMs,
-                                    durationMs = progressDurationMs,
-                                    sliceUiState = sliceUiState,
-                                    onSeekTo = { viewModel.seekTo(it) },
-                                    onCutPressed = { viewModel.onCutPressed(progressDurationMs) },
-                                    onScrubbingChanged = { viewModel.setUserScrubbing(it) },
-                                    onSelectSlice = { viewModel.selectSlice(it) },
-                                    onLongPressSlice = {
-                                        viewModel.selectSlice(it)
-                                        showSliceSheet = true
-                                    },
-                                    onUpdateSliceRange = { sliceId, startMs, endMs ->
-                                        viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
-                                    },
-                                    activeColor = accentColor,
-                                    inactiveColor = accentColor.copy(alpha = 0.2f)
-                                )
+                            if (!isVideo) {
+                                Box(
+                                    modifier = portraitContentWidthModifier
+                                        .weight(1f)
+                                        .then(lyricsMotion),
+                                    contentAlignment = Alignment.TopCenter
+                                ) {
+                                    if (expandedLyricsActive || expandedLyricsAlpha > 0.001f) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(top = expandedLyricsTopPadding)
+                                                .graphicsLayer { alpha = expandedLyricsAlpha }
+                                        ) {
+                                            PlaybackProgressContent(viewModel, isVideo) { progress ->
+                                                NowPlayingLyricsSurface(
+                                                    isLandscape = false,
+                                                    playbackPositionMs = progress.positionMs,
+                                                    lyrics = lyricsState.lyrics,
+                                                    lyricColors = lyricColors,
+                                                    accentColor = accentColor,
+                                                    onAccentColor = onAccentColor,
+                                                    lyricsPageSettings = expandedHomeLyricsSettings,
+                                                    onSeekTo = { viewModel.seekTo(it) },
+                                                    onTimelinePlay = { targetMs ->
+                                                        viewModel.seekTo(targetMs)
+                                                        viewModel.play()
+                                                    },
+                                                    onAddLyrics = openManualLyricsAction,
+                                                    interactionEnabled = lyricsExpandedInteractionEnabled,
+                                                    stableFocusAnchor = true,
+                                                    expandedHomeVisualEffects = true,
+                                                    lyricItemOuterHorizontalPadding = 6.dp,
+                                                    lyricItemInnerHorizontalPadding = 8.dp,
+                                                    contentKey = lyricsState.contentKey,
+                                                    contentVisible = !lyricsState.isLoading,
+                                                    modifier = Modifier.fillMaxSize()
+                                                )
+                                            }
+                                        }
+                                    }
+                                    if (classicLyricsActive || classicLyricsAlpha > 0.001f) {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .height(58.dp)
+                                                .align(Alignment.BottomCenter)
+                                                .padding(horizontal = portraitContentHorizontalPadding)
+                                                .padding(bottom = NowPlayingHomeClassicLyricsBottomPadding)
+                                                .graphicsLayer { alpha = classicLyricsAlpha },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            PlaybackProgressContent(viewModel, isVideo) { progress ->
+                                                SingleLineLyrics(
+                                                    lyrics = lyricsState.lyrics,
+                                                    currentPosition = progress.positionMs,
+                                                    onOpenLyrics = showLyricsSurface,
+                                                    colors = lyricColors,
+                                                    interactionEnabled = lyricsClassicInteractionEnabled,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            } else {
+                                Spacer(modifier = Modifier.weight(1f))
                             }
                         }
                     }
 
-                    PlaybackControls(
-                        playback = playback,
-                        isFavorite = isFavorite,
-                        viewModel = viewModel,
-                        onShowPlaylistPicker = {
-                            val current = playback.currentMediaItem ?: return@PlaybackControls
-                            onOpenPlaylistPicker(current)
-                        },
-                        onShowEqualizer = { showEqualizer = true },
-                        onManageTags = {
-                            val mediaId = item?.mediaId.orEmpty()
-                            val fallback = metadata?.title?.toString().orEmpty()
-                            tagViewModel.openForMediaId(mediaId, fallback)
-                        },
-                        sliceUiState = sliceUiState,
-                        actionRowModifier = actionRowMotion,
-                        coreControlsModifier = controlsMotion,
-                        primaryColor = accentColor,
-                        onPrimaryColor = onAccentColor
-                    )
+                    Column(
+                        modifier = portraitContentWidthModifier
+                            .padding(bottom = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        key(item?.mediaId) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = portraitContentHorizontalPadding)
+                                    .then(progressMotion)
+                            ) {
+                                PlaybackProgressContent(viewModel, isVideo) { progress ->
+                                    PlayerProgress(
+                                        positionMs = progress.positionMs,
+                                        durationMs = progressDurationMs,
+                                        sliceUiState = sliceUiState,
+                                        onSeekTo = { viewModel.seekTo(it) },
+                                        onCutPressed = { viewModel.onCutPressed(progressDurationMs) },
+                                        onScrubbingChanged = { viewModel.setUserScrubbing(it) },
+                                        onSelectSlice = { viewModel.selectSlice(it) },
+                                        onLongPressSlice = {
+                                            viewModel.selectSlice(it)
+                                            showSliceSheet = true
+                                        },
+                                        onUpdateSliceRange = { sliceId, startMs, endMs ->
+                                            viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
+                                        },
+                                        activeColor = accentColor,
+                                        inactiveColor = accentColor.copy(alpha = 0.2f)
+                                    )
+                                }
+                            }
+                        }
 
-                    VolumeControl(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .then(volumeMotion)
-                            .onGloballyPositioned { coordinates ->
-                                volumeControlBounds = coordinates.boundsInRoot()
+                        PlaybackControls(
+                            playback = playback,
+                            isFavorite = isFavorite,
+                            viewModel = viewModel,
+                            onShowPlaylistPicker = {
+                                val current = playback.currentMediaItem ?: return@PlaybackControls
+                                onOpenPlaylistPicker(current)
                             },
-                        accentColor = accentColor,
-                        viewModel = viewModel,
-                        hardwareVolumeEventTick = hardwareVolumeEventTick,
-                        audioOutputRouteKind = audioOutputRouteKind,
-                        warningSessionState = warningSessionState,
-                        expanded = volumeControlExpanded,
-                        onExpandedChange = { volumeControlExpanded = it }
-                    )
+                            onShowEqualizer = { showEqualizer = true },
+                            onManageTags = {
+                                val mediaId = item?.mediaId.orEmpty()
+                                val fallback = metadata?.title?.toString().orEmpty()
+                                tagViewModel.openForMediaId(mediaId, fallback)
+                            },
+                            sliceUiState = sliceUiState,
+                            modifier = Modifier.padding(horizontal = portraitContentHorizontalPadding),
+                            actionRowModifier = actionRowMotion,
+                            coreControlsModifier = controlsMotion,
+                            primaryColor = accentColor,
+                            onPrimaryColor = onAccentColor
+                        )
+
+                        VolumeControl(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = portraitContentHorizontalPadding)
+                                .then(volumeMotion)
+                                .onGloballyPositioned { coordinates ->
+                                    volumeControlBounds = coordinates.boundsInRoot()
+                                },
+                            accentColor = accentColor,
+                            viewModel = viewModel,
+                            hardwareVolumeEventTick = hardwareVolumeEventTick,
+                            audioOutputRouteKind = audioOutputRouteKind,
+                            warningSessionState = warningSessionState,
+                            expanded = volumeControlExpanded,
+                            onExpandedChange = { volumeControlExpanded = it }
+                        )
+                    }
                 }
             }
             }
@@ -1591,6 +2138,8 @@ internal fun NowPlayingScreen(
                             viewModel.play()
                         },
                         onAddLyrics = openManualLyricsAction,
+                        contentKey = lyricsState.contentKey,
+                        contentVisible = !lyricsState.isLoading,
                         modifier = Modifier
                             .fillMaxSize()
                             .then(routeTransition.nowPlayingMotionModifier(currentMotionLayout, NowPlayingMotionSlot.COVER))
@@ -1685,6 +2234,7 @@ internal fun NowPlayingScreen(
                                 .fillMaxWidth()
                                 .weight(1f, fill = true)
                                 .thinScrollbar(sliceListState),
+                            flingBehavior = rememberCalmScrollableFlingBehavior(),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             itemsIndexed(sliceUiState.slices, key = { _, s -> s.id }) { index, slice ->
@@ -1855,7 +2405,10 @@ internal fun NowPlayingScreen(
                         onPlaybackParametersChanged = { speed, pitch -> viewModel.setPlaybackParameters(speed, pitch) },
                         modifier = Modifier
                             .fillMaxSize()
-                            .verticalScroll(scrollState)
+                            .verticalScroll(
+                                state = scrollState,
+                                flingBehavior = rememberCalmScrollableFlingBehavior()
+                            )
                             .padding(bottom = 32.dp)
                     )
                     if (showEqualizerVolumeOverlay) {

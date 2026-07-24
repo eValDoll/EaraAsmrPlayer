@@ -59,6 +59,16 @@ internal fun calculateRuntimeMaxVisibleLines(
     return max(1, floor(viewportHeightPx / lineBlockHeightPx).toInt())
 }
 
+internal fun centeredLyricFocusTop(
+    viewportWindowHeightPx: Float,
+    activeItemHeightPx: Float,
+    nominalItemHeightPx: Float,
+    stableFocusAnchor: Boolean
+): Float {
+    val focusHeightPx = if (stableFocusAnchor) nominalItemHeightPx else activeItemHeightPx
+    return ((viewportWindowHeightPx - focusHeightPx) / 2f).coerceAtLeast(0f)
+}
+
 internal fun lyricTextAlign(align: Int): TextAlign = when (align) {
     0 -> TextAlign.Start
     2 -> TextAlign.End

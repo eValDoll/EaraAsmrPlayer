@@ -29,6 +29,7 @@ interface Asmr200Api {
     @GET("tracks/{workId}")
     suspend fun getTracks(
         @Path("workId") workId: String,
+        @Query("v") version: Int = 2,
         @Header(NetworkHeaders.HEADER_SILENT_IO_ERROR) silentIoError: String? = null
     ): List<AsmrOneTrackNodeResponse>
 

@@ -50,6 +50,13 @@ class FadingPlayer(
         pendingSwitchFadeIn = false
         volumeFader.cancel()
         volume = 0f
+        if (
+            delegate.playbackState == Player.STATE_IDLE &&
+            delegate.playerError != null &&
+            delegate.mediaItemCount > 0
+        ) {
+            delegate.prepare()
+        }
         delegate.play()
         volumeFader.fadeTo(this, 1f, playFadeDurationMs)
     }

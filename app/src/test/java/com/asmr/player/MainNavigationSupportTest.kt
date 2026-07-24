@@ -4,6 +4,9 @@ import android.net.Uri
 import android.os.Bundle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import com.asmr.player.ui.nav.bottomChromeNavItems
+import com.asmr.player.ui.nav.isPrimaryRoute
+import com.asmr.player.ui.nav.resolvePrimaryRoute
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -108,6 +111,7 @@ class MainNavigationSupportTest {
     fun resolvePrimaryPagerBeyondBoundsPageCount_keepsAllPrimaryPagesComposed() {
         assertEquals(0, resolvePrimaryPagerBeyondBoundsPageCount(0))
         assertEquals(0, resolvePrimaryPagerBeyondBoundsPageCount(1))
+        assertEquals(1, resolvePrimaryPagerBeyondBoundsPageCount(2))
         assertEquals(7, resolvePrimaryPagerBeyondBoundsPageCount(8))
     }
 
@@ -125,16 +129,61 @@ class MainNavigationSupportTest {
     }
 
     @Test
+    fun bottomChromeNavItems_useListeningCalendarAsPrimaryEntry() {
+        val items = bottomChromeNavItems()
+        val routes = items.map { it.route }
+
+        assertEquals("ASMR 看板", items[items.lastIndex - 1].label)
+        assertEquals("listening_calendar", items[items.lastIndex - 1].route)
+        assertEquals("设置", items.last().label)
+        assertEquals("settings", items.last().route)
+        assertEquals(true, routes.contains("listening_calendar"))
+        assertEquals(false, routes.contains("dlsite_login"))
+    }
+
+    @Test
+    fun primaryRouteResolution_treatsCalendarAsPrimaryAndDlsiteLoginAsSecondary() {
+        assertEquals(true, isPrimaryRoute("listening_calendar"))
+        assertEquals(false, isPrimaryRoute("dlsite_login"))
+        assertEquals("listening_calendar", resolvePrimaryRoute("listening_calendar", "library"))
+        assertEquals("library", resolvePrimaryRoute("dlsite_login", "library"))
+        assertEquals("listening_calendar", resolveCurrentPrimaryDestinationRoute("listening_calendar"))
+        assertEquals(null, resolveCurrentPrimaryDestinationRoute("dlsite_login"))
+    }
+
+    @Test
     fun resolveCurrentPrimaryDestinationRoute_treatsSearchAssistAsSecondary() {
         assertEquals(null, resolveCurrentPrimaryDestinationRoute("search_assist"))
         assertEquals(null, resolveCurrentPrimaryDestinationRoute("search_assist?keyword={keyword}"))
     }
 
     @Test
-    fun shouldScrollPrimaryRouteToTop_onlyWhenAlreadyAtPrimaryRoot() {
+    fun shouldScrollPrimaryRouteToTop_whenRequestedRouteIsCurrentPrimaryRoute() {
         assertEquals(true, shouldScrollPrimaryRouteToTop("playlists", "playlists", "playlists"))
-        assertEquals(false, shouldScrollPrimaryRouteToTop("playlists", "playlists", null))
+        assertEquals(true, shouldScrollPrimaryRouteToTop("playlists", "playlists", null))
         assertEquals(false, shouldScrollPrimaryRouteToTop("groups", "playlists", "playlists"))
+    }
+
+    @Test
+    fun shouldTriggerPrimaryRouteScrollToTop_whenVisualRouteIsAlreadySelected() {
+        assertEquals(
+            true,
+            shouldTriggerPrimaryRouteScrollToTop(
+                requestedRoute = "hot",
+                visualPrimaryRoute = "hot",
+                activePrimaryRoute = "library",
+                currentPrimaryRoute = "library"
+            )
+        )
+        assertEquals(
+            false,
+            shouldTriggerPrimaryRouteScrollToTop(
+                requestedRoute = "groups",
+                visualPrimaryRoute = "hot",
+                activePrimaryRoute = "library",
+                currentPrimaryRoute = "library"
+            )
+        )
     }
 
     @Test

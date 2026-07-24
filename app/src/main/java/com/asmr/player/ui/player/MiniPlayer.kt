@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.player
+package com.asmr.player.ui.player
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
@@ -13,6 +13,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
@@ -416,39 +417,48 @@ private fun MiniPlayerActivityBars(
     compactScale: Float,
     modifier: Modifier = Modifier
 ) {
-    val transition = rememberInfiniteTransition(label = "miniPlayerBars")
-    val heights = listOf(0, 60, 120, 180, 240, 300).map { delayMs ->
-        transition.animateFloat(
-            initialValue = 0.18f,
-            targetValue = 1f,
-            animationSpec = infiniteRepeatable(
-                animation = tween(
-                    durationMillis = 520,
-                    delayMillis = delayMs,
-                    easing = FastOutSlowInEasing
+    val animatedHeights = if (isPlaying) {
+        val transition = rememberInfiniteTransition(label = "miniPlayerBars")
+        arrayOf(0, 60, 120, 180, 240, 300).map { delayMs ->
+            transition.animateFloat(
+                initialValue = 0.18f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(
+                        durationMillis = 520,
+                        delayMillis = delayMs,
+                        easing = FastOutSlowInEasing
+                    ),
+                    repeatMode = RepeatMode.Reverse
                 ),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "miniPlayerBar$delayMs"
-        )
+                label = "miniPlayerBar$delayMs"
+            )
+        }
+    } else {
+        null
     }
 
-    Row(
-        modifier = modifier,
-        horizontalArrangement = Arrangement.spacedBy(1.8.dp * compactScale),
-        verticalAlignment = Alignment.CenterVertically
+    Canvas(
+        modifier = modifier.size(
+            width = ((2.6f * 6f + 1.8f * 5f) * compactScale).dp,
+            height = ((4f + 13.55f) * compactScale).dp
+        )
     ) {
-        heights.forEachIndexed { index, height ->
-            val maxHeight = (8.2f + (index % 3) * 1.8f + index * 0.35f) * compactScale
-            val minHeight = 4f * compactScale
-            Box(
-                modifier = Modifier
-                    .size(
-                        width = 2.6.dp * compactScale,
-                        height = (if (isPlaying) minHeight + height.value * maxHeight else minHeight).dp
-                    )
-                    .clip(RoundedCornerShape(99.dp))
-                    .background(tint)
+        val barWidth = (2.6f * compactScale).dp.toPx()
+        val spacing = (1.8f * compactScale).dp.toPx()
+        val minimumHeight = (4f * compactScale).dp.toPx()
+        for (index in 0 until 6) {
+            val maximumHeight =
+                ((8.2f + (index % 3) * 1.8f + index * 0.35f) * compactScale).dp.toPx()
+            val fraction = animatedHeights?.get(index)?.value ?: 0f
+            val barHeight = minimumHeight + fraction * maximumHeight
+            val left = index * (barWidth + spacing)
+            val top = (size.height - barHeight) / 2f
+            drawRoundRect(
+                color = tint,
+                topLeft = androidx.compose.ui.geometry.Offset(left, top),
+                size = androidx.compose.ui.geometry.Size(barWidth, barHeight),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(barWidth / 2f, barWidth / 2f)
             )
         }
     }

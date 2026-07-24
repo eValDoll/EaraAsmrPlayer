@@ -56,14 +56,12 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.asmr.player.domain.model.Album
-import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.CoverContentRow
+import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.NoImageLoadingIndicator
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
 import com.asmr.player.ui.library.AlbumMetaLeadingVisual.Icon
-import com.asmr.player.util.DlsiteAntiHotlink
-
 import com.asmr.player.ui.theme.AsmrTheme
 import kotlinx.coroutines.delay
 
@@ -83,6 +81,7 @@ private val AlbumOnlineDetailResizeSpring = spring<IntSize>(
 private const val AlbumOnlineDetailExitSettleMillis = 320L
 internal const val ALBUM_ITEM_CARD_TAG = "album_item_card"
 internal const val ALBUM_ITEM_STATS_TAG = "album_item_stats"
+internal const val ALBUM_ITEM_TAGS_TAG = "album_item_tags"
 
 private fun Album.hasRatingInfo(): Boolean {
     return (ratingValue?.let { it > 0.0 } == true) || ratingCount > 0
@@ -97,11 +96,15 @@ fun AlbumItem(
     modifier: Modifier = Modifier,
     onRjClick: ((String) -> Unit)? = null,
     onCircleClick: ((String) -> Unit)? = null,
+    onCircleLongClick: ((String) -> Unit)? = null,
     onCvClick: ((String) -> Unit)? = null,
+    onCvLongClick: ((String) -> Unit)? = null,
     onTagClick: ((String) -> Unit)? = null,
+    onTagLongClick: ((String) -> Unit)? = null,
     coverBadge: AlbumCoverBadge? = null,
     onlineDetailLoading: Boolean = false,
     onlineCvLoading: Boolean = onlineDetailLoading,
+    coverFadeIn: Boolean = true,
     coverReloadKey: Any? = null,
     coverRetainPainterDuringReload: Boolean = false,
 ) {
@@ -115,13 +118,8 @@ fun AlbumItem(
             bottomEnd = 0.dp
         )
     }
-    val data = album.coverThumbPath.takeIf { it.isNotBlank() && it.contains("_v2") }
-        .orEmpty()
-        .ifBlank { album.coverPath }
-        .ifEmpty { album.coverUrl }
-    val imageModel = remember(data) {
-        val headers = if (data.startsWith("http", ignoreCase = true)) DlsiteAntiHotlink.headersForImageUrl(data) else emptyMap()
-        if (headers.isEmpty()) data else CacheImageModel(data = data, headers = headers, keyTag = "dlsite")
+    val imageModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
+        albumCoverImageModel(album)
     }
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
@@ -157,6 +155,7 @@ fun AlbumItem(
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         placeholderCornerRadius = 0,
+                        fadeIn = coverFadeIn,
                         reloadKey = coverReloadKey,
                         retainPainterDuringReload = coverRetainPainterDuringReload,
                         peekAnySizeForInitial = true,
@@ -226,7 +225,7 @@ fun AlbumItem(
 
                 BalancedColumn(
                     modifier = Modifier
-                        .padding(top = 4.dp, bottom = 4.dp, end = 12.dp),
+                        .padding(top = 4.dp, bottom = 4.dp),
                     minGap = 4.dp,
                     maxGap = 12.dp,
                 ) {
@@ -245,6 +244,7 @@ fun AlbumItem(
                         modifier = Modifier.fillMaxWidth(),
                         rjOnClick = onRjClick?.let { click -> { click(rj) } },
                         circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
+                        circleOnLongClick = onCircleLongClick?.let { longClick -> { longClick(album.circle) } },
                         leadingVisual = Icon,
                         order = AlbumPrimaryMetaOrder.CircleThenRj,
                     )
@@ -257,6 +257,7 @@ fun AlbumItem(
                             cvText = album.cv,
                             modifier = Modifier.fillMaxWidth(),
                             onCvClick = onCvClick,
+                            onCvLongClick = onCvLongClick,
                             leadingVisual = Icon,
                         )
                     }
@@ -269,8 +270,11 @@ fun AlbumItem(
                     ) {
                         AlbumTagsSingleLine(
                             tags = album.tags,
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag(ALBUM_ITEM_TAGS_TAG),
                             onTagClick = onTagClick,
+                            onTagLongClick = onTagLongClick,
                             leadingVisual = Icon,
                         )
                     }
@@ -354,11 +358,15 @@ fun AlbumGridItem(
     modifier: Modifier = Modifier,
     onRjClick: ((String) -> Unit)? = null,
     onCircleClick: ((String) -> Unit)? = null,
+    onCircleLongClick: ((String) -> Unit)? = null,
     onCvClick: ((String) -> Unit)? = null,
+    onCvLongClick: ((String) -> Unit)? = null,
     onTagClick: ((String) -> Unit)? = null,
+    onTagLongClick: ((String) -> Unit)? = null,
     coverBadge: AlbumCoverBadge? = null,
     onlineDetailLoading: Boolean = false,
     onlineCvLoading: Boolean = onlineDetailLoading,
+    coverFadeIn: Boolean = true,
     coverReloadKey: Any? = null,
     coverRetainPainterDuringReload: Boolean = false,
 ) {
@@ -372,13 +380,8 @@ fun AlbumGridItem(
             bottomEnd = 0.dp
         )
     }
-    val data = album.coverThumbPath.takeIf { it.isNotBlank() && it.contains("_v2") }
-        .orEmpty()
-        .ifBlank { album.coverPath }
-        .ifEmpty { album.coverUrl }
-    val imageModel = remember(data) {
-        val headers = if (data.startsWith("http", ignoreCase = true)) DlsiteAntiHotlink.headersForImageUrl(data) else emptyMap()
-        if (headers.isEmpty()) data else CacheImageModel(data = data, headers = headers, keyTag = "dlsite")
+    val imageModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
+        albumCoverImageModel(album)
     }
     Column(
         modifier = modifier
@@ -395,6 +398,7 @@ fun AlbumGridItem(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 placeholderCornerRadius = 0,
+                fadeIn = coverFadeIn,
                 reloadKey = coverReloadKey,
                 retainPainterDuringReload = coverRetainPainterDuringReload,
                 peekAnySizeForInitial = true,
@@ -495,6 +499,7 @@ fun AlbumGridItem(
                 circle = album.circle,
                 modifier = Modifier.fillMaxWidth(),
                 circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
+                circleOnLongClick = onCircleLongClick?.let { longClick -> { longClick(album.circle) } },
                 leadingVisual = Icon,
             )
 
@@ -508,6 +513,7 @@ fun AlbumGridItem(
                 AlbumCvChipsFlow(
                     cvText = album.cv,
                     onCvClick = onCvClick,
+                    onCvLongClick = onCvLongClick,
                     leadingVisual = Icon,
                 )
             }
@@ -538,6 +544,7 @@ fun AlbumGridItem(
                     tags = album.tags,
                     modifier = Modifier.padding(top = 2.dp),
                     onTagClick = onTagClick,
+                    onTagLongClick = onTagLongClick,
                     leadingVisual = Icon,
                 )
             }

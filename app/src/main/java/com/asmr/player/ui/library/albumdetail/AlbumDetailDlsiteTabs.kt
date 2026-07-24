@@ -142,6 +142,7 @@ import com.asmr.player.ui.common.ImagePreviewPreparedItem
 import com.asmr.player.ui.common.ImagePreviewRequest
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
+import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
@@ -155,6 +156,7 @@ import com.asmr.player.util.RemoteSubtitleSource
 private val DlsiteGalleryThumbWidth = 140.dp
 private val DlsiteGalleryThumbHeight = 100.dp
 private val DlsiteGalleryThumbGap = 10.dp
+private val DlsiteGallerySectionHeight = 120.dp
 private const val DlsiteGalleryThumbCornerRadius = 12
 
 @Composable
@@ -163,6 +165,7 @@ private fun DlsiteGalleryLoadingRow() {
     LazyRow(
         modifier = Modifier
             .fillMaxWidth()
+            .height(DlsiteGallerySectionHeight)
             .padding(horizontal = AlbumDetailHorizontalPadding),
         horizontalArrangement = Arrangement.spacedBy(DlsiteGalleryThumbGap),
         contentPadding = PaddingValues(vertical = 10.dp)
@@ -201,7 +204,7 @@ private fun rememberDlsiteDirectoryListHeight(): Dp {
 
 @Composable
 private fun rememberStableOneDirectoryContainerHeight(): Dp {
-    return rememberDlsiteDirectoryListHeight() + 152.dp
+    return rememberDlsiteDirectoryListHeight() + 104.dp
 }
 
 @Composable
@@ -912,71 +915,83 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             .nestedScroll(chromeState.nestedScrollConnection)
             .thinScrollbar(listState),
         state = listState,
+        flingBehavior = rememberCalmScrollableFlingBehavior(),
         contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
     ) {
         item(key = "dlsite-header") { header() }
         item(key = "dlsite-gallery-section") {
             Column(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
-            Text(
-                text = "Gallery",
-                modifier = Modifier.padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
-            )
-            if (galleryUrls.isEmpty() && isInitialDlsiteLoading) {
-                DlsiteGalleryLoadingRow()
-            } else if (galleryUrls.isEmpty()) {
-                DlsiteSectionEmptyState(
-                    text = "暂无样图",
-                    artworkKind = DlsiteEmptyArtworkKind.Gallery,
-                    modifier = Modifier.then(dlsiteAnimatedSectionModifier(Modifier, animateIntro))
+                Text(
+                    text = "Gallery",
+                    modifier = Modifier.padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
                 )
-            } else {
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding),
-                    horizontalArrangement = Arrangement.spacedBy(DlsiteGalleryThumbGap),
-                    contentPadding = PaddingValues(vertical = 10.dp)
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(DlsiteGallerySectionHeight),
+                    contentAlignment = Alignment.Center
                 ) {
-                    items(items = galleryUrls, key = { it }, contentType = { "galleryThumb" }) { url ->
-                        val model = remember(url) {
-                            val headers = DlsiteAntiHotlink.headersForImageUrl(url)
-                            if (headers.isEmpty()) url else CacheImageModel(data = url, headers = headers, keyTag = "dlsite")
+                    when {
+                        galleryUrls.isEmpty() && isInitialDlsiteLoading -> {
+                            DlsiteGalleryLoadingRow()
                         }
-                        Card(
-                            modifier = Modifier.size(width = DlsiteGalleryThumbWidth, height = DlsiteGalleryThumbHeight).clickable {
-                                buildGalleryImagePreviewRequest(
-                                    galleryUrls = galleryUrls,
-                                    clickedUrl = url,
-                                    toPreviewItem = { galleryUrl ->
-                                        val headers = DlsiteAntiHotlink.headersForImageUrl(galleryUrl)
-                                        val previewModel: Any = if (headers.isEmpty()) {
-                                            galleryUrl
-                                        } else {
-                                            CacheImageModel(data = galleryUrl, headers = headers, keyTag = "dlsite")
-                                        }
-                                        ImagePreviewItem(
-                                            key = galleryUrl,
-                                            title = galleryUrl.substringBefore('?').substringAfterLast('/').ifBlank { "Gallery" },
-                                            imageModel = previewModel,
-                                            openPathOrUrl = galleryUrl
+                        galleryUrls.isEmpty() -> {
+                            DlsiteSectionEmptyState(
+                                text = "暂无样图",
+                                artworkKind = DlsiteEmptyArtworkKind.Gallery,
+                                modifier = Modifier.then(dlsiteAnimatedSectionModifier(Modifier, animateIntro))
+                            )
+                        }
+                        else -> {
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding),
+                                horizontalArrangement = Arrangement.spacedBy(DlsiteGalleryThumbGap),
+                                contentPadding = PaddingValues(vertical = 10.dp)
+                            ) {
+                                items(items = galleryUrls, key = { it }, contentType = { "galleryThumb" }) { url ->
+                                    val model = remember(url) {
+                                        val headers = DlsiteAntiHotlink.headersForImageUrl(url)
+                                        if (headers.isEmpty()) url else CacheImageModel(data = url, headers = headers, keyTag = "dlsite")
+                                    }
+                                    Card(
+                                        modifier = Modifier.size(width = DlsiteGalleryThumbWidth, height = DlsiteGalleryThumbHeight).clickable {
+                                            buildGalleryImagePreviewRequest(
+                                                galleryUrls = galleryUrls,
+                                                clickedUrl = url,
+                                                toPreviewItem = { galleryUrl ->
+                                                    val headers = DlsiteAntiHotlink.headersForImageUrl(galleryUrl)
+                                                    val previewModel: Any = if (headers.isEmpty()) {
+                                                        galleryUrl
+                                                    } else {
+                                                        CacheImageModel(data = galleryUrl, headers = headers, keyTag = "dlsite")
+                                                    }
+                                                    ImagePreviewItem(
+                                                        key = galleryUrl,
+                                                        title = galleryUrl.substringBefore('?').substringAfterLast('/').ifBlank { "Gallery" },
+                                                        imageModel = previewModel,
+                                                        openPathOrUrl = galleryUrl
+                                                    )
+                                                }
+                                            )?.let(onPreviewImages)
+                                        },
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        AsmrAsyncImage(
+                                            model = model,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            placeholderCornerRadius = DlsiteGalleryThumbCornerRadius,
+                                            loading = NoImageLoadingIndicator,
+                                            modifier = Modifier.fillMaxSize()
                                         )
                                     }
-                                )?.let(onPreviewImages)
-                            },
-                            shape = RoundedCornerShape(10.dp)
-                        ) {
-                            AsmrAsyncImage(
-                                model = model,
-                                contentDescription = null,
-                                contentScale = ContentScale.Crop,
-                                placeholderCornerRadius = DlsiteGalleryThumbCornerRadius,
-                                loading = NoImageLoadingIndicator,
-                                modifier = Modifier.fillMaxSize()
-                            )
+                                }
+                            }
                         }
                     }
                 }
-            }
             }
         }
         item(key = "dlsite-one-header") {
@@ -1367,6 +1382,7 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
             .nestedScroll(chromeState.nestedScrollConnection)
             .thinScrollbar(listState),
         state = listState,
+        flingBehavior = rememberCalmScrollableFlingBehavior(),
         contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
     ) {
         item(key = "dlplay-header:$treeStateKey") { header() }

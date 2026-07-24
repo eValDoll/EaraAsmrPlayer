@@ -1,7 +1,9 @@
 package com.asmr.player.domain.model
 
+import androidx.compose.runtime.Immutable
 import com.asmr.player.util.RemoteSubtitleSource
 
+@Immutable
 data class Track(
     val id: Long = 0L,
     val albumId: Long,

@@ -32,6 +32,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
@@ -269,7 +270,7 @@ class ImageCacheManager(
         models.forEach { m ->
             scope.launch {
                 preloadSemaphore.withPermit {
-                    runCatching { loadImageFromCache(model = m, size = size, cachePolicy = CachePolicy.CACHE_WARMUP) }
+                    runCatching { loadImage(model = m, size = size, cachePolicy = CachePolicy.CACHE_WARMUP) }
                 }
             }
         }
@@ -281,9 +282,19 @@ class ImageCacheManager(
 
     fun preload(scope: CoroutineScope, models: List<Any>, size: IntSize?): Job {
         return scope.launch(Dispatchers.IO) {
-            models.forEach { m ->
-                preloadSemaphore.withPermit {
-                    runCatching { loadImageFromCache(model = m, size = size, cachePolicy = CachePolicy.CACHE_WARMUP) }
+            coroutineScope {
+                models.forEach { model ->
+                    launch {
+                        preloadSemaphore.withPermit {
+                            runCatching {
+                                loadImage(
+                                    model = model,
+                                    size = size,
+                                    cachePolicy = CachePolicy.CACHE_WARMUP
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -316,6 +327,7 @@ class ImageCacheManager(
 
     private suspend fun decodeBytes(bytes: ByteArray): Bitmap = withContext(decodeDispatcher) {
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+            ?.also { it.prepareToDraw() }
             ?: throw IllegalStateException("Disk cache decode failed")
     }
 
