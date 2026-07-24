@@ -1225,7 +1225,7 @@ fun MainContainer(
                         Triple(Icons.AutoMirrored.Rounded.QueueMusic, "我的列表", "playlists"),
                         Triple(Icons.Rounded.Folder, "我的分组", "groups"),
                         Triple(Icons.Rounded.Download, "下载管理", "downloads"),
-                        Triple(Icons.Rounded.Route, "我的足迹", "listening_calendar"),
+                        Triple(Icons.Rounded.Route, "ASMR 看板", "listening_calendar"),
                         Triple(Icons.Rounded.Settings, "设置", "settings")
                     )
 
@@ -1429,7 +1429,7 @@ fun MainContainer(
                                                     groupName.ifBlank { "我的分组" }
                                                 resolvedTitleRoute == "settings" -> "设置"
                                                 resolvedTitleRoute == "downloads" -> "下载管理"
-                                                resolvedTitleRoute == "listening_calendar" -> "我的足迹"
+                                                resolvedTitleRoute == "listening_calendar" -> "ASMR 看板"
                                                 resolvedTitleRoute == "dlsite_login" -> "DLsite 登录"
                                                 resolvedTitleRoute?.startsWith("playlist_picker") == true -> "添加到我的列表"
                                                 resolvedTitleRoute?.startsWith("album_detail") == true -> "专辑详情"
