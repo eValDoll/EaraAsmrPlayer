@@ -236,7 +236,7 @@ class SearchAssistViewModel @Inject constructor(
     private companion object {
         const val MAX_RECOMMENDATION_SEEDS = 20
         const val MAX_RECOMMENDATION_EXCLUDES = 200
-        const val RECOMMENDATION_DISPLAY_LIMIT = 20
+        const val RECOMMENDATION_DISPLAY_LIMIT = 10
     }
 }
 
