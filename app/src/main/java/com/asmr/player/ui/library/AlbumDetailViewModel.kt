@@ -1584,10 +1584,17 @@ class AlbumDetailViewModel @Inject constructor(
                     ?.uppercase()
                     .orEmpty()
                 val originalRj = jpnWorkno.ifBlank { latestBase.ifBlank { keyRj } }
-                val backendRjs = listOf(keyRj, originalRj, latest.dlsiteWorkno, latestBase)
-                    .map { it.trim().uppercase() }
-                    .filter { RJ_CODE_REGEX.matches(it) }
-                    .distinct()
+                val preferInitialCollectedRj = latest.displayAlbum.hasAsmrOne &&
+                    !latest.isDlsiteLanguageUserSelected &&
+                    RJ_CODE_REGEX.matches(latestBase)
+                val backendRjs = asmrOneTrackRjCandidates(
+                    baseRj = latestBase,
+                    currentRj = keyRj,
+                    dlsiteWorkno = latest.dlsiteWorkno,
+                    originalRj = originalRj,
+                    selectedLang = selectedLang,
+                    preferInitialCollectedRj = preferInitialCollectedRj
+                )
                 fun finishWithResolvedAsmrOneTree(
                     workId: String?,
                     site: Int?,
@@ -1632,6 +1639,22 @@ class AlbumDetailViewModel @Inject constructor(
                         site = null,
                         tree = backendFallback.third
                     )
+                }
+
+                if (preferInitialCollectedRj) {
+                    val preferredInitial = resolveAsmrOneWork(latestBase)
+                    if (preferredInitial != null) {
+                        val (preferredWorkId, preferredSite) = preferredInitial
+                        val preferredTree = getAsmrOneTracksCached(preferredSite, preferredWorkId)
+                        if (preferredTree.isNotEmpty()) {
+                            finishWithResolvedAsmrOneTree(
+                                workId = preferredWorkId,
+                                site = preferredSite,
+                                tree = preferredTree
+                            )
+                            return@launch
+                        }
+                    }
                 }
 
                 val collected = isAsmrOneCollected(originalRj, timeoutMs = 1_200L)
@@ -1697,30 +1720,21 @@ class AlbumDetailViewModel @Inject constructor(
                     if (site != null) asmrOneCrawler.getDetailsFromSite(site, originalWorkId) else asmrOneCrawler.getDetails(originalWorkId)
                 }.getOrNull()
 
-                val otherId = if (selectedLang == "JPN") {
-                    null
-                } else {
-                    val other = originalDetails?.other_language_editions_in_db.orEmpty()
-                    other.firstOrNull { it.source_id.orEmpty().trim().equals(keyRj, ignoreCase = true) }?.id
-                        ?: when (selectedLang) {
-                            "CHI_HANS" -> other.firstOrNull { it.lang.orEmpty().contains("简体") }?.id
-                            "CHI_HANT" -> other.firstOrNull { it.lang.orEmpty().contains("繁體") }?.id
-                            "KO_KR" -> other.firstOrNull { it.lang.orEmpty().contains("韩") || it.lang.orEmpty().contains("韓") }?.id
-                            else -> null
-                        }
-                }
-
-                val finalWorkId = otherId?.toString()?.trim().orEmpty().ifBlank { originalWorkId }
-                val tree = getAsmrOneTracksCached(site, finalWorkId).ifEmpty {
-                    if (finalWorkId != originalWorkId) getAsmrOneTracksCached(site, originalWorkId) else emptyList()
-                }
-                val workId = finalWorkId
+                val workId = resolveAsmrOneTrackWorkId(
+                    resolvedWorkId = originalWorkId,
+                    resolvedDetails = originalDetails,
+                    selectedLang = selectedLang,
+                    selectedRjs = backendRjs
+                )
+                val tree = workId
+                    ?.let { getAsmrOneTracksCached(site, it) }
+                    .orEmpty()
                 if (token != asmrOneLoadToken) {
                     asmrOneAttemptedRj.remove(keyRj)
                     finishAsmrOneLoad(keyRj, resolved = false)
                     return@launch
                 }
-                if (workId.isBlank()) {
+                if (workId.isNullOrBlank()) {
                     if (loadBackendFallbackAndFinishIfFound()) return@launch
                     asmrOneAttemptedRj.remove(keyRj)
                     finishAsmrOneLoad(keyRj, resolved = true)
@@ -1841,32 +1855,6 @@ class AlbumDetailViewModel @Inject constructor(
                 )
             }
         }
-    }
-
-    private suspend fun fetchAsmrOneWithFallback(
-        primaryRj: String,
-        fallbackRj: String
-    ): Triple<String?, Int?, List<AsmrOneTrackNodeResponse>> {
-        suspend fun pickExact(workNo: String): Triple<String?, Int?, List<AsmrOneTrackNodeResponse>> {
-            val normalized = workNo.trim().uppercase()
-            if (normalized.isBlank()) return Triple(null, null, emptyList())
-            val resolved = resolveAsmrOneWork(normalized) ?: return Triple(null, null, emptyList())
-            val (workId, site) = resolved
-            val tree = getAsmrOneTracksCached(site, workId)
-            return Triple(workId, site, tree)
-        }
-
-        val primary = pickExact(primaryRj)
-        if (primary.first != null) return primary
-
-        val normalizedFallback = fallbackRj.trim()
-        val normalizedPrimary = primaryRj.trim()
-        if (normalizedFallback.isNotBlank() && !normalizedFallback.equals(normalizedPrimary, ignoreCase = true)) {
-            val fallback = pickExact(normalizedFallback)
-            if (fallback.first != null) return fallback
-        }
-
-        return Triple(null, null, emptyList())
     }
 
     private fun albumFromInitialHint(rj: String, hint: AlbumCoverHint?): Album {
