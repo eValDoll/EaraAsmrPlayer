@@ -30,6 +30,7 @@ internal const val SEARCH_ASSIST_RESULT_CHINESE_TRANSLATED_ONLY_KEY = "searchChi
 internal const val SEARCH_ASSIST_RESULT_COLLECTED_ONLY_KEY = "searchCollectedOnly"
 internal const val SEARCH_ASSIST_RESULT_COLLECTED_SORT_KEY = "searchCollectedSortName"
 internal const val SEARCH_ASSIST_RESULT_LOCALE_KEY = "searchLocale"
+internal const val SEARCH_ASSIST_RECOMMENDATION_DISPLAY_LIMIT = 10
 
 data class SearchAssistSearchRequest(
     val keyword: String = "",
@@ -208,7 +209,7 @@ class SearchAssistViewModel @Inject constructor(
         val recommendations = items
             .map { item -> item.toSearchAssistRecommendation() }
             .filter { recommendation -> recommendation.album.rjCode.isNotBlank() }
-            .take(RECOMMENDATION_DISPLAY_LIMIT)
+            .take(SEARCH_ASSIST_RECOMMENDATION_DISPLAY_LIMIT)
         _uiState.update {
             it.copy(
                 isLoadingRecommendations = false,
@@ -241,19 +242,18 @@ class SearchAssistViewModel @Inject constructor(
             asmrOneAvailabilityApi.getRecommendations(
                 seedRjs = listenedRjs.take(MAX_RECOMMENDATION_SEEDS),
                 excludeRjs = listenedRjs,
-                limit = RECOMMENDATION_DISPLAY_LIMIT
+                limit = SEARCH_ASSIST_RECOMMENDATION_DISPLAY_LIMIT
             )
         } else {
             asmrOneAvailabilityApi.continueRecommendations(
                 cursor = recommendationCursor,
-                limit = RECOMMENDATION_DISPLAY_LIMIT
+                limit = SEARCH_ASSIST_RECOMMENDATION_DISPLAY_LIMIT
             )
         }
 
     private companion object {
         const val MAX_RECOMMENDATION_SEEDS = 20
         const val MAX_RECOMMENDATION_EXCLUDES = 200
-        const val RECOMMENDATION_DISPLAY_LIMIT = 10
     }
 }
 
