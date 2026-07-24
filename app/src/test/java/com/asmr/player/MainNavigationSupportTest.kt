@@ -133,7 +133,7 @@ class MainNavigationSupportTest {
         val items = bottomChromeNavItems()
         val routes = items.map { it.route }
 
-        assertEquals("我的足迹", items[items.lastIndex - 1].label)
+        assertEquals("ASMR 看板", items[items.lastIndex - 1].label)
         assertEquals("listening_calendar", items[items.lastIndex - 1].route)
         assertEquals("设置", items.last().label)
         assertEquals("settings", items.last().route)

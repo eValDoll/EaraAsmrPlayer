@@ -56,7 +56,7 @@ fun AppSupportStatusSection(
     modifier: Modifier = Modifier,
     drawerStatusViewModel: DrawerStatusViewModel = hiltViewModel()
 ) {
-    // 完整收听数据集中在「我的足迹」页面，这里仅保留站点状态测试。
+    // 完整收听数据集中在「ASMR 看板」页面，这里仅保留站点状态测试。
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SiteStatusSection(viewModel = drawerStatusViewModel)
     }
