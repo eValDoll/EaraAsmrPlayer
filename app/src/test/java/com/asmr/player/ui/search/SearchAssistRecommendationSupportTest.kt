@@ -1,9 +1,8 @@
 package com.asmr.player.ui.search
 
 import com.asmr.player.data.remote.api.AsmrOneRecommendationItem
+import com.asmr.player.data.remote.api.AsmrOneRecommendationResponse
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class SearchAssistRecommendationSupportTest {
@@ -33,38 +32,27 @@ class SearchAssistRecommendationSupportTest {
     }
 
     @Test
-    fun recommendationExclusionsContainEveryMatchedLanguageEdition() {
-        val exclusions = AsmrOneRecommendationItem(
-            rj = "RJ123456",
-            originalWorkno = "RJ654321",
-            matchedRjs = listOf("RJ123456", "RJ777777", "rj888888")
-        ).recommendationExclusionRjs()
+    fun continuationCursorRequiresHasMore() {
+        val activeCursor = AsmrOneRecommendationResponse(
+            nextCursor = "  next-page  ",
+            hasMore = true
+        ).recommendationContinuationCursor()
+        val exhaustedCursor = AsmrOneRecommendationResponse(
+            nextCursor = "stale-cursor",
+            hasMore = false
+        ).recommendationContinuationCursor()
 
-        assertEquals(
-            listOf("RJ123456", "RJ654321", "RJ777777", "RJ888888"),
-            exclusions
-        )
+        assertEquals("next-page", activeCursor)
+        assertEquals("", exhaustedCursor)
     }
 
     @Test
-    fun exclusionPlanKeepsExactLimitAndResetsOnlyAfterOverflow() {
-        val listened = (100000 until 100190).map { "RJ$it" }
-        val seenAtLimit = (200000 until 200010).map { "RJ$it" }
+    fun continuationCursorRejectsBlankValue() {
+        val cursor = AsmrOneRecommendationResponse(
+            nextCursor = "   ",
+            hasMore = true
+        ).recommendationContinuationCursor()
 
-        val exactLimitPlan = planRecommendationExclusions(
-            listenedRjs = listened,
-            recommendationSeenRjs = seenAtLimit,
-            maxExcludes = 200
-        )
-        assertFalse(exactLimitPlan.resetRecommendationSeen)
-        assertEquals(200, exactLimitPlan.excludeRjs.size)
-
-        val overflowPlan = planRecommendationExclusions(
-            listenedRjs = listened,
-            recommendationSeenRjs = seenAtLimit + "RJ200010",
-            maxExcludes = 200
-        )
-        assertTrue(overflowPlan.resetRecommendationSeen)
-        assertEquals(listened, overflowPlan.excludeRjs)
+        assertEquals("", cursor)
     }
 }

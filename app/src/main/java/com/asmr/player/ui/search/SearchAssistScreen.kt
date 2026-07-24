@@ -364,7 +364,8 @@ internal fun SearchAssistContent(
                         trailing = {
                             TextButton(
                                 onClick = onRefreshRecommendations,
-                                enabled = !uiState.isLoadingRecommendations,
+                                enabled = !uiState.isLoadingRecommendations &&
+                                    uiState.hasMoreRecommendations,
                                 modifier = Modifier.testTag(SEARCH_ASSIST_RECOMMENDATION_REFRESH_TAG)
                             ) {
                                 Icon(
@@ -372,7 +373,13 @@ internal fun SearchAssistContent(
                                     contentDescription = null,
                                     modifier = Modifier.size(16.dp)
                                 )
-                                Text(if (uiState.isLoadingRecommendations) "推荐中" else "换一批")
+                                Text(
+                                    when {
+                                        uiState.isLoadingRecommendations -> "推荐中"
+                                        uiState.hasMoreRecommendations -> "换一批"
+                                        else -> "已看完"
+                                    }
+                                )
                             }
                         }
                     ) {
