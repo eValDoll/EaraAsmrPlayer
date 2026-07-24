@@ -62,7 +62,8 @@ class SearchAssistViewModel @Inject constructor(
     private val searchCacheStore: SearchCacheStore,
     private val hotListeningApi: HotListeningApi,
     private val asmrOneAvailabilityApi: AsmrOneAvailabilityApi,
-    private val listeningRecordRepository: ListeningRecordRepository
+    private val listeningRecordRepository: ListeningRecordRepository,
+    private val recommendationSessionCache: SearchRecommendationSessionCache
 ) : ViewModel() {
     private val _uiState = MutableStateFlow(SearchAssistUiState())
     val uiState: StateFlow<SearchAssistUiState> = _uiState.asStateFlow()
@@ -176,6 +177,13 @@ class SearchAssistViewModel @Inject constructor(
             }
             return
         }
+        recommendationSessionCache.read(
+            seedRjs = listenedRjs.take(MAX_RECOMMENDATION_SEEDS),
+            excludeRjs = listenedRjs
+        )?.let { cachedResponse ->
+            applyRecommendationResponse(cachedResponse)
+            return
+        }
         loadRecommendationBatch()
     }
 
@@ -186,6 +194,15 @@ class SearchAssistViewModel @Inject constructor(
             _uiState.update { it.copy(isLoadingRecommendations = false) }
             return
         }
+        recommendationSessionCache.write(
+            seedRjs = listenedRjs.take(MAX_RECOMMENDATION_SEEDS),
+            excludeRjs = listenedRjs,
+            response = response
+        )
+        applyRecommendationResponse(response)
+    }
+
+    private fun applyRecommendationResponse(response: AsmrOneRecommendationResponse) {
         val items = response.items.orEmpty()
         recommendationCursor = response.recommendationContinuationCursor()
         val recommendations = items
