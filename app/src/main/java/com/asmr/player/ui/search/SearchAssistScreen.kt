@@ -85,11 +85,24 @@ internal const val SEARCH_ASSIST_HISTORY_CLEAR_TAG = "search_assist_history_clea
 internal const val SEARCH_ASSIST_RECOMMENDATION_CARD_TAG = "search_assist_recommendation_card"
 internal const val SEARCH_ASSIST_RECOMMENDATION_REFRESH_TAG = "search_assist_recommendation_refresh"
 internal const val SEARCH_ASSIST_CHROME_TAG = "search_assist_chrome"
+internal const val SEARCH_ASSIST_HOT_CVS_SECTION_TAG = "search_assist_hot_cvs_section"
+internal const val SEARCH_ASSIST_HOT_TAGS_SECTION_TAG = "search_assist_hot_tags_section"
+internal const val SEARCH_ASSIST_RECOMMENDATION_SECTION_TAG = "search_assist_recommendation_section"
 private const val SearchAssistCollapsedRows = 2
+private const val SearchAssistRecommendationColumns = 2
+private const val SearchAssistRecommendationRows =
+    (SEARCH_ASSIST_RECOMMENDATION_DISPLAY_LIMIT + SearchAssistRecommendationColumns - 1) /
+        SearchAssistRecommendationColumns
 private val SearchAssistChromeContentGap = 8.dp
-private val SearchAssistSkeletonChipHeight = 30.dp
-private val SearchAssistSkeletonWorkHeightCompact = 76.dp
-private val SearchAssistSkeletonWorkHeightExpanded = 84.dp
+private val SearchAssistSectionHeaderHeight = 32.dp
+private val SearchAssistChipHeight = 30.dp
+private val SearchAssistChipVerticalSpacing = 6.dp
+private val SearchAssistCollapsedChipFlowHeight =
+    SearchAssistChipHeight * SearchAssistCollapsedRows +
+        SearchAssistChipVerticalSpacing * (SearchAssistCollapsedRows - 1)
+private val SearchAssistWorkHeightCompact = 76.dp
+private val SearchAssistWorkHeightExpanded = 84.dp
+private val SearchAssistWorkRowSpacing = 8.dp
 
 @Composable
 fun SearchAssistScreen(
@@ -320,10 +333,16 @@ internal fun SearchAssistContent(
 
             if (uiState.isLoadingSuggestions) {
                 item(contentType = "hotCvsLoading") {
-                    SearchAssistTermSectionSkeleton(title = "热门声优")
+                    SearchAssistTermSectionSkeleton(
+                        title = "热门声优",
+                        modifier = Modifier.testTag(SEARCH_ASSIST_HOT_CVS_SECTION_TAG)
+                    )
                 }
                 item(contentType = "hotTagsLoading") {
-                    SearchAssistTermSectionSkeleton(title = "热门标签")
+                    SearchAssistTermSectionSkeleton(
+                        title = "热门标签",
+                        modifier = Modifier.testTag(SEARCH_ASSIST_HOT_TAGS_SECTION_TAG)
+                    )
                 }
             } else {
                 if (uiState.suggestions.hotCvs.isNotEmpty()) {
@@ -333,7 +352,8 @@ internal fun SearchAssistContent(
                             terms = uiState.suggestions.hotCvs,
                             expanded = hotCvsExpanded,
                             onExpandedChange = { hotCvsExpanded = it },
-                            onTermClick = { submit(it) }
+                            onTermClick = { submit(it) },
+                            modifier = Modifier.testTag(SEARCH_ASSIST_HOT_CVS_SECTION_TAG)
                         )
                     }
                 }
@@ -344,7 +364,8 @@ internal fun SearchAssistContent(
                             terms = uiState.suggestions.hotTags,
                             expanded = hotTagsExpanded,
                             onExpandedChange = { hotTagsExpanded = it },
-                            onTermClick = { submit(it) }
+                            onTermClick = { submit(it) },
+                            modifier = Modifier.testTag(SEARCH_ASSIST_HOT_TAGS_SECTION_TAG)
                         )
                     }
                 }
@@ -354,19 +375,24 @@ internal fun SearchAssistContent(
                 item(contentType = "recommendationsLoading") {
                     SearchAssistWorkSectionSkeleton(
                         title = "猜你喜欢",
-                        compact = isCompact
+                        compact = isCompact,
+                        modifier = Modifier.testTag(SEARCH_ASSIST_RECOMMENDATION_SECTION_TAG)
                     )
                 }
             } else if (uiState.suggestions.recommendations.isNotEmpty()) {
                 item(contentType = "recommendations") {
                     SearchAssistSection(
                         title = "猜你喜欢",
+                        modifier = Modifier.testTag(SEARCH_ASSIST_RECOMMENDATION_SECTION_TAG),
                         trailing = {
                             TextButton(
                                 onClick = onRefreshRecommendations,
                                 enabled = !uiState.isLoadingRecommendations &&
                                     uiState.hasMoreRecommendations,
-                                modifier = Modifier.testTag(SEARCH_ASSIST_RECOMMENDATION_REFRESH_TAG)
+                                modifier = Modifier
+                                    .height(SearchAssistSectionHeaderHeight)
+                                    .testTag(SEARCH_ASSIST_RECOMMENDATION_REFRESH_TAG),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Rounded.Refresh,
@@ -383,12 +409,16 @@ internal fun SearchAssistContent(
                             }
                         }
                     ) {
-                        val rows = uiState.suggestions.recommendations.chunked(2)
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        val rows = uiState.suggestions.recommendations
+                            .chunked(SearchAssistRecommendationColumns)
+                        Column(
+                            modifier = Modifier.height(searchAssistRecommendationGridHeight(isCompact)),
+                            verticalArrangement = Arrangement.spacedBy(SearchAssistWorkRowSpacing)
+                        ) {
                             rows.forEach { row ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(SearchAssistWorkRowSpacing)
                                 ) {
                                     row.forEach { recommendation ->
                                         SearchAssistRecommendationCard(
@@ -467,9 +497,15 @@ internal fun SearchAssistContent(
 }
 
 @Composable
-private fun SearchAssistTermSectionSkeleton(title: String) {
-    SearchAssistSection(title = title) {
-        SearchAssistChipFlow(expanded = false) {
+private fun SearchAssistTermSectionSkeleton(
+    title: String,
+    modifier: Modifier = Modifier
+) {
+    SearchAssistSection(title = title, modifier = modifier) {
+        SearchAssistChipFlow(
+            expanded = false,
+            reserveCollapsedHeight = true
+        ) {
             listOf(0.26f, 0.22f, 0.30f, 0.18f, 0.24f, 0.28f).forEach { widthFraction ->
                 SearchAssistTextChipSkeleton(widthFraction = widthFraction)
             }
@@ -480,14 +516,18 @@ private fun SearchAssistTermSectionSkeleton(title: String) {
 @Composable
 private fun SearchAssistWorkSectionSkeleton(
     title: String,
-    compact: Boolean
+    compact: Boolean,
+    modifier: Modifier = Modifier
 ) {
-    SearchAssistSection(title = title) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            repeat(2) {
+    SearchAssistSection(title = title, modifier = modifier) {
+        Column(
+            modifier = Modifier.height(searchAssistRecommendationGridHeight(compact)),
+            verticalArrangement = Arrangement.spacedBy(SearchAssistWorkRowSpacing)
+        ) {
+            repeat(SearchAssistRecommendationRows) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(SearchAssistWorkRowSpacing)
                 ) {
                     SearchAssistWorkChipSkeleton(
                         compact = compact,
@@ -506,17 +546,20 @@ private fun SearchAssistWorkSectionSkeleton(
 @Composable
 private fun SearchAssistSection(
     title: String,
+    modifier: Modifier = Modifier,
     trailing: @Composable (() -> Unit)? = null,
     content: @Composable () -> Unit
 ) {
     Column(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(SearchAssistSectionHeaderHeight),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text(
@@ -545,10 +588,12 @@ private fun SearchAssistTermSection(
     terms: List<SearchSuggestionTerm>,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
-    onTermClick: (String) -> Unit
+    onTermClick: (String) -> Unit,
+    modifier: Modifier = Modifier
 ) {
     SearchAssistSection(
         title = title,
+        modifier = modifier,
         trailing = {
             ExpandCollapseIconButton(
                 expanded = expanded,
@@ -572,7 +617,7 @@ private fun SearchAssistTextChipSkeleton(
     AsmrShimmerPlaceholder(
         modifier = Modifier
             .fillMaxWidth(widthFraction)
-            .height(SearchAssistSkeletonChipHeight)
+            .height(SearchAssistChipHeight)
             .clip(shape),
         cornerRadius = 7
     )
@@ -598,11 +643,12 @@ private fun SearchAssistTextChip(
     Row(
         modifier = Modifier
             .widthIn(max = 220.dp)
+            .height(SearchAssistChipHeight)
             .clip(shape)
             .background(containerColor)
             .border(1.dp, borderColor, shape)
             .clickable(onClick = onClick)
-            .padding(horizontal = 9.dp, vertical = 5.dp),
+            .padding(horizontal = 9.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Text(
@@ -621,11 +667,7 @@ private fun SearchAssistWorkChipSkeleton(
     modifier: Modifier = Modifier
 ) {
     val shape = RoundedCornerShape(8.dp)
-    val cardHeight = if (compact) {
-        SearchAssistSkeletonWorkHeightCompact
-    } else {
-        SearchAssistSkeletonWorkHeightExpanded
-    }
+    val cardHeight = searchAssistRecommendationCardHeight(compact)
     Row(
         modifier = modifier
             .height(cardHeight)
@@ -685,7 +727,10 @@ private fun SearchAssistTermChips(
     expanded: Boolean,
     onTermClick: (String) -> Unit
 ) {
-    SearchAssistChipFlow(expanded = expanded) {
+    SearchAssistChipFlow(
+        expanded = expanded,
+        reserveCollapsedHeight = true
+    ) {
         terms.forEach { term ->
             SearchAssistTextChip(
                 text = term.value,
@@ -699,14 +744,20 @@ private fun SearchAssistTermChips(
 private fun SearchAssistChipFlow(
     expanded: Boolean,
     modifier: Modifier = Modifier,
+    reserveCollapsedHeight: Boolean = false,
     content: @Composable () -> Unit
 ) {
+    val layoutModifier = if (!expanded && reserveCollapsedHeight) {
+        modifier.height(SearchAssistCollapsedChipFlowHeight)
+    } else {
+        modifier
+    }
     Layout(
         content = content,
-        modifier = modifier.fillMaxWidth()
+        modifier = layoutModifier.fillMaxWidth()
     ) { measurables, constraints ->
         val horizontalSpacingPx = 8.dp.roundToPx()
-        val verticalSpacingPx = 6.dp.roundToPx()
+        val verticalSpacingPx = SearchAssistChipVerticalSpacing.roundToPx()
         val maxWidth = constraints.maxWidth
         val placements = mutableListOf<SearchAssistChipPlacement>()
         var x = 0
@@ -817,7 +868,7 @@ private fun SearchAssistRecommendationCard(
 
     Row(
         modifier = modifier
-            .height(if (compact) 76.dp else 84.dp)
+            .height(searchAssistRecommendationCardHeight(compact))
             .clip(shape)
             .background(containerColor)
             .border(
@@ -837,7 +888,7 @@ private fun SearchAssistRecommendationCard(
             loading = NoImageLoadingIndicator,
             modifier = Modifier
                 .aspectRatio(1f)
-                .height(if (compact) 76.dp else 84.dp)
+                .height(searchAssistRecommendationCardHeight(compact))
                 .clip(RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp))
         )
         Column(
@@ -865,6 +916,13 @@ private fun SearchAssistRecommendationCard(
         }
     }
 }
+
+private fun searchAssistRecommendationCardHeight(compact: Boolean) =
+    if (compact) SearchAssistWorkHeightCompact else SearchAssistWorkHeightExpanded
+
+private fun searchAssistRecommendationGridHeight(compact: Boolean) =
+    searchAssistRecommendationCardHeight(compact) * SearchAssistRecommendationRows +
+        SearchAssistWorkRowSpacing * (SearchAssistRecommendationRows - 1)
 
 @Composable
 private fun AssistMutedText(text: String) {

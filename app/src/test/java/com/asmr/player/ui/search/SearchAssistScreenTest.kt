@@ -1,5 +1,6 @@
 package com.asmr.player.ui.search
 
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -337,4 +338,71 @@ class SearchAssistScreenTest {
         composeRule.onNodeWithText("推荐作品").assertExists()
         composeRule.onAllNodesWithText("RJ333333").assertCountEquals(0)
     }
+
+    @Test
+    fun loadingAndLoadedSuggestionSectionsKeepTheSameHeight() {
+        val uiState = mutableStateOf(SearchAssistUiState())
+        val hotCvs = (1..8).map { index ->
+            SearchSuggestionTerm(value = "热门声优 $index", count = 10 - index, rank = index)
+        }
+        val hotTags = (1..8).map { index ->
+            SearchSuggestionTerm(value = "热门标签 $index", count = 10 - index, rank = index)
+        }
+        val recommendations = (1..SEARCH_ASSIST_RECOMMENDATION_DISPLAY_LIMIT).map { index ->
+            SearchAssistRecommendation(
+                album = Album(
+                    title = "推荐作品 $index",
+                    path = "",
+                    workId = "RJ${index.toString().padStart(6, '0')}",
+                    rjCode = "RJ${index.toString().padStart(6, '0')}",
+                    cv = "声优 $index"
+                )
+            )
+        }
+
+        composeRule.setContent {
+            AsmrPlayerTheme {
+                SearchAssistContent(
+                    windowSizeClass = testWindowSizeClass(),
+                    initialRequest = SearchAssistSearchRequest(),
+                    uiState = uiState.value,
+                    onSubmitSearch = {},
+                    onClearHistory = {},
+                    onRefreshRecommendations = {}
+                )
+            }
+        }
+
+        val sectionTags = listOf(
+            SEARCH_ASSIST_HOT_CVS_SECTION_TAG,
+            SEARCH_ASSIST_HOT_TAGS_SECTION_TAG,
+            SEARCH_ASSIST_RECOMMENDATION_SECTION_TAG
+        )
+        val loadingHeights = sectionTags.associateWith(::sectionHeight)
+
+        composeRule.runOnIdle {
+            uiState.value = SearchAssistUiState(
+                suggestions = SearchSuggestionsUiData(
+                    hotCvs = hotCvs,
+                    hotTags = hotTags,
+                    recommendations = recommendations
+                ),
+                isLoadingSuggestions = false,
+                isLoadingRecommendations = false,
+                hasMoreRecommendations = true
+            )
+        }
+
+        sectionTags.forEach { tag ->
+            assertEquals(
+                "Section $tag changed height after loading",
+                loadingHeights.getValue(tag),
+                sectionHeight(tag),
+                0.5f
+            )
+        }
+    }
+
+    private fun sectionHeight(tag: String): Float =
+        composeRule.onAllNodesWithTag(tag).fetchSemanticsNodes().single().boundsInRoot.height
 }
