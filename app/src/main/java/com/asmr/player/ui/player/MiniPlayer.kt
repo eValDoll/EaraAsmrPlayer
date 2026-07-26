@@ -122,7 +122,7 @@ fun MiniPlayer(
             .map { it.isPlaying }
             .distinctUntilChanged()
     }.collectAsState(initial = false)
-    val progressState by remember(viewModel, displayMode) {
+    val progressState = remember(viewModel, displayMode) {
         if (displayMode == MiniPlayerDisplayMode.Expanded) {
             viewModel.playback
                 .map { MiniPlayerProgress(it.positionMs, it.durationMs) }
@@ -164,8 +164,6 @@ fun MiniPlayer(
             optimisticIsPlaying = null
         }
     }
-
-    val progress = progressState.fraction
 
     AnimatedContent(
         targetState = displayMode,
@@ -328,7 +326,7 @@ fun MiniPlayer(
                             }
 
                             LinearProgressIndicator(
-                                progress = { progress },
+                                progress = { progressState.value.fraction },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height((if (largeLayout) 3.dp else 2.dp) * resolvedCompactScale),

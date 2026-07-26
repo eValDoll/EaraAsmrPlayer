@@ -104,6 +104,7 @@ fun AlbumItem(
     coverBadge: AlbumCoverBadge? = null,
     onlineDetailLoading: Boolean = false,
     onlineCvLoading: Boolean = onlineDetailLoading,
+    animateOnlineDetails: Boolean = true,
     coverFadeIn: Boolean = true,
     coverReloadKey: Any? = null,
     coverRetainPainterDuringReload: Boolean = false,
@@ -222,6 +223,9 @@ fun AlbumItem(
                         }
                     }
                 }
+                val tagsStateContent = remember(album.tags) {
+                    album.tags.joinToString(separator = "\n")
+                }
 
                 BalancedColumn(
                     modifier = Modifier
@@ -251,7 +255,8 @@ fun AlbumItem(
 
                     AlbumOnlineDetailAnimatedLine(
                         content = if (onlineCvLoading) "" else album.cv,
-                        loading = onlineCvLoading
+                        loading = onlineCvLoading,
+                        animated = animateOnlineDetails,
                     ) {
                         AlbumCvChipsSingleLine(
                             cvText = album.cv,
@@ -262,8 +267,9 @@ fun AlbumItem(
                         )
                     }
                     AlbumOnlineDetailAnimatedLine(
-                        content = album.tags.joinToString(separator = "\n"),
+                        content = tagsStateContent,
                         loading = onlineDetailLoading,
+                        animated = animateOnlineDetails,
                         loadingContent = {
                             AlbumDetailSkeletonLine(widthFraction = 0.86f)
                         }
@@ -282,6 +288,7 @@ fun AlbumItem(
                     AlbumOnlineDetailAnimatedLine(
                         content = statsText,
                         loading = onlineDetailLoading && !album.hasRatingInfo(),
+                        animated = animateOnlineDetails,
                         modifier = Modifier.testTag(ALBUM_ITEM_STATS_TAG)
                     ) {
                         Text(
@@ -366,6 +373,7 @@ fun AlbumGridItem(
     coverBadge: AlbumCoverBadge? = null,
     onlineDetailLoading: Boolean = false,
     onlineCvLoading: Boolean = onlineDetailLoading,
+    animateOnlineDetails: Boolean = true,
     coverFadeIn: Boolean = true,
     coverReloadKey: Any? = null,
     coverRetainPainterDuringReload: Boolean = false,
@@ -448,6 +456,7 @@ fun AlbumGridItem(
 
             AlbumOnlineDetailAnimatedOverlay(
                 visible = album.releaseDate.isNotBlank(),
+                animated = animateOnlineDetails,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(8.dp)
@@ -506,6 +515,7 @@ fun AlbumGridItem(
             AlbumOnlineDetailAnimatedLine(
                 content = if (onlineCvLoading) "" else album.cv,
                 loading = onlineCvLoading,
+                animated = animateOnlineDetails,
                 loadingContent = {
                     AlbumDetailSkeletonLine(widthFraction = 0.72f)
                 }
@@ -532,10 +542,14 @@ fun AlbumGridItem(
                     }
                 }
             }
+            val tagsStateContent = remember(album.tags) {
+                album.tags.joinToString(separator = "\n")
+            }
 
             AlbumOnlineDetailAnimatedLine(
-                content = album.tags.joinToString(separator = "\n"),
+                content = tagsStateContent,
                 loading = onlineDetailLoading,
+                animated = animateOnlineDetails,
                 loadingContent = {
                     AlbumDetailSkeletonLine(widthFraction = 0.92f)
                 }
@@ -551,7 +565,8 @@ fun AlbumGridItem(
 
             AlbumOnlineDetailAnimatedLine(
                 content = statsText,
-                loading = onlineDetailLoading && !album.hasRatingInfo()
+                loading = onlineDetailLoading && !album.hasRatingInfo(),
+                animated = animateOnlineDetails,
             ) {
                 Text(
                     text = statsText,
@@ -569,12 +584,24 @@ fun AlbumGridItem(
 private fun AlbumOnlineDetailAnimatedLine(
     content: String,
     loading: Boolean,
+    animated: Boolean,
     modifier: Modifier = Modifier,
     loadingContent: @Composable () -> Unit = {
         AlbumDetailSkeletonLine(widthFraction = 0.62f)
     },
     contentBlock: @Composable () -> Unit,
 ) {
+    if (!animated) {
+        when {
+            content.isNotBlank() -> Box(modifier = modifier.fillMaxWidth()) {
+                contentBlock()
+            }
+            loading -> Box(modifier = modifier.fillMaxWidth()) {
+                loadingContent()
+            }
+        }
+        return
+    }
     val stateKey = onlineDetailLineStateKey(content = content, loading = loading)
     var keepMounted by remember { mutableStateOf(stateKey != "empty") }
     LaunchedEffect(stateKey) {
@@ -612,9 +639,18 @@ private fun onlineDetailLineStateKey(
 @Composable
 private fun AlbumOnlineDetailAnimatedOverlay(
     visible: Boolean,
+    animated: Boolean,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
+    if (!animated) {
+        if (visible) {
+            Box(modifier = modifier) {
+                content()
+            }
+        }
+        return
+    }
     AnimatedContent(
         targetState = visible,
         modifier = modifier,

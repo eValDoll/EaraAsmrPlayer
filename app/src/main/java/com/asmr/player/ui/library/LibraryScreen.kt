@@ -795,7 +795,7 @@ fun LibraryScreen(
                                         state = gridState,
                                         itemCount = pagedAlbums.itemCount,
                                         preloadNext = 24,
-                                        preloadNextWhileScrolling = 16,
+                                        preloadNextWhileScrolling = 8,
                                         preloadSize = gridPreloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->
@@ -861,7 +861,7 @@ fun LibraryScreen(
                                         state = listState,
                                         itemCount = pagedAlbums.itemCount,
                                         preloadNext = 24,
-                                        preloadNextWhileScrolling = 16,
+                                        preloadNextWhileScrolling = 8,
                                         preloadSize = preloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->
