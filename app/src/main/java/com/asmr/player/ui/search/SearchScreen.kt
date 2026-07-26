@@ -963,7 +963,7 @@ fun SearchScreen(
                                         state = listState,
                                         itemCount = state.results.size,
                                         preloadNext = 24,
-                                        preloadNextWhileScrolling = 16,
+                                        preloadNextWhileScrolling = 8,
                                         preloadSize = preloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->
@@ -1021,7 +1021,7 @@ fun SearchScreen(
                                         state = gridState,
                                         itemCount = state.results.size,
                                         preloadNext = 24,
-                                        preloadNextWhileScrolling = 16,
+                                        preloadNextWhileScrolling = 8,
                                         preloadSize = gridPreloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->

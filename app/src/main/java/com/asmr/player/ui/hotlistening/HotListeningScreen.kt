@@ -281,7 +281,7 @@ fun HotListeningScreen(
                         state = listState,
                         itemCount = state.entries.size,
                         preloadNext = 24,
-                        preloadNextWhileScrolling = 16,
+                        preloadNextWhileScrolling = 8,
                         preloadSize = preloadSize,
                         cacheManagerProvider = { cacheManager },
                         modelAt = { idx ->
@@ -353,7 +353,7 @@ fun HotListeningScreen(
                         state = gridState,
                         itemCount = state.entries.size,
                         preloadNext = 24,
-                        preloadNextWhileScrolling = 16,
+                        preloadNextWhileScrolling = 8,
                         preloadSize = gridPreloadSize,
                         cacheManagerProvider = { cacheManager },
                         modelAt = { idx ->
@@ -445,11 +445,13 @@ private fun HotListeningListItem(
     coverFadeIn: Boolean = true
 ) {
     val album = entry.album
+    val coverBadge = remember(entry) { entry.toCoverBadge() }
     AlbumItem(
         album = album,
         onClick = { onAlbumClick(album) },
         coverRetainPainterDuringReload = true,
-        coverBadge = entry.toCoverBadge(),
+        coverBadge = coverBadge,
+        animateOnlineDetails = false,
         coverFadeIn = coverFadeIn,
         onRjClick = { copyMeta("RJ", it) },
         onCircleClick = { copyMeta("社团", it) },
@@ -470,11 +472,13 @@ private fun HotListeningGridItem(
     coverFadeIn: Boolean = true
 ) {
     val album = entry.album
+    val coverBadge = remember(entry) { entry.toCoverBadge() }
     AlbumGridItem(
         album = album,
         onClick = { onAlbumClick(album) },
         coverRetainPainterDuringReload = true,
-        coverBadge = entry.toCoverBadge(),
+        coverBadge = coverBadge,
+        animateOnlineDetails = false,
         coverFadeIn = coverFadeIn,
         onRjClick = { copyMeta("RJ", it) },
         onCircleClick = { copyMeta("社团", it) },

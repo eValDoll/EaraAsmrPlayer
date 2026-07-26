@@ -270,7 +270,7 @@ class ImageCacheManager(
         models.forEach { m ->
             scope.launch {
                 preloadSemaphore.withPermit {
-                    runCatching { loadImage(model = m, size = size, cachePolicy = CachePolicy.CACHE_WARMUP) }
+                    preloadModel(model = m, size = size)
                 }
             }
         }
@@ -280,23 +280,37 @@ class ImageCacheManager(
         return preload(scope, models, size = null)
     }
 
-    fun preload(scope: CoroutineScope, models: List<Any>, size: IntSize?): Job {
+    fun preload(
+        scope: CoroutineScope,
+        models: List<Any>,
+        size: IntSize?,
+        maxConcurrency: Int? = null,
+    ): Job {
         return scope.launch(Dispatchers.IO) {
+            val requestSemaphore = Semaphore(
+                permits = (maxConcurrency ?: models.size).coerceAtLeast(1)
+            )
             coroutineScope {
                 models.forEach { model ->
                     launch {
-                        preloadSemaphore.withPermit {
-                            runCatching {
-                                loadImage(
-                                    model = model,
-                                    size = size,
-                                    cachePolicy = CachePolicy.CACHE_WARMUP
-                                )
+                        requestSemaphore.withPermit {
+                            preloadSemaphore.withPermit {
+                                preloadModel(model = model, size = size)
                             }
                         }
                     }
                 }
             }
+        }
+    }
+
+    private suspend fun preloadModel(model: Any, size: IntSize?) {
+        try {
+            loadImage(model = model, size = size, cachePolicy = CachePolicy.CACHE_WARMUP)
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            // 预取失败不影响可见图片按正常路径重试。
         }
     }
 
