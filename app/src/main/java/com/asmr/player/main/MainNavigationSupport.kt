@@ -351,7 +351,6 @@ internal fun shouldTriggerPrimaryRouteScrollToTop(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PrimaryTopBarBrand(
     appName: String,
@@ -388,17 +387,18 @@ internal fun PrimaryTopBarBrand(
 
     Row(
         modifier = modifier
-            .fillMaxHeight()
-            .padding(start = 10.dp)
-            .then(clickModifier),
+            .padding(start = 6.dp)
+            .height(44.dp)
+            .then(clickModifier)
+            .padding(start = 2.dp, end = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp)
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Icon(
             painter = painterResource(R.drawable.ic_launcher_foreground),
             contentDescription = null,
             tint = tint,
-            modifier = Modifier.size(42.dp)
+            modifier = Modifier.size(38.dp)
         )
         Text(
             text = appName,

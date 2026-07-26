@@ -48,7 +48,6 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -123,6 +122,9 @@ import com.asmr.player.ui.common.FlatActionDialog
 import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.FlatTextFieldDialog
+import com.asmr.player.ui.common.EaraTopBarContainer
+import com.asmr.player.ui.common.EaraTopBarIconButton
+import com.asmr.player.ui.common.resolveMainPageBackgroundColor
 import com.asmr.player.ui.common.glassMenu
 import com.asmr.player.ui.drawer.DrawerStatusViewModel
 import com.asmr.player.ui.drawer.SiteStatus
@@ -335,13 +337,7 @@ private fun SecondaryPageBackground(
     content: @Composable () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val pageBackgroundColor = remember(colorScheme.background, colorScheme.primarySoft, colorScheme.isDark) {
-        if (colorScheme.isDark) {
-            colorScheme.background
-        } else {
-            colorScheme.primarySoft.copy(alpha = 0.16f).compositeOver(colorScheme.background)
-        }
-    }
+    val pageBackgroundColor = resolveMainPageBackgroundColor(colorScheme)
 
     Box(
         modifier = modifier
@@ -1333,13 +1329,6 @@ fun MainContainer(
         val currentScreenIsPrimary = currentPrimaryRoute != null
         val showBackButton = !currentScreenIsPrimary
         val showPrimaryBrand = currentScreenIsPrimary
-        val topBarDividerColor = if (isAlbumDetailRoute) {
-            Color.Transparent
-        } else {
-            colorScheme.onSurface.copy(
-                alpha = if (colorScheme.isDark) 0.16f else 0.10f
-            )
-        }
         val useLargeBottomChrome = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && !isPhone
         val navigationBarBottomPadding = StableWindowInsets.navigationBars
             .only(WindowInsetsSides.Bottom)
@@ -1356,43 +1345,16 @@ fun MainContainer(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(colorScheme.background)
+                            .background(resolveMainPageBackgroundColor(colorScheme))
                     )
-                    if (!colorScheme.isDark) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(colorScheme.primarySoft.copy(alpha = 0.16f))
-                        )
-                    }
                     Scaffold(
                         contentWindowInsets = WindowInsets(0, 0, 0, 0),
                         containerColor = Color.Transparent,
                         contentColor = colorScheme.onBackground,
                         topBar = {
-                            Column {
-                                    val compactTopBar =
-                                        currentRoute == "library" ||
-                                            currentRoute == "library_filter" ||
-                                            currentRoute == "search" ||
-                                            currentRoute == Routes.SearchAssist ||
-                                            currentRoute == Routes.SearchAssistPattern ||
-                                            currentRoute == Routes.HotListening ||
-                                            currentRoute == "playlists" ||
-                                            currentRoute == "playlist/{playlistId}/{playlistName}" ||
-                                            currentRoute == "playlist_system/{type}" ||
-                                            currentRoute == "groups" ||
-                                            currentRoute == "group/{groupId}/{groupName}" ||
-                                            currentRoute == "settings" ||
-                                            currentRoute == "downloads" ||
-                                            currentRoute == "dlsite_login" ||
-                                            currentRoute == "listening_calendar" ||
-                                            currentRoute?.startsWith("album_detail") == true
-                                    val topBarHeight = when {
-                                        isAlbumDetailRoute -> 56.dp
-                                        compactTopBar -> 48.dp
-                                        else -> 64.dp
-                                    }
+                            EaraTopBarContainer(overlay = isAlbumDetailRoute) {
+                                Column {
+                                    val topBarHeight = if (isAlbumDetailRoute) 56.dp else 48.dp
                                     Spacer(modifier = Modifier.windowInsetsTopHeight(StableWindowInsets.statusBars))
                                     CenterAlignedTopAppBar(
                                         modifier = Modifier.height(topBarHeight),
@@ -1435,30 +1397,30 @@ fun MainContainer(
                                                 resolvedTitleRoute?.startsWith("album_detail") == true -> "专辑详情"
                                                 else -> appName
                                             }
-                                            Box(modifier = Modifier.fillMaxHeight(), contentAlignment = Alignment.Center) {
-                                                if (!isAlbumDetailRoute) {
-                                                    AnimatedContent(
-                                                        targetState = titleText,
-                                                        transitionSpec = {
-                                                            (fadeIn(animationSpec = tween(220, easing = LinearOutSlowInEasing))
-                                                                + slideInHorizontally(animationSpec = tween(220, easing = LinearOutSlowInEasing)) { it / 4 })
-                                                                .togetherWith(
-                                                                    fadeOut(animationSpec = tween(180, easing = FastOutLinearInEasing))
-                                                                        + slideOutHorizontally(animationSpec = tween(180, easing = FastOutLinearInEasing)) { -it / 4 }
-                                                                )
-                                                        },
-                                                        label = "headerTitle"
-                                                    ) { targetText ->
-                                                        Text(
-                                                            text = targetText,
-                                                            color = topBarContentColor,
-                                                            style = if (compactTopBar) {
-                                                                MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold)
-                                                            } else {
-                                                                MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
-                                                            }
+                                            if (!isAlbumDetailRoute) {
+                                                AnimatedContent(
+                                                    targetState = titleText,
+                                                    modifier = Modifier
+                                                        .height(40.dp)
+                                                        .offset(y = 4.dp),
+                                                    contentAlignment = Alignment.Center,
+                                                    transitionSpec = {
+                                                        (fadeIn(animationSpec = tween(220, easing = LinearOutSlowInEasing))
+                                                            + slideInHorizontally(animationSpec = tween(220, easing = LinearOutSlowInEasing)) { it / 4 })
+                                                            .togetherWith(
+                                                                fadeOut(animationSpec = tween(180, easing = FastOutLinearInEasing))
+                                                                    + slideOutHorizontally(animationSpec = tween(180, easing = FastOutLinearInEasing)) { -it / 4 }
+                                                            )
+                                                    },
+                                                    label = "headerTitle"
+                                                ) { targetText ->
+                                                    Text(
+                                                        text = targetText,
+                                                        color = topBarContentColor,
+                                                        style = MaterialTheme.typography.titleMedium.copy(
+                                                            fontWeight = FontWeight.SemiBold
                                                         )
-                                                    }
+                                                    )
                                                 }
                                             }
                                         },
@@ -1471,11 +1433,10 @@ fun MainContainer(
                                         ),
                                         navigationIcon = {
                                             if (showBackButton && hasPreviousBackStackEntry) {
-                                                IconButton(
+                                                EaraTopBarIconButton(
                                                     onClick = { navController.popBackStack() },
                                                     modifier = Modifier
                                                         .padding(start = if (isAlbumDetailRoute) 4.dp else 0.dp)
-                                                        .size(if (isAlbumDetailRoute) 40.dp else 48.dp)
                                                         .albumDetailTopBarButtonMotion(isAlbumDetailRoute, navBackStackEntry)
                                                         .albumDetailTopBarButtonSurface(isAlbumDetailRoute)
                                                 ) {
@@ -1484,7 +1445,7 @@ fun MainContainer(
                                             } else if (showPrimaryBrand) {
                                                 PrimaryTopBarBrand(
                                                     appName = stringResource(R.string.app_name),
-                                                    tint = topBarContentColor
+                                                    tint = colorScheme.primaryStrong
                                                 )
                                             }
                                         },
@@ -1500,7 +1461,10 @@ fun MainContainer(
                                                     }
                                                 }
                                                 Box {
-                                                    IconButton(onClick = { navController.navigate("downloads") }) {
+                                                    EaraTopBarIconButton(
+                                                        onClick = { navController.navigate("downloads") },
+                                                        modifier = Modifier.padding(end = 4.dp)
+                                                    ) {
                                                         Icon(Icons.Rounded.Download, contentDescription = "下载管理")
                                                     }
                                                     if (activeDownloadCount > 0) {
@@ -1524,7 +1488,10 @@ fun MainContainer(
                                                             2 -> Icons.Rounded.Audiotrack
                                                             else -> Icons.AutoMirrored.Rounded.ViewList
                                                         }
-                                                        IconButton(onClick = { viewMenuExpanded = true }) {
+                                                        EaraTopBarIconButton(
+                                                            onClick = { viewMenuExpanded = true },
+                                                            modifier = Modifier.padding(end = 4.dp)
+                                                        ) {
                                                             Icon(imageVector = icon, contentDescription = "切换视图")
                                                         }
                                                         MaterialTheme(
@@ -1538,64 +1505,70 @@ fun MainContainer(
                                                                 onDismissRequest = { viewMenuExpanded = false },
                                                                 modifier = Modifier.background(dynamicContainerColor)
                                                             ) {
-                                                            DropdownMenuItem(
-                                                                text = { Text("专辑列表") },
-                                                                leadingIcon = {
-                                                                    Icon(Icons.AutoMirrored.Rounded.ViewList, contentDescription = null)
-                                                                },
-                                                                onClick = {
-                                                                    viewMenuExpanded = false
-                                                                    libraryViewModel.setLibraryViewMode(0)
-                                                                }
-                                                            )
-                                                            HorizontalDivider(
-                                                                modifier = Modifier.padding(horizontal = 8.dp),
-                                                                thickness = 0.5.dp,
-                                                                color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
-                                                            )
-                                                            DropdownMenuItem(
-                                                                text = { Text("专辑卡片") },
-                                                                leadingIcon = {
-                                                                    Icon(Icons.Rounded.GridView, contentDescription = null)
-                                                                },
-                                                                onClick = {
-                                                                    viewMenuExpanded = false
-                                                                    libraryViewModel.setLibraryViewMode(1)
-                                                                }
-                                                            )
-                                                            HorizontalDivider(
-                                                                modifier = Modifier.padding(horizontal = 8.dp),
-                                                                thickness = 0.5.dp,
-                                                                color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
-                                                            )
-                                                            DropdownMenuItem(
-                                                                text = { Text("音轨列表") },
-                                                                leadingIcon = {
-                                                                    Icon(Icons.Rounded.Audiotrack, contentDescription = null)
-                                                                },
-                                                                onClick = {
-                                                                    viewMenuExpanded = false
-                                                                    libraryViewModel.setLibraryViewMode(2)
-                                                                }
-                                                            )
+                                                                DropdownMenuItem(
+                                                                    text = { Text("专辑列表") },
+                                                                    leadingIcon = {
+                                                                        Icon(Icons.AutoMirrored.Rounded.ViewList, contentDescription = null)
+                                                                    },
+                                                                    onClick = {
+                                                                        viewMenuExpanded = false
+                                                                        libraryViewModel.setLibraryViewMode(0)
+                                                                    }
+                                                                )
+                                                                HorizontalDivider(
+                                                                    modifier = Modifier.padding(horizontal = 8.dp),
+                                                                    thickness = 0.5.dp,
+                                                                    color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                                                                )
+                                                                DropdownMenuItem(
+                                                                    text = { Text("专辑卡片") },
+                                                                    leadingIcon = {
+                                                                        Icon(Icons.Rounded.GridView, contentDescription = null)
+                                                                    },
+                                                                    onClick = {
+                                                                        viewMenuExpanded = false
+                                                                        libraryViewModel.setLibraryViewMode(1)
+                                                                    }
+                                                                )
+                                                                HorizontalDivider(
+                                                                    modifier = Modifier.padding(horizontal = 8.dp),
+                                                                    thickness = 0.5.dp,
+                                                                    color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                                                                )
+                                                                DropdownMenuItem(
+                                                                    text = { Text("音轨列表") },
+                                                                    leadingIcon = {
+                                                                        Icon(Icons.Rounded.Audiotrack, contentDescription = null)
+                                                                    },
+                                                                    onClick = {
+                                                                        viewMenuExpanded = false
+                                                                        libraryViewModel.setLibraryViewMode(2)
+                                                                    }
+                                                                )
                                                             }
                                                         }
                                                     }
                                                 }
                                             } else if (currentRoute == "search") {
                                                 val viewMode by searchViewModel.viewMode.collectAsState()
-                                                IconButton(onClick = { searchViewModel.setViewMode(if (viewMode == 1) 0 else 1) }) {
+                                                EaraTopBarIconButton(
+                                                    onClick = { searchViewModel.setViewMode(if (viewMode == 1) 0 else 1) },
+                                                    modifier = Modifier.padding(end = 4.dp)
+                                                ) {
                                                     Icon(
                                                         imageVector = if (viewMode == 1) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.ViewModule,
-                                                        contentDescription = null
+                                                        contentDescription = if (viewMode == 1) "切换为列表视图" else "切换为卡片视图"
                                                     )
                                                 }
                                             } else if (currentRoute == Routes.HotListening) {
                                                 val viewMode by hotListeningViewModel.viewMode.collectAsState()
-                                                IconButton(onClick = { hotListeningViewModel.setViewMode(if (viewMode == 1) 0 else 1) }) {
+                                                EaraTopBarIconButton(
+                                                    onClick = { hotListeningViewModel.setViewMode(if (viewMode == 1) 0 else 1) },
+                                                    modifier = Modifier.padding(end = 4.dp)
+                                                ) {
                                                     Icon(
                                                         imageVector = if (viewMode == 1) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.ViewModule,
-                                                        contentDescription = null
+                                                        contentDescription = if (viewMode == 1) "切换为列表视图" else "切换为卡片视图"
                                                     )
                                                 }
                                             } else if (currentRoute == "downloads") {
@@ -1634,7 +1607,7 @@ fun MainContainer(
                                                     local != null && local.id > 0L
                                                 } == true
                                                 if (showManualBind) {
-                                                    IconButton(
+                                                    EaraTopBarIconButton(
                                                         onClick = {
                                                             val currentRj = (detailState as? AlbumDetailUiState.Success)?.model?.let { m ->
                                                                 val local = m.localAlbum
@@ -1647,7 +1620,6 @@ fun MainContainer(
                                                         },
                                                         modifier = Modifier
                                                             .padding(end = 8.dp)
-                                                            .size(40.dp)
                                                             .albumDetailTopBarButtonMotion(true, navBackStackEntry)
                                                             .albumDetailTopBarButtonSurface(true)
                                                     ) {
@@ -1656,11 +1628,6 @@ fun MainContainer(
                                                 }
                                             }
                                         }
-                                    )
-                                    HorizontalDivider(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        thickness = 0.5.dp,
-                                        color = topBarDividerColor
                                     )
 
                                     val p = bulkProgress
@@ -1674,6 +1641,7 @@ fun MainContainer(
                                             LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                                         }
                                     }
+                                }
                             }
                         }
                     ) { padding ->
@@ -1683,8 +1651,8 @@ fun MainContainer(
                         ) {
                             val topContentPadding = padding.calculateTopPadding()
                             val hasOverlayRoute = currentPrimaryRoute == null
-                            // 详情页等 overlay 路由会把共享顶栏增高（48dp->56dp），导致 Scaffold top padding 变大。
-                            // 但底层 pager 始终只承载主路由（库/搜索/热门），转场期间仍可见——若跟随顶栏增高会整体下沉 8dp。
+                            // overlay 路由会改变共享顶栏高度，但底层 pager 在转场期间仍然可见。
+                            // pager 始终只承载主路由（库/搜索/热门），若跟随 overlay 的顶栏高度会在转场时整体移动 8dp。
                             // 因此 pager 专用 padding 在 overlay 激活时冻结为最近一次主路由的值，避免进入详情页时来源列表抖动下沉。
                             // 注意：NavHost 内的 secondary 页面仍用 topContentPadding（真实值），不受此冻结影响。
                             var lastPrimaryTopPadding by remember { mutableStateOf(topContentPadding) }
