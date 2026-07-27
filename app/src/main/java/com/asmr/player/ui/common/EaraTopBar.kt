@@ -37,7 +37,7 @@ internal fun EaraTopBarContainer(
     val colorScheme = AsmrTheme.colorScheme
     val pageBackground = resolveMainPageBackgroundColor(colorScheme)
     val tonalTop = colorScheme.primarySoft
-        .copy(alpha = if (colorScheme.isDark) 0.44f else 0.28f)
+        .copy(alpha = if (colorScheme.isDark) 0.44f else 0.38f)
         .compositeOver(pageBackground)
 
     Box(

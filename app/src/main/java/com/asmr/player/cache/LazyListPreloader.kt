@@ -37,6 +37,7 @@ internal enum class LazyListPreloadDirection {
 fun LazyListPreloader(
     state: LazyListState,
     models: List<Any>,
+    enabled: Boolean = true,
     preloadNext: Int = 24,
     preloadNextWhileScrolling: Int = 8,
     preloadSize: IntSize? = null,
@@ -44,8 +45,9 @@ fun LazyListPreloader(
 ) {
     val manager = remember { cacheManagerProvider() }
     val preloadedModels = remember { LinkedHashSet<Any>() }
-    LaunchedEffect(state, models, preloadNext, preloadNextWhileScrolling, preloadSize) {
+    LaunchedEffect(state, models, enabled, preloadNext, preloadNextWhileScrolling, preloadSize) {
         preloadedModels.clear()
+        if (!enabled) return@LaunchedEffect
         snapshotFlow {
             val visibleItems = state.layoutInfo.visibleItemsInfo
             LazyListPreloadSnapshot(
@@ -72,6 +74,7 @@ fun LazyListPreloader(
 fun LazyListPreloader(
     state: LazyListState,
     itemCount: Int,
+    enabled: Boolean = true,
     preloadNext: Int = 24,
     preloadNextWhileScrolling: Int = 8,
     preloadSize: IntSize? = null,
@@ -81,13 +84,14 @@ fun LazyListPreloader(
     val manager = remember { cacheManagerProvider() }
     val preloadedModels = remember { LinkedHashSet<Any>() }
     val latestModelAt = rememberUpdatedState(modelAt)
-    LaunchedEffect(state, itemCount, preloadNext, preloadNextWhileScrolling, preloadSize) {
+    LaunchedEffect(state, itemCount, enabled, preloadNext, preloadNextWhileScrolling, preloadSize) {
         preloadedModels.clear()
+        if (!enabled) return@LaunchedEffect
         snapshotFlow {
             val visibleItems = state.layoutInfo.visibleItemsInfo
             LazyListPreloadSnapshot(
-                firstVisibleIndex = visibleItems.minOfOrNull { it.index } ?: -1,
-                lastVisibleIndex = visibleItems.maxOfOrNull { it.index } ?: -1,
+                firstVisibleIndex = visibleItems.firstOrNull()?.index ?: -1,
+                lastVisibleIndex = visibleItems.lastOrNull()?.index ?: -1,
                 visibleItemCount = visibleItems.size,
                 isScrolling = state.isScrollInProgress,
             )
@@ -109,6 +113,7 @@ fun LazyListPreloader(
 fun LazyStaggeredGridPreloader(
     state: LazyStaggeredGridState,
     itemCount: Int,
+    enabled: Boolean = true,
     preloadNext: Int = 24,
     preloadNextWhileScrolling: Int = 8,
     preloadSize: IntSize? = null,
@@ -118,8 +123,9 @@ fun LazyStaggeredGridPreloader(
     val manager = remember { cacheManagerProvider() }
     val preloadedModels = remember { LinkedHashSet<Any>() }
     val latestModelAt = rememberUpdatedState(modelAt)
-    LaunchedEffect(state, itemCount, preloadNext, preloadNextWhileScrolling, preloadSize) {
+    LaunchedEffect(state, itemCount, enabled, preloadNext, preloadNextWhileScrolling, preloadSize) {
         preloadedModels.clear()
+        if (!enabled) return@LaunchedEffect
         snapshotFlow {
             val visibleItems = state.layoutInfo.visibleItemsInfo
             LazyListPreloadSnapshot(

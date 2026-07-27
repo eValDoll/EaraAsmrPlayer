@@ -55,6 +55,7 @@ fun AsmrAsyncImage(
     fadeIn: Boolean = true,
     fadeInMillis: Int = 500,
     peekAnySizeForInitial: Boolean = false,
+    requestSize: IntSize? = null,
     // 按原尺寸加载（size=null）：缓存 key 与显示尺寸无关，让列表与详情大图共用同一缓存条目，
     // 详情页进入即内存命中、不再二次网络请求、不再低分辨率占位闪烁。显示时由 ContentScale 缩放。
     loadAtOriginalSize: Boolean = false,
@@ -85,19 +86,24 @@ fun AsmrAsyncImage(
     val crossfade = remember(normalizedModel, reloadKey) { Animatable(if (seededPainter != null) 1f else 0f) }
     val crossfadeRunning = remember(normalizedModel, reloadKey) { mutableStateOf(false) }
     val latestFadeIn by rememberUpdatedState(fadeIn)
-    val containerModifier = modifier.onSizeChanged { sz ->
-        if (sz.width > 0 && sz.height > 0) measuredSize.value = IntSize(sz.width, sz.height)
+    val containerModifier = if (requestSize == null) {
+        modifier.onSizeChanged { sz ->
+            if (sz.width > 0 && sz.height > 0) measuredSize.value = IntSize(sz.width, sz.height)
+        }
+    } else {
+        modifier
     }
     val contentModifier = Modifier.fillMaxSize()
 
-    val loadSizeKey = if (loadAtOriginalSize) Unit else measuredSize.value
+    val resolvedSize = requestSize ?: measuredSize.value
+    val loadSizeKey: Any? = if (loadAtOriginalSize) Unit else resolvedSize
     LaunchedEffect(normalizedModel, loadSizeKey, reloadKey) {
-        val initialSize = measuredSize.value
+        val initialSize = requestSize ?: measuredSize.value
         if (!loadAtOriginalSize && initialSize == null) return@LaunchedEffect
         if (!loadAtOriginalSize && loadWhenSizeStableForMillis > 0L) {
             delay(loadWhenSizeStableForMillis)
         }
-        val sz = measuredSize.value ?: initialSize ?: IntSize.Zero
+        val sz = requestSize ?: measuredSize.value ?: initialSize ?: IntSize.Zero
         suspend fun finishWithExistingPainter() {
             state.value = AsmrAsyncImageState.Success
             crossfadeRunning.value = false
@@ -117,7 +123,7 @@ fun AsmrAsyncImage(
             crossfadeRunning.value = false
             val hasExistingPainter = painter.value != null
             val shouldRetainPainter = (retainPainterDuringReload || loadAtOriginalSize || seededPlaceholder.value) && hasExistingPainter
-            val requestSize = if (loadAtOriginalSize) null else sz
+            val imageRequestSize = if (loadAtOriginalSize) null else sz
             if (!shouldRetainPainter) {
                 state.value = AsmrAsyncImageState.Loading
                 painter.value = null
@@ -129,7 +135,7 @@ fun AsmrAsyncImage(
             val img = withTimeoutOrNull(15_000) {
                 manager.loadImage(
                     model = normalizedModel,
-                    size = requestSize,
+                    size = imageRequestSize,
                     cachePolicy = CachePolicy.DEFAULT
                 )
             } ?: throw IllegalStateException("Image load timeout")
