@@ -794,6 +794,7 @@ fun LibraryScreen(
                                     LazyStaggeredGridPreloader(
                                         state = gridState,
                                         itemCount = pagedAlbums.itemCount,
+                                        enabled = isActive,
                                         preloadNext = 24,
                                         preloadNextWhileScrolling = 8,
                                         preloadSize = gridPreloadSize,
@@ -860,6 +861,7 @@ fun LibraryScreen(
                                     LazyListPreloader(
                                         state = listState,
                                         itemCount = pagedAlbums.itemCount,
+                                        enabled = isActive,
                                         preloadNext = 24,
                                         preloadNextWhileScrolling = 8,
                                         preloadSize = preloadSize,

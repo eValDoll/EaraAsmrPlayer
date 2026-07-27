@@ -46,7 +46,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -74,6 +76,22 @@ private val AlbumItemCoverContentSpacing = 8.dp
 private val AlbumGridInfoHorizontalPadding = 6.dp
 private val AlbumGridInfoVerticalPadding = 8.dp
 private val AlbumDetailSkeletonHeight = 18.dp
+private val AlbumListBadgeScrim = Brush.verticalGradient(
+    colors = listOf(
+        Color.Transparent,
+        Color.Black.copy(alpha = 0.18f),
+        Color.Black.copy(alpha = 0.42f),
+        Color.Black.copy(alpha = 0.68f)
+    )
+)
+private val AlbumGridBadgeScrim = Brush.verticalGradient(
+    colors = listOf(
+        Color.Transparent,
+        Color.Black.copy(alpha = 0.18f),
+        Color.Black.copy(alpha = 0.44f),
+        Color.Black.copy(alpha = 0.70f)
+    )
+)
 private val AlbumOnlineDetailResizeSpring = spring<IntSize>(
     dampingRatio = Spring.DampingRatioNoBouncy,
     stiffness = Spring.StiffnessMediumLow
@@ -125,6 +143,11 @@ fun AlbumItem(
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
     val coverSize = listItemHeight
+    val density = LocalDensity.current
+    val coverRequestSize = remember(coverSize, density) {
+        val sizePx = with(density) { coverSize.roundToPx() }
+        IntSize(sizePx, sizePx)
+    }
 
     Box(
         modifier = modifier
@@ -160,6 +183,7 @@ fun AlbumItem(
                         reloadKey = coverReloadKey,
                         retainPainterDuringReload = coverRetainPainterDuringReload,
                         peekAnySizeForInitial = true,
+                        requestSize = coverRequestSize,
                         loading = NoImageLoadingIndicator,
                         modifier = Modifier.fillMaxSize().clip(coverShape),
                     )
@@ -169,16 +193,7 @@ fun AlbumItem(
                                 .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
                                 .fillMaxHeight(0.34f)
-                                .background(
-                                    Brush.verticalGradient(
-                                        colors = listOf(
-                                            Color.Transparent,
-                                            Color.Black.copy(alpha = 0.18f),
-                                            Color.Black.copy(alpha = 0.42f),
-                                            Color.Black.copy(alpha = 0.68f)
-                                        )
-                                    )
-                                )
+                                .background(AlbumListBadgeScrim)
                         )
                     }
                     coverBadge?.let { badge ->
@@ -322,17 +337,23 @@ internal fun BalancedColumn(
     content: @Composable () -> Unit,
 ) {
     Layout(content = content, modifier = modifier) { measurables, constraints ->
-        val placeables = measurables.map { measurable ->
-            measurable.measure(constraints.copy(minHeight = 0))
+        val childConstraints = constraints.copy(minHeight = 0)
+        val placeables = ArrayList<Placeable>(measurables.size)
+        var childrenHeight = 0
+        var widestChild = 0
+        for (index in measurables.indices) {
+            val placeable = measurables[index].measure(childConstraints)
+            placeables.add(placeable)
+            childrenHeight += placeable.height
+            if (placeable.width > widestChild) widestChild = placeable.width
         }
 
         val layoutWidth = if (constraints.maxWidth != Constraints.Infinity) {
             constraints.maxWidth
         } else {
-            maxOf(constraints.minWidth, placeables.maxOfOrNull { it.width } ?: 0)
+            maxOf(constraints.minWidth, widestChild)
         }
 
-        val childrenHeight = placeables.sumOf { it.height }
         val layoutHeight = if (constraints.maxHeight != Constraints.Infinity) {
             maxOf(constraints.minHeight, constraints.maxHeight, childrenHeight)
         } else {
@@ -342,13 +363,16 @@ internal fun BalancedColumn(
         val remaining = (layoutHeight - childrenHeight).coerceAtLeast(0)
         val gapCount = placeables.size + 1
         val idealGap = if (gapCount > 0) remaining / gapCount else 0
-        val gap = idealGap.coerceIn(minGap.roundToPx(), maxGap.roundToPx())
+        val minGapPx = minGap.roundToPx()
+        val maxGapPx = maxGap.roundToPx()
+        val gap = idealGap.coerceIn(minGapPx, maxGapPx)
         val used = gap * gapCount
         val extra = remaining - used
 
         layout(layoutWidth, layoutHeight) {
             var y = (extra / 2) + gap
-            placeables.forEach { placeable ->
+            for (index in placeables.indices) {
+                val placeable = placeables[index]
                 placeable.placeRelative(0, y)
                 y += placeable.height + gap
             }
@@ -419,16 +443,7 @@ fun AlbumGridItem(
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .fillMaxHeight(0.36f)
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color.Black.copy(alpha = 0.18f),
-                                    Color.Black.copy(alpha = 0.44f),
-                                    Color.Black.copy(alpha = 0.70f)
-                                )
-                            )
-                        )
+                        .background(AlbumGridBadgeScrim)
                 )
             }
             

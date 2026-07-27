@@ -122,7 +122,9 @@ fun HotListeningScreen(
         LazyStaggeredGridState()
     }
 
-    val periods = listOf("day" to "过去一天", "week" to "过去一周", "month" to "过去一月")
+    val periods = remember {
+        listOf("day" to "过去一天", "week" to "过去一周", "month" to "过去一月")
+    }
 
     fun stopActiveScroll() {
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -280,6 +282,7 @@ fun HotListeningScreen(
                     LazyListPreloader(
                         state = listState,
                         itemCount = state.entries.size,
+                        enabled = isActive,
                         preloadNext = 24,
                         preloadNextWhileScrolling = 8,
                         preloadSize = preloadSize,
@@ -352,6 +355,7 @@ fun HotListeningScreen(
                     LazyStaggeredGridPreloader(
                         state = gridState,
                         itemCount = state.entries.size,
+                        enabled = isActive,
                         preloadNext = 24,
                         preloadNextWhileScrolling = 8,
                         preloadSize = gridPreloadSize,

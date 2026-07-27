@@ -962,6 +962,7 @@ fun SearchScreen(
                                     LazyListPreloader(
                                         state = listState,
                                         itemCount = state.results.size,
+                                        enabled = isActive,
                                         preloadNext = 24,
                                         preloadNextWhileScrolling = 8,
                                         preloadSize = preloadSize,
@@ -1020,6 +1021,7 @@ fun SearchScreen(
                                     LazyStaggeredGridPreloader(
                                         state = gridState,
                                         itemCount = state.results.size,
+                                        enabled = isActive,
                                         preloadNext = 24,
                                         preloadNextWhileScrolling = 8,
                                         preloadSize = gridPreloadSize,
