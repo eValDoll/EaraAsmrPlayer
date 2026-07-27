@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.library
+package com.asmr.player.ui.library
 
 import android.content.Intent
 import android.net.Uri
@@ -7,7 +7,6 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -23,7 +22,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -109,7 +107,6 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 import androidx.compose.ui.draw.clip
@@ -125,8 +122,6 @@ import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.ImagePreviewItem
 import com.asmr.player.ui.common.ImagePreviewRequest
-import com.asmr.player.ui.common.collapsibleHeaderUiState
-import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.theme.AsmrTheme
@@ -147,7 +142,6 @@ internal fun AlbumLocalBreadcrumbTabV2(
     initialScroll: Pair<Int, Int>,
     onPersistScroll: (Int, Int) -> Unit,
     topContentPadding: Dp,
-    chromeState: com.asmr.player.ui.common.CollapsibleHeaderState,
     animateIntro: Boolean,
     album: Album,
     header: @Composable () -> Unit,
@@ -177,20 +171,11 @@ internal fun AlbumLocalBreadcrumbTabV2(
     val listState = rememberSaveable("scroll:$stateKey", saver = LazyListState.Saver) {
         LazyListState(initialScroll.first, initialScroll.second)
     }
-    LaunchedEffect(listState, stateKey) {
-        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-            .distinctUntilChanged()
-            .collect { (idx, off) -> onPersistScroll(idx, off) }
-    }
-    LaunchedEffect(listState, stateKey) {
-        snapshotFlow {
-            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
-        }
-            .distinctUntilChanged()
-            .collect { atTop ->
-                if (atTop) chromeState.expand()
-            }
-    }
+    PersistAlbumDetailListScroll(
+        listState = listState,
+        stateKey = stateKey,
+        onPersistScroll = onPersistScroll
+    )
     LaunchedEffect(currentPath, stateKey) {
         onPersistCurrentPath(currentPath)
     }
@@ -235,7 +220,6 @@ internal fun AlbumLocalBreadcrumbTabV2(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .nestedScroll(chromeState.nestedScrollConnection)
             .thinScrollbar(listState),
         state = listState,
         flingBehavior = rememberCalmScrollableFlingBehavior(),
@@ -268,7 +252,6 @@ internal fun AlbumLocalBreadcrumbTabV2(
                     onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
                     onAddMediaItemsToQueue = onAddMediaItemsToQueue,
                     animateIntro = animateIntro,
-                    parentChromeState = chromeState,
                     preferredPath = preferredCurrentPath,
                     onTogglePreferredPath = { enabled ->
                         onTogglePreferredCurrentPath(currentPath, enabled)

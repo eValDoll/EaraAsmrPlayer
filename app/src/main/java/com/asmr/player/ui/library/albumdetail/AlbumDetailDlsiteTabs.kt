@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.library
+package com.asmr.player.ui.library
 
 import android.content.Intent
 import android.net.Uri
@@ -8,7 +8,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -28,7 +27,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -119,7 +117,6 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 import androidx.compose.ui.draw.clip
@@ -140,8 +137,6 @@ import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.ImagePreviewItem
 import com.asmr.player.ui.common.ImagePreviewPreparedItem
 import com.asmr.player.ui.common.ImagePreviewRequest
-import com.asmr.player.ui.common.collapsibleHeaderUiState
-import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.theme.AsmrTheme
@@ -708,10 +703,7 @@ private fun LazyItemScope.dlsiteAnimatedSectionModifier(
     animateIntro: Boolean = true
 ): Modifier {
     if (!animateIntro) return modifier
-    return dlsiteSectionRevealModifier(
-        modifier = modifier.animateItemPlacement(animationSpec = DlsiteSectionPlacementTweenSpec),
-        enabled = true
-    )
+    return modifier.animateItemPlacement(animationSpec = DlsiteSectionPlacementTweenSpec)
 }
 
 @Composable
@@ -764,9 +756,7 @@ private fun DirectoryTreeAnimatedContent(
 ) {
     AnimatedContent(
         targetState = targetState,
-        modifier = modifier.animateContentSize(
-            animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
-        ),
+        modifier = modifier,
         transitionSpec = {
             (
                 fadeIn(animationSpec = tween(durationMillis = 180, delayMillis = 60)) +
@@ -847,7 +837,6 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     treeStateKey: String,
     initialCurrentPath: String,
     topContentPadding: Dp,
-    chromeState: com.asmr.player.ui.common.CollapsibleHeaderState,
     animateIntro: Boolean,
     onPersistCurrentPath: (String) -> Unit,
     initialScroll: Pair<Int, Int>,
@@ -883,20 +872,11 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     val listState = rememberSaveable("scroll:$treeStateKey", saver = LazyListState.Saver) {
         LazyListState(initialScroll.first, initialScroll.second)
     }
-    LaunchedEffect(listState, treeStateKey) {
-        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-            .distinctUntilChanged()
-            .collect { (idx, off) -> onPersistScroll(idx, off) }
-    }
-    LaunchedEffect(listState, treeStateKey) {
-        snapshotFlow {
-            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
-        }
-            .distinctUntilChanged()
-            .collect { atTop ->
-                if (atTop) chromeState.expand()
-            }
-    }
+    PersistAlbumDetailListScroll(
+        listState = listState,
+        stateKey = treeStateKey,
+        onPersistScroll = onPersistScroll
+    )
     LaunchedEffect(currentPath, treeStateKey) {
         onPersistCurrentPath(currentPath)
     }
@@ -912,7 +892,6 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .nestedScroll(chromeState.nestedScrollConnection)
             .thinScrollbar(listState),
         state = listState,
         flingBehavior = rememberCalmScrollableFlingBehavior(),
@@ -1042,7 +1021,6 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                                     onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
                                     onAddMediaItemsToQueue = onAddMediaItemsToQueue,
                                     animateIntro = false,
-                                    parentChromeState = chromeState,
                                     folderKeyPrefix = "asmr-folder",
                                     fileKeyPrefix = "asmr-file",
                                     fileContent = { file, selectionMode, selected, enterSelectionMode, onSelectedChange ->
@@ -1277,7 +1255,6 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
     treeStateKey: String,
     initialCurrentPath: String,
     topContentPadding: Dp,
-    chromeState: com.asmr.player.ui.common.CollapsibleHeaderState,
     animateIntro: Boolean,
     onPersistCurrentPath: (String) -> Unit,
     initialScroll: Pair<Int, Int>,
@@ -1325,23 +1302,12 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
     val listState = rememberSaveable("scroll:$treeStateKey", saver = LazyListState.Saver) {
         LazyListState(restoredIndex, initialScroll.second)
     }
-    LaunchedEffect(listState, treeStateKey) {
-        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-            .distinctUntilChanged()
-            .collect { (idx, off) ->
-                val persistedIndex = (idx - headerItemCount).coerceAtLeast(0)
-                onPersistScroll(persistedIndex, off)
-            }
-    }
-    LaunchedEffect(listState, treeStateKey) {
-        snapshotFlow {
-            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
-        }
-            .distinctUntilChanged()
-            .collect { atTop ->
-                if (atTop) chromeState.expand()
-            }
-    }
+    PersistAlbumDetailListScroll(
+        listState = listState,
+        stateKey = treeStateKey,
+        indexOffset = headerItemCount,
+        onPersistScroll = onPersistScroll
+    )
 
     val rj = rjCode.trim().uppercase()
     var currentPath by rememberSaveable(treeStateKey) { mutableStateOf(initialCurrentPath.trim().trim('/')) }
@@ -1379,7 +1345,6 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .nestedScroll(chromeState.nestedScrollConnection)
             .thinScrollbar(listState),
         state = listState,
         flingBehavior = rememberCalmScrollableFlingBehavior(),
@@ -1456,7 +1421,6 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
                                 onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
                                 onAddMediaItemsToQueue = onAddMediaItemsToQueue,
                                 animateIntro = animateIntro,
-                                parentChromeState = chromeState,
                                 folderKeyPrefix = "dlplay-folder",
                                 fileKeyPrefix = "dlplay-file",
                                 fileContent = { file, selectionMode, selected, enterSelectionMode, onSelectedChange ->

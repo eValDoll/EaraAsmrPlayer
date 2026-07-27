@@ -516,6 +516,7 @@ fun MainContainer(
     val navController = rememberNavController()
     val navigator = remember(navController) { AppNavigator(navController) }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val visibleNavEntries by navController.visibleEntries.collectAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val hasPreviousBackStackEntry = navController.previousBackStackEntry != null
     val currentPlaylistSystemType = navBackStackEntry?.arguments?.getString("type")
@@ -1329,6 +1330,17 @@ fun MainContainer(
         val currentScreenIsPrimary = currentPrimaryRoute != null
         val showBackButton = !currentScreenIsPrimary
         val showPrimaryBrand = currentScreenIsPrimary
+        val albumDetailExitTransitionActive = !isAlbumDetailRoute && visibleNavEntries.any { entry ->
+            entry.destination.route?.startsWith("album_detail") == true
+        }
+        val sharedTopBarAlpha by animateFloatAsState(
+            targetValue = if (albumDetailExitTransitionActive) 0f else 1f,
+            animationSpec = tween(
+                durationMillis = if (albumDetailExitTransitionActive) 0 else 160,
+                easing = LinearOutSlowInEasing
+            ),
+            label = "sharedTopBarAlbumDetailExitAlpha"
+        )
         val useLargeBottomChrome = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && !isPhone
         val navigationBarBottomPadding = StableWindowInsets.navigationBars
             .only(WindowInsetsSides.Bottom)
@@ -1352,7 +1364,12 @@ fun MainContainer(
                         containerColor = Color.Transparent,
                         contentColor = colorScheme.onBackground,
                         topBar = {
-                            EaraTopBarContainer(overlay = isAlbumDetailRoute) {
+                            EaraTopBarContainer(
+                                overlay = isAlbumDetailRoute || albumDetailExitTransitionActive,
+                                modifier = Modifier.graphicsLayer {
+                                    alpha = if (albumDetailExitTransitionActive) 0f else sharedTopBarAlpha
+                                }
+                            ) {
                                 Column {
                                     val topBarHeight = if (isAlbumDetailRoute) 56.dp else 48.dp
                                     Spacer(modifier = Modifier.windowInsetsTopHeight(StableWindowInsets.statusBars))
