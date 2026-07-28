@@ -1,7 +1,5 @@
 package com.asmr.player.ui.library
 
-import androidx.compose.animation.animateContentSize
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -56,7 +54,6 @@ private val AlbumMetaTagShape = RoundedCornerShape(7.dp)
 private val AlbumMetaDenseTagShape = RoundedCornerShape(6.dp)
 private val AlbumHeaderMetaLabelWidth = 58.dp
 private const val AlbumHeaderMetaCollapsedLines = 2
-private const val AlbumHeaderMetaResizeDurationMs = 220
 
 private data class AlbumMetaPalette(
     val container: Color,
@@ -453,11 +450,7 @@ private fun AlbumHeaderMetaFlow(
             )
         }
         AlbumMetaMeasuredFlow(
-            modifier = Modifier
-                .weight(1f)
-                .animateContentSize(
-                    animationSpec = tween(durationMillis = AlbumHeaderMetaResizeDurationMs)
-                ),
+            modifier = Modifier.weight(1f),
             itemCount = itemCount,
             expanded = expanded,
             onExpandedChange = onExpandedChange,
@@ -652,13 +645,42 @@ internal fun albumMetaCollapsedVisibleCount(
     maxLines: Int,
 ): Int {
     if (itemWidths.isEmpty() || maxLines <= 0) return 0
-    for (visibleCount in itemWidths.lastIndex downTo 0) {
-        val candidateWidths = itemWidths.take(visibleCount) + overflowWidth
-        if (albumMetaFlowLineCount(candidateWidths, maxWidth, horizontalSpacing) <= maxLines) {
-            return visibleCount
+    var low = 0
+    var high = itemWidths.lastIndex
+    var result = 0
+    while (low <= high) {
+        val visibleCount = (low + high) ushr 1
+        val lineCount = albumMetaFlowLineCountWithTrailing(
+            itemWidths = itemWidths,
+            visibleCount = visibleCount,
+            trailingWidth = overflowWidth,
+            maxWidth = maxWidth,
+            horizontalSpacing = horizontalSpacing,
+        )
+        if (lineCount <= maxLines) {
+            result = visibleCount
+            low = visibleCount + 1
+        } else {
+            high = visibleCount - 1
         }
     }
-    return 0
+    return result
+}
+
+private fun albumMetaFlowLineCountWithTrailing(
+    itemWidths: List<Int>,
+    visibleCount: Int,
+    trailingWidth: Int,
+    maxWidth: Int,
+    horizontalSpacing: Int,
+): Int {
+    val widths = object : AbstractList<Int>() {
+        override val size: Int = visibleCount + 1
+        override fun get(index: Int): Int {
+            return if (index < visibleCount) itemWidths[index] else trailingWidth
+        }
+    }
+    return albumMetaFlowLineCount(widths, maxWidth, horizontalSpacing)
 }
 
 private enum class AlbumMetaTone {

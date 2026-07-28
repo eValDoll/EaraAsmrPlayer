@@ -259,10 +259,9 @@ internal fun dlsiteSectionRevealModifier(
 }
 
 internal fun shouldExpandAlbumHeaderMetaReveal(
-    deferMetaRevealExpected: Boolean,
     presentInitially: Boolean
 ): Boolean {
-    return deferMetaRevealExpected || !presentInitially
+    return !presentInitially
 }
 
 internal data class AlbumDetailOnlineLoadPlan(
@@ -1641,11 +1640,11 @@ private fun AlbumHeader(
     }
 
     // 记录“首帧时各信息块是否已存在”：本地库专辑进入时 cv/tags 已就绪，应直接淡入不撑开（消除下沉抖动）；
-    // 在线专辑即使从列表 hint 拿到了 cv，也仍按延迟元信息处理，保留延迟淡入/展开的进入节奏。
+    // 列表 hint 已经提供的信息首帧直接占住最终高度，只有网络到达后才新增的信息才纵向展开。
     val cvPresentInitially = remember(headerAnimationScopeKey) { album.cv.isNotBlank() }
     val tagsPresentInitially = remember(headerAnimationScopeKey) { album.tags.isNotEmpty() }
-    val cvExpandLayout = shouldExpandAlbumHeaderMetaReveal(deferMetaRevealExpected, cvPresentInitially)
-    val tagsExpandLayout = shouldExpandAlbumHeaderMetaReveal(deferMetaRevealExpected, tagsPresentInitially)
+    val cvExpandLayout = shouldExpandAlbumHeaderMetaReveal(cvPresentInitially)
+    val tagsExpandLayout = shouldExpandAlbumHeaderMetaReveal(tagsPresentInitially)
     val headerHasDeferredMeta = deferMetaRevealExpected
 
     val headerContainerModifier = Modifier
