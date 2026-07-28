@@ -1417,32 +1417,34 @@ fun MainContainer(
             .calculateBottomPadding()
         val bottomChromeBottomPadding = 24.dp + navigationBarBottomPadding
         val bottomOverlayPadding = bottomChromeOverlayHeight(useLargeBottomChrome) + navigationBarBottomPadding
+        var secondaryPageTopPadding by remember { mutableStateOf(0.dp) }
         CompositionLocalProvider(
             LocalBottomOverlayPadding provides bottomOverlayPadding,
             LocalRightPanelExpandedState provides rightPanelExpandedState
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(resolveMainPageBackgroundColor(colorScheme))
-                    )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(resolveMainPageBackgroundColor(colorScheme))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            translationX = if (albumDetailTransitionActive) {
+                                primaryPageParallaxOffset.value.toPx()
+                            } else {
+                                0f
+                            }
+                        }
+                ) {
                     Scaffold(
                         contentWindowInsets = WindowInsets(0, 0, 0, 0),
                         containerColor = Color.Transparent,
                         contentColor = colorScheme.onBackground,
                         topBar = {
                             Box {
-                                EaraTopBarContainer(
-                                    modifier = Modifier.graphicsLayer {
-                                        translationX = if (albumDetailTransitionActive) {
-                                            primaryPageParallaxOffset.value.toPx()
-                                        } else {
-                                            0f
-                                        }
-                                    }
-                                ) {
+                                EaraTopBarContainer {
                                     Column {
                                         Spacer(modifier = Modifier.windowInsetsTopHeight(StableWindowInsets.statusBars))
                                         CenterAlignedTopAppBar(
@@ -1730,6 +1732,11 @@ fun MainContainer(
                                 .zIndex(if (albumDetailTransitionActive) 1f else 0f)
                         ) {
                             val topContentPadding = padding.calculateTopPadding()
+                            SideEffect {
+                                if (secondaryPageTopPadding != topContentPadding) {
+                                    secondaryPageTopPadding = topContentPadding
+                                }
+                            }
                             primaryContentStateHolder.SaveableStateProvider("primary_pager") {
                                 HorizontalPager(
                                     state = primaryPagerState,
@@ -1737,7 +1744,11 @@ fun MainContainer(
                                         .fillMaxSize()
                                         .padding(top = topContentPadding)
                                         .graphicsLayer {
-                                            translationX = primaryPageParallaxOffset.value.toPx()
+                                            translationX = if (albumDetailTransitionActive) {
+                                                0f
+                                            } else {
+                                                primaryPageParallaxOffset.value.toPx()
+                                            }
                                         },
                                     beyondBoundsPageCount = primaryPagerBeyondBoundsPageCount,
                                     flingBehavior = primaryPagerFlingBehavior,
@@ -1950,7 +1961,11 @@ fun MainContainer(
                             }
                             }
 
-                            NavHost(
+                        }
+                    }
+                }
+
+                NavHost(
                                 navController = navController,
                                 startDestination = initialDestination,
                                 enterTransition = {
@@ -1977,7 +1992,7 @@ fun MainContainer(
                     Box(modifier = Modifier.fillMaxSize())
                 }
                                 composable("library_filter") {
-                    SecondaryPageBackground(topPadding = topContentPadding) {
+                    SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                         LibraryFilterScreen(
                             onClose = { navController.popBackStack() },
                             viewModel = libraryViewModel
@@ -2061,7 +2076,7 @@ fun MainContainer(
                     Box(modifier = Modifier.fillMaxSize())
                 }
                 composable(route = Routes.SearchAssist) {
-                    SecondaryPageBackground(topPadding = topContentPadding) {
+                    SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                         SearchAssistScreen(
                             windowSizeClass = windowSizeClass,
                             initialRequest = searchAssistInitialRequest,
@@ -2087,7 +2102,7 @@ fun MainContainer(
                         searchAssistInitialRequest.copy(keyword = initialKeyword)
                     }
 
-                    SecondaryPageBackground(topPadding = topContentPadding) {
+                    SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                         SearchAssistScreen(
                             windowSizeClass = windowSizeClass,
                             initialRequest = initialRequest,
@@ -2316,7 +2331,7 @@ fun MainContainer(
                 ) { backStackEntry ->
                     val groupId = backStackEntry.arguments?.getLong("groupId") ?: 0L
                     val groupName = decodeRouteArg(backStackEntry.arguments?.getString("groupName").orEmpty())
-                    SecondaryPageBackground(topPadding = topContentPadding) {
+                    SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                         com.asmr.player.ui.groups.AlbumGroupDetailScreen(
                             windowSizeClass = windowSizeClass,
                             groupId = groupId,
@@ -2335,7 +2350,7 @@ fun MainContainer(
                     )
                 ) { backStackEntry ->
                     val albumId = backStackEntry.arguments?.getLong("albumId") ?: 0L
-                    SecondaryPageBackground(topPadding = topContentPadding) {
+                    SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                         com.asmr.player.ui.groups.AlbumGroupPickerScreen(
                             windowSizeClass = windowSizeClass,
                             albumId = albumId,
@@ -2353,7 +2368,7 @@ fun MainContainer(
                 ) { backStackEntry ->
                     val playlistId = backStackEntry.arguments?.getLong("playlistId") ?: 0L
                     val playlistName = decodeRouteArg(backStackEntry.arguments?.getString("playlistName").orEmpty())
-                    SecondaryPageBackground(topPadding = topContentPadding) {
+                    SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                         PlaylistDetailScreen(
                             windowSizeClass = windowSizeClass,
                             playlistId = playlistId,
@@ -2370,7 +2385,7 @@ fun MainContainer(
                     if (type == "favorites") {
                         Box(modifier = Modifier.fillMaxSize())
                     } else {
-                        SecondaryPageBackground(topPadding = topContentPadding) {
+                        SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                             SystemPlaylistScreen(
                                 windowSizeClass = windowSizeClass,
                                 onPlayAll = { items, startItem ->
@@ -2386,7 +2401,7 @@ fun MainContainer(
                     Box(modifier = Modifier.fillMaxSize())
                 }
                 composable("downloads") {
-                    SecondaryPageBackground(topPadding = topContentPadding) {
+                    SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                         DownloadsScreen(
                             windowSizeClass = windowSizeClass,
                             scrollToTopSignal = downloadsScrollToTopSignal,
@@ -2395,7 +2410,7 @@ fun MainContainer(
                     }
                 }
                 composable("dlsite_login") {
-                    SecondaryPageBackground(topPadding = topContentPadding) {
+                    SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                         DlsiteLoginScreen(
                             windowSizeClass = windowSizeClass,
                             onDone = { navController.popBackStack() },
@@ -2415,8 +2430,6 @@ fun MainContainer(
                                 .pointerInteropFilter { true }
                         )
                     }
-            }
-
             if (showManualRjDialog && navBackStackEntry != null &&
                 (currentRoute?.startsWith("album_detail/{albumId}") == true || currentRoute?.startsWith("album_detail/") == true)
             ) {
@@ -2449,10 +2462,6 @@ fun MainContainer(
                     onIgnoreAll = ignoreAllHandler
                 )
             }
-
-        }
-
-        }
 
         if (bottomChromeVisible) {
             BoxWithConstraints(
