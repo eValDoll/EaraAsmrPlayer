@@ -900,11 +900,9 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         item(key = "dlsite-header") { header() }
         item(key = "dlsite-gallery-section") {
             Column(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
-                Text(
-                    text = "Gallery",
-                    modifier = Modifier.padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
+                AlbumDetailSectionHeading(
+                    title = "Gallery",
+                    modifier = Modifier.padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp)
                 )
                 Box(
                     modifier = Modifier
@@ -974,23 +972,18 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             }
         }
         item(key = "dlsite-one-header") {
-            Row(
+            AlbumDetailSectionHeading(
+                title = if (asmrOneTree.isNotEmpty()) "ONE（已收录）" else "ONE",
                 modifier = dlsiteAnimatedSectionModifier(
                     Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
                     animateIntro = animateIntro
                 ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (asmrOneTree.isNotEmpty()) "ONE（已收录）" else "ONE",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                IconButton(onClick = onRefreshAsmrOne, enabled = !isLoadingAsmrOne) {
-                    Icon(Icons.Rounded.Refresh, contentDescription = "刷新")
+                actions = {
+                    IconButton(onClick = onRefreshAsmrOne, enabled = !isLoadingAsmrOne) {
+                        Icon(Icons.Rounded.Refresh, contentDescription = "刷新")
+                    }
                 }
-            }
+            )
         }
         val asmrOnePanelState = when {
             asmrOneTree.isNotEmpty() && browser != null -> DirectoryTreePanelState.Content
@@ -1134,26 +1127,21 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             }
         }
         item(key = "dlsite-trial-header") {
-            Row(
+            AlbumDetailSectionHeading(
+                title = "试听 / 试看",
                 modifier = dlsiteAnimatedSectionModifier(
                     Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
                     animateIntro = animateIntro
                 ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "试听 / 试看",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                IconButton(onClick = onRefreshTrial, enabled = !isLoading && !isLoadingTrial) {
-                    Icon(Icons.Rounded.Refresh, contentDescription = "刷新")
+                actions = {
+                    IconButton(onClick = onRefreshTrial, enabled = !isLoading && !isLoadingTrial) {
+                        Icon(Icons.Rounded.Refresh, contentDescription = "刷新")
+                    }
+                    IconButton(onClick = onDownloadTrial, enabled = trialDownloadEnabled) {
+                        Icon(Icons.Rounded.Download, contentDescription = "下载")
+                    }
                 }
-                IconButton(onClick = onDownloadTrial, enabled = trialDownloadEnabled) {
-                    Icon(Icons.Rounded.Download, contentDescription = "下载")
-                }
-            }
+            )
         }
         if (trialTracks.isEmpty()) {
             item(key = "dlsite-trial-content") {

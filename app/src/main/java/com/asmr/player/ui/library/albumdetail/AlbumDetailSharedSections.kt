@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.library
+package com.asmr.player.ui.library
 
 import android.content.Intent
 import android.net.Uri
@@ -15,7 +15,6 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -45,7 +44,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.graphics.graphicsLayer
@@ -269,19 +267,62 @@ internal fun DlsiteRecommendationsBlocks(
 }
 
 @Composable
+internal fun AlbumDetailSectionHeading(
+    title: String,
+    modifier: Modifier = Modifier,
+    actions: @Composable RowScope.() -> Unit = {}
+) {
+    val colorScheme = AsmrTheme.colorScheme
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(5.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.35.sp
+                ),
+                color = colorScheme.textPrimary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Box(
+                modifier = Modifier
+                    .width(64.dp)
+                    .height(2.dp)
+                    .clip(RoundedCornerShape(999.dp))
+                    .background(
+                        Brush.horizontalGradient(
+                            listOf(
+                                colorScheme.primary.copy(alpha = 0.82f),
+                                colorScheme.primary.copy(alpha = 0.08f),
+                                Color.Transparent
+                            )
+                        )
+                    )
+            )
+        }
+        actions()
+    }
+}
+
+@Composable
 private fun DlsiteRecommendationsBlock(
     title: String,
     items: List<DlsiteRecommendedWork>,
     onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit
 ) {
     if (items.isEmpty()) return
-    val colorScheme = AsmrTheme.colorScheme
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            color = colorScheme.textPrimary
-        )
+        AlbumDetailSectionHeading(title = title)
         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             itemsIndexed(
                 items = items.take(30),
