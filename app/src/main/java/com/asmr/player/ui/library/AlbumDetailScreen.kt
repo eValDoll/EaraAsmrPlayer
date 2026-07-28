@@ -1686,13 +1686,10 @@ private fun AlbumHeader(
                         expandLayout = cvExpandLayout
                     ) {
                         Box(modifier = Modifier.padding(bottom = if (album.tags.isNotEmpty()) 6.dp else 8.dp)) {
-                            AlbumCvChipsFlow(
+                            AlbumHeaderCvFlow(
                                 cvText = album.cv,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
                                 onCvClick = { cv -> copyMeta("CV", cv) },
                                 onCvLongClick = onMetaLongClick,
-                                leadingVisual = AlbumMetaLeadingVisual.Icon,
                             )
                         }
                     }
@@ -1706,13 +1703,10 @@ private fun AlbumHeader(
                         expandLayout = tagsExpandLayout
                     ) {
                         Box(modifier = Modifier.padding(bottom = 8.dp)) {
-                            AlbumTagsFlow(
+                            AlbumHeaderTagsFlow(
                                 tags = album.tags,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
                                 onTagClick = { tag -> copyMeta("标签", tag) },
                                 onTagLongClick = onMetaLongClick,
-                                leadingVisual = AlbumMetaLeadingVisual.Icon,
                             )
                         }
                     }
