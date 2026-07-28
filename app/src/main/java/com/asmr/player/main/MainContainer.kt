@@ -219,6 +219,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 import androidx.compose.foundation.border
@@ -246,10 +247,17 @@ internal data class BatchPlaylistPickerRequest(
 
 private const val SecondaryPageEnterDurationMs = 440
 private const val SecondaryPageExitDurationMs = 420
+private const val SecondaryPageTouchBlockDurationMs = 320
 private const val PrimaryPagerSnapThreshold = 0.16f
 private val SecondaryPageSlideEasing = CubicBezierEasing(0.215f, 0.61f, 0.355f, 1f)
 private val PrimaryPageParallaxOffset = 120.dp
 private val AlbumDetailTopBarButtonShape = CircleShape
+private val AlbumDetailBackTouchPassThroughWidth = 88.dp
+private val AlbumDetailTopBarTouchPassThroughHeight = 64.dp
+
+private fun String?.startsWithAlbumDetailRoute(): Boolean {
+    return this?.startsWith("album_detail") == true
+}
 
 private fun NavBackStackEntry.usesSecondaryPageSlideTransition(): Boolean {
     return resolveCurrentPrimaryDestinationRoute(
@@ -569,7 +577,6 @@ fun MainContainer(
     val navController = rememberNavController()
     val navigator = remember(navController) { AppNavigator(navController) }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val visibleNavEntries by navController.visibleEntries.collectAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val hasPreviousBackStackEntry = navController.previousBackStackEntry != null
     val currentPlaylistSystemType = navBackStackEntry?.arguments?.getString("type")
@@ -657,6 +664,8 @@ fun MainContainer(
     var pendingDetailNavigation by remember { mutableStateOf(false) }
     var pendingDetailNavigationSeq by remember { mutableIntStateOf(0) }
     var cancelPendingDetailNavigation by remember { mutableStateOf(false) }
+    var settledAlbumDetailEntryId by remember { mutableStateOf<String?>(null) }
+    var pendingAlbumDetailPopEntryId by remember { mutableStateOf<String?>(null) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val searchViewModel: SearchViewModel = hiltViewModel()
@@ -1070,9 +1079,13 @@ fun MainContainer(
                 last in primaryPagerRoutes &&
                 normalizedCurrentRoute in primaryPagerRoutes
         if (last != null && normalizedCurrentRoute != null && last != normalizedCurrentRoute && !isPrimaryPagerSwitch) {
+            val touchBlockDurationMillis = when {
+                last.startsWithAlbumDetailRoute() -> SecondaryPageExitDurationMs
+                else -> SecondaryPageTouchBlockDurationMs
+            }
             blockNavTouches = true
             try {
-                delay(320)
+                delay(touchBlockDurationMillis.toLong())
             } finally {
                 if (touchBlockSeq == seq) {
                     blockNavTouches = false
@@ -1120,6 +1133,34 @@ fun MainContainer(
     val materialColorScheme = MaterialTheme.colorScheme
     val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
     val isAlbumDetailRoute = currentRoute?.startsWith("album_detail") == true
+    val albumDetailEntryId = navBackStackEntry
+        ?.takeIf { it.destination.route.startsWithAlbumDetailRoute() }
+        ?.id
+    LaunchedEffect(albumDetailEntryId) {
+        if (albumDetailEntryId == null) {
+            settledAlbumDetailEntryId = null
+            pendingAlbumDetailPopEntryId = null
+            return@LaunchedEffect
+        }
+
+        settledAlbumDetailEntryId = null
+        pendingAlbumDetailPopEntryId = null
+        delay(SecondaryPageEnterDurationMs.toLong())
+        settledAlbumDetailEntryId = albumDetailEntryId
+        withFrameNanos { }
+        if (pendingAlbumDetailPopEntryId == albumDetailEntryId) {
+            pendingAlbumDetailPopEntryId = null
+            navController.popBackStack()
+        }
+    }
+    val requestAlbumDetailBack: () -> Unit = {
+        val entryId = albumDetailEntryId
+        if (entryId == null || settledAlbumDetailEntryId == entryId) {
+            navController.popBackStack()
+        } else {
+            pendingAlbumDetailPopEntryId = entryId
+        }
+    }
     val topBarContentColor = if (isAlbumDetailRoute) Color.White else colorScheme.onSurface
     val drawerContainerColor = if (colorScheme.isDark) Color(0xFF121212) else Color.White
 
@@ -1383,10 +1424,6 @@ fun MainContainer(
         val currentScreenIsPrimary = currentPrimaryRoute != null
         val showBackButton = !currentScreenIsPrimary
         val showPrimaryBrand = currentScreenIsPrimary
-        val albumDetailExitTransitionActive = !isAlbumDetailRoute && visibleNavEntries.any { entry ->
-            entry.destination.route?.startsWith("album_detail") == true
-        }
-        val albumDetailTransitionActive = isAlbumDetailRoute || albumDetailExitTransitionActive
         var primaryContentCoveredByAlbumDetail by remember { mutableStateOf(false) }
         LaunchedEffect(isAlbumDetailRoute) {
             if (isAlbumDetailRoute) {
@@ -1410,6 +1447,18 @@ fun MainContainer(
             ),
             label = "primaryPageParallaxOffset"
         )
+        var albumDetailLayerLatched by remember { mutableStateOf(isAlbumDetailRoute) }
+        val albumDetailTransitionActive = isAlbumDetailRoute || albumDetailLayerLatched
+        LaunchedEffect(isAlbumDetailRoute) {
+            if (isAlbumDetailRoute) {
+                albumDetailLayerLatched = true
+            } else if (albumDetailLayerLatched) {
+                snapshotFlow { primaryPageParallaxOffset.value }
+                    .filter { it == 0.dp }
+                    .first()
+                albumDetailLayerLatched = false
+            }
+        }
         val useLargeBottomChrome = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && !isPhone
         val navigationBarBottomPadding = StableWindowInsets.navigationBars
             .only(WindowInsetsSides.Bottom)
@@ -2123,7 +2172,7 @@ fun MainContainer(
                     val rj = backStackEntry.arguments?.getString("rj").orEmpty()
                     AlbumDetailRouteFrame(
                         backStackEntry = backStackEntry,
-                        onBack = { navController.popBackStack() },
+                        onBack = requestAlbumDetailBack,
                         onEditRj = { currentRj ->
                             manualRjInput = currentRj
                             showManualRjDialog = true
@@ -2189,7 +2238,7 @@ fun MainContainer(
                     val rjCode = backStackEntry.arguments?.getString("rjCode")
                     AlbumDetailRouteFrame(
                         backStackEntry = backStackEntry,
-                        onBack = { navController.popBackStack() },
+                        onBack = requestAlbumDetailBack,
                         onEditRj = { currentRj ->
                             manualRjInput = currentRj
                             showManualRjDialog = true
@@ -2250,7 +2299,7 @@ fun MainContainer(
                     val rj = backStackEntry.arguments?.getString("rj").orEmpty()
                     AlbumDetailRouteFrame(
                         backStackEntry = backStackEntry,
-                        onBack = { navController.popBackStack() },
+                        onBack = requestAlbumDetailBack,
                         onEditRj = { currentRj ->
                             manualRjInput = currentRj
                             showManualRjDialog = true
@@ -2424,11 +2473,30 @@ fun MainContainer(
             }
 
                     if (blockNavTouches) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .pointerInteropFilter { true }
-                        )
+                        if (isAlbumDetailRoute) {
+                            val albumDetailTopBarTouchPassThroughHeight =
+                                StableWindowInsets.statusBars.asPaddingValues().calculateTopPadding() +
+                                    AlbumDetailTopBarTouchPassThroughHeight
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(albumDetailTopBarTouchPassThroughHeight)
+                                    .padding(start = AlbumDetailBackTouchPassThroughWidth)
+                                    .pointerInteropFilter { true }
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(top = albumDetailTopBarTouchPassThroughHeight)
+                                    .pointerInteropFilter { true }
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .pointerInteropFilter { true }
+                            )
+                        }
                     }
             if (showManualRjDialog && navBackStackEntry != null &&
                 (currentRoute?.startsWith("album_detail/{albumId}") == true || currentRoute?.startsWith("album_detail/") == true)
