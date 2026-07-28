@@ -389,6 +389,10 @@ class AlbumDetailViewModel @Inject constructor(
         lastAlbumKey = null
     }
 
+    fun cancelOnlineLoadsForExit() {
+        cancelPendingOnlineJobs(resetLoadingState = false)
+    }
+
     private fun cancelPendingOnlineJobs(resetLoadingState: Boolean) {
         dlsiteLoadToken++
         dlsiteTrialLoadToken++

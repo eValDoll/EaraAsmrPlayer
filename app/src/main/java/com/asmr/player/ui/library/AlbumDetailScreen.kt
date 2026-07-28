@@ -1184,16 +1184,19 @@ private fun AlbumDetailHeroBackground(
     val blurRadiusPx = with(density) {
         AlbumDetailHeroBlurRadius.toPx().coerceAtMost(AlbumDetailHeroBlurRadiusMaxPx)
     }
-    val blurModifier = remember(blurRadiusPx) {
+    val blurRenderEffect = remember(blurRadiusPx) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            Modifier.graphicsLayer {
-                renderEffect = RenderEffect
-                    .createBlurEffect(blurRadiusPx, blurRadiusPx, Shader.TileMode.CLAMP)
-                    .asComposeRenderEffect()
-            }
+            RenderEffect
+                .createBlurEffect(blurRadiusPx, blurRadiusPx, Shader.TileMode.CLAMP)
+                .asComposeRenderEffect()
         } else {
-            Modifier.blur(AlbumDetailHeroBlurRadius)
+            null
         }
+    }
+    val legacyBlurModifier = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+        Modifier.blur(AlbumDetailHeroBlurRadius)
+    } else {
+        Modifier
     }
 
     // hero 的可见高度跟随手势变化，但内部始终按完整高度测量。这样封面、毛玻璃和文字不必逐帧
@@ -1273,8 +1276,9 @@ private fun AlbumDetailHeroBackground(
             loadAtOriginalSize = true,
             modifier = Modifier
                 .fillMaxSize()
-                .then(blurModifier)
+                .then(legacyBlurModifier)
                 .graphicsLayer {
+                    renderEffect = blurRenderEffect
                     compositingStrategy = CompositingStrategy.Offscreen
                     val intro = heroIntroProgress.value.coerceIn(0f, 1f)
                     val introScale = AlbumDetailHeroIntroStartScale -
@@ -1322,18 +1326,21 @@ private fun AlbumDetailHeroBackground(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer {
-                    alpha = heroIntroProgress.value.coerceIn(0f, 1f)
-                }
-                .background(
-                    Brush.verticalGradient(
+                .drawWithCache {
+                    val topMask = Brush.verticalGradient(
                         colorStops = arrayOf(
                             0f to Color.Black.copy(alpha = 0.44f),
                             0.42f to Color.Black.copy(alpha = 0.16f),
                             0.70f to Color.Transparent
                         )
                     )
-                )
+                    onDrawBehind {
+                        drawRect(
+                            brush = topMask,
+                            alpha = heroIntroProgress.value.coerceIn(0f, 1f)
+                        )
+                    }
+                }
         )
         // 只在封面容器内部做底缘融色，让封面边缘轻轻透出页面背景。
         Box(

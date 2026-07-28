@@ -1649,12 +1649,14 @@ fun MainContainer(
                                     key = { primaryPagerRoutes[it] }
                                 ) { page ->
                                     val route = primaryPagerRoutes[page]
+                                    val primaryRouteActive = visualPrimaryRoute == route &&
+                                        !albumDetailTransitionActive
                                     primaryContentStateHolder.SaveableStateProvider("primary_route:$route") {
                                         when (route) {
                                         Routes.Library -> {
                                             LibraryScreen(
                                                 windowSizeClass = windowSizeClass,
-                                                isActive = visualPrimaryRoute == route,
+                                                isActive = primaryRouteActive,
                                                 scrollToTopSignal = libraryScrollToTopSignal,
                                                 onAlbumClick = { album ->
                                                     AlbumCoverHintStore.record(
@@ -1692,7 +1694,7 @@ fun MainContainer(
                                         Routes.Search -> {
                                             SearchScreen(
                                                 windowSizeClass = windowSizeClass,
-                                                isActive = visualPrimaryRoute == route,
+                                                isActive = primaryRouteActive,
                                                 scrollToTopSignal = searchScrollToTopSignal,
                                                 submittedSearchKeyword = submittedSearchKeyword,
                                                 submittedSearchOrderName = submittedSearchOrderName,
@@ -1741,7 +1743,7 @@ fun MainContainer(
                                         Routes.HotListening -> {
                                             HotListeningScreen(
                                                 windowSizeClass = windowSizeClass,
-                                                isActive = visualPrimaryRoute == route,
+                                                isActive = primaryRouteActive,
                                                 scrollToTopSignal = hotListeningScrollToTopSignal,
                                                 onAlbumClick = { album ->
                                                     AlbumCoverHintStore.record(
@@ -1771,7 +1773,7 @@ fun MainContainer(
                                         "playlist_system/favorites" -> {
                                             SystemPlaylistScreen(
                                                 windowSizeClass = windowSizeClass,
-                                                isActive = visualPrimaryRoute == route,
+                                                isActive = primaryRouteActive,
                                                 scrollToTopSignal = favoritesScrollToTopSignal,
                                                 onPlayAll = { items, startItem ->
                                                     playerViewModel.playPlaylistItems(items, startItem)
@@ -1784,7 +1786,7 @@ fun MainContainer(
                                         "playlists" -> {
                                             PlaylistsScreen(
                                                 windowSizeClass = windowSizeClass,
-                                                isActive = visualPrimaryRoute == route,
+                                                isActive = primaryRouteActive,
                                                 scrollToTopSignal = playlistsScrollToTopSignal,
                                                 onPlaylistClick = { playlist ->
                                                     val encoded = URLEncoder.encode(playlist.name, "UTF-8")
@@ -1797,7 +1799,7 @@ fun MainContainer(
                                         "groups" -> {
                                             com.asmr.player.ui.groups.AlbumGroupsScreen(
                                                 windowSizeClass = windowSizeClass,
-                                                isActive = visualPrimaryRoute == route,
+                                                isActive = primaryRouteActive,
                                                 scrollToTopSignal = groupsScrollToTopSignal,
                                                 onGroupClick = { group ->
                                                     val encoded = encodeRouteArg(group.name)
@@ -1810,7 +1812,7 @@ fun MainContainer(
                                         "settings" -> {
                                             SettingsScreen(
                                                 windowSizeClass = windowSizeClass,
-                                                isActive = visualPrimaryRoute == route,
+                                                isActive = primaryRouteActive,
                                                 viewModel = settingsViewModel,
                                                 libraryViewModel = libraryViewModel,
                                                 scrollToTopSignal = settingsScrollToTopSignal,
@@ -2290,6 +2292,16 @@ fun MainContainer(
                 enter = secondaryPageEnterTransition(),
                 exit = secondaryPagePopExitTransition()
             ) {
+                val albumDetailViewModel = albumDetailTopBarEntry?.let { entry ->
+                    hiltViewModel<AlbumDetailViewModel>(entry)
+                }
+                val closeAlbumDetail = {
+                    if (isAlbumDetailRoute) {
+                        albumDetailViewModel?.cancelOnlineLoadsForExit()
+                        navController.popBackStack()
+                    }
+                }
+                BackHandler(enabled = isAlbumDetailRoute, onBack = closeAlbumDetail)
                 Column {
                     Spacer(modifier = Modifier.windowInsetsTopHeight(StableWindowInsets.statusBars))
                     CenterAlignedTopAppBar(
@@ -2303,11 +2315,7 @@ fun MainContainer(
                         ),
                         navigationIcon = {
                             EaraTopBarIconButton(
-                                onClick = {
-                                    if (isAlbumDetailRoute) {
-                                        navController.popBackStack()
-                                    }
-                                },
+                                onClick = closeAlbumDetail,
                                 modifier = Modifier
                                     .padding(start = 4.dp)
                                     .albumDetailTopBarButtonSurface(true)
@@ -2320,9 +2328,7 @@ fun MainContainer(
                             }
                         },
                         actions = {
-                            val entry = albumDetailTopBarEntry
-                            if (entry != null) {
-                                val albumDetailViewModel: AlbumDetailViewModel = hiltViewModel(entry)
+                            if (albumDetailViewModel != null) {
                                 val detailState by albumDetailViewModel.uiState.collectAsState()
                                 val showManualBind =
                                     (detailState as? AlbumDetailUiState.Success)?.model?.let { model ->
