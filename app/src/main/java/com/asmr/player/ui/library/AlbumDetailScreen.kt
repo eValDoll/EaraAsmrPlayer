@@ -310,8 +310,6 @@ fun AlbumDetailScreen(
     windowSizeClass: WindowSizeClass,
     albumId: Long? = null,
     rjCode: String? = null,
-    refreshToken: Long = 0L,
-    onConsumeRefreshToken: (() -> Unit)? = null,
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
     onPlayMediaItems: (List<MediaItem>, Int) -> Unit = { _, _ -> },
     onAddToQueue: (Album, Track) -> Boolean = { _, _ -> false },
@@ -322,13 +320,15 @@ fun AlbumDetailScreen(
     onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit = { _, _ -> },
     onSearchKeyword: (String) -> Unit = {},
     initialTab: Int? = null,
+    initialOnlineLoadDelayMillis: Long = 0L,
+    playlistsViewModel: PlaylistsViewModel = hiltViewModel(),
+    albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel(),
+    settingsViewModel: SettingsViewModel = hiltViewModel(),
+    libraryViewModel: LibraryViewModel = hiltViewModel(),
     viewModel: AlbumDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val cloudSyncSelectionDialogState by viewModel.cloudSyncSelectionDialogState.collectAsState()
-    val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
-    val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
-    val settingsViewModel: SettingsViewModel = hiltViewModel()
     val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsState()
     val colorScheme = AsmrTheme.colorScheme
     val screenKey = remember(albumId, rjCode) {
@@ -368,13 +368,18 @@ fun AlbumDetailScreen(
         }
     }
 
-    LaunchedEffect(albumId, rjCode) {
-        viewModel.loadAlbum(albumId, rjCode, force = false)
+    var initialOnlineLoadReady by remember(screenKey) {
+        mutableStateOf(initialOnlineLoadDelayMillis <= 0L)
     }
-    LaunchedEffect(refreshToken) {
-        if (refreshToken == 0L) return@LaunchedEffect
-        viewModel.loadAlbum(albumId, rjCode, force = true)
-        onConsumeRefreshToken?.invoke()
+    LaunchedEffect(screenKey, initialOnlineLoadDelayMillis) {
+        if (initialOnlineLoadDelayMillis > 0L) {
+            delay(initialOnlineLoadDelayMillis)
+            initialOnlineLoadReady = true
+        }
+    }
+    LaunchedEffect(albumId, rjCode) {
+        withFrameNanos { }
+        viewModel.loadAlbum(albumId, rjCode, force = false)
     }
     DisposableEffect(screenKey, viewModel) {
         onDispose {
@@ -428,7 +433,6 @@ fun AlbumDetailScreen(
                     val shouldAnimateHeaderIntro = true
                     val availableTags by viewModel.availableTags.collectAsState()
                     val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsState()
-                    val libraryViewModel: LibraryViewModel = hiltViewModel()
                     var showTagManager by remember { mutableStateOf(false) }
                     var tagManageTrack by remember { mutableStateOf<Track?>(null) }
                     var localPreviewFile by remember { mutableStateOf<LocalTreeUiEntry.File?>(null) }
@@ -751,8 +755,10 @@ fun AlbumDetailScreen(
                                 selectedTab,
                                 model.rjCode,
                                 model.dlsiteWorkno,
-                                model.hasResolvedInitialDlsiteTarget
+                                model.hasResolvedInitialDlsiteTarget,
+                                initialOnlineLoadReady
                             ) {
+                                if (!initialOnlineLoadReady) return@LaunchedEffect
                                 val loadPlan = albumDetailOnlineLoadPlan(
                                     selectedTab = selectedTab,
                                     hasResolvedInitialDlsiteTarget = model.hasResolvedInitialDlsiteTarget

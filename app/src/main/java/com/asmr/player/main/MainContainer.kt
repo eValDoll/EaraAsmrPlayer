@@ -292,6 +292,97 @@ private fun Modifier.albumDetailTopBarButtonSurface(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AlbumDetailRouteFrame(
+    backStackEntry: NavBackStackEntry,
+    onBack: () -> Unit,
+    onEditRj: (String) -> Unit,
+    content: @Composable (AlbumDetailViewModel) -> Unit
+) {
+    val viewModel = hiltViewModel<AlbumDetailViewModel>(backStackEntry)
+    val closeAlbumDetail = {
+        viewModel.cancelOnlineLoadsForExit()
+        onBack()
+    }
+    BackHandler(onBack = closeAlbumDetail)
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        content(viewModel)
+        AlbumDetailRouteTopBar(
+            viewModel = viewModel,
+            onBack = closeAlbumDetail,
+            onEditRj = onEditRj,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .zIndex(2f)
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AlbumDetailRouteTopBar(
+    viewModel: AlbumDetailViewModel,
+    onBack: () -> Unit,
+    onEditRj: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val detailState by viewModel.uiState.collectAsState()
+    val detailModel = (detailState as? AlbumDetailUiState.Success)?.model
+    val showManualBind = detailModel?.localAlbum?.id?.let { it > 0L } == true
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Spacer(modifier = Modifier.windowInsetsTopHeight(StableWindowInsets.statusBars))
+        CenterAlignedTopAppBar(
+            modifier = Modifier.height(56.dp),
+            title = {},
+            windowInsets = WindowInsets(0, 0, 0, 0),
+            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                containerColor = Color.Transparent,
+                navigationIconContentColor = Color.White,
+                actionIconContentColor = Color.White
+            ),
+            navigationIcon = {
+                EaraTopBarIconButton(
+                    onClick = onBack,
+                    modifier = Modifier
+                        .padding(start = 4.dp)
+                        .albumDetailTopBarButtonSurface(true)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = null,
+                        tint = Color.White
+                    )
+                }
+            },
+            actions = {
+                if (showManualBind) {
+                    EaraTopBarIconButton(
+                        onClick = {
+                            val local = detailModel?.localAlbum
+                            val currentRj = detailModel?.rjCode?.trim().orEmpty()
+                                .ifBlank { local?.rjCode?.trim().orEmpty() }
+                                .ifBlank { local?.workId?.trim().orEmpty() }
+                            onEditRj(currentRj)
+                        },
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .albumDetailTopBarButtonSurface(true)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Edit,
+                            contentDescription = "手动输入RJ号",
+                            tint = Color.White
+                        )
+                    }
+                }
+            }
+        )
+    }
+}
+
 @Composable
 private fun SecondaryPageBackground(
     modifier: Modifier = Modifier,
@@ -1296,13 +1387,18 @@ fun MainContainer(
             entry.destination.route?.startsWith("album_detail") == true
         }
         val albumDetailTransitionActive = isAlbumDetailRoute || albumDetailExitTransitionActive
-        val albumDetailTopBarEntry = visibleNavEntries.lastOrNull { entry ->
-            entry.destination.route?.startsWith("album_detail") == true
-        } ?: navBackStackEntry?.takeIf { entry ->
-            entry.destination.route?.startsWith("album_detail") == true
+        var primaryContentCoveredByAlbumDetail by remember { mutableStateOf(false) }
+        LaunchedEffect(isAlbumDetailRoute) {
+            if (isAlbumDetailRoute) {
+                delay(SecondaryPageEnterDurationMs.toLong())
+                primaryContentCoveredByAlbumDetail = true
+            } else if (primaryContentCoveredByAlbumDetail) {
+                delay(SecondaryPageExitDurationMs.toLong())
+                primaryContentCoveredByAlbumDetail = false
+            }
         }
         val hasOverlayRoute = currentPrimaryRoute == null
-        val primaryPageParallaxOffset by animateDpAsState(
+        val primaryPageParallaxOffset = animateDpAsState(
             targetValue = if (hasOverlayRoute) -PrimaryPageParallaxOffset else 0.dp,
             animationSpec = tween(
                 durationMillis = if (hasOverlayRoute) {
@@ -1341,7 +1437,7 @@ fun MainContainer(
                                 EaraTopBarContainer(
                                     modifier = Modifier.graphicsLayer {
                                         translationX = if (albumDetailTransitionActive) {
-                                            primaryPageParallaxOffset.toPx()
+                                            primaryPageParallaxOffset.value.toPx()
                                         } else {
                                             0f
                                         }
@@ -1641,7 +1737,7 @@ fun MainContainer(
                                         .fillMaxSize()
                                         .padding(top = topContentPadding)
                                         .graphicsLayer {
-                                            translationX = primaryPageParallaxOffset.toPx()
+                                            translationX = primaryPageParallaxOffset.value.toPx()
                                         },
                                     beyondBoundsPageCount = primaryPagerBeyondBoundsPageCount,
                                     flingBehavior = primaryPagerFlingBehavior,
@@ -1650,7 +1746,7 @@ fun MainContainer(
                                 ) { page ->
                                     val route = primaryPagerRoutes[page]
                                     val primaryRouteActive = visualPrimaryRoute == route &&
-                                        !albumDetailTransitionActive
+                                        !primaryContentCoveredByAlbumDetail
                                     primaryContentStateHolder.SaveableStateProvider("primary_route:$route") {
                                         when (route) {
                                         Routes.Library -> {
@@ -2010,49 +2106,61 @@ fun MainContainer(
                     )
                 ) { backStackEntry ->
                     val rj = backStackEntry.arguments?.getString("rj").orEmpty()
-                    val refreshToken by backStackEntry.savedStateHandle.getStateFlow("refreshToken", 0L).collectAsState()
-                    AlbumDetailScreen(
-                        windowSizeClass = windowSizeClass,
-                        rjCode = rj,
-                        initialTab = backStackEntry.arguments?.getString("initialTab").toAlbumDetailInitialTab(),
-                        refreshToken = refreshToken,
-                        onConsumeRefreshToken = { backStackEntry.savedStateHandle["refreshToken"] = 0L },
-                        onPlayTracks = { album, tracks, startTrack ->
-                            scope.launch {
-                                if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                    openNowPlaying()
+                    AlbumDetailRouteFrame(
+                        backStackEntry = backStackEntry,
+                        onBack = { navController.popBackStack() },
+                        onEditRj = { currentRj ->
+                            manualRjInput = currentRj
+                            showManualRjDialog = true
+                        }
+                    ) { albumDetailViewModel ->
+                        AlbumDetailScreen(
+                            windowSizeClass = windowSizeClass,
+                            rjCode = rj,
+                            initialTab = backStackEntry.arguments?.getString("initialTab").toAlbumDetailInitialTab(),
+                            initialOnlineLoadDelayMillis = SecondaryPageEnterDurationMs.toLong(),
+                            onPlayTracks = { album, tracks, startTrack ->
+                                scope.launch {
+                                    if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
+                                        openNowPlaying()
+                                    }
                                 }
-                            }
-                        },
-                        onPlayMediaItems = { items, startIndex ->
-                            playerViewModel.playMediaItems(items, startIndex)
-                            openNowPlaying()
-                        },
-                        onAddToQueue = { album, track ->
-                            playerViewModel.addTrackToQueue(album, track)
-                        },
-                        onAddMediaItemsToQueue = { items ->
-                            playerViewModel.addMediaItemsToQueue(items)
-                        },
-                        onAddMediaItemsToFavorites = { items ->
-                            playlistsViewModel.addItemsToFavoritesInBackground(items)
-                        },
-                        onOpenPlaylistPicker = { item ->
-                            albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
-                        },
-                        onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
-                        onOpenAlbumByRj = { targetRj, work ->
-                            AlbumCoverHintStore.record(
-                                albumId = null,
-                                rjCode = targetRj,
-                                title = work?.title,
-                                circle = null,
-                                coverUrl = work?.coverUrl
-                            )
-                            navigator.openAlbumDetailByRjStacked(targetRj)
-                        },
-                        onSearchKeyword = ::submitMetaSearchKeyword
-                    )
+                            },
+                            onPlayMediaItems = { items, startIndex ->
+                                playerViewModel.playMediaItems(items, startIndex)
+                                openNowPlaying()
+                            },
+                            onAddToQueue = { album, track ->
+                                playerViewModel.addTrackToQueue(album, track)
+                            },
+                            onAddMediaItemsToQueue = { items ->
+                                playerViewModel.addMediaItemsToQueue(items)
+                            },
+                            onAddMediaItemsToFavorites = { items ->
+                                playlistsViewModel.addItemsToFavoritesInBackground(items)
+                            },
+                            onOpenPlaylistPicker = { item ->
+                                albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
+                            },
+                            onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
+                            onOpenAlbumByRj = { targetRj, work ->
+                                AlbumCoverHintStore.record(
+                                    albumId = null,
+                                    rjCode = targetRj,
+                                    title = work?.title,
+                                    circle = null,
+                                    coverUrl = work?.coverUrl
+                                )
+                                navigator.openAlbumDetailByRjStacked(targetRj)
+                            },
+                            onSearchKeyword = ::submitMetaSearchKeyword,
+                            playlistsViewModel = playlistsViewModel,
+                            albumGroupsViewModel = albumGroupsViewModel,
+                            settingsViewModel = settingsViewModel,
+                            libraryViewModel = libraryViewModel,
+                            viewModel = albumDetailViewModel
+                        )
+                    }
                 }
                 composable(
                     route = Routes.AlbumDetailByIdPattern,
@@ -2064,92 +2172,115 @@ fun MainContainer(
                 ) { backStackEntry ->
                     val albumId = backStackEntry.arguments?.getLong("albumId") ?: 0L
                     val rjCode = backStackEntry.arguments?.getString("rjCode")
-                    val refreshToken by backStackEntry.savedStateHandle.getStateFlow("refreshToken", 0L).collectAsState()
-                    AlbumDetailScreen(
-                        windowSizeClass = windowSizeClass,
-                        albumId = albumId,
-                        rjCode = rjCode,
-                        initialTab = backStackEntry.arguments?.getString("initialTab").toAlbumDetailInitialTab(),
-                        refreshToken = refreshToken,
-                        onConsumeRefreshToken = { backStackEntry.savedStateHandle["refreshToken"] = 0L },
-                        onPlayTracks = { album, tracks, startTrack ->
-                            scope.launch {
-                                if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                    openNowPlaying()
+                    AlbumDetailRouteFrame(
+                        backStackEntry = backStackEntry,
+                        onBack = { navController.popBackStack() },
+                        onEditRj = { currentRj ->
+                            manualRjInput = currentRj
+                            showManualRjDialog = true
+                        }
+                    ) { albumDetailViewModel ->
+                        AlbumDetailScreen(
+                            windowSizeClass = windowSizeClass,
+                            albumId = albumId,
+                            rjCode = rjCode,
+                            initialTab = backStackEntry.arguments?.getString("initialTab").toAlbumDetailInitialTab(),
+                            onPlayTracks = { album, tracks, startTrack ->
+                                scope.launch {
+                                    if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
+                                        openNowPlaying()
+                                    }
                                 }
-                            }
-                        },
-                        onPlayMediaItems = { items, startIndex ->
-                            playerViewModel.playMediaItems(items, startIndex)
-                            openNowPlaying()
-                        },
-                        onAddToQueue = { album, track ->
-                            playerViewModel.addTrackToQueue(album, track)
-                        },
-                        onAddMediaItemsToQueue = { items ->
-                            playerViewModel.addMediaItemsToQueue(items)
-                        },
-                        onAddMediaItemsToFavorites = { items ->
-                            playlistsViewModel.addItemsToFavoritesInBackground(items)
-                        },
-                        onOpenPlaylistPicker = { item ->
-                            albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
-                        },
-                        onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
-                        onOpenAlbumByRj = { targetRj, work ->
-                            AlbumCoverHintStore.record(
-                                albumId = null,
-                                rjCode = targetRj,
-                                title = work?.title,
-                                circle = null,
-                                coverUrl = work?.coverUrl
-                            )
-                            navigator.openAlbumDetailByRjStacked(targetRj)
-                        },
-                        onSearchKeyword = ::submitMetaSearchKeyword
-                    )
+                            },
+                            onPlayMediaItems = { items, startIndex ->
+                                playerViewModel.playMediaItems(items, startIndex)
+                                openNowPlaying()
+                            },
+                            onAddToQueue = { album, track ->
+                                playerViewModel.addTrackToQueue(album, track)
+                            },
+                            onAddMediaItemsToQueue = { items ->
+                                playerViewModel.addMediaItemsToQueue(items)
+                            },
+                            onAddMediaItemsToFavorites = { items ->
+                                playlistsViewModel.addItemsToFavoritesInBackground(items)
+                            },
+                            onOpenPlaylistPicker = { item ->
+                                albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
+                            },
+                            onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
+                            onOpenAlbumByRj = { targetRj, work ->
+                                AlbumCoverHintStore.record(
+                                    albumId = null,
+                                    rjCode = targetRj,
+                                    title = work?.title,
+                                    circle = null,
+                                    coverUrl = work?.coverUrl
+                                )
+                                navigator.openAlbumDetailByRjStacked(targetRj)
+                            },
+                            onSearchKeyword = ::submitMetaSearchKeyword,
+                            playlistsViewModel = playlistsViewModel,
+                            albumGroupsViewModel = albumGroupsViewModel,
+                            settingsViewModel = settingsViewModel,
+                            libraryViewModel = libraryViewModel,
+                            viewModel = albumDetailViewModel
+                        )
+                    }
                 }
                 composable(
                     route = "album_detail_online/{rj}",
                     arguments = listOf(navArgument("rj") { defaultValue = "" })
                 ) { backStackEntry ->
                     val rj = backStackEntry.arguments?.getString("rj").orEmpty()
-                    val refreshToken by backStackEntry.savedStateHandle.getStateFlow("refreshToken", 0L).collectAsState()
-                    AlbumDetailScreen(
-                        windowSizeClass = windowSizeClass,
-                        rjCode = rj,
-                        refreshToken = refreshToken,
-                        onConsumeRefreshToken = { backStackEntry.savedStateHandle["refreshToken"] = 0L },
-                        onPlayTracks = { album, tracks, startTrack ->
-                            scope.launch {
-                                if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                    openNowPlaying()
+                    AlbumDetailRouteFrame(
+                        backStackEntry = backStackEntry,
+                        onBack = { navController.popBackStack() },
+                        onEditRj = { currentRj ->
+                            manualRjInput = currentRj
+                            showManualRjDialog = true
+                        }
+                    ) { albumDetailViewModel ->
+                        AlbumDetailScreen(
+                            windowSizeClass = windowSizeClass,
+                            rjCode = rj,
+                            initialOnlineLoadDelayMillis = SecondaryPageEnterDurationMs.toLong(),
+                            onPlayTracks = { album, tracks, startTrack ->
+                                scope.launch {
+                                    if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
+                                        openNowPlaying()
+                                    }
                                 }
-                            }
-                        },
-                        onPlayMediaItems = { items, startIndex ->
-                            playerViewModel.playMediaItems(items, startIndex)
-                            openNowPlaying()
-                        },
-                        onAddToQueue = { album, track ->
-                            playerViewModel.addTrackToQueue(album, track)
-                        },
-                        onOpenPlaylistPicker = { item ->
-                            albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
-                        },
-                        onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
-                        onOpenAlbumByRj = { targetRj, work ->
-                            AlbumCoverHintStore.record(
-                                albumId = null,
-                                rjCode = targetRj,
-                                title = work?.title,
-                                circle = null,
-                                coverUrl = work?.coverUrl
-                            )
-                            navigator.openAlbumDetailByRjStacked(targetRj)
-                        },
-                        onSearchKeyword = ::submitMetaSearchKeyword
-                    )
+                            },
+                            onPlayMediaItems = { items, startIndex ->
+                                playerViewModel.playMediaItems(items, startIndex)
+                                openNowPlaying()
+                            },
+                            onAddToQueue = { album, track ->
+                                playerViewModel.addTrackToQueue(album, track)
+                            },
+                            onOpenPlaylistPicker = { item ->
+                                albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
+                            },
+                            onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
+                            onOpenAlbumByRj = { targetRj, work ->
+                                AlbumCoverHintStore.record(
+                                    albumId = null,
+                                    rjCode = targetRj,
+                                    title = work?.title,
+                                    circle = null,
+                                    coverUrl = work?.coverUrl
+                                )
+                                navigator.openAlbumDetailByRjStacked(targetRj)
+                            },
+                            onSearchKeyword = ::submitMetaSearchKeyword,
+                            playlistsViewModel = playlistsViewModel,
+                            albumGroupsViewModel = albumGroupsViewModel,
+                            settingsViewModel = settingsViewModel,
+                            libraryViewModel = libraryViewModel,
+                            viewModel = albumDetailViewModel
+                        )
+                    }
                 }
                 composable(
                     route = "album_detail_online/{source}/{workId}",
@@ -2284,85 +2415,6 @@ fun MainContainer(
                                 .pointerInteropFilter { true }
                         )
                     }
-            }
-
-            AnimatedVisibility(
-                modifier = Modifier.zIndex(2f),
-                visible = isAlbumDetailRoute,
-                enter = secondaryPageEnterTransition(),
-                exit = secondaryPagePopExitTransition()
-            ) {
-                val albumDetailViewModel = albumDetailTopBarEntry?.let { entry ->
-                    hiltViewModel<AlbumDetailViewModel>(entry)
-                }
-                val closeAlbumDetail = {
-                    if (isAlbumDetailRoute) {
-                        albumDetailViewModel?.cancelOnlineLoadsForExit()
-                        navController.popBackStack()
-                    }
-                }
-                BackHandler(enabled = isAlbumDetailRoute, onBack = closeAlbumDetail)
-                Column {
-                    Spacer(modifier = Modifier.windowInsetsTopHeight(StableWindowInsets.statusBars))
-                    CenterAlignedTopAppBar(
-                        modifier = Modifier.height(56.dp),
-                        title = {},
-                        windowInsets = WindowInsets(0, 0, 0, 0),
-                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                            containerColor = Color.Transparent,
-                            navigationIconContentColor = Color.White,
-                            actionIconContentColor = Color.White
-                        ),
-                        navigationIcon = {
-                            EaraTopBarIconButton(
-                                onClick = closeAlbumDetail,
-                                modifier = Modifier
-                                    .padding(start = 4.dp)
-                                    .albumDetailTopBarButtonSurface(true)
-                            ) {
-                                Icon(
-                                    Icons.AutoMirrored.Rounded.ArrowBack,
-                                    contentDescription = null,
-                                    tint = Color.White
-                                )
-                            }
-                        },
-                        actions = {
-                            if (albumDetailViewModel != null) {
-                                val detailState by albumDetailViewModel.uiState.collectAsState()
-                                val showManualBind =
-                                    (detailState as? AlbumDetailUiState.Success)?.model?.let { model ->
-                                        val local = model.localAlbum
-                                        local != null && local.id > 0L
-                                    } == true
-                                if (showManualBind) {
-                                    EaraTopBarIconButton(
-                                        onClick = {
-                                            val currentRj =
-                                                (detailState as? AlbumDetailUiState.Success)?.model?.let { model ->
-                                                    val local = model.localAlbum
-                                                    model.rjCode.trim()
-                                                        .ifBlank { local?.rjCode?.trim().orEmpty() }
-                                                        .ifBlank { local?.workId?.trim().orEmpty() }
-                                                }.orEmpty()
-                                            manualRjInput = currentRj
-                                            showManualRjDialog = true
-                                        },
-                                        modifier = Modifier
-                                            .padding(end = 8.dp)
-                                            .albumDetailTopBarButtonSurface(true)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Edit,
-                                            contentDescription = "手动输入RJ号",
-                                            tint = Color.White
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    )
-                }
             }
 
             if (showManualRjDialog && navBackStackEntry != null &&
