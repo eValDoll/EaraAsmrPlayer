@@ -790,15 +790,17 @@ fun SearchScreen(
                 modifier = contentModifier,
                 contentAlignment = if (hasRightPanel) Alignment.TopStart else Alignment.TopCenter
             ) {
+                val searchContentModifier = if (isCompact || hasRightPanel) {
+                    Modifier.fillMaxSize()
+                } else {
+                    Modifier
+                        .fillMaxHeight()
+                        .widthIn(max = 800.dp)
+                        .fillMaxWidth()
+                }
                 Box(
-                    modifier = if (isCompact || hasRightPanel) {
-                        Modifier.fillMaxSize()
-                    } else {
-                        Modifier
-                            .fillMaxHeight()
-                            .widthIn(max = 800.dp)
-                            .fillMaxWidth()
-                    }
+                    modifier = searchContentModifier
+                        .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
                 ) {
                     Box(
                         modifier = Modifier
@@ -1141,9 +1143,7 @@ fun SearchScreen(
                     }
 
                     SearchChrome(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .interruptScrollableFlingOnPointerDown { stopActiveScroll() },
+                        modifier = Modifier.align(Alignment.TopCenter),
                         keyword = keyword,
                         onKeywordChange = { keyword = it },
                         placeholder = hotKeywordCarouselItem.placeholder,

@@ -532,7 +532,11 @@ fun LibraryScreen(
                             }
                         } else {
                             // Main content area
-                            Box(modifier = Modifier.fillMaxSize()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
+                            ) {
                                 val isTrackListLoading = isTrackList &&
                                     (pagedTrackAlbumHeaders.loadState.refresh is LoadState.Loading) &&
                                     pagedTrackAlbumHeaders.itemCount == 0
@@ -913,9 +917,7 @@ fun LibraryScreen(
                                 }
 
                                 LibraryChrome(
-                                    modifier = Modifier
-                                        .align(Alignment.TopCenter)
-                                        .interruptScrollableFlingOnPointerDown { stopActiveScroll() },
+                                    modifier = Modifier.align(Alignment.TopCenter),
                                     searchText = searchText,
                                     onSearchTextChange = {
                                         searchText = it
