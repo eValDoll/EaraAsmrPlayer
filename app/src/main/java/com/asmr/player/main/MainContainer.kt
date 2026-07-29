@@ -1078,14 +1078,22 @@ fun MainContainer(
                 last != normalizedCurrentRoute &&
                 last in primaryPagerRoutes &&
                 normalizedCurrentRoute in primaryPagerRoutes
-        if (last != null && normalizedCurrentRoute != null && last != normalizedCurrentRoute && !isPrimaryPagerSwitch) {
-            val touchBlockDurationMillis = when {
-                last.startsWithAlbumDetailRoute() -> SecondaryPageExitDurationMs
-                else -> SecondaryPageTouchBlockDurationMs
-            }
+        val isReturningToPrimaryPage =
+            last != null &&
+                normalizedCurrentRoute != null &&
+                last != normalizedCurrentRoute &&
+                last !in primaryPagerRoutes &&
+                normalizedCurrentRoute in primaryPagerRoutes
+        if (
+            last != null &&
+            normalizedCurrentRoute != null &&
+            last != normalizedCurrentRoute &&
+            !isPrimaryPagerSwitch &&
+            !isReturningToPrimaryPage
+        ) {
             blockNavTouches = true
             try {
-                delay(touchBlockDurationMillis.toLong())
+                delay(SecondaryPageTouchBlockDurationMs.toLong())
             } finally {
                 if (touchBlockSeq == seq) {
                     blockNavTouches = false
@@ -1799,7 +1807,7 @@ fun MainContainer(
                                                 primaryPageParallaxOffset.value.toPx()
                                             }
                                         },
-                                    beyondBoundsPageCount = primaryPagerBeyondBoundsPageCount,
+                                    beyondViewportPageCount = primaryPagerBeyondBoundsPageCount,
                                     flingBehavior = primaryPagerFlingBehavior,
                                     userScrollEnabled = !primaryPagerScrollLocked && !hasOverlayRoute,
                                     key = { primaryPagerRoutes[it] }
