@@ -2,9 +2,6 @@ package com.asmr.player.ui.library
 
 import android.content.Intent
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.MutatePriority
@@ -180,7 +177,9 @@ import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
+import com.asmr.player.ui.common.rememberAnimatedCollapsibleHeaderOffset
 import com.asmr.player.ui.common.thinScrollbar
+import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.playback.MediaItemFactory
 
 internal const val LIBRARY_CHROME_TAG = "library_chrome"
@@ -252,6 +251,7 @@ private fun LibraryActionItem(
 fun LibraryScreen(
     windowSizeClass: WindowSizeClass,
     isActive: Boolean = true,
+    isDataActive: Boolean = isActive,
     onAlbumClick: (Album) -> Unit,
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
     onOpenPlaylistPicker: (MediaItem) -> Unit = {},
@@ -263,19 +263,19 @@ fun LibraryScreen(
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val materialColorScheme = MaterialTheme.colorScheme
-    val uiState by viewModel.uiState.collectAsState()
-    val viewMode by viewModel.libraryViewMode.collectAsState()
-    val querySpec by viewModel.querySpec.collectAsState()
-    val hasActiveFilters by viewModel.hasActiveFilters.collectAsState()
-    val tags by viewModel.availableTags.collectAsState()
-    val userTagsByAlbumId by viewModel.userTagsByAlbumId.collectAsState()
-    val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsState()
-    val isGlobalSyncRunning by viewModel.isGlobalSyncRunning.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWhileActive(isDataActive)
+    val viewMode by viewModel.libraryViewMode.collectAsStateWhileActive(isDataActive)
+    val querySpec by viewModel.querySpec.collectAsStateWhileActive(isDataActive)
+    val hasActiveFilters by viewModel.hasActiveFilters.collectAsStateWhileActive(isDataActive)
+    val tags by viewModel.availableTags.collectAsStateWhileActive(isDataActive)
+    val userTagsByAlbumId by viewModel.userTagsByAlbumId.collectAsStateWhileActive(isDataActive)
+    val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsStateWhileActive(isDataActive)
+    val isGlobalSyncRunning by viewModel.isGlobalSyncRunning.collectAsStateWhileActive(isDataActive)
     val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
     val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
     val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
     val settingsViewModel: SettingsViewModel = hiltViewModel()
-    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsState()
+    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsStateWhileActive(isDataActive)
     val playerViewModel: PlayerViewModel = hiltViewModel()
     val scope = rememberCoroutineScope()
     var searchText by rememberSaveable { mutableStateOf(querySpec.textQuery.orEmpty()) }
@@ -321,7 +321,7 @@ fun LibraryScreen(
     val pagedAlbumIndices = remember(pagedAlbumSnapshot.items.size) { List(pagedAlbumSnapshot.items.size) { it } }
     val loadedTrackAlbumHeaders = pagedTrackAlbumHeaders.itemSnapshotList.items
     val expandedAlbumTracks by (if (isTrackList) viewModel.expandedTrackAlbumTracks else flowOf(emptyMap())).collectAsState(initial = emptyMap())
-    val expandedAlbumIds by viewModel.expandedTrackAlbumIds.collectAsState()
+    val expandedAlbumIds by viewModel.expandedTrackAlbumIds.collectAsStateWhileActive(isDataActive)
     var actionAlbum by remember { mutableStateOf<Album?>(null) }
     var showAlbumActions by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -532,7 +532,11 @@ fun LibraryScreen(
                             }
                         } else {
                             // Main content area
-                            Box(modifier = Modifier.fillMaxSize()) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
+                            ) {
                                 val isTrackListLoading = isTrackList &&
                                     (pagedTrackAlbumHeaders.loadState.refresh is LoadState.Loading) &&
                                     pagedTrackAlbumHeaders.itemCount == 0
@@ -913,9 +917,7 @@ fun LibraryScreen(
                                 }
 
                                 LibraryChrome(
-                                    modifier = Modifier
-                                        .align(Alignment.TopCenter)
-                                        .interruptScrollableFlingOnPointerDown { stopActiveScroll() },
+                                    modifier = Modifier.align(Alignment.TopCenter),
                                     searchText = searchText,
                                     onSearchTextChange = {
                                         searchText = it
@@ -1146,11 +1148,7 @@ internal fun LibraryChrome(
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val collapseOvershootPx = with(LocalDensity.current) { LibraryChromeCollapseOvershoot.toPx() }
-    val animatedChromeOffsetPx = animateFloatAsState(
-        targetValue = chromeState.offsetPx,
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-        label = "libraryChromeOffset"
-    )
+    val animatedChromeOffsetPx = rememberAnimatedCollapsibleHeaderOffset(chromeState)
     val collapseStateDescription by remember(chromeState) {
         derivedStateOf { collapsibleHeaderUiState(chromeState.collapseFraction) }
     }

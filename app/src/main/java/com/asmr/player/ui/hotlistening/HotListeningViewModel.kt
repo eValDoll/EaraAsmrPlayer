@@ -11,14 +11,17 @@ import com.asmr.player.hotlistening.HotListeningSortMode
 import com.asmr.player.util.MessageManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.Locale
 import javax.inject.Inject
 
@@ -35,7 +38,9 @@ class HotListeningViewModel @Inject constructor(
         settingsRepository.searchBlockedKeywords
     ) { rawState, blockedKeywords ->
         rawState.toUiState(blockedKeywords)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HotListeningUiState.Loading)
+    }
+        .flowOn(Dispatchers.Default)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), HotListeningUiState.Loading)
 
     private val _selectedPeriod = MutableStateFlow("day")
     val selectedPeriod: StateFlow<String> = _selectedPeriod.asStateFlow()
@@ -91,7 +96,9 @@ class HotListeningViewModel @Inject constructor(
                 _rawUiState.update { HotListeningRawUiState.Error("请求失败") }
                 return
             }
-            val entries = items.map { it.toEntry(sortMode) }
+            val entries = withContext(Dispatchers.Default) {
+                items.map { it.toEntry(sortMode) }
+            }
             _rawUiState.update {
                 HotListeningRawUiState.Success(
                     entries = entries,

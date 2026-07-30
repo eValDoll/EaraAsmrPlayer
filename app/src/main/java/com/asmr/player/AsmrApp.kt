@@ -35,6 +35,11 @@ class AsmrApp : Application(), ImageLoaderFactory, Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         applicationScope.launch {
+            runCatching {
+                getSharedPreferences("album_detail_tree_prefs", MODE_PRIVATE).all
+            }
+        }
+        applicationScope.launch {
             runCatching { settingsRepository.clearSleepTimer() }
             runCatching { AppDatabaseProvider.get(applicationContext) }
             runCatching { DownloadQueueCoordinator.recoverDownloadsOnAppLaunch(applicationContext) }

@@ -15,6 +15,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.FlowPreview
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -23,6 +24,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 import java.text.SimpleDateFormat
@@ -111,12 +113,14 @@ class ListeningCalendarViewModel @Inject constructor(
             )
         }
             .debounce(SUMMARY_UPDATE_DEBOUNCE_MS)
+            .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ListeningSummary())
 
     /** 可切换的年份列表，默认包含当前年，按新到旧排序。 */
     val availableYears: StateFlow<List<Int>> =
         statisticsRepository.observeAllStats()
             .map { stats -> availableYearsForDates(stats.map { it.date }, currentYear) }
+            .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf(currentYear))
 
     private val _selectedYear = MutableStateFlow(currentYear)
@@ -136,6 +140,7 @@ class ListeningCalendarViewModel @Inject constructor(
                         }
                     }
             }
+            .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _selectedDate = MutableStateFlow<String?>(currentDate)
@@ -151,6 +156,7 @@ class ListeningCalendarViewModel @Inject constructor(
                 listeningRecordRepository.observeTopAlbum(range.startDate, range.endDate)
                     .map { row -> row?.toSummaryArtwork() }
             }
+            .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _isDlsiteLoggedIn = MutableStateFlow(authStore.isLoggedIn())
@@ -170,6 +176,7 @@ class ListeningCalendarViewModel @Inject constructor(
             )
         }
             .debounce(SUMMARY_UPDATE_DEBOUNCE_MS)
+            .flowOn(Dispatchers.Default)
             .stateIn(
                 viewModelScope,
                 SharingStarted.WhileSubscribed(5000),
@@ -187,6 +194,7 @@ class ListeningCalendarViewModel @Inject constructor(
                 }
             }
             .map { sessions -> mergeAdjacentListeningSessions(sessions) }
+            .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun selectDate(date: String?) {

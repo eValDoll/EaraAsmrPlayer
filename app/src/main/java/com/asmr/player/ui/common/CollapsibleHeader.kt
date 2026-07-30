@@ -1,15 +1,24 @@
 package com.asmr.player.ui.common
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.unit.Velocity
+import kotlinx.coroutines.flow.collectLatest
 
 internal const val COLLAPSIBLE_HEADER_STATE_EXPANDED = "expanded"
 internal const val COLLAPSIBLE_HEADER_STATE_PARTIAL = "partial"
@@ -97,9 +106,26 @@ class CollapsibleHeaderState internal constructor(
     }
 }
 
-@androidx.compose.runtime.Composable
+@Composable
 fun rememberCollapsibleHeaderState(): CollapsibleHeaderState =
     rememberSaveable(saver = CollapsibleHeaderState.Saver) { CollapsibleHeaderState() }
+
+@Composable
+internal fun rememberAnimatedCollapsibleHeaderOffset(
+    state: CollapsibleHeaderState
+): Animatable<Float, AnimationVector1D> {
+    val animatedOffset = remember(state) { Animatable(state.offsetPx) }
+    LaunchedEffect(state) {
+        snapshotFlow { state.offsetPx }
+            .collectLatest { targetOffset ->
+                animatedOffset.animateTo(
+                    targetValue = targetOffset,
+                    animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing)
+                )
+            }
+    }
+    return animatedOffset
+}
 
 internal fun collapsibleHeaderUiState(collapseFraction: Float): String = when {
     collapseFraction <= 0.01f -> COLLAPSIBLE_HEADER_STATE_EXPANDED

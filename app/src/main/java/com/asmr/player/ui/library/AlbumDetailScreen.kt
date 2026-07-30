@@ -259,10 +259,9 @@ internal fun dlsiteSectionRevealModifier(
 }
 
 internal fun shouldExpandAlbumHeaderMetaReveal(
-    deferMetaRevealExpected: Boolean,
     presentInitially: Boolean
 ): Boolean {
-    return deferMetaRevealExpected || !presentInitially
+    return !presentInitially
 }
 
 internal data class AlbumDetailOnlineLoadPlan(
@@ -311,8 +310,6 @@ fun AlbumDetailScreen(
     windowSizeClass: WindowSizeClass,
     albumId: Long? = null,
     rjCode: String? = null,
-    refreshToken: Long = 0L,
-    onConsumeRefreshToken: (() -> Unit)? = null,
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
     onPlayMediaItems: (List<MediaItem>, Int) -> Unit = { _, _ -> },
     onAddToQueue: (Album, Track) -> Boolean = { _, _ -> false },
@@ -323,13 +320,15 @@ fun AlbumDetailScreen(
     onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit = { _, _ -> },
     onSearchKeyword: (String) -> Unit = {},
     initialTab: Int? = null,
+    initialOnlineLoadDelayMillis: Long = 0L,
+    playlistsViewModel: PlaylistsViewModel = hiltViewModel(),
+    albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel(),
+    settingsViewModel: SettingsViewModel = hiltViewModel(),
+    libraryViewModel: LibraryViewModel = hiltViewModel(),
     viewModel: AlbumDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val cloudSyncSelectionDialogState by viewModel.cloudSyncSelectionDialogState.collectAsState()
-    val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
-    val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
-    val settingsViewModel: SettingsViewModel = hiltViewModel()
     val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsState()
     val colorScheme = AsmrTheme.colorScheme
     val screenKey = remember(albumId, rjCode) {
@@ -369,13 +368,18 @@ fun AlbumDetailScreen(
         }
     }
 
-    LaunchedEffect(albumId, rjCode) {
-        viewModel.loadAlbum(albumId, rjCode, force = false)
+    var initialOnlineLoadReady by remember(screenKey) {
+        mutableStateOf(initialOnlineLoadDelayMillis <= 0L)
     }
-    LaunchedEffect(refreshToken) {
-        if (refreshToken == 0L) return@LaunchedEffect
-        viewModel.loadAlbum(albumId, rjCode, force = true)
-        onConsumeRefreshToken?.invoke()
+    LaunchedEffect(screenKey, initialOnlineLoadDelayMillis) {
+        if (initialOnlineLoadDelayMillis > 0L) {
+            delay(initialOnlineLoadDelayMillis)
+            initialOnlineLoadReady = true
+        }
+    }
+    LaunchedEffect(albumId, rjCode) {
+        withFrameNanos { }
+        viewModel.loadAlbum(albumId, rjCode, force = false)
     }
     DisposableEffect(screenKey, viewModel) {
         onDispose {
@@ -429,7 +433,6 @@ fun AlbumDetailScreen(
                     val shouldAnimateHeaderIntro = true
                     val availableTags by viewModel.availableTags.collectAsState()
                     val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsState()
-                    val libraryViewModel: LibraryViewModel = hiltViewModel()
                     var showTagManager by remember { mutableStateOf(false) }
                     var tagManageTrack by remember { mutableStateOf<Track?>(null) }
                     var localPreviewFile by remember { mutableStateOf<LocalTreeUiEntry.File?>(null) }
@@ -752,8 +755,10 @@ fun AlbumDetailScreen(
                                 selectedTab,
                                 model.rjCode,
                                 model.dlsiteWorkno,
-                                model.hasResolvedInitialDlsiteTarget
+                                model.hasResolvedInitialDlsiteTarget,
+                                initialOnlineLoadReady
                             ) {
+                                if (!initialOnlineLoadReady) return@LaunchedEffect
                                 val loadPlan = albumDetailOnlineLoadPlan(
                                     selectedTab = selectedTab,
                                     hasResolvedInitialDlsiteTarget = model.hasResolvedInitialDlsiteTarget
@@ -1185,16 +1190,19 @@ private fun AlbumDetailHeroBackground(
     val blurRadiusPx = with(density) {
         AlbumDetailHeroBlurRadius.toPx().coerceAtMost(AlbumDetailHeroBlurRadiusMaxPx)
     }
-    val blurModifier = remember(blurRadiusPx) {
+    val blurRenderEffect = remember(blurRadiusPx) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            Modifier.graphicsLayer {
-                renderEffect = RenderEffect
-                    .createBlurEffect(blurRadiusPx, blurRadiusPx, Shader.TileMode.CLAMP)
-                    .asComposeRenderEffect()
-            }
+            RenderEffect
+                .createBlurEffect(blurRadiusPx, blurRadiusPx, Shader.TileMode.CLAMP)
+                .asComposeRenderEffect()
         } else {
-            Modifier.blur(AlbumDetailHeroBlurRadius)
+            null
         }
+    }
+    val legacyBlurModifier = if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+        Modifier.blur(AlbumDetailHeroBlurRadius)
+    } else {
+        Modifier
     }
 
     // hero 的可见高度跟随手势变化，但内部始终按完整高度测量。这样封面、毛玻璃和文字不必逐帧
@@ -1274,8 +1282,9 @@ private fun AlbumDetailHeroBackground(
             loadAtOriginalSize = true,
             modifier = Modifier
                 .fillMaxSize()
-                .then(blurModifier)
+                .then(legacyBlurModifier)
                 .graphicsLayer {
+                    renderEffect = blurRenderEffect
                     compositingStrategy = CompositingStrategy.Offscreen
                     val intro = heroIntroProgress.value.coerceIn(0f, 1f)
                     val introScale = AlbumDetailHeroIntroStartScale -
@@ -1323,18 +1332,21 @@ private fun AlbumDetailHeroBackground(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer {
-                    alpha = heroIntroProgress.value.coerceIn(0f, 1f)
-                }
-                .background(
-                    Brush.verticalGradient(
+                .drawWithCache {
+                    val topMask = Brush.verticalGradient(
                         colorStops = arrayOf(
                             0f to Color.Black.copy(alpha = 0.44f),
                             0.42f to Color.Black.copy(alpha = 0.16f),
                             0.70f to Color.Transparent
                         )
                     )
-                )
+                    onDrawBehind {
+                        drawRect(
+                            brush = topMask,
+                            alpha = heroIntroProgress.value.coerceIn(0f, 1f)
+                        )
+                    }
+                }
         )
         // 只在封面容器内部做底缘融色，让封面边缘轻轻透出页面背景。
         Box(
@@ -1641,11 +1653,11 @@ private fun AlbumHeader(
     }
 
     // 记录“首帧时各信息块是否已存在”：本地库专辑进入时 cv/tags 已就绪，应直接淡入不撑开（消除下沉抖动）；
-    // 在线专辑即使从列表 hint 拿到了 cv，也仍按延迟元信息处理，保留延迟淡入/展开的进入节奏。
+    // 列表 hint 已经提供的信息首帧直接占住最终高度，只有网络到达后才新增的信息才纵向展开。
     val cvPresentInitially = remember(headerAnimationScopeKey) { album.cv.isNotBlank() }
     val tagsPresentInitially = remember(headerAnimationScopeKey) { album.tags.isNotEmpty() }
-    val cvExpandLayout = shouldExpandAlbumHeaderMetaReveal(deferMetaRevealExpected, cvPresentInitially)
-    val tagsExpandLayout = shouldExpandAlbumHeaderMetaReveal(deferMetaRevealExpected, tagsPresentInitially)
+    val cvExpandLayout = shouldExpandAlbumHeaderMetaReveal(cvPresentInitially)
+    val tagsExpandLayout = shouldExpandAlbumHeaderMetaReveal(tagsPresentInitially)
     val headerHasDeferredMeta = deferMetaRevealExpected
 
     val headerContainerModifier = Modifier
@@ -1686,13 +1698,10 @@ private fun AlbumHeader(
                         expandLayout = cvExpandLayout
                     ) {
                         Box(modifier = Modifier.padding(bottom = if (album.tags.isNotEmpty()) 6.dp else 8.dp)) {
-                            AlbumCvChipsFlow(
+                            AlbumHeaderCvFlow(
                                 cvText = album.cv,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
                                 onCvClick = { cv -> copyMeta("CV", cv) },
                                 onCvLongClick = onMetaLongClick,
-                                leadingVisual = AlbumMetaLeadingVisual.Icon,
                             )
                         }
                     }
@@ -1706,13 +1715,10 @@ private fun AlbumHeader(
                         expandLayout = tagsExpandLayout
                     ) {
                         Box(modifier = Modifier.padding(bottom = 8.dp)) {
-                            AlbumTagsFlow(
+                            AlbumHeaderTagsFlow(
                                 tags = album.tags,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
                                 onTagClick = { tag -> copyMeta("标签", tag) },
                                 onTagLongClick = onMetaLongClick,
-                                leadingVisual = AlbumMetaLeadingVisual.Icon,
                             )
                         }
                     }

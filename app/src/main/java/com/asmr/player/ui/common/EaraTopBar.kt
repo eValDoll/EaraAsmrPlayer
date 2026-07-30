@@ -25,27 +25,23 @@ internal fun resolveMainPageBackgroundColor(colorScheme: AsmrColorScheme): Color
 
 @Composable
 internal fun EaraTopBarContainer(
-    overlay: Boolean,
     modifier: Modifier = Modifier,
     content: @Composable BoxScope.() -> Unit
 ) {
-    if (overlay) {
-        Box(modifier = modifier.fillMaxWidth(), content = content)
-        return
-    }
-
     val colorScheme = AsmrTheme.colorScheme
     val pageBackground = resolveMainPageBackgroundColor(colorScheme)
     val tonalTop = colorScheme.primarySoft
         .copy(alpha = if (colorScheme.isDark) 0.44f else 0.38f)
         .compositeOver(pageBackground)
-
     Box(
         modifier = modifier
             .fillMaxWidth()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(tonalTop, pageBackground)
+                    colors = listOf(
+                        tonalTop,
+                        pageBackground
+                    )
                 )
             ),
         content = content

@@ -3,7 +3,6 @@ package com.asmr.player.baselineprofile
 import android.content.Intent
 import android.os.SystemClock
 import androidx.benchmark.macro.MacrobenchmarkScope
-import androidx.benchmark.macro.StartupMode
 import androidx.benchmark.macro.junit4.BaselineProfileRule
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
@@ -300,5 +299,3 @@ internal fun UiDevice.expandFirstVisibleDownloadTask() {
     waitForIdle()
     SystemClock.sleep(300)
 }
-
-internal fun defaultFrameTimingStartupMode(): StartupMode = StartupMode.WARM

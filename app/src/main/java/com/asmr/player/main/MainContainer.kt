@@ -148,7 +148,6 @@ import java.net.URLEncoder
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -220,6 +219,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 import androidx.compose.foundation.border
@@ -247,9 +247,19 @@ internal data class BatchPlaylistPickerRequest(
 
 private const val SecondaryPageEnterDurationMs = 440
 private const val SecondaryPageExitDurationMs = 420
+private const val SecondaryPageTouchBlockDurationMs = 320
 private const val PrimaryPagerSnapThreshold = 0.16f
+private const val PrimaryRouteDataWarmRetentionMs = 5_000L
+private const val PrimaryRouteDataWarmStaggerMs = 80L
 private val SecondaryPageSlideEasing = CubicBezierEasing(0.215f, 0.61f, 0.355f, 1f)
+private val PrimaryPageParallaxOffset = 120.dp
 private val AlbumDetailTopBarButtonShape = CircleShape
+private val AlbumDetailBackTouchPassThroughWidth = 88.dp
+private val AlbumDetailTopBarTouchPassThroughHeight = 64.dp
+
+private fun String?.startsWithAlbumDetailRoute(): Boolean {
+    return this?.startsWith("album_detail") == true
+}
 
 private fun NavBackStackEntry.usesSecondaryPageSlideTransition(): Boolean {
     return resolveCurrentPrimaryDestinationRoute(
@@ -292,41 +302,94 @@ private fun Modifier.albumDetailTopBarButtonSurface(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun Modifier.albumDetailTopBarButtonMotion(
-    enabled: Boolean,
-    motionKey: Any?
-): Modifier {
-    if (!enabled) return this
-
-    var entered by remember(motionKey) { mutableStateOf(false) }
-    LaunchedEffect(motionKey) {
-        entered = false
-        withFrameNanos { }
-        entered = true
+private fun AlbumDetailRouteFrame(
+    backStackEntry: NavBackStackEntry,
+    onBack: () -> Unit,
+    onEditRj: (String) -> Unit,
+    content: @Composable (AlbumDetailViewModel) -> Unit
+) {
+    val viewModel = hiltViewModel<AlbumDetailViewModel>(backStackEntry)
+    val closeAlbumDetail = {
+        viewModel.cancelOnlineLoadsForExit()
+        onBack()
     }
-    val offsetX by animateDpAsState(
-        targetValue = if (entered) 0.dp else 30.dp,
-        animationSpec = tween(
-            durationMillis = SecondaryPageEnterDurationMs,
-            easing = SecondaryPageSlideEasing
-        ),
-        label = "albumDetailTopBarButtonOffset"
-    )
-    val alpha by animateFloatAsState(
-        targetValue = if (entered) 1f else 0f,
-        animationSpec = tween(
-            durationMillis = 260,
-            delayMillis = 70,
-            easing = LinearOutSlowInEasing
-        ),
-        label = "albumDetailTopBarButtonAlpha"
-    )
-    val density = LocalDensity.current
-    return this.graphicsLayer {
-        translationX = with(density) { offsetX.toPx() }
-        this.alpha = alpha
-        clip = false
+    BackHandler(onBack = closeAlbumDetail)
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        content(viewModel)
+        AlbumDetailRouteTopBar(
+            viewModel = viewModel,
+            onBack = closeAlbumDetail,
+            onEditRj = onEditRj,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .zIndex(2f)
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AlbumDetailRouteTopBar(
+    viewModel: AlbumDetailViewModel,
+    onBack: () -> Unit,
+    onEditRj: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val detailState by viewModel.uiState.collectAsState()
+    val detailModel = (detailState as? AlbumDetailUiState.Success)?.model
+    val showManualBind = detailModel?.localAlbum?.id?.let { it > 0L } == true
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        Spacer(modifier = Modifier.windowInsetsTopHeight(StableWindowInsets.statusBars))
+        CenterAlignedTopAppBar(
+            modifier = Modifier.height(56.dp),
+            title = {},
+            windowInsets = WindowInsets(0, 0, 0, 0),
+            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                containerColor = Color.Transparent,
+                navigationIconContentColor = Color.White,
+                actionIconContentColor = Color.White
+            ),
+            navigationIcon = {
+                EaraTopBarIconButton(
+                    onClick = onBack,
+                    modifier = Modifier
+                        .padding(start = 4.dp)
+                        .albumDetailTopBarButtonSurface(true)
+                ) {
+                    Icon(
+                        Icons.AutoMirrored.Rounded.ArrowBack,
+                        contentDescription = null,
+                        tint = Color.White
+                    )
+                }
+            },
+            actions = {
+                if (showManualBind) {
+                    EaraTopBarIconButton(
+                        onClick = {
+                            val local = detailModel?.localAlbum
+                            val currentRj = detailModel?.rjCode?.trim().orEmpty()
+                                .ifBlank { local?.rjCode?.trim().orEmpty() }
+                                .ifBlank { local?.workId?.trim().orEmpty() }
+                            onEditRj(currentRj)
+                        },
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .albumDetailTopBarButtonSurface(true)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Edit,
+                            contentDescription = "手动输入RJ号",
+                            tint = Color.White
+                        )
+                    }
+                }
+            }
+        )
     }
 }
 
@@ -360,17 +423,24 @@ private fun applyMainContainerSystemUi(
     val controller = WindowInsetsControllerCompat(window, window.decorView)
     WindowCompat.setDecorFitsSystemWindows(window, false)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        window.isStatusBarContrastEnforced = false
-        window.isNavigationBarContrastEnforced = false
+        if (window.isStatusBarContrastEnforced) {
+            window.isStatusBarContrastEnforced = false
+        }
+        if (window.isNavigationBarContrastEnforced) {
+            window.isNavigationBarContrastEnforced = false
+        }
     }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        window.attributes = window.attributes.apply {
-            layoutInDisplayCutoutMode = if (forceImmersive || hideStatusBarForImmersivePage || nowPlayingVisible) {
-                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-            } else {
-                defaultSystemUi?.layoutInDisplayCutoutMode
-                    ?: WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
-            }
+        val targetCutoutMode = if (forceImmersive || hideStatusBarForImmersivePage || nowPlayingVisible) {
+            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        } else {
+            defaultSystemUi?.layoutInDisplayCutoutMode
+                ?: WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
+        }
+        val attributes = window.attributes
+        if (attributes.layoutInDisplayCutoutMode != targetCutoutMode) {
+            attributes.layoutInDisplayCutoutMode = targetCutoutMode
+            window.attributes = attributes
         }
     }
 
@@ -378,8 +448,12 @@ private fun applyMainContainerSystemUi(
         forceImmersive -> {
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.systemBars())
-            window.statusBarColor = android.graphics.Color.TRANSPARENT
-            window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            if (window.statusBarColor != android.graphics.Color.TRANSPARENT) {
+                window.statusBarColor = android.graphics.Color.TRANSPARENT
+            }
+            if (window.navigationBarColor != android.graphics.Color.TRANSPARENT) {
+                window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            }
             controller.isAppearanceLightStatusBars = false
             controller.isAppearanceLightNavigationBars = false
         }
@@ -387,8 +461,12 @@ private fun applyMainContainerSystemUi(
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.statusBars())
             controller.hide(WindowInsetsCompat.Type.navigationBars())
-            window.statusBarColor = android.graphics.Color.TRANSPARENT
-            window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            if (window.statusBarColor != android.graphics.Color.TRANSPARENT) {
+                window.statusBarColor = android.graphics.Color.TRANSPARENT
+            }
+            if (window.navigationBarColor != android.graphics.Color.TRANSPARENT) {
+                window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            }
             controller.isAppearanceLightStatusBars = false
             controller.isAppearanceLightNavigationBars = false
         }
@@ -396,15 +474,23 @@ private fun applyMainContainerSystemUi(
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.statusBars())
             controller.show(WindowInsetsCompat.Type.navigationBars())
-            window.statusBarColor = android.graphics.Color.TRANSPARENT
-            window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            if (window.statusBarColor != android.graphics.Color.TRANSPARENT) {
+                window.statusBarColor = android.graphics.Color.TRANSPARENT
+            }
+            if (window.navigationBarColor != android.graphics.Color.TRANSPARENT) {
+                window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            }
             controller.isAppearanceLightStatusBars = false
             controller.isAppearanceLightNavigationBars = !isDark
         }
         else -> {
             controller.show(WindowInsetsCompat.Type.systemBars())
-            window.statusBarColor = android.graphics.Color.TRANSPARENT
-            window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            if (window.statusBarColor != android.graphics.Color.TRANSPARENT) {
+                window.statusBarColor = android.graphics.Color.TRANSPARENT
+            }
+            if (window.navigationBarColor != android.graphics.Color.TRANSPARENT) {
+                window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            }
             controller.isAppearanceLightStatusBars = !isDark
             controller.isAppearanceLightNavigationBars = !isDark
         }
@@ -516,7 +602,6 @@ fun MainContainer(
     val navController = rememberNavController()
     val navigator = remember(navController) { AppNavigator(navController) }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val visibleNavEntries by navController.visibleEntries.collectAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val hasPreviousBackStackEntry = navController.previousBackStackEntry != null
     val currentPlaylistSystemType = navBackStackEntry?.arguments?.getString("type")
@@ -604,6 +689,8 @@ fun MainContainer(
     var pendingDetailNavigation by remember { mutableStateOf(false) }
     var pendingDetailNavigationSeq by remember { mutableIntStateOf(0) }
     var cancelPendingDetailNavigation by remember { mutableStateOf(false) }
+    var settledAlbumDetailEntryId by remember { mutableStateOf<String?>(null) }
+    var pendingAlbumDetailPopEntryId by remember { mutableStateOf<String?>(null) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val searchViewModel: SearchViewModel = hiltViewModel()
@@ -1016,10 +1103,22 @@ fun MainContainer(
                 last != normalizedCurrentRoute &&
                 last in primaryPagerRoutes &&
                 normalizedCurrentRoute in primaryPagerRoutes
-        if (last != null && normalizedCurrentRoute != null && last != normalizedCurrentRoute && !isPrimaryPagerSwitch) {
+        val isReturningToPrimaryPage =
+            last != null &&
+                normalizedCurrentRoute != null &&
+                last != normalizedCurrentRoute &&
+                last !in primaryPagerRoutes &&
+                normalizedCurrentRoute in primaryPagerRoutes
+        if (
+            last != null &&
+            normalizedCurrentRoute != null &&
+            last != normalizedCurrentRoute &&
+            !isPrimaryPagerSwitch &&
+            !isReturningToPrimaryPage
+        ) {
             blockNavTouches = true
             try {
-                delay(320)
+                delay(SecondaryPageTouchBlockDurationMs.toLong())
             } finally {
                 if (touchBlockSeq == seq) {
                     blockNavTouches = false
@@ -1067,6 +1166,34 @@ fun MainContainer(
     val materialColorScheme = MaterialTheme.colorScheme
     val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
     val isAlbumDetailRoute = currentRoute?.startsWith("album_detail") == true
+    val albumDetailEntryId = navBackStackEntry
+        ?.takeIf { it.destination.route.startsWithAlbumDetailRoute() }
+        ?.id
+    LaunchedEffect(albumDetailEntryId) {
+        if (albumDetailEntryId == null) {
+            settledAlbumDetailEntryId = null
+            pendingAlbumDetailPopEntryId = null
+            return@LaunchedEffect
+        }
+
+        settledAlbumDetailEntryId = null
+        pendingAlbumDetailPopEntryId = null
+        delay(SecondaryPageEnterDurationMs.toLong())
+        settledAlbumDetailEntryId = albumDetailEntryId
+        withFrameNanos { }
+        if (pendingAlbumDetailPopEntryId == albumDetailEntryId) {
+            pendingAlbumDetailPopEntryId = null
+            navController.popBackStack()
+        }
+    }
+    val requestAlbumDetailBack: () -> Unit = {
+        val entryId = albumDetailEntryId
+        if (entryId == null || settledAlbumDetailEntryId == entryId) {
+            navController.popBackStack()
+        } else {
+            pendingAlbumDetailPopEntryId = entryId
+        }
+    }
     val topBarContentColor = if (isAlbumDetailRoute) Color.White else colorScheme.onSurface
     val drawerContainerColor = if (colorScheme.isDark) Color(0xFF121212) else Color.White
 
@@ -1104,8 +1231,15 @@ fun MainContainer(
         }
     }
 
-    SideEffect {
-        val act = activity ?: return@SideEffect
+    DisposableEffect(
+        activity,
+        defaultSystemUi,
+        forceImmersive,
+        hideStatusBarForImmersivePage,
+        nowPlayingVisible,
+        colorScheme.isDark
+    ) {
+        val act = activity ?: return@DisposableEffect onDispose { }
         applyMainContainerSystemUi(
             window = act.window,
             defaultSystemUi = defaultSystemUi,
@@ -1114,6 +1248,7 @@ fun MainContainer(
             nowPlayingVisible = nowPlayingVisible,
             isDark = colorScheme.isDark
         )
+        onDispose { }
     }
 
     // 屏幕旋转管理逻辑
@@ -1330,17 +1465,41 @@ fun MainContainer(
         val currentScreenIsPrimary = currentPrimaryRoute != null
         val showBackButton = !currentScreenIsPrimary
         val showPrimaryBrand = currentScreenIsPrimary
-        val albumDetailExitTransitionActive = !isAlbumDetailRoute && visibleNavEntries.any { entry ->
-            entry.destination.route?.startsWith("album_detail") == true
+        var primaryContentCoveredByAlbumDetail by remember { mutableStateOf(false) }
+        LaunchedEffect(isAlbumDetailRoute) {
+            if (isAlbumDetailRoute) {
+                delay(SecondaryPageEnterDurationMs.toLong())
+                primaryContentCoveredByAlbumDetail = true
+            } else if (primaryContentCoveredByAlbumDetail) {
+                delay(SecondaryPageExitDurationMs.toLong())
+                primaryContentCoveredByAlbumDetail = false
+            }
         }
-        val sharedTopBarAlpha by animateFloatAsState(
-            targetValue = if (albumDetailExitTransitionActive) 0f else 1f,
+        val hasOverlayRoute = currentPrimaryRoute == null
+        val primaryPageParallaxOffset = animateDpAsState(
+            targetValue = if (hasOverlayRoute) -PrimaryPageParallaxOffset else 0.dp,
             animationSpec = tween(
-                durationMillis = if (albumDetailExitTransitionActive) 0 else 160,
-                easing = LinearOutSlowInEasing
+                durationMillis = if (hasOverlayRoute) {
+                    SecondaryPageEnterDurationMs
+                } else {
+                    SecondaryPageExitDurationMs
+                },
+                easing = SecondaryPageSlideEasing
             ),
-            label = "sharedTopBarAlbumDetailExitAlpha"
+            label = "primaryPageParallaxOffset"
         )
+        var albumDetailLayerLatched by remember { mutableStateOf(isAlbumDetailRoute) }
+        val albumDetailTransitionActive = isAlbumDetailRoute || albumDetailLayerLatched
+        LaunchedEffect(isAlbumDetailRoute) {
+            if (isAlbumDetailRoute) {
+                albumDetailLayerLatched = true
+            } else if (albumDetailLayerLatched) {
+                snapshotFlow { primaryPageParallaxOffset.value }
+                    .filter { it == 0.dp }
+                    .first()
+                albumDetailLayerLatched = false
+            }
+        }
         val useLargeBottomChrome = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && !isPhone
         val navigationBarBottomPadding = StableWindowInsets.navigationBars
             .only(WindowInsetsSides.Bottom)
@@ -1348,73 +1507,81 @@ fun MainContainer(
             .calculateBottomPadding()
         val bottomChromeBottomPadding = 24.dp + navigationBarBottomPadding
         val bottomOverlayPadding = bottomChromeOverlayHeight(useLargeBottomChrome) + navigationBarBottomPadding
+        var secondaryPageTopPadding by remember { mutableStateOf(0.dp) }
         CompositionLocalProvider(
             LocalBottomOverlayPadding provides bottomOverlayPadding,
             LocalRightPanelExpandedState provides rightPanelExpandedState
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                Box(modifier = Modifier.fillMaxSize()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(resolveMainPageBackgroundColor(colorScheme))
-                    )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(resolveMainPageBackgroundColor(colorScheme))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer {
+                            translationX = if (albumDetailTransitionActive) {
+                                primaryPageParallaxOffset.value.toPx()
+                            } else {
+                                0f
+                            }
+                        }
+                ) {
                     Scaffold(
                         contentWindowInsets = WindowInsets(0, 0, 0, 0),
                         containerColor = Color.Transparent,
                         contentColor = colorScheme.onBackground,
                         topBar = {
-                            EaraTopBarContainer(
-                                overlay = isAlbumDetailRoute || albumDetailExitTransitionActive,
-                                modifier = Modifier.graphicsLayer {
-                                    alpha = if (albumDetailExitTransitionActive) 0f else sharedTopBarAlpha
-                                }
-                            ) {
-                                Column {
-                                    val topBarHeight = if (isAlbumDetailRoute) 56.dp else 48.dp
-                                    Spacer(modifier = Modifier.windowInsetsTopHeight(StableWindowInsets.statusBars))
-                                    CenterAlignedTopAppBar(
-                                        modifier = Modifier.height(topBarHeight),
-                                        title = {
-                                            val entry = navBackStackEntry
-                                            val resolvedTitleRoute = if (currentScreenIsPrimary) visualPrimaryRoute else currentRoute
-                                            val groupName = if (resolvedTitleRoute == "group/{groupId}/{groupName}") {
-                                                decodeRouteArg(entry?.arguments?.getString("groupName").orEmpty())
-                                            } else ""
-                                            val playlistName = if (resolvedTitleRoute == "playlist/{playlistId}/{playlistName}") {
-                                                decodeRouteArg(entry?.arguments?.getString("playlistName").orEmpty())
-                                            } else ""
-                                            val systemPlaylistType = if (resolvedTitleRoute == "playlist_system/{type}") {
-                                                entry?.arguments?.getString("type").orEmpty()
-                                            } else ""
-                                            val appName = stringResource(R.string.app_name)
-                                            val titleText = when {
-                                                resolvedTitleRoute == "library" -> "本地库"
-                                                resolvedTitleRoute == "library_filter" -> "筛选"
-                                                resolvedTitleRoute == "search" -> "在线搜索"
-                                                resolvedTitleRoute == Routes.SearchAssist -> "在线搜索"
-                                                resolvedTitleRoute == Routes.SearchAssistPattern -> "在线搜索"
-                                                resolvedTitleRoute == Routes.HotListening -> "热门收听"
-                                                resolvedTitleRoute == "playlists" -> "我的列表"
-                                                resolvedTitleRoute == "playlist/{playlistId}/{playlistName}" ->
-                                                    playlistName.ifBlank { "我的列表" }
-                                                resolvedTitleRoute == "playlist_system/favorites" -> "我的收藏"
-                                                resolvedTitleRoute == "playlist_system/{type}" -> when (systemPlaylistType) {
-                                                    "favorites" -> "我的收藏"
-                                                    else -> "我的收藏"
+                            Box {
+                                EaraTopBarContainer {
+                                    Column {
+                                        Spacer(modifier = Modifier.windowInsetsTopHeight(StableWindowInsets.statusBars))
+                                        CenterAlignedTopAppBar(
+                                            modifier = Modifier.height(48.dp),
+                                            title = {
+                                                val entry = navBackStackEntry
+                                                val resolvedTitleRoute = if (currentScreenIsPrimary || albumDetailTransitionActive) {
+                                                    visualPrimaryRoute
+                                                } else {
+                                                    currentRoute
                                                 }
-                                                resolvedTitleRoute == "groups" -> "我的分组"
-                                                resolvedTitleRoute == "group/{groupId}/{groupName}" ->
-                                                    groupName.ifBlank { "我的分组" }
-                                                resolvedTitleRoute == "settings" -> "设置"
-                                                resolvedTitleRoute == "downloads" -> "下载管理"
-                                                resolvedTitleRoute == "listening_calendar" -> "ASMR 看板"
-                                                resolvedTitleRoute == "dlsite_login" -> "DLsite 登录"
-                                                resolvedTitleRoute?.startsWith("playlist_picker") == true -> "添加到我的列表"
-                                                resolvedTitleRoute?.startsWith("album_detail") == true -> "专辑详情"
-                                                else -> appName
-                                            }
-                                            if (!isAlbumDetailRoute) {
+                                                val groupName = if (resolvedTitleRoute == "group/{groupId}/{groupName}") {
+                                                    decodeRouteArg(entry?.arguments?.getString("groupName").orEmpty())
+                                                } else ""
+                                                val playlistName = if (resolvedTitleRoute == "playlist/{playlistId}/{playlistName}") {
+                                                    decodeRouteArg(entry?.arguments?.getString("playlistName").orEmpty())
+                                                } else ""
+                                                val systemPlaylistType = if (resolvedTitleRoute == "playlist_system/{type}") {
+                                                    entry?.arguments?.getString("type").orEmpty()
+                                                } else ""
+                                                val appName = stringResource(R.string.app_name)
+                                                val titleText = when {
+                                                    resolvedTitleRoute == "library" -> "本地库"
+                                                    resolvedTitleRoute == "library_filter" -> "筛选"
+                                                    resolvedTitleRoute == "search" -> "在线搜索"
+                                                    resolvedTitleRoute == Routes.SearchAssist -> "在线搜索"
+                                                    resolvedTitleRoute == Routes.SearchAssistPattern -> "在线搜索"
+                                                    resolvedTitleRoute == Routes.HotListening -> "热门收听"
+                                                    resolvedTitleRoute == "playlists" -> "我的列表"
+                                                    resolvedTitleRoute == "playlist/{playlistId}/{playlistName}" ->
+                                                        playlistName.ifBlank { "我的列表" }
+                                                    resolvedTitleRoute == "playlist_system/favorites" -> "我的收藏"
+                                                    resolvedTitleRoute == "playlist_system/{type}" -> when (systemPlaylistType) {
+                                                        "favorites" -> "我的收藏"
+                                                        else -> "我的收藏"
+                                                    }
+                                                    resolvedTitleRoute == "groups" -> "我的分组"
+                                                    resolvedTitleRoute == "group/{groupId}/{groupName}" ->
+                                                        groupName.ifBlank { "我的分组" }
+                                                    resolvedTitleRoute == "settings" -> "设置"
+                                                    resolvedTitleRoute == "downloads" -> "下载管理"
+                                                    resolvedTitleRoute == "listening_calendar" -> "ASMR 看板"
+                                                    resolvedTitleRoute == "dlsite_login" -> "DLsite 登录"
+                                                    resolvedTitleRoute?.startsWith("playlist_picker") == true -> "添加到我的列表"
+                                                    resolvedTitleRoute?.startsWith("album_detail") == true -> "专辑详情"
+                                                    else -> appName
+                                                }
                                                 AnimatedContent(
                                                     targetState = titleText,
                                                     modifier = Modifier
@@ -1433,229 +1600,216 @@ fun MainContainer(
                                                 ) { targetText ->
                                                     Text(
                                                         text = targetText,
-                                                        color = topBarContentColor,
+                                                        color = if (albumDetailTransitionActive) {
+                                                            colorScheme.onSurface
+                                                        } else {
+                                                            topBarContentColor
+                                                        },
                                                         style = MaterialTheme.typography.titleMedium.copy(
                                                             fontWeight = FontWeight.SemiBold
                                                         )
                                                     )
                                                 }
-                                            }
-                                        },
-                                        windowInsets = WindowInsets(0, 0, 0, 0),
-                                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                                            containerColor = Color.Transparent,
-                                            titleContentColor = topBarContentColor,
-                                            navigationIconContentColor = topBarContentColor,
-                                            actionIconContentColor = topBarContentColor
-                                        ),
-                                        navigationIcon = {
-                                            if (showBackButton && hasPreviousBackStackEntry) {
-                                                EaraTopBarIconButton(
-                                                    onClick = { navController.popBackStack() },
-                                                    modifier = Modifier
-                                                        .padding(start = if (isAlbumDetailRoute) 4.dp else 0.dp)
-                                                        .albumDetailTopBarButtonMotion(isAlbumDetailRoute, navBackStackEntry)
-                                                        .albumDetailTopBarButtonSurface(isAlbumDetailRoute)
-                                                ) {
-                                                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
+                                            },
+                                            windowInsets = WindowInsets(0, 0, 0, 0),
+                                            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                                                containerColor = Color.Transparent,
+                                                titleContentColor = topBarContentColor,
+                                                navigationIconContentColor = topBarContentColor,
+                                                actionIconContentColor = if (albumDetailTransitionActive) {
+                                                    colorScheme.onSurface
+                                                } else {
+                                                    topBarContentColor
                                                 }
-                                            } else if (showPrimaryBrand) {
-                                                PrimaryTopBarBrand(
-                                                    appName = stringResource(R.string.app_name),
-                                                    tint = colorScheme.primaryStrong
-                                                )
-                                            }
-                                        },
-                                        actions = {
-                                            val entry = navBackStackEntry
-                                            if (currentRoute != null && (isPrimaryRoute(currentRoute) || currentRoute == "playlist_system/{type}")) {
-                                                val downloadTasks by downloadsViewModel.tasks.collectAsState()
-                                                val activeDownloadCount = remember(downloadTasks) {
-                                                    downloadTasks.sumOf { task ->
-                                                        task.items.count {
-                                                            it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED
-                                                        }
-                                                    }
-                                                }
+                                            ),
+                                            navigationIcon = {
                                                 Box {
-                                                    EaraTopBarIconButton(
-                                                        onClick = { navController.navigate("downloads") },
-                                                        modifier = Modifier.padding(end = 4.dp)
-                                                    ) {
-                                                        Icon(Icons.Rounded.Download, contentDescription = "下载管理")
+                                                    if (showPrimaryBrand || albumDetailTransitionActive) {
+                                                        PrimaryTopBarBrand(
+                                                            appName = stringResource(R.string.app_name),
+                                                            tint = colorScheme.primaryStrong
+                                                        )
                                                     }
-                                                    if (activeDownloadCount > 0) {
-                                                        Badge(
-                                                            modifier = Modifier
-                                                                .align(Alignment.TopEnd)
+                                                    if (showBackButton &&
+                                                        !albumDetailTransitionActive &&
+                                                        hasPreviousBackStackEntry
+                                                    ) {
+                                                        EaraTopBarIconButton(
+                                                            onClick = { navController.popBackStack() }
                                                         ) {
-                                                            Text(activeDownloadCount.toString())
+                                                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
                                                         }
                                                     }
                                                 }
-                                            }
-                                            if (currentRoute == "library") {
-                                                val viewMode by libraryViewModel.libraryViewMode.collectAsState()
-                                                if (viewMode != null) {
-                                                    var viewMenuExpanded by remember { mutableStateOf(false) }
-                                                    Box {
-                                                        val normalized = (viewMode ?: 0).coerceIn(0, 2)
-                                                        val icon = when (normalized) {
-                                                            1 -> Icons.Rounded.GridView
-                                                            2 -> Icons.Rounded.Audiotrack
-                                                            else -> Icons.AutoMirrored.Rounded.ViewList
+                                            },
+                                            actions = {
+                                                val headerActionRoute = if (albumDetailTransitionActive) {
+                                                    visualPrimaryRoute
+                                                } else {
+                                                    currentRoute
+                                                }
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    if (headerActionRoute != null &&
+                                                        (isPrimaryRoute(headerActionRoute) || headerActionRoute == "playlist_system/{type}")
+                                                    ) {
+                                                        val downloadTasks by downloadsViewModel.tasks.collectAsState()
+                                                        val activeDownloadCount = remember(downloadTasks) {
+                                                            downloadTasks.sumOf { task ->
+                                                                task.items.count {
+                                                                    it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED
+                                                                }
+                                                            }
                                                         }
-                                                        EaraTopBarIconButton(
-                                                            onClick = { viewMenuExpanded = true },
-                                                            modifier = Modifier.padding(end = 4.dp)
-                                                        ) {
-                                                            Icon(imageVector = icon, contentDescription = "切换视图")
-                                                        }
-                                                        MaterialTheme(
-                                                            colorScheme = materialColorScheme.copy(
-                                                                surface = dynamicContainerColor,
-                                                                surfaceContainer = dynamicContainerColor
-                                                            )
-                                                        ) {
-                                                            DropdownMenu(
-                                                                expanded = viewMenuExpanded,
-                                                                onDismissRequest = { viewMenuExpanded = false },
-                                                                modifier = Modifier.background(dynamicContainerColor)
+                                                        Box {
+                                                            EaraTopBarIconButton(
+                                                                onClick = { navController.navigate("downloads") },
+                                                                modifier = Modifier.padding(end = 4.dp)
                                                             ) {
-                                                                DropdownMenuItem(
-                                                                    text = { Text("专辑列表") },
-                                                                    leadingIcon = {
-                                                                        Icon(Icons.AutoMirrored.Rounded.ViewList, contentDescription = null)
-                                                                    },
-                                                                    onClick = {
-                                                                        viewMenuExpanded = false
-                                                                        libraryViewModel.setLibraryViewMode(0)
-                                                                    }
-                                                                )
-                                                                HorizontalDivider(
-                                                                    modifier = Modifier.padding(horizontal = 8.dp),
-                                                                    thickness = 0.5.dp,
-                                                                    color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
-                                                                )
-                                                                DropdownMenuItem(
-                                                                    text = { Text("专辑卡片") },
-                                                                    leadingIcon = {
-                                                                        Icon(Icons.Rounded.GridView, contentDescription = null)
-                                                                    },
-                                                                    onClick = {
-                                                                        viewMenuExpanded = false
-                                                                        libraryViewModel.setLibraryViewMode(1)
-                                                                    }
-                                                                )
-                                                                HorizontalDivider(
-                                                                    modifier = Modifier.padding(horizontal = 8.dp),
-                                                                    thickness = 0.5.dp,
-                                                                    color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
-                                                                )
-                                                                DropdownMenuItem(
-                                                                    text = { Text("音轨列表") },
-                                                                    leadingIcon = {
-                                                                        Icon(Icons.Rounded.Audiotrack, contentDescription = null)
-                                                                    },
-                                                                    onClick = {
-                                                                        viewMenuExpanded = false
-                                                                        libraryViewModel.setLibraryViewMode(2)
-                                                                    }
-                                                                )
+                                                                Icon(Icons.Rounded.Download, contentDescription = "下载管理")
+                                                            }
+                                                            if (activeDownloadCount > 0) {
+                                                                Badge(
+                                                                    modifier = Modifier
+                                                                        .align(Alignment.TopEnd)
+                                                                ) {
+                                                                    Text(activeDownloadCount.toString())
+                                                                }
                                                             }
                                                         }
                                                     }
-                                                }
-                                            } else if (currentRoute == "search") {
-                                                val viewMode by searchViewModel.viewMode.collectAsState()
-                                                EaraTopBarIconButton(
-                                                    onClick = { searchViewModel.setViewMode(if (viewMode == 1) 0 else 1) },
-                                                    modifier = Modifier.padding(end = 4.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = if (viewMode == 1) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.ViewModule,
-                                                        contentDescription = if (viewMode == 1) "切换为列表视图" else "切换为卡片视图"
-                                                    )
-                                                }
-                                            } else if (currentRoute == Routes.HotListening) {
-                                                val viewMode by hotListeningViewModel.viewMode.collectAsState()
-                                                EaraTopBarIconButton(
-                                                    onClick = { hotListeningViewModel.setViewMode(if (viewMode == 1) 0 else 1) },
-                                                    modifier = Modifier.padding(end = 4.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = if (viewMode == 1) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.ViewModule,
-                                                        contentDescription = if (viewMode == 1) "切换为列表视图" else "切换为卡片视图"
-                                                    )
-                                                }
-                                            } else if (currentRoute == "downloads") {
-                                                val tasks by downloadsViewModel.tasks.collectAsState()
-                                                val hasActiveDownloads = remember(tasks) {
-                                                    tasks.any { task ->
-                                                        task.items.any { it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED }
-                                                    }
-                                                }
-                                                val hasPausedDownloads = remember(tasks) {
-                                                    tasks.any { task ->
-                                                        task.items.any { it.state == DownloadItemState.PAUSED }
-                                                    }
-                                                }
-                                                
-                                                if (hasActiveDownloads) {
-                                                    TextButton(
-                                                        onClick = { downloadsViewModel.pauseAll() },
-                                                        colors = ButtonDefaults.textButtonColors(contentColor = topBarContentColor)
-                                                    ) { Text("全部暂停") }
-                                                } else if (hasPausedDownloads) {
-                                                    TextButton(
-                                                        onClick = { downloadsViewModel.resumeAll() },
-                                                        colors = ButtonDefaults.textButtonColors(contentColor = topBarContentColor)
-                                                    ) { Text("全部继续") }
-                                                }
-                                            } else if (entry != null && (
-                                                currentRoute?.startsWith("album_detail/{albumId}") == true ||
-                                                    currentRoute?.startsWith("album_detail/") == true
-                                                )
-                                            ) {
-                                                val albumDetailViewModel: AlbumDetailViewModel = hiltViewModel(entry)
-                                                val detailState by albumDetailViewModel.uiState.collectAsState()
-                                                val showManualBind = (detailState as? AlbumDetailUiState.Success)?.model?.let { m ->
-                                                    val local = m.localAlbum
-                                                    local != null && local.id > 0L
-                                                } == true
-                                                if (showManualBind) {
-                                                    EaraTopBarIconButton(
-                                                        onClick = {
-                                                            val currentRj = (detailState as? AlbumDetailUiState.Success)?.model?.let { m ->
-                                                                val local = m.localAlbum
-                                                                m.rjCode.trim()
-                                                                    .ifBlank { local?.rjCode?.trim().orEmpty() }
-                                                                    .ifBlank { local?.workId?.trim().orEmpty() }
-                                                            }.orEmpty()
-                                                            manualRjInput = currentRj
-                                                            showManualRjDialog = true
-                                                        },
-                                                        modifier = Modifier
-                                                            .padding(end = 8.dp)
-                                                            .albumDetailTopBarButtonMotion(true, navBackStackEntry)
-                                                            .albumDetailTopBarButtonSurface(true)
-                                                    ) {
-                                                        Icon(Icons.Rounded.Edit, contentDescription = "手动输入RJ号")
+                                                    if (headerActionRoute == "library") {
+                                                        val viewMode by libraryViewModel.libraryViewMode.collectAsState()
+                                                        if (viewMode != null) {
+                                                            var viewMenuExpanded by remember { mutableStateOf(false) }
+                                                            Box {
+                                                                val normalized = (viewMode ?: 0).coerceIn(0, 2)
+                                                                val icon = when (normalized) {
+                                                                    1 -> Icons.Rounded.GridView
+                                                                    2 -> Icons.Rounded.Audiotrack
+                                                                    else -> Icons.AutoMirrored.Rounded.ViewList
+                                                                }
+                                                                EaraTopBarIconButton(
+                                                                    onClick = { viewMenuExpanded = true },
+                                                                    modifier = Modifier.padding(end = 4.dp)
+                                                                ) {
+                                                                    Icon(imageVector = icon, contentDescription = "切换视图")
+                                                                }
+                                                                MaterialTheme(
+                                                                    colorScheme = materialColorScheme.copy(
+                                                                        surface = dynamicContainerColor,
+                                                                        surfaceContainer = dynamicContainerColor
+                                                                    )
+                                                                ) {
+                                                                    DropdownMenu(
+                                                                        expanded = viewMenuExpanded,
+                                                                        onDismissRequest = { viewMenuExpanded = false },
+                                                                        modifier = Modifier.background(dynamicContainerColor)
+                                                                    ) {
+                                                                        DropdownMenuItem(
+                                                                            text = { Text("专辑列表") },
+                                                                            leadingIcon = {
+                                                                                Icon(Icons.AutoMirrored.Rounded.ViewList, contentDescription = null)
+                                                                            },
+                                                                            onClick = {
+                                                                                viewMenuExpanded = false
+                                                                                libraryViewModel.setLibraryViewMode(0)
+                                                                            }
+                                                                        )
+                                                                        HorizontalDivider(
+                                                                            modifier = Modifier.padding(horizontal = 8.dp),
+                                                                            thickness = 0.5.dp,
+                                                                            color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                                                                        )
+                                                                        DropdownMenuItem(
+                                                                            text = { Text("专辑卡片") },
+                                                                            leadingIcon = {
+                                                                                Icon(Icons.Rounded.GridView, contentDescription = null)
+                                                                            },
+                                                                            onClick = {
+                                                                                viewMenuExpanded = false
+                                                                                libraryViewModel.setLibraryViewMode(1)
+                                                                            }
+                                                                        )
+                                                                        HorizontalDivider(
+                                                                            modifier = Modifier.padding(horizontal = 8.dp),
+                                                                            thickness = 0.5.dp,
+                                                                            color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                                                                        )
+                                                                        DropdownMenuItem(
+                                                                            text = { Text("音轨列表") },
+                                                                            leadingIcon = {
+                                                                                Icon(Icons.Rounded.Audiotrack, contentDescription = null)
+                                                                            },
+                                                                            onClick = {
+                                                                                viewMenuExpanded = false
+                                                                                libraryViewModel.setLibraryViewMode(2)
+                                                                            }
+                                                                        )
+                                                                    }
+                                                                }
+                                                            }
+                                                        }
+                                                    } else if (headerActionRoute == "search") {
+                                                        val viewMode by searchViewModel.viewMode.collectAsState()
+                                                        EaraTopBarIconButton(
+                                                            onClick = { searchViewModel.setViewMode(if (viewMode == 1) 0 else 1) },
+                                                            modifier = Modifier.padding(end = 4.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = if (viewMode == 1) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.ViewModule,
+                                                                contentDescription = if (viewMode == 1) "切换为列表视图" else "切换为卡片视图"
+                                                            )
+                                                        }
+                                                    } else if (headerActionRoute == Routes.HotListening) {
+                                                        val viewMode by hotListeningViewModel.viewMode.collectAsState()
+                                                        EaraTopBarIconButton(
+                                                            onClick = { hotListeningViewModel.setViewMode(if (viewMode == 1) 0 else 1) },
+                                                            modifier = Modifier.padding(end = 4.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = if (viewMode == 1) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.ViewModule,
+                                                                contentDescription = if (viewMode == 1) "切换为列表视图" else "切换为卡片视图"
+                                                            )
+                                                        }
+                                                    } else if (headerActionRoute == "downloads") {
+                                                        val tasks by downloadsViewModel.tasks.collectAsState()
+                                                        val hasActiveDownloads = remember(tasks) {
+                                                            tasks.any { task ->
+                                                                task.items.any { it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED }
+                                                            }
+                                                        }
+                                                        val hasPausedDownloads = remember(tasks) {
+                                                            tasks.any { task ->
+                                                                task.items.any { it.state == DownloadItemState.PAUSED }
+                                                            }
+                                                        }
+
+                                                        if (hasActiveDownloads) {
+                                                            TextButton(
+                                                                onClick = { downloadsViewModel.pauseAll() },
+                                                                colors = ButtonDefaults.textButtonColors(contentColor = topBarContentColor)
+                                                            ) { Text("全部暂停") }
+                                                        } else if (hasPausedDownloads) {
+                                                            TextButton(
+                                                                onClick = { downloadsViewModel.resumeAll() },
+                                                                colors = ButtonDefaults.textButtonColors(contentColor = topBarContentColor)
+                                                            ) { Text("全部继续") }
+                                                        }
                                                     }
                                                 }
                                             }
-                                        }
-                                    )
+                                        )
 
-                                    val p = bulkProgress
-                                    if (currentRoute == "library" && p?.phase == BulkPhase.ScanningLocal) {
-                                        if (p.total > 0) {
-                                            LinearProgressIndicator(
-                                                progress = { p.fraction },
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
-                                        } else {
-                                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                        val p = bulkProgress
+                                        if (currentRoute == "library" && p?.phase == BulkPhase.ScanningLocal) {
+                                            if (p.total > 0) {
+                                                LinearProgressIndicator(
+                                                    progress = { p.fraction },
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
+                                            } else {
+                                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                                            }
                                         }
                                     }
                                 }
@@ -1665,36 +1819,65 @@ fun MainContainer(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
+                                .zIndex(if (albumDetailTransitionActive) 1f else 0f)
                         ) {
                             val topContentPadding = padding.calculateTopPadding()
-                            val hasOverlayRoute = currentPrimaryRoute == null
-                            // overlay 路由会改变共享顶栏高度，但底层 pager 在转场期间仍然可见。
-                            // pager 始终只承载主路由（库/搜索/热门），若跟随 overlay 的顶栏高度会在转场时整体移动 8dp。
-                            // 因此 pager 专用 padding 在 overlay 激活时冻结为最近一次主路由的值，避免进入详情页时来源列表抖动下沉。
-                            // 注意：NavHost 内的 secondary 页面仍用 topContentPadding（真实值），不受此冻结影响。
-                            var lastPrimaryTopPadding by remember { mutableStateOf(topContentPadding) }
-                            if (!hasOverlayRoute) {
-                                lastPrimaryTopPadding = topContentPadding
+                            SideEffect {
+                                if (secondaryPageTopPadding != topContentPadding) {
+                                    secondaryPageTopPadding = topContentPadding
+                                }
                             }
-                            val pagerTopContentPadding = if (hasOverlayRoute) lastPrimaryTopPadding else topContentPadding
                             primaryContentStateHolder.SaveableStateProvider("primary_pager") {
                                 HorizontalPager(
                                     state = primaryPagerState,
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .padding(top = pagerTopContentPadding),
-                                    beyondBoundsPageCount = primaryPagerBeyondBoundsPageCount,
+                                        .padding(top = topContentPadding)
+                                        .graphicsLayer {
+                                            translationX = if (albumDetailTransitionActive) {
+                                                0f
+                                            } else {
+                                                primaryPageParallaxOffset.value.toPx()
+                                            }
+                                        },
+                                    beyondViewportPageCount = primaryPagerBeyondBoundsPageCount,
                                     flingBehavior = primaryPagerFlingBehavior,
                                     userScrollEnabled = !primaryPagerScrollLocked && !hasOverlayRoute,
                                     key = { primaryPagerRoutes[it] }
                                 ) { page ->
                                     val route = primaryPagerRoutes[page]
+                                    val primaryRouteActive = visualPrimaryRoute == route &&
+                                        !primaryContentCoveredByAlbumDetail
+                                    val pagerRouteVisible = primaryPagerState.currentPage == page ||
+                                        (
+                                            primaryPagerState.isScrollInProgress &&
+                                                primaryPagerState.targetPage == page
+                                            )
+                                    val primaryRouteImmediatelyActive = !hasOverlayRoute &&
+                                        (primaryRouteActive || pagerRouteVisible)
+                                    var keepPrimaryRouteDataWarm by remember(route) {
+                                        mutableStateOf(true)
+                                    }
+                                    LaunchedEffect(primaryRouteImmediatelyActive) {
+                                        if (primaryRouteImmediatelyActive) {
+                                            keepPrimaryRouteDataWarm = true
+                                        } else {
+                                            delay(
+                                                PrimaryRouteDataWarmRetentionMs +
+                                                    page * PrimaryRouteDataWarmStaggerMs
+                                            )
+                                            keepPrimaryRouteDataWarm = false
+                                        }
+                                    }
+                                    val primaryRouteDataActive = primaryRouteImmediatelyActive ||
+                                        keepPrimaryRouteDataWarm
                                     primaryContentStateHolder.SaveableStateProvider("primary_route:$route") {
                                         when (route) {
                                         Routes.Library -> {
                                             LibraryScreen(
                                                 windowSizeClass = windowSizeClass,
-                                                isActive = visualPrimaryRoute == route,
+                                                isActive = primaryRouteActive,
+                                                isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = libraryScrollToTopSignal,
                                                 onAlbumClick = { album ->
                                                     AlbumCoverHintStore.record(
@@ -1732,7 +1915,8 @@ fun MainContainer(
                                         Routes.Search -> {
                                             SearchScreen(
                                                 windowSizeClass = windowSizeClass,
-                                                isActive = visualPrimaryRoute == route,
+                                                isActive = primaryRouteActive,
+                                                isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = searchScrollToTopSignal,
                                                 submittedSearchKeyword = submittedSearchKeyword,
                                                 submittedSearchOrderName = submittedSearchOrderName,
@@ -1781,7 +1965,8 @@ fun MainContainer(
                                         Routes.HotListening -> {
                                             HotListeningScreen(
                                                 windowSizeClass = windowSizeClass,
-                                                isActive = visualPrimaryRoute == route,
+                                                isActive = primaryRouteActive,
+                                                isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = hotListeningScrollToTopSignal,
                                                 onAlbumClick = { album ->
                                                     AlbumCoverHintStore.record(
@@ -1811,7 +1996,8 @@ fun MainContainer(
                                         "playlist_system/favorites" -> {
                                             SystemPlaylistScreen(
                                                 windowSizeClass = windowSizeClass,
-                                                isActive = visualPrimaryRoute == route,
+                                                isActive = primaryRouteActive,
+                                                isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = favoritesScrollToTopSignal,
                                                 onPlayAll = { items, startItem ->
                                                     playerViewModel.playPlaylistItems(items, startItem)
@@ -1824,7 +2010,8 @@ fun MainContainer(
                                         "playlists" -> {
                                             PlaylistsScreen(
                                                 windowSizeClass = windowSizeClass,
-                                                isActive = visualPrimaryRoute == route,
+                                                isActive = primaryRouteActive,
+                                                isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = playlistsScrollToTopSignal,
                                                 onPlaylistClick = { playlist ->
                                                     val encoded = URLEncoder.encode(playlist.name, "UTF-8")
@@ -1837,7 +2024,8 @@ fun MainContainer(
                                         "groups" -> {
                                             com.asmr.player.ui.groups.AlbumGroupsScreen(
                                                 windowSizeClass = windowSizeClass,
-                                                isActive = visualPrimaryRoute == route,
+                                                isActive = primaryRouteActive,
+                                                isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = groupsScrollToTopSignal,
                                                 onGroupClick = { group ->
                                                     val encoded = encodeRouteArg(group.name)
@@ -1850,7 +2038,8 @@ fun MainContainer(
                                         "settings" -> {
                                             SettingsScreen(
                                                 windowSizeClass = windowSizeClass,
-                                                isActive = visualPrimaryRoute == route,
+                                                isActive = primaryRouteActive,
+                                                isDataActive = primaryRouteDataActive,
                                                 viewModel = settingsViewModel,
                                                 libraryViewModel = libraryViewModel,
                                                 scrollToTopSignal = settingsScrollToTopSignal,
@@ -1863,6 +2052,8 @@ fun MainContainer(
                                         "listening_calendar" -> {
                                             com.asmr.player.ui.calendar.ListeningCalendarScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                isActive = primaryRouteActive,
+                                                isDataActive = primaryRouteDataActive,
                                                 onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
                                                 onOpenAlbum = { session ->
                                                     AlbumCoverHintStore.record(
@@ -1892,7 +2083,11 @@ fun MainContainer(
                             }
                             }
 
-                            NavHost(
+                        }
+                    }
+                }
+
+                NavHost(
                                 navController = navController,
                                 startDestination = initialDestination,
                                 enterTransition = {
@@ -1919,7 +2114,7 @@ fun MainContainer(
                     Box(modifier = Modifier.fillMaxSize())
                 }
                                 composable("library_filter") {
-                    SecondaryPageBackground(topPadding = topContentPadding) {
+                    SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                         LibraryFilterScreen(
                             onClose = { navController.popBackStack() },
                             viewModel = libraryViewModel
@@ -2003,7 +2198,7 @@ fun MainContainer(
                     Box(modifier = Modifier.fillMaxSize())
                 }
                 composable(route = Routes.SearchAssist) {
-                    SecondaryPageBackground(topPadding = topContentPadding) {
+                    SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                         SearchAssistScreen(
                             windowSizeClass = windowSizeClass,
                             initialRequest = searchAssistInitialRequest,
@@ -2029,7 +2224,7 @@ fun MainContainer(
                         searchAssistInitialRequest.copy(keyword = initialKeyword)
                     }
 
-                    SecondaryPageBackground(topPadding = topContentPadding) {
+                    SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                         SearchAssistScreen(
                             windowSizeClass = windowSizeClass,
                             initialRequest = initialRequest,
@@ -2048,49 +2243,61 @@ fun MainContainer(
                     )
                 ) { backStackEntry ->
                     val rj = backStackEntry.arguments?.getString("rj").orEmpty()
-                    val refreshToken by backStackEntry.savedStateHandle.getStateFlow("refreshToken", 0L).collectAsState()
-                    AlbumDetailScreen(
-                        windowSizeClass = windowSizeClass,
-                        rjCode = rj,
-                        initialTab = backStackEntry.arguments?.getString("initialTab").toAlbumDetailInitialTab(),
-                        refreshToken = refreshToken,
-                        onConsumeRefreshToken = { backStackEntry.savedStateHandle["refreshToken"] = 0L },
-                        onPlayTracks = { album, tracks, startTrack ->
-                            scope.launch {
-                                if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                    openNowPlaying()
+                    AlbumDetailRouteFrame(
+                        backStackEntry = backStackEntry,
+                        onBack = requestAlbumDetailBack,
+                        onEditRj = { currentRj ->
+                            manualRjInput = currentRj
+                            showManualRjDialog = true
+                        }
+                    ) { albumDetailViewModel ->
+                        AlbumDetailScreen(
+                            windowSizeClass = windowSizeClass,
+                            rjCode = rj,
+                            initialTab = backStackEntry.arguments?.getString("initialTab").toAlbumDetailInitialTab(),
+                            initialOnlineLoadDelayMillis = SecondaryPageEnterDurationMs.toLong(),
+                            onPlayTracks = { album, tracks, startTrack ->
+                                scope.launch {
+                                    if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
+                                        openNowPlaying()
+                                    }
                                 }
-                            }
-                        },
-                        onPlayMediaItems = { items, startIndex ->
-                            playerViewModel.playMediaItems(items, startIndex)
-                            openNowPlaying()
-                        },
-                        onAddToQueue = { album, track ->
-                            playerViewModel.addTrackToQueue(album, track)
-                        },
-                        onAddMediaItemsToQueue = { items ->
-                            playerViewModel.addMediaItemsToQueue(items)
-                        },
-                        onAddMediaItemsToFavorites = { items ->
-                            playlistsViewModel.addItemsToFavoritesInBackground(items)
-                        },
-                        onOpenPlaylistPicker = { item ->
-                            albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
-                        },
-                        onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
-                        onOpenAlbumByRj = { targetRj, work ->
-                            AlbumCoverHintStore.record(
-                                albumId = null,
-                                rjCode = targetRj,
-                                title = work?.title,
-                                circle = null,
-                                coverUrl = work?.coverUrl
-                            )
-                            navigator.openAlbumDetailByRjStacked(targetRj)
-                        },
-                        onSearchKeyword = ::submitMetaSearchKeyword
-                    )
+                            },
+                            onPlayMediaItems = { items, startIndex ->
+                                playerViewModel.playMediaItems(items, startIndex)
+                                openNowPlaying()
+                            },
+                            onAddToQueue = { album, track ->
+                                playerViewModel.addTrackToQueue(album, track)
+                            },
+                            onAddMediaItemsToQueue = { items ->
+                                playerViewModel.addMediaItemsToQueue(items)
+                            },
+                            onAddMediaItemsToFavorites = { items ->
+                                playlistsViewModel.addItemsToFavoritesInBackground(items)
+                            },
+                            onOpenPlaylistPicker = { item ->
+                                albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
+                            },
+                            onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
+                            onOpenAlbumByRj = { targetRj, work ->
+                                AlbumCoverHintStore.record(
+                                    albumId = null,
+                                    rjCode = targetRj,
+                                    title = work?.title,
+                                    circle = null,
+                                    coverUrl = work?.coverUrl
+                                )
+                                navigator.openAlbumDetailByRjStacked(targetRj)
+                            },
+                            onSearchKeyword = ::submitMetaSearchKeyword,
+                            playlistsViewModel = playlistsViewModel,
+                            albumGroupsViewModel = albumGroupsViewModel,
+                            settingsViewModel = settingsViewModel,
+                            libraryViewModel = libraryViewModel,
+                            viewModel = albumDetailViewModel
+                        )
+                    }
                 }
                 composable(
                     route = Routes.AlbumDetailByIdPattern,
@@ -2102,92 +2309,115 @@ fun MainContainer(
                 ) { backStackEntry ->
                     val albumId = backStackEntry.arguments?.getLong("albumId") ?: 0L
                     val rjCode = backStackEntry.arguments?.getString("rjCode")
-                    val refreshToken by backStackEntry.savedStateHandle.getStateFlow("refreshToken", 0L).collectAsState()
-                    AlbumDetailScreen(
-                        windowSizeClass = windowSizeClass,
-                        albumId = albumId,
-                        rjCode = rjCode,
-                        initialTab = backStackEntry.arguments?.getString("initialTab").toAlbumDetailInitialTab(),
-                        refreshToken = refreshToken,
-                        onConsumeRefreshToken = { backStackEntry.savedStateHandle["refreshToken"] = 0L },
-                        onPlayTracks = { album, tracks, startTrack ->
-                            scope.launch {
-                                if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                    openNowPlaying()
+                    AlbumDetailRouteFrame(
+                        backStackEntry = backStackEntry,
+                        onBack = requestAlbumDetailBack,
+                        onEditRj = { currentRj ->
+                            manualRjInput = currentRj
+                            showManualRjDialog = true
+                        }
+                    ) { albumDetailViewModel ->
+                        AlbumDetailScreen(
+                            windowSizeClass = windowSizeClass,
+                            albumId = albumId,
+                            rjCode = rjCode,
+                            initialTab = backStackEntry.arguments?.getString("initialTab").toAlbumDetailInitialTab(),
+                            onPlayTracks = { album, tracks, startTrack ->
+                                scope.launch {
+                                    if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
+                                        openNowPlaying()
+                                    }
                                 }
-                            }
-                        },
-                        onPlayMediaItems = { items, startIndex ->
-                            playerViewModel.playMediaItems(items, startIndex)
-                            openNowPlaying()
-                        },
-                        onAddToQueue = { album, track ->
-                            playerViewModel.addTrackToQueue(album, track)
-                        },
-                        onAddMediaItemsToQueue = { items ->
-                            playerViewModel.addMediaItemsToQueue(items)
-                        },
-                        onAddMediaItemsToFavorites = { items ->
-                            playlistsViewModel.addItemsToFavoritesInBackground(items)
-                        },
-                        onOpenPlaylistPicker = { item ->
-                            albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
-                        },
-                        onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
-                        onOpenAlbumByRj = { targetRj, work ->
-                            AlbumCoverHintStore.record(
-                                albumId = null,
-                                rjCode = targetRj,
-                                title = work?.title,
-                                circle = null,
-                                coverUrl = work?.coverUrl
-                            )
-                            navigator.openAlbumDetailByRjStacked(targetRj)
-                        },
-                        onSearchKeyword = ::submitMetaSearchKeyword
-                    )
+                            },
+                            onPlayMediaItems = { items, startIndex ->
+                                playerViewModel.playMediaItems(items, startIndex)
+                                openNowPlaying()
+                            },
+                            onAddToQueue = { album, track ->
+                                playerViewModel.addTrackToQueue(album, track)
+                            },
+                            onAddMediaItemsToQueue = { items ->
+                                playerViewModel.addMediaItemsToQueue(items)
+                            },
+                            onAddMediaItemsToFavorites = { items ->
+                                playlistsViewModel.addItemsToFavoritesInBackground(items)
+                            },
+                            onOpenPlaylistPicker = { item ->
+                                albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
+                            },
+                            onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
+                            onOpenAlbumByRj = { targetRj, work ->
+                                AlbumCoverHintStore.record(
+                                    albumId = null,
+                                    rjCode = targetRj,
+                                    title = work?.title,
+                                    circle = null,
+                                    coverUrl = work?.coverUrl
+                                )
+                                navigator.openAlbumDetailByRjStacked(targetRj)
+                            },
+                            onSearchKeyword = ::submitMetaSearchKeyword,
+                            playlistsViewModel = playlistsViewModel,
+                            albumGroupsViewModel = albumGroupsViewModel,
+                            settingsViewModel = settingsViewModel,
+                            libraryViewModel = libraryViewModel,
+                            viewModel = albumDetailViewModel
+                        )
+                    }
                 }
                 composable(
                     route = "album_detail_online/{rj}",
                     arguments = listOf(navArgument("rj") { defaultValue = "" })
                 ) { backStackEntry ->
                     val rj = backStackEntry.arguments?.getString("rj").orEmpty()
-                    val refreshToken by backStackEntry.savedStateHandle.getStateFlow("refreshToken", 0L).collectAsState()
-                    AlbumDetailScreen(
-                        windowSizeClass = windowSizeClass,
-                        rjCode = rj,
-                        refreshToken = refreshToken,
-                        onConsumeRefreshToken = { backStackEntry.savedStateHandle["refreshToken"] = 0L },
-                        onPlayTracks = { album, tracks, startTrack ->
-                            scope.launch {
-                                if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                    openNowPlaying()
+                    AlbumDetailRouteFrame(
+                        backStackEntry = backStackEntry,
+                        onBack = requestAlbumDetailBack,
+                        onEditRj = { currentRj ->
+                            manualRjInput = currentRj
+                            showManualRjDialog = true
+                        }
+                    ) { albumDetailViewModel ->
+                        AlbumDetailScreen(
+                            windowSizeClass = windowSizeClass,
+                            rjCode = rj,
+                            initialOnlineLoadDelayMillis = SecondaryPageEnterDurationMs.toLong(),
+                            onPlayTracks = { album, tracks, startTrack ->
+                                scope.launch {
+                                    if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
+                                        openNowPlaying()
+                                    }
                                 }
-                            }
-                        },
-                        onPlayMediaItems = { items, startIndex ->
-                            playerViewModel.playMediaItems(items, startIndex)
-                            openNowPlaying()
-                        },
-                        onAddToQueue = { album, track ->
-                            playerViewModel.addTrackToQueue(album, track)
-                        },
-                        onOpenPlaylistPicker = { item ->
-                            albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
-                        },
-                        onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
-                        onOpenAlbumByRj = { targetRj, work ->
-                            AlbumCoverHintStore.record(
-                                albumId = null,
-                                rjCode = targetRj,
-                                title = work?.title,
-                                circle = null,
-                                coverUrl = work?.coverUrl
-                            )
-                            navigator.openAlbumDetailByRjStacked(targetRj)
-                        },
-                        onSearchKeyword = ::submitMetaSearchKeyword
-                    )
+                            },
+                            onPlayMediaItems = { items, startIndex ->
+                                playerViewModel.playMediaItems(items, startIndex)
+                                openNowPlaying()
+                            },
+                            onAddToQueue = { album, track ->
+                                playerViewModel.addTrackToQueue(album, track)
+                            },
+                            onOpenPlaylistPicker = { item ->
+                                albumBatchPlaylistPickerRequest = BatchPlaylistPickerRequest(listOf(item))
+                            },
+                            onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
+                            onOpenAlbumByRj = { targetRj, work ->
+                                AlbumCoverHintStore.record(
+                                    albumId = null,
+                                    rjCode = targetRj,
+                                    title = work?.title,
+                                    circle = null,
+                                    coverUrl = work?.coverUrl
+                                )
+                                navigator.openAlbumDetailByRjStacked(targetRj)
+                            },
+                            onSearchKeyword = ::submitMetaSearchKeyword,
+                            playlistsViewModel = playlistsViewModel,
+                            albumGroupsViewModel = albumGroupsViewModel,
+                            settingsViewModel = settingsViewModel,
+                            libraryViewModel = libraryViewModel,
+                            viewModel = albumDetailViewModel
+                        )
+                    }
                 }
                 composable(
                     route = "album_detail_online/{source}/{workId}",
@@ -2223,7 +2453,7 @@ fun MainContainer(
                 ) { backStackEntry ->
                     val groupId = backStackEntry.arguments?.getLong("groupId") ?: 0L
                     val groupName = decodeRouteArg(backStackEntry.arguments?.getString("groupName").orEmpty())
-                    SecondaryPageBackground(topPadding = topContentPadding) {
+                    SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                         com.asmr.player.ui.groups.AlbumGroupDetailScreen(
                             windowSizeClass = windowSizeClass,
                             groupId = groupId,
@@ -2242,7 +2472,7 @@ fun MainContainer(
                     )
                 ) { backStackEntry ->
                     val albumId = backStackEntry.arguments?.getLong("albumId") ?: 0L
-                    SecondaryPageBackground(topPadding = topContentPadding) {
+                    SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                         com.asmr.player.ui.groups.AlbumGroupPickerScreen(
                             windowSizeClass = windowSizeClass,
                             albumId = albumId,
@@ -2260,7 +2490,7 @@ fun MainContainer(
                 ) { backStackEntry ->
                     val playlistId = backStackEntry.arguments?.getLong("playlistId") ?: 0L
                     val playlistName = decodeRouteArg(backStackEntry.arguments?.getString("playlistName").orEmpty())
-                    SecondaryPageBackground(topPadding = topContentPadding) {
+                    SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                         PlaylistDetailScreen(
                             windowSizeClass = windowSizeClass,
                             playlistId = playlistId,
@@ -2277,7 +2507,7 @@ fun MainContainer(
                     if (type == "favorites") {
                         Box(modifier = Modifier.fillMaxSize())
                     } else {
-                        SecondaryPageBackground(topPadding = topContentPadding) {
+                        SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                             SystemPlaylistScreen(
                                 windowSizeClass = windowSizeClass,
                                 onPlayAll = { items, startItem ->
@@ -2293,7 +2523,7 @@ fun MainContainer(
                     Box(modifier = Modifier.fillMaxSize())
                 }
                 composable("downloads") {
-                    SecondaryPageBackground(topPadding = topContentPadding) {
+                    SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                         DownloadsScreen(
                             windowSizeClass = windowSizeClass,
                             scrollToTopSignal = downloadsScrollToTopSignal,
@@ -2302,7 +2532,7 @@ fun MainContainer(
                     }
                 }
                 composable("dlsite_login") {
-                    SecondaryPageBackground(topPadding = topContentPadding) {
+                    SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                         DlsiteLoginScreen(
                             windowSizeClass = windowSizeClass,
                             onDone = { navController.popBackStack() },
@@ -2316,14 +2546,31 @@ fun MainContainer(
             }
 
                     if (blockNavTouches) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .pointerInteropFilter { true }
-                        )
+                        if (isAlbumDetailRoute) {
+                            val albumDetailTopBarTouchPassThroughHeight =
+                                StableWindowInsets.statusBars.asPaddingValues().calculateTopPadding() +
+                                    AlbumDetailTopBarTouchPassThroughHeight
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(albumDetailTopBarTouchPassThroughHeight)
+                                    .padding(start = AlbumDetailBackTouchPassThroughWidth)
+                                    .pointerInteropFilter { true }
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(top = albumDetailTopBarTouchPassThroughHeight)
+                                    .pointerInteropFilter { true }
+                            )
+                        } else {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .pointerInteropFilter { true }
+                            )
+                        }
                     }
-            }
-
             if (showManualRjDialog && navBackStackEntry != null &&
                 (currentRoute?.startsWith("album_detail/{albumId}") == true || currentRoute?.startsWith("album_detail/") == true)
             ) {
@@ -2356,10 +2603,6 @@ fun MainContainer(
                     onIgnoreAll = ignoreAllHandler
                 )
             }
-
-        }
-
-        }
 
         if (bottomChromeVisible) {
             BoxWithConstraints(

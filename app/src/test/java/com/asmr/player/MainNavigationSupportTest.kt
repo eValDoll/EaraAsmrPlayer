@@ -108,11 +108,11 @@ class MainNavigationSupportTest {
     }
 
     @Test
-    fun resolvePrimaryPagerBeyondBoundsPageCount_keepsAllPrimaryPagesComposed() {
+    fun resolvePrimaryPagerBeyondBoundsPageCount_keepsOnlyAdjacentPageComposed() {
         assertEquals(0, resolvePrimaryPagerBeyondBoundsPageCount(0))
         assertEquals(0, resolvePrimaryPagerBeyondBoundsPageCount(1))
         assertEquals(1, resolvePrimaryPagerBeyondBoundsPageCount(2))
-        assertEquals(7, resolvePrimaryPagerBeyondBoundsPageCount(8))
+        assertEquals(1, resolvePrimaryPagerBeyondBoundsPageCount(8))
     }
 
     @Test

@@ -68,7 +68,6 @@ import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -128,9 +127,11 @@ import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.consumeTapThrough
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
+import com.asmr.player.ui.common.rememberAnimatedCollapsibleHeaderOffset
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
+import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.library.AlbumGridItem
 import com.asmr.player.ui.library.AlbumGridItemSpacing
 import com.asmr.player.ui.library.AlbumItem
@@ -279,6 +280,7 @@ private fun SearchFilterIconView(
 fun SearchScreen(
     windowSizeClass: WindowSizeClass,
     isActive: Boolean = true,
+    isDataActive: Boolean = isActive,
     onAlbumClick: (Album, Boolean, Boolean) -> Unit,
     onOpenSearchAssist: (SearchAssistSearchRequest) -> Unit = {},
     submittedSearchKeyword: String = "",
@@ -317,10 +319,10 @@ fun SearchScreen(
             collectedOnly = collectedOnly
         )
     }
-    val viewMode by viewModel.viewMode.collectAsState()
-    val uiState by viewModel.uiState.collectAsState()
-    val hotKeywordTerms by viewModel.hotKeywordTerms.collectAsState()
-    val showHotKeywordFallback by viewModel.showHotKeywordFallback.collectAsState()
+    val viewMode by viewModel.viewMode.collectAsStateWhileActive(isDataActive)
+    val uiState by viewModel.uiState.collectAsStateWhileActive(isDataActive)
+    val hotKeywordTerms by viewModel.hotKeywordTerms.collectAsStateWhileActive(isDataActive)
+    val showHotKeywordFallback by viewModel.showHotKeywordFallback.collectAsStateWhileActive(isDataActive)
     val hotKeywordCarouselItem = rememberSearchHotKeywordCarouselItem(
         terms = hotKeywordTerms,
         showFallback = showHotKeywordFallback
@@ -334,7 +336,7 @@ fun SearchScreen(
     val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
     val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
     val settingsViewModel: SettingsViewModel = hiltViewModel()
-    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsState()
+    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsStateWhileActive(isDataActive)
     val scope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
@@ -790,15 +792,17 @@ fun SearchScreen(
                 modifier = contentModifier,
                 contentAlignment = if (hasRightPanel) Alignment.TopStart else Alignment.TopCenter
             ) {
+                val searchContentModifier = if (isCompact || hasRightPanel) {
+                    Modifier.fillMaxSize()
+                } else {
+                    Modifier
+                        .fillMaxHeight()
+                        .widthIn(max = 800.dp)
+                        .fillMaxWidth()
+                }
                 Box(
-                    modifier = if (isCompact || hasRightPanel) {
-                        Modifier.fillMaxSize()
-                    } else {
-                        Modifier
-                            .fillMaxHeight()
-                            .widthIn(max = 800.dp)
-                            .fillMaxWidth()
-                    }
+                    modifier = searchContentModifier
+                        .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
                 ) {
                     Box(
                         modifier = Modifier
@@ -1141,9 +1145,7 @@ fun SearchScreen(
                     }
 
                     SearchChrome(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .interruptScrollableFlingOnPointerDown { stopActiveScroll() },
+                        modifier = Modifier.align(Alignment.TopCenter),
                         keyword = keyword,
                         onKeywordChange = { keyword = it },
                         placeholder = hotKeywordCarouselItem.placeholder,
@@ -1364,11 +1366,7 @@ internal fun SearchChrome(
     onPrev: () -> Unit,
     onNext: () -> Unit
 ) {
-    val animatedOffsetPx = animateFloatAsState(
-        targetValue = chromeState.offsetPx,
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-        label = "searchChromeOffset"
-    )
+    val animatedOffsetPx = rememberAnimatedCollapsibleHeaderOffset(chromeState)
     val collapseStateDescription by remember(chromeState) {
         derivedStateOf { collapsibleHeaderUiState(chromeState.collapseFraction) }
     }

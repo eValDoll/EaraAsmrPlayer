@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.SystemClock
 import android.util.Log
+import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
@@ -105,6 +106,7 @@ private const val LISTEN_TOGETHER_RJ_SUMMARY_POLL_INTERVAL_MS = 60_000L
 
 @HiltViewModel
 class AlbumDetailViewModel @Inject constructor(
+    savedStateHandle: SavedStateHandle,
     private val database: AppDatabase,
     private val albumDao: AlbumDao,
     private val trackDao: TrackDao,
@@ -155,7 +157,9 @@ class AlbumDetailViewModel @Inject constructor(
         )
     }
 
-    private val _uiState = MutableStateFlow<AlbumDetailUiState>(AlbumDetailUiState.Loading)
+    private val _uiState = MutableStateFlow<AlbumDetailUiState>(
+        createRouteInitialUiState(savedStateHandle)
+    )
     val uiState = _uiState.asStateFlow()
     private val _cloudSyncSelectionDialogState = MutableStateFlow<CloudSyncSelectionDialogState?>(null)
     internal val cloudSyncSelectionDialogState: StateFlow<CloudSyncSelectionDialogState?> = _cloudSyncSelectionDialogState.asStateFlow()
@@ -383,6 +387,10 @@ class AlbumDetailViewModel @Inject constructor(
         listenTogetherRjSummaryJob?.cancel()
         listenTogetherRjSummaryJob = null
         lastAlbumKey = null
+    }
+
+    fun cancelOnlineLoadsForExit() {
+        cancelPendingOnlineJobs(resetLoadingState = false)
     }
 
     private fun cancelPendingOnlineJobs(resetLoadingState: Boolean) {
@@ -1859,6 +1867,27 @@ class AlbumDetailViewModel @Inject constructor(
 
     private fun albumFromInitialHint(rj: String, hint: AlbumCoverHint?): Album {
         return albumFromCoverHint(rj, hint)
+    }
+
+    private fun createRouteInitialUiState(savedStateHandle: SavedStateHandle): AlbumDetailUiState {
+        val albumId = savedStateHandle.get<Long>("albumId")?.takeIf { it > 0L }
+        val routeRj = savedStateHandle.get<String>("rjCode")
+            ?.trim()
+            .orEmpty()
+            .ifBlank { savedStateHandle.get<String>("rj")?.trim().orEmpty() }
+            .uppercase()
+        val hint = AlbumCoverHintStore.peekHint(albumId, routeRj)
+        val initialRj = routeRj.ifBlank { hint?.rjCode.orEmpty() }
+        val hintAlbum = albumFromInitialHint(initialRj, hint)
+        val preserveHeaderMetadata = shouldPreserveHeaderAlbumMetadata(hint)
+        return AlbumDetailUiState.Success(
+            model = createInitialAlbumDetailModel(
+                rj = initialRj,
+                displayAlbum = hintAlbum,
+                dlsiteInfo = hintAlbum.takeIf { preserveHeaderMetadata },
+                preserveHeaderAlbumMetadata = preserveHeaderMetadata
+            )
+        )
     }
 
     private fun createInitialAlbumDetailModel(

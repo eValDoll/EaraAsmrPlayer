@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.downloads
+package com.asmr.player.ui.downloads
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
@@ -63,6 +63,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -898,7 +899,7 @@ private fun CompactProgressBar(
         return
     }
 
-    val animatedProgress by animateFloatAsState(
+    val animatedProgress = animateFloatAsState(
         targetValue = progress?.coerceIn(0f, 1f) ?: 0f,
         animationSpec = tween(durationMillis = 300),
         label = "compact_progress"
@@ -909,15 +910,14 @@ private fun CompactProgressBar(
             .fillMaxWidth()
             .height(6.dp)
             .clip(RoundedCornerShape(3.dp))
-            .background(trackColor)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth(animatedProgress)
-                .fillMaxHeight()
-                .background(progressColor)
-        )
-    }
+            .drawBehind {
+                drawRect(color = trackColor)
+                drawRect(
+                    color = progressColor,
+                    size = size.copy(width = size.width * animatedProgress.value)
+                )
+            }
+    )
 }
 
 private fun downloadItemStateLabel(state: DownloadItemState): String {

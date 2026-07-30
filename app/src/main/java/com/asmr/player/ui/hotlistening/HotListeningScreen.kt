@@ -37,7 +37,6 @@ import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -69,6 +68,7 @@ import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
+import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.library.AlbumGridItem
 import com.asmr.player.ui.library.AlbumGridItemSpacing
 import com.asmr.player.ui.library.AlbumCoverBadge
@@ -92,21 +92,22 @@ private fun hotListeningItemKey(section: String, album: Album): String {
 fun HotListeningScreen(
     windowSizeClass: WindowSizeClass,
     isActive: Boolean = true,
+    isDataActive: Boolean = isActive,
     onAlbumClick: (Album) -> Unit,
     onSearchKeyword: (String) -> Unit = {},
     scrollToTopSignal: Long = 0L,
     viewModel: HotListeningViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val viewMode by viewModel.viewMode.collectAsState()
-    val selectedSortMode by viewModel.sortMode.collectAsState()
-    val selectedPeriod by viewModel.selectedPeriod.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWhileActive(isDataActive)
+    val viewMode by viewModel.viewMode.collectAsStateWhileActive(isDataActive)
+    val selectedSortMode by viewModel.sortMode.collectAsStateWhileActive(isDataActive)
+    val selectedPeriod by viewModel.selectedPeriod.collectAsStateWhileActive(isDataActive)
     val colorScheme = AsmrTheme.colorScheme
     val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
     val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
     val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
     val settingsViewModel: SettingsViewModel = hiltViewModel()
-    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsState()
+    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsStateWhileActive(isDataActive)
     val scope = rememberCoroutineScope()
     val isCompactWidth = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
     var showBlockedEntries by rememberSaveable { mutableStateOf(false) }

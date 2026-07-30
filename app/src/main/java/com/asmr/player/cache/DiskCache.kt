@@ -17,6 +17,7 @@ class DiskCache(
     private var currentSizeBytes: Long? = null
     private var clearGeneration = 0L
     private val removeGenerations = mutableMapOf<String, Long>()
+    private var directoryReady = false
 
     data class Entry(
         val bytes: ByteArray,
@@ -24,11 +25,8 @@ class DiskCache(
         val height: Int
     )
 
-    init {
-        directory.mkdirs()
-    }
-
     fun get(key: String): Entry? = synchronized(lock) {
+        if (!ensureDirectoryReady()) return@synchronized null
         val f = fileForKey(key)
         if (!f.exists()) return@synchronized null
         val now = System.currentTimeMillis()
@@ -60,6 +58,7 @@ class DiskCache(
 
     fun put(key: String, entry: Entry) {
         val (clearGenerationAtStart, removeGenerationAtStart) = synchronized(lock) {
+            if (!ensureDirectoryReady()) return
             ensureSizeInitialized()
             clearGeneration to (removeGenerations[key] ?: 0L)
         }
@@ -105,6 +104,7 @@ class DiskCache(
 
     fun remove(key: String) = synchronized(lock) {
         removeGenerations[key] = (removeGenerations[key] ?: 0L) + 1L
+        if (!ensureDirectoryReady()) return@synchronized
         val file = fileForKey(key)
         if (!file.exists()) return@synchronized
         val length = file.length()
@@ -120,6 +120,10 @@ class DiskCache(
     fun clear() = synchronized(lock) {
         clearGeneration += 1L
         removeGenerations.clear()
+        if (!ensureDirectoryReady()) {
+            currentSizeBytes = 0L
+            return@synchronized
+        }
         directory.listFiles()?.forEach { it.delete() }
         currentSizeBytes = calculateSizeBytes()
     }
@@ -159,6 +163,12 @@ class DiskCache(
             }
         }
         currentSizeBytes = totalSize
+    }
+
+    private fun ensureDirectoryReady(): Boolean {
+        if (directoryReady) return true
+        directoryReady = directory.isDirectory || directory.mkdirs()
+        return directoryReady
     }
 
     private fun calculateSizeBytes(): Long {
