@@ -846,6 +846,11 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     loadRemoteFileSize: suspend (String) -> Long?
 ) {
     val scope = rememberCoroutineScope()
+    val colorScheme = AsmrTheme.colorScheme
+    val sectionActionIconColors = IconButtonDefaults.iconButtonColors(
+        contentColor = colorScheme.textPrimary,
+        disabledContentColor = colorScheme.textTertiary.copy(alpha = 0.7f)
+    )
     val videoTracks = remember(trialTracks) { trialTracks.filter { isVideoPreviewUrl(it.path) } }
     val audioTracks = remember(trialTracks) { trialTracks.filterNot { isVideoPreviewUrl(it.path) } }
     var currentPath by rememberSaveable(treeStateKey) { mutableStateOf(initialCurrentPath.trim().trim('/')) }
@@ -979,7 +984,11 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                     animateIntro = animateIntro
                 ),
                 actions = {
-                    IconButton(onClick = onRefreshAsmrOne, enabled = !isLoadingAsmrOne) {
+                    IconButton(
+                        onClick = onRefreshAsmrOne,
+                        enabled = !isLoadingAsmrOne,
+                        colors = sectionActionIconColors
+                    ) {
                         Icon(Icons.Rounded.Refresh, contentDescription = "刷新")
                     }
                 }
@@ -1134,10 +1143,18 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                     animateIntro = animateIntro
                 ),
                 actions = {
-                    IconButton(onClick = onRefreshTrial, enabled = !isLoading && !isLoadingTrial) {
+                    IconButton(
+                        onClick = onRefreshTrial,
+                        enabled = !isLoading && !isLoadingTrial,
+                        colors = sectionActionIconColors
+                    ) {
                         Icon(Icons.Rounded.Refresh, contentDescription = "刷新")
                     }
-                    IconButton(onClick = onDownloadTrial, enabled = trialDownloadEnabled) {
+                    IconButton(
+                        onClick = onDownloadTrial,
+                        enabled = trialDownloadEnabled,
+                        colors = sectionActionIconColors
+                    ) {
                         Icon(Icons.Rounded.Download, contentDescription = "下载")
                     }
                 }

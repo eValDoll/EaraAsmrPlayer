@@ -405,8 +405,8 @@ private fun SecondaryPageBackground(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(pageBackgroundColor)
             .padding(top = topPadding)
+            .background(pageBackgroundColor)
     ) {
         content()
     }
