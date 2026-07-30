@@ -10,22 +10,27 @@ import coil.ImageLoader
 import coil.request.ImageRequest
 import coil.request.ErrorResult
 import coil.request.SuccessResult
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
 class ImageLoaderFacade(
     private val context: Context,
-    okHttpClient: OkHttpClient
+    okHttpClient: OkHttpClient,
+    private val imageDispatcher: CoroutineDispatcher
 ) {
     private val imageLoader: ImageLoader = ImageLoader.Builder(context)
         .okHttpClient { okHttpClient }
+        .interceptorDispatcher(imageDispatcher)
+        .fetcherDispatcher(imageDispatcher)
+        .decoderDispatcher(imageDispatcher)
+        .transformationDispatcher(imageDispatcher)
         .memoryCache(null)
         .diskCache(null)
         .build()
 
-    suspend fun loadBitmap(model: Any, size: IntSize?): Bitmap = withContext(Dispatchers.IO) {
+    suspend fun loadBitmap(model: Any, size: IntSize?): Bitmap = withContext(imageDispatcher) {
         Trace.beginSection("img.coilExec")
         try {
             val request = buildRequest(model, size)

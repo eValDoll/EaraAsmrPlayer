@@ -27,7 +27,6 @@ import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.CancellationException
@@ -69,7 +68,7 @@ class ImageCacheManager(
         val cachePolicy: CachePolicy,
     )
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = CoroutineScope(SupervisorJob() + decodeDispatcher)
     private val inFlight = ConcurrentHashMap<InFlightKey, InFlightLoad>()
     private val loadSemaphore = Semaphore(config.loadParallelism)
     private val preloadSemaphore = Semaphore(config.preloadParallelism)
@@ -127,9 +126,9 @@ class ImageCacheManager(
         model: Any,
         size: IntSize?,
         cachePolicy: CachePolicy = CachePolicy.DEFAULT
-    ): ImageBitmap {
+    ): ImageBitmap = withContext(decodeDispatcher) {
         Trace.beginSection("img.load")
-        return try {
+        try {
             loadImageInternal(model, size, cachePolicy)
         } finally {
             Trace.endSection()
@@ -242,7 +241,7 @@ class ImageCacheManager(
         if (!cachePolicy.readDisk) return null
         Trace.beginSection("img.disk")
         try {
-            val entry = withContext(Dispatchers.IO) { diskCache.get(key) }
+            val entry = diskCache.get(key)
             if (entry == null) {
                 stats.onDiskMiss()
                 return null
@@ -267,7 +266,7 @@ class ImageCacheManager(
         model: Any,
         size: IntSize?,
         cachePolicy: CachePolicy = CachePolicy.DEFAULT
-    ): ImageBitmap? {
+    ): ImageBitmap? = withContext(decodeDispatcher) {
         val key = CacheKeyFactory.createKey(appContext, model, size, config.cacheVersion)
         val dataKey = CacheKeyFactory.createDataKey(appContext, model, config.cacheVersion)
         val memoryGenerationAtStart = currentMemoryGeneration()
@@ -276,24 +275,24 @@ class ImageCacheManager(
             val cached = getMemory(key, dataKey)
             if (cached != null) {
                 stats.onMemoryHit()
-                return cached.asImageBitmap()
+                return@withContext cached.asImageBitmap()
             }
             stats.onMemoryMiss()
         }
 
         if (cachePolicy.readDisk) {
-            val entry = withContext(Dispatchers.IO) { diskCache.get(key) }
+            val entry = diskCache.get(key)
             if (entry != null) {
                 stats.onDiskHit()
                 val bmp = decodeBytes(entry.bytes)
                 if (cachePolicy.writeMemory) {
                     putMemory(key, dataKey, bmp, memoryGenerationAtStart)
                 }
-                return bmp.asImageBitmap()
+                return@withContext bmp.asImageBitmap()
             }
             stats.onDiskMiss()
         }
-        return null
+        null
     }
 
     fun preload(models: List<Any>) {
@@ -322,7 +321,7 @@ class ImageCacheManager(
         size: IntSize?,
         maxConcurrency: Int? = null,
     ): Job {
-        return scope.launch(Dispatchers.IO) {
+        return scope.launch(decodeDispatcher) {
             val requestSemaphore = Semaphore(
                 permits = (maxConcurrency ?: models.size).coerceAtLeast(1)
             )

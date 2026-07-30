@@ -39,7 +39,6 @@ import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -74,6 +73,7 @@ import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.thinScrollbar
+import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.common.rememberAudioMetaText
 import com.asmr.player.ui.common.reorderable.ItemPosition
 import com.asmr.player.ui.common.reorderable.ReorderableItem
@@ -98,6 +98,7 @@ private const val PLAYLIST_DETAIL_REORDER_SENTINEL_KEY = "__playlist_detail_reor
 fun PlaylistDetailScreen(
     windowSizeClass: WindowSizeClass,
     isActive: Boolean = true,
+    isDataActive: Boolean = isActive,
     playlistId: Long,
     title: String,
     onPlayAll: (List<PlaylistItemEntity>, PlaylistItemEntity) -> Unit,
@@ -107,7 +108,7 @@ fun PlaylistDetailScreen(
     LaunchedEffect(playlistId) {
         viewModel.setPlaylistId(playlistId)
     }
-    val items by viewModel.items.collectAsState()
+    val items by viewModel.items.collectAsStateWhileActive(isDataActive)
     PlaylistDetailContent(
         windowSizeClass = windowSizeClass,
         isActive = isActive,

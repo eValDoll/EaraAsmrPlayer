@@ -276,7 +276,7 @@ internal fun shouldClearPendingPrimaryNavigationRoute(
 }
 
 internal fun resolvePrimaryPagerBeyondBoundsPageCount(pageCount: Int): Int {
-    return (pageCount - 1).coerceAtLeast(0)
+    return (pageCount - 1).coerceIn(0, 1)
 }
 
 internal fun resolveCurrentPrimaryDestinationRoute(

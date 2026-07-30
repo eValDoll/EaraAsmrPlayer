@@ -2,7 +2,8 @@ package com.asmr.player.baselineprofile
 
 import androidx.benchmark.macro.BaselineProfileMode
 import androidx.benchmark.macro.CompilationMode
-import androidx.benchmark.macro.FrameTimingMetric
+import androidx.benchmark.macro.ExperimentalMetricApi
+import androidx.benchmark.macro.FrameTimingGfxInfoMetric
 import androidx.benchmark.macro.StartupTimingMetric
 import androidx.benchmark.macro.StartupMode
 import androidx.benchmark.macro.junit4.MacrobenchmarkRule
@@ -12,6 +13,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
+@OptIn(ExperimentalMetricApi::class)
 class LongListPerformanceBenchmark {
     @get:Rule
     val benchmarkRule = MacrobenchmarkRule()
@@ -34,12 +36,14 @@ class LongListPerformanceBenchmark {
     fun primaryNavigationPagerFrameTiming() {
         benchmarkRule.measureRepeated(
             packageName = PackageName,
-            metrics = listOf(FrameTimingMetric()),
+            metrics = listOf(FrameTimingGfxInfoMetric()),
             compilationMode = CompilationMode.Partial(BaselineProfileMode.Require),
-            startupMode = defaultFrameTimingStartupMode(),
-            iterations = 1
+            startupMode = null,
+            iterations = FrameTimingIterations,
+            setupBlock = {
+                startMainActivity()
+            }
         ) {
-            startMainActivity()
             device.performPrimaryNavigationProfile()
         }
     }
@@ -48,13 +52,15 @@ class LongListPerformanceBenchmark {
     fun secondaryNavigationTransitionsFrameTiming() {
         benchmarkRule.measureRepeated(
             packageName = PackageName,
-            metrics = listOf(FrameTimingMetric()),
+            metrics = listOf(FrameTimingGfxInfoMetric()),
             compilationMode = CompilationMode.Partial(BaselineProfileMode.Require),
-            startupMode = defaultFrameTimingStartupMode(),
-            iterations = 1
+            startupMode = null,
+            iterations = FrameTimingIterations,
+            setupBlock = {
+                startHarnessScenario(BenchmarkScenarioValue.LibraryAlbums)
+                startMainActivity(clearData = false)
+            }
         ) {
-            startHarnessScenario(BenchmarkScenarioValue.LibraryAlbums)
-            startMainActivity(clearData = false)
             device.performSecondaryNavigationTransitionsProfile()
         }
     }
@@ -78,13 +84,14 @@ class LongListPerformanceBenchmark {
     fun downloadsListFrameTiming() {
         benchmarkRule.measureRepeated(
             packageName = PackageName,
-            metrics = listOf(FrameTimingMetric()),
+            metrics = listOf(FrameTimingGfxInfoMetric()),
             compilationMode = CompilationMode.Partial(BaselineProfileMode.Require),
-            startupMode = defaultFrameTimingStartupMode(),
-            iterations = 1
+            startupMode = null,
+            iterations = FrameTimingIterations,
+            setupBlock = {
+                startHarnessScenario(BenchmarkScenarioValue.DownloadsList)
+            }
         ) {
-            device.pressHome()
-            startHarnessScenario(BenchmarkScenarioValue.DownloadsList)
             device.expandFirstVisibleDownloadTask()
             device.performSlowDragAndFling()
         }
@@ -112,13 +119,15 @@ class LongListPerformanceBenchmark {
     fun searchNetworkRefreshAndScrollFrameTiming() {
         benchmarkRule.measureRepeated(
             packageName = PackageName,
-            metrics = listOf(FrameTimingMetric()),
+            metrics = listOf(FrameTimingGfxInfoMetric()),
             compilationMode = CompilationMode.Partial(BaselineProfileMode.Require),
-            startupMode = defaultFrameTimingStartupMode(),
-            iterations = 1
+            startupMode = null,
+            iterations = FrameTimingIterations,
+            setupBlock = {
+                startMainActivity(startRoute = "search")
+                waitForSearchNetworkLoad()
+            }
         ) {
-            startMainActivity(startRoute = "search")
-            waitForSearchNetworkLoad()
             device.pullToRefreshSearch()
             waitForSearchRefresh()
             device.performSlowDragAndFling()
@@ -129,13 +138,14 @@ class LongListPerformanceBenchmark {
     fun albumDetailDlTabFrameTiming() {
         benchmarkRule.measureRepeated(
             packageName = PackageName,
-            metrics = listOf(FrameTimingMetric()),
+            metrics = listOf(FrameTimingGfxInfoMetric()),
             compilationMode = CompilationMode.Partial(BaselineProfileMode.Require),
-            startupMode = defaultFrameTimingStartupMode(),
-            iterations = 1
+            startupMode = null,
+            iterations = FrameTimingIterations,
+            setupBlock = {
+                startAlbumDetailDlTabExample()
+            }
         ) {
-            device.pressHome()
-            startAlbumDetailDlTabExample()
             device.performSlowDragAndFling()
         }
     }
@@ -145,14 +155,19 @@ class LongListPerformanceBenchmark {
     ) {
         benchmarkRule.measureRepeated(
             packageName = PackageName,
-            metrics = listOf(FrameTimingMetric()),
+            metrics = listOf(FrameTimingGfxInfoMetric()),
             compilationMode = CompilationMode.Partial(BaselineProfileMode.Require),
-            startupMode = defaultFrameTimingStartupMode(),
-            iterations = 1
+            startupMode = null,
+            iterations = FrameTimingIterations,
+            setupBlock = {
+                startHarnessScenario(scenario)
+            }
         ) {
-            device.pressHome()
-            startHarnessScenario(scenario)
             device.performSlowDragAndFling()
         }
+    }
+
+    private companion object {
+        const val FrameTimingIterations = 3
     }
 }

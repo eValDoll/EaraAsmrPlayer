@@ -144,6 +144,7 @@ class LibraryViewModel @Inject constructor(
     private val _scanRoots = MutableStateFlow<Set<String>>(emptySet())
     val scanRoots: StateFlow<List<String>> = _scanRoots
         .map { it.toList().sorted() }
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
     private val _syncStatus = MutableStateFlow<Map<Long, SyncStatus>>(emptyMap())
     private val _bulkProgress = MutableStateFlow<BulkProgress?>(null)
@@ -192,6 +193,7 @@ class LibraryViewModel @Inject constructor(
             }
             result.sortedWith(compareBy(String.CASE_INSENSITIVE_ORDER) { it })
         }
+        .flowOn(Dispatchers.Default)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val filterPresets: StateFlow<List<LibraryFilterPreset>> = preferencesStore.presets
@@ -233,8 +235,8 @@ class LibraryViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     init {
-        _scanRoots.value = runCatching { scanRootsStore.getRoots() }.getOrDefault(emptySet())
         viewModelScope.launch(Dispatchers.IO) {
+            _scanRoots.value = runCatching { scanRootsStore.getRoots() }.getOrDefault(emptySet())
             ensureTagTablesInitialized()
             restoreLibraryPreferences()
             backfillLegacyOnlineSavedAlbumRoots()
@@ -279,6 +281,7 @@ class LibraryViewModel @Inject constructor(
             ).flow
         }
         .map { paging -> paging.map { entity -> entity.toAlbum() } }
+        .flowOn(Dispatchers.Default)
         .cachedIn(viewModelScope)
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)

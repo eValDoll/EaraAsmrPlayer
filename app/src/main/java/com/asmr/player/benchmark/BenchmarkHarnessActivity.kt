@@ -67,13 +67,15 @@ class BenchmarkHarnessActivity : ComponentActivity() {
             val windowSizeClass = calculateWindowSizeClass(this@BenchmarkHarnessActivity)
             AsmrPlayerTheme {
                 Surface(color = MaterialTheme.colorScheme.background) {
-                    BenchmarkHarnessRoot(
-                        scenario = scenario,
-                        windowSizeClass = windowSizeClass,
-                        uiState = uiState,
-                        playlistRepository = playlistRepository,
-                        albumGroupRepository = albumGroupRepository
-                    )
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        BenchmarkHarnessRoot(
+                            scenario = scenario,
+                            windowSizeClass = windowSizeClass,
+                            uiState = uiState,
+                            playlistRepository = playlistRepository,
+                            albumGroupRepository = albumGroupRepository
+                        )
+                    }
                 }
             }
         }

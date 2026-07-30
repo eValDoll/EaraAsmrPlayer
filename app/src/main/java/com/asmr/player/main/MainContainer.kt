@@ -249,6 +249,8 @@ private const val SecondaryPageEnterDurationMs = 440
 private const val SecondaryPageExitDurationMs = 420
 private const val SecondaryPageTouchBlockDurationMs = 320
 private const val PrimaryPagerSnapThreshold = 0.16f
+private const val PrimaryRouteDataWarmRetentionMs = 5_000L
+private const val PrimaryRouteDataWarmStaggerMs = 80L
 private val SecondaryPageSlideEasing = CubicBezierEasing(0.215f, 0.61f, 0.355f, 1f)
 private val PrimaryPageParallaxOffset = 120.dp
 private val AlbumDetailTopBarButtonShape = CircleShape
@@ -421,17 +423,24 @@ private fun applyMainContainerSystemUi(
     val controller = WindowInsetsControllerCompat(window, window.decorView)
     WindowCompat.setDecorFitsSystemWindows(window, false)
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-        window.isStatusBarContrastEnforced = false
-        window.isNavigationBarContrastEnforced = false
+        if (window.isStatusBarContrastEnforced) {
+            window.isStatusBarContrastEnforced = false
+        }
+        if (window.isNavigationBarContrastEnforced) {
+            window.isNavigationBarContrastEnforced = false
+        }
     }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        window.attributes = window.attributes.apply {
-            layoutInDisplayCutoutMode = if (forceImmersive || hideStatusBarForImmersivePage || nowPlayingVisible) {
-                WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-            } else {
-                defaultSystemUi?.layoutInDisplayCutoutMode
-                    ?: WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
-            }
+        val targetCutoutMode = if (forceImmersive || hideStatusBarForImmersivePage || nowPlayingVisible) {
+            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+        } else {
+            defaultSystemUi?.layoutInDisplayCutoutMode
+                ?: WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
+        }
+        val attributes = window.attributes
+        if (attributes.layoutInDisplayCutoutMode != targetCutoutMode) {
+            attributes.layoutInDisplayCutoutMode = targetCutoutMode
+            window.attributes = attributes
         }
     }
 
@@ -439,8 +448,12 @@ private fun applyMainContainerSystemUi(
         forceImmersive -> {
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.systemBars())
-            window.statusBarColor = android.graphics.Color.TRANSPARENT
-            window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            if (window.statusBarColor != android.graphics.Color.TRANSPARENT) {
+                window.statusBarColor = android.graphics.Color.TRANSPARENT
+            }
+            if (window.navigationBarColor != android.graphics.Color.TRANSPARENT) {
+                window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            }
             controller.isAppearanceLightStatusBars = false
             controller.isAppearanceLightNavigationBars = false
         }
@@ -448,8 +461,12 @@ private fun applyMainContainerSystemUi(
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.statusBars())
             controller.hide(WindowInsetsCompat.Type.navigationBars())
-            window.statusBarColor = android.graphics.Color.TRANSPARENT
-            window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            if (window.statusBarColor != android.graphics.Color.TRANSPARENT) {
+                window.statusBarColor = android.graphics.Color.TRANSPARENT
+            }
+            if (window.navigationBarColor != android.graphics.Color.TRANSPARENT) {
+                window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            }
             controller.isAppearanceLightStatusBars = false
             controller.isAppearanceLightNavigationBars = false
         }
@@ -457,15 +474,23 @@ private fun applyMainContainerSystemUi(
             controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.statusBars())
             controller.show(WindowInsetsCompat.Type.navigationBars())
-            window.statusBarColor = android.graphics.Color.TRANSPARENT
-            window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            if (window.statusBarColor != android.graphics.Color.TRANSPARENT) {
+                window.statusBarColor = android.graphics.Color.TRANSPARENT
+            }
+            if (window.navigationBarColor != android.graphics.Color.TRANSPARENT) {
+                window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            }
             controller.isAppearanceLightStatusBars = false
             controller.isAppearanceLightNavigationBars = !isDark
         }
         else -> {
             controller.show(WindowInsetsCompat.Type.systemBars())
-            window.statusBarColor = android.graphics.Color.TRANSPARENT
-            window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            if (window.statusBarColor != android.graphics.Color.TRANSPARENT) {
+                window.statusBarColor = android.graphics.Color.TRANSPARENT
+            }
+            if (window.navigationBarColor != android.graphics.Color.TRANSPARENT) {
+                window.navigationBarColor = android.graphics.Color.TRANSPARENT
+            }
             controller.isAppearanceLightStatusBars = !isDark
             controller.isAppearanceLightNavigationBars = !isDark
         }
@@ -1206,8 +1231,15 @@ fun MainContainer(
         }
     }
 
-    SideEffect {
-        val act = activity ?: return@SideEffect
+    DisposableEffect(
+        activity,
+        defaultSystemUi,
+        forceImmersive,
+        hideStatusBarForImmersivePage,
+        nowPlayingVisible,
+        colorScheme.isDark
+    ) {
+        val act = activity ?: return@DisposableEffect onDispose { }
         applyMainContainerSystemUi(
             window = act.window,
             defaultSystemUi = defaultSystemUi,
@@ -1216,6 +1248,7 @@ fun MainContainer(
             nowPlayingVisible = nowPlayingVisible,
             isDark = colorScheme.isDark
         )
+        onDispose { }
     }
 
     // 屏幕旋转管理逻辑
@@ -1815,12 +1848,36 @@ fun MainContainer(
                                     val route = primaryPagerRoutes[page]
                                     val primaryRouteActive = visualPrimaryRoute == route &&
                                         !primaryContentCoveredByAlbumDetail
+                                    val pagerRouteVisible = primaryPagerState.currentPage == page ||
+                                        (
+                                            primaryPagerState.isScrollInProgress &&
+                                                primaryPagerState.targetPage == page
+                                            )
+                                    val primaryRouteImmediatelyActive = !hasOverlayRoute &&
+                                        (primaryRouteActive || pagerRouteVisible)
+                                    var keepPrimaryRouteDataWarm by remember(route) {
+                                        mutableStateOf(true)
+                                    }
+                                    LaunchedEffect(primaryRouteImmediatelyActive) {
+                                        if (primaryRouteImmediatelyActive) {
+                                            keepPrimaryRouteDataWarm = true
+                                        } else {
+                                            delay(
+                                                PrimaryRouteDataWarmRetentionMs +
+                                                    page * PrimaryRouteDataWarmStaggerMs
+                                            )
+                                            keepPrimaryRouteDataWarm = false
+                                        }
+                                    }
+                                    val primaryRouteDataActive = primaryRouteImmediatelyActive ||
+                                        keepPrimaryRouteDataWarm
                                     primaryContentStateHolder.SaveableStateProvider("primary_route:$route") {
                                         when (route) {
                                         Routes.Library -> {
                                             LibraryScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
+                                                isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = libraryScrollToTopSignal,
                                                 onAlbumClick = { album ->
                                                     AlbumCoverHintStore.record(
@@ -1859,6 +1916,7 @@ fun MainContainer(
                                             SearchScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
+                                                isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = searchScrollToTopSignal,
                                                 submittedSearchKeyword = submittedSearchKeyword,
                                                 submittedSearchOrderName = submittedSearchOrderName,
@@ -1908,6 +1966,7 @@ fun MainContainer(
                                             HotListeningScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
+                                                isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = hotListeningScrollToTopSignal,
                                                 onAlbumClick = { album ->
                                                     AlbumCoverHintStore.record(
@@ -1938,6 +1997,7 @@ fun MainContainer(
                                             SystemPlaylistScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
+                                                isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = favoritesScrollToTopSignal,
                                                 onPlayAll = { items, startItem ->
                                                     playerViewModel.playPlaylistItems(items, startItem)
@@ -1951,6 +2011,7 @@ fun MainContainer(
                                             PlaylistsScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
+                                                isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = playlistsScrollToTopSignal,
                                                 onPlaylistClick = { playlist ->
                                                     val encoded = URLEncoder.encode(playlist.name, "UTF-8")
@@ -1964,6 +2025,7 @@ fun MainContainer(
                                             com.asmr.player.ui.groups.AlbumGroupsScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
+                                                isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = groupsScrollToTopSignal,
                                                 onGroupClick = { group ->
                                                     val encoded = encodeRouteArg(group.name)
@@ -1977,6 +2039,7 @@ fun MainContainer(
                                             SettingsScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
+                                                isDataActive = primaryRouteDataActive,
                                                 viewModel = settingsViewModel,
                                                 libraryViewModel = libraryViewModel,
                                                 scrollToTopSignal = settingsScrollToTopSignal,
@@ -1989,6 +2052,8 @@ fun MainContainer(
                                         "listening_calendar" -> {
                                             com.asmr.player.ui.calendar.ListeningCalendarScreen(
                                                 windowSizeClass = windowSizeClass,
+                                                isActive = primaryRouteActive,
+                                                isDataActive = primaryRouteDataActive,
                                                 onOpenDlsiteLogin = { navController.navigateSingleTop("dlsite_login") },
                                                 onOpenAlbum = { session ->
                                                     AlbumCoverHintStore.record(

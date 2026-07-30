@@ -20,6 +20,7 @@ import androidx.compose.runtime.Immutable
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -446,7 +447,9 @@ class SearchViewModel @Inject constructor(
         if (collectedOnly) {
             val offset = (page.coerceAtLeast(1) - 1) * pageSize
             val resp = asmrOneAvailabilityApi.search(keywordWithBlockedTerms, pageSize, offset, collectedSort.backendSort)
-            val items = resp.items.orEmpty().map { it.toCollectedAlbum() }
+            val items = withContext(Dispatchers.Default) {
+                resp.items.orEmpty().map { it.toCollectedAlbum() }
+            }
             val total = resp.total.coerceAtLeast(0)
             val responseOffset = resp.offset.coerceAtLeast(offset)
             return SearchPageResult(

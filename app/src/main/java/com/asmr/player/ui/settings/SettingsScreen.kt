@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.settings
+package com.asmr.player.ui.settings
 
 import android.Manifest
 import android.content.Intent
@@ -82,6 +82,7 @@ import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
+import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.update.launchDownloadedApkInstall
 import kotlin.math.abs
 
@@ -93,34 +94,35 @@ private const val MONOCHROME_THEME_SENTINEL = 0x01000000
 fun SettingsScreen(
     windowSizeClass: WindowSizeClass,
     isActive: Boolean = true,
+    isDataActive: Boolean = isActive,
     viewModel: SettingsViewModel = hiltViewModel(),
     libraryViewModel: LibraryViewModel = hiltViewModel(),
     scrollToTopSignal: Long = 0L,
     onHorizontalControlInteractionChanged: (Boolean) -> Unit = {},
 ) {
-    val floatingLyricsEnabled by viewModel.floatingLyricsEnabled.collectAsState()
-    val floatingSettings by viewModel.floatingLyricsSettings.collectAsState()
-    val lyricsPageSettings by viewModel.lyricsPageSettings.collectAsState()
-    val dynamicPlayerHueEnabled by viewModel.dynamicPlayerHueEnabled.collectAsState()
-    val themeMode by viewModel.themeMode.collectAsState()
-    val staticHueArgbLight by viewModel.staticHueArgbLight.collectAsState()
-    val staticHueArgbDark by viewModel.staticHueArgbDark.collectAsState()
-    val coverBackgroundEnabled by viewModel.coverBackgroundEnabled.collectAsState()
-    val coverBackgroundClarity by viewModel.coverBackgroundClarity.collectAsState()
-    val coverPreviewMode by viewModel.coverPreviewMode.collectAsState()
-    val pauseOnOutputDisconnect by viewModel.pauseOnOutputDisconnect.collectAsState()
-    val resumeOnOutputConnect by viewModel.resumeOnOutputConnect.collectAsState()
-    val pauseOnOtherAudio by viewModel.pauseOnOtherAudio.collectAsState()
-    val playFadeInMs by viewModel.playFadeInMs.collectAsState()
-    val pauseFadeOutMs by viewModel.pauseFadeOutMs.collectAsState()
-    val sfwHideSystemControls by viewModel.sfwHideSystemControls.collectAsState()
-    val showMiniPlayerBar by viewModel.showMiniPlayerBar.collectAsState()
-    val searchBlockedKeywords by viewModel.searchBlockedKeywords.collectAsState()
-    val updateState by viewModel.updateState.collectAsState()
-    val autoUpdateCheckEnabled by viewModel.autoUpdateCheckEnabled.collectAsState()
-    val scanRoots by libraryViewModel.scanRoots.collectAsState()
-    val bulkProgress by libraryViewModel.bulkProgress.collectAsState()
-    val isGlobalSyncRunning by libraryViewModel.isGlobalSyncRunning.collectAsState()
+    val floatingLyricsEnabled by viewModel.floatingLyricsEnabled.collectAsStateWhileActive(isDataActive)
+    val floatingSettings by viewModel.floatingLyricsSettings.collectAsStateWhileActive(isDataActive)
+    val lyricsPageSettings by viewModel.lyricsPageSettings.collectAsStateWhileActive(isDataActive)
+    val dynamicPlayerHueEnabled by viewModel.dynamicPlayerHueEnabled.collectAsStateWhileActive(isDataActive)
+    val themeMode by viewModel.themeMode.collectAsStateWhileActive(isDataActive)
+    val staticHueArgbLight by viewModel.staticHueArgbLight.collectAsStateWhileActive(isDataActive)
+    val staticHueArgbDark by viewModel.staticHueArgbDark.collectAsStateWhileActive(isDataActive)
+    val coverBackgroundEnabled by viewModel.coverBackgroundEnabled.collectAsStateWhileActive(isDataActive)
+    val coverBackgroundClarity by viewModel.coverBackgroundClarity.collectAsStateWhileActive(isDataActive)
+    val coverPreviewMode by viewModel.coverPreviewMode.collectAsStateWhileActive(isDataActive)
+    val pauseOnOutputDisconnect by viewModel.pauseOnOutputDisconnect.collectAsStateWhileActive(isDataActive)
+    val resumeOnOutputConnect by viewModel.resumeOnOutputConnect.collectAsStateWhileActive(isDataActive)
+    val pauseOnOtherAudio by viewModel.pauseOnOtherAudio.collectAsStateWhileActive(isDataActive)
+    val playFadeInMs by viewModel.playFadeInMs.collectAsStateWhileActive(isDataActive)
+    val pauseFadeOutMs by viewModel.pauseFadeOutMs.collectAsStateWhileActive(isDataActive)
+    val sfwHideSystemControls by viewModel.sfwHideSystemControls.collectAsStateWhileActive(isDataActive)
+    val showMiniPlayerBar by viewModel.showMiniPlayerBar.collectAsStateWhileActive(isDataActive)
+    val searchBlockedKeywords by viewModel.searchBlockedKeywords.collectAsStateWhileActive(isDataActive)
+    val updateState by viewModel.updateState.collectAsStateWhileActive(isDataActive)
+    val autoUpdateCheckEnabled by viewModel.autoUpdateCheckEnabled.collectAsStateWhileActive(isDataActive)
+    val scanRoots by libraryViewModel.scanRoots.collectAsStateWhileActive(isDataActive)
+    val bulkProgress by libraryViewModel.bulkProgress.collectAsStateWhileActive(isDataActive)
+    val isGlobalSyncRunning by libraryViewModel.isGlobalSyncRunning.collectAsStateWhileActive(isDataActive)
     val context = LocalContext.current
     val colorScheme = AsmrTheme.colorScheme
     val listState = rememberLazyListState()

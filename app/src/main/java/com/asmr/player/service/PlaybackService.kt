@@ -238,7 +238,7 @@ class PlaybackService : MediaSessionService() {
         applyPlaybackRuntimeSettings(runtimeSettings)
         val currentAppVolumePercent = appVolumeBoostController.currentVolumePercent()
         startupAppVolumePercent = currentAppVolumePercent
-        runBlocking {
+        val startupAppVolumeSyncJob = serviceScope.launch(Dispatchers.IO) {
             settingsRepository.syncAppVolumePercentFromSystem(currentAppVolumePercent)
         }
         runCatching {
@@ -356,7 +356,7 @@ class PlaybackService : MediaSessionService() {
             onPlayRequested = { requestPlaybackAudioFocus() }
         )
         registerPlaybackRouteListeners()
-        startEffectLoops()
+        startEffectLoops(startupAppVolumeSyncJob)
         mediaSession = buildMediaSession()
 
         notificationProvider = LyricMediaNotificationProvider(
@@ -1221,7 +1221,7 @@ class PlaybackService : MediaSessionService() {
         return rawDelay.coerceIn(200L, maxDelay)
     }
 
-    private fun startEffectLoops() {
+    private fun startEffectLoops(startupAppVolumeSyncJob: Job) {
         effectApplyJob?.cancel()
         effectApplyJob = serviceScope.launch {
             combine(
@@ -1255,6 +1255,7 @@ class PlaybackService : MediaSessionService() {
             }
         }
         serviceScope.launch {
+            startupAppVolumeSyncJob.join()
             var skipStartupApplyPercent = startupAppVolumePercent
             settingsRepository.appVolumePercent
                 .distinctUntilChanged()
