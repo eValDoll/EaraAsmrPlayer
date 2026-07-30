@@ -9,12 +9,10 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -32,6 +30,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,7 +51,6 @@ import com.asmr.player.util.MessageManager
 private val AlbumMetaPillShape = RoundedCornerShape(999.dp)
 private val AlbumMetaTagShape = RoundedCornerShape(7.dp)
 private val AlbumMetaDenseTagShape = RoundedCornerShape(6.dp)
-private val AlbumHeaderMetaLabelWidth = 58.dp
 private const val AlbumHeaderMetaCollapsedLines = 2
 
 private data class AlbumMetaPalette(
@@ -433,22 +431,21 @@ private fun AlbumHeaderMetaFlow(
     modifier: Modifier = Modifier,
     itemContent: @Composable (Int) -> Unit,
 ) {
+    val labelGap = with(LocalDensity.current) {
+        minOf(horizontalSpacing, MaterialTheme.typography.labelSmall.fontSize.toDp() / 2f)
+    }
     Row(
         modifier = modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(labelGap),
         verticalAlignment = Alignment.Top,
     ) {
-        Box(
-            modifier = Modifier.width(AlbumHeaderMetaLabelWidth),
-            contentAlignment = Alignment.TopStart,
-        ) {
-            AlbumMetaBadge(
-                text = label,
-                tone = labelTone,
-                shape = AlbumMetaTagShape,
-                textWeight = FontWeight.SemiBold,
-                leadingIcon = labelIcon,
-            )
-        }
+        AlbumMetaBadge(
+            text = label,
+            tone = labelTone,
+            shape = AlbumMetaTagShape,
+            textWeight = FontWeight.SemiBold,
+            leadingIcon = labelIcon,
+        )
         AlbumMetaMeasuredFlow(
             modifier = Modifier.weight(1f),
             itemCount = itemCount,
