@@ -697,6 +697,58 @@ private enum class DirectoryTreePanelState {
     MissingRj
 }
 
+private enum class DlsiteContentKind {
+    Loading,
+    Content,
+    Empty
+}
+
+private data class DlsiteContentPanel<T>(
+    val kind: DlsiteContentKind,
+    val value: T? = null
+)
+
+@Stable
+private class DlsiteContentFadeState<T>(initialPanel: DlsiteContentPanel<T>) {
+    var panel by mutableStateOf(initialPanel)
+        private set
+
+    val alpha = Animatable(1f)
+
+    suspend fun update(targetPanel: DlsiteContentPanel<T>) {
+        if (panel.kind != targetPanel.kind) {
+            alpha.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 90)
+            )
+        }
+        panel = targetPanel
+        alpha.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
+        )
+    }
+}
+
+@Composable
+private fun <T> rememberDlsiteContentFadeState(
+    targetPanel: DlsiteContentPanel<T>,
+    stateKey: Any
+): DlsiteContentFadeState<T> {
+    val state = remember(stateKey) { DlsiteContentFadeState(targetPanel) }
+    LaunchedEffect(state, targetPanel) {
+        state.update(targetPanel)
+    }
+    return state
+}
+
+private fun <T> Modifier.dlsiteContentFade(state: DlsiteContentFadeState<T>): Modifier {
+    return graphicsLayer {
+        alpha = state.alpha.value
+        compositingStrategy = CompositingStrategy.ModulateAlpha
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 private fun LazyItemScope.dlsiteAnimatedSectionModifier(
     modifier: Modifier = Modifier,
@@ -709,42 +761,28 @@ private fun LazyItemScope.dlsiteAnimatedSectionModifier(
 @Composable
 private fun StableOneDirectoryTreeContent(
     targetState: DirectoryTreePanelState,
+    stateKey: Any,
     modifier: Modifier = Modifier,
     content: @Composable (DirectoryTreePanelState) -> Unit
 ) {
-    val contentAlpha = remember { Animatable(if (targetState == DirectoryTreePanelState.Content) 0f else 1f) }
-    LaunchedEffect(targetState) {
-        if (targetState == DirectoryTreePanelState.Content) {
-            contentAlpha.snapTo(0f)
-            contentAlpha.animateTo(1f, animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing))
-        } else {
-            contentAlpha.snapTo(1f)
-        }
-    }
-    AnimatedContent(
-        targetState = targetState,
+    val targetPanel = DlsiteContentPanel(
+        kind = when (targetState) {
+            DirectoryTreePanelState.Loading -> DlsiteContentKind.Loading
+            DirectoryTreePanelState.Content -> DlsiteContentKind.Content
+            DirectoryTreePanelState.Empty,
+            DirectoryTreePanelState.MissingRj -> DlsiteContentKind.Empty
+        },
+        value = targetState
+    )
+    val fadeState = rememberDlsiteContentFadeState(targetPanel, stateKey)
+    Box(
         modifier = modifier
             .height(rememberStableOneDirectoryContainerHeight())
-            .clipToBounds(),
-        transitionSpec = {
-            fadeIn(animationSpec = tween(durationMillis = 140))
-                .togetherWith(fadeOut(animationSpec = tween(durationMillis = 90)))
-        },
-        label = "stableAsmrOneDirectoryTree",
-        content = { state ->
-            val stateModifier = if (state == DirectoryTreePanelState.Content) {
-                Modifier.graphicsLayer {
-                    alpha = contentAlpha.value
-                    compositingStrategy = CompositingStrategy.ModulateAlpha
-                }
-            } else {
-                Modifier
-            }
-            Box(modifier = stateModifier.fillMaxSize()) {
-                content(state)
-            }
-        }
-    )
+            .clipToBounds()
+            .dlsiteContentFade(fadeState)
+    ) {
+        content(fadeState.panel.value ?: targetState)
+    }
 }
 
 @Composable
@@ -851,8 +889,6 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         contentColor = colorScheme.textPrimary,
         disabledContentColor = colorScheme.textTertiary.copy(alpha = 0.7f)
     )
-    val videoTracks = remember(trialTracks) { trialTracks.filter { isVideoPreviewUrl(it.path) } }
-    val audioTracks = remember(trialTracks) { trialTracks.filterNot { isVideoPreviewUrl(it.path) } }
     var currentPath by rememberSaveable(treeStateKey) { mutableStateOf(initialCurrentPath.trim().trim('/')) }
     val asmrLeafTracks by produceState(initialValue = emptyList<AsmrOneLeafUi>(), key1 = asmrOneTree) {
         value = withContext(Dispatchers.Default) { flattenAsmrOneTracksForUi(asmrOneTree) }
@@ -893,6 +929,25 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         hasAsmrOneTree = asmrOneTree.isNotEmpty(),
         hasDirectoryBrowser = browser != null
     )
+    val galleryPanelTarget: DlsiteContentPanel<List<String>> = when {
+        galleryUrls.isEmpty() && isInitialDlsiteLoading -> DlsiteContentPanel(DlsiteContentKind.Loading)
+        galleryUrls.isEmpty() -> DlsiteContentPanel(DlsiteContentKind.Empty)
+        else -> DlsiteContentPanel(DlsiteContentKind.Content, galleryUrls)
+    }
+    val galleryFadeState = rememberDlsiteContentFadeState(galleryPanelTarget, treeStateKey)
+    val trialPanelTarget: DlsiteContentPanel<List<Track>> = when {
+        trialTracks.isNotEmpty() -> DlsiteContentPanel(DlsiteContentKind.Content, trialTracks)
+        isInitialDlsiteLoading || isLoadingTrial -> DlsiteContentPanel(DlsiteContentKind.Loading)
+        else -> DlsiteContentPanel(DlsiteContentKind.Empty)
+    }
+    val trialFadeState = rememberDlsiteContentFadeState(trialPanelTarget, treeStateKey)
+    val displayedTrialTracks = trialFadeState.panel.value.orEmpty()
+    val videoTracks = remember(displayedTrialTracks) {
+        displayedTrialTracks.filter { isVideoPreviewUrl(it.path) }
+    }
+    val audioTracks = remember(displayedTrialTracks) {
+        displayedTrialTracks.filterNot { isVideoPreviewUrl(it.path) }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -912,27 +967,27 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(DlsiteGallerySectionHeight),
+                        .height(DlsiteGallerySectionHeight)
+                        .dlsiteContentFade(galleryFadeState),
                     contentAlignment = Alignment.Center
                 ) {
-                    when {
-                        galleryUrls.isEmpty() && isInitialDlsiteLoading -> {
-                            DlsiteGalleryLoadingRow()
-                        }
-                        galleryUrls.isEmpty() -> {
+                    when (galleryFadeState.panel.kind) {
+                        DlsiteContentKind.Loading -> DlsiteGalleryLoadingRow()
+                        DlsiteContentKind.Empty -> {
                             DlsiteSectionEmptyState(
                                 text = "暂无样图",
                                 artworkKind = DlsiteEmptyArtworkKind.Gallery,
                                 modifier = Modifier.then(dlsiteAnimatedSectionModifier(Modifier, animateIntro))
                             )
                         }
-                        else -> {
+                        DlsiteContentKind.Content -> {
+                            val displayedGalleryUrls = galleryFadeState.panel.value.orEmpty()
                             LazyRow(
                                 modifier = Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding),
                                 horizontalArrangement = Arrangement.spacedBy(DlsiteGalleryThumbGap),
                                 contentPadding = PaddingValues(vertical = 10.dp)
                             ) {
-                                items(items = galleryUrls, key = { it }, contentType = { "galleryThumb" }) { url ->
+                                items(items = displayedGalleryUrls, key = { it }, contentType = { "galleryThumb" }) { url ->
                                     val model = remember(url) {
                                         val headers = DlsiteAntiHotlink.headersForImageUrl(url)
                                         if (headers.isEmpty()) url else CacheImageModel(data = url, headers = headers, keyTag = "dlsite")
@@ -940,7 +995,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                                     Card(
                                         modifier = Modifier.size(width = DlsiteGalleryThumbWidth, height = DlsiteGalleryThumbHeight).clickable {
                                             buildGalleryImagePreviewRequest(
-                                                galleryUrls = galleryUrls,
+                                                galleryUrls = displayedGalleryUrls,
                                                 clickedUrl = url,
                                                 toPreviewItem = { galleryUrl ->
                                                     val headers = DlsiteAntiHotlink.headersForImageUrl(galleryUrl)
@@ -958,7 +1013,8 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                                                 }
                                             )?.let(onPreviewImages)
                                         },
-                                        shape = RoundedCornerShape(10.dp)
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
                                     ) {
                                         AsmrAsyncImage(
                                             model = model,
@@ -1003,6 +1059,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
                 StableOneDirectoryTreeContent(
                     targetState = asmrOnePanelState,
+                    stateKey = treeStateKey,
                     modifier = Modifier.fillMaxWidth()
                 ) { panelState ->
                     when (panelState) {
@@ -1160,64 +1217,85 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                 }
             )
         }
-        if (trialTracks.isEmpty()) {
-            item(key = "dlsite-trial-content") {
-                if (isInitialDlsiteLoading || isLoadingTrial) {
+        when (trialFadeState.panel.kind) {
+            DlsiteContentKind.Loading -> {
+                item(key = "dlsite-trial-content") {
                     Box(
-                        modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro),
+                        modifier = dlsiteAnimatedSectionModifier(
+                            Modifier
+                                .fillMaxWidth()
+                                .dlsiteContentFade(trialFadeState),
+                            animateIntro
+                        ),
                         contentAlignment = Alignment.Center
                     ) {
                         DlsiteTrialLoadingList()
                     }
-                } else {
+                }
+            }
+            DlsiteContentKind.Empty -> {
+                item(key = "dlsite-trial-content") {
                     DlsiteSectionEmptyState(
                         text = "暂无试听 / 试看",
                         artworkKind = DlsiteEmptyArtworkKind.Trial,
-                        modifier = dlsiteAnimatedSectionModifier(Modifier, animateIntro)
-                    )
-                }
-            }
-        } else {
-            if (isLoadingTrial) {
-                item(key = "dlsite-trial-progress") {
-                    LinearProgressIndicator(
                         modifier = dlsiteAnimatedSectionModifier(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = AlbumDetailHorizontalPadding),
-                            animateIntro = animateIntro
+                            Modifier.dlsiteContentFade(trialFadeState),
+                            animateIntro
                         )
                     )
                 }
             }
-            items(items = videoTracks, key = { track -> if (track.id > 0L) track.id else track.path }, contentType = { "trialVideo" }) { track ->
-                Column(
-                    modifier = dlsiteAnimatedSectionModifier(
-                        Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
-                        animateIntro = animateIntro
-                    )
-                ) {
-                    Text(
-                        text = track.title,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    InlineVideoPlayer(
-                        url = track.path,
-                        modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
-                    )
+            DlsiteContentKind.Content -> {
+                if (isLoadingTrial && trialPanelTarget.kind == DlsiteContentKind.Content) {
+                    item(key = "dlsite-trial-progress") {
+                        LinearProgressIndicator(
+                            modifier = dlsiteAnimatedSectionModifier(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = AlbumDetailHorizontalPadding)
+                                    .dlsiteContentFade(trialFadeState),
+                                animateIntro = animateIntro
+                            )
+                        )
+                    }
                 }
-            }
-            items(items = audioTracks, key = { track -> if (track.id > 0L) track.id else track.path }, contentType = { "trialAudioTrack" }) { track ->
-                Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
-                    DlsiteTrialAudioItem(
-                        track = track,
-                        onClick = { onPlayTracks(album, audioTracks, track) },
-                        onAddToPlaylist = { onAddToPlaylist(track) }
-                    )
+                items(items = videoTracks, key = { track -> if (track.id > 0L) track.id else track.path }, contentType = { "trialVideo" }) { track ->
+                    Column(
+                        modifier = dlsiteAnimatedSectionModifier(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp)
+                                .dlsiteContentFade(trialFadeState),
+                            animateIntro = animateIntro
+                        )
+                    ) {
+                        Text(
+                            text = track.title,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        InlineVideoPlayer(
+                            url = track.path,
+                            modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+                        )
+                    }
+                }
+                items(items = audioTracks, key = { track -> if (track.id > 0L) track.id else track.path }, contentType = { "trialAudioTrack" }) { track ->
+                    Box(
+                        modifier = dlsiteAnimatedSectionModifier(
+                            Modifier.fillMaxWidth().dlsiteContentFade(trialFadeState),
+                            animateIntro
+                        )
+                    ) {
+                        DlsiteTrialAudioItem(
+                            track = track,
+                            onClick = { onPlayTracks(album, audioTracks, track) },
+                            onAddToPlaylist = { onAddToPlaylist(track) }
+                        )
+                    }
                 }
             }
         }
