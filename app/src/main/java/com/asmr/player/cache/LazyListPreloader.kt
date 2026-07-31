@@ -15,11 +15,9 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 private const val MaxRememberedPreloadKeys = 96
-private const val ScrollingLeadViewportMultiplier = 1
 private const val IdleLeadViewportMultiplier = 3
-private const val ScrollingPreloadDelayMs = 24L
 private const val IdlePreloadDelayMs = 160L
-private const val ScrollingPreloadParallelism = 1
+private const val IdlePreloadParallelism = 1
 
 private data class LazyListPreloadSnapshot(
     val firstVisibleIndex: Int,
@@ -39,13 +37,12 @@ fun LazyListPreloader(
     models: List<Any>,
     enabled: Boolean = true,
     preloadNext: Int = 24,
-    preloadNextWhileScrolling: Int = 8,
     preloadSize: IntSize? = null,
     cacheManagerProvider: () -> ImageCacheManager,
 ) {
     val manager = remember { cacheManagerProvider() }
     val preloadedModels = remember { LinkedHashSet<Any>() }
-    LaunchedEffect(state, models, enabled, preloadNext, preloadNextWhileScrolling, preloadSize) {
+    LaunchedEffect(state, models, enabled, preloadNext, preloadSize) {
         preloadedModels.clear()
         if (!enabled) return@LaunchedEffect
         snapshotFlow {
@@ -63,7 +60,6 @@ fun LazyListPreloader(
                 preloadedModels = preloadedModels,
                 itemCount = models.size,
                 preloadNext = preloadNext,
-                preloadNextWhileScrolling = preloadNextWhileScrolling,
                 preloadSize = preloadSize,
                 modelAt = models::get,
             )
@@ -76,7 +72,6 @@ fun LazyListPreloader(
     itemCount: Int,
     enabled: Boolean = true,
     preloadNext: Int = 24,
-    preloadNextWhileScrolling: Int = 8,
     preloadSize: IntSize? = null,
     cacheManagerProvider: () -> ImageCacheManager,
     modelAt: (Int) -> Any?,
@@ -84,7 +79,7 @@ fun LazyListPreloader(
     val manager = remember { cacheManagerProvider() }
     val preloadedModels = remember { LinkedHashSet<Any>() }
     val latestModelAt = rememberUpdatedState(modelAt)
-    LaunchedEffect(state, itemCount, enabled, preloadNext, preloadNextWhileScrolling, preloadSize) {
+    LaunchedEffect(state, itemCount, enabled, preloadNext, preloadSize) {
         preloadedModels.clear()
         if (!enabled) return@LaunchedEffect
         snapshotFlow {
@@ -102,7 +97,6 @@ fun LazyListPreloader(
                 preloadedModels = preloadedModels,
                 itemCount = itemCount,
                 preloadNext = preloadNext,
-                preloadNextWhileScrolling = preloadNextWhileScrolling,
                 preloadSize = preloadSize,
                 modelAt = { index -> latestModelAt.value(index) },
             )
@@ -115,7 +109,6 @@ fun LazyStaggeredGridPreloader(
     itemCount: Int,
     enabled: Boolean = true,
     preloadNext: Int = 24,
-    preloadNextWhileScrolling: Int = 8,
     preloadSize: IntSize? = null,
     cacheManagerProvider: () -> ImageCacheManager,
     modelAt: (Int) -> Any?,
@@ -123,7 +116,7 @@ fun LazyStaggeredGridPreloader(
     val manager = remember { cacheManagerProvider() }
     val preloadedModels = remember { LinkedHashSet<Any>() }
     val latestModelAt = rememberUpdatedState(modelAt)
-    LaunchedEffect(state, itemCount, enabled, preloadNext, preloadNextWhileScrolling, preloadSize) {
+    LaunchedEffect(state, itemCount, enabled, preloadNext, preloadSize) {
         preloadedModels.clear()
         if (!enabled) return@LaunchedEffect
         snapshotFlow {
@@ -141,7 +134,6 @@ fun LazyStaggeredGridPreloader(
                 preloadedModels = preloadedModels,
                 itemCount = itemCount,
                 preloadNext = preloadNext,
-                preloadNextWhileScrolling = preloadNextWhileScrolling,
                 preloadSize = preloadSize,
                 modelAt = { index -> latestModelAt.value(index) },
             )
@@ -153,7 +145,6 @@ private suspend fun Flow<LazyListPreloadSnapshot>.collectImagePreloads(
     preloadedModels: LinkedHashSet<Any>,
     itemCount: Int,
     preloadNext: Int,
-    preloadNextWhileScrolling: Int,
     preloadSize: IntSize?,
     modelAt: (Int) -> Any?,
 ) {
@@ -175,12 +166,11 @@ private suspend fun Flow<LazyListPreloadSnapshot>.collectImagePreloads(
             visibleItemCount = snapshot.visibleItemCount,
             itemCount = itemCount,
             preloadNext = preloadNext,
-            preloadNextWhileScrolling = preloadNextWhileScrolling,
             isScrolling = snapshot.isScrolling,
             direction = direction,
         ) ?: return@collectLatest
 
-        delay(if (snapshot.isScrolling) ScrollingPreloadDelayMs else IdlePreloadDelayMs)
+        delay(IdlePreloadDelayMs)
         val toPreload = range.mapNotNull { index ->
             modelAt(index)?.takeUnless { model -> model in preloadedModels }
         }
@@ -191,7 +181,7 @@ private suspend fun Flow<LazyListPreloadSnapshot>.collectImagePreloads(
                 scope = this,
                 models = toPreload,
                 size = preloadSize,
-                maxConcurrency = if (snapshot.isScrolling) ScrollingPreloadParallelism else null,
+                maxConcurrency = IdlePreloadParallelism,
             ).join()
         }
         preloadedModels.addAll(toPreload)
@@ -228,16 +218,13 @@ internal fun resolveLazyListPreloadRange(
     visibleItemCount: Int,
     itemCount: Int,
     preloadNext: Int,
-    preloadNextWhileScrolling: Int,
     isScrolling: Boolean,
     direction: LazyListPreloadDirection,
 ): IntRange? {
-    if (firstVisibleIndex < 0 || lastVisibleIndex < 0 || itemCount <= 0) return null
+    if (isScrolling || firstVisibleIndex < 0 || lastVisibleIndex < 0 || itemCount <= 0) return null
     val leadCount = resolveLazyListPreloadLeadCount(
         visibleItemCount = visibleItemCount,
         preloadNext = preloadNext,
-        preloadNextWhileScrolling = preloadNextWhileScrolling,
-        isScrolling = isScrolling,
     )
     val range = when (direction) {
         LazyListPreloadDirection.Forward -> {
@@ -256,13 +243,9 @@ internal fun resolveLazyListPreloadRange(
 internal fun resolveLazyListPreloadLeadCount(
     visibleItemCount: Int,
     preloadNext: Int,
-    preloadNextWhileScrolling: Int,
-    isScrolling: Boolean,
 ): Int {
-    val viewportLead = visibleItemCount.coerceAtLeast(1) *
-        if (isScrolling) ScrollingLeadViewportMultiplier else IdleLeadViewportMultiplier
-    val baseLead = if (isScrolling) preloadNextWhileScrolling else preloadNext
-    return maxOf(baseLead, viewportLead)
+    val viewportLead = visibleItemCount.coerceAtLeast(1) * IdleLeadViewportMultiplier
+    return maxOf(preloadNext, viewportLead)
 }
 
 private fun <T> LinkedHashSet<T>.trimOldest(maxSize: Int) {

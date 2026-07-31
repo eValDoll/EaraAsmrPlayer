@@ -21,4 +21,12 @@ class CollapsibleHeaderStateTest {
         assertEquals(0f, state.offsetPx)
         assertEquals(COLLAPSIBLE_HEADER_STATE_EXPANDED, collapsibleHeaderUiState(state.collapseFraction))
     }
+
+    @Test
+    fun settleTarget_usesHalfHeightThreshold() {
+        assertEquals(0f, collapsibleHeaderSettleTargetOffset(heightPx = 120f, offsetPx = -59f))
+        assertEquals(-120f, collapsibleHeaderSettleTargetOffset(heightPx = 120f, offsetPx = -60f))
+        assertEquals(-120f, collapsibleHeaderSettleTargetOffset(heightPx = 120f, offsetPx = -200f))
+        assertEquals(0f, collapsibleHeaderSettleTargetOffset(heightPx = 0f, offsetPx = -30f))
+    }
 }

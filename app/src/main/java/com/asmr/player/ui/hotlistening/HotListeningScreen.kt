@@ -65,6 +65,7 @@ import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.albumStableKey
 import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
+import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
@@ -116,9 +117,7 @@ fun HotListeningScreen(
     val contentScrollKey = remember(selectedPeriod, selectedSortMode, scrollResetNonce) {
         "hot-listening:$selectedPeriod:${selectedSortMode.name}:$scrollResetNonce"
     }
-    val listState = rememberSaveable(contentScrollKey, saver = LazyListState.Saver) {
-        LazyListState(0, 0)
-    }
+    val listState = rememberSaveablePrefetchedLazyListState(stateKey = contentScrollKey)
     val gridState = rememberSaveable(contentScrollKey, saver = LazyStaggeredGridState.Saver) {
         LazyStaggeredGridState()
     }
@@ -285,7 +284,6 @@ fun HotListeningScreen(
                         itemCount = state.entries.size,
                         enabled = isActive,
                         preloadNext = 24,
-                        preloadNextWhileScrolling = 8,
                         preloadSize = preloadSize,
                         cacheManagerProvider = { cacheManager },
                         modelAt = { idx ->
@@ -358,7 +356,6 @@ fun HotListeningScreen(
                         itemCount = state.entries.size,
                         enabled = isActive,
                         preloadNext = 24,
-                        preloadNextWhileScrolling = 8,
                         preloadSize = gridPreloadSize,
                         cacheManagerProvider = { cacheManager },
                         modelAt = { idx ->

@@ -127,7 +127,7 @@ import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.consumeTapThrough
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
-import com.asmr.player.ui.common.rememberAnimatedCollapsibleHeaderOffset
+import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
@@ -329,7 +329,7 @@ fun SearchScreen(
     )
     val success = uiState as? SearchUiState.Success
     val resultScrollKey = searchResultScrollKey(success)
-    val listState = rememberSaveable(resultScrollKey, saver = LazyListState.Saver) { LazyListState(0, 0) }
+    val listState = rememberSaveablePrefetchedLazyListState(stateKey = resultScrollKey)
     val gridState = rememberSaveable(resultScrollKey, saver = LazyStaggeredGridState.Saver) { LazyStaggeredGridState() }
     val colorScheme = AsmrTheme.colorScheme
     val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
@@ -968,7 +968,6 @@ fun SearchScreen(
                                         itemCount = state.results.size,
                                         enabled = isActive,
                                         preloadNext = 24,
-                                        preloadNextWhileScrolling = 8,
                                         preloadSize = preloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->
@@ -1027,7 +1026,6 @@ fun SearchScreen(
                                         itemCount = state.results.size,
                                         enabled = isActive,
                                         preloadNext = 24,
-                                        preloadNextWhileScrolling = 8,
                                         preloadSize = gridPreloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->
@@ -1366,7 +1364,6 @@ internal fun SearchChrome(
     onPrev: () -> Unit,
     onNext: () -> Unit
 ) {
-    val animatedOffsetPx = rememberAnimatedCollapsibleHeaderOffset(chromeState)
     val collapseStateDescription by remember(chromeState) {
         derivedStateOf { collapsibleHeaderUiState(chromeState.collapseFraction) }
     }
@@ -1375,7 +1372,7 @@ internal fun SearchChrome(
             .onSizeChanged(onMeasured)
             // Use layout offset instead of a graphics layer so Android text selection
             // toolbars anchor to the real on-screen position of the editable field.
-            .offset { IntOffset(x = 0, y = animatedOffsetPx.value.roundToInt()) }
+            .offset { IntOffset(x = 0, y = chromeState.offsetPx.roundToInt()) }
             .semantics { stateDescription = collapseStateDescription }
             .testTag(chromeTestTag)
     ) {

@@ -177,7 +177,7 @@ import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
-import com.asmr.player.ui.common.rememberAnimatedCollapsibleHeaderOffset
+import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.playback.MediaItemFactory
@@ -306,7 +306,7 @@ fun LibraryScreen(
         if (newText != searchText) searchText = newText
     }
 
-    val listState = rememberSaveable(saver = LazyListState.Saver) { LazyListState(0, 0) }
+    val listState = rememberSaveablePrefetchedLazyListState(stateKey = "library")
     val gridState = rememberSaveable(saver = androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState.Saver) {
         androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState()
     }
@@ -800,7 +800,6 @@ fun LibraryScreen(
                                         itemCount = pagedAlbums.itemCount,
                                         enabled = isActive,
                                         preloadNext = 24,
-                                        preloadNextWhileScrolling = 8,
                                         preloadSize = gridPreloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->
@@ -867,7 +866,6 @@ fun LibraryScreen(
                                         itemCount = pagedAlbums.itemCount,
                                         enabled = isActive,
                                         preloadNext = 24,
-                                        preloadNextWhileScrolling = 8,
                                         preloadSize = preloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->
@@ -1148,7 +1146,6 @@ internal fun LibraryChrome(
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val collapseOvershootPx = with(LocalDensity.current) { LibraryChromeCollapseOvershoot.toPx() }
-    val animatedChromeOffsetPx = rememberAnimatedCollapsibleHeaderOffset(chromeState)
     val collapseStateDescription by remember(chromeState) {
         derivedStateOf { collapsibleHeaderUiState(chromeState.collapseFraction) }
     }
@@ -1166,7 +1163,7 @@ internal fun LibraryChrome(
             .onSizeChanged(onMeasured)
             .graphicsLayer {
                 val collapseFraction = chromeState.collapseFraction.coerceIn(0f, 1f)
-                translationY = animatedChromeOffsetPx.value - (collapseFraction * collapseOvershootPx)
+                translationY = chromeState.offsetPx - (collapseFraction * collapseOvershootPx)
                 alpha = 1f - (collapseFraction * 0.1f)
             }
             .semantics { stateDescription = collapseStateDescription }

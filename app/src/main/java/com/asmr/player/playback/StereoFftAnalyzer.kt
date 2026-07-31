@@ -99,6 +99,11 @@ class StereoFftAnalyzer(
         var lastSeq = 0L
         var idleFrames = 0
         while (scope.isActive) {
+            if (!StereoSpectrumBus.captureActive) {
+                idleFrames = 0
+                delay(SpectrumAnalyzerInactivePollMillis)
+                continue
+            }
             val sr = sampleRate
             val framesDelay = ((visualDelayMs.toLong() * sr.toLong()) / 1000L).toInt()
             val slotsDelay = ((framesDelay + pcmBuffer.frameSize / 2) / pcmBuffer.frameSize).coerceIn(0, pcmBuffer.slotCount - 1)
@@ -109,7 +114,7 @@ class StereoFftAnalyzer(
                     publishDecay()
                     idleFrames = 0
                 }
-                delay(16)
+                delay(SpectrumAnalyzerFrameIntervalMillis)
                 continue
             }
             idleFrames = 0
@@ -119,6 +124,7 @@ class StereoFftAnalyzer(
             computeBins(leftIn, spectrumStore.leftWriteBuffer(writeIndex), smoothLeft, isLeft = true)
             computeBins(rightIn, spectrumStore.rightWriteBuffer(writeIndex), smoothRight, isLeft = false)
             spectrumStore.publish(writeIndex)
+            delay(SpectrumAnalyzerFrameIntervalMillis)
         }
     }
 
@@ -296,3 +302,6 @@ class StereoFftAnalyzer(
         }
     }
 }
+
+internal const val SpectrumAnalyzerFrameIntervalMillis = 16L
+internal const val SpectrumAnalyzerInactivePollMillis = 96L
