@@ -1,6 +1,5 @@
 package com.asmr.player.ui.search
 
-import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
@@ -570,7 +569,6 @@ fun SearchScreen(
     var pullNextPageGestureActive by remember(resultScrollKey, viewMode) { mutableStateOf(false) }
     var pullNextPageReturnInProgress by remember(resultScrollKey, viewMode) { mutableStateOf(false) }
     var pullNextPageRequestAfterReturn by remember(resultScrollKey, viewMode) { mutableStateOf(false) }
-    val pullNextPageVisualOffset = remember(resultScrollKey, viewMode) { Animatable(0f) }
     var searchPointerPressed by remember(resultScrollKey, viewMode) { mutableStateOf(false) }
     val pullNextPageArmed = pullNextPageDragPx >= pullNextPageTriggerDistancePx
     val pullNextPageGestureEnabled = pullNextPageEnabled && !pullNextPageReturnInProgress
@@ -594,7 +592,26 @@ fun SearchScreen(
             followRatio = SearchPullNextPageFollowRatio
         )
     }
-    val pullNextPageVisualOffsetPx = pullNextPageVisualOffset.value
+    val pullNextPageVisualOffsetPx by animateFloatAsState(
+        targetValue = pullNextPageVisualTargetPx,
+        animationSpec = if (pullNextPageGestureActive) {
+            snap()
+        } else {
+            SearchPullNextPageReturnSpring
+        },
+        finishedListener = { settledOffset ->
+            // 翻页请求必须等待回落动画完整结束，避免松手瞬间跳页。
+            if (settledOffset <= 0.5f && pullNextPageReturnInProgress) {
+                val shouldRequestNextPage = pullNextPageRequestAfterReturn
+                pullNextPageRequestAfterReturn = false
+                pullNextPageReturnInProgress = false
+                if (shouldRequestNextPage) {
+                    latestRequestNextPage.value()
+                }
+            }
+        },
+        label = "searchPullNextPageOffset"
+    )
     val pullNextPageProgress =
         (pullNextPageVisualOffsetPx / pullNextPageMaxLiftPx).coerceIn(0f, 1f)
     val finishPullNextPageGesture = rememberUpdatedState finish@{
@@ -614,27 +631,6 @@ fun SearchScreen(
         pullNextPageRequestAfterReturn = shouldTrigger
         pullNextPageReturnInProgress = hasPullOffset
         pullNextPageDragPx = 0f
-    }
-    LaunchedEffect(pullNextPageVisualTargetPx, pullNextPageReturnInProgress) {
-        if (!pullNextPageReturnInProgress) {
-            pullNextPageVisualOffset.snapTo(pullNextPageVisualTargetPx)
-            return@LaunchedEffect
-        }
-
-        val shouldRequestNextPage = pullNextPageRequestAfterReturn
-        try {
-            // 显式等待回落完成，再执行翻页，避免松手瞬间跳页或快速手势丢请求。
-            pullNextPageVisualOffset.animateTo(
-                targetValue = 0f,
-                animationSpec = SearchPullNextPageReturnSpring
-            )
-            if (shouldRequestNextPage) {
-                latestRequestNextPage.value()
-            }
-        } finally {
-            pullNextPageRequestAfterReturn = false
-            pullNextPageReturnInProgress = false
-        }
     }
     val refreshGestureEnabled = !pullToRefreshState.isRefreshing
     val topPaddingPx = with(androidx.compose.ui.platform.LocalDensity.current) { topPadding.toPx() }
