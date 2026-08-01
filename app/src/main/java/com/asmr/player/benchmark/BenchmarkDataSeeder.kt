@@ -71,7 +71,9 @@ class BenchmarkDataSeeder @Inject constructor(
             if (scenario == BenchmarkScenario.LibraryTracks) 2 else 0
         )
 
-        clearPlayerQueue()
+        if (scenario != BenchmarkScenario.PerformancePlayback) {
+            clearPlayerQueue()
+        }
 
         if (scenario == BenchmarkScenario.SearchNetwork) {
             return BenchmarkSeedSummary()
@@ -80,8 +82,29 @@ class BenchmarkDataSeeder @Inject constructor(
         val summary = seedLocalData()
         if (scenario == BenchmarkScenario.Queue) {
             prepareQueue(summary)
+        } else if (scenario == BenchmarkScenario.PerformancePlayback) {
+            resumeExistingPlayback()
         }
         return summary
+    }
+
+    private suspend fun resumeExistingPlayback() {
+        withTimeout(QueueConnectTimeoutMs) {
+            playerConnection.snapshot
+                .filter { it.isConnected }
+                .first()
+        }
+        check((playerConnection.getControllerOrNull()?.mediaItemCount ?: 0) > 0) {
+            "Performance playback scenario requires an existing playback queue"
+        }
+        withContext(Dispatchers.Main) {
+            playerConnection.play()
+        }
+        withTimeout(QueueConnectTimeoutMs) {
+            playerConnection.snapshot
+                .filter { it.isPlaying }
+                .first()
+        }
     }
 
     private suspend fun seedLocalData(): BenchmarkSeedSummary = withContext(Dispatchers.IO) {

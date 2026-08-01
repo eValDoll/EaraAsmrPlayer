@@ -50,10 +50,12 @@ import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
@@ -66,6 +68,11 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.layer.GraphicsLayer
+import androidx.compose.ui.graphics.layer.CompositingStrategy as LayerCompositingStrategy
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
@@ -191,8 +198,10 @@ private val AlbumDetailHeroBlurRadius = 32.dp
 private val AlbumDetailScrolledContentFadeSpan = 10.dp
 private const val AlbumDetailInitialIntroDurationMs = 1200L
 private const val AlbumDetailHeroIntroDurationMs = 520
+private const val AlbumDetailHeaderEnterDurationMs = 320
 private const val AlbumDetailHeroIntroStartScale = 1.025f
 private const val AlbumDetailHeroBlurRadiusMaxPx = 96f
+private const val AlbumDetailHeroBlurSampleMarginMultiplier = 3f
 private const val AlbumDetailHeroOvershootResistance = 0.30f
 private const val AlbumDetailHeroOvershootReleaseMultiplier = 0.72f
 private const val AlbumDetailHeroExpandOvershootScale = 0.16f
@@ -208,8 +217,14 @@ private const val AlbumDetailHeroMetaRevealDelayMs = 280
 private const val AlbumDetailCvRevealDelayMs = 220
 private const val AlbumDetailTagsRevealDelayMs = 360
 private const val AlbumDetailActionsRevealDelayMs = 500
-private const val AlbumDetailHeaderMotionSettleMs = 520L
 internal val AlbumDetailHorizontalPadding = 8.dp
+
+private class AlbumHeaderAlphaRevealState(var hasPlayed: Boolean)
+
+private val AlbumHeaderAlphaRevealStateSaver = Saver<AlbumHeaderAlphaRevealState, Boolean>(
+    save = { it.hasPlayed },
+    restore = { AlbumHeaderAlphaRevealState(it) }
+)
 
 private val AlbumDetailHeroBounceBackSpec = spring<Float>(
     dampingRatio = Spring.DampingRatioNoBouncy,
@@ -217,7 +232,7 @@ private val AlbumDetailHeroBounceBackSpec = spring<Float>(
 )
 
 private val AlbumHeaderEnterTweenSpec = tween<Float>(
-    durationMillis = 320,
+    durationMillis = AlbumDetailHeaderEnterDurationMs,
     easing = FastOutLinearInEasing
 )
 
@@ -325,11 +340,11 @@ fun AlbumDetailScreen(
     albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel(),
     libraryViewModel: LibraryViewModel = hiltViewModel(),
+    heroBlurLayerCache: AlbumHeroBlurLayerCache,
     viewModel: AlbumDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val cloudSyncSelectionDialogState by viewModel.cloudSyncSelectionDialogState.collectAsState()
-    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsState()
     val colorScheme = AsmrTheme.colorScheme
     val screenKey = remember(albumId, rjCode) {
         val idPart = albumId?.takeIf { it > 0 }?.toString().orEmpty()
@@ -356,18 +371,6 @@ fun AlbumDetailScreen(
         if (keyword.isNotBlank()) metaActionKeyword = keyword
     }
 
-    fun addMetaBlockedKeyword(value: String) {
-        val keyword = value.trim()
-        if (keyword.isBlank()) return
-        val exists = searchBlockedKeywords.any { it.equals(keyword, ignoreCase = true) }
-        settingsViewModel.addSearchBlockedKeyword(keyword)
-        if (exists) {
-            viewModel.messageManager.showInfo("屏蔽词已存在：$keyword")
-        } else {
-            viewModel.messageManager.showSuccess("已添加屏蔽词：$keyword")
-        }
-    }
-
     var initialOnlineLoadReady by remember(screenKey) {
         mutableStateOf(initialOnlineLoadDelayMillis <= 0L)
     }
@@ -377,12 +380,16 @@ fun AlbumDetailScreen(
             initialOnlineLoadReady = true
         }
     }
+    LaunchedEffect(viewModel, initialOnlineLoadReady) {
+        viewModel.setListenTogetherRjSummaryPollingEnabled(initialOnlineLoadReady)
+    }
     LaunchedEffect(albumId, rjCode) {
         withFrameNanos { }
         viewModel.loadAlbum(albumId, rjCode, force = false)
     }
     DisposableEffect(screenKey, viewModel) {
         onDispose {
+            viewModel.setListenTogetherRjSummaryPollingEnabled(false)
             viewModel.cancelActiveLoads()
         }
     }
@@ -431,8 +438,6 @@ fun AlbumDetailScreen(
                     }
                     val shouldPlayInitialAnimations = !initialIntroSettled
                     val shouldAnimateHeaderIntro = true
-                    val availableTags by viewModel.availableTags.collectAsState()
-                    val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsState()
                     var showTagManager by remember { mutableStateOf(false) }
                     var tagManageTrack by remember { mutableStateOf<Track?>(null) }
                     var localPreviewFile by remember { mutableStateOf<LocalTreeUiEntry.File?>(null) }
@@ -714,7 +719,8 @@ fun AlbumDetailScreen(
                                 onOpenGroupPicker = { id -> groupPickerAlbumId = id },
                                 introSessionKey = introSessionKey,
                                 animateIntro = shouldAnimateHeaderIntro,
-                                deferMetaRevealExpected = !isLocalTab,
+                                availableWidth = (maxWidth - AlbumDetailHorizontalPadding * 2)
+                                    .coerceAtLeast(0.dp),
                                 messageManager = viewModel.messageManager,
                                 onMetaLongClick = ::openMetaActions
                             )
@@ -744,6 +750,7 @@ fun AlbumDetailScreen(
                                 showCoverLoadingState = showHeroCoverLoadingState,
                                 messageManager = viewModel.messageManager,
                                 onMetaLongClick = ::openMetaActions,
+                                blurLayerCache = heroBlurLayerCache,
                                 collapsePx = { heroMotion.collapsePx },
                                 collapseMaxPx = heroCollapseMaxPx,
                                 visualOvershootPx = { heroMotion.visualOvershootPx },
@@ -1084,44 +1091,62 @@ fun AlbumDetailScreen(
                 }
 
                 metaActionKeyword?.let { keyword ->
+                    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsState()
                     AlbumMetaActionDialog(
                         keyword = keyword,
                         onDismissRequest = { metaActionKeyword = null },
                         onSearch = onSearchKeyword,
                         onCreatePlaylist = playlistsViewModel::createPlaylist,
                         onCreateGroup = albumGroupsViewModel::createGroup,
-                        onAddBlockedKeyword = ::addMetaBlockedKeyword,
+                        onAddBlockedKeyword = { value ->
+                            val normalized = value.trim()
+                            if (normalized.isNotBlank()) {
+                                val exists = searchBlockedKeywords.any {
+                                    it.equals(normalized, ignoreCase = true)
+                                }
+                                settingsViewModel.addSearchBlockedKeyword(normalized)
+                                if (exists) {
+                                    viewModel.messageManager.showInfo("屏蔽词已存在：$normalized")
+                                } else {
+                                    viewModel.messageManager.showSuccess("已添加屏蔽词：$normalized")
+                                }
+                            }
+                        },
                     )
                 }
 
                 val track = tagManageTrack
-                if (track != null && track.id > 0L) {
-                    TagAssignDialog(
-                        title = track.title,
-                        inheritedTags = album.tags,
-                        userTags = userTagsByTrackId[track.id].orEmpty(),
-                        allTags = availableTags,
-                        onApplyUserTags = { list ->
-                            viewModel.setUserTagsForTrack(track.id, list)
-                            tagManageTrack = null
-                        },
-                        onDismiss = { tagManageTrack = null },
-                        onOpenTagManager = { showTagManager = true }
-                    )
-                }
+                if ((track != null && track.id > 0L) || showTagManager) {
+                    val availableTags by viewModel.availableTags.collectAsState()
+                    val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsState()
+                    if (track != null && track.id > 0L) {
+                        TagAssignDialog(
+                            title = track.title,
+                            inheritedTags = album.tags,
+                            userTags = userTagsByTrackId[track.id].orEmpty(),
+                            allTags = availableTags,
+                            onApplyUserTags = { list ->
+                                viewModel.setUserTagsForTrack(track.id, list)
+                                tagManageTrack = null
+                            },
+                            onDismiss = { tagManageTrack = null },
+                            onOpenTagManager = { showTagManager = true }
+                        )
+                    }
 
-                if (showTagManager) {
-                    Dialog(
-                        onDismissRequest = { showTagManager = false },
-                        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
-                    ) {
-                        Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-                            TagManagerSheet(
-                                tags = availableTags,
-                                onRename = { tagId, newName -> libraryViewModel.renameUserTag(tagId, newName) },
-                                onDelete = { tagId -> libraryViewModel.deleteUserTag(tagId) },
-                                onClose = { showTagManager = false }
-                            )
+                    if (showTagManager) {
+                        Dialog(
+                            onDismissRequest = { showTagManager = false },
+                            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+                        ) {
+                            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+                                TagManagerSheet(
+                                    tags = availableTags,
+                                    onRename = { tagId, newName -> libraryViewModel.renameUserTag(tagId, newName) },
+                                    onDelete = { tagId -> libraryViewModel.deleteUserTag(tagId) },
+                                    onClose = { showTagManager = false }
+                                )
+                            }
                         }
                     }
                 }
@@ -1147,6 +1172,43 @@ fun AlbumDetailScreen(
     }
 }
 
+private data class AlbumHeroBlurSource(
+    val painter: BitmapPainter,
+    val alpha: State<Float>
+)
+
+class AlbumHeroBlurLayerCache(
+    val layer: GraphicsLayer
+) {
+    private var contentKey: Any? = null
+    private var layerSize: IntSize = IntSize.Zero
+    private var fullHeroSize: IntSize = IntSize.Zero
+    private var sourceAlpha: Float = Float.NaN
+
+    fun matches(
+        contentKey: Any?,
+        layerSize: IntSize,
+        fullHeroSize: IntSize,
+        sourceAlpha: Float
+    ): Boolean =
+        this.contentKey == contentKey &&
+            this.layerSize == layerSize &&
+            this.fullHeroSize == fullHeroSize &&
+            this.sourceAlpha == sourceAlpha
+
+    fun markRecorded(
+        contentKey: Any?,
+        layerSize: IntSize,
+        fullHeroSize: IntSize,
+        sourceAlpha: Float
+    ) {
+        this.contentKey = contentKey
+        this.layerSize = layerSize
+        this.fullHeroSize = fullHeroSize
+        this.sourceAlpha = sourceAlpha
+    }
+}
+
 @Composable
 private fun AlbumDetailHeroBackground(
     album: Album,
@@ -1159,6 +1221,7 @@ private fun AlbumDetailHeroBackground(
     showCoverLoadingState: Boolean,
     messageManager: MessageManager,
     onMetaLongClick: (String) -> Unit,
+    blurLayerCache: AlbumHeroBlurLayerCache,
     modifier: Modifier = Modifier,
     collapsePx: () -> Float = { 0f },
     collapseMaxPx: Float = 0f,
@@ -1167,6 +1230,9 @@ private fun AlbumDetailHeroBackground(
 ) {
     val coverSource = rememberStableAlbumHeroCoverSource(album, coverSessionKey)
     val imageModel = rememberAlbumCoverImageModel(coverSource)
+    var blurSource by remember(imageModel) {
+        mutableStateOf<AlbumHeroBlurSource?>(null)
+    }
     val density = LocalDensity.current
     val fullHeightPx = with(density) { height.toPx() }
     val heroIntroProgress = remember(introSessionKey) {
@@ -1190,6 +1256,15 @@ private fun AlbumDetailHeroBackground(
     val blurRadiusPx = with(density) {
         AlbumDetailHeroBlurRadius.toPx().coerceAtMost(AlbumDetailHeroBlurRadiusMaxPx)
     }
+    val blurRampHeightPx = with(density) {
+        AlbumDetailHeroBlurRampHeight.toPx().coerceAtMost(fullHeightPx * 0.52f)
+    }
+    // Gaussian blur 在可见渐变上方只需要保留完整的 3σ 采样范围。把透明区域也放进
+    // 离屏 RenderNode 会让 GPU 每帧处理整张 hero，虽然那些像素最终都会被蒙版丢弃。
+    val blurLayerHeightPx = (
+        blurRampHeightPx + blurRadiusPx * AlbumDetailHeroBlurSampleMarginMultiplier
+        ).coerceAtMost(fullHeightPx)
+    val blurLayerHeight = with(density) { blurLayerHeightPx.toDp() }
     val blurRenderEffect = remember(blurRadiusPx) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             RenderEffect
@@ -1236,16 +1311,9 @@ private fun AlbumDetailHeroBackground(
                 .matchParentSize()
                 .consumeTapThrough()
         )
-        AsmrAsyncImage(
-            model = imageModel,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            alignment = Alignment.TopCenter,
-            placeholderCornerRadius = 0,
-            peekAnySizeForInitial = true,
-            loadAtOriginalSize = true,
+        Box(
             modifier = Modifier
-                .fillMaxSize()
+                .matchParentSize()
                 .graphicsLayer {
                     val intro = heroIntroProgress.value.coerceIn(0f, 1f)
                     val introScale = AlbumDetailHeroIntroStartScale -
@@ -1260,74 +1328,148 @@ private fun AlbumDetailHeroBackground(
                     scaleX = scale
                     scaleY = scale
                     transformOrigin = TransformOrigin(0.5f, 0f)
+                    compositingStrategy = CompositingStrategy.ModulateAlpha
+                }
+        ) {
+            AsmrAsyncImage(
+                model = imageModel,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.TopCenter,
+                placeholderCornerRadius = 0,
+                peekAnySizeForInitial = true,
+                loadAtOriginalSize = true,
+                onBitmapPainterState = { painter, alpha ->
+                    blurSource = painter?.let { AlbumHeroBlurSource(it, alpha) }
                 },
-            placeholder = { m -> DiscPlaceholder(modifier = m, cornerRadius = 0) },
-            loading = { m -> AsmrImageLoadingPlaceholder(modifier = m, cornerRadius = 0, indicatorSize = 36.dp) },
-            empty = { m ->
-                if (showCoverLoadingState) {
+                modifier = Modifier.fillMaxSize(),
+                placeholder = { m -> DiscPlaceholder(modifier = m, cornerRadius = 0) },
+                loading = { m ->
                     AsmrImageLoadingPlaceholder(modifier = m, cornerRadius = 0, indicatorSize = 36.dp)
-                } else {
-                    DiscPlaceholder(modifier = m, cornerRadius = 0)
-                }
-            },
-        )
-        // 渐进式毛玻璃：从标题区域开始叠加模糊副本，让标题和元信息下方仍保留封面纹理。
-        AsmrAsyncImage(
-            model = imageModel,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            alignment = Alignment.TopCenter,
-            placeholderCornerRadius = 0,
-            peekAnySizeForInitial = true,
-            loadAtOriginalSize = true,
-            modifier = Modifier
-                .fillMaxSize()
-                .then(legacyBlurModifier)
-                .graphicsLayer {
-                    renderEffect = blurRenderEffect
-                    compositingStrategy = CompositingStrategy.Offscreen
-                    val intro = heroIntroProgress.value.coerceIn(0f, 1f)
-                    val introScale = AlbumDetailHeroIntroStartScale -
-                        (AlbumDetailHeroIntroStartScale - 1f) * intro
-                    val overshootProgress = (
-                        -visualOvershootPx() / visualOvershootMaxPx.coerceAtLeast(1f)
-                        ).coerceIn(0f, 1f)
-                    val scale = introScale * (
-                        1f + overshootProgress * AlbumDetailHeroExpandOvershootScale
-                        )
-                    alpha = intro
-                    translationY = -collapsePx().coerceIn(0f, collapseMaxPx)
-                    scaleX = scale
-                    scaleY = scale
-                    transformOrigin = TransformOrigin(0.5f, 0f)
-                }
-                .drawWithCache {
-                    val rampHeightPx = AlbumDetailHeroBlurRampHeight.toPx()
-                        .coerceAtMost(size.height * 0.52f)
-                    val rampStartY = (size.height - rampHeightPx).coerceAtLeast(0f)
-                    val stops = (0..6).map { i ->
-                        val t = i / 6f
-                        val eased = t * t * (3f - 2f * t)
-                        t to Color.White.copy(alpha = 0.18f + eased * 0.82f)
-                    }.toTypedArray()
-                    val mask = Brush.verticalGradient(
-                        colorStops = arrayOf(
-                            0f to Color.Transparent,
-                            *stops,
-                            1f to Color.White
-                        ),
-                        startY = rampStartY,
-                        endY = size.height
-                    )
-                    onDrawWithContent {
-                        drawContent()
-                        drawRect(brush = mask, blendMode = BlendMode.DstIn)
+                },
+                empty = { m ->
+                    if (showCoverLoadingState) {
+                        AsmrImageLoadingPlaceholder(modifier = m, cornerRadius = 0, indicatorSize = 36.dp)
+                    } else {
+                        DiscPlaceholder(modifier = m, cornerRadius = 0)
                     }
                 },
-            placeholder = {},
-            loading = {},
-            empty = {},
-        )
+            )
+            // 渐进式毛玻璃：从标题区域开始叠加模糊副本，让标题和元信息下方仍保留封面纹理。
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(blurLayerHeight)
+                    .graphicsLayer {
+                        translationY = -collapsePx().coerceIn(0f, collapseMaxPx)
+                    }
+                    .clipToBounds()
+                    .then(legacyBlurModifier)
+                    .drawWithCache {
+                        val rampStartY = (size.height - blurRampHeightPx).coerceAtLeast(0f)
+                        val stops = (0..6).map { i ->
+                            val t = i / 6f
+                            val eased = t * t * (3f - 2f * t)
+                            t to Color.White.copy(alpha = 0.18f + eased * 0.82f)
+                        }.toTypedArray()
+                        val mask = Brush.verticalGradient(
+                            colorStops = arrayOf(
+                                0f to Color.Transparent,
+                                *stops,
+                                1f to Color.White
+                            ),
+                            startY = rampStartY,
+                            endY = size.height
+                        )
+                        val layerSize = IntSize(
+                            width = size.width.roundToInt().coerceAtLeast(1),
+                            height = size.height.roundToInt().coerceAtLeast(1)
+                        )
+                        val fullHeroSize = Size(size.width, fullHeightPx)
+                        val fullHeroIntSize = IntSize(
+                            width = fullHeroSize.width.roundToInt().coerceAtLeast(1),
+                            height = fullHeroSize.height.roundToInt().coerceAtLeast(1)
+                        )
+                        val sliceTop = (fullHeightPx - size.height).coerceAtLeast(0f)
+                        val source = blurSource
+                        if (source == null) {
+                            onDrawBehind {
+                                if (
+                                    blurLayerCache.matches(
+                                        contentKey = imageModel,
+                                        layerSize = layerSize,
+                                        fullHeroSize = fullHeroIntSize,
+                                        sourceAlpha = 1f
+                                    )
+                                ) {
+                                    drawLayer(blurLayerCache.layer)
+                                }
+                            }
+                        } else {
+                            val intrinsicSize = source.painter.intrinsicSize
+                            if (intrinsicSize.width <= 0f || intrinsicSize.height <= 0f) {
+                                onDrawBehind {}
+                            } else {
+                                val scaleFactor = ContentScale.Crop.computeScaleFactor(
+                                    srcSize = intrinsicSize,
+                                    dstSize = fullHeroSize
+                                )
+                                val scaledSize = Size(
+                                    width = intrinsicSize.width * scaleFactor.scaleX,
+                                    height = intrinsicSize.height * scaleFactor.scaleY
+                                )
+                                val alignedOffset = Alignment.TopCenter.align(
+                                    size = IntSize(
+                                        width = scaledSize.width.roundToInt(),
+                                        height = scaledSize.height.roundToInt()
+                                    ),
+                                    space = fullHeroIntSize,
+                                    layoutDirection = layoutDirection
+                                )
+                                val sourceAlpha = source.alpha.value
+
+                                if (
+                                    !blurLayerCache.matches(
+                                        contentKey = imageModel,
+                                        layerSize = layerSize,
+                                        fullHeroSize = fullHeroIntSize,
+                                        sourceAlpha = sourceAlpha
+                                    )
+                                ) {
+                                    blurLayerCache.layer.renderEffect = blurRenderEffect
+                                    blurLayerCache.layer.compositingStrategy =
+                                        LayerCompositingStrategy.Offscreen
+                                    blurLayerCache.layer.record(
+                                        density = this,
+                                        layoutDirection = layoutDirection,
+                                        size = layerSize
+                                    ) {
+                                        translate(
+                                            left = alignedOffset.x.toFloat(),
+                                            top = alignedOffset.y.toFloat() - sliceTop
+                                        ) {
+                                            with(source.painter) {
+                                                draw(size = scaledSize, alpha = sourceAlpha)
+                                            }
+                                        }
+                                        drawRect(brush = mask, blendMode = BlendMode.DstIn)
+                                    }
+                                    blurLayerCache.markRecorded(
+                                        contentKey = imageModel,
+                                        layerSize = layerSize,
+                                        fullHeroSize = fullHeroIntSize,
+                                        sourceAlpha = sourceAlpha
+                                    )
+                                }
+                                onDrawBehind {
+                                    drawLayer(blurLayerCache.layer)
+                                }
+                            }
+                        }
+                    }
+            )
+        }
         // 顶部深色蒙版，保证返回按钮等控件的可读性
         Box(
             modifier = Modifier
@@ -1632,7 +1774,7 @@ private fun AlbumHeader(
     onOpenGroupPicker: (albumId: Long) -> Unit,
     introSessionKey: String,
     animateIntro: Boolean,
-    deferMetaRevealExpected: Boolean,
+    availableWidth: Dp,
     messageManager: MessageManager,
     onMetaLongClick: (String) -> Unit
 ) {
@@ -1641,16 +1783,6 @@ private fun AlbumHeader(
     val copyMeta = rememberAlbumMetaCopyAction(messageManager)
 
     val headerAnimationScopeKey = remember(introSessionKey) { "albumHeader:$introSessionKey" }
-    var headerIntroPlayed by rememberSaveable(headerAnimationScopeKey) { mutableStateOf(false) }
-    LaunchedEffect(headerAnimationScopeKey, animateIntro) {
-        if (headerIntroPlayed) return@LaunchedEffect
-        if (!animateIntro) {
-            headerIntroPlayed = true
-            return@LaunchedEffect
-        }
-        delay(AlbumDetailActionsRevealDelayMs + AlbumDetailHeaderMotionSettleMs)
-        headerIntroPlayed = true
-    }
 
     // 记录“首帧时各信息块是否已存在”：本地库专辑进入时 cv/tags 已就绪，应直接淡入不撑开（消除下沉抖动）；
     // 列表 hint 已经提供的信息首帧直接占住最终高度，只有网络到达后才新增的信息才纵向展开。
@@ -1658,8 +1790,6 @@ private fun AlbumHeader(
     val tagsPresentInitially = remember(headerAnimationScopeKey) { album.tags.isNotEmpty() }
     val cvExpandLayout = shouldExpandAlbumHeaderMetaReveal(cvPresentInitially)
     val tagsExpandLayout = shouldExpandAlbumHeaderMetaReveal(tagsPresentInitially)
-    val headerHasDeferredMeta = deferMetaRevealExpected
-
     val headerContainerModifier = Modifier
         .fillMaxWidth()
         .padding(horizontal = AlbumDetailHorizontalPadding)
@@ -1677,11 +1807,7 @@ private fun AlbumHeader(
     var languageMenuExpanded by rememberSaveable { mutableStateOf(false) }
 
     Column(
-        modifier = dlsiteSectionRevealModifier(
-            modifier = headerContainerModifier,
-            enabled = animateIntro && !headerIntroPlayed && !headerHasDeferredMeta
-        )
-            .padding(top = 10.dp, bottom = 12.dp)
+        modifier = headerContainerModifier.padding(top = 10.dp, bottom = 12.dp)
         // 不用 spacedBy 控制信息行之间的间距：cv/tags 行在网络数据到达后会以 0 高度组合、再通过
         // AnimatedVisibility 纵向展开，而 spacedBy 的固定间距会在“0 高度的折叠内容刚组合”的那一帧
         // 立即出现，把下方按钮行瞬间下推一截，造成展开前的下沉抖动。改为把行间距/与按钮行的间距作为
@@ -1730,12 +1856,12 @@ private fun AlbumHeader(
                     enabled = animateIntro,
                     expandLayout = false
                 ) {
-                    BoxWithConstraints(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
                     ) {
-                        val compact = maxWidth < 400.dp
-                        val ultraCompact = maxWidth < 340.dp
+                        val compact = availableWidth < 400.dp
+                        val ultraCompact = availableWidth < 340.dp
                         val actionGap = if (compact) 8.dp else 10.dp
                         val primaryButtonPadding = when {
                             ultraCompact -> 6.dp
@@ -2162,13 +2288,67 @@ private fun AlbumHeaderInfoReveal(
     expandLayout: Boolean = true,
     content: @Composable () -> Unit
 ) {
+    if (!expandLayout) {
+        val playbackState = rememberSaveable(
+            revealKey,
+            saver = AlbumHeaderAlphaRevealStateSaver
+        ) {
+            AlbumHeaderAlphaRevealState(false)
+        }
+        if (!enabled) {
+            SideEffect { playbackState.hasPlayed = true }
+            content()
+            return
+        }
+        if (!ready) {
+            content()
+            return
+        }
+        val alpha = remember(revealKey) {
+            Animatable(if (playbackState.hasPlayed) 1f else 0f)
+        }
+        LaunchedEffect(revealKey, ready, enabled) {
+            if (playbackState.hasPlayed) {
+                alpha.snapTo(1f)
+                return@LaunchedEffect
+            }
+            alpha.snapTo(0f)
+            if (delayMillis > 0) {
+                delay(delayMillis.toLong())
+            }
+            withFrameNanos { }
+            alpha.animateTo(
+                targetValue = 1f,
+                animationSpec = AlbumHeaderEnterTweenSpec
+            )
+            // 原实现会在可见状态切换 420ms 后记录完成；保持同一时间语义，但使用普通
+            // saveable 对象，避免纯 bookkeeping 在动画中途触发一次额外重组。
+            delay(
+                (AlbumDetailRevealSettleMs - AlbumDetailHeaderEnterDurationMs)
+                    .coerceAtLeast(0L)
+            )
+            playbackState.hasPlayed = true
+        }
+        Box(
+            modifier = Modifier.graphicsLayer {
+                this.alpha = alpha.value
+                // 信息块内部没有重叠的半透明内容，直接调制绘制指令可保持相同结果，
+                // 同时不为每次详情页进入创建需要延迟回收的离屏纹理。
+                compositingStrategy = CompositingStrategy.ModulateAlpha
+            }
+        ) {
+            content()
+        }
+        return
+    }
+
     var hasPlayed by rememberSaveable(revealKey) { mutableStateOf(false) }
     LaunchedEffect(revealKey, enabled, ready) {
         if (!enabled && !hasPlayed) {
             hasPlayed = true
         }
     }
-    if (!enabled || hasPlayed) {
+    if (!enabled) {
         content()
         return
     }
@@ -2187,21 +2367,8 @@ private fun AlbumHeaderInfoReveal(
         delay(AlbumDetailRevealSettleMs)
         hasPlayed = true
     }
-    val alpha = animateFloatAsState(
-        targetValue = if (visible) 1f else 0f,
-        animationSpec = AlbumHeaderEnterTweenSpec,
-        label = "albumHeaderInfoAlpha"
-    )
-    if (!expandLayout) {
-        // 进入时就已存在的内容（RJ、cv/tags、按钮行）：只做淡入，不做纵向平移，
-        // 避免先超过最终位置再回到目标位置。
-        Box(
-            modifier = Modifier.graphicsLayer {
-                this.alpha = alpha.value
-            }
-        ) {
-            content()
-        }
+    if (hasPlayed) {
+        content()
         return
     }
     // 网络数据到达后才出现的内容（在线 cv/tags）：保留原有的纵向展开，

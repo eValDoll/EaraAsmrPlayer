@@ -2,6 +2,7 @@ package com.asmr.player
 
 import android.os.Bundle
 import android.view.KeyEvent
+import android.view.Choreographer
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -20,6 +21,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ViewList
 import androidx.compose.material.icons.rounded.*
@@ -34,6 +36,8 @@ import android.content.res.Configuration
 import android.net.Uri
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.core.view.WindowCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsAnimationCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.material3.*
@@ -70,6 +74,7 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.asmr.player.ui.library.AlbumDetailScreen
+import com.asmr.player.ui.library.AlbumHeroBlurLayerCache
 import com.asmr.player.ui.library.AlbumDetailUiState
 import com.asmr.player.ui.library.AlbumDetailViewModel
 import com.asmr.player.ui.library.CloudSyncSelectionDialog
@@ -77,6 +82,7 @@ import com.asmr.player.ui.library.LibraryFilterScreen
 import com.asmr.player.ui.library.LibraryScreen
 import com.asmr.player.ui.library.LibraryViewModel
 import com.asmr.player.ui.library.BulkPhase
+import com.asmr.player.performance.UiFrameWorkCoordinator
 import com.asmr.player.ui.player.MiniPlayer
 import com.asmr.player.ui.player.NowPlayingMotionLayout
 import com.asmr.player.ui.player.NowPlayingMotionSpec
@@ -165,6 +171,8 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.animation.*
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -175,6 +183,10 @@ import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.translate
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -247,8 +259,6 @@ private const val SecondaryPageEnterDurationMs = 440
 private const val SecondaryPageExitDurationMs = 420
 private const val SecondaryPageTouchBlockDurationMs = 320
 private const val PrimaryPagerSnapThreshold = 0.16f
-private const val PrimaryRouteDataWarmRetentionMs = 5_000L
-private const val PrimaryRouteDataWarmStaggerMs = 80L
 private val SecondaryPageSlideEasing = CubicBezierEasing(0.215f, 0.61f, 0.355f, 1f)
 private val PrimaryPageParallaxOffset = 120.dp
 private val AlbumDetailTopBarButtonShape = CircleShape
@@ -260,6 +270,7 @@ private fun String?.startsWithAlbumDetailRoute(): Boolean {
 }
 
 private fun NavBackStackEntry.usesSecondaryPageSlideTransition(): Boolean {
+    if (destination.route.startsWithAlbumDetailRoute()) return false
     return resolveCurrentPrimaryDestinationRoute(
         currentRoute = destination.route,
         playlistSystemType = arguments?.getString("type")
@@ -304,18 +315,82 @@ private fun Modifier.albumDetailTopBarButtonSurface(
 @Composable
 private fun AlbumDetailRouteFrame(
     backStackEntry: NavBackStackEntry,
-    onBack: () -> Unit,
+    pageOffsetX: Animatable<Float, AnimationVector1D>,
+    onPopBackStack: () -> Unit,
+    onExitStateChanged: (Boolean) -> Unit,
     onEditRj: (String) -> Unit,
     content: @Composable (AlbumDetailViewModel) -> Unit
 ) {
     val viewModel = hiltViewModel<AlbumDetailViewModel>(backStackEntry)
+    val rootView = LocalView.current
+    val pageWidthPx = rootView.width.toFloat().coerceAtLeast(1f)
+    var exitRequested by remember(backStackEntry.id) { mutableStateOf(false) }
+    val currentPopBackStack by rememberUpdatedState(onPopBackStack)
+    val currentExitStateChanged by rememberUpdatedState(onExitStateChanged)
     val closeAlbumDetail = {
-        viewModel.cancelOnlineLoadsForExit()
-        onBack()
+        UiFrameWorkCoordinator.markFrameCritical(
+            SecondaryPageExitDurationMs.toLong()
+        )
+        exitRequested = true
     }
-    BackHandler(onBack = closeAlbumDetail)
+    BackHandler(enabled = !exitRequested, onBack = closeAlbumDetail)
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    LaunchedEffect(backStackEntry.id, pageWidthPx) {
+        pageOffsetX.snapTo(pageWidthPx)
+        // 详情页先在屏幕外完成一次组合与绘制，再启动可见位移。导航提前使用原本的第二个
+        // 准备帧，因此不会改变用户看到的动画起点、时长或缓动。
+        withFrameNanos { }
+        UiFrameWorkCoordinator.markFrameCritical(
+            SecondaryPageEnterDurationMs.toLong()
+        )
+        pageOffsetX.animateTo(
+            targetValue = 0f,
+            animationSpec = tween(
+                durationMillis = SecondaryPageEnterDurationMs,
+                easing = SecondaryPageSlideEasing
+            )
+        )
+        snapshotFlow { exitRequested }.filter { it }.first()
+
+        currentExitStateChanged(true)
+        viewModel.cancelOnlineLoadsForExit()
+        // 退出前先让底层主页面恢复 active；此时详情页仍完全覆盖屏幕，不产生视觉变化。
+        withFrameNanos { }
+        UiFrameWorkCoordinator.markFrameCritical(
+            SecondaryPageExitDurationMs.toLong()
+        )
+        pageOffsetX.animateTo(
+            targetValue = pageWidthPx,
+            animationSpec = tween(
+                durationMillis = SecondaryPageExitDurationMs,
+                easing = SecondaryPageSlideEasing
+            )
+        )
+        currentPopBackStack()
+    }
+    DisposableEffect(backStackEntry.id) {
+        onDispose {
+            currentExitStateChanged(false)
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .drawWithContent {
+                val translationX = pageOffsetX.value.coerceIn(0f, size.width)
+                val visibleWidth = size.width - translationX
+                if (visibleWidth > 0f) {
+                    // 直接在绘制阶段平移并裁剪，保持与整页 graphicsLayer 完全相同的几何结果，
+                    // 同时避免 RenderThread 为屏幕外区域维护额外的全屏平移层。
+                    translate(left = translationX) {
+                        clipRect(right = visibleWidth) {
+                            this@drawWithContent.drawContent()
+                        }
+                    }
+                }
+            }
+    ) {
         content(viewModel)
         AlbumDetailRouteTopBar(
             viewModel = viewModel,
@@ -412,7 +487,6 @@ private fun SecondaryPageBackground(
 
 private fun applyMainContainerSystemUi(
     window: android.view.Window,
-    defaultSystemUi: DefaultSystemUiState?,
     forceImmersive: Boolean,
     hideStatusBarForImmersivePage: Boolean,
     nowPlayingVisible: Boolean,
@@ -429,12 +503,10 @@ private fun applyMainContainerSystemUi(
         }
     }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-        val targetCutoutMode = if (forceImmersive || hideStatusBarForImmersivePage || nowPlayingVisible) {
-            WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
-        } else {
-            defaultSystemUi?.layoutInDisplayCutoutMode
-                ?: WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT
-        }
+        // Edge-to-edge 内容始终按照短边刘海区域布局，路由切换时只改变系统栏可见性。
+        // 若在专辑转场开始时同步修改 Window 属性，WindowManager 会触发一次昂贵的 relayout，
+        // 与 Compose 转场争抢同一帧的主线程和 RenderThread 预算。
+        val targetCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
         val attributes = window.attributes
         if (attributes.layoutInDisplayCutoutMode != targetCutoutMode) {
             attributes.layoutInDisplayCutoutMode = targetCutoutMode
@@ -597,7 +669,42 @@ fun MainContainer(
     volumeKeyEventTick: Long
 ) {
     val navController = rememberNavController()
-    val navigator = remember(navController) { AppNavigator(navController) }
+    val mainRootView = LocalView.current
+    val albumDetailPageWidthPx = mainRootView.width.toFloat().coerceAtLeast(1f)
+    val albumDetailPageOffsetX = remember(albumDetailPageWidthPx) {
+        Animatable(albumDetailPageWidthPx)
+    }
+    val albumDetailHeroBlurGraphicsLayer = rememberGraphicsLayer()
+    val albumDetailHeroBlurLayerCache = remember(albumDetailHeroBlurGraphicsLayer) {
+        AlbumHeroBlurLayerCache(albumDetailHeroBlurGraphicsLayer)
+    }
+    var albumDetailEnterPreparing by remember { mutableStateOf(false) }
+    var albumDetailEnterInsetsDispatchSuppressed by remember { mutableStateOf(false) }
+    var albumDetailEnterRequestId by remember { mutableLongStateOf(0L) }
+    val navigator = remember(navController, mainRootView) {
+        AppNavigator(navController) scheduler@{ navigation ->
+            if (albumDetailEnterPreparing) return@scheduler
+            albumDetailEnterPreparing = true
+            albumDetailEnterInsetsDispatchSuppressed = true
+            val requestId = ++albumDetailEnterRequestId
+            UiFrameWorkCoordinator.markFrameCritical(
+                SecondaryPageEnterDurationMs.toLong()
+            )
+            mainRootView.postDelayed({
+                if (albumDetailEnterRequestId == requestId) {
+                    albumDetailEnterInsetsDispatchSuppressed = false
+                }
+            }, SecondaryPageEnterDurationMs + 180L)
+            Choreographer.getInstance().postFrameCallback navigationFrame@{
+                if (albumDetailEnterRequestId != requestId) return@navigationFrame
+                try {
+                    navigation()
+                } finally {
+                    albumDetailEnterPreparing = false
+                }
+            }
+        }
+    }
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val hasPreviousBackStackEntry = navController.previousBackStackEntry != null
@@ -618,6 +725,11 @@ fun MainContainer(
         lastPrimaryRoute = lastPrimaryRoute,
         playlistSystemType = currentPlaylistSystemType
     )
+    LaunchedEffect(currentRoute) {
+        UiFrameWorkCoordinator.markFrameCritical(
+            maxOf(SecondaryPageEnterDurationMs, SecondaryPageExitDurationMs) + 120L
+        )
+    }
     val bottomNavItems = remember { bottomChromeNavItems() }
     val storedMiniPlayerDisplayMode by settingsDataStore.miniPlayerDisplayMode.collectAsState(
         initial = MiniPlayerDisplayMode.CoverOnly.name
@@ -686,8 +798,7 @@ fun MainContainer(
     var pendingDetailNavigation by remember { mutableStateOf(false) }
     var pendingDetailNavigationSeq by remember { mutableIntStateOf(0) }
     var cancelPendingDetailNavigation by remember { mutableStateOf(false) }
-    var settledAlbumDetailEntryId by remember { mutableStateOf<String?>(null) }
-    var pendingAlbumDetailPopEntryId by remember { mutableStateOf<String?>(null) }
+    var albumDetailExitInProgress by remember { mutableStateOf(false) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val searchViewModel: SearchViewModel = hiltViewModel()
@@ -771,7 +882,9 @@ fun MainContainer(
     var nowPlayingPlaylistPickerRequest by remember { mutableStateOf<PlaylistPickerRequest?>(null) }
     var albumBatchPlaylistPickerRequest by remember { mutableStateOf<BatchPlaylistPickerRequest?>(null) }
     val hideStatusBarForImmersivePage = shouldHideStatusBarForImmersivePage(
-        currentRoute = currentRoute,
+        currentRoute = currentRoute
+            .takeUnless { albumDetailExitInProgress }
+            .let { route -> if (albumDetailEnterPreparing) "album_detail_preparing" else route },
         nowPlayingVisible = nowPlayingVisible
     )
     val openNowPlaying = openNowPlaying@{
@@ -1163,34 +1276,6 @@ fun MainContainer(
     val materialColorScheme = MaterialTheme.colorScheme
     val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
     val isAlbumDetailRoute = currentRoute?.startsWith("album_detail") == true
-    val albumDetailEntryId = navBackStackEntry
-        ?.takeIf { it.destination.route.startsWithAlbumDetailRoute() }
-        ?.id
-    LaunchedEffect(albumDetailEntryId) {
-        if (albumDetailEntryId == null) {
-            settledAlbumDetailEntryId = null
-            pendingAlbumDetailPopEntryId = null
-            return@LaunchedEffect
-        }
-
-        settledAlbumDetailEntryId = null
-        pendingAlbumDetailPopEntryId = null
-        delay(SecondaryPageEnterDurationMs.toLong())
-        settledAlbumDetailEntryId = albumDetailEntryId
-        withFrameNanos { }
-        if (pendingAlbumDetailPopEntryId == albumDetailEntryId) {
-            pendingAlbumDetailPopEntryId = null
-            navController.popBackStack()
-        }
-    }
-    val requestAlbumDetailBack: () -> Unit = {
-        val entryId = albumDetailEntryId
-        if (entryId == null || settledAlbumDetailEntryId == entryId) {
-            navController.popBackStack()
-        } else {
-            pendingAlbumDetailPopEntryId = entryId
-        }
-    }
     val topBarContentColor = if (isAlbumDetailRoute) Color.White else colorScheme.onSurface
     val drawerContainerColor = if (colorScheme.isDark) Color(0xFF121212) else Color.White
 
@@ -1228,6 +1313,26 @@ fun MainContainer(
         }
     }
 
+    val suppressAlbumDetailInsetsAnimationDispatch =
+        albumDetailEnterInsetsDispatchSuppressed || albumDetailExitInProgress
+    DisposableEffect(activity, suppressAlbumDetailInsetsAnimationDispatch) {
+        val decorView = activity?.window?.decorView
+        if (suppressAlbumDetailInsetsAnimationDispatch && decorView != null) {
+            val callback = object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_STOP) {
+                override fun onProgress(
+                    insets: WindowInsetsCompat,
+                    runningAnimations: MutableList<WindowInsetsAnimationCompat>
+                ): WindowInsetsCompat = insets
+            }
+            ViewCompat.setWindowInsetsAnimationCallback(decorView, callback)
+            onDispose {
+                ViewCompat.setWindowInsetsAnimationCallback(decorView, null)
+            }
+        } else {
+            onDispose { }
+        }
+    }
+
     DisposableEffect(
         activity,
         defaultSystemUi,
@@ -1239,7 +1344,6 @@ fun MainContainer(
         val act = activity ?: return@DisposableEffect onDispose { }
         applyMainContainerSystemUi(
             window = act.window,
-            defaultSystemUi = defaultSystemUi,
             forceImmersive = forceImmersive,
             hideStatusBarForImmersivePage = hideStatusBarForImmersivePage,
             nowPlayingVisible = nowPlayingVisible,
@@ -1459,20 +1563,13 @@ fun MainContainer(
         LaunchedEffect(rightPanelExpandedFromStore) {
             rightPanelExpandedState.updateFromStore(rightPanelExpandedFromStore)
         }
-        val currentScreenIsPrimary = currentPrimaryRoute != null
+        // 专辑详情始终覆盖在主页面之上；让底层顶栏/页面 active 标记在整个详情生命周期内
+        // 保持稳定，退出时只更新必要的位移，不在同一帧重建整套主页面 chrome。
+        val currentScreenIsPrimary = currentPrimaryRoute != null ||
+            isAlbumDetailRoute || albumDetailExitInProgress
         val showBackButton = !currentScreenIsPrimary
         val showPrimaryBrand = currentScreenIsPrimary
-        var primaryContentCoveredByAlbumDetail by remember { mutableStateOf(false) }
-        LaunchedEffect(isAlbumDetailRoute) {
-            if (isAlbumDetailRoute) {
-                delay(SecondaryPageEnterDurationMs.toLong())
-                primaryContentCoveredByAlbumDetail = true
-            } else if (primaryContentCoveredByAlbumDetail) {
-                delay(SecondaryPageExitDurationMs.toLong())
-                primaryContentCoveredByAlbumDetail = false
-            }
-        }
-        val hasOverlayRoute = currentPrimaryRoute == null
+        val hasOverlayRoute = currentPrimaryRoute == null && !albumDetailExitInProgress
         val primaryPageParallaxOffset = animateDpAsState(
             targetValue = if (hasOverlayRoute) -PrimaryPageParallaxOffset else 0.dp,
             animationSpec = tween(
@@ -1517,11 +1614,27 @@ fun MainContainer(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .graphicsLayer {
-                            translationX = if (albumDetailTransitionActive) {
+                        .drawWithContent {
+                            val translationPx = if (albumDetailTransitionActive) {
                                 primaryPageParallaxOffset.value.toPx()
                             } else {
                                 0f
+                            }
+                            val visibleLeft = (-translationPx).coerceIn(0f, size.width)
+                            val visibleRight = if (albumDetailTransitionActive) {
+                                (albumDetailPageOffsetX.value - translationPx)
+                                    .coerceIn(visibleLeft, size.width)
+                            } else {
+                                size.width
+                            }
+                            if (visibleRight > visibleLeft) {
+                                // 详情页是完全不透明的前景。只绘制它左侧仍然可见的主页面区域，
+                                // 避免每帧把随后必然被覆盖的列表、封面和顶栏再次提交给 GPU。
+                                translate(left = translationPx) {
+                                    clipRect(left = visibleLeft, right = visibleRight) {
+                                        this@drawWithContent.drawContent()
+                                    }
+                                }
                             }
                         }
                 ) {
@@ -1843,8 +1956,7 @@ fun MainContainer(
                                     key = { primaryPagerRoutes[it] }
                                 ) { page ->
                                     val route = primaryPagerRoutes[page]
-                                    val primaryRouteActive = visualPrimaryRoute == route &&
-                                        !primaryContentCoveredByAlbumDetail
+                                    val primaryRouteActive = visualPrimaryRoute == route
                                     val pagerRouteVisible = primaryPagerState.currentPage == page ||
                                         (
                                             primaryPagerState.isScrollInProgress &&
@@ -1852,22 +1964,12 @@ fun MainContainer(
                                             )
                                     val primaryRouteImmediatelyActive = !hasOverlayRoute &&
                                         (primaryRouteActive || pagerRouteVisible)
-                                    var keepPrimaryRouteDataWarm by remember(route) {
-                                        mutableStateOf(true)
-                                    }
-                                    LaunchedEffect(primaryRouteImmediatelyActive) {
-                                        if (primaryRouteImmediatelyActive) {
-                                            keepPrimaryRouteDataWarm = true
-                                        } else {
-                                            delay(
-                                                PrimaryRouteDataWarmRetentionMs +
-                                                    page * PrimaryRouteDataWarmStaggerMs
-                                            )
-                                            keepPrimaryRouteDataWarm = false
-                                        }
-                                    }
-                                    val primaryRouteDataActive = primaryRouteImmediatelyActive ||
-                                        keepPrimaryRouteDataWarm
+                                    // ViewModel 的 StateFlow 已经持有最新页面数据；隐藏页面无需继续
+                                    // 收集、排序和转换数据。目标页在横向手势开始时会立即恢复收集。
+                                    // 详情页退出动画中使用已保留的主页面快照状态；等详情真正弹栈后再恢复
+                                    // 数据流，避免在返回手势首帧同时启动查询、排序和列表状态转换。
+                                    val primaryRouteDataActive = primaryRouteImmediatelyActive &&
+                                        !isAlbumDetailRoute
                                     primaryContentStateHolder.SaveableStateProvider("primary_route:$route") {
                                         when (route) {
                                         Routes.Library -> {
@@ -1877,14 +1979,7 @@ fun MainContainer(
                                                 isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = libraryScrollToTopSignal,
                                                 onAlbumClick = { album ->
-                                                    AlbumCoverHintStore.record(
-                                                        albumId = album.id,
-                                                        rjCode = album.rjCode.ifBlank { album.workId },
-                                                        title = album.title,
-                                                        circle = album.circle,
-                                                        cv = album.cv,
-                                                        coverUrl = album.coverUrl
-                                                    )
+                                                    AlbumCoverHintStore.recordLocalAlbum(album)
                                                     navigator.openAlbumDetail(
                                                         albumId = album.id,
                                                         rj = null
@@ -2242,7 +2337,9 @@ fun MainContainer(
                     val rj = backStackEntry.arguments?.getString("rj").orEmpty()
                     AlbumDetailRouteFrame(
                         backStackEntry = backStackEntry,
-                        onBack = requestAlbumDetailBack,
+                        pageOffsetX = albumDetailPageOffsetX,
+                        onPopBackStack = { navController.popBackStack() },
+                        onExitStateChanged = { albumDetailExitInProgress = it },
                         onEditRj = { currentRj ->
                             manualRjInput = currentRj
                             showManualRjDialog = true
@@ -2251,7 +2348,9 @@ fun MainContainer(
                         AlbumDetailScreen(
                             windowSizeClass = windowSizeClass,
                             rjCode = rj,
-                            initialTab = backStackEntry.arguments?.getString("initialTab").toAlbumDetailInitialTab(),
+                            initialTab = backStackEntry.arguments
+                                ?.getString("initialTab")
+                                .toAlbumDetailInitialTab(),
                             initialOnlineLoadDelayMillis = SecondaryPageEnterDurationMs.toLong(),
                             onPlayTracks = { album, tracks, startTrack ->
                                 scope.launch {
@@ -2292,6 +2391,7 @@ fun MainContainer(
                             albumGroupsViewModel = albumGroupsViewModel,
                             settingsViewModel = settingsViewModel,
                             libraryViewModel = libraryViewModel,
+                            heroBlurLayerCache = albumDetailHeroBlurLayerCache,
                             viewModel = albumDetailViewModel
                         )
                     }
@@ -2308,7 +2408,9 @@ fun MainContainer(
                     val rjCode = backStackEntry.arguments?.getString("rjCode")
                     AlbumDetailRouteFrame(
                         backStackEntry = backStackEntry,
-                        onBack = requestAlbumDetailBack,
+                        pageOffsetX = albumDetailPageOffsetX,
+                        onPopBackStack = { navController.popBackStack() },
+                        onExitStateChanged = { albumDetailExitInProgress = it },
                         onEditRj = { currentRj ->
                             manualRjInput = currentRj
                             showManualRjDialog = true
@@ -2318,7 +2420,9 @@ fun MainContainer(
                             windowSizeClass = windowSizeClass,
                             albumId = albumId,
                             rjCode = rjCode,
-                            initialTab = backStackEntry.arguments?.getString("initialTab").toAlbumDetailInitialTab(),
+                            initialTab = backStackEntry.arguments
+                                ?.getString("initialTab")
+                                .toAlbumDetailInitialTab(),
                             onPlayTracks = { album, tracks, startTrack ->
                                 scope.launch {
                                     if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
@@ -2358,6 +2462,7 @@ fun MainContainer(
                             albumGroupsViewModel = albumGroupsViewModel,
                             settingsViewModel = settingsViewModel,
                             libraryViewModel = libraryViewModel,
+                            heroBlurLayerCache = albumDetailHeroBlurLayerCache,
                             viewModel = albumDetailViewModel
                         )
                     }
@@ -2369,7 +2474,9 @@ fun MainContainer(
                     val rj = backStackEntry.arguments?.getString("rj").orEmpty()
                     AlbumDetailRouteFrame(
                         backStackEntry = backStackEntry,
-                        onBack = requestAlbumDetailBack,
+                        pageOffsetX = albumDetailPageOffsetX,
+                        onPopBackStack = { navController.popBackStack() },
+                        onExitStateChanged = { albumDetailExitInProgress = it },
                         onEditRj = { currentRj ->
                             manualRjInput = currentRj
                             showManualRjDialog = true
@@ -2412,6 +2519,7 @@ fun MainContainer(
                             albumGroupsViewModel = albumGroupsViewModel,
                             settingsViewModel = settingsViewModel,
                             libraryViewModel = libraryViewModel,
+                            heroBlurLayerCache = albumDetailHeroBlurLayerCache,
                             viewModel = albumDetailViewModel
                         )
                     }
@@ -2542,7 +2650,7 @@ fun MainContainer(
                 }
             }
 
-                    if (blockNavTouches) {
+                    if (blockNavTouches || albumDetailExitInProgress) {
                         if (isAlbumDetailRoute) {
                             val albumDetailTopBarTouchPassThroughHeight =
                                 StableWindowInsets.statusBars.asPaddingValues().calculateTopPadding() +

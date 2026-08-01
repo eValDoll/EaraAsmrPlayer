@@ -15,7 +15,7 @@ import kotlin.math.sin
 import kotlin.math.sinh
 
 @UnstableApi
-class GraphicEqualizerAudioProcessor : BaseAudioProcessor() {
+class GraphicEqualizerAudioProcessor : BaseAudioProcessor(), RuntimeAudioProcessor {
 
     companion object {
         private val BandCentersHz = floatArrayOf(31f, 62f, 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f)
@@ -36,12 +36,15 @@ class GraphicEqualizerAudioProcessor : BaseAudioProcessor() {
     private var pendingEnabled = false
     private var pendingLevels = IntArray(BandCentersHz.size)
     private var settingsDirty = true
+    @Volatile
+    private var runtimeActive = false
 
     fun setEnabled(enabled: Boolean) {
         synchronized(lock) {
             if (pendingEnabled != enabled) {
                 pendingEnabled = enabled
                 settingsDirty = true
+                updateRuntimeActiveLocked()
             }
         }
     }
@@ -52,6 +55,7 @@ class GraphicEqualizerAudioProcessor : BaseAudioProcessor() {
             if (!pendingLevels.contentEquals(normalized)) {
                 pendingLevels = normalized
                 settingsDirty = true
+                updateRuntimeActiveLocked()
             }
         }
     }
@@ -63,9 +67,12 @@ class GraphicEqualizerAudioProcessor : BaseAudioProcessor() {
                     inputAudioFormat.encoding != C.ENCODING_PCM_FLOAT)
         synchronized(lock) {
             settingsDirty = true
+            updateRuntimeActiveLocked()
         }
         return inputAudioFormat
     }
+
+    override fun isRuntimeActive(): Boolean = runtimeActive
 
     override fun onFlush() {
         clearFilterState()
@@ -80,7 +87,12 @@ class GraphicEqualizerAudioProcessor : BaseAudioProcessor() {
         activeSampleRate = 0
         synchronized(lock) {
             settingsDirty = true
+            updateRuntimeActiveLocked()
         }
+    }
+
+    private fun updateRuntimeActiveLocked() {
+        runtimeActive = !passthrough && pendingEnabled && pendingLevels.any { it != 0 }
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {

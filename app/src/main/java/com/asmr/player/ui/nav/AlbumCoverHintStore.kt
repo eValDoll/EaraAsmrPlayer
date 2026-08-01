@@ -42,6 +42,28 @@ object AlbumCoverHintStore {
         )
     }
 
+    fun recordLocalAlbum(album: Album) {
+        val rj = album.rjCode.ifBlank { album.workId }.trim().uppercase()
+        val hint = AlbumCoverHint(
+            title = album.title,
+            rjCode = rj,
+            circle = album.circle,
+            cv = album.cv,
+            tags = album.tags,
+            coverUrl = album.coverUrl.takeIf { it.startsWith("http", ignoreCase = true) }.orEmpty(),
+            ratingValue = album.ratingValue,
+            ratingCount = album.ratingCount,
+            releaseDate = album.releaseDate,
+            dlCount = album.dlCount,
+            priceJpy = album.priceJpy,
+            hasAsmrOne = album.hasAsmrOne,
+            description = album.description,
+            hasResolvedDlsiteInfo = false,
+            localAlbum = album
+        )
+        storeHint(album.id, rj, hint)
+    }
+
     fun record(
         albumId: Long?,
         rjCode: String?,
@@ -57,7 +79,8 @@ object AlbumCoverHintStore {
         priceJpy: Int = 0,
         hasAsmrOne: Boolean = false,
         description: String? = null,
-        hasResolvedDlsiteInfo: Boolean = false
+        hasResolvedDlsiteInfo: Boolean = false,
+        localAlbum: Album? = null
     ) {
         val hint = AlbumCoverHint(
             title = title?.trim().orEmpty(),
@@ -76,14 +99,23 @@ object AlbumCoverHintStore {
             priceJpy = priceJpy.coerceAtLeast(0),
             hasAsmrOne = hasAsmrOne,
             description = description?.trim().orEmpty(),
-            hasResolvedDlsiteInfo = hasResolvedDlsiteInfo
+            hasResolvedDlsiteInfo = hasResolvedDlsiteInfo,
+            localAlbum = localAlbum
         )
         if (hint.isBlank()) return
-        val rj = hint.rjCode
-        val id = albumId ?: 0L
+        storeHint(albumId ?: 0L, hint.rjCode, hint)
+    }
+
+    private fun storeHint(albumId: Long, rjCode: String, hint: AlbumCoverHint) {
         synchronized(lock) {
-            if (rj.isNotBlank()) hints["rj:$rj"] = hint
-            if (id > 0L) hints["id:$id"] = hint
+            if (rjCode.isNotBlank()) {
+                val key = "rj:$rjCode"
+                hints[key] = hint
+            }
+            if (albumId > 0L) {
+                val key = "id:$albumId"
+                hints[key] = hint
+            }
         }
     }
 
@@ -100,6 +132,7 @@ object AlbumCoverHintStore {
         }
         return null
     }
+
 }
 
 data class AlbumCoverHint(
@@ -116,7 +149,8 @@ data class AlbumCoverHint(
     val priceJpy: Int,
     val hasAsmrOne: Boolean,
     val description: String,
-    val hasResolvedDlsiteInfo: Boolean
+    val hasResolvedDlsiteInfo: Boolean,
+    val localAlbum: Album?
 ) {
     fun isBlank(): Boolean {
         return title.isBlank() &&
@@ -131,11 +165,13 @@ data class AlbumCoverHint(
             dlCount <= 0 &&
             priceJpy <= 0 &&
             !hasAsmrOne &&
-            description.isBlank()
+            description.isBlank() &&
+            localAlbum == null
     }
 }
 
 internal fun albumFromCoverHint(rj: String, hint: AlbumCoverHint?): Album {
+    hint?.localAlbum?.let { return it }
     val normalizedRj = rj.ifBlank { hint?.rjCode.orEmpty() }
     return Album(
         title = hint?.title?.ifBlank { normalizedRj }.orEmpty().ifBlank { "专辑" },

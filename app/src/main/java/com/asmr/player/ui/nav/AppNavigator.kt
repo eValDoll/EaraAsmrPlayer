@@ -48,7 +48,8 @@ internal fun resolveAlbumDetailPopUpToRoute(currentRoute: String?): String {
 }
 
 class AppNavigator(
-    private val navController: NavHostController
+    private val navController: NavHostController,
+    private val scheduleAlbumDetailNavigation: (() -> Unit) -> Unit = { navigation -> navigation() }
 ) {
     fun openAlbumDetail(albumId: Long?, rj: String?, preferDlsitePlay: Boolean = false) {
         val normalizedRj = rj?.trim().orEmpty()
@@ -63,12 +64,14 @@ class AppNavigator(
             append(id)
             if (preferDlsitePlay) append("?initialTab=dlsitePlay")
         }
-        val currentRoute = navController.currentBackStackEntry?.destination?.route
-        val popToRoute = resolveAlbumDetailPopUpToRoute(currentRoute)
-        navController.navigate(route) {
-            launchSingleTop = true
-            restoreState = false
-            popUpTo(popToRoute) { inclusive = false; saveState = true }
+        scheduleAlbumDetailNavigation {
+            val currentRoute = navController.currentBackStackEntry?.destination?.route
+            val popToRoute = resolveAlbumDetailPopUpToRoute(currentRoute)
+            navController.navigate(route) {
+                launchSingleTop = true
+                restoreState = false
+                popUpTo(popToRoute) { inclusive = false; saveState = true }
+            }
         }
     }
 
@@ -79,12 +82,14 @@ class AppNavigator(
             normalized,
             initialTab = if (preferDlsitePlay) "dlsitePlay" else null
         )
-        val currentRoute = navController.currentBackStackEntry?.destination?.route
-        val popToRoute = resolveAlbumDetailPopUpToRoute(currentRoute)
-        navController.navigate(route) {
-            launchSingleTop = true
-            restoreState = false
-            popUpTo(popToRoute) { inclusive = false; saveState = true }
+        scheduleAlbumDetailNavigation {
+            val currentRoute = navController.currentBackStackEntry?.destination?.route
+            val popToRoute = resolveAlbumDetailPopUpToRoute(currentRoute)
+            navController.navigate(route) {
+                launchSingleTop = true
+                restoreState = false
+                popUpTo(popToRoute) { inclusive = false; saveState = true }
+            }
         }
     }
 
@@ -92,9 +97,11 @@ class AppNavigator(
         val normalized = rj.trim().uppercase()
         if (normalized.isBlank()) return
         val route = Routes.albumDetailByRj(normalized)
-        navController.navigate(route) {
-            launchSingleTop = false
-            restoreState = false
+        scheduleAlbumDetailNavigation {
+            navController.navigate(route) {
+                launchSingleTop = false
+                restoreState = false
+            }
         }
     }
 }

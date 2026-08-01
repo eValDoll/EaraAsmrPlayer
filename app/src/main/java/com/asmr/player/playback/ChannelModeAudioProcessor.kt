@@ -7,7 +7,7 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 @UnstableApi
-class ChannelModeAudioProcessor : BaseAudioProcessor() {
+class ChannelModeAudioProcessor : BaseAudioProcessor(), RuntimeAudioProcessor {
 
     @Volatile
     private var mode: Int = 0
@@ -24,6 +24,8 @@ class ChannelModeAudioProcessor : BaseAudioProcessor() {
                 inputAudioFormat.encoding != androidx.media3.common.C.ENCODING_PCM_FLOAT)
         return inputAudioFormat
     }
+
+    override fun isRuntimeActive(): Boolean = !passthrough && mode != 0
 
     override fun queueInput(inputBuffer: ByteBuffer) {
         if (!inputBuffer.hasRemaining()) return

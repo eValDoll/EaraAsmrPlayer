@@ -88,6 +88,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.flowOn
@@ -208,14 +209,21 @@ class AlbumDetailViewModel @Inject constructor(
     private val remoteFileSizeCache = linkedMapOf<String, Long?>()
     private var listenTogetherRjSummaryJob: Job? = null
     private val listenTogetherRjSummaryInFlight = AtomicBoolean(false)
+    private val listenTogetherRjSummaryPollingEnabled = MutableStateFlow(false)
     private val preferredTreePathPrefs by lazy {
         context.getSharedPreferences("album_detail_tree_prefs", Context.MODE_PRIVATE)
     }
 
     init {
         viewModelScope.launch {
-            uiState
-                .map { (it as? AlbumDetailUiState.Success)?.model?.rjCode?.trim().orEmpty().uppercase() }
+            combine(
+                uiState.map {
+                    (it as? AlbumDetailUiState.Success)?.model?.rjCode?.trim().orEmpty().uppercase()
+                },
+                listenTogetherRjSummaryPollingEnabled,
+            ) { rj, enabled ->
+                rj.takeIf { enabled }.orEmpty()
+            }
                 .distinctUntilChanged()
                 .collect { rj ->
                     listenTogetherRjSummaryJob?.cancel()
@@ -230,6 +238,14 @@ class AlbumDetailViewModel @Inject constructor(
                         }
                     }
                 }
+        }
+    }
+
+    fun setListenTogetherRjSummaryPollingEnabled(enabled: Boolean) {
+        listenTogetherRjSummaryPollingEnabled.value = enabled
+        if (!enabled) {
+            listenTogetherRjSummaryJob?.cancel()
+            listenTogetherRjSummaryJob = null
         }
     }
 
@@ -379,13 +395,14 @@ class AlbumDetailViewModel @Inject constructor(
     }
 
     fun cancelActiveLoads() {
-        cancelPendingOnlineJobs(resetLoadingState = true)
+        setListenTogetherRjSummaryPollingEnabled(false)
+        // 该方法只在详情页退出/清理时调用，界面已经不可见；不要为 loading 标志
+        // 再发布一份新 UiState，与弹栈处置争用同一帧。
+        cancelPendingOnlineJobs(resetLoadingState = false)
         albumLoadJob?.cancel()
         albumLoadJob = null
         localTracksObserveJob?.cancel()
         localTracksObserveJob = null
-        listenTogetherRjSummaryJob?.cancel()
-        listenTogetherRjSummaryJob = null
         lastAlbumKey = null
     }
 
@@ -631,14 +648,17 @@ class AlbumDetailViewModel @Inject constructor(
         val initialHint = AlbumCoverHintStore.peekHint(albumId, normalizedRj)
         val initialRj = normalizedRj.ifBlank { initialHint?.rjCode.orEmpty() }
         val initialHintAlbum = albumFromInitialHint(initialRj, initialHint)
-        _uiState.value = AlbumDetailUiState.Success(
-            model = createInitialAlbumDetailModel(
-                rj = initialRj,
-                displayAlbum = initialHintAlbum,
-                dlsiteInfo = initialHintAlbum.takeIf { shouldPreserveHeaderAlbumMetadata(initialHint) },
-                preserveHeaderAlbumMetadata = shouldPreserveHeaderAlbumMetadata(initialHint)
+        if (force || current == null) {
+            _uiState.value = AlbumDetailUiState.Success(
+                model = createInitialAlbumDetailModel(
+                    rj = initialRj,
+                    displayAlbum = initialHintAlbum,
+                    localAlbum = initialHint?.localAlbum,
+                    dlsiteInfo = initialHintAlbum.takeIf { shouldPreserveHeaderAlbumMetadata(initialHint) },
+                    preserveHeaderAlbumMetadata = shouldPreserveHeaderAlbumMetadata(initialHint)
+                )
             )
-        )
+        }
         albumLoadJob = viewModelScope.launch {
             try {
                 val localAlbum = if (albumId != null && albumId > 0) {
@@ -657,21 +677,29 @@ class AlbumDetailViewModel @Inject constructor(
                 val hintAlbum = albumFromInitialHint(rj, hint)
                 val preserveHeaderAlbumMetadata = shouldPreserveHeaderAlbumMetadata(hint)
                 val dlsiteInfo = hintAlbum.takeIf { preserveHeaderAlbumMetadata }
+                val hydratedLocalAlbum = localAlbum?.let { loaded ->
+                    val prefetchedTracks = hint?.localAlbum?.tracks.orEmpty()
+                    if (prefetchedTracks.isEmpty()) loaded else loaded.copy(tracks = prefetchedTracks)
+                }
                 // 种入列表点击时记录的封面与元信息：让 hero 与列表卡片使用相同图片 model，
                 // 在网络解析完成前即可命中跨尺寸内存缓存，避免重复请求封面。
                 val displayAlbum = if (hint != null) hintAlbum else localAlbum ?: hintAlbum
-                _uiState.value = AlbumDetailUiState.Success(
-                    model = createInitialAlbumDetailModel(
-                        rj = rj,
-                        displayAlbum = displayAlbum,
-                        localAlbum = localAlbum,
-                        dlsiteInfo = dlsiteInfo,
-                        preserveHeaderAlbumMetadata = preserveHeaderAlbumMetadata
-                    )
+                val loadedModel = createInitialAlbumDetailModel(
+                    rj = rj,
+                    displayAlbum = displayAlbum,
+                    localAlbum = hydratedLocalAlbum,
+                    dlsiteInfo = dlsiteInfo,
+                    preserveHeaderAlbumMetadata = preserveHeaderAlbumMetadata
                 )
+                val currentModel = (_uiState.value as? AlbumDetailUiState.Success)?.model
+                if (loadedModel != currentModel) {
+                    _uiState.value = AlbumDetailUiState.Success(
+                        model = loadedModel
+                    )
+                }
                 localTracksObserveJob?.cancel()
                 localTracksObserveJob = null
-                val localId = localAlbum?.id ?: 0L
+                val localId = hydratedLocalAlbum?.id ?: 0L
                 if (localId > 0L) {
                     localTracksObserveJob = viewModelScope.launch {
                         trackDao.getTracksForAlbum(localId)
@@ -1884,6 +1912,7 @@ class AlbumDetailViewModel @Inject constructor(
             model = createInitialAlbumDetailModel(
                 rj = initialRj,
                 displayAlbum = hintAlbum,
+                localAlbum = hint?.localAlbum,
                 dlsiteInfo = hintAlbum.takeIf { preserveHeaderMetadata },
                 preserveHeaderAlbumMetadata = preserveHeaderMetadata
             )
