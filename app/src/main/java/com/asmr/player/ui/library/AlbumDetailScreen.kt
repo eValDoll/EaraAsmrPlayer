@@ -1700,7 +1700,7 @@ private fun AlbumHeader(
                         Box(modifier = Modifier.padding(bottom = if (album.tags.isNotEmpty()) 6.dp else 8.dp)) {
                             AlbumHeaderCvFlow(
                                 cvText = album.cv,
-                                onCvClick = { cv -> copyMeta("CV", cv) },
+                                onCvClick = { cv -> copyMeta("声优", cv) },
                                 onCvLongClick = onMetaLongClick,
                             )
                         }
