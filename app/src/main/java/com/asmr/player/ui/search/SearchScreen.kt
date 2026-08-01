@@ -7,6 +7,7 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.background
@@ -67,6 +68,7 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -804,10 +806,11 @@ fun SearchScreen(
                     modifier = searchContentModifier
                         .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .pointerInput(resultScrollKey, viewMode) {
+                    CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .pointerInput(resultScrollKey, viewMode) {
                                 awaitEachGesture {
                                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                                     var trackedPointerId = down.id
@@ -894,8 +897,8 @@ fun SearchScreen(
                                     Modifier
                                 }
                             )
-                            .clipToBounds()
-                    ) {
+                                .clipToBounds()
+                        ) {
                         if (pullRefreshHintVisible) {
                             SearchPullActionHint(
                                 progress = pullRefreshProgress,
@@ -1139,6 +1142,7 @@ fun SearchScreen(
                                     activeText = "正在翻页"
                                 )
                             }
+                        }
                         }
                     }
 

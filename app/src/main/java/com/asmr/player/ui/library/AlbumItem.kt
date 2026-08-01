@@ -126,6 +126,7 @@ fun AlbumItem(
     coverFadeIn: Boolean = true,
     coverReloadKey: Any? = null,
     coverRetainPainterDuringReload: Boolean = false,
+    containerColor: Color? = null,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val shape = remember { RoundedCornerShape(AlbumListItemCornerRadius) }
@@ -155,7 +156,7 @@ fun AlbumItem(
             .padding(horizontal = AlbumItemHorizontalPadding, vertical = AlbumItemVerticalPadding)
             .testTag(ALBUM_ITEM_CARD_TAG)
             .clip(shape)
-            .background(colorScheme.surface.copy(alpha = 0.5f))
+            .background(containerColor ?: colorScheme.surface.copy(alpha = 0.5f))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -401,6 +402,7 @@ fun AlbumGridItem(
     coverFadeIn: Boolean = true,
     coverReloadKey: Any? = null,
     coverRetainPainterDuringReload: Boolean = false,
+    containerColor: Color? = null,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val shape = remember { RoundedCornerShape(AlbumGridItemCornerRadius) }
@@ -418,7 +420,7 @@ fun AlbumGridItem(
     Column(
         modifier = modifier
             .clip(shape)
-            .background(colorScheme.surface.copy(alpha = 0.3f))
+            .background(containerColor ?: colorScheme.surface.copy(alpha = 0.3f))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick

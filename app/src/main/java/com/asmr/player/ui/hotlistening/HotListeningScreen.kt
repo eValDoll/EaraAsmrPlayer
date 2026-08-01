@@ -1,5 +1,7 @@
 package com.asmr.player.ui.hotlistening
 
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -36,6 +38,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -46,6 +49,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -64,6 +68,7 @@ import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.albumStableKey
 import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
+import com.asmr.player.ui.common.lightweightVerticalStretchOverscroll
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
 import com.asmr.player.ui.common.shouldFadeInCover
@@ -88,7 +93,7 @@ private fun hotListeningItemKey(section: String, album: Album): String {
     return "hot-listening:$section:${albumStableKey(album)}"
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HotListeningScreen(
     windowSizeClass: WindowSizeClass,
@@ -117,7 +122,11 @@ fun HotListeningScreen(
     val contentScrollKey = remember(selectedPeriod, selectedSortMode, scrollResetNonce) {
         "hot-listening:$selectedPeriod:${selectedSortMode.name}:$scrollResetNonce"
     }
-    val listState = rememberSaveablePrefetchedLazyListState(stateKey = contentScrollKey)
+    val listState = rememberSaveablePrefetchedLazyListState(
+        stateKey = contentScrollKey,
+        forwardCompositionPrefetchCount = 2,
+        backwardCompositionPrefetchCount = 2,
+    )
     val gridState = rememberSaveable(contentScrollKey, saver = LazyStaggeredGridState.Saver) {
         LazyStaggeredGridState()
     }
@@ -290,43 +299,27 @@ fun HotListeningScreen(
                             state.entries.getOrNull(idx)?.album?.let { albumCoverImageModel(it) }
                         }
                     )
-                    LazyColumn(
-                        state = listState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .thinScrollbar(listState),
-                        flingBehavior = rememberCalmScrollableFlingBehavior(),
-                        contentPadding = PaddingValues(bottom = 8.dp)
-                            .withAddedBottomPadding(LocalBottomOverlayPadding.current)
-                    ) {
-                        lazyItemsIndexed(
-                            items = state.entries,
-                            key = { _, entry -> hotListeningItemKey("visible", entry.album) },
-                            contentType = { _, _ -> "album" }
-                        ) { _, entry ->
-                            HotListeningListItem(
-                                entry = entry,
-                                onAlbumClick = onAlbumClick,
-                                copyMeta = copyMeta,
-                                onMetaLongClick = ::openMetaActions,
-                                coverFadeIn = listCoverFadeIn
-                            )
-                        }
-                        if (state.blockedEntries.isNotEmpty()) {
-                            item(
-                                key = "blocked-footer",
-                                contentType = "blockedFooter"
-                            ) {
-                                BlockedHotListeningFooter(
-                                    blockedCount = state.blockedEntries.size,
-                                    expanded = showBlockedEntries,
-                                    onToggle = { showBlockedEntries = !showBlockedEntries }
+                    CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .lightweightVerticalStretchOverscroll(
+                                    isAtStart = { !listState.canScrollBackward },
+                                    isAtEnd = { !listState.canScrollForward },
                                 )
-                            }
-                            if (showBlockedEntries) {
+                        ) {
+                            LazyColumn(
+                                state = listState,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .thinScrollbar(listState),
+                                flingBehavior = rememberCalmScrollableFlingBehavior(),
+                                contentPadding = PaddingValues(bottom = 8.dp)
+                                    .withAddedBottomPadding(LocalBottomOverlayPadding.current)
+                            ) {
                                 lazyItemsIndexed(
-                                    items = state.blockedEntries,
-                                    key = { _, entry -> hotListeningItemKey("blocked", entry.album) },
+                                    items = state.entries,
+                                    key = { _, entry -> hotListeningItemKey("visible", entry.album) },
                                     contentType = { _, _ -> "album" }
                                 ) { _, entry ->
                                     HotListeningListItem(
@@ -336,6 +329,35 @@ fun HotListeningScreen(
                                         onMetaLongClick = ::openMetaActions,
                                         coverFadeIn = listCoverFadeIn
                                     )
+                                }
+                                if (state.blockedEntries.isNotEmpty()) {
+                                    item(
+                                        key = "blocked-footer",
+                                        contentType = "blockedFooter"
+                                    ) {
+                                        BlockedHotListeningFooter(
+                                            blockedCount = state.blockedEntries.size,
+                                            expanded = showBlockedEntries,
+                                            onToggle = { showBlockedEntries = !showBlockedEntries }
+                                        )
+                                    }
+                                    if (showBlockedEntries) {
+                                        lazyItemsIndexed(
+                                            items = state.blockedEntries,
+                                            key = { _, entry ->
+                                                hotListeningItemKey("blocked", entry.album)
+                                            },
+                                            contentType = { _, _ -> "album" }
+                                        ) { _, entry ->
+                                            HotListeningListItem(
+                                                entry = entry,
+                                                onAlbumClick = onAlbumClick,
+                                                copyMeta = copyMeta,
+                                                onMetaLongClick = ::openMetaActions,
+                                                coverFadeIn = listCoverFadeIn
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -362,61 +384,75 @@ fun HotListeningScreen(
                             state.entries.getOrNull(idx)?.album?.let { albumCoverImageModel(it) }
                         }
                     )
-                    LazyVerticalStaggeredGrid(
-                        columns = StaggeredGridCells.Adaptive(adaptiveCellSize),
-                        state = gridState,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .thinScrollbar(gridState),
-                        flingBehavior = rememberCalmScrollableFlingBehavior(),
-                        contentPadding = PaddingValues(
-                            start = 8.dp,
-                            end = 8.dp,
-                            bottom = 16.dp
-                        ).withAddedBottomPadding(LocalBottomOverlayPadding.current),
-                        horizontalArrangement = Arrangement.spacedBy(AlbumGridItemSpacing),
-                        verticalItemSpacing = AlbumGridItemSpacing
-                    ) {
-                        items(
-                            state.entries.size,
-                            key = { index -> hotListeningItemKey("visible", state.entries[index].album) },
-                            contentType = { "albumGrid" }
-                        ) { index ->
-                            HotListeningGridItem(
-                                entry = state.entries[index],
-                                onAlbumClick = onAlbumClick,
-                                copyMeta = copyMeta,
-                                onMetaLongClick = ::openMetaActions,
-                                coverFadeIn = gridCoverFadeIn
-                            )
-                        }
-                        if (state.blockedEntries.isNotEmpty()) {
-                            item(
-                                key = "blocked-footer",
-                                contentType = "blockedFooter",
-                                span = StaggeredGridItemSpan.FullLine
-                            ) {
-                                BlockedHotListeningFooter(
-                                    blockedCount = state.blockedEntries.size,
-                                    expanded = showBlockedEntries,
-                                    onToggle = { showBlockedEntries = !showBlockedEntries }
+                    CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .lightweightVerticalStretchOverscroll(
+                                    isAtStart = { !gridState.canScrollBackward },
+                                    isAtEnd = { !gridState.canScrollForward },
                                 )
-                            }
-                            if (showBlockedEntries) {
+                        ) {
+                            LazyVerticalStaggeredGrid(
+                                columns = StaggeredGridCells.Adaptive(adaptiveCellSize),
+                                state = gridState,
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .thinScrollbar(gridState),
+                                flingBehavior = rememberCalmScrollableFlingBehavior(),
+                                contentPadding = PaddingValues(
+                                    start = 8.dp,
+                                    end = 8.dp,
+                                    bottom = 16.dp
+                                ).withAddedBottomPadding(LocalBottomOverlayPadding.current),
+                                horizontalArrangement = Arrangement.spacedBy(AlbumGridItemSpacing),
+                                verticalItemSpacing = AlbumGridItemSpacing
+                            ) {
                                 items(
-                                    state.blockedEntries.size,
-                                    key = { index ->
-                                        hotListeningItemKey("blocked", state.blockedEntries[index].album)
-                                    },
+                                    state.entries.size,
+                                    key = { index -> hotListeningItemKey("visible", state.entries[index].album) },
                                     contentType = { "albumGrid" }
                                 ) { index ->
                                     HotListeningGridItem(
-                                        entry = state.blockedEntries[index],
+                                        entry = state.entries[index],
                                         onAlbumClick = onAlbumClick,
                                         copyMeta = copyMeta,
                                         onMetaLongClick = ::openMetaActions,
                                         coverFadeIn = gridCoverFadeIn
                                     )
+                                }
+                                if (state.blockedEntries.isNotEmpty()) {
+                                    item(
+                                        key = "blocked-footer",
+                                        contentType = "blockedFooter",
+                                        span = StaggeredGridItemSpan.FullLine
+                                    ) {
+                                        BlockedHotListeningFooter(
+                                            blockedCount = state.blockedEntries.size,
+                                            expanded = showBlockedEntries,
+                                            onToggle = { showBlockedEntries = !showBlockedEntries }
+                                        )
+                                    }
+                                    if (showBlockedEntries) {
+                                        items(
+                                            state.blockedEntries.size,
+                                            key = { index ->
+                                                hotListeningItemKey(
+                                                    "blocked",
+                                                    state.blockedEntries[index].album
+                                                )
+                                            },
+                                            contentType = { "albumGrid" }
+                                        ) { index ->
+                                            HotListeningGridItem(
+                                                entry = state.blockedEntries[index],
+                                                onAlbumClick = onAlbumClick,
+                                                copyMeta = copyMeta,
+                                                onMetaLongClick = ::openMetaActions,
+                                                coverFadeIn = gridCoverFadeIn
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -447,7 +483,11 @@ private fun HotListeningListItem(
     coverFadeIn: Boolean = true
 ) {
     val album = entry.album
+    val colorScheme = AsmrTheme.colorScheme
     val coverBadge = remember(entry) { entry.toCoverBadge() }
+    val containerColor = remember(colorScheme.surface, colorScheme.background) {
+        colorScheme.surface.copy(alpha = 0.5f).compositeOver(colorScheme.background)
+    }
     AlbumItem(
         album = album,
         onClick = { onAlbumClick(album) },
@@ -455,6 +495,7 @@ private fun HotListeningListItem(
         coverBadge = coverBadge,
         animateOnlineDetails = false,
         coverFadeIn = coverFadeIn,
+        containerColor = containerColor,
         onRjClick = { copyMeta("RJ", it) },
         onCircleClick = { copyMeta("社团", it) },
         onCircleLongClick = onMetaLongClick,
@@ -474,7 +515,11 @@ private fun HotListeningGridItem(
     coverFadeIn: Boolean = true
 ) {
     val album = entry.album
+    val colorScheme = AsmrTheme.colorScheme
     val coverBadge = remember(entry) { entry.toCoverBadge() }
+    val containerColor = remember(colorScheme.surface, colorScheme.background) {
+        colorScheme.surface.copy(alpha = 0.3f).compositeOver(colorScheme.background)
+    }
     AlbumGridItem(
         album = album,
         onClick = { onAlbumClick(album) },
@@ -482,6 +527,7 @@ private fun HotListeningGridItem(
         coverBadge = coverBadge,
         animateOnlineDetails = false,
         coverFadeIn = coverFadeIn,
+        containerColor = containerColor,
         onRjClick = { copyMeta("RJ", it) },
         onCircleClick = { copyMeta("社团", it) },
         onCircleLongClick = onMetaLongClick,
@@ -533,8 +579,8 @@ private fun HotListeningEntry.toCoverBadge(): AlbumCoverBadge {
     return AlbumCoverBadge(
         icon = icon,
         text = metricLabel,
-        showContainer = false,
-        bottomScrim = true,
+        showContainer = true,
+        bottomScrim = false,
         compactOffset = true
     )
 }

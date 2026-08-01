@@ -35,9 +35,11 @@ private class EaraLazyListPrefetchStrategy(
     private fun LazyListPrefetchScope.updatePrefetches(layoutInfo: LazyListLayoutInfo) {
         val visibleItems = layoutInfo.visibleItemsInfo
         if (visibleItems.isEmpty()) return
+        val firstVisibleIndex = visibleItems.first().index
+        val lastVisibleIndex = visibleItems.last().index
         val targetIndices = resolveCompositionPrefetchIndices(
-            firstVisibleIndex = visibleItems.first().index,
-            lastVisibleIndex = visibleItems.last().index,
+            firstVisibleIndex = firstVisibleIndex,
+            lastVisibleIndex = lastVisibleIndex,
             totalItemCount = layoutInfo.totalItemsCount,
             forwardItemCount = forwardItemCount,
             backwardItemCount = backwardItemCount,
@@ -65,11 +67,17 @@ fun rememberSaveablePrefetchedLazyListState(
     stateKey: Any?,
     initialFirstVisibleItemIndex: Int = 0,
     initialFirstVisibleItemScrollOffset: Int = 0,
+    forwardCompositionPrefetchCount: Int = DefaultForwardCompositionPrefetchCount,
+    backwardCompositionPrefetchCount: Int = DefaultBackwardCompositionPrefetchCount,
 ): LazyListState {
-    val prefetchStrategy = remember(stateKey) {
+    val prefetchStrategy = remember(
+        stateKey,
+        forwardCompositionPrefetchCount,
+        backwardCompositionPrefetchCount,
+    ) {
         EaraLazyListPrefetchStrategy(
-            forwardItemCount = DefaultForwardCompositionPrefetchCount,
-            backwardItemCount = DefaultBackwardCompositionPrefetchCount,
+            forwardItemCount = forwardCompositionPrefetchCount.coerceAtLeast(0),
+            backwardItemCount = backwardCompositionPrefetchCount.coerceAtLeast(0),
         )
     }
     val saver = remember(prefetchStrategy) {

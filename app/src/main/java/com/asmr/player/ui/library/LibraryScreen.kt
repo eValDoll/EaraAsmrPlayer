@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -63,6 +64,7 @@ import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
+import com.asmr.player.ui.common.lightweightVerticalStretchOverscroll
 import com.asmr.player.ui.common.rememberAudioMeta
 import com.asmr.player.ui.common.rememberAudioMetaText
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
@@ -91,6 +93,7 @@ import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -532,11 +535,12 @@ fun LibraryScreen(
                             }
                         } else {
                             // Main content area
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
-                            ) {
+                            CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
+                                ) {
                                 val isTrackListLoading = isTrackList &&
                                     (pagedTrackAlbumHeaders.loadState.refresh is LoadState.Loading) &&
                                     pagedTrackAlbumHeaders.itemCount == 0
@@ -603,6 +607,10 @@ fun LibraryScreen(
                                         state = listState,
                                         modifier = Modifier
                                             .fillMaxSize()
+                                            .lightweightVerticalStretchOverscroll(
+                                                isAtStart = { !listState.canScrollBackward },
+                                                isAtEnd = { !listState.canScrollForward },
+                                            )
                                             .clearFocusOnTapOutside()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(listState),
@@ -811,6 +819,10 @@ fun LibraryScreen(
                                         state = gridState,
                                         modifier = Modifier
                                             .fillMaxSize()
+                                            .lightweightVerticalStretchOverscroll(
+                                                isAtStart = { !gridState.canScrollBackward },
+                                                isAtEnd = { !gridState.canScrollForward },
+                                            )
                                             .clearFocusOnTapOutside()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(gridState),
@@ -876,6 +888,10 @@ fun LibraryScreen(
                                         state = listState,
                                         modifier = Modifier
                                             .fillMaxSize()
+                                            .lightweightVerticalStretchOverscroll(
+                                                isAtStart = { !listState.canScrollBackward },
+                                                isAtEnd = { !listState.canScrollForward },
+                                            )
                                             .clearFocusOnTapOutside()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(listState),
@@ -938,6 +954,7 @@ fun LibraryScreen(
                                     chromeState = chromeState,
                                     onMeasured = { chromeState.updateHeight(it.height.toFloat()) }
                                 )
+                            }
                             }
                         }
                     }

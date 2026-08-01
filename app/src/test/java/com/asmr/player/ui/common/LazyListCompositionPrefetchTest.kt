@@ -28,4 +28,18 @@ class LazyListCompositionPrefetchTest {
             ),
         )
     }
+
+    @Test
+    fun prefetchIndices_supportsSmallSymmetricWindow() {
+        assertArrayEquals(
+            intArrayOf(17, 18, 9, 8),
+            resolveCompositionPrefetchIndices(
+                firstVisibleIndex = 10,
+                lastVisibleIndex = 16,
+                totalItemCount = 30,
+                forwardItemCount = 2,
+                backwardItemCount = 2,
+            ),
+        )
+    }
 }
