@@ -499,7 +499,7 @@ private fun HotListeningListItem(
         onRjClick = { copyMeta("RJ", it) },
         onCircleClick = { copyMeta("社团", it) },
         onCircleLongClick = onMetaLongClick,
-        onCvClick = { copyMeta("CV", it) },
+        onCvClick = { copyMeta("声优", it) },
         onCvLongClick = onMetaLongClick,
         onTagClick = { copyMeta("标签", it) },
         onTagLongClick = onMetaLongClick,
@@ -531,7 +531,7 @@ private fun HotListeningGridItem(
         onRjClick = { copyMeta("RJ", it) },
         onCircleClick = { copyMeta("社团", it) },
         onCircleLongClick = onMetaLongClick,
-        onCvClick = { copyMeta("CV", it) },
+        onCvClick = { copyMeta("声优", it) },
         onCvLongClick = onMetaLongClick,
         onTagClick = { copyMeta("标签", it) },
         onTagLongClick = onMetaLongClick,
@@ -579,8 +579,8 @@ private fun HotListeningEntry.toCoverBadge(): AlbumCoverBadge {
     return AlbumCoverBadge(
         icon = icon,
         text = metricLabel,
-        showContainer = true,
-        bottomScrim = false,
+        showContainer = false,
+        bottomScrim = true,
         compactOffset = true
     )
 }

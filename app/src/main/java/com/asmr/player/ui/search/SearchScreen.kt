@@ -1,11 +1,10 @@
 package com.asmr.player.ui.search
 
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.MutatePriority
@@ -73,6 +72,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -147,6 +147,7 @@ import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
 import com.asmr.player.ui.theme.AsmrTheme
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.runtime.snapshotFlow
@@ -172,6 +173,7 @@ private val SearchChromeContentGap = 16.dp
 private const val SearchPullRefreshFollowRatio = 0.86f
 private val SearchPullRefreshSettleDistance = 68.dp
 private val SearchPullRefreshMaxDistance = 112.dp
+private const val SearchPullRefreshMinFeedbackMillis = 420L
 private val SearchPullActionHintHeight = 58.dp
 private val SearchPageHorizontalPadding = 8.dp
 private const val SearchPullNextPageDragResistance = 0.82f
@@ -181,6 +183,10 @@ private const val SearchPullNextPageVerticalBias = 1.25f
 private val SearchPullNextPageTriggerDistance = 96.dp
 private val SearchPullNextPageMaxDistance = 172.dp
 private val SearchPullNextPageMaxLift = 108.dp
+private val SearchPullNextPageReturnSpring = spring<Float>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = Spring.StiffnessMediumLow
+)
 private val SearchResultPlacementSpring = spring<IntOffset>(
     dampingRatio = Spring.DampingRatioNoBouncy,
     stiffness = Spring.StiffnessMediumLow
@@ -548,6 +554,7 @@ fun SearchScreen(
     }
 
     val pullToRefreshState = rememberPullToRefreshState()
+    var pullRefreshStartedAtMs by remember { mutableLongStateOf(0L) }
     val pullNextPageEnabled =
         success?.results?.isNotEmpty() == true &&
             canGoNext &&
@@ -560,8 +567,14 @@ fun SearchScreen(
     val pullNextPageMaxLiftPx =
         with(androidx.compose.ui.platform.LocalDensity.current) { SearchPullNextPageMaxLift.toPx() }
     var pullNextPageDragPx by remember(resultScrollKey, viewMode) { mutableFloatStateOf(0f) }
+    var pullNextPageGestureActive by remember(resultScrollKey, viewMode) { mutableStateOf(false) }
+    var pullNextPageReturnInProgress by remember(resultScrollKey, viewMode) { mutableStateOf(false) }
+    var pullNextPageRequestAfterReturn by remember(resultScrollKey, viewMode) { mutableStateOf(false) }
+    val pullNextPageVisualOffset = remember(resultScrollKey, viewMode) { Animatable(0f) }
+    var searchPointerPressed by remember(resultScrollKey, viewMode) { mutableStateOf(false) }
     val pullNextPageArmed = pullNextPageDragPx >= pullNextPageTriggerDistancePx
-    val latestPullNextPageEnabled = rememberUpdatedState(pullNextPageEnabled)
+    val pullNextPageGestureEnabled = pullNextPageEnabled && !pullNextPageReturnInProgress
+    val latestPullNextPageEnabled = rememberUpdatedState(pullNextPageGestureEnabled)
     val latestIsAtBottom = rememberUpdatedState(
         if (viewMode == 0) !listState.canScrollForward else !gridState.canScrollForward
     )
@@ -581,16 +594,46 @@ fun SearchScreen(
             followRatio = SearchPullNextPageFollowRatio
         )
     }
-    val pullNextPageVisualOffsetPx = pullNextPageVisualTargetPx
+    val pullNextPageVisualOffsetPx = pullNextPageVisualOffset.value
     val pullNextPageProgress =
         (pullNextPageVisualOffsetPx / pullNextPageMaxLiftPx).coerceIn(0f, 1f)
-    val finishPullNextPageGesture = rememberUpdatedState {
+    val finishPullNextPageGesture = rememberUpdatedState finish@{
+        if (
+            pullNextPageReturnInProgress &&
+                !pullNextPageGestureActive &&
+                pullNextPageDragPx <= 0f
+        ) {
+            return@finish
+        }
+        val hasPullOffset = pullNextPageDragPx > 0f
         val shouldTrigger =
+            hasPullOffset &&
             latestPullNextPageEnabled.value &&
                 pullNextPageDragPx >= latestPullNextPageTriggerDistancePx.value
+        pullNextPageGestureActive = false
+        pullNextPageRequestAfterReturn = shouldTrigger
+        pullNextPageReturnInProgress = hasPullOffset
         pullNextPageDragPx = 0f
-        if (shouldTrigger) {
-            latestRequestNextPage.value()
+    }
+    LaunchedEffect(pullNextPageVisualTargetPx, pullNextPageReturnInProgress) {
+        if (!pullNextPageReturnInProgress) {
+            pullNextPageVisualOffset.snapTo(pullNextPageVisualTargetPx)
+            return@LaunchedEffect
+        }
+
+        val shouldRequestNextPage = pullNextPageRequestAfterReturn
+        try {
+            // 显式等待回落完成，再执行翻页，避免松手瞬间跳页或快速手势丢请求。
+            pullNextPageVisualOffset.animateTo(
+                targetValue = 0f,
+                animationSpec = SearchPullNextPageReturnSpring
+            )
+            if (shouldRequestNextPage) {
+                latestRequestNextPage.value()
+            }
+        } finally {
+            pullNextPageRequestAfterReturn = false
+            pullNextPageReturnInProgress = false
         }
     }
     val refreshGestureEnabled = !pullToRefreshState.isRefreshing
@@ -620,10 +663,17 @@ fun SearchScreen(
     )
     val pullContentOffsetPx by animateFloatAsState(
         targetValue = pullContentOffsetTargetPx,
-        animationSpec = if (pullToRefreshState.progress > 0f && !pullToRefreshState.isRefreshing) {
+        animationSpec = if (
+            searchPointerPressed &&
+                pullToRefreshState.progress > 0f &&
+                !pullToRefreshState.isRefreshing
+        ) {
             snap()
         } else {
-            tween(durationMillis = 220, easing = FastOutSlowInEasing)
+            spring(
+                dampingRatio = 0.72f,
+                stiffness = Spring.StiffnessMediumLow
+            )
         },
         label = "searchPullContentOffset"
     )
@@ -652,14 +702,22 @@ fun SearchScreen(
     val latestHorizontalPagerScrollLockChanged = rememberUpdatedState(onHorizontalPagerScrollLockChanged)
     fun stopActiveScroll() {
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            pullNextPageDragPx = 0f
-            latestHorizontalPagerScrollLockChanged.value(false)
+            if (!pullNextPageReturnInProgress) {
+                pullNextPageDragPx = 0f
+                pullNextPageGestureActive = false
+                pullNextPageRequestAfterReturn = false
+                latestHorizontalPagerScrollLockChanged.value(false)
+            }
             runCatching { listState.stopScroll(MutatePriority.UserInput) }
             runCatching { gridState.stopScroll(MutatePriority.UserInput) }
         }
     }
     LaunchedEffect(pullToRefreshState.isRefreshing) {
-        if (!pullToRefreshState.isRefreshing) return@LaunchedEffect
+        if (!pullToRefreshState.isRefreshing) {
+            pullRefreshStartedAtMs = 0L
+            return@LaunchedEffect
+        }
+        pullRefreshStartedAtMs = android.os.SystemClock.elapsedRealtime()
         when (val state = uiState) {
             is SearchUiState.Success -> {
                 if (state.isBusy) {
@@ -680,18 +738,33 @@ fun SearchScreen(
             is SearchUiState.Loading -> false
             else -> true
         }
-        if (canEnd) pullToRefreshState.endRefresh()
+        if (canEnd) {
+            val elapsedMillis = android.os.SystemClock.elapsedRealtime() - pullRefreshStartedAtMs
+            val remainingFeedbackMillis =
+                (SearchPullRefreshMinFeedbackMillis - elapsedMillis).coerceAtLeast(0L)
+            if (remainingFeedbackMillis > 0L) delay(remainingFeedbackMillis)
+            if (pullToRefreshState.isRefreshing) pullToRefreshState.endRefresh()
+        }
     }
     LaunchedEffect(resultScrollKey, pullNextPageEnabled) {
         if (!pullNextPageEnabled) {
-            if (pullNextPageDragPx != 0f) {
-                pullNextPageDragPx = 0f
-            }
+            pullNextPageDragPx = 0f
+            pullNextPageGestureActive = false
+            pullNextPageRequestAfterReturn = false
+            pullNextPageReturnInProgress = false
             latestHorizontalPagerScrollLockChanged.value(false)
         }
     }
-    LaunchedEffect(pullNextPageDragPx > 0f) {
-        latestHorizontalPagerScrollLockChanged.value(pullNextPageDragPx > 0f)
+    LaunchedEffect(
+        pullNextPageDragPx > 0f,
+        pullNextPageGestureActive,
+        pullNextPageReturnInProgress
+    ) {
+        latestHorizontalPagerScrollLockChanged.value(
+            pullNextPageDragPx > 0f ||
+                pullNextPageGestureActive ||
+                pullNextPageReturnInProgress
+        )
     }
     LaunchedEffect(Unit) {
         try {
@@ -729,6 +802,9 @@ fun SearchScreen(
     LaunchedEffect(scrollToTopSignal) {
         if (scrollToTopSignal == 0L) return@LaunchedEffect
         pullNextPageDragPx = 0f
+        pullNextPageGestureActive = false
+        pullNextPageRequestAfterReturn = false
+        pullNextPageReturnInProgress = false
         when (viewMode) {
             0 -> {
                 runCatching { listState.stopScroll(MutatePriority.PreventUserInput) }
@@ -748,6 +824,9 @@ fun SearchScreen(
             else -> gridState.stopScroll(MutatePriority.PreventUserInput)
         }
         pullNextPageDragPx = 0f
+        pullNextPageGestureActive = false
+        pullNextPageRequestAfterReturn = false
+        pullNextPageReturnInProgress = false
         latestHorizontalPagerScrollLockChanged.value(false)
     }
 
@@ -813,6 +892,7 @@ fun SearchScreen(
                                 .pointerInput(resultScrollKey, viewMode) {
                                 awaitEachGesture {
                                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                                    searchPointerPressed = true
                                     var trackedPointerId = down.id
                                     var previousPosition = down.position
                                     var dragFromDown = Offset.Zero
@@ -843,6 +923,7 @@ fun SearchScreen(
                                                             latestIsAtBottom.value &&
                                                             latestPullNextPageEnabled.value
                                                     if (pullNextGestureActive) {
+                                                        pullNextPageGestureActive = true
                                                         latestHorizontalPagerScrollLockChanged.value(true)
                                                     }
                                                 }
@@ -855,6 +936,7 @@ fun SearchScreen(
                                                     if (pullNextPageDragPx != 0f) {
                                                         pullNextPageDragPx = 0f
                                                     }
+                                                    pullNextPageGestureActive = false
                                                 }
 
                                                 deltaY < 0f && latestIsAtBottom.value && pullNextGestureActive -> {
@@ -871,6 +953,7 @@ fun SearchScreen(
                                                         (pullNextPageDragPx - deltaY).coerceAtLeast(0f)
                                                     if (pullNextPageDragPx == 0f) {
                                                         pullNextGestureActive = false
+                                                        pullNextPageGestureActive = false
                                                         latestHorizontalPagerScrollLockChanged.value(false)
                                                     }
                                                     change.consume()
@@ -882,11 +965,12 @@ fun SearchScreen(
 
                                                 !latestIsAtBottom.value && pullNextPageDragPx > 0f -> {
                                                     pullNextPageDragPx = 0f
+                                                    pullNextPageGestureActive = false
                                                 }
                                             }
                                         }
                                     } while (event.changes.any { it.pressed })
-                                    latestHorizontalPagerScrollLockChanged.value(false)
+                                    searchPointerPressed = false
                                     finishPullNextPageGesture.value()
                                 }
                             }
@@ -1006,7 +1090,7 @@ fun SearchScreen(
                                                 onRjClick = { copyMeta("RJ", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
                                                 onCircleLongClick = ::openMetaActions,
-                                                onCvClick = { copyMeta("CV", it) },
+                                                onCvClick = { copyMeta("声优", it) },
                                                 onCvLongClick = ::openMetaActions,
                                                 onTagClick = { copyMeta("标签", it) },
                                                 onTagLongClick = ::openMetaActions,
@@ -1072,7 +1156,7 @@ fun SearchScreen(
                                                 onRjClick = { copyMeta("RJ", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
                                                 onCircleLongClick = ::openMetaActions,
-                                                onCvClick = { copyMeta("CV", it) },
+                                                onCvClick = { copyMeta("声优", it) },
                                                 onCvLongClick = ::openMetaActions,
                                                 onTagClick = { copyMeta("标签", it) },
                                                 onTagLongClick = ::openMetaActions,
@@ -1130,7 +1214,7 @@ fun SearchScreen(
                             ) {
                                 SearchPullActionHint(
                                     progress = pullNextPageProgress,
-                                    active = false,
+                                    active = pullNextPageRequestAfterReturn,
                                     armed = pullNextPageArmed,
                                     direction = if (pullNextPageArmed) {
                                         SearchPullActionDirection.Down
