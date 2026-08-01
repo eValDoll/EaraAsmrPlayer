@@ -599,6 +599,7 @@ class MainActivity : ComponentActivity() {
                         onShowQueue = { overlaySheet = OverlaySheet.Queue },
                         onShowSleepTimer = { overlaySheet = OverlaySheet.SleepTimer },
                         onContentReady = { contentReady = true },
+                        visibleMessages = visibleMessagesSnapshot,
                         showMiniPlayerBar = showMiniPlayerBar,
                         coverBackgroundEnabled = coverBackgroundEnabled,
                         coverBackgroundClarity = coverBackgroundClarity,
@@ -609,7 +610,6 @@ class MainActivity : ComponentActivity() {
                         forceImmersive = showSplash,
                         volumeKeyEventTick = volumeKeyTick
                     )
-                    NonTouchableAppMessageOverlay(messages = visibleMessagesSnapshot)
 
                     if (showSplash) {
                         EaraSplashOverlay(
