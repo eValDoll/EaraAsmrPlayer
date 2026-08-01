@@ -188,9 +188,7 @@ import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
 import com.asmr.player.util.MessageManager
-import com.asmr.player.ui.common.NonTouchableAppMessageOverlay
 import com.asmr.player.ui.common.StableWindowInsets
-import com.asmr.player.ui.common.VisibleAppMessage
 import com.asmr.player.ui.theme.HuePalette
 import com.asmr.player.ui.theme.PlayerTheme
 import com.asmr.player.ui.theme.ThemeMode
@@ -588,7 +586,6 @@ fun MainContainer(
     onShowQueue: () -> Unit,
     onShowSleepTimer: () -> Unit,
     onContentReady: () -> Unit,
-    visibleMessages: List<VisibleAppMessage>,
     showMiniPlayerBar: Boolean,
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
@@ -2963,8 +2960,6 @@ fun MainContainer(
                 }
             }
         }
-
-        NonTouchableAppMessageOverlay(messages = visibleMessages)
     }
 }
 
