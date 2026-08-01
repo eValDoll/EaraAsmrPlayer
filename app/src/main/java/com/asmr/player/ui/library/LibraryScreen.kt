@@ -4,6 +4,7 @@ import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -63,6 +64,7 @@ import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
+import com.asmr.player.ui.common.lightweightVerticalStretchOverscroll
 import com.asmr.player.ui.common.rememberAudioMeta
 import com.asmr.player.ui.common.rememberAudioMetaText
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
@@ -91,6 +93,7 @@ import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -177,7 +180,7 @@ import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
-import com.asmr.player.ui.common.rememberAnimatedCollapsibleHeaderOffset
+import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.playback.MediaItemFactory
@@ -306,7 +309,7 @@ fun LibraryScreen(
         if (newText != searchText) searchText = newText
     }
 
-    val listState = rememberSaveable(saver = LazyListState.Saver) { LazyListState(0, 0) }
+    val listState = rememberSaveablePrefetchedLazyListState(stateKey = "library")
     val gridState = rememberSaveable(saver = androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState.Saver) {
         androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState()
     }
@@ -532,11 +535,12 @@ fun LibraryScreen(
                             }
                         } else {
                             // Main content area
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
-                            ) {
+                            CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
+                                ) {
                                 val isTrackListLoading = isTrackList &&
                                     (pagedTrackAlbumHeaders.loadState.refresh is LoadState.Loading) &&
                                     pagedTrackAlbumHeaders.itemCount == 0
@@ -603,6 +607,10 @@ fun LibraryScreen(
                                         state = listState,
                                         modifier = Modifier
                                             .fillMaxSize()
+                                            .lightweightVerticalStretchOverscroll(
+                                                isAtStart = { !listState.canScrollBackward },
+                                                isAtEnd = { !listState.canScrollForward },
+                                            )
                                             .clearFocusOnTapOutside()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(listState),
@@ -800,7 +808,6 @@ fun LibraryScreen(
                                         itemCount = pagedAlbums.itemCount,
                                         enabled = isActive,
                                         preloadNext = 24,
-                                        preloadNextWhileScrolling = 8,
                                         preloadSize = gridPreloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->
@@ -812,6 +819,10 @@ fun LibraryScreen(
                                         state = gridState,
                                         modifier = Modifier
                                             .fillMaxSize()
+                                            .lightweightVerticalStretchOverscroll(
+                                                isAtStart = { !gridState.canScrollBackward },
+                                                isAtEnd = { !gridState.canScrollForward },
+                                            )
                                             .clearFocusOnTapOutside()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(gridState),
@@ -867,7 +878,6 @@ fun LibraryScreen(
                                         itemCount = pagedAlbums.itemCount,
                                         enabled = isActive,
                                         preloadNext = 24,
-                                        preloadNextWhileScrolling = 8,
                                         preloadSize = preloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->
@@ -878,6 +888,10 @@ fun LibraryScreen(
                                         state = listState,
                                         modifier = Modifier
                                             .fillMaxSize()
+                                            .lightweightVerticalStretchOverscroll(
+                                                isAtStart = { !listState.canScrollBackward },
+                                                isAtEnd = { !listState.canScrollForward },
+                                            )
                                             .clearFocusOnTapOutside()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(listState),
@@ -940,6 +954,7 @@ fun LibraryScreen(
                                     chromeState = chromeState,
                                     onMeasured = { chromeState.updateHeight(it.height.toFloat()) }
                                 )
+                            }
                             }
                         }
                     }
@@ -1148,7 +1163,6 @@ internal fun LibraryChrome(
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val collapseOvershootPx = with(LocalDensity.current) { LibraryChromeCollapseOvershoot.toPx() }
-    val animatedChromeOffsetPx = rememberAnimatedCollapsibleHeaderOffset(chromeState)
     val collapseStateDescription by remember(chromeState) {
         derivedStateOf { collapsibleHeaderUiState(chromeState.collapseFraction) }
     }
@@ -1166,7 +1180,7 @@ internal fun LibraryChrome(
             .onSizeChanged(onMeasured)
             .graphicsLayer {
                 val collapseFraction = chromeState.collapseFraction.coerceIn(0f, 1f)
-                translationY = animatedChromeOffsetPx.value - (collapseFraction * collapseOvershootPx)
+                translationY = chromeState.offsetPx - (collapseFraction * collapseOvershootPx)
                 alpha = 1f - (collapseFraction * 0.1f)
             }
             .semantics { stateDescription = collapseStateDescription }

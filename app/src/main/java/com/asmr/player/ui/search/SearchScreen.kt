@@ -7,6 +7,7 @@ import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.background
@@ -67,6 +68,7 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -127,7 +129,7 @@ import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.consumeTapThrough
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
-import com.asmr.player.ui.common.rememberAnimatedCollapsibleHeaderOffset
+import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
@@ -329,7 +331,7 @@ fun SearchScreen(
     )
     val success = uiState as? SearchUiState.Success
     val resultScrollKey = searchResultScrollKey(success)
-    val listState = rememberSaveable(resultScrollKey, saver = LazyListState.Saver) { LazyListState(0, 0) }
+    val listState = rememberSaveablePrefetchedLazyListState(stateKey = resultScrollKey)
     val gridState = rememberSaveable(resultScrollKey, saver = LazyStaggeredGridState.Saver) { LazyStaggeredGridState() }
     val colorScheme = AsmrTheme.colorScheme
     val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
@@ -804,10 +806,11 @@ fun SearchScreen(
                     modifier = searchContentModifier
                         .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .pointerInput(resultScrollKey, viewMode) {
+                    CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .pointerInput(resultScrollKey, viewMode) {
                                 awaitEachGesture {
                                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
                                     var trackedPointerId = down.id
@@ -894,8 +897,8 @@ fun SearchScreen(
                                     Modifier
                                 }
                             )
-                            .clipToBounds()
-                    ) {
+                                .clipToBounds()
+                        ) {
                         if (pullRefreshHintVisible) {
                             SearchPullActionHint(
                                 progress = pullRefreshProgress,
@@ -968,7 +971,6 @@ fun SearchScreen(
                                         itemCount = state.results.size,
                                         enabled = isActive,
                                         preloadNext = 24,
-                                        preloadNextWhileScrolling = 8,
                                         preloadSize = preloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->
@@ -1027,7 +1029,6 @@ fun SearchScreen(
                                         itemCount = state.results.size,
                                         enabled = isActive,
                                         preloadNext = 24,
-                                        preloadNextWhileScrolling = 8,
                                         preloadSize = gridPreloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->
@@ -1141,6 +1142,7 @@ fun SearchScreen(
                                     activeText = "正在翻页"
                                 )
                             }
+                        }
                         }
                     }
 
@@ -1366,7 +1368,6 @@ internal fun SearchChrome(
     onPrev: () -> Unit,
     onNext: () -> Unit
 ) {
-    val animatedOffsetPx = rememberAnimatedCollapsibleHeaderOffset(chromeState)
     val collapseStateDescription by remember(chromeState) {
         derivedStateOf { collapsibleHeaderUiState(chromeState.collapseFraction) }
     }
@@ -1375,7 +1376,7 @@ internal fun SearchChrome(
             .onSizeChanged(onMeasured)
             // Use layout offset instead of a graphics layer so Android text selection
             // toolbars anchor to the real on-screen position of the editable field.
-            .offset { IntOffset(x = 0, y = animatedOffsetPx.value.roundToInt()) }
+            .offset { IntOffset(x = 0, y = chromeState.offsetPx.roundToInt()) }
             .semantics { stateDescription = collapseStateDescription }
             .testTag(chromeTestTag)
     ) {

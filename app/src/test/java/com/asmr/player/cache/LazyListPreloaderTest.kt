@@ -6,36 +6,19 @@ import org.junit.Test
 
 class LazyListPreloaderTest {
     @Test
-    fun preloadLeadCount_keepsScrollingWindowBoundedToOneViewport() {
-        assertEquals(
-            8,
-            resolveLazyListPreloadLeadCount(
-                visibleItemCount = 6,
-                preloadNext = 24,
-                preloadNextWhileScrolling = 8,
-                isScrolling = true,
-            )
-        )
-        assertEquals(
-            12,
-            resolveLazyListPreloadLeadCount(
-                visibleItemCount = 12,
-                preloadNext = 24,
-                preloadNextWhileScrolling = 8,
-                isScrolling = true,
-            )
-        )
-    }
-
-    @Test
     fun preloadLeadCount_keepsIdleWindowWider() {
         assertEquals(
             24,
             resolveLazyListPreloadLeadCount(
                 visibleItemCount = 6,
                 preloadNext = 24,
-                preloadNextWhileScrolling = 8,
-                isScrolling = false,
+            )
+        )
+        assertEquals(
+            36,
+            resolveLazyListPreloadLeadCount(
+                visibleItemCount = 12,
+                preloadNext = 24,
             )
         )
     }
@@ -43,15 +26,14 @@ class LazyListPreloaderTest {
     @Test
     fun preloadRange_prefetchesAfterLastVisibleItemWhenScrollingForward() {
         assertEquals(
-            5..12,
+            5..28,
             resolveLazyListPreloadRange(
                 firstVisibleIndex = 0,
                 lastVisibleIndex = 4,
                 visibleItemCount = 5,
                 itemCount = 30,
                 preloadNext = 24,
-                preloadNextWhileScrolling = 8,
-                isScrolling = true,
+                isScrolling = false,
                 direction = LazyListPreloadDirection.Forward,
             )
         )
@@ -60,15 +42,14 @@ class LazyListPreloaderTest {
     @Test
     fun preloadRange_prefetchesBeforeFirstVisibleItemWhenScrollingBackward() {
         assertEquals(
-            2..9,
+            0..9,
             resolveLazyListPreloadRange(
                 firstVisibleIndex = 10,
                 lastVisibleIndex = 15,
                 visibleItemCount = 6,
                 itemCount = 30,
                 preloadNext = 24,
-                preloadNextWhileScrolling = 8,
-                isScrolling = true,
+                isScrolling = false,
                 direction = LazyListPreloadDirection.Backward,
             )
         )
@@ -84,7 +65,6 @@ class LazyListPreloaderTest {
                 visibleItemCount = 5,
                 itemCount = 10,
                 preloadNext = 24,
-                preloadNextWhileScrolling = 8,
                 isScrolling = false,
                 direction = LazyListPreloadDirection.Forward,
             )
@@ -96,9 +76,23 @@ class LazyListPreloaderTest {
                 visibleItemCount = 5,
                 itemCount = 10,
                 preloadNext = 24,
-                preloadNextWhileScrolling = 8,
-                isScrolling = true,
+                isScrolling = false,
                 direction = LazyListPreloadDirection.Backward,
+            )
+        )
+    }
+
+    @Test
+    fun preloadRange_pausesWhileListIsScrolling() {
+        assertNull(
+            resolveLazyListPreloadRange(
+                firstVisibleIndex = 4,
+                lastVisibleIndex = 9,
+                visibleItemCount = 6,
+                itemCount = 30,
+                preloadNext = 24,
+                isScrolling = true,
+                direction = LazyListPreloadDirection.Forward,
             )
         )
     }
