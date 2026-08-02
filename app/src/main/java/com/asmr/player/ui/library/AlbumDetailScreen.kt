@@ -1771,7 +1771,7 @@ private fun AlbumHeader(
     var languageMenuExpanded by rememberSaveable { mutableStateOf(false) }
 
     Column(
-        modifier = headerContainerModifier.padding(top = 10.dp, bottom = 12.dp)
+        modifier = headerContainerModifier.padding(top = 4.dp, bottom = 12.dp)
         // 不用 spacedBy 控制信息行之间的间距：cv/tags 行在网络数据到达后会以 0 高度组合、再通过
         // AnimatedVisibility 纵向展开，而 spacedBy 的固定间距会在"0 高度的折叠内容刚组合"的那一帧
         // 立即出现，把下方按钮行瞬间下推一截，造成展开前的下沉抖动。改为把行间距/与按钮行的间距作为
