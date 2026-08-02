@@ -289,8 +289,10 @@ internal data class AlbumDetailOnlineLoadPlan(
 
 internal fun albumDetailOnlineLoadPlan(
     selectedTab: Int,
-    hasResolvedInitialDlsiteTarget: Boolean
+    hasResolvedInitialDlsiteTarget: Boolean,
+    isInitialRouteReady: Boolean
 ): AlbumDetailOnlineLoadPlan {
+    if (!isInitialRouteReady) return AlbumDetailOnlineLoadPlan()
     return when (selectedTab) {
         1 -> AlbumDetailOnlineLoadPlan(loadDlsite = true, loadAsmrOne = true)
         2 -> AlbumDetailOnlineLoadPlan(
@@ -358,6 +360,7 @@ fun AlbumDetailScreen(
     val selectedTab = remember(albumId, initialTab) {
         initialTab?.coerceIn(0, 2) ?: if (albumId != null && albumId > 0) 0 else 1
     }
+    var isInitialRouteReady by remember(screenKey) { mutableStateOf(false) }
     val initialIntroState = remember(screenKey) { AlbumDetailIntroState(settled = false) }
     var showAsmrDownloadDialog by remember { mutableStateOf(false) }
     var showOnlineSaveDialog by remember { mutableStateOf(false) }
@@ -376,8 +379,10 @@ fun AlbumDetailScreen(
         viewModel.setListenTogetherRjSummaryPollingEnabled(true)
     }
     LaunchedEffect(albumId, rjCode) {
+        isInitialRouteReady = false
         withFrameNanos { }
-        viewModel.loadAlbum(albumId, rjCode, force = false)
+        viewModel.loadAlbumAndAwait(albumId, rjCode, force = false)
+        isInitialRouteReady = true
     }
     DisposableEffect(screenKey, viewModel) {
         onDispose {
@@ -756,11 +761,13 @@ fun AlbumDetailScreen(
                                 selectedTab,
                                 model.rjCode,
                                 model.dlsiteWorkno,
-                                model.hasResolvedInitialDlsiteTarget
+                                model.hasResolvedInitialDlsiteTarget,
+                                isInitialRouteReady
                             ) {
                                 val loadPlan = albumDetailOnlineLoadPlan(
                                     selectedTab = selectedTab,
-                                    hasResolvedInitialDlsiteTarget = model.hasResolvedInitialDlsiteTarget
+                                    hasResolvedInitialDlsiteTarget = model.hasResolvedInitialDlsiteTarget,
+                                    isInitialRouteReady = isInitialRouteReady
                                 )
                                 if (loadPlan.loadDlsite) {
                                     viewModel.ensureDlsiteLoaded()

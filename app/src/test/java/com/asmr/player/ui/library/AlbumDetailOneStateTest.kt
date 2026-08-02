@@ -78,7 +78,8 @@ class AlbumDetailOneStateTest {
             AlbumDetailOnlineLoadPlan(loadDlsite = true, loadAsmrOne = true),
             albumDetailOnlineLoadPlan(
                 selectedTab = 1,
-                hasResolvedInitialDlsiteTarget = false
+                hasResolvedInitialDlsiteTarget = false,
+                isInitialRouteReady = true
             )
         )
     }
@@ -89,14 +90,36 @@ class AlbumDetailOneStateTest {
             AlbumDetailOnlineLoadPlan(loadDlsite = true, loadDlsitePlay = false),
             albumDetailOnlineLoadPlan(
                 selectedTab = 2,
-                hasResolvedInitialDlsiteTarget = false
+                hasResolvedInitialDlsiteTarget = false,
+                isInitialRouteReady = true
             )
         )
         assertEquals(
             AlbumDetailOnlineLoadPlan(loadDlsite = true, loadDlsitePlay = true),
             albumDetailOnlineLoadPlan(
                 selectedTab = 2,
-                hasResolvedInitialDlsiteTarget = true
+                hasResolvedInitialDlsiteTarget = true,
+                isInitialRouteReady = true
+            )
+        )
+    }
+
+    @Test
+    fun albumDetailOnlineLoadPlan_waitsForInitialRouteHydration() {
+        assertEquals(
+            AlbumDetailOnlineLoadPlan(),
+            albumDetailOnlineLoadPlan(
+                selectedTab = 1,
+                hasResolvedInitialDlsiteTarget = false,
+                isInitialRouteReady = false
+            )
+        )
+        assertEquals(
+            AlbumDetailOnlineLoadPlan(),
+            albumDetailOnlineLoadPlan(
+                selectedTab = 2,
+                hasResolvedInitialDlsiteTarget = true,
+                isInitialRouteReady = false
             )
         )
     }
