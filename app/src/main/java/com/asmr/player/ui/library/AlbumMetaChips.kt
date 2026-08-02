@@ -1,5 +1,8 @@
 package com.asmr.player.ui.library
 
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -43,6 +46,7 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import com.asmr.player.R
 import com.asmr.player.ui.theme.AsmrTheme
@@ -51,6 +55,10 @@ import com.asmr.player.util.MessageManager
 private val AlbumMetaPillShape = RoundedCornerShape(999.dp)
 private val AlbumMetaTagShape = RoundedCornerShape(7.dp)
 private val AlbumMetaDenseTagShape = RoundedCornerShape(6.dp)
+private val AlbumHeaderMetaExpandCollapseSpec = tween<IntSize>(
+    durationMillis = 280,
+    easing = FastOutSlowInEasing,
+)
 private const val AlbumHeaderMetaCollapsedLines = 2
 
 private data class AlbumMetaPalette(
@@ -435,7 +443,12 @@ private fun AlbumHeaderMetaFlow(
         minOf(horizontalSpacing, MaterialTheme.typography.labelSmall.fontSize.toDp() / 2f)
     }
     Row(
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .animateContentSize(
+                animationSpec = AlbumHeaderMetaExpandCollapseSpec,
+                alignment = Alignment.TopStart,
+            ),
         horizontalArrangement = Arrangement.spacedBy(labelGap),
         verticalAlignment = Alignment.Top,
     ) {
