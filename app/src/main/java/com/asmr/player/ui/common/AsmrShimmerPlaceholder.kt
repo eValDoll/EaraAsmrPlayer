@@ -5,6 +5,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -50,8 +51,23 @@ fun AsmrShimmerPlaceholder(
     modifier: Modifier = Modifier,
     cornerRadius: Int = 6,
     sharedProgress: State<Float>? = null,
+    animateHighlight: Boolean = true,
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val shape = RoundedCornerShape(cornerRadius.dp)
+    if (!animateHighlight) {
+        val staticBaseColor = remember(colorScheme) {
+            colorScheme.onSurface
+                .copy(alpha = if (colorScheme.isDark) 0.14f else 0.16f)
+                .compositeOver(colorScheme.surfaceVariant)
+        }
+        Box(
+            modifier = modifier
+                .clip(shape)
+                .background(staticBaseColor)
+        )
+        return
+    }
     val isLight = remember(colorScheme) { colorScheme.surface.luminance() > 0.5f }
     val baseColor: Color = remember(colorScheme) {
         if (isLight) colorScheme.surfaceVariant else colorScheme.surfaceVariant.copy(alpha = 0.80f)
@@ -68,7 +84,7 @@ fun AsmrShimmerPlaceholder(
 
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(cornerRadius.dp))
+            .clip(shape)
             .drawWithCache {
                 val w = size.width.coerceAtLeast(1f)
                 val h = size.height.coerceAtLeast(1f)
