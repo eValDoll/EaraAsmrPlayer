@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntSize
+import com.asmr.player.performance.UiFrameWorkCoordinator
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
@@ -399,10 +400,14 @@ class ImageCacheManager(
     private fun writeDiskCacheAsync(key: String, bitmap: Bitmap) {
         val width = bitmap.width
         val height = bitmap.height
+        // 先占用唯一写槽，滚动突发期间其余图片留在内存缓存即可，避免为每张图片都
+        // 创建一个持有 Bitmap、等待静默窗口的协程。
+        if (!diskWriteSemaphore.tryAcquire()) return
         scope.launch {
-            // 磁盘缓存是尽力写入；存储繁忙时跳过，避免滚动突发请求堆积压缩和 I/O。
-            if (!diskWriteSemaphore.tryAcquire()) return@launch
+            // WEBP lossless 压缩会持续占用 CPU 与内存带宽；等滚动/转场帧完全安静后再做，
+            // 图片已先写入内存缓存，因此不会延迟可见内容。
             try {
+                UiFrameWorkCoordinator.awaitFrameQuiet()
                 runCatching {
                     val bytes = encodeBitmapForDisk(bitmap)
                     diskCache.put(

@@ -39,11 +39,8 @@ import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -55,11 +52,24 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Outline
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -206,35 +216,37 @@ fun MiniPlayer(
                     val favoriteIconSize = (if (largeLayout) 19.dp else 17.dp) * resolvedCompactScale
                     val playbackIconSize = (if (largeLayout) 22.dp else 20.dp) * resolvedCompactScale
                     val queueIconSize = (if (largeLayout) 20.dp else 18.dp) * resolvedCompactScale
+                    val progressHeight = (if (largeLayout) 3.dp else 2.dp) * resolvedCompactScale
+                    val expandedShape = RoundedCornerShape(
+                        topStart = coverSize / 2,
+                        bottomStart = coverSize / 2,
+                        topEnd = expandedEndCornerRadius,
+                        bottomEnd = expandedEndCornerRadius
+                    )
+                    val expandedContainerColor = lerp(
+                        colorScheme.surface,
+                        colorScheme.primarySoft,
+                        if (colorScheme.isDark) 0.05f else 0.08f
+                    ).copy(alpha = if (colorScheme.isDark) 0.93f else 0.95f)
+                        .compositeOver(colorScheme.background)
 
-                    ElevatedCard(
+                    Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(barHeight),
-                        shape = RoundedCornerShape(
-                            topStart = coverSize / 2,
-                            bottomStart = coverSize / 2,
-                            topEnd = expandedEndCornerRadius,
-                            bottomEnd = expandedEndCornerRadius
-                        ),
-                        colors = CardDefaults.elevatedCardColors(
-                            containerColor = lerp(
-                                colorScheme.surface,
-                                colorScheme.primarySoft,
-                                if (colorScheme.isDark) 0.05f else 0.08f
-                            ).copy(alpha = if (colorScheme.isDark) 0.93f else 0.95f)
-                                .compositeOver(colorScheme.background)
-                        ),
-                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp)
+                            .height(barHeight)
                     ) {
-                        Column(modifier = Modifier.fillMaxSize()) {
-                            Row(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(0.dp)
-                            ) {
+                        Box(
+                            modifier = Modifier
+                                .matchParentSize()
+                                .background(expandedContainerColor, expandedShape)
+                        )
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(barHeight - progressHeight),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(0.dp)
+                        ) {
                                 Box(
                                     modifier = Modifier
                                         .padding(start = coverInset, top = coverInset)
@@ -265,13 +277,22 @@ fun MiniPlayer(
                                 ) {
                                     Text(
                                         text = metadata.title?.toString().orEmpty().ifBlank { "未播放" },
-                                        modifier = Modifier.basicMarquee(),
+                                        modifier = Modifier
+                                            .basicMarquee()
+                                            // 走马灯只平移已录制的文字图层，避免逐帧让整张迷你栏和列表
+                                            // 重新栅格化；动画参数与原生 basicMarquee 保持完全一致。
+                                            .graphicsLayer {
+                                                compositingStrategy = CompositingStrategy.ModulateAlpha
+                                            },
                                         maxLines = 1,
                                         style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Bold),
                                         color = colorScheme.textPrimary
                                     )
                                     Text(
                                         text = metadata.artist?.toString().orEmpty(),
+                                        modifier = Modifier.graphicsLayer {
+                                            compositingStrategy = CompositingStrategy.Offscreen
+                                        },
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                         style = MaterialTheme.typography.labelSmall,
@@ -282,7 +303,10 @@ fun MiniPlayer(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxHeight()
-                                        .padding(end = 8.dp * resolvedCompactScale),
+                                        .padding(end = 8.dp * resolvedCompactScale)
+                                        .graphicsLayer {
+                                            compositingStrategy = CompositingStrategy.Offscreen
+                                        },
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.spacedBy(controlsSpacing)
                                 ) {
@@ -322,18 +346,73 @@ fun MiniPlayer(
                                         modifier = Modifier.size(queueIconSize)
                                     )
                                 }
-                            }
-                            }
-
-                            LinearProgressIndicator(
-                                progress = { progressState.value.fraction },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height((if (largeLayout) 3.dp else 2.dp) * resolvedCompactScale),
-                                color = colorScheme.primary,
-                                trackColor = colorScheme.primary.copy(alpha = 0.1f)
-                            )
                         }
+                        }
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .height(progressHeight)
+                                .semantics(mergeDescendants = true) {
+                                    progressBarRangeInfo = ProgressBarRangeInfo(
+                                        current = progressState.value.fraction,
+                                        range = 0f..1f
+                                    )
+                                }
+                                .drawWithCache {
+                                    val fullBarHeightPx = barHeight.toPx()
+                                    val clipTranslationY = fullBarHeightPx - size.height
+                                    val fullShapePath = when (
+                                        val outline = expandedShape.createOutline(
+                                            size = Size(size.width, fullBarHeightPx),
+                                            layoutDirection = layoutDirection,
+                                            density = this
+                                        )
+                                    ) {
+                                        is Outline.Rectangle -> null
+                                        is Outline.Rounded -> Path().apply {
+                                            addRoundRect(outline.roundRect)
+                                            translate(Offset(0f, -clipTranslationY))
+                                        }
+                                        is Outline.Generic -> Path().apply {
+                                            addPath(outline.path, Offset(0f, -clipTranslationY))
+                                        }
+                                    }
+                                    val progressTrackPath = fullShapePath?.let { shapePath ->
+                                        val progressBoundsPath = Path().apply {
+                                            addRect(Rect(0f, 0f, size.width, size.height))
+                                        }
+                                        Path().apply {
+                                            op(shapePath, progressBoundsPath, PathOperation.Intersect)
+                                        }
+                                    }
+                                    onDrawBehind {
+                                        val trackPath = progressTrackPath ?: return@onDrawBehind
+                                        drawPath(
+                                            path = trackPath,
+                                            color = colorScheme.primary.copy(alpha = 0.1f)
+                                        )
+                                        val fraction = progressState.value.fraction
+                                        val activeLeft: Float
+                                        val activeRight: Float
+                                        if (layoutDirection == androidx.compose.ui.unit.LayoutDirection.Ltr) {
+                                            activeLeft = 0f
+                                            activeRight = size.width * fraction
+                                        } else {
+                                            activeLeft = size.width * (1f - fraction)
+                                            activeRight = size.width
+                                        }
+                                        if (activeRight > activeLeft) {
+                                            clipRect(left = activeLeft, right = activeRight) {
+                                                this@onDrawBehind.drawPath(
+                                                    path = trackPath,
+                                                    color = colorScheme.primary
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                        )
                     }
                     Box(
                         modifier = Modifier
@@ -341,12 +420,7 @@ fun MiniPlayer(
                             .border(
                                 width = 1.dp,
                                 color = miniPlayerBorderColor,
-                                shape = RoundedCornerShape(
-                                    topStart = coverSize / 2,
-                                    bottomStart = coverSize / 2,
-                                    topEnd = expandedEndCornerRadius,
-                                    bottomEnd = expandedEndCornerRadius
-                                )
+                                shape = expandedShape
                             )
                     )
                 }

@@ -38,6 +38,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.State
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -98,7 +99,7 @@ private fun hotListeningItemKey(section: String, album: Album): String {
 fun HotListeningScreen(
     windowSizeClass: WindowSizeClass,
     isActive: Boolean = true,
-    isDataActive: Boolean = isActive,
+    isDataActive: State<Boolean>,
     onAlbumClick: (Album) -> Unit,
     onSearchKeyword: (String) -> Unit = {},
     scrollToTopSignal: Long = 0L,
@@ -130,7 +131,6 @@ fun HotListeningScreen(
     val gridState = rememberSaveable(contentScrollKey, saver = LazyStaggeredGridState.Saver) {
         LazyStaggeredGridState()
     }
-
     val periods = remember {
         listOf("day" to "过去一天", "week" to "过去一周", "month" to "过去一月")
     }
@@ -287,7 +287,16 @@ fun HotListeningScreen(
                     val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
                     val coverPx = remember(listItemHeight, density) { with(density) { listItemHeight.roundToPx() } }
                     val preloadSize = remember(coverPx) { IntSize(coverPx, coverPx) }
-                    val listCoverFadeIn = shouldFadeInCover(listState.isScrollInProgress)
+                    val listIsScrolling = listState.isScrollInProgress
+                    val listCoverFadeIn = shouldFadeInCover(listIsScrolling)
+                    // 滚动中不读 layoutInfo，避免可见索引每帧变化引起重组。
+                    // 停止后只保留当前真正可见的卡片纹理，让 Lazy 预取/复用槽
+                    // 中的屏外大图层及时释放。
+                    val idleVisibleListIndices = if (listIsScrolling) {
+                        emptySet()
+                    } else {
+                        listState.layoutInfo.visibleItemsInfo.mapTo(mutableSetOf()) { it.index }
+                    }
                     LazyListPreloader(
                         state = listState,
                         itemCount = state.entries.size,
@@ -321,13 +330,16 @@ fun HotListeningScreen(
                                     items = state.entries,
                                     key = { _, entry -> hotListeningItemKey("visible", entry.album) },
                                     contentType = { _, _ -> "album" }
-                                ) { _, entry ->
+                                ) { index, entry ->
                                     HotListeningListItem(
                                         entry = entry,
                                         onAlbumClick = onAlbumClick,
                                         copyMeta = copyMeta,
                                         onMetaLongClick = ::openMetaActions,
-                                        coverFadeIn = listCoverFadeIn
+                                        coverFadeIn = listCoverFadeIn,
+                                        // 排行卡片在滚动期间内容静止，仅位置变化；缓存
+                                        // RenderNode 层可避免每帧重放整卡文字、圆角和图片。
+                                        cacheDrawLayer = listIsScrolling || index in idleVisibleListIndices,
                                     )
                                 }
                                 if (state.blockedEntries.isNotEmpty()) {
@@ -348,13 +360,15 @@ fun HotListeningScreen(
                                                 hotListeningItemKey("blocked", entry.album)
                                             },
                                             contentType = { _, _ -> "album" }
-                                        ) { _, entry ->
+                                        ) { index, entry ->
                                             HotListeningListItem(
                                                 entry = entry,
                                                 onAlbumClick = onAlbumClick,
                                                 copyMeta = copyMeta,
                                                 onMetaLongClick = ::openMetaActions,
-                                                coverFadeIn = listCoverFadeIn
+                                                coverFadeIn = listCoverFadeIn,
+                                                cacheDrawLayer = listIsScrolling ||
+                                                    (state.entries.size + 1 + index) in idleVisibleListIndices,
                                             )
                                         }
                                     }
@@ -372,7 +386,8 @@ fun HotListeningScreen(
                     val density = LocalDensity.current
                     val gridCoverPx = remember(adaptiveCellSize, density) { with(density) { adaptiveCellSize.roundToPx() } }
                     val gridPreloadSize = remember(gridCoverPx) { IntSize(gridCoverPx, gridCoverPx) }
-                    val gridCoverFadeIn = shouldFadeInCover(gridState.isScrollInProgress)
+                    val gridIsScrolling = gridState.isScrollInProgress
+                    val gridCoverFadeIn = shouldFadeInCover(gridIsScrolling)
                     LazyStaggeredGridPreloader(
                         state = gridState,
                         itemCount = state.entries.size,
@@ -480,7 +495,8 @@ private fun HotListeningListItem(
     onAlbumClick: (Album) -> Unit,
     copyMeta: (String, String) -> Unit,
     onMetaLongClick: (String) -> Unit,
-    coverFadeIn: Boolean = true
+    coverFadeIn: Boolean = true,
+    cacheDrawLayer: Boolean = false,
 ) {
     val album = entry.album
     val colorScheme = AsmrTheme.colorScheme
@@ -495,6 +511,7 @@ private fun HotListeningListItem(
         coverBadge = coverBadge,
         animateOnlineDetails = false,
         coverFadeIn = coverFadeIn,
+        cacheDrawLayer = cacheDrawLayer,
         containerColor = containerColor,
         onRjClick = { copyMeta("RJ", it) },
         onCircleClick = { copyMeta("社团", it) },

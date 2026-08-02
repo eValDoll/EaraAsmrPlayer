@@ -17,6 +17,7 @@ enum class BenchmarkScenario(
     GroupDetail("group_detail"),
     GroupPicker("group_picker"),
     Queue("queue"),
+    PerformancePlayback("performance_playback"),
     Settings("settings");
 
     companion object {

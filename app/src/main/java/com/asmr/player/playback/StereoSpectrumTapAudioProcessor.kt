@@ -11,7 +11,7 @@ import java.nio.ByteBuffer
 class StereoSpectrumTapAudioProcessor(
     private val pcmBuffer: StereoPcmRingBuffer,
     private val onAudioFormat: (sampleRate: Int) -> Unit
-) : BaseAudioProcessor() {
+) : BaseAudioProcessor(), RuntimeAudioProcessor {
 
     private val inv32768 = 1f / 32768f
     private var tapEnabled = false
@@ -23,6 +23,8 @@ class StereoSpectrumTapAudioProcessor(
         }
         return inputAudioFormat
     }
+
+    override fun isRuntimeActive(): Boolean = tapEnabled && StereoSpectrumBus.captureActive
 
     override fun queueInput(inputBuffer: ByteBuffer) {
         if (!inputBuffer.hasRemaining()) return

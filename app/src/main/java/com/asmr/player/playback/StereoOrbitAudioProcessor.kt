@@ -10,7 +10,7 @@ import kotlin.math.cos
 import kotlin.math.sin
 
 @UnstableApi
-class StereoOrbitAudioProcessor : BaseAudioProcessor() {
+class StereoOrbitAudioProcessor : BaseAudioProcessor(), RuntimeAudioProcessor {
 
     @Volatile
     private var enabled: Boolean = false
@@ -57,6 +57,8 @@ class StereoOrbitAudioProcessor : BaseAudioProcessor() {
                 inputAudioFormat.encoding != androidx.media3.common.C.ENCODING_PCM_FLOAT)
         return inputAudioFormat
     }
+
+    override fun isRuntimeActive(): Boolean = !passthrough && enabled
 
     override fun queueInput(inputBuffer: ByteBuffer) {
         if (!inputBuffer.hasRemaining()) return

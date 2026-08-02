@@ -13,7 +13,8 @@ import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 
 private const val DefaultForwardCompositionPrefetchCount = 4
-private const val DefaultBackwardCompositionPrefetchCount = 1
+private const val DefaultBackwardCompositionPrefetchCount = 4
+private const val OppositeDirectionCompositionPrefetchCount = 1
 
 @OptIn(ExperimentalFoundationApi::class)
 private class EaraLazyListPrefetchStrategy(
@@ -21,6 +22,10 @@ private class EaraLazyListPrefetchStrategy(
     private val backwardItemCount: Int,
 ) : LazyListPrefetchStrategy {
     private val handles = mutableMapOf<Int, LazyLayoutPrefetchState.PrefetchHandle>()
+    private var lastFirstVisibleIndex = -1
+    private var lastLastVisibleIndex = -1
+    private var lastTotalItemCount = -1
+    private var scrollDirection = 1
 
     override fun LazyListPrefetchScope.onScroll(delta: Float, layoutInfo: LazyListLayoutInfo) {
         updatePrefetches(layoutInfo)
@@ -37,18 +42,47 @@ private class EaraLazyListPrefetchStrategy(
         if (visibleItems.isEmpty()) return
         val firstVisibleIndex = visibleItems.first().index
         val lastVisibleIndex = visibleItems.last().index
+        if (lastFirstVisibleIndex >= 0) {
+            scrollDirection = when {
+                firstVisibleIndex > lastFirstVisibleIndex -> 1
+                firstVisibleIndex < lastFirstVisibleIndex -> -1
+                else -> scrollDirection
+            }
+        }
+        if (
+            firstVisibleIndex == lastFirstVisibleIndex &&
+            lastVisibleIndex == lastLastVisibleIndex &&
+            layoutInfo.totalItemsCount == lastTotalItemCount
+        ) {
+            return
+        }
+        lastFirstVisibleIndex = firstVisibleIndex
+        lastLastVisibleIndex = lastVisibleIndex
+        lastTotalItemCount = layoutInfo.totalItemsCount
+
+        val activeForwardItemCount = if (scrollDirection >= 0) {
+            forwardItemCount
+        } else {
+            minOf(forwardItemCount, OppositeDirectionCompositionPrefetchCount)
+        }
+        val activeBackwardItemCount = if (scrollDirection < 0) {
+            backwardItemCount
+        } else {
+            minOf(backwardItemCount, OppositeDirectionCompositionPrefetchCount)
+        }
+
         val targetIndices = resolveCompositionPrefetchIndices(
             firstVisibleIndex = firstVisibleIndex,
             lastVisibleIndex = lastVisibleIndex,
             totalItemCount = layoutInfo.totalItemsCount,
-            forwardItemCount = forwardItemCount,
-            backwardItemCount = backwardItemCount,
-        ).toSet()
+            forwardItemCount = activeForwardItemCount,
+            backwardItemCount = activeBackwardItemCount,
+        )
 
         val iterator = handles.iterator()
         while (iterator.hasNext()) {
             val entry = iterator.next()
-            if (entry.key !in targetIndices) {
+            if (!targetIndices.containsIndex(entry.key)) {
                 entry.value.cancel()
                 iterator.remove()
             }
@@ -59,6 +93,13 @@ private class EaraLazyListPrefetchStrategy(
             }
         }
     }
+}
+
+private fun IntArray.containsIndex(index: Int): Boolean {
+    for (candidate in this) {
+        if (candidate == index) return true
+    }
+    return false
 }
 
 @Composable

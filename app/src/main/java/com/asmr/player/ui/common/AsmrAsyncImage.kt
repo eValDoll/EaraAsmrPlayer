@@ -8,6 +8,8 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
@@ -59,6 +61,7 @@ fun AsmrAsyncImage(
     // 按原尺寸加载（size=null）：缓存 key 与显示尺寸无关，让列表与详情大图共用同一缓存条目，
     // 详情页进入即内存命中、不再二次网络请求、不再低分辨率占位闪烁。显示时由 ContentScale 缩放。
     loadAtOriginalSize: Boolean = false,
+    onBitmapPainterState: ((BitmapPainter?, State<Float>) -> Unit)? = null,
 ) {
     val normalizedModel = remember(model) { normalizeImageModel(model) }
     if (normalizedModel == null) {
@@ -165,6 +168,21 @@ fun AsmrAsyncImage(
     }
 
     val p = painter.value
+    val bitmapPainterAlpha = remember(normalizedModel, reloadKey) {
+        derivedStateOf {
+            val currentPainter = painter.value
+            val seeded = currentPainter != null && seededPlaceholder.value
+            if (currentPainter != null && latestFadeIn && !seeded && crossfadeRunning.value) {
+                crossfade.value.coerceIn(0f, 1f)
+            } else {
+                1f
+            }
+        }
+    }
+    val latestBitmapPainterObserver by rememberUpdatedState(onBitmapPainterState)
+    LaunchedEffect(p, bitmapPainterAlpha) {
+        latestBitmapPainterObserver?.invoke(p as? BitmapPainter, bitmapPainterAlpha)
+    }
     LaunchedEffect(fadeIn, p) {
         if (!fadeIn && p != null) {
             crossfadeRunning.value = false

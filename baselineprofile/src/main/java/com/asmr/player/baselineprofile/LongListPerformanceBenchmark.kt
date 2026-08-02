@@ -168,6 +168,6 @@ class LongListPerformanceBenchmark {
     }
 
     private companion object {
-        const val FrameTimingIterations = 3
+        const val FrameTimingIterations = 10
     }
 }

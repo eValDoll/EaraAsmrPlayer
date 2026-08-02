@@ -11,7 +11,7 @@ import kotlin.math.log10
 import kotlin.math.sqrt
 
 @UnstableApi
-class VolumeThresholdAudioProcessor : BaseAudioProcessor() {
+class VolumeThresholdAudioProcessor : BaseAudioProcessor(), RuntimeAudioProcessor {
 
     companion object {
         const val MODE_THRESHOLD = 0
@@ -89,6 +89,8 @@ class VolumeThresholdAudioProcessor : BaseAudioProcessor() {
         resetForNewItem()
         return inputAudioFormat
     }
+
+    override fun isRuntimeActive(): Boolean = !passthrough && enabled
 
     override fun onFlush() {
         resetForNewItem()

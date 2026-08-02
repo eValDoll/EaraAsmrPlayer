@@ -12,7 +12,7 @@ import kotlin.math.PI
 import kotlin.math.tanh
 
 @UnstableApi
-class SceneEffectAudioProcessor : BaseAudioProcessor() {
+class SceneEffectAudioProcessor : BaseAudioProcessor(), RuntimeAudioProcessor {
 
     private val lock = Any()
 
@@ -20,6 +20,8 @@ class SceneEffectAudioProcessor : BaseAudioProcessor() {
     private var pendingPresetId = SceneEffectPresets.DefaultPresetId
     private var pendingAmount = SceneEffectPresets.DefaultAmount
     private var settingsDirty = true
+    @Volatile
+    private var runtimeActive = false
 
     private var passthrough = false
     private var activeSampleRate = 0
@@ -60,6 +62,7 @@ class SceneEffectAudioProcessor : BaseAudioProcessor() {
             if (pendingEnabled != enabled) {
                 pendingEnabled = enabled
                 settingsDirty = true
+                updateRuntimeActiveLocked()
             }
         }
     }
@@ -69,6 +72,7 @@ class SceneEffectAudioProcessor : BaseAudioProcessor() {
             if (pendingPresetId != presetId) {
                 pendingPresetId = presetId
                 settingsDirty = true
+                updateRuntimeActiveLocked()
             }
         }
     }
@@ -79,6 +83,7 @@ class SceneEffectAudioProcessor : BaseAudioProcessor() {
             if (pendingAmount != normalized) {
                 pendingAmount = normalized
                 settingsDirty = true
+                updateRuntimeActiveLocked()
             }
         }
     }
@@ -90,9 +95,12 @@ class SceneEffectAudioProcessor : BaseAudioProcessor() {
                     inputAudioFormat.encoding != C.ENCODING_PCM_FLOAT)
         synchronized(lock) {
             settingsDirty = true
+            updateRuntimeActiveLocked()
         }
         return inputAudioFormat
     }
+
+    override fun isRuntimeActive(): Boolean = runtimeActive
 
     override fun onFlush() {
         clearState()
@@ -117,7 +125,12 @@ class SceneEffectAudioProcessor : BaseAudioProcessor() {
         clearState()
         synchronized(lock) {
             settingsDirty = true
+            updateRuntimeActiveLocked()
         }
+    }
+
+    private fun updateRuntimeActiveLocked() {
+        runtimeActive = !passthrough && pendingEnabled && pendingAmount > 0
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {

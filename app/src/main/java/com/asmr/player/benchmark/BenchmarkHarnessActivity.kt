@@ -145,7 +145,8 @@ private fun BenchmarkScenarioScreen(
 ) {
     when (scenario) {
         BenchmarkScenario.LibraryAlbums,
-        BenchmarkScenario.LibraryTracks -> {
+        BenchmarkScenario.LibraryTracks,
+        BenchmarkScenario.PerformancePlayback -> {
             LibraryScreen(
                 windowSizeClass = windowSizeClass,
                 onAlbumClick = {},
