@@ -964,7 +964,7 @@ class LibraryViewModel @Inject constructor(
                     if (!hasOnline) {
                         trackDao.deleteSubtitlesForAlbum(entity.id)
                         trackDao.deleteTracksForAlbum(entity.id)
-                        albumDao.deleteAlbum(entity)
+                        deleteAlbumEntity(entity)
                     } else {
                         tracks.filter { it.path.startsWith(uriString) }.forEach { track ->
                             trackDao.deleteSubtitlesForTrack(track.id)
@@ -1582,7 +1582,7 @@ class LibraryViewModel @Inject constructor(
                         if (!hasOnline) {
                             trackDao.deleteSubtitlesForAlbum(entity.id)
                             trackDao.deleteTracksForAlbum(entity.id)
-                            albumDao.deleteAlbum(entity)
+                            deleteAlbumEntity(entity)
                             removed = true
                         } else {
                             val prefixes = localPaths.map { it.trim() }.filter { it.isNotBlank() }
@@ -1650,7 +1650,7 @@ class LibraryViewModel @Inject constructor(
                 database.withTransaction {
                     trackDao.deleteSubtitlesForAlbum(album.id)
                     trackDao.deleteTracksForAlbum(album.id)
-                    albumDao.deleteAlbum(entity)
+                    deleteAlbumEntity(entity)
                     database.tagDao().deleteAlbumTagsByAlbumId(album.id)
                     database.albumFtsDao().deleteByAlbumId(album.id)
                 }
@@ -1965,7 +1965,7 @@ class LibraryViewModel @Inject constructor(
                 if (entity.localPath.isNullOrBlank() && !entity.path.startsWith("content://")) {
                     trackDao.deleteSubtitlesForAlbum(entity.id)
                     trackDao.deleteTracksForAlbum(entity.id)
-                    albumDao.deleteAlbum(entity)
+                    deleteAlbumEntity(entity)
                 } else {
                     val dl = entity.downloadPath?.trim().orEmpty()
                     val tracks = trackDao.getTracksForAlbumOnce(entity.id)
@@ -2366,7 +2366,7 @@ class LibraryViewModel @Inject constructor(
                     if (!hasOnline) {
                         trackDao.deleteSubtitlesForAlbum(entity.id)
                         trackDao.deleteTracksForAlbum(entity.id)
-                        albumDao.deleteAlbum(entity)
+                        deleteAlbumEntity(entity)
                     } else {
                         val root = rootUriString.trim()
                         tracks.filter { it.path.startsWith(root) }.forEach { track ->
@@ -2444,12 +2444,13 @@ class LibraryViewModel @Inject constructor(
                 if (!anyValid) {
                     val hasOnlineTracks = cachedHasOnlineTracks ?: run {
                         val ts = cachedTracks ?: trackDao.getTracksForAlbumOnce(entity.id).also { cachedTracks = it }
-                        ts.any { isOnlineTrackPath(it.path) }.also { cachedHasOnlineTracks = it }
+                        (isVirtualAlbumPath(entity.path) || ts.any { isOnlineTrackPath(it.path) })
+                            .also { cachedHasOnlineTracks = it }
                     }
                     if (!hasOnlineTracks) {
                         trackDao.deleteSubtitlesForAlbum(entity.id)
                         trackDao.deleteTracksForAlbum(entity.id)
-                        albumDao.deleteAlbum(entity)
+                        deleteAlbumEntity(entity)
                         return@forEach
                     }
                 }
@@ -2513,7 +2514,7 @@ class LibraryViewModel @Inject constructor(
                         if (!hasOnlineTracks) {
                             trackDao.deleteSubtitlesForAlbum(entity.id)
                             trackDao.deleteTracksForAlbum(entity.id)
-                            albumDao.deleteAlbum(entity)
+                            deleteAlbumEntity(entity)
                             return@forEach
                         }
                         val onlinePath = buildOnlineAlbumPath(updated)
@@ -2676,7 +2677,8 @@ class LibraryViewModel @Inject constructor(
                 val canonical = matches.firstOrNull { !it.localPath.isNullOrBlank() } ?: matches.first()
                 matches.filter { it.id != canonical.id }.forEach { other ->
                     trackDao.moveTracksToAlbum(other.id, canonical.id)
-                    albumDao.deleteAlbum(other)
+                    database.onlineSavedResourceDao().moveToAlbum(other.id, canonical.id)
+                    deleteAlbumEntity(other)
                 }
                 val merged = canonical.copy(
                     title = canonical.title.ifBlank { fallbackTitle },
@@ -2697,6 +2699,11 @@ class LibraryViewModel @Inject constructor(
             return albumDao.getAllAlbumsOnce().firstOrNull { it.title == fallbackTitle }
         }
         return null
+    }
+
+    private suspend fun deleteAlbumEntity(entity: AlbumEntity) {
+        database.onlineSavedResourceDao().deleteByAlbumId(entity.id)
+        albumDao.deleteAlbum(entity)
     }
 
     private data class DocNode(

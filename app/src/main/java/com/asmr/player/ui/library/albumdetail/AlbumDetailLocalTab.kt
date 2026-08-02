@@ -193,13 +193,28 @@ internal fun AlbumLocalBreadcrumbTabV2(
                 .toSet()
         }
     }
-    val treeIndex by produceState<LocalTreeIndex?>(initialValue = null, key1 = allPaths, key2 = queueTracks) {
+    val onlineSavedResources by produceState(
+        initialValue = emptyList<com.asmr.player.data.local.db.entities.OnlineSavedResourceEntity>(),
+        key1 = album.id
+    ) {
+        if (album.id <= 0L) return@produceState
+        AppDatabaseProvider.get(context).onlineSavedResourceDao()
+            .observeForAlbum(album.id)
+            .collect { value = it }
+    }
+    val treeIndex by produceState<LocalTreeIndex?>(
+        initialValue = null,
+        key1 = allPaths,
+        key2 = queueTracks,
+        key3 = onlineSavedResources
+    ) {
         value = withContext(Dispatchers.IO) {
             loadOrBuildLocalTreeIndex(
                 context = context,
                 albumId = album.id,
                 albumPaths = allPaths,
-                tracks = queueTracks
+                tracks = queueTracks,
+                onlineSavedResources = onlineSavedResources
             )
         }
     }
@@ -362,7 +377,11 @@ internal fun AlbumLocalBreadcrumbTabV2(
                             selected = selected,
                             onEnterSelectionMode = enterSelectionMode,
                             onSelectedChange = onSelectedChange,
-                            onSetAsCover = if (file.fileType == TreeFileType.Image) ({ onSetCoverFromImage(file.absolutePath) }) else null,
+                            onSetAsCover = if (canSetDirectoryImageAsLocalCover(file)) {
+                                { onSetCoverFromImage(file.absolutePath) }
+                            } else {
+                                null
+                            },
                             onDownload = null,
                             onAddToQueue = track?.let { { onAddToQueue(it); Unit } },
                             onAddToPlaylist = track?.let { { onAddToPlaylist(it) } },

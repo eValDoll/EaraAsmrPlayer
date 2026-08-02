@@ -22,6 +22,7 @@ import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.AlbumFtsEntity
 import com.asmr.player.data.local.db.entities.AlbumTagEntity
 import com.asmr.player.data.local.db.entities.RemoteSubtitleSourceEntity
+import com.asmr.player.data.local.db.entities.OnlineSavedResourceEntity
 import com.asmr.player.data.local.db.entities.TagEntity
 import com.asmr.player.data.local.db.entities.TagSource
 import com.asmr.player.data.local.db.entities.TrackEntity
@@ -74,7 +75,6 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.FileOutputStream
-import java.io.IOException
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 import javax.inject.Named
@@ -876,45 +876,18 @@ class AlbumDetailViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                var resolvedCoverPath = value
                 withContext(Dispatchers.IO) {
                     val entity = albumDao.getAlbumById(local.id) ?: return@withContext
-                    resolvedCoverPath = resolveCoverPathForLocalAlbum(entity, value)
-                    albumDao.updateAlbum(entity.copy(coverPath = resolvedCoverPath, coverThumbPath = ""))
+                    albumDao.updateAlbum(entity.copy(coverPath = value, coverThumbPath = ""))
                     runCatching { database.localTreeCacheDao().deleteByAlbum(entity.id) }
                 }
-                updateCurrentCoverState(local.id, resolvedCoverPath, "")
+                updateCurrentCoverState(local.id, value, "")
                 enqueueAlbumCoverThumbWork(local.id)
                 messageManager.showSuccess("已设置封面")
             } catch (e: Exception) {
                 messageManager.showError("设置封面失败，请检查后重试")
             }
         }
-    }
-
-    private fun resolveCoverPathForLocalAlbum(entity: AlbumEntity, value: String): String {
-        if (!value.startsWith("http", ignoreCase = true)) return value
-        val url = value.trim()
-        val root = listOfNotNull(entity.localPath, entity.downloadPath, entity.path)
-            .map { it.trim() }
-            .firstOrNull { it.isNotBlank() && !it.startsWith("content://") && !it.startsWith("web://") && !it.startsWith("http", ignoreCase = true) }
-            ?.let { File(it) }
-            ?: onlineSaveAlbumDir(entity.toAlbumForCover(), entity.rjCode.ifBlank { entity.workId })
-        val coverPrefix = "cover_${url.hashCode().toString().replace("-", "n")}"
-        return saveOnlineCoverToAlbumDir(url, root, fileNamePrefix = coverPrefix)?.absolutePath ?: value
-    }
-
-    private fun AlbumEntity.toAlbumForCover(): Album {
-        return Album(
-            id = id,
-            title = title,
-            path = path,
-            localPath = localPath,
-            downloadPath = downloadPath,
-            coverUrl = coverUrl,
-            workId = workId,
-            rjCode = rjCode
-        )
     }
 
     private fun updateCurrentCoverState(albumId: Long, coverPath: String, coverThumbPath: String) {
@@ -2164,11 +2137,7 @@ class AlbumDetailViewModel @Inject constructor(
                     return@withContext SaveOnlineToLibraryResult(
                         selectedCount = 0,
                         insertedCount = 0,
-                        resourceEnqueuedCount = 0,
-                        resourceSkippedCount = 0,
-                        albumId = 0L,
-                        coverUrl = "",
-                        coverPath = ""
+                        resourceSavedCount = 0
                     )
                 }
 
@@ -2179,7 +2148,6 @@ class AlbumDetailViewModel @Inject constructor(
                     mkdirs()
                     ensureNoMediaMarkers(this)
                 }
-                val coverFile = saveOnlineCoverToAlbumDir(displayAlbum.coverUrl, albumDir)
                 val playableSelected = selected.filter { isPlayableTreeFileType(it.fileType) }
                 val resourceSelected = selected.filter { !isPlayableTreeFileType(it.fileType) }
 
@@ -2188,9 +2156,8 @@ class AlbumDetailViewModel @Inject constructor(
                 }
 
                 var insertedCount = 0
+                var resourceSavedCount = 0
                 var albumIdResult = 0L
-                var coverUrlResult = ""
-                var coverPathResult = ""
                 database.withTransaction {
                     val existing = if (workKey.isNotBlank()) {
                         runCatching { albumDao.getAlbumByWorkIdOnce(workKey) }.getOrNull()
@@ -2209,7 +2176,7 @@ class AlbumDetailViewModel @Inject constructor(
                         cv = existing?.cv?.takeIf { it.isNotBlank() } ?: displayAlbum.cv,
                         tags = existing?.tags?.takeIf { it.isNotBlank() } ?: tagsCsv,
                         coverUrl = existing?.coverUrl?.takeIf { it.isNotBlank() } ?: displayAlbum.coverUrl,
-                        coverPath = coverFile?.absolutePath ?: existing?.coverPath.orEmpty(),
+                        coverPath = existing?.coverPath.orEmpty(),
                         coverThumbPath = existing?.coverThumbPath.orEmpty(),
                         workId = existing?.workId?.takeIf { it.isNotBlank() } ?: displayAlbum.workId.trim().ifBlank { workKey },
                         rjCode = existing?.rjCode?.takeIf { it.isNotBlank() } ?: displayAlbum.rjCode.trim().ifBlank { rj },
@@ -2219,8 +2186,6 @@ class AlbumDetailViewModel @Inject constructor(
                     val albumId = if (insertedId > 0L) insertedId else (existing?.id ?: 0L)
                     if (albumId <= 0L) return@withTransaction
                     albumIdResult = albumId
-                    coverUrlResult = entity.coverUrl.trim().takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }.orEmpty()
-                    coverPathResult = entity.coverPath.trim().takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }.orEmpty()
                     runCatching { database.localTreeCacheDao().deleteByAlbum(albumId) }
 
                     val fts = AlbumFtsEntity(
@@ -2282,23 +2247,29 @@ class AlbumDetailViewModel @Inject constructor(
                             runCatching { database.remoteSubtitleSourceDao().insertAll(sources) }
                         }
                     }
-                }
 
-                var resourceEnqueuedCount = 0
-                var resourceSkippedCount = 0
-                val resourceTaskKey = "album:${safeFolderName(workKey.ifBlank { displayAlbum.title })}"
-                resourceSelected.forEach { leaf ->
-                    val enqueued = enqueueOnlineSavedResourceDownload(
-                        album = displayAlbum,
-                        leaf = leaf,
-                        albumDir = albumDir,
-                        taskKey = resourceTaskKey,
-                        taskSubtitle = displayAlbum.title
-                    )
-                    if (enqueued) {
-                        resourceEnqueuedCount += 1
-                    } else {
-                        resourceSkippedCount += 1
+                    val resourceDao = database.onlineSavedResourceDao()
+                    val existingResourcesByPath = resourceDao.getForAlbumOnce(albumId)
+                        .associateBy { it.relativePath }
+                    val changedResources = resourceSelected.mapNotNull { leaf ->
+                        val relativePath = leaf.relativePath.replace('\\', '/').trim().trimStart('/')
+                        val url = leaf.url.trim()
+                        if (relativePath.isBlank() || !url.startsWith("http", ignoreCase = true)) {
+                            return@mapNotNull null
+                        }
+                        val existingResource = existingResourcesByPath[relativePath]
+                        val resource = OnlineSavedResourceEntity(
+                            id = existingResource?.id ?: 0L,
+                            albumId = albumId,
+                            relativePath = relativePath,
+                            url = url,
+                            fileType = leaf.fileType.name
+                        )
+                        resource.takeUnless { it == existingResource }
+                    }.distinctBy { it.relativePath }
+                    if (changedResources.isNotEmpty()) {
+                        resourceDao.insertAll(changedResources)
+                        resourceSavedCount = changedResources.size
                     }
                 }
 
@@ -2309,25 +2280,14 @@ class AlbumDetailViewModel @Inject constructor(
                 SaveOnlineToLibraryResult(
                     selectedCount = selected.size,
                     insertedCount = insertedCount,
-                    resourceEnqueuedCount = resourceEnqueuedCount,
-                    resourceSkippedCount = resourceSkippedCount,
-                    albumId = albumIdResult,
-                    coverUrl = coverUrlResult,
-                    coverPath = coverPathResult
+                    resourceSavedCount = resourceSavedCount
                 )
             }
 
             val selectedCount = result.selectedCount
-            val changedCount = result.insertedCount + result.resourceEnqueuedCount
+            val changedCount = result.insertedCount + result.resourceSavedCount
             val skippedCount = selectedCount - changedCount
 
-            if (result.albumId > 0L) {
-                try {
-                    ensureAlbumCoverSaved(result.albumId, result.coverPath, result.coverUrl)
-                } catch (_: Exception) {
-                }
-                enqueueAlbumCoverThumbWork(result.albumId)
-            }
             if (selectedCount <= 0) {
                 messageManager.showInfo("没有可保存文件")
             } else if (changedCount <= 0) {
@@ -2343,11 +2303,7 @@ class AlbumDetailViewModel @Inject constructor(
     private data class SaveOnlineToLibraryResult(
         val selectedCount: Int,
         val insertedCount: Int,
-        val resourceEnqueuedCount: Int,
-        val resourceSkippedCount: Int,
-        val albumId: Long,
-        val coverUrl: String,
-        val coverPath: String
+        val resourceSavedCount: Int
     )
 
     private fun isLikelyPlaceholderCover(url: String): Boolean {
@@ -2670,98 +2626,6 @@ class AlbumDetailViewModel @Inject constructor(
             val marker = File(dir, ".nomedia")
             if (!marker.exists()) marker.createNewFile()
         }
-    }
-
-    private fun saveOnlineCoverToAlbumDir(
-        coverUrl: String,
-        albumDir: File,
-        fileNamePrefix: String = "cover"
-    ): File? {
-        val url = coverUrl.trim()
-        if (!url.startsWith("http", ignoreCase = true) || isLikelyPlaceholderCover(url)) return null
-        val ext = url.substringBefore('?').substringAfterLast('.', "").takeIf { it.length in 2..5 } ?: "jpg"
-        val target = File(albumDir, "${safeFileName(fileNamePrefix)}.$ext")
-        if (target.exists() && target.length() > 0L) return target
-        return runCatching {
-            if (!albumDir.exists()) albumDir.mkdirs()
-            val request = Request.Builder()
-                .url(url)
-                .header("Accept", "image/*")
-                .get()
-                .build()
-            imageOkHttpClient.newCall(request).execute().use { response ->
-                if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
-                val body = response.body ?: throw IOException("empty body")
-                FileOutputStream(target).use { output ->
-                    body.byteStream().use { input -> input.copyTo(output) }
-                }
-            }
-            target.takeIf { it.exists() && it.length() > 0L }
-        }.getOrNull()
-    }
-
-    private fun enqueueOnlineSavedResourceDownload(
-        album: Album,
-        leaf: OnlineSaveLeaf,
-        albumDir: File,
-        taskKey: String,
-        taskSubtitle: String
-    ): Boolean {
-        val url = leaf.url.trim()
-        if (!url.startsWith("http", ignoreCase = true)) return false
-        val relPath = leaf.relativePath.replace('\\', '/').trim().trimStart('/')
-        if (relPath.isBlank()) return false
-        val rawName = relPath.substringAfterLast('/', relPath)
-        val fileName = resolveRemoteResourceFileName(rawName, url, leaf.fileType)
-        val relDir = relPath.substringBeforeLast('/', "")
-        val targetDir = if (relDir.isBlank()) albumDir else File(albumDir, relDir)
-        if (!targetDir.exists()) targetDir.mkdirs()
-        ensureNoMediaMarkers(albumDir)
-
-        val outFile = File(targetDir, fileName)
-        if (outFile.exists() && outFile.isFile && outFile.length() > 0L) return false
-        val relativeFilePath = if (relDir.isBlank()) fileName else "$relDir/$fileName"
-
-        downloadManager.enqueueDownload(
-            url = url,
-            fileName = fileName,
-            targetDir = targetDir.absolutePath,
-            taskRootDir = albumDir.absolutePath,
-            relativePath = relativeFilePath,
-            taskSubtitle = taskSubtitle,
-            tags = listOf(taskKey),
-            albumTitle = album.title,
-            albumCircle = album.circle,
-            albumCv = album.cv,
-            albumTagsCsv = album.tags.joinToString(","),
-            albumCoverUrl = album.coverUrl,
-            albumWorkId = album.workId,
-            albumRjCode = album.rjCode
-        )
-        return true
-    }
-
-    private fun resolveRemoteResourceFileName(rawName: String, url: String, fileType: TreeFileType): String {
-        val baseName = safeFileName(rawName)
-        val extFromName = baseName.substringAfterLast('.', "").takeIf { it.isNotBlank() }
-        if (extFromName != null) return baseName
-        val extFromUrl = url.substringBefore('?').substringAfterLast('.', "").takeIf { it.length in 2..6 }
-        val defaultExt = when (fileType) {
-            TreeFileType.Video -> "mp4"
-            TreeFileType.Image -> "jpg"
-            TreeFileType.Pdf -> "pdf"
-            TreeFileType.Archive -> "zip"
-            TreeFileType.Document -> "doc"
-            TreeFileType.Spreadsheet -> "csv"
-            TreeFileType.Presentation -> "ppt"
-            TreeFileType.Code -> "txt"
-            TreeFileType.Ebook -> "epub"
-            TreeFileType.Font -> "ttf"
-            TreeFileType.AppPackage -> "apk"
-            TreeFileType.Text -> "txt"
-            else -> "mp3"
-        }
-        return "$baseName.${extFromUrl ?: defaultExt}"
     }
 
     private fun normalizeRj(raw: String): String {

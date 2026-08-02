@@ -87,6 +87,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.asmr.player.data.local.db.AppDatabaseProvider
 import com.asmr.player.data.local.db.entities.LocalTreeCacheEntity
+import com.asmr.player.data.local.db.entities.OnlineSavedResourceEntity
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
@@ -619,6 +620,7 @@ internal fun buildLocalDirectoryBrowser(
         .sortedBy { SmartSortKey.of(it.name) }
         .mapNotNull { child ->
             val absolutePath = child.absolutePath ?: return@mapNotNull null
+            val isRemoteResource = absolutePath.startsWith("http", ignoreCase = true)
             val displayTitle = child.track?.title?.ifBlank { child.name.substringBeforeLast('.') }
                 ?: child.name.substringBeforeLast('.')
             val playlistTarget = when (child.fileType) {
@@ -633,7 +635,11 @@ internal fun buildLocalDirectoryBrowser(
                 isPlayable = child.track != null || child.fileType == TreeFileType.Video,
                 isOnline = isOnlineDirectoryAudio(child.fileType, absolutePath, child.track),
                 durationSeconds = child.track?.duration?.takeIf { it > 0.0 },
-                sizeSource = FileSizeSource.Local(path = absolutePath, sizeBytes = child.sizeBytes),
+                sizeSource = if (isRemoteResource) {
+                    FileSizeSource.Remote(absolutePath)
+                } else {
+                    FileSizeSource.Local(path = absolutePath, sizeBytes = child.sizeBytes)
+                },
                 absolutePath = absolutePath,
                 url = absolutePath,
                 track = child.track,
@@ -649,6 +655,11 @@ internal fun buildLocalDirectoryBrowser(
         folders = folders,
         files = files
     )
+}
+
+internal fun canSetDirectoryImageAsLocalCover(file: DirectoryFileItem): Boolean {
+    return file.fileType == TreeFileType.Image &&
+        !file.absolutePath.startsWith("http", ignoreCase = true)
 }
 
 internal class RemoteTreeNode(
@@ -893,6 +904,22 @@ internal data class LocalTreeLeafCacheEntry(
     val sizeBytes: Long? = null
 )
 
+internal fun onlineSavedResourceTreeLeaf(
+    resource: OnlineSavedResourceEntity
+): LocalTreeLeafCacheEntry? {
+    val relativePath = resource.relativePath.replace('\\', '/').trim().trimStart('/')
+    val url = resource.url.trim()
+    if (relativePath.isBlank() || !url.startsWith("http", ignoreCase = true)) return null
+    val fileType = runCatching { TreeFileType.valueOf(resource.fileType) }
+        .getOrElse { treeFileTypeForNode(relativePath, url) }
+    if (!isLibraryResourceSavableTreeFileType(fileType) || isPlayableTreeFileType(fileType)) return null
+    return LocalTreeLeafCacheEntry(
+        relativePath = relativePath,
+        absolutePath = url,
+        fileType = fileType
+    )
+}
+
 internal data class LocalTreeIndexBuildResult(
     val index: LocalTreeIndex,
     val leaves: List<LocalTreeLeafCacheEntry>
@@ -902,7 +929,8 @@ internal suspend fun loadOrBuildLocalTreeIndex(
     context: android.content.Context,
     albumId: Long,
     albumPaths: List<String>,
-    tracks: List<Track>
+    tracks: List<Track>,
+    onlineSavedResources: List<OnlineSavedResourceEntity> = emptyList()
 ): LocalTreeIndex {
     val gson = Gson()
     val cacheKey = albumPaths.map { it.trim() }.filter { it.isNotBlank() }.sorted().joinToString("|")
@@ -910,6 +938,11 @@ internal suspend fun loadOrBuildLocalTreeIndex(
     val dao = AppDatabaseProvider.get(context).localTreeCacheDao()
     val onlineTracks = tracks.filter { it.path.trim().startsWith("http", ignoreCase = true) }
     val onlineUrlSet = onlineTracks.map { it.path.trim() }.filter { it.isNotBlank() }.toSet()
+    val savedResourceKeys = onlineSavedResources.mapNotNull { resource ->
+        val relativePath = resource.relativePath.replace('\\', '/').trim().trimStart('/')
+        val url = resource.url.trim()
+        if (relativePath.isBlank() || url.isBlank()) null else relativePath to url
+    }.toSet()
 
     fun sanitizeSeg(name: String): String {
         return name.trim().ifEmpty { "item" }.replace(Regex("""[\\/:*?"<>|]"""), "_")
@@ -950,14 +983,27 @@ internal suspend fun loadOrBuildLocalTreeIndex(
         }
     }
 
-    fun mergeLeaves(localLeaves: List<LocalTreeLeafCacheEntry>, onlineLeaves: List<LocalTreeLeafCacheEntry>): List<LocalTreeLeafCacheEntry> {
+    fun buildSavedResourceLeaves(): List<LocalTreeLeafCacheEntry> {
+        return onlineSavedResources.mapNotNull(::onlineSavedResourceTreeLeaf)
+    }
+
+    fun mergeLeaves(
+        localLeaves: List<LocalTreeLeafCacheEntry>,
+        onlineLeaves: List<LocalTreeLeafCacheEntry>,
+        savedResourceLeaves: List<LocalTreeLeafCacheEntry>
+    ): List<LocalTreeLeafCacheEntry> {
         val filteredLocal = localLeaves.filter { leaf ->
             val abs = leaf.absolutePath.trim()
-            !(abs.startsWith("http", ignoreCase = true) && !onlineUrlSet.contains(abs))
+            !(
+                abs.startsWith("http", ignoreCase = true) &&
+                    !onlineUrlSet.contains(abs) &&
+                    !savedResourceKeys.contains(leaf.relativePath to abs)
+            )
         }
         val byRel = linkedMapOf<String, LocalTreeLeafCacheEntry>()
         filteredLocal.forEach { byRel[it.relativePath] = it }
-        onlineLeaves.forEach { leaf ->
+
+        fun mergeRemoteLeaf(leaf: LocalTreeLeafCacheEntry) {
             val existing = byRel[leaf.relativePath]
             if (existing == null) {
                 byRel[leaf.relativePath] = leaf
@@ -966,16 +1012,24 @@ internal suspend fun loadOrBuildLocalTreeIndex(
                 if (abs.startsWith("http", ignoreCase = true)) byRel[leaf.relativePath] = leaf
             }
         }
+
+        onlineLeaves.forEach(::mergeRemoteLeaf)
+        savedResourceLeaves.forEach(::mergeRemoteLeaf)
         return byRel.values.toList()
     }
     val onlineLeaves = buildOnlineLeaves()
+    val savedResourceLeaves = buildSavedResourceLeaves()
 
     val cached = dao.getByAlbumAndKey(albumId = albumId, cacheKey = cacheKey)
     if (cached != null && cached.stamp == stamp && cached.payloadJson.isNotBlank()) {
         val type = object : TypeToken<List<LocalTreeLeafCacheEntry>>() {}.type
         val leaves = runCatching { gson.fromJson<List<LocalTreeLeafCacheEntry>>(cached.payloadJson, type) }
             .getOrDefault(emptyList())
-        val merged = mergeLeaves(localLeaves = leaves, onlineLeaves = onlineLeaves)
+        val merged = mergeLeaves(
+            localLeaves = leaves,
+            onlineLeaves = onlineLeaves,
+            savedResourceLeaves = savedResourceLeaves
+        )
         val missingLocalSizeMetadata = leaves.any { leaf ->
             val abs = leaf.absolutePath.trim()
             abs.isNotBlank() &&
@@ -988,7 +1042,11 @@ internal suspend fun loadOrBuildLocalTreeIndex(
     }
 
     val built = buildLocalTreeIndexByScanning(context = context, albumPaths = albumPaths, tracks = tracks)
-    val merged = mergeLeaves(localLeaves = built.leaves, onlineLeaves = onlineLeaves)
+    val merged = mergeLeaves(
+        localLeaves = built.leaves,
+        onlineLeaves = onlineLeaves,
+        savedResourceLeaves = savedResourceLeaves
+    )
     dao.upsert(
         LocalTreeCacheEntity(
             albumId = albumId,
