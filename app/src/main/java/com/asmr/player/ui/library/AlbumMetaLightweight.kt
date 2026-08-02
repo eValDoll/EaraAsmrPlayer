@@ -194,10 +194,10 @@ internal fun AlbumHeaderCvLightweight(
  *
  * 设计特点：
  * - 小图标 + 井号文本
- * - 间距分隔，可换行
- * - FlowRow 布局
+ * - 单行横向滚动显示
+ * - 与声优列表保持一致的布局
  */
-@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 internal fun AlbumHeaderTagsLightweight(
     tags: List<String>,
@@ -210,23 +210,21 @@ internal fun AlbumHeaderTagsLightweight(
 
     val colorScheme = AsmrTheme.colorScheme
 
-    FlowRow(
-        modifier = modifier.fillMaxWidth(),
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clipToBounds()
+            .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         // 标签图标
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(vertical = 2.dp)
-        ) {
-            Icon(
-                painter = painterResource(id = R.drawable.ic_album_meta_tags),
-                contentDescription = null,
-                tint = colorScheme.textSecondary,
-                modifier = Modifier.size(14.dp)
-            )
-        }
+        Icon(
+            painter = painterResource(id = R.drawable.ic_album_meta_tags),
+            contentDescription = null,
+            tint = colorScheme.textSecondary,
+            modifier = Modifier.size(14.dp)
+        )
 
         // 标签列表
         normalizedTags.forEach { tag ->
