@@ -413,4 +413,21 @@ object AppDatabaseMigrations {
             )
         }
     }
+
+    val MIGRATION_23_24: Migration = object : Migration(23, 24) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `online_saved_resources` (" +
+                    "`id` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
+                    "`albumId` INTEGER NOT NULL, " +
+                    "`relativePath` TEXT NOT NULL, " +
+                    "`url` TEXT NOT NULL, " +
+                    "`fileType` TEXT NOT NULL)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_online_saved_resources_albumId` " +
+                    "ON `online_saved_resources` (`albumId`)"
+            )
+        }
+    }
 }

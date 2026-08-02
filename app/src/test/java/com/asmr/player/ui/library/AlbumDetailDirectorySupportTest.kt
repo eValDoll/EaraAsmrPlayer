@@ -1,14 +1,29 @@
 package com.asmr.player.ui.library
 
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
+import com.asmr.player.data.local.db.entities.OnlineSavedResourceEntity
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class AlbumDetailDirectorySupportTest {
+
+    @Test
+    fun combineLocalTreeCacheStamp_changesWhenDatabaseTracksArrive() {
+        val withoutTracks = combineLocalTreeCacheStamp(albumPathsStamp = 42L, tracks = emptyList())
+        val withTracks = combineLocalTreeCacheStamp(
+            albumPathsStamp = 42L,
+            tracks = listOf(
+                Track(albumId = 7L, title = "01", path = "/album/mp3/01.mp3")
+            )
+        )
+
+        assertNotEquals(withoutTracks, withTracks)
+    }
 
     @Test
     fun buildBreadcrumbSegments_preservesHierarchyOrder() {
@@ -252,6 +267,29 @@ class AlbumDetailDirectorySupportTest {
 
         assertEquals("在线音频", directoryFileTypeLabel(browser.files.single { it.title == "online" }))
         assertEquals("本地音频", directoryFileTypeLabel(browser.files.single { it.title == "local" }))
+    }
+
+    @Test
+    fun onlineSavedResourceTreeLeaf_keepsLogicalImageWithoutLocalCoverAction() {
+        val leaf = onlineSavedResourceTreeLeaf(
+            OnlineSavedResourceEntity(
+                albumId = 9L,
+                relativePath = "booklet/images/scene.jpg",
+                url = "https://example.com/scene.jpg",
+                fileType = TreeFileType.Image.name
+            )
+        ) ?: error("resource should be retained")
+        val index = buildLocalTreeIndexFromLeaves(leaves = listOf(leaf), tracks = emptyList())
+        val browser = buildLocalDirectoryBrowser(
+            index = index,
+            currentPath = "booklet/images",
+            album = Album(id = 9L, title = "album", path = "web://rj/RJ000009"),
+            shouldShowSubtitleStamp = { false }
+        )
+
+        val file = browser.files.single()
+        assertEquals(FileSizeSource.Remote("https://example.com/scene.jpg"), file.sizeSource)
+        assertFalse(canSetDirectoryImageAsLocalCover(file))
     }
 
     @Test

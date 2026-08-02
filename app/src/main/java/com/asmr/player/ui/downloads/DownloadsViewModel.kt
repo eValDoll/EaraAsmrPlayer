@@ -497,6 +497,7 @@ class DownloadsViewModel @Inject constructor(
                 runCatching { trackDao.deleteTracksForAlbum(albumId) }
                 runCatching { tagDao.deleteAlbumTagsByAlbumId(albumId) }
                 runCatching { albumFtsDao.deleteByAlbumId(albumId) }
+                runCatching { db.onlineSavedResourceDao().deleteByAlbumId(albumId) }
                 runCatching { albumDao.deleteAlbum(album) }
             }
             return
