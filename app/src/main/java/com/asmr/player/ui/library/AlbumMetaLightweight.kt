@@ -129,7 +129,7 @@ internal fun AlbumHeaderPrimaryMetaLightweight(
  * 轻量级声优列表
  *
  * 设计特点：
- * - 小图标 + 纯文本
+ * - 小图标固定在左侧 + 纯文本可滚动
  * - 中点分隔
  * - 可横向滚动
  */
@@ -149,12 +149,11 @@ internal fun AlbumHeaderCvLightweight(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clipToBounds()
-            .horizontalScroll(rememberScrollState()),
+            .clipToBounds(),
         horizontalArrangement = Arrangement.spacedBy(6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // 声优图标
+        // 声优图标 - 固定在左侧
         Icon(
             painter = painterResource(id = R.drawable.ic_album_meta_cv),
             contentDescription = null,
@@ -162,29 +161,37 @@ internal fun AlbumHeaderCvLightweight(
             modifier = Modifier.size(14.dp)
         )
 
-        // 声优列表，用中点分隔
-        cvs.forEachIndexed { index, cv ->
-            if (index > 0) {
+        // 声优列表 - 可横向滚动
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            cvs.forEachIndexed { index, cv ->
+                if (index > 0) {
+                    Text(
+                        text = "·",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = colorScheme.textTertiary.copy(alpha = 0.6f),
+                    )
+                }
                 Text(
-                    text = "·",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colorScheme.textTertiary.copy(alpha = 0.6f),
+                    text = cv,
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp),
+                    color = colorScheme.textPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .combinedClickable(
+                            onClick = { onCvClick?.invoke(cv) },
+                            onLongClick = onCvLongClick?.let { longClick -> { longClick(cv) } }
+                        )
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
                 )
             }
-            Text(
-                text = cv,
-                style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp),
-                color = colorScheme.textPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .combinedClickable(
-                        onClick = { onCvClick?.invoke(cv) },
-                        onLongClick = onCvLongClick?.let { longClick -> { longClick(cv) } }
-                    )
-                    .padding(horizontal = 4.dp, vertical = 2.dp)
-            )
         }
     }
 }
@@ -193,7 +200,7 @@ internal fun AlbumHeaderCvLightweight(
  * 轻量级标签列表
  *
  * 设计特点：
- * - 小图标 + 井号文本
+ * - 小图标固定在左侧 + 井号文本可滚动
  * - 单行横向滚动显示
  * - 与声优列表保持一致的布局
  */
@@ -213,12 +220,11 @@ internal fun AlbumHeaderTagsLightweight(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clipToBounds()
-            .horizontalScroll(rememberScrollState()),
+            .clipToBounds(),
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // 标签图标
+        // 标签图标 - 固定在左侧
         Icon(
             painter = painterResource(id = R.drawable.ic_album_meta_tags),
             contentDescription = null,
@@ -226,22 +232,30 @@ internal fun AlbumHeaderTagsLightweight(
             modifier = Modifier.size(14.dp)
         )
 
-        // 标签列表
-        normalizedTags.forEach { tag ->
-            Text(
-                text = if (tag.startsWith("#")) tag else "#$tag",
-                style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp),
-                color = colorScheme.textSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .combinedClickable(
-                        onClick = { onTagClick?.invoke(tag) },
-                        onLongClick = onTagLongClick?.let { longClick -> { longClick(tag) } }
-                    )
-                    .padding(horizontal = 4.dp, vertical = 2.dp)
-            )
+        // 标签列表 - 可横向滚动
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            normalizedTags.forEach { tag ->
+                Text(
+                    text = if (tag.startsWith("#")) tag else "#$tag",
+                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp),
+                    color = colorScheme.textSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .combinedClickable(
+                            onClick = { onTagClick?.invoke(tag) },
+                            onLongClick = onTagLongClick?.let { longClick -> { longClick(tag) } }
+                        )
+                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                )
+            }
         }
     }
 }
