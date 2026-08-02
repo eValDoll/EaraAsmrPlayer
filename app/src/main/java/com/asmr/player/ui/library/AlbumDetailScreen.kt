@@ -1748,7 +1748,7 @@ private fun AlbumHeader(
 
     val headerAnimationScopeKey = remember(introSessionKey) { "albumHeader:$introSessionKey" }
 
-    // 记录“首帧时各信息块是否已存在”：本地库专辑进入时 cv/tags 已就绪，应直接显示，不做渐入或撑开；
+    // 记录"首帧时各信息块是否已存在"：本地库专辑进入时 cv/tags 已就绪，应直接显示，不做渐入或撑开；
     // 列表 hint 已经提供的信息首帧直接占住最终高度，只有网络到达后才新增的信息才纵向展开。
     val cvPresentInitially = remember(headerAnimationScopeKey) { album.cv.isNotBlank() }
     val tagsPresentInitially = remember(headerAnimationScopeKey) { album.tags.isNotEmpty() }
@@ -1771,50 +1771,51 @@ private fun AlbumHeader(
     var languageMenuExpanded by rememberSaveable { mutableStateOf(false) }
 
     Column(
-        modifier = headerContainerModifier.padding(top = 10.dp, bottom = 12.dp)
+        modifier = headerContainerModifier.padding(top = 4.dp, bottom = 12.dp)
         // 不用 spacedBy 控制信息行之间的间距：cv/tags 行在网络数据到达后会以 0 高度组合、再通过
-        // AnimatedVisibility 纵向展开，而 spacedBy 的固定间距会在“0 高度的折叠内容刚组合”的那一帧
+        // AnimatedVisibility 纵向展开，而 spacedBy 的固定间距会在"0 高度的折叠内容刚组合"的那一帧
         // 立即出现，把下方按钮行瞬间下推一截，造成展开前的下沉抖动。改为把行间距/与按钮行的间距作为
         // 每个信息行自身的底部 padding 放进 reveal 内部——这样间距属于被 expandVertically 裁剪的高度，
         // 会随展开动画一起从 0 平滑增长，按钮行始终被平滑下移而非瞬间跳变。
     ) {
-                // cv 行与 tags 行同属“信息行”，行间距与行内换行间距（6.dp）保持一致；
-                // 末尾信息行携带 8.dp 底部 padding 作为与下方按钮行的间距。
-                if (album.cv.isNotBlank()) {
-                    AlbumHeaderLateMetaReveal(
-                        revealKey = "$headerAnimationScopeKey:cv",
-                        delayMillis = AlbumDetailCvRevealDelayMs,
-                        enabled = animateIntro,
-                        lateArrival = cvExpandLayout
-                    ) {
-                        Box(modifier = Modifier.padding(bottom = if (album.tags.isNotEmpty()) 6.dp else 8.dp)) {
-                            AlbumHeaderCvFlow(
-                                cvText = album.cv,
-                                onCvClick = { cv -> copyMeta("声优", cv) },
-                                onCvLongClick = onMetaLongClick,
-                            )
-                        }
+        // 使用新的轻量级信息组件替换原有的胶囊样式
+        val metaRevealKey = headerAnimationScopeKey + ":meta"
+        AlbumHeaderLateMetaReveal(
+            revealKey = metaRevealKey,
+            delayMillis = AlbumDetailCvRevealDelayMs,
+            enabled = animateIntro,
+            lateArrival = cvExpandLayout || tagsExpandLayout
+        ) {
+            Box(modifier = Modifier.padding(bottom = 8.dp)) {
+                val labelCv = "声优"
+                val labelTag = "标签"
+                // 只显示声优和标签，RJ和社团已经在Hero封面底部显示
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // 声优
+                    if (album.cv.isNotBlank()) {
+                        AlbumHeaderCvLightweight(
+                            cvText = album.cv,
+                            onCvClick = { cv -> copyMeta(labelCv, cv) },
+                            onCvLongClick = onMetaLongClick
+                        )
+                    }
+
+                    // 标签
+                    if (album.tags.isNotEmpty()) {
+                        AlbumHeaderTagsLightweight(
+                            tags = album.tags,
+                            onTagClick = { tag -> copyMeta(labelTag, tag) },
+                            onTagLongClick = onMetaLongClick
+                        )
                     }
                 }
+            }
+        }
 
-                if (album.tags.isNotEmpty()) {
-                    AlbumHeaderLateMetaReveal(
-                        revealKey = "$headerAnimationScopeKey:tags",
-                        delayMillis = AlbumDetailTagsRevealDelayMs,
-                        enabled = animateIntro,
-                        lateArrival = tagsExpandLayout
-                    ) {
-                        Box(modifier = Modifier.padding(bottom = 8.dp)) {
-                            AlbumHeaderTagsFlow(
-                                tags = album.tags,
-                                onTagClick = { tag -> copyMeta("标签", tag) },
-                                onTagLongClick = onMetaLongClick,
-                            )
-                        }
-                    }
-                }
-
-                Box(
+        Box(
                     modifier = Modifier
                         .fillMaxWidth()
                 ) {
