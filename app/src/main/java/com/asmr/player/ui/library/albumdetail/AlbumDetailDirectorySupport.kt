@@ -906,7 +906,7 @@ internal suspend fun loadOrBuildLocalTreeIndex(
 ): LocalTreeIndex {
     val gson = Gson()
     val cacheKey = albumPaths.map { it.trim() }.filter { it.isNotBlank() }.sorted().joinToString("|")
-    val stamp = computeAlbumPathsStamp(context, albumPaths)
+    val stamp = computeLocalTreeCacheStamp(context, albumPaths, tracks)
     val dao = AppDatabaseProvider.get(context).localTreeCacheDao()
     val onlineTracks = tracks.filter { it.path.trim().startsWith("http", ignoreCase = true) }
     val onlineUrlSet = onlineTracks.map { it.path.trim() }.filter { it.isNotBlank() }.toSet()
@@ -1012,6 +1012,28 @@ internal fun computeAlbumPathsStamp(context: android.content.Context, albumPaths
         }
         acc = (acc xor v) * 1099511628211L
     }
+    return acc
+}
+
+internal fun computeLocalTreeCacheStamp(
+    context: android.content.Context,
+    albumPaths: List<String>,
+    tracks: List<Track>
+): Long {
+    return combineLocalTreeCacheStamp(computeAlbumPathsStamp(context, albumPaths), tracks)
+}
+
+internal fun combineLocalTreeCacheStamp(albumPathsStamp: Long, tracks: List<Track>): Long {
+    var acc = albumPathsStamp
+    val localTrackPaths = tracks.asSequence()
+        .map { it.path.trim() }
+        .filter { it.isNotBlank() && !it.startsWith("http", ignoreCase = true) }
+        .sorted()
+        .toList()
+    localTrackPaths.forEach { path ->
+        acc = (acc xor path.hashCode().toLong()) * 1099511628211L
+    }
+    acc = (acc xor localTrackPaths.size.toLong()) * 1099511628211L
     return acc
 }
 

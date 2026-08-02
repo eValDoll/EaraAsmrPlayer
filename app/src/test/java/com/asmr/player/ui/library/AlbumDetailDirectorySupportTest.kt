@@ -6,9 +6,23 @@ import com.asmr.player.domain.model.Track
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 
 class AlbumDetailDirectorySupportTest {
+
+    @Test
+    fun combineLocalTreeCacheStamp_changesWhenDatabaseTracksArrive() {
+        val withoutTracks = combineLocalTreeCacheStamp(albumPathsStamp = 42L, tracks = emptyList())
+        val withTracks = combineLocalTreeCacheStamp(
+            albumPathsStamp = 42L,
+            tracks = listOf(
+                Track(albumId = 7L, title = "01", path = "/album/mp3/01.mp3")
+            )
+        )
+
+        assertNotEquals(withoutTracks, withTracks)
+    }
 
     @Test
     fun buildBreadcrumbSegments_preservesHierarchyOrder() {

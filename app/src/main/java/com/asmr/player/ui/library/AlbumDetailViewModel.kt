@@ -661,7 +661,6 @@ class AlbumDetailViewModel @Inject constructor(
                 model = createInitialAlbumDetailModel(
                     rj = initialRj,
                     displayAlbum = initialHintAlbum,
-                    localAlbum = initialHint?.localAlbum,
                     dlsiteInfo = initialHintAlbum.takeIf { shouldPreserveHeaderAlbumMetadata(initialHint) },
                     preserveHeaderAlbumMetadata = shouldPreserveHeaderAlbumMetadata(initialHint)
                 )
@@ -685,17 +684,13 @@ class AlbumDetailViewModel @Inject constructor(
                 val hintAlbum = albumFromInitialHint(rj, hint)
                 val preserveHeaderAlbumMetadata = shouldPreserveHeaderAlbumMetadata(hint)
                 val dlsiteInfo = hintAlbum.takeIf { preserveHeaderAlbumMetadata }
-                val hydratedLocalAlbum = localAlbum?.let { loaded ->
-                    val prefetchedTracks = hint?.localAlbum?.tracks.orEmpty()
-                    if (prefetchedTracks.isEmpty()) loaded else loaded.copy(tracks = prefetchedTracks)
-                }
                 // 种入列表点击时记录的封面与元信息：让 hero 与列表卡片使用相同图片 model，
                 // 在网络解析完成前即可命中跨尺寸内存缓存，避免重复请求封面。
                 val displayAlbum = if (hint != null) hintAlbum else localAlbum ?: hintAlbum
                 val loadedModel = createInitialAlbumDetailModel(
                     rj = rj,
                     displayAlbum = displayAlbum,
-                    localAlbum = hydratedLocalAlbum,
+                    localAlbum = localAlbum,
                     dlsiteInfo = dlsiteInfo,
                     preserveHeaderAlbumMetadata = preserveHeaderAlbumMetadata
                 )
@@ -707,7 +702,7 @@ class AlbumDetailViewModel @Inject constructor(
                 }
                 localTracksObserveJob?.cancel()
                 localTracksObserveJob = null
-                val localId = hydratedLocalAlbum?.id ?: 0L
+                val localId = localAlbum?.id ?: 0L
                 if (localId > 0L) {
                     localTracksObserveJob = viewModelScope.launch {
                         trackDao.getTracksForAlbum(localId)
@@ -1927,7 +1922,6 @@ class AlbumDetailViewModel @Inject constructor(
             model = createInitialAlbumDetailModel(
                 rj = initialRj,
                 displayAlbum = hintAlbum,
-                localAlbum = hint?.localAlbum,
                 dlsiteInfo = hintAlbum.takeIf { preserveHeaderMetadata },
                 preserveHeaderAlbumMetadata = preserveHeaderMetadata
             )
