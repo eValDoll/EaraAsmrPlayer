@@ -177,19 +177,18 @@ private fun DlsiteGalleryLoadingRow() {
 }
 
 @Composable
-private fun DlsiteSectionPlaceholderLine(
+private fun DlsiteStaticPlaceholderLine(
     widthFraction: Float,
     modifier: Modifier = Modifier,
     height: Dp = 14.dp,
     cornerRadius: Int = 8,
-    animateHighlight: Boolean = true,
 ) {
     AsmrShimmerPlaceholder(
         modifier = modifier
             .fillMaxWidth(widthFraction)
             .height(height),
         cornerRadius = cornerRadius,
-        animateHighlight = animateHighlight,
+        animateHighlight = false,
     )
 }
 
@@ -273,17 +272,15 @@ private fun DlsiteDirectoryLoadingPanel() {
                     modifier = Modifier.weight(1f),
                     verticalArrangement = Arrangement.spacedBy(4.dp),
                 ) {
-                    DlsiteSectionPlaceholderLine(
+                    DlsiteStaticPlaceholderLine(
                         widthFraction = 0.42f,
                         height = 12.dp,
                         cornerRadius = 6,
-                        animateHighlight = false,
                     )
-                    DlsiteSectionPlaceholderLine(
+                    DlsiteStaticPlaceholderLine(
                         widthFraction = 0.64f,
                         height = 9.dp,
                         cornerRadius = 5,
-                        animateHighlight = false,
                     )
                 }
                 AsmrShimmerPlaceholder(
@@ -360,11 +357,10 @@ private fun DlsiteDirectoryFolderPlaceholder(
         )
         Spacer(modifier = Modifier.width(10.dp))
         Box(modifier = Modifier.weight(1f)) {
-            DlsiteSectionPlaceholderLine(
+            DlsiteStaticPlaceholderLine(
                 widthFraction = titleWidthFraction,
                 height = 14.dp,
                 cornerRadius = 7,
-                animateHighlight = false,
             )
         }
         AsmrShimmerPlaceholder(
@@ -403,17 +399,15 @@ private fun DlsiteDirectoryFilePlaceholder(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            DlsiteSectionPlaceholderLine(
+            DlsiteStaticPlaceholderLine(
                 widthFraction = titleWidthFraction,
                 height = 13.dp,
                 cornerRadius = 7,
-                animateHighlight = false,
             )
-            DlsiteSectionPlaceholderLine(
+            DlsiteStaticPlaceholderLine(
                 widthFraction = metaWidthFraction,
                 height = 9.dp,
                 cornerRadius = 5,
-                animateHighlight = false,
             )
         }
         Spacer(modifier = Modifier.width(8.dp))
@@ -447,11 +441,11 @@ private fun DlsiteTrialLoadingList() {
                         .padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    DlsiteSectionPlaceholderLine(
+                    DlsiteStaticPlaceholderLine(
                         widthFraction = if (index == 0) 0.62f else 0.48f,
                         height = 15.dp
                     )
-                    DlsiteSectionPlaceholderLine(
+                    DlsiteStaticPlaceholderLine(
                         widthFraction = if (index == 2) 0.26f else 0.18f,
                         height = 11.dp
                     )
@@ -786,7 +780,7 @@ private fun DlsiteRecommendationsLoadingBlocks() {
     ) {
         placeholders.forEach { sectionIndex ->
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                DlsiteSectionPlaceholderLine(
+                DlsiteStaticPlaceholderLine(
                     widthFraction = when (sectionIndex) {
                         0 -> 0.34f
                         1 -> 0.28f
@@ -817,8 +811,8 @@ private fun DlsiteRecommendationsLoadingBlocks() {
                                     modifier = Modifier.padding(horizontal = 10.dp),
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    DlsiteSectionPlaceholderLine(widthFraction = 0.88f, height = 12.dp)
-                                    DlsiteSectionPlaceholderLine(widthFraction = 0.46f, height = 10.dp)
+                                    DlsiteStaticPlaceholderLine(widthFraction = 0.88f, height = 12.dp)
+                                    DlsiteStaticPlaceholderLine(widthFraction = 0.46f, height = 10.dp)
                                 }
                             }
                         }
