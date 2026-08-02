@@ -1787,24 +1787,31 @@ private fun AlbumHeader(
             lateArrival = cvExpandLayout || tagsExpandLayout
         ) {
             Box(modifier = Modifier.padding(bottom = 8.dp)) {
-                val rjValue = album.rjCode.ifBlank { album.workId }
-                val labelRj = "RJ"
-                val labelCircle = "社团"
                 val labelCv = "声优"
                 val labelTag = "标签"
-                AlbumHeaderMetaLightweight(
-                    rjCode = rjValue,
-                    circle = album.circle,
-                    cvText = album.cv,
-                    tags = album.tags,
-                    rjOnClick = { copyMeta(labelRj, rjValue) },
-                    circleOnClick = { copyMeta(labelCircle, album.circle) },
-                    circleOnLongClick = { onMetaLongClick(album.circle) },
-                    onCvClick = { cv -> copyMeta(labelCv, cv) },
-                    onCvLongClick = onMetaLongClick,
-                    onTagClick = { tag -> copyMeta(labelTag, tag) },
-                    onTagLongClick = onMetaLongClick,
-                )
+                // 只显示声优和标签，RJ和社团已经在Hero封面底部显示
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // 声优
+                    if (album.cv.isNotBlank()) {
+                        AlbumHeaderCvLightweight(
+                            cvText = album.cv,
+                            onCvClick = { cv -> copyMeta(labelCv, cv) },
+                            onCvLongClick = onMetaLongClick
+                        )
+                    }
+
+                    // 标签
+                    if (album.tags.isNotEmpty()) {
+                        AlbumHeaderTagsLightweight(
+                            tags = album.tags,
+                            onTagClick = { tag -> copyMeta(labelTag, tag) },
+                            onTagLongClick = onMetaLongClick
+                        )
+                    }
+                }
             }
         }
 
