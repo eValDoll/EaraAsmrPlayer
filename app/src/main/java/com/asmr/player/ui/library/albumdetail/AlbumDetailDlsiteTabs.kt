@@ -132,6 +132,7 @@ import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.NoImageLoadingIndicator
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
+import com.asmr.player.ui.common.rememberAsmrShimmerProgress
 import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.ImagePreviewItem
@@ -157,6 +158,7 @@ private const val DlsiteGalleryThumbCornerRadius = 12
 @Composable
 private fun DlsiteGalleryLoadingRow() {
     val placeholders = remember { listOf(0, 1, 2, 3) }
+    val shimmerProgress = rememberAsmrShimmerProgress()
     LazyRow(
         modifier = Modifier
             .fillMaxWidth()
@@ -168,7 +170,8 @@ private fun DlsiteGalleryLoadingRow() {
         items(placeholders, key = { it }, contentType = { "galleryLoadingThumb" }) {
             AsmrShimmerPlaceholder(
                 modifier = Modifier.size(width = DlsiteGalleryThumbWidth, height = DlsiteGalleryThumbHeight),
-                cornerRadius = DlsiteGalleryThumbCornerRadius
+                cornerRadius = DlsiteGalleryThumbCornerRadius,
+                sharedProgress = shimmerProgress,
             )
         }
     }
@@ -179,13 +182,15 @@ private fun DlsiteSectionPlaceholderLine(
     widthFraction: Float,
     modifier: Modifier = Modifier,
     height: Dp = 14.dp,
-    cornerRadius: Int = 8
+    cornerRadius: Int = 8,
+    sharedProgress: State<Float>? = null,
 ) {
     AsmrShimmerPlaceholder(
         modifier = modifier
             .fillMaxWidth(widthFraction)
             .height(height),
-        cornerRadius = cornerRadius
+        cornerRadius = cornerRadius,
+        sharedProgress = sharedProgress,
     )
 }
 
@@ -205,6 +210,7 @@ private fun rememberStableOneDirectoryContainerHeight(): Dp {
 @Composable
 private fun DlsiteDirectoryLoadingPanel() {
     val fixedHeight = rememberDlsiteDirectoryListHeight()
+    val shimmerProgress = rememberAsmrShimmerProgress()
     Surface(
         shape = RoundedCornerShape(12.dp),
         tonalElevation = 1.dp,
@@ -220,8 +226,16 @@ private fun DlsiteDirectoryLoadingPanel() {
                     .padding(horizontal = 12.dp, vertical = 12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                DlsiteSectionPlaceholderLine(widthFraction = 0.56f, height = 16.dp)
-                DlsiteSectionPlaceholderLine(widthFraction = 0.32f, height = 12.dp)
+                DlsiteSectionPlaceholderLine(
+                    widthFraction = 0.56f,
+                    height = 16.dp,
+                    sharedProgress = shimmerProgress,
+                )
+                DlsiteSectionPlaceholderLine(
+                    widthFraction = 0.32f,
+                    height = 12.dp,
+                    sharedProgress = shimmerProgress,
+                )
             }
             HorizontalDivider(
                 modifier = Modifier.padding(horizontal = 12.dp),
@@ -239,11 +253,13 @@ private fun DlsiteDirectoryLoadingPanel() {
                     modifier = Modifier
                         .weight(1f)
                         .height(40.dp),
-                    cornerRadius = 12
+                    cornerRadius = 12,
+                    sharedProgress = shimmerProgress,
                 )
                 AsmrShimmerPlaceholder(
                     modifier = Modifier.size(width = 92.dp, height = 34.dp),
-                    cornerRadius = 16
+                    cornerRadius = 16,
+                    sharedProgress = shimmerProgress,
                 )
             }
             HorizontalDivider(
@@ -269,12 +285,14 @@ private fun DlsiteDirectoryLoadingPanel() {
                         val iconSize = if (index % 3 == 0) 18.dp else 14.dp
                         AsmrShimmerPlaceholder(
                             modifier = Modifier.size(iconSize),
-                            cornerRadius = 999
+                            cornerRadius = 999,
+                            sharedProgress = shimmerProgress,
                         )
                         DlsiteSectionPlaceholderLine(
                             widthFraction = if (index % 3 == 0) 0.72f else 0.54f,
                             modifier = Modifier.weight(1f),
-                            height = 14.dp
+                            height = 14.dp,
+                            sharedProgress = shimmerProgress,
                         )
                     }
                 }

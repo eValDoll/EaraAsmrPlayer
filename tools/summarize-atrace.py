@@ -28,6 +28,8 @@ def main() -> None:
     parser.add_argument("--top", type=int, default=80)
     parser.add_argument("--slowest", type=int, default=0)
     parser.add_argument("--slow-thread", default="")
+    parser.add_argument("--start", type=float)
+    parser.add_argument("--end", type=float)
     args = parser.parse_args()
 
     target = args.tgid
@@ -49,7 +51,11 @@ def main() -> None:
             elif payload == f"E|{target}" and stacks[tid]:
                 name, started, started_thread = stacks[tid].pop()
                 duration_ms = (timestamp - started) * 1_000
-                if duration_ms >= 0:
+                inside_window = (
+                    (args.start is None or started >= args.start) and
+                    (args.end is None or started < args.end)
+                )
+                if duration_ms >= 0 and inside_window:
                     durations[(started_thread, name)].append(duration_ms)
                     events.append((duration_ms, started, timestamp, started_thread, name))
 

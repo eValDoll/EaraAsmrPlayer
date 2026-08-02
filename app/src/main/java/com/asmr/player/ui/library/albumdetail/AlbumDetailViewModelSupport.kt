@@ -2,6 +2,7 @@ package com.asmr.player.ui.library
 
 import android.content.Context
 import android.util.Log
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
@@ -104,6 +105,7 @@ internal fun centerCropSquare(src: Bitmap, size: Int): Bitmap {
     return out
 }
 
+@Immutable
 sealed class AlbumDetailUiState {
     object Loading : AlbumDetailUiState()
     data class Success(val model: AlbumDetailModel) : AlbumDetailUiState()
@@ -145,6 +147,7 @@ internal fun extractRemoteFileSize(response: Response): Long? {
     return bodyLength?.takeIf { it > 0L }
 }
 
+@Immutable
 data class AlbumDetailModel(
     val baseRjCode: String,
     val rjCode: String,

@@ -221,6 +221,8 @@ internal val AlbumDetailHorizontalPadding = 8.dp
 
 private class AlbumHeaderAlphaRevealState(var hasPlayed: Boolean)
 
+private class AlbumDetailIntroState(var settled: Boolean)
+
 private val AlbumHeaderAlphaRevealStateSaver = Saver<AlbumHeaderAlphaRevealState, Boolean>(
     save = { it.hasPlayed },
     restore = { AlbumHeaderAlphaRevealState(it) }
@@ -335,7 +337,6 @@ fun AlbumDetailScreen(
     onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit = { _, _ -> },
     onSearchKeyword: (String) -> Unit = {},
     initialTab: Int? = null,
-    initialOnlineLoadDelayMillis: Long = 0L,
     playlistsViewModel: PlaylistsViewModel = hiltViewModel(),
     albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel(),
@@ -357,7 +358,7 @@ fun AlbumDetailScreen(
     val selectedTab = remember(albumId, initialTab) {
         initialTab?.coerceIn(0, 2) ?: if (albumId != null && albumId > 0) 0 else 1
     }
-    var initialIntroSettled by remember(screenKey) { mutableStateOf(false) }
+    val initialIntroState = remember(screenKey) { AlbumDetailIntroState(settled = false) }
     var showAsmrDownloadDialog by remember { mutableStateOf(false) }
     var showOnlineSaveDialog by remember { mutableStateOf(false) }
     var pendingOnlineSaveSelection by remember { mutableStateOf<Set<String>?>(null) }
@@ -371,17 +372,8 @@ fun AlbumDetailScreen(
         if (keyword.isNotBlank()) metaActionKeyword = keyword
     }
 
-    var initialOnlineLoadReady by remember(screenKey) {
-        mutableStateOf(initialOnlineLoadDelayMillis <= 0L)
-    }
-    LaunchedEffect(screenKey, initialOnlineLoadDelayMillis) {
-        if (initialOnlineLoadDelayMillis > 0L) {
-            delay(initialOnlineLoadDelayMillis)
-            initialOnlineLoadReady = true
-        }
-    }
-    LaunchedEffect(viewModel, initialOnlineLoadReady) {
-        viewModel.setListenTogetherRjSummaryPollingEnabled(initialOnlineLoadReady)
+    LaunchedEffect(viewModel) {
+        viewModel.setListenTogetherRjSummaryPollingEnabled(true)
     }
     LaunchedEffect(albumId, rjCode) {
         withFrameNanos { }
@@ -425,10 +417,12 @@ fun AlbumDetailScreen(
                     }
                 }
                 is AlbumDetailUiState.Success -> {
-                    LaunchedEffect(screenKey, initialIntroSettled) {
-                        if (initialIntroSettled) return@LaunchedEffect
+                    LaunchedEffect(screenKey) {
+                        if (initialIntroState.settled) return@LaunchedEffect
                         delay(AlbumDetailInitialIntroDurationMs)
-                        initialIntroSettled = true
+                        // 这只是供之后新到数据判断是否还需入场动画的生命周期标记。
+                        // 已经在树上的动画会自行完整收尾，计时结束时无需强制整页重组。
+                        initialIntroState.settled = true
                     }
                     val model = state.model
                     val album = model.displayAlbum
@@ -436,7 +430,7 @@ fun AlbumDetailScreen(
                     val trialDownloadTree = remember(model.dlsiteTrialTracks) {
                         buildDlsiteTrialDownloadTree(model.dlsiteTrialTracks)
                     }
-                    val shouldPlayInitialAnimations = !initialIntroSettled
+                    val shouldPlayInitialAnimations = !initialIntroState.settled
                     val shouldAnimateHeaderIntro = true
                     var showTagManager by remember { mutableStateOf(false) }
                     var tagManageTrack by remember { mutableStateOf<Track?>(null) }
@@ -762,10 +756,8 @@ fun AlbumDetailScreen(
                                 selectedTab,
                                 model.rjCode,
                                 model.dlsiteWorkno,
-                                model.hasResolvedInitialDlsiteTarget,
-                                initialOnlineLoadReady
+                                model.hasResolvedInitialDlsiteTarget
                             ) {
-                                if (!initialOnlineLoadReady) return@LaunchedEffect
                                 val loadPlan = albumDetailOnlineLoadPlan(
                                     selectedTab = selectedTab,
                                     hasResolvedInitialDlsiteTarget = model.hasResolvedInitialDlsiteTarget
@@ -1183,29 +1175,24 @@ class AlbumHeroBlurLayerCache(
     private var contentKey: Any? = null
     private var layerSize: IntSize = IntSize.Zero
     private var fullHeroSize: IntSize = IntSize.Zero
-    private var sourceAlpha: Float = Float.NaN
 
     fun matches(
         contentKey: Any?,
         layerSize: IntSize,
-        fullHeroSize: IntSize,
-        sourceAlpha: Float
+        fullHeroSize: IntSize
     ): Boolean =
         this.contentKey == contentKey &&
             this.layerSize == layerSize &&
-            this.fullHeroSize == fullHeroSize &&
-            this.sourceAlpha == sourceAlpha
+            this.fullHeroSize == fullHeroSize
 
     fun markRecorded(
         contentKey: Any?,
         layerSize: IntSize,
-        fullHeroSize: IntSize,
-        sourceAlpha: Float
+        fullHeroSize: IntSize
     ) {
         this.contentKey = contentKey
         this.layerSize = layerSize
         this.fullHeroSize = fullHeroSize
-        this.sourceAlpha = sourceAlpha
     }
 }
 
@@ -1399,10 +1386,10 @@ private fun AlbumDetailHeroBackground(
                                     blurLayerCache.matches(
                                         contentKey = imageModel,
                                         layerSize = layerSize,
-                                        fullHeroSize = fullHeroIntSize,
-                                        sourceAlpha = 1f
+                                        fullHeroSize = fullHeroIntSize
                                     )
                                 ) {
+                                    blurLayerCache.layer.alpha = 1f
                                     drawLayer(blurLayerCache.layer)
                                 }
                             }
@@ -1427,14 +1414,11 @@ private fun AlbumDetailHeroBackground(
                                     space = fullHeroIntSize,
                                     layoutDirection = layoutDirection
                                 )
-                                val sourceAlpha = source.alpha.value
-
                                 if (
                                     !blurLayerCache.matches(
                                         contentKey = imageModel,
                                         layerSize = layerSize,
-                                        fullHeroSize = fullHeroIntSize,
-                                        sourceAlpha = sourceAlpha
+                                        fullHeroSize = fullHeroIntSize
                                     )
                                 ) {
                                     blurLayerCache.layer.renderEffect = blurRenderEffect
@@ -1450,7 +1434,9 @@ private fun AlbumDetailHeroBackground(
                                             top = alignedOffset.y.toFloat() - sliceTop
                                         ) {
                                             with(source.painter) {
-                                                draw(size = scaledSize, alpha = sourceAlpha)
+                                                // 毛玻璃内容只录制一次；淡入 alpha 在合成属性上更新，
+                                                // 避免每帧重做大面积高斯模糊。
+                                                draw(size = scaledSize)
                                             }
                                         }
                                         drawRect(brush = mask, blendMode = BlendMode.DstIn)
@@ -1458,11 +1444,11 @@ private fun AlbumDetailHeroBackground(
                                     blurLayerCache.markRecorded(
                                         contentKey = imageModel,
                                         layerSize = layerSize,
-                                        fullHeroSize = fullHeroIntSize,
-                                        sourceAlpha = sourceAlpha
+                                        fullHeroSize = fullHeroIntSize
                                     )
                                 }
                                 onDrawBehind {
+                                    blurLayerCache.layer.alpha = source.alpha.value
                                     drawLayer(blurLayerCache.layer)
                                 }
                             }
@@ -2332,8 +2318,8 @@ private fun AlbumHeaderInfoReveal(
         Box(
             modifier = Modifier.graphicsLayer {
                 this.alpha = alpha.value
-                // 信息块内部没有重叠的半透明内容，直接调制绘制指令可保持相同结果，
-                // 同时不为每次详情页进入创建需要延迟回收的离屏纹理。
+                // 信息块内部元素互不重叠，逐指令调制与离屏 alpha 的像素结果一致。
+                // 避免为入场淡入临时分配并上传多张纹理，属性仍只在 RenderNode 更新。
                 compositingStrategy = CompositingStrategy.ModulateAlpha
             }
         ) {

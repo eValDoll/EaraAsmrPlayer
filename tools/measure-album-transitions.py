@@ -129,12 +129,19 @@ def main() -> None:
     parser.add_argument("--tap-x", type=int, default=159)
     parser.add_argument("--tap-y", type=int, default=646)
     parser.add_argument("--sample-ms", type=int, default=800)
+    parser.add_argument(
+        "--cooldown-ms",
+        type=int,
+        default=1_500,
+        help="Idle time between independent enter/exit samples",
+    )
     parser.add_argument("--show-misses", action="store_true")
     args = parser.parse_args()
 
     assert_playing(args.serial, args.package)
     layer = find_main_activity_layer(args.serial, args.package)
     print(f"layer={layer}")
+    samples: dict[str, list[float]] = {"enter": [], "exit": []}
     for round_index in range(1, args.rounds + 1):
         clear_latency(args.serial, layer)
         adb(
@@ -147,14 +154,28 @@ def main() -> None:
         )
         time.sleep(args.sample_ms / 1_000)
         refresh_ms, intervals = read_intervals(args.serial, layer)
+        samples["enter"].extend(intervals)
         print_result("enter", round_index, refresh_ms, intervals, args.show_misses)
 
         clear_latency(args.serial, layer)
         adb(args.serial, "shell", "input", "keyevent", "4")
         time.sleep(args.sample_ms / 1_000)
         refresh_ms, intervals = read_intervals(args.serial, layer)
+        samples["exit"].extend(intervals)
         print_result("exit", round_index, refresh_ms, intervals, args.show_misses)
         assert_playing(args.serial, args.package)
+        if round_index < args.rounds and args.cooldown_ms > 0:
+            time.sleep(args.cooldown_ms / 1_000)
+
+    for label, intervals in samples.items():
+        missed = sum(interval > refresh_ms * 1.5 for interval in intervals)
+        cadence = [max(1, round(interval / refresh_ms)) * refresh_ms for interval in intervals]
+        print(
+            f"aggregate phase={label:<5} frames={len(intervals):4d} "
+            f"p99={percentile(intervals, 0.99):.3f}ms "
+            f"cadenceP99={percentile(cadence, 0.99):.3f}ms "
+            f"max={max(intervals):.3f}ms missed={missed}"
+        )
 
 
 if __name__ == "__main__":

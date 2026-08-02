@@ -29,6 +29,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material3.Icon as MaterialIcon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -47,6 +49,9 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -127,6 +132,7 @@ fun AlbumItem(
     coverReloadKey: Any? = null,
     coverRetainPainterDuringReload: Boolean = false,
     containerColor: Color? = null,
+    cacheDrawLayer: Boolean = false,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val shape = remember { RoundedCornerShape(AlbumListItemCornerRadius) }
@@ -149,12 +155,40 @@ fun AlbumItem(
         val sizePx = with(density) { coverSize.roundToPx() }
         IntSize(sizePx, sizePx)
     }
+    var isNearWindow by remember { mutableStateOf(true) }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = AlbumItemHorizontalPadding, vertical = AlbumItemVerticalPadding)
             .testTag(ALBUM_ITEM_CARD_TAG)
+            .onGloballyPositioned { coordinates ->
+                val position = coordinates.positionInWindow()
+                val itemHeight = coordinates.size.height.toFloat().coerceAtLeast(1f)
+                val rootHeight = coordinates.findRootCoordinates().size.height.toFloat()
+                // Lazy 的复用槽会保留已经离开窗口的 Modifier.Node。提前在卡片越过
+                // 一个自身高度后撤销离屏合成，让复用槽只保存显示列表，不继续占用
+                // 大块 GPU 纹理；上下各留一张卡片作为滚入前的预热区。
+                val nearWindow =
+                    position.y + itemHeight >= -itemHeight &&
+                        position.y <= rootHeight + itemHeight
+                if (isNearWindow != nearWindow) {
+                    isNearWindow = nearWindow
+                }
+            }
+            .then(
+                if (cacheDrawLayer) {
+                    Modifier.graphicsLayer {
+                        compositingStrategy = if (isNearWindow) {
+                            CompositingStrategy.Offscreen
+                        } else {
+                            CompositingStrategy.Auto
+                        }
+                    }
+                } else {
+                    Modifier
+                }
+            )
             .clip(shape)
             .background(containerColor ?: colorScheme.surface.copy(alpha = 0.5f))
             .combinedClickable(

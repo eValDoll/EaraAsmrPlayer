@@ -3,6 +3,7 @@ package com.asmr.player
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.Choreographer
+import android.view.View
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
@@ -51,6 +52,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
@@ -169,6 +171,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.animation.*
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Animatable
@@ -184,9 +187,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.graphics.drawscope.clipRect
-import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.LayoutDirection
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -265,6 +267,25 @@ private val AlbumDetailTopBarButtonShape = CircleShape
 private val AlbumDetailBackTouchPassThroughWidth = 88.dp
 private val AlbumDetailTopBarTouchPassThroughHeight = 64.dp
 
+/**
+ * 把过渡期的可见区域裁剪交给 RenderNode。边界只改变图层属性，不会让页面内容的
+ * display list 每帧重新录制；矩形 outline 同时保留原有的精确裁剪范围。
+ */
+private class HorizontalRectClipShape(
+    private val leftPx: Float,
+    private val rightPx: Float
+) : Shape {
+    override fun createOutline(
+        size: Size,
+        layoutDirection: LayoutDirection,
+        density: Density
+    ): Outline {
+        val left = leftPx.coerceIn(0f, size.width)
+        val right = rightPx.coerceIn(left, size.width)
+        return Outline.Rectangle(Rect(left, 0f, right, size.height))
+    }
+}
+
 private fun String?.startsWithAlbumDetailRoute(): Boolean {
     return this?.startsWith("album_detail") == true
 }
@@ -311,6 +332,42 @@ private fun Modifier.albumDetailTopBarButtonSurface(
     }
 }
 
+/**
+ * 以命令式令牌管理系统栏 insets 动画的子树分发。这个状态不进入
+ * Compose，回调到期时不会让整个 MainContainer 因不可见的标记而重组。
+ */
+private class InsetsAnimationDispatchSuppressor(
+    private val target: View
+) {
+    private var nextToken = 0L
+    private val activeTokens = mutableSetOf<Long>()
+    private val callback = object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_STOP) {
+        override fun onProgress(
+            insets: WindowInsetsCompat,
+            runningAnimations: MutableList<WindowInsetsAnimationCompat>
+        ): WindowInsetsCompat = insets
+    }
+
+    fun acquire(): Long {
+        val token = ++nextToken
+        if (activeTokens.add(token) && activeTokens.size == 1) {
+            ViewCompat.setWindowInsetsAnimationCallback(target, callback)
+        }
+        return token
+    }
+
+    fun release(token: Long) {
+        if (activeTokens.remove(token) && activeTokens.isEmpty()) {
+            ViewCompat.setWindowInsetsAnimationCallback(target, null)
+        }
+    }
+
+    fun clear() {
+        activeTokens.clear()
+        ViewCompat.setWindowInsetsAnimationCallback(target, null)
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AlbumDetailRouteFrame(
@@ -328,10 +385,16 @@ private fun AlbumDetailRouteFrame(
     val currentPopBackStack by rememberUpdatedState(onPopBackStack)
     val currentExitStateChanged by rememberUpdatedState(onExitStateChanged)
     val closeAlbumDetail = {
-        UiFrameWorkCoordinator.markFrameCritical(
-            SecondaryPageExitDurationMs.toLong()
-        )
-        exitRequested = true
+        if (!exitRequested) {
+            UiFrameWorkCoordinator.markFrameCritical(
+                SecondaryPageExitDurationMs.toLong()
+            )
+            // 返回输入本来就在帧与帧之间处理。在同一个 snapshot 中提交
+            // 退出标记和底层页 active 状态，避免下一帧再追加一次整树重组。
+            currentExitStateChanged(true)
+            viewModel.cancelOnlineLoadsForExit()
+            exitRequested = true
+        }
     }
     BackHandler(enabled = !exitRequested, onBack = closeAlbumDetail)
 
@@ -352,8 +415,6 @@ private fun AlbumDetailRouteFrame(
         )
         snapshotFlow { exitRequested }.filter { it }.first()
 
-        currentExitStateChanged(true)
-        viewModel.cancelOnlineLoadsForExit()
         // 退出前先让底层主页面恢复 active；此时详情页仍完全覆盖屏幕，不产生视觉变化。
         withFrameNanos { }
         UiFrameWorkCoordinator.markFrameCritical(
@@ -366,7 +427,10 @@ private fun AlbumDetailRouteFrame(
                 easing = SecondaryPageSlideEasing
             )
         )
-        currentPopBackStack()
+        // animateTo 在 Choreographer 的 animation 阶段恢复协程。如果在这里直接
+        // pop，导航销毁会被计入最后一帧动画回调。页面已完全在屏外，
+        // 立即投递到当前帧结束后的主线程队列空隙，避免二者叠在同一帧。
+        rootView.post { currentPopBackStack() }
     }
     DisposableEffect(backStackEntry.id) {
         onDispose {
@@ -377,18 +441,19 @@ private fun AlbumDetailRouteFrame(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .drawWithContent {
-                val translationX = pageOffsetX.value.coerceIn(0f, size.width)
-                val visibleWidth = size.width - translationX
-                if (visibleWidth > 0f) {
-                    // 直接在绘制阶段平移并裁剪，保持与整页 graphicsLayer 完全相同的几何结果，
-                    // 同时避免 RenderThread 为屏幕外区域维护额外的全屏平移层。
-                    translate(left = translationX) {
-                        clipRect(right = visibleWidth) {
-                            this@drawWithContent.drawContent()
-                        }
-                    }
+            .graphicsLayer {
+                val width = size.width.toFloat().coerceAtLeast(1f)
+                val offset = pageOffsetX.value.coerceIn(0f, width)
+                val visibleRight = if (offset >= width - 0.5f) {
+                    // 保留屏外预绘制帧，避免动画起点改变。
+                    width
+                } else {
+                    (width - offset).coerceIn(0f, width)
                 }
+                // 位移和裁剪都只更新 RenderNode 属性，避免逐帧重新录制整张详情页。
+                translationX = offset
+                shape = HorizontalRectClipShape(0f, visibleRight)
+                clip = true
             }
     ) {
         content(viewModel)
@@ -494,6 +559,13 @@ private fun applyMainContainerSystemUi(
 ) {
     val controller = WindowInsetsControllerCompat(window, window.decorView)
     WindowCompat.setDecorFitsSystemWindows(window, false)
+    if (
+        controller.systemBarsBehavior !=
+        WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+    ) {
+        // 提前固定系统栏手势行为，避免首次进入沉浸页面时再修改 Window 参数并触发 relayout。
+        controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+    }
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         if (window.isStatusBarContrastEnforced) {
             window.isStatusBarContrastEnforced = false
@@ -516,7 +588,6 @@ private fun applyMainContainerSystemUi(
 
     when {
         forceImmersive -> {
-            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.systemBars())
             if (window.statusBarColor != android.graphics.Color.TRANSPARENT) {
                 window.statusBarColor = android.graphics.Color.TRANSPARENT
@@ -528,7 +599,6 @@ private fun applyMainContainerSystemUi(
             controller.isAppearanceLightNavigationBars = false
         }
         nowPlayingVisible -> {
-            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.statusBars())
             controller.hide(WindowInsetsCompat.Type.navigationBars())
             if (window.statusBarColor != android.graphics.Color.TRANSPARENT) {
@@ -541,7 +611,6 @@ private fun applyMainContainerSystemUi(
             controller.isAppearanceLightNavigationBars = false
         }
         hideStatusBarForImmersivePage -> {
-            controller.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
             controller.hide(WindowInsetsCompat.Type.statusBars())
             controller.show(WindowInsetsCompat.Type.navigationBars())
             if (window.statusBarColor != android.graphics.Color.TRANSPARENT) {
@@ -550,7 +619,7 @@ private fun applyMainContainerSystemUi(
             if (window.navigationBarColor != android.graphics.Color.TRANSPARENT) {
                 window.navigationBarColor = android.graphics.Color.TRANSPARENT
             }
-            controller.isAppearanceLightStatusBars = false
+            // 状态栏已经不可见，不切换图标明暗标志；该 Window 参数变化会额外触发 relayout。
             controller.isAppearanceLightNavigationBars = !isDark
         }
         else -> {
@@ -679,21 +748,24 @@ fun MainContainer(
         AlbumHeroBlurLayerCache(albumDetailHeroBlurGraphicsLayer)
     }
     var albumDetailEnterPreparing by remember { mutableStateOf(false) }
-    var albumDetailEnterInsetsDispatchSuppressed by remember { mutableStateOf(false) }
     var albumDetailEnterRequestId by remember { mutableLongStateOf(0L) }
-    val navigator = remember(navController, mainRootView) {
+    val albumDetailInsetsDispatchSuppressor = remember(mainRootView) {
+        InsetsAnimationDispatchSuppressor(mainRootView.rootView)
+    }
+    DisposableEffect(albumDetailInsetsDispatchSuppressor) {
+        onDispose { albumDetailInsetsDispatchSuppressor.clear() }
+    }
+    val navigator = remember(navController, mainRootView, albumDetailInsetsDispatchSuppressor) {
         AppNavigator(navController) scheduler@{ navigation ->
             if (albumDetailEnterPreparing) return@scheduler
             albumDetailEnterPreparing = true
-            albumDetailEnterInsetsDispatchSuppressed = true
+            val insetsSuppressionToken = albumDetailInsetsDispatchSuppressor.acquire()
             val requestId = ++albumDetailEnterRequestId
             UiFrameWorkCoordinator.markFrameCritical(
                 SecondaryPageEnterDurationMs.toLong()
             )
             mainRootView.postDelayed({
-                if (albumDetailEnterRequestId == requestId) {
-                    albumDetailEnterInsetsDispatchSuppressed = false
-                }
+                albumDetailInsetsDispatchSuppressor.release(insetsSuppressionToken)
             }, SecondaryPageEnterDurationMs + 180L)
             Choreographer.getInstance().postFrameCallback navigationFrame@{
                 if (albumDetailEnterRequestId != requestId) return@navigationFrame
@@ -1313,21 +1385,10 @@ fun MainContainer(
         }
     }
 
-    val suppressAlbumDetailInsetsAnimationDispatch =
-        albumDetailEnterInsetsDispatchSuppressed || albumDetailExitInProgress
-    DisposableEffect(activity, suppressAlbumDetailInsetsAnimationDispatch) {
-        val decorView = activity?.window?.decorView
-        if (suppressAlbumDetailInsetsAnimationDispatch && decorView != null) {
-            val callback = object : WindowInsetsAnimationCompat.Callback(DISPATCH_MODE_STOP) {
-                override fun onProgress(
-                    insets: WindowInsetsCompat,
-                    runningAnimations: MutableList<WindowInsetsAnimationCompat>
-                ): WindowInsetsCompat = insets
-            }
-            ViewCompat.setWindowInsetsAnimationCallback(decorView, callback)
-            onDispose {
-                ViewCompat.setWindowInsetsAnimationCallback(decorView, null)
-            }
+    DisposableEffect(albumDetailInsetsDispatchSuppressor, albumDetailExitInProgress) {
+        if (albumDetailExitInProgress) {
+            val token = albumDetailInsetsDispatchSuppressor.acquire()
+            onDispose { albumDetailInsetsDispatchSuppressor.release(token) }
         } else {
             onDispose { }
         }
@@ -1614,28 +1675,25 @@ fun MainContainer(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .drawWithContent {
+                        .graphicsLayer {
+                            val width = size.width.toFloat().coerceAtLeast(1f)
                             val translationPx = if (albumDetailTransitionActive) {
                                 primaryPageParallaxOffset.value.toPx()
                             } else {
                                 0f
                             }
-                            val visibleLeft = (-translationPx).coerceIn(0f, size.width)
+                            val visibleLeft = (-translationPx).coerceIn(0f, width)
                             val visibleRight = if (albumDetailTransitionActive) {
                                 (albumDetailPageOffsetX.value - translationPx)
-                                    .coerceIn(visibleLeft, size.width)
+                                    .coerceIn(visibleLeft, width)
                             } else {
-                                size.width
+                                width
                             }
-                            if (visibleRight > visibleLeft) {
-                                // 详情页是完全不透明的前景。只绘制它左侧仍然可见的主页面区域，
-                                // 避免每帧把随后必然被覆盖的列表、封面和顶栏再次提交给 GPU。
-                                translate(left = translationPx) {
-                                    clipRect(left = visibleLeft, right = visibleRight) {
-                                        this@drawWithContent.drawContent()
-                                    }
-                                }
-                            }
+                            // 详情页是完全不透明的前景。只提交它左侧仍然可见的主页面区域，
+                            // 同时让位移和裁剪保持在 RenderNode 属性更新路径。
+                            translationX = translationPx
+                            shape = HorizontalRectClipShape(visibleLeft, visibleRight)
+                            clip = true
                         }
                 ) {
                     Scaffold(
@@ -1970,6 +2028,9 @@ fun MainContainer(
                                     // 数据流，避免在返回手势首帧同时启动查询、排序和列表状态转换。
                                     val primaryRouteDataActive = primaryRouteImmediatelyActive &&
                                         !isAlbumDetailRoute
+                                    val primaryRouteDataActiveState = rememberUpdatedState(
+                                        primaryRouteDataActive
+                                    )
                                     primaryContentStateHolder.SaveableStateProvider("primary_route:$route") {
                                         when (route) {
                                         Routes.Library -> {
@@ -2058,7 +2119,7 @@ fun MainContainer(
                                             HotListeningScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
-                                                isDataActive = primaryRouteDataActive,
+                                                isDataActive = primaryRouteDataActiveState,
                                                 scrollToTopSignal = hotListeningScrollToTopSignal,
                                                 onAlbumClick = { album ->
                                                     AlbumCoverHintStore.record(
@@ -2351,7 +2412,6 @@ fun MainContainer(
                             initialTab = backStackEntry.arguments
                                 ?.getString("initialTab")
                                 .toAlbumDetailInitialTab(),
-                            initialOnlineLoadDelayMillis = SecondaryPageEnterDurationMs.toLong(),
                             onPlayTracks = { album, tracks, startTrack ->
                                 scope.launch {
                                     if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
@@ -2485,7 +2545,6 @@ fun MainContainer(
                         AlbumDetailScreen(
                             windowSizeClass = windowSizeClass,
                             rjCode = rj,
-                            initialOnlineLoadDelayMillis = SecondaryPageEnterDurationMs.toLong(),
                             onPlayTracks = { album, tracks, startTrack ->
                                 scope.launch {
                                     if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
