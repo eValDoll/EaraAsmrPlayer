@@ -1078,7 +1078,11 @@ fun SearchScreen(
                                             AlbumItem(
                                                 album = album,
                                                 onClick = { onAlbumClick(album, state.purchasedOnly, hasResolvedDetail) },
-                                                modifier = Modifier.animateItemPlacement(SearchResultPlacementSpring),
+                                                modifier = Modifier.animateItem(
+                                                    fadeInSpec = null,
+                                                    placementSpec = SearchResultPlacementSpring,
+                                                    fadeOutSpec = null,
+                                                ),
                                                 onlineDetailLoading = onlineDetailLoading,
                                                 onlineCvLoading = onlineDetailLoading,
                                                 coverFadeIn = coverFadeIn,
@@ -1144,7 +1148,11 @@ fun SearchScreen(
                                             AlbumGridItem(
                                                 album = album,
                                                 onClick = { onAlbumClick(album, state.purchasedOnly, hasResolvedDetail) },
-                                                modifier = Modifier.animateItemPlacement(SearchResultPlacementSpring),
+                                                modifier = Modifier.animateItem(
+                                                    fadeInSpec = null,
+                                                    placementSpec = SearchResultPlacementSpring,
+                                                    fadeOutSpec = null,
+                                                ),
                                                 onlineDetailLoading = onlineDetailLoading,
                                                 onlineCvLoading = onlineDetailLoading,
                                                 coverFadeIn = coverFadeIn,

@@ -358,9 +358,9 @@ class PlayerConnection @Inject constructor(
                 if (mediaId.isBlank()) return@mapNotNull null
                 val uri = runCatching { item.uri }.getOrNull().orEmpty().trim()
                 val remoteSubtitleSources = runCatching { item.remoteSubtitleSources }.getOrNull().orEmpty()
-                    .mapNotNull { sourceItem ->
+                    .mapNotNull subtitleSource@{ sourceItem ->
                         val url = runCatching { sourceItem.url }.getOrNull().orEmpty().trim()
-                        if (url.isBlank()) return@mapNotNull null
+                        if (url.isBlank()) return@subtitleSource null
                         PersistedRemoteSubtitleSource(
                             url = url,
                             language = sourceItem.language,
@@ -436,9 +436,9 @@ class PlayerConnection @Inject constructor(
                     duration = track.duration,
                     group = track.group,
                     lyricsRelativePathNoExt = "",
-                    remoteSubtitleSources = persisted.remoteSubtitleSources.mapNotNull { persistedSource ->
+                    remoteSubtitleSources = persisted.remoteSubtitleSources.mapNotNull subtitleSource@{ persistedSource ->
                         val url = persistedSource.url.trim()
-                        if (url.isBlank()) return@mapNotNull null
+                        if (url.isBlank()) return@subtitleSource null
                         RemoteSubtitleSource(
                             url = url,
                             language = persistedSource.language.orEmpty().ifBlank { "default" },
@@ -448,9 +448,9 @@ class PlayerConnection @Inject constructor(
                 )
                 MediaItemFactory.fromTrack(album, t)
             } else {
-                val restoredRemoteSubtitleSources = persisted.remoteSubtitleSources.mapNotNull { persistedSource ->
+                val restoredRemoteSubtitleSources = persisted.remoteSubtitleSources.mapNotNull subtitleSource@{ persistedSource ->
                     val url = persistedSource.url.trim()
-                    if (url.isBlank()) return@mapNotNull null
+                    if (url.isBlank()) return@subtitleSource null
                     RemoteSubtitleSource(
                         url = url,
                         language = persistedSource.language.orEmpty().ifBlank { "default" },

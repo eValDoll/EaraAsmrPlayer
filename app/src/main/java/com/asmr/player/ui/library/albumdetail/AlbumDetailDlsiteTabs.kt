@@ -66,7 +66,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.state.ToggleableState
@@ -773,7 +773,11 @@ private fun LazyItemScope.dlsiteAnimatedSectionModifier(
     animateIntro: Boolean = true
 ): Modifier {
     if (!animateIntro) return modifier
-    return modifier.animateItemPlacement(animationSpec = DlsiteSectionPlacementTweenSpec)
+    return modifier.animateItem(
+        fadeInSpec = null,
+        placementSpec = DlsiteSectionPlacementTweenSpec,
+        fadeOutSpec = null,
+    )
 }
 
 @Composable
