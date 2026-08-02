@@ -20,6 +20,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -132,7 +133,6 @@ import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.NoImageLoadingIndicator
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
-import com.asmr.player.ui.common.rememberAsmrShimmerProgress
 import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.ImagePreviewItem
@@ -158,7 +158,6 @@ private const val DlsiteGalleryThumbCornerRadius = 12
 @Composable
 private fun DlsiteGalleryLoadingRow() {
     val placeholders = remember { listOf(0, 1, 2, 3) }
-    val shimmerProgress = rememberAsmrShimmerProgress()
     LazyRow(
         modifier = Modifier
             .fillMaxWidth()
@@ -171,7 +170,7 @@ private fun DlsiteGalleryLoadingRow() {
             AsmrShimmerPlaceholder(
                 modifier = Modifier.size(width = DlsiteGalleryThumbWidth, height = DlsiteGalleryThumbHeight),
                 cornerRadius = DlsiteGalleryThumbCornerRadius,
-                sharedProgress = shimmerProgress,
+                animateHighlight = false,
             )
         }
     }
@@ -183,14 +182,14 @@ private fun DlsiteSectionPlaceholderLine(
     modifier: Modifier = Modifier,
     height: Dp = 14.dp,
     cornerRadius: Int = 8,
-    sharedProgress: State<Float>? = null,
+    animateHighlight: Boolean = true,
 ) {
     AsmrShimmerPlaceholder(
         modifier = modifier
             .fillMaxWidth(widthFraction)
             .height(height),
         cornerRadius = cornerRadius,
-        sharedProgress = sharedProgress,
+        animateHighlight = animateHighlight,
     )
 }
 
@@ -210,94 +209,220 @@ private fun rememberStableOneDirectoryContainerHeight(): Dp {
 @Composable
 private fun DlsiteDirectoryLoadingPanel() {
     val fixedHeight = rememberDlsiteDirectoryListHeight()
-    val shimmerProgress = rememberAsmrShimmerProgress()
+    val colorScheme = AsmrTheme.colorScheme
+    val headerSectionColor = colorScheme.primarySoft.copy(alpha = if (colorScheme.isDark) 0.14f else 0.22f)
+    val actionSectionColor = colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.24f else 0.42f)
+    val listSectionColor = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.28f else 0.62f)
+    val sectionDividerColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f)
     Surface(
         shape = RoundedCornerShape(12.dp),
         tonalElevation = 1.dp,
-        color = AsmrTheme.colorScheme.surface.copy(alpha = 0.44f),
+        color = colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.28f else 0.46f),
+        border = BorderStroke(0.5.dp, sectionDividerColor),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 4.dp)
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Column(
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(listSectionColor)
+        ) {
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .background(headerSectionColor)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                DlsiteSectionPlaceholderLine(
-                    widthFraction = 0.56f,
-                    height = 16.dp,
-                    sharedProgress = shimmerProgress,
+                AsmrShimmerPlaceholder(
+                    modifier = Modifier.size(22.dp),
+                    cornerRadius = 7,
+                    animateHighlight = false,
                 )
-                DlsiteSectionPlaceholderLine(
-                    widthFraction = 0.32f,
-                    height = 12.dp,
-                    sharedProgress = shimmerProgress,
+                AsmrShimmerPlaceholder(
+                    modifier = Modifier.size(width = 54.dp, height = 22.dp),
+                    cornerRadius = 8,
+                    animateHighlight = false,
+                )
+                AsmrShimmerPlaceholder(
+                    modifier = Modifier.size(width = 5.dp, height = 12.dp),
+                    cornerRadius = 3,
+                    animateHighlight = false,
+                )
+                AsmrShimmerPlaceholder(
+                    modifier = Modifier.size(width = 82.dp, height = 22.dp),
+                    cornerRadius = 8,
+                    animateHighlight = false,
                 )
             }
             HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 12.dp),
                 thickness = 0.5.dp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+                color = sectionDividerColor,
             )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .background(actionSectionColor)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    DlsiteSectionPlaceholderLine(
+                        widthFraction = 0.42f,
+                        height = 12.dp,
+                        cornerRadius = 6,
+                        animateHighlight = false,
+                    )
+                    DlsiteSectionPlaceholderLine(
+                        widthFraction = 0.64f,
+                        height = 9.dp,
+                        cornerRadius = 5,
+                        animateHighlight = false,
+                    )
+                }
                 AsmrShimmerPlaceholder(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(40.dp),
-                    cornerRadius = 12,
-                    sharedProgress = shimmerProgress,
-                )
-                AsmrShimmerPlaceholder(
-                    modifier = Modifier.size(width = 92.dp, height = 34.dp),
-                    cornerRadius = 16,
-                    sharedProgress = shimmerProgress,
+                    modifier = Modifier.size(width = 78.dp, height = 30.dp),
+                    cornerRadius = 15,
+                    animateHighlight = false,
                 )
             }
             HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 12.dp),
                 thickness = 0.5.dp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+                color = sectionDividerColor,
             )
-            Column(
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(fixedHeight)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .height(fixedHeight),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp),
+                userScrollEnabled = false,
             ) {
-                repeat(5) { index ->
-                    Row(
+                item(key = "directoryLoadingFolders", contentType = "folderLoadingGroup") {
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = if (index % 3 == 0) 0.dp else 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                colorScheme.surfaceVariant.copy(
+                                    alpha = if (colorScheme.isDark) 0.52f else 0.72f
+                                )
+                            )
                     ) {
-                        val iconSize = if (index % 3 == 0) 18.dp else 14.dp
-                        AsmrShimmerPlaceholder(
-                            modifier = Modifier.size(iconSize),
-                            cornerRadius = 999,
-                            sharedProgress = shimmerProgress,
-                        )
-                        DlsiteSectionPlaceholderLine(
-                            widthFraction = if (index % 3 == 0) 0.72f else 0.54f,
-                            modifier = Modifier.weight(1f),
-                            height = 14.dp,
-                            sharedProgress = shimmerProgress,
-                        )
+                        repeat(2) { index ->
+                            DlsiteDirectoryFolderPlaceholder(
+                                titleWidthFraction = if (index == 0) 0.64f else 0.48f,
+                            )
+                        }
                     }
+                }
+                items(
+                    count = 4,
+                    key = { index -> "directoryLoadingFile:$index" },
+                    contentType = { "fileLoading" },
+                ) { index ->
+                    DlsiteDirectoryFilePlaceholder(
+                        titleWidthFraction = when (index) {
+                            0 -> 0.78f
+                            1 -> 0.58f
+                            2 -> 0.70f
+                            else -> 0.52f
+                        },
+                        metaWidthFraction = if (index % 2 == 0) 0.36f else 0.24f,
+                        showThumbnail = index == 1,
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DlsiteDirectoryFolderPlaceholder(
+    titleWidthFraction: Float,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 42.dp)
+            .padding(horizontal = 12.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AsmrShimmerPlaceholder(
+            modifier = Modifier.size(18.dp),
+            cornerRadius = 5,
+            animateHighlight = false,
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Box(modifier = Modifier.weight(1f)) {
+            DlsiteSectionPlaceholderLine(
+                widthFraction = titleWidthFraction,
+                height = 14.dp,
+                cornerRadius = 7,
+                animateHighlight = false,
+            )
+        }
+        AsmrShimmerPlaceholder(
+            modifier = Modifier.size(18.dp),
+            cornerRadius = 6,
+            animateHighlight = false,
+        )
+    }
+}
+
+@Composable
+private fun DlsiteDirectoryFilePlaceholder(
+    titleWidthFraction: Float,
+    metaWidthFraction: Float,
+    showThumbnail: Boolean,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 58.dp)
+            .padding(start = 8.dp, top = 8.dp, end = 4.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier.width(if (showThumbnail) 42.dp else 24.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            AsmrShimmerPlaceholder(
+                modifier = Modifier.size(if (showThumbnail) 42.dp else 21.dp),
+                cornerRadius = if (showThumbnail) 8 else 5,
+                animateHighlight = false,
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            DlsiteSectionPlaceholderLine(
+                widthFraction = titleWidthFraction,
+                height = 13.dp,
+                cornerRadius = 7,
+                animateHighlight = false,
+            )
+            DlsiteSectionPlaceholderLine(
+                widthFraction = metaWidthFraction,
+                height = 9.dp,
+                cornerRadius = 5,
+                animateHighlight = false,
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        AsmrShimmerPlaceholder(
+            modifier = Modifier.size(20.dp),
+            cornerRadius = 6,
+            animateHighlight = false,
+        )
+        Spacer(modifier = Modifier.width(8.dp))
     }
 }
 
@@ -685,7 +810,8 @@ private fun DlsiteRecommendationsLoadingBlocks() {
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .aspectRatio(1f),
-                                    cornerRadius = 14
+                                    cornerRadius = 14,
+                                    animateHighlight = false,
                                 )
                                 Column(
                                     modifier = Modifier.padding(horizontal = 10.dp),

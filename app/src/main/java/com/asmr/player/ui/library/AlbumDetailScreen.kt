@@ -50,7 +50,6 @@ import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -211,21 +210,11 @@ private const val AlbumDetailHeroFlingOvershootMaxPortion = 0.14f
 private const val AlbumDetailHeroFlingApproachMillis = 560
 private const val AlbumDetailHeroFlingSettleMillis = 980
 private const val AlbumDetailRevealSettleMs = 420L
-private const val AlbumDetailHeroTitleRevealDelayMs = 120
-private const val AlbumDetailHeroMetaRevealDelayMs = 280
 private const val AlbumDetailCvRevealDelayMs = 220
 private const val AlbumDetailTagsRevealDelayMs = 360
-private const val AlbumDetailActionsRevealDelayMs = 500
 internal val AlbumDetailHorizontalPadding = 8.dp
 
-private class AlbumHeaderAlphaRevealState(var hasPlayed: Boolean)
-
 private class AlbumDetailIntroState(var settled: Boolean)
-
-private val AlbumHeaderAlphaRevealStateSaver = Saver<AlbumHeaderAlphaRevealState, Boolean>(
-    save = { it.hasPlayed },
-    restore = { AlbumHeaderAlphaRevealState(it) }
-)
 
 private val AlbumDetailHeroBounceBackSpec = spring<Float>(
     dampingRatio = Spring.DampingRatioNoBouncy,
@@ -1507,7 +1496,6 @@ private fun AlbumDetailHeroBackground(
         AlbumHeroIdentityOverlay(
             album = album,
             introSessionKey = introSessionKey,
-            animateIntro = animateIntro,
             listenTogetherRjListenerCount = listenTogetherRjListenerCount,
             messageManager = messageManager,
             onMetaLongClick = onMetaLongClick,
@@ -1524,7 +1512,6 @@ private fun AlbumDetailHeroBackground(
 private fun AlbumHeroIdentityOverlay(
     album: Album,
     introSessionKey: String,
-    animateIntro: Boolean,
     listenTogetherRjListenerCount: Int?,
     messageManager: MessageManager,
     onMetaLongClick: (String) -> Unit,
@@ -1537,7 +1524,6 @@ private fun AlbumHeroIdentityOverlay(
     val circle = identity.circle
     val showMetaRow = rj.isNotBlank() || circle.isNotBlank() ||
         (listenTogetherRjListenerCount != null && rj.isNotBlank())
-    val heroRevealKey = remember(introSessionKey) { "albumHero:$introSessionKey" }
 
     Column(
         modifier = modifier
@@ -1549,57 +1535,43 @@ private fun AlbumHeroIdentityOverlay(
             ),
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
-        AlbumHeaderInfoReveal(
-            revealKey = "$heroRevealKey:title",
-            delayMillis = AlbumDetailHeroTitleRevealDelayMs,
-            enabled = animateIntro,
-            expandLayout = false
-        ) {
-            Text(
-                text = identity.title,
-                modifier = Modifier.clickable { copyMeta("标题", identity.title) },
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 20.sp,
-                    shadow = Shadow(
-                        color = if (colorScheme.isDark) Color.White.copy(alpha = 0.58f) else Color.Black.copy(alpha = 0.58f),
-                        offset = Offset(0f, 2f),
-                        blurRadius = 8f
-                    )
-                ),
-                color = if (colorScheme.isDark) Color.White else Color.Black,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+        Text(
+            text = identity.title,
+            modifier = Modifier.clickable { copyMeta("标题", identity.title) },
+            style = MaterialTheme.typography.titleMedium.copy(
+                fontWeight = FontWeight.Bold,
+                fontSize = 20.sp,
+                shadow = Shadow(
+                    color = if (colorScheme.isDark) Color.White.copy(alpha = 0.58f) else Color.Black.copy(alpha = 0.58f),
+                    offset = Offset(0f, 2f),
+                    blurRadius = 8f
+                )
+            ),
+            color = if (colorScheme.isDark) Color.White else Color.Black,
+            maxLines = 3,
+            overflow = TextOverflow.Ellipsis
+        )
 
         if (showMetaRow) {
-            AlbumHeaderInfoReveal(
-                revealKey = "$heroRevealKey:meta",
-                delayMillis = AlbumDetailHeroMetaRevealDelayMs,
-                enabled = animateIntro,
-                expandLayout = false
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    AlbumPrimaryMetaRow(
-                        rjCode = rj,
-                        circle = circle,
-                        modifier = Modifier.weight(1f),
-                        rjOnClick = { copyMeta("RJ", rj) },
-                        circleOnClick = { copyMeta("社团", circle) },
-                        circleOnLongClick = { onMetaLongClick(circle) },
-                        appearance = AlbumMetaAppearance.OnImage,
-                        leadingVisual = AlbumMetaLeadingVisual.Icon,
-                    )
-                    AlbumOnlineListenerInfo(
-                        listenerCount = listenTogetherRjListenerCount,
-                        visible = rj.isNotBlank(),
-                        modifier = Modifier.padding(start = 8.dp)
-                    )
-                }
+                AlbumPrimaryMetaRow(
+                    rjCode = rj,
+                    circle = circle,
+                    modifier = Modifier.weight(1f),
+                    rjOnClick = { copyMeta("RJ", rj) },
+                    circleOnClick = { copyMeta("社团", circle) },
+                    circleOnLongClick = { onMetaLongClick(circle) },
+                    appearance = AlbumMetaAppearance.OnImage,
+                    leadingVisual = AlbumMetaLeadingVisual.Icon,
+                )
+                AlbumOnlineListenerInfo(
+                    listenerCount = listenTogetherRjListenerCount,
+                    visible = rj.isNotBlank(),
+                    modifier = Modifier.padding(start = 8.dp)
+                )
             }
         }
     }
@@ -1776,7 +1748,7 @@ private fun AlbumHeader(
 
     val headerAnimationScopeKey = remember(introSessionKey) { "albumHeader:$introSessionKey" }
 
-    // 记录“首帧时各信息块是否已存在”：本地库专辑进入时 cv/tags 已就绪，应直接淡入不撑开（消除下沉抖动）；
+    // 记录“首帧时各信息块是否已存在”：本地库专辑进入时 cv/tags 已就绪，应直接显示，不做渐入或撑开；
     // 列表 hint 已经提供的信息首帧直接占住最终高度，只有网络到达后才新增的信息才纵向展开。
     val cvPresentInitially = remember(headerAnimationScopeKey) { album.cv.isNotBlank() }
     val tagsPresentInitially = remember(headerAnimationScopeKey) { album.tags.isNotEmpty() }
@@ -1809,11 +1781,11 @@ private fun AlbumHeader(
                 // cv 行与 tags 行同属“信息行”，行间距与行内换行间距（6.dp）保持一致；
                 // 末尾信息行携带 8.dp 底部 padding 作为与下方按钮行的间距。
                 if (album.cv.isNotBlank()) {
-                    AlbumHeaderInfoReveal(
+                    AlbumHeaderLateMetaReveal(
                         revealKey = "$headerAnimationScopeKey:cv",
                         delayMillis = AlbumDetailCvRevealDelayMs,
                         enabled = animateIntro,
-                        expandLayout = cvExpandLayout
+                        lateArrival = cvExpandLayout
                     ) {
                         Box(modifier = Modifier.padding(bottom = if (album.tags.isNotEmpty()) 6.dp else 8.dp)) {
                             AlbumHeaderCvFlow(
@@ -1826,11 +1798,11 @@ private fun AlbumHeader(
                 }
 
                 if (album.tags.isNotEmpty()) {
-                    AlbumHeaderInfoReveal(
+                    AlbumHeaderLateMetaReveal(
                         revealKey = "$headerAnimationScopeKey:tags",
                         delayMillis = AlbumDetailTagsRevealDelayMs,
                         enabled = animateIntro,
-                        expandLayout = tagsExpandLayout
+                        lateArrival = tagsExpandLayout
                     ) {
                         Box(modifier = Modifier.padding(bottom = 8.dp)) {
                             AlbumHeaderTagsFlow(
@@ -1842,16 +1814,10 @@ private fun AlbumHeader(
                     }
                 }
 
-                AlbumHeaderInfoReveal(
-                    revealKey = "$headerAnimationScopeKey:actions",
-                    delayMillis = AlbumDetailActionsRevealDelayMs,
-                    enabled = animateIntro,
-                    expandLayout = false
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                    ) {
                         val compact = availableWidth < 400.dp
                         val ultraCompact = availableWidth < 340.dp
                         val actionGap = if (compact) 8.dp else 10.dp
@@ -2037,7 +2003,6 @@ private fun AlbumHeader(
                                 }
                             }
                         }
-                    }
                 }
             }
         }
@@ -2272,70 +2237,19 @@ private fun AlbumHeaderDownloadAction(
 }
 
 @Composable
-private fun AlbumHeaderInfoReveal(
+private fun AlbumHeaderLateMetaReveal(
     revealKey: String,
-    delayMillis: Int = 0,
-    enabled: Boolean = true,
-    ready: Boolean = true,
-    expandLayout: Boolean = true,
+    delayMillis: Int,
+    enabled: Boolean,
+    lateArrival: Boolean,
     content: @Composable () -> Unit
 ) {
-    if (!expandLayout) {
-        val playbackState = rememberSaveable(
-            revealKey,
-            saver = AlbumHeaderAlphaRevealStateSaver
-        ) {
-            AlbumHeaderAlphaRevealState(false)
-        }
-        if (!enabled) {
-            SideEffect { playbackState.hasPlayed = true }
-            content()
-            return
-        }
-        if (!ready) {
-            content()
-            return
-        }
-        val alpha = remember(revealKey) {
-            Animatable(if (playbackState.hasPlayed) 1f else 0f)
-        }
-        LaunchedEffect(revealKey, ready, enabled) {
-            if (playbackState.hasPlayed) {
-                alpha.snapTo(1f)
-                return@LaunchedEffect
-            }
-            alpha.snapTo(0f)
-            if (delayMillis > 0) {
-                delay(delayMillis.toLong())
-            }
-            withFrameNanos { }
-            alpha.animateTo(
-                targetValue = 1f,
-                animationSpec = AlbumHeaderEnterTweenSpec
-            )
-            // 原实现会在可见状态切换 420ms 后记录完成；保持同一时间语义，但使用普通
-            // saveable 对象，避免纯 bookkeeping 在动画中途触发一次额外重组。
-            delay(
-                (AlbumDetailRevealSettleMs - AlbumDetailHeaderEnterDurationMs)
-                    .coerceAtLeast(0L)
-            )
-            playbackState.hasPlayed = true
-        }
-        Box(
-            modifier = Modifier.graphicsLayer {
-                this.alpha = alpha.value
-                // 信息块内部元素互不重叠，逐指令调制与离屏 alpha 的像素结果一致。
-                // 避免为入场淡入临时分配并上传多张纹理，属性仍只在 RenderNode 更新。
-                compositingStrategy = CompositingStrategy.ModulateAlpha
-            }
-        ) {
-            content()
-        }
+    if (!lateArrival) {
+        content()
         return
     }
-
     var hasPlayed by rememberSaveable(revealKey) { mutableStateOf(false) }
-    LaunchedEffect(revealKey, enabled, ready) {
+    LaunchedEffect(revealKey, enabled) {
         if (!enabled && !hasPlayed) {
             hasPlayed = true
         }
@@ -2344,12 +2258,8 @@ private fun AlbumHeaderInfoReveal(
         content()
         return
     }
-    if (!ready) {
-        content()
-        return
-    }
     var visible by remember(revealKey) { mutableStateOf(false) }
-    LaunchedEffect(revealKey, ready, enabled) {
+    LaunchedEffect(revealKey, enabled) {
         visible = false
         if (delayMillis > 0) {
             delay(delayMillis.toLong())
