@@ -4,6 +4,7 @@ import androidx.media3.common.audio.AudioProcessor.AudioFormat
 import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.util.UnstableApi
 import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 /**
  * 把可即时开关的应用音效合并成一个 Media3 音频处理节点。
@@ -20,6 +21,7 @@ internal class DynamicAudioProcessorChain(
     private var pendingOutputAudioFormat = AudioFormat.NOT_SET
     private var outputAudioFormat = AudioFormat.NOT_SET
     private var outputBuffer = AudioProcessor.EMPTY_BUFFER
+    private var passthroughBuffer = AudioProcessor.EMPTY_BUFFER
     private var inputEnded = false
 
     override fun configure(inputAudioFormat: AudioFormat): AudioFormat {
@@ -43,6 +45,7 @@ internal class DynamicAudioProcessorChain(
     override fun reset() {
         flush()
         outputBuffer = AudioProcessor.EMPTY_BUFFER
+        passthroughBuffer = AudioProcessor.EMPTY_BUFFER
         pendingOutputAudioFormat = AudioFormat.NOT_SET
         outputAudioFormat = AudioFormat.NOT_SET
         processors.forEach(RuntimeAudioProcessor::reset)
@@ -65,12 +68,20 @@ internal class DynamicAudioProcessorChain(
         outputBuffer = if (appliedProcessor) {
             currentBuffer
         } else {
-            // 默认音效全关时直接把输入的独立读取窗口交给 AudioSink。底层 PCM 内存不会复制，
-            // 原输入仍按 AudioProcessor 契约推进到末尾。
-            inputBuffer.slice().also {
-                inputBuffer.position(inputBuffer.limit())
-            }
+            copyToPassthroughBuffer(inputBuffer)
         }
+    }
+
+    private fun copyToPassthroughBuffer(inputBuffer: ByteBuffer): ByteBuffer {
+        val size = inputBuffer.remaining()
+        passthroughBuffer = if (passthroughBuffer.capacity() < size) {
+            ByteBuffer.allocateDirect(size).order(ByteOrder.nativeOrder())
+        } else {
+            passthroughBuffer.also { it.clear() }
+        }
+        passthroughBuffer.put(inputBuffer)
+        passthroughBuffer.flip()
+        return passthroughBuffer
     }
 
     override fun queueEndOfStream() {
