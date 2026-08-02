@@ -13,7 +13,7 @@ import org.junit.Test
 class DynamicAudioProcessorChainTest {
 
     @Test
-    fun inactiveProcessorsAreSkippedAndPcmIsPreserved() {
+    fun inactiveProcessorsCopyPcmIntoOwnedOutputBuffer() {
         val first = RecordingProcessor(active = false, delta = 10)
         val second = RecordingProcessor(active = false, delta = 20)
         val chain = configuredChain(first, second)
@@ -26,9 +26,10 @@ class DynamicAudioProcessorChainTest {
         assertEquals(0, first.inputCount)
         assertEquals(0, second.inputCount)
         assertEquals(inputBuffer.limit(), inputBuffer.position())
+        inputBuffer.clear()
         inputBuffer.put(0, 9)
-        assertEquals(9, output.get(0).toInt())
-        assertArrayEquals(byteArrayOf(9, 2, 3, 4), output.toByteArray())
+        assertEquals(1, output.get(0).toInt())
+        assertArrayEquals(input, output.toByteArray())
     }
 
     @Test

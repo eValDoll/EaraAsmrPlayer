@@ -108,7 +108,8 @@ class AlbumDetailViewModelSupportTest {
             priceJpy = 0,
             hasAsmrOne = false,
             description = "",
-            hasResolvedDlsiteInfo = false
+            hasResolvedDlsiteInfo = false,
+            localAlbum = null
         )
         val resolvedHint = partialHint.copy(hasResolvedDlsiteInfo = true)
 
