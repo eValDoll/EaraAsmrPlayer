@@ -29,6 +29,7 @@ import com.asmr.player.data.local.db.entities.TrackTagEntity
 import com.asmr.player.data.lyrics.LyricsLoader
 import com.asmr.player.data.lyrics.deriveLyricsRelativePathNoExt
 import com.asmr.player.data.remote.NetworkHeaders
+import com.asmr.player.data.remote.ONLINE_DIRECTORY_REQUEST_TIMEOUT_MS
 import com.asmr.player.data.remote.api.AsmrOneAvailabilityApi
 import com.asmr.player.data.remote.api.AsmrOneOtherLanguageEditionInDb
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
@@ -81,6 +82,7 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -98,6 +100,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -635,6 +638,11 @@ class AlbumDetailViewModel @Inject constructor(
             }
         }
         return resolvedWorkno
+    }
+
+    suspend fun loadAlbumAndAwait(albumId: Long?, rjCode: String?, force: Boolean = false) {
+        loadAlbum(albumId, rjCode, force)
+        albumLoadJob?.join()
     }
 
     fun loadAlbum(albumId: Long?, rjCode: String?, force: Boolean = false) {
@@ -1842,7 +1850,14 @@ class AlbumDetailViewModel @Inject constructor(
                 var sawNotAvailable = false
                 for (workno in candidates) {
                     val res = try {
-                        dlsitePlayWorkClient.fetchPlayableTree(workno)
+                        withTimeout(ONLINE_DIRECTORY_REQUEST_TIMEOUT_MS) {
+                            dlsitePlayWorkClient.fetchPlayableTree(workno)
+                        }
+                    } catch (e: TimeoutCancellationException) {
+                        lastError = e
+                        continue
+                    } catch (e: CancellationException) {
+                        throw e
                     } catch (e: Exception) {
                         lastError = e
                         continue
