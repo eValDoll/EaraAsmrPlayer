@@ -1625,16 +1625,18 @@ fun MainContainer(
             rightPanelExpandedState.updateFromStore(rightPanelExpandedFromStore)
         }
         // 专辑详情始终覆盖在主页面之上；让底层顶栏/页面 active 标记在整个详情生命周期内
-        // 保持稳定，退出时只更新必要的位移，不在同一帧重建整套主页面 chrome。
+        // 保持稳定，退出时只更新必要的详情页位移和裁剪，不在同一帧重建整套主页面 chrome。
         val currentScreenIsPrimary = currentPrimaryRoute != null ||
             isAlbumDetailRoute || albumDetailExitInProgress
         val showBackButton = !currentScreenIsPrimary
         val showPrimaryBrand = currentScreenIsPrimary
         val hasOverlayRoute = currentPrimaryRoute == null && !albumDetailExitInProgress
+        val albumDetailTransitionActive = isAlbumDetailRoute || albumDetailExitInProgress
+        val primaryPageParallaxActive = hasOverlayRoute && !albumDetailTransitionActive
         val primaryPageParallaxOffset = animateDpAsState(
-            targetValue = if (hasOverlayRoute) -PrimaryPageParallaxOffset else 0.dp,
+            targetValue = if (primaryPageParallaxActive) -PrimaryPageParallaxOffset else 0.dp,
             animationSpec = tween(
-                durationMillis = if (hasOverlayRoute) {
+                durationMillis = if (primaryPageParallaxActive) {
                     SecondaryPageEnterDurationMs
                 } else {
                     SecondaryPageExitDurationMs
@@ -1643,18 +1645,6 @@ fun MainContainer(
             ),
             label = "primaryPageParallaxOffset"
         )
-        var albumDetailLayerLatched by remember { mutableStateOf(isAlbumDetailRoute) }
-        val albumDetailTransitionActive = isAlbumDetailRoute || albumDetailLayerLatched
-        LaunchedEffect(isAlbumDetailRoute) {
-            if (isAlbumDetailRoute) {
-                albumDetailLayerLatched = true
-            } else if (albumDetailLayerLatched) {
-                snapshotFlow { primaryPageParallaxOffset.value }
-                    .filter { it == 0.dp }
-                    .first()
-                albumDetailLayerLatched = false
-            }
-        }
         val useLargeBottomChrome = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && !isPhone
         val navigationBarBottomPadding = StableWindowInsets.navigationBars
             .only(WindowInsetsSides.Bottom)
@@ -1677,22 +1667,14 @@ fun MainContainer(
                         .fillMaxSize()
                         .graphicsLayer {
                             val width = size.width.toFloat().coerceAtLeast(1f)
-                            val translationPx = if (albumDetailTransitionActive) {
-                                primaryPageParallaxOffset.value.toPx()
-                            } else {
-                                0f
-                            }
-                            val visibleLeft = (-translationPx).coerceIn(0f, width)
                             val visibleRight = if (albumDetailTransitionActive) {
-                                (albumDetailPageOffsetX.value - translationPx)
-                                    .coerceIn(visibleLeft, width)
+                                albumDetailPageOffsetX.value.coerceIn(0f, width)
                             } else {
                                 width
                             }
                             // 详情页是完全不透明的前景。只提交它左侧仍然可见的主页面区域，
-                            // 同时让位移和裁剪保持在 RenderNode 属性更新路径。
-                            translationX = translationPx
-                            shape = HorizontalRectClipShape(visibleLeft, visibleRight)
+                            // 裁剪保持在 RenderNode 属性更新路径，底层主页面不再跟随位移。
+                            shape = HorizontalRectClipShape(0f, visibleRight)
                             clip = true
                         }
                 ) {
