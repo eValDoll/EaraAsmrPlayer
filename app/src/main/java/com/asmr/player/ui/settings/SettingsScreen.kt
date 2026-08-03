@@ -65,6 +65,8 @@ import androidx.compose.ui.window.PopupProperties
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.BuildConfig
+import com.asmr.player.cache.AppCacheLimits
+import com.asmr.player.cache.AppCacheState
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.FloatingLyricsSettings
 import com.asmr.player.data.settings.LyricsPageSettings
@@ -85,6 +87,7 @@ import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.update.launchDownloadedApkInstall
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 private val SettingsPageHorizontalPadding = 8.dp
 private const val MONOCHROME_THEME_SENTINEL = 0x01000000
@@ -118,6 +121,7 @@ fun SettingsScreen(
     val sfwHideSystemControls by viewModel.sfwHideSystemControls.collectAsStateWhileActive(isDataActive)
     val showMiniPlayerBar by viewModel.showMiniPlayerBar.collectAsStateWhileActive(isDataActive)
     val searchBlockedKeywords by viewModel.searchBlockedKeywords.collectAsStateWhileActive(isDataActive)
+    val appCacheState by viewModel.appCacheState.collectAsStateWhileActive(isDataActive)
     val updateState by viewModel.updateState.collectAsStateWhileActive(isDataActive)
     val autoUpdateCheckEnabled by viewModel.autoUpdateCheckEnabled.collectAsStateWhileActive(isDataActive)
     val scanRoots by libraryViewModel.scanRoots.collectAsStateWhileActive(isDataActive)
@@ -138,6 +142,7 @@ fun SettingsScreen(
     var overlayGranted by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
     var activeTipKey by remember { mutableStateOf<String?>(null) }
     var searchBlockedKeywordInput by rememberSaveable { mutableStateOf("") }
+    var showClearAppCacheConfirmation by remember { mutableStateOf(false) }
     DisposableEffect(onHorizontalControlInteractionChanged) {
         onDispose { onHorizontalControlInteractionChanged(false) }
     }
@@ -172,6 +177,9 @@ fun SettingsScreen(
         LaunchedEffect(isActive) {
             if (isActive) return@LaunchedEffect
             listState.stopScroll(MutatePriority.PreventUserInput)
+        }
+        LaunchedEffect(isDataActive) {
+            if (isDataActive) viewModel.refreshAppCacheSize()
         }
         LaunchedEffect(scrollToTopSignal) {
             if (scrollToTopSignal == 0L) return@LaunchedEffect
@@ -841,6 +849,17 @@ fun SettingsScreen(
                     }
                 }
 
+                item(key = "group:app_cache") {
+                    SettingsGroup(title = "APP 缓存") {
+                        AppCacheSettingsSection(
+                            state = appCacheState,
+                            onMaxSizeChanged = viewModel::setAppCacheMaxSizeMb,
+                            onClearClick = { showClearAppCacheConfirmation = true },
+                            onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged,
+                        )
+                    }
+                }
+
                 item(key = "bottom_spacer") {
                     Spacer(modifier = Modifier.height(40.dp))
                 }
@@ -870,6 +889,111 @@ fun SettingsScreen(
                 )
             )
         )
+    }
+    if (showClearAppCacheConfirmation) {
+        FlatActionDialog(
+            onDismissRequest = { showClearAppCacheConfirmation = false },
+            message = "将清理网络图片、在线音频播放和在线预览产生的缓存，不会删除下载内容、本地媒体或收藏数据。",
+            actions = listOf(
+                FlatDialogAction("取消", onClick = { showClearAppCacheConfirmation = false }),
+                FlatDialogAction(
+                    text = "清理",
+                    tone = FlatDialogActionTone.Danger,
+                    onClick = {
+                        showClearAppCacheConfirmation = false
+                        viewModel.clearAppCache()
+                    }
+                )
+            )
+        )
+    }
+}
+
+@Composable
+private fun AppCacheSettingsSection(
+    state: AppCacheState,
+    onMaxSizeChanged: (Int) -> Unit,
+    onClearClick: () -> Unit,
+    onHorizontalControlInteractionChanged: (Boolean) -> Unit,
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val interactionSource = remember { MutableInteractionSource() }
+    val isDragging by interactionSource.collectIsDraggedAsState()
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val isInteracting = isDragging || isPressed
+    var draftSizeMb by remember { mutableFloatStateOf(state.maxSizeMb.toFloat()) }
+
+    LaunchedEffect(state.maxSizeMb, isInteracting) {
+        if (!isInteracting) draftSizeMb = state.maxSizeMb.toFloat()
+    }
+
+    Text(
+        text = "当前占用：${formatCacheSize(state.usedSizeBytes)}",
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.SemiBold,
+    )
+    Text(
+        text = "空间由网络图片、在线音频播放和在线预览缓存共享。缓存满后会优先清理较早使用的资源。",
+        style = MaterialTheme.typography.bodySmall,
+        color = colorScheme.textSecondary,
+    )
+    SettingsSliderRow(
+        text = "缓存空间上限：${draftSizeMb.roundToInt()} MB",
+        value = draftSizeMb,
+        range = AppCacheLimits.MinSizeMb.toFloat()..AppCacheLimits.MaxSizeMb.toFloat(),
+        stepSize = AppCacheLimits.SizeStepMb.toFloat(),
+        onValueChange = { draftSizeMb = it },
+        onValueChangeFinished = { onMaxSizeChanged(draftSizeMb.roundToInt()) },
+        interactionSource = interactionSource,
+        onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged,
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = "最小 ${AppCacheLimits.MinSizeMb} MB",
+            style = MaterialTheme.typography.labelSmall,
+            color = colorScheme.textSecondary,
+        )
+        Text(
+            text = "最大 ${AppCacheLimits.MaxSizeMb} MB",
+            style = MaterialTheme.typography.labelSmall,
+            color = colorScheme.textSecondary,
+        )
+    }
+    FilledTonalButton(
+        onClick = onClearClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("clearAppCacheButton"),
+        enabled = !state.isClearing,
+        colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = colorScheme.primarySoft,
+            contentColor = if (colorScheme.isDark) colorScheme.onPrimaryContainer else colorScheme.primaryStrong,
+        ),
+    ) {
+        if (state.isClearing) {
+            EaraLogoLoadingIndicator(size = 18.dp)
+            Spacer(modifier = Modifier.width(10.dp))
+            Text("正在清理…")
+        } else {
+            Icon(Icons.Rounded.Delete, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("清理 APP 缓存")
+        }
+    }
+}
+
+private fun formatCacheSize(sizeBytes: Long): String {
+    val safeBytes = sizeBytes.coerceAtLeast(0L)
+    val megabytes = safeBytes / (1024.0 * 1024.0)
+    return if (megabytes < 0.1) {
+        "0 MB"
+    } else if (megabytes < 10.0) {
+        String.format(java.util.Locale.ROOT, "%.1f MB", megabytes)
+    } else {
+        "${megabytes.roundToInt()} MB"
     }
 }
 

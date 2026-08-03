@@ -1,5 +1,6 @@
 package com.asmr.player.data.settings
 
+import com.asmr.player.cache.AppCacheLimits
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -91,6 +92,20 @@ class SettingsRepositoryTest {
         repository.setAppVolumePercent(48)
 
         assertEquals(false, repository.consumePendingSystemVolumeSync(32))
+    }
+
+    @Test
+    fun appCacheMaxSizeMb_defaultsTo150() = runBlocking {
+        assertEquals(AppCacheLimits.DefaultSizeMb, repository.appCacheMaxSizeMb.first())
+    }
+
+    @Test
+    fun setAppCacheMaxSizeMb_clampsToSupportedRange() = runBlocking {
+        repository.setAppCacheMaxSizeMb(1)
+        assertEquals(AppCacheLimits.MinSizeMb, repository.appCacheMaxSizeMb.first())
+
+        repository.setAppCacheMaxSizeMb(2_000)
+        assertEquals(AppCacheLimits.MaxSizeMb, repository.appCacheMaxSizeMb.first())
     }
 
     @Test

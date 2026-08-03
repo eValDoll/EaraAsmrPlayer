@@ -12,6 +12,7 @@ val Context.settingsDataStore by preferencesDataStore(name = "settings")
 
 object SettingsKeys {
     val APP_VOLUME_PERCENT = intPreferencesKey("app_volume_percent")
+    val APP_CACHE_MAX_SIZE_MB = intPreferencesKey("app_cache_max_size_mb")
 
     val EQ_ENABLED = booleanPreferencesKey("eq_enabled")
     fun eqBandLevel(index: Int) = intPreferencesKey("eq_band_$index")

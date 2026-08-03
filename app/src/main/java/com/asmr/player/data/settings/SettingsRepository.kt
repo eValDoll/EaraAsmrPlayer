@@ -1,6 +1,7 @@
 package com.asmr.player.data.settings
 
 import android.content.Context
+import com.asmr.player.cache.AppCacheLimits
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.hotlistening.HotListeningSortMode
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -33,6 +34,12 @@ class SettingsRepository @Inject constructor(
 
     val appVolumePercent: Flow<Int> = context.settingsDataStore.data.map { prefs ->
         AppVolume.clampPercent(prefs[SettingsKeys.APP_VOLUME_PERCENT] ?: AppVolume.DefaultPercent)
+    }
+
+    val appCacheMaxSizeMb: Flow<Int> = context.settingsDataStore.data.map { prefs ->
+        AppCacheLimits.clampSizeMb(
+            prefs[SettingsKeys.APP_CACHE_MAX_SIZE_MB] ?: AppCacheLimits.DefaultSizeMb
+        )
     }
 
     val libraryViewMode: Flow<Int> = context.settingsDataStore.data.map { prefs ->
@@ -416,6 +423,14 @@ class SettingsRepository @Inject constructor(
         withContext(Dispatchers.IO) {
             context.settingsDataStore.edit {
                 it[SettingsKeys.APP_VOLUME_PERCENT] = AppVolume.clampPercent(percent)
+            }
+        }
+    }
+
+    suspend fun setAppCacheMaxSizeMb(sizeMb: Int) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit {
+                it[SettingsKeys.APP_CACHE_MAX_SIZE_MB] = AppCacheLimits.clampSizeMb(sizeMb)
             }
         }
     }
