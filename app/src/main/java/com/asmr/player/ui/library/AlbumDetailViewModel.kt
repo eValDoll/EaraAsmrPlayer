@@ -14,6 +14,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.asmr.player.BuildConfig
+import com.asmr.player.cache.AppCacheManager
 import com.asmr.player.data.local.db.AppDatabase
 import com.asmr.player.data.local.db.dao.AlbumDao
 import com.asmr.player.data.local.db.dao.TagWithCount
@@ -123,6 +124,7 @@ class AlbumDetailViewModel @Inject constructor(
     private val lyricsLoader: LyricsLoader,
     private val syncCoordinator: SyncCoordinator,
     private val listenTogetherRepository: ListenTogetherRepository,
+    private val appCacheManager: AppCacheManager,
     @Named("image") private val imageOkHttpClient: OkHttpClient,
     val messageManager: MessageManager,
     @ApplicationContext private val context: Context
@@ -462,7 +464,9 @@ class AlbumDetailViewModel @Inject constructor(
         }
         val seed = parseDlsitePlayImageSeed(name) ?: return@withContext null
 
-        val previewDir = File(context.cacheDir, "dlsite_play_preview").apply { if (!exists()) mkdirs() }
+        val previewDir = File(context.cacheDir, AppCacheManager.DLSITE_PREVIEW_CACHE_DIR_NAME).apply {
+            if (!exists()) mkdirs()
+        }
         val previewKey = listOf(
             DLSITE_PLAY_PREVIEW_CACHE_VERSION.toString(),
             normalizedUrl,
@@ -497,6 +501,7 @@ class AlbumDetailViewModel @Inject constructor(
         }
         if (descrambled !== scrambled && !descrambled.isRecycled) descrambled.recycle()
         if (!scrambled.isRecycled) scrambled.recycle()
+        appCacheManager.onPreviewCacheChanged(previewFile)
         previewFile.absolutePath
     }
 

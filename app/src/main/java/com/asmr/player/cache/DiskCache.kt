@@ -9,7 +9,7 @@ import java.io.IOException
 
 class DiskCache(
     private val directory: File,
-    private val maxSizeBytes: Long,
+    maxSizeBytes: Long,
     private val ttlMs: Long
 ) {
     private val lock = Any()
@@ -18,6 +18,7 @@ class DiskCache(
     private var clearGeneration = 0L
     private val removeGenerations = mutableMapOf<String, Long>()
     private var directoryReady = false
+    private var maxSizeBytes = maxSizeBytes.coerceAtLeast(0L)
 
     data class Entry(
         val bytes: ByteArray,
@@ -126,6 +127,19 @@ class DiskCache(
         }
         directory.listFiles()?.forEach { it.delete() }
         currentSizeBytes = calculateSizeBytes()
+    }
+
+    fun updateMaxSizeBytes(maxSizeBytes: Long) = synchronized(lock) {
+        this.maxSizeBytes = maxSizeBytes.coerceAtLeast(0L)
+        if (!ensureDirectoryReady()) return@synchronized
+        ensureSizeInitialized()
+        trimToSize()
+    }
+
+    fun sizeBytes(): Long = synchronized(lock) {
+        if (!ensureDirectoryReady()) return@synchronized 0L
+        ensureSizeInitialized()
+        currentSizeBytes ?: 0L
     }
 
     private fun fileForKey(key: String): File {

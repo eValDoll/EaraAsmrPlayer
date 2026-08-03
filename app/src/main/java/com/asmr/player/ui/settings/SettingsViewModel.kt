@@ -6,6 +6,8 @@ import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.asmr.player.BuildConfig
+import com.asmr.player.cache.AppCacheManager
+import com.asmr.player.cache.AppCacheState
 import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.update.GitHubUpdateClient
@@ -72,6 +74,7 @@ sealed interface AppUpdateState {
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val settingsDataStore: SettingsDataStore,
+    private val appCacheManager: AppCacheManager,
     private val okHttpClient: OkHttpClient,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
@@ -135,11 +138,17 @@ class SettingsViewModel @Inject constructor(
     val searchBlockedKeywords: StateFlow<List<String>> = settingsRepository.searchBlockedKeywords
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    val appCacheState: StateFlow<AppCacheState> = appCacheManager.state
+
     private val updateClient = GitHubUpdateClient(okHttpClient)
     private val _updateState = MutableStateFlow<AppUpdateState>(AppUpdateState.Idle)
     val updateState = _updateState.asStateFlow()
     private var updateJob: Job? = null
     private var automaticCheckStarted = false
+
+    init {
+        appCacheManager.start()
+    }
 
     fun setFloatingLyricsEnabled(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setFloatingLyricsEnabled(enabled) }
@@ -211,6 +220,18 @@ class SettingsViewModel @Inject constructor(
 
     fun removeSearchBlockedKeyword(keyword: String) {
         viewModelScope.launch { settingsRepository.removeSearchBlockedKeyword(keyword) }
+    }
+
+    fun setAppCacheMaxSizeMb(sizeMb: Int) {
+        viewModelScope.launch { settingsRepository.setAppCacheMaxSizeMb(sizeMb) }
+    }
+
+    fun refreshAppCacheSize() {
+        appCacheManager.refreshSize()
+    }
+
+    fun clearAppCache() {
+        appCacheManager.clearCache()
     }
 
     fun setAutoUpdateCheckEnabled(enabled: Boolean) {

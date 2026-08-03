@@ -352,6 +352,21 @@ class ImageCacheManager(
 
     fun statsSnapshot(): CacheStats.Snapshot = stats.snapshot()
 
+    fun updateDiskMaxSizeBytes(maxSizeBytes: Long) {
+        diskCache.updateMaxSizeBytes(maxSizeBytes)
+    }
+
+    fun diskSizeBytes(): Long = diskCache.sizeBytes()
+
+    fun clearCaches() {
+        synchronized(memoryStateLock) {
+            memoryGeneration += 1L
+            memoryCache.clear()
+            dataKeyToLatestFullKey.clear()
+        }
+        diskCache.clear()
+    }
+
     fun onTrimMemory(level: Int) {
         val maxSize = memoryCache.maxSizeBytes()
         val targetSize = when {

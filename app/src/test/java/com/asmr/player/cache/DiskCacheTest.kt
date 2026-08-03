@@ -1,6 +1,7 @@
 package com.asmr.player.cache
 
 import org.junit.Assert.assertArrayEquals
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -44,6 +45,25 @@ class DiskCacheTest {
 
         assertArrayEquals(ByteArray(10) { 3 }, cache.get("first")?.bytes)
         assertArrayEquals(ByteArray(50) { 4 }, cache.get("second")?.bytes)
+    }
+
+    @Test
+    fun updateMaxSizeBytes_trimsExistingEntriesImmediately() {
+        val directory = temporaryFolder.newFolder("resize")
+        val cache = DiskCache(
+            directory = directory,
+            maxSizeBytes = 200L,
+            ttlMs = 0L,
+        )
+        cache.put("first", entry(size = 60, fill = 1))
+        assertTrue(directory.resolve("first.bin").setLastModified(1L))
+        cache.put("second", entry(size = 60, fill = 2))
+
+        cache.updateMaxSizeBytes(100L)
+
+        assertNull(cache.get("first"))
+        assertArrayEquals(ByteArray(60) { 2 }, cache.get("second")?.bytes)
+        assertEquals(directory.resolve("second.bin").length(), cache.sizeBytes())
     }
 
     private fun entry(size: Int, fill: Int): DiskCache.Entry {
