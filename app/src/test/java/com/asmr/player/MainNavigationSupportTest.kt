@@ -208,6 +208,19 @@ class MainNavigationSupportTest {
     }
 
     @Test
+    fun resolveAlbumDetailTransitionKey_isolatesEachDetailBackStackEntry() {
+        assertEquals(
+            "online-detail-entry",
+            resolveAlbumDetailTransitionKey("album_detail_online/{rj}", "online-detail-entry")
+        )
+        assertEquals(
+            "local-detail-entry",
+            resolveAlbumDetailTransitionKey("album_detail/{albumId}", "local-detail-entry")
+        )
+        assertEquals(null, resolveAlbumDetailTransitionKey("library", "library-entry"))
+    }
+
+    @Test
     fun toThemeMediaSource_prefersArtworkForVideoWhenAvailable() {
         val item = MediaItem.Builder()
             .setUri("file:///sample.mp4")

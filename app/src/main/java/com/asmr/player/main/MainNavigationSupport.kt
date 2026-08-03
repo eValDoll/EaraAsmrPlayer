@@ -304,6 +304,13 @@ internal fun shouldHideStatusBarForImmersivePage(
     return currentRoute?.startsWith("album_detail") == true
 }
 
+internal fun resolveAlbumDetailTransitionKey(
+    currentRoute: String?,
+    backStackEntryId: String?
+): String? {
+    return backStackEntryId.takeIf { currentRoute?.startsWith("album_detail") == true }
+}
+
 internal fun NavHostController.navigateSingleTop(route: String, popUpToRoute: String? = null) {
     navigate(route) {
         launchSingleTop = true
