@@ -64,6 +64,7 @@ internal fun rememberPlayerDynamicHuePalette(
 }
 
 internal data class PlayerThemeColors(
+    val coverAccentColor: Color,
     val accentColor: Color,
     val onAccentColor: Color,
     val backdropTintColor: Color,
@@ -134,6 +135,7 @@ internal fun resolvePlayerThemeColors(
         )
     }
     return PlayerThemeColors(
+        coverAccentColor = dynamicHue.primaryStrong,
         accentColor = accentColor,
         onAccentColor = onAccentColor,
         backdropTintColor = backdropTintColor,

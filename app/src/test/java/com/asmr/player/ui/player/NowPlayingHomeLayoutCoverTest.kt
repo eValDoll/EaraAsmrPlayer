@@ -7,6 +7,13 @@ import org.junit.Test
 
 class NowPlayingHomeLayoutCoverTest {
     @Test
+    fun classicTrackInfoHeightOnlyExpandsWhenTitleWraps() {
+        assertEquals(82.dp, nowPlayingClassicTrackInfoHeight(titleLineCount = 1))
+        assertEquals(102.dp, nowPlayingClassicTrackInfoHeight(titleLineCount = 2))
+        assertEquals(102.dp, nowPlayingClassicTrackInfoHeight(titleLineCount = 3))
+    }
+
+    @Test
     fun expandedCoverUsesFullAvailableWidth() {
         assertEquals(
             720.dp,
@@ -47,11 +54,11 @@ class NowPlayingHomeLayoutCoverTest {
     }
 
     @Test
-    fun compactClassicCoverShrinksWhenTopContentHeightIsShort() {
+    fun compactClassicCoverReservesIdentityHierarchyWhenTopContentHeightIsShort() {
         val screenHeight = 592.dp
 
         assertEquals(
-            224.dp,
+            180.dp,
             nowPlayingHomeCoverWidth(
                 expanded = false,
                 availableWidth = 360.dp,
@@ -73,7 +80,7 @@ class NowPlayingHomeLayoutCoverTest {
     }
 
     @Test
-    fun compactClassicTopPaddingKeepsAudienceLineVisible() {
+    fun compactClassicTopPaddingKeepsCoverAwayFromHeader() {
         assertEquals(
             20.dp,
             nowPlayingHomeTopPadding(
@@ -85,7 +92,7 @@ class NowPlayingHomeLayoutCoverTest {
     }
 
     @Test
-    fun compactExpandedCoverReservesLyricsRoomWhenTopContentHeightIsShort() {
+    fun compactExpandedCoverOnlyReservesLyricsRoomWhenTopContentHeightIsShort() {
         val screenHeight = 592.dp
 
         assertEquals(
