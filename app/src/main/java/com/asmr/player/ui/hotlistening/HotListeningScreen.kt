@@ -3,15 +3,19 @@ package com.asmr.player.ui.hotlistening
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.MutatePriority
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -30,9 +34,8 @@ import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Whatshot
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
@@ -50,13 +53,16 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.cache.LazyListPreloader
@@ -92,6 +98,47 @@ import kotlinx.coroutines.launch
 
 private fun hotListeningItemKey(section: String, album: Album): String {
     return "hot-listening:$section:${albumStableKey(album)}"
+}
+
+@Composable
+private fun HotListeningPeriodTab(
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val containerColor = if (selected) {
+        colorScheme.primary.copy(alpha = 0.13f)
+    } else {
+        colorScheme.surfaceVariant.copy(alpha = 0.28f)
+    }
+    val labelColor = if (selected) {
+        colorScheme.primary
+    } else {
+        colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
+    }
+
+    Box(
+        modifier = Modifier
+            .height(28.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(containerColor)
+            .selectable(
+                selected = selected,
+                onClick = onClick,
+                role = Role.Tab,
+            )
+            .padding(horizontal = 9.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium.copy(lineHeight = 16.sp),
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+            color = labelColor,
+            maxLines = 1,
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -182,63 +229,57 @@ fun HotListeningScreen(
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
-        Row(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
-                .padding(horizontal = 8.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
+                .padding(horizontal = 8.dp, vertical = 4.dp),
         ) {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.align(Alignment.Center),
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 periods.forEach { (period, label) ->
-                    FilterChip(
+                    HotListeningPeriodTab(
+                        label = label,
                         selected = selectedPeriod == period,
                         onClick = {
                             viewModel.selectPeriod(period)
                             requestScrollToTop()
                         },
-                        label = { Text(label) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = colorScheme.primary.copy(alpha = 0.2f),
-                            selectedLabelColor = colorScheme.primary
-                        )
                     )
                 }
             }
-            Box(modifier = Modifier.padding(start = 18.dp)) {
-                Row(
+            Row(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        val nextMode = selectedSortMode.nextMode
+                        viewModel.selectSortMode(nextMode)
+                        requestScrollToTop()
+                    }
+                    .padding(horizontal = 4.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(3.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = selectedSortMode.toggleLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Medium,
+                    color = colorScheme.primary
+                )
+                Icon(
+                    imageVector = Icons.Rounded.FilterList,
+                    contentDescription = null,
+                    tint = colorScheme.primary,
                     modifier = Modifier
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            val nextMode = selectedSortMode.nextMode
-                            viewModel.selectSortMode(nextMode)
-                            requestScrollToTop()
-                        }
-                        .padding(horizontal = 4.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(3.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = selectedSortMode.toggleLabel,
-                        style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Medium,
-                        color = colorScheme.primary
-                    )
-                    Icon(
-                        imageVector = Icons.Rounded.FilterList,
-                        contentDescription = null,
-                        tint = colorScheme.primary,
-                        modifier = Modifier
-                            .padding(top = 1.dp)
-                            .size(14.dp)
-                    )
-                }
+                        .padding(top = 1.dp)
+                        .size(14.dp)
+                )
             }
         }
 
