@@ -38,6 +38,7 @@ class PlayerDynamicHueTest {
             coverBackgroundEnabled = true
         )
 
+        assertEquals(dynamicHue.primaryStrong, result.coverAccentColor)
         assertEquals(dynamicHue.primaryStrong, result.accentColor)
         assertEquals(dynamicHue.onPrimary, result.onAccentColor)
         assertEquals(
@@ -80,6 +81,7 @@ class PlayerDynamicHueTest {
             coverBackgroundEnabled = false
         )
 
+        assertEquals(dynamicHue.primaryStrong, result.coverAccentColor)
         assertEquals(colorScheme.primary, result.accentColor)
         assertEquals(colorScheme.onPrimary, result.onAccentColor)
         assertEquals(colorScheme.background, result.backdropTintColor)
@@ -123,6 +125,7 @@ class PlayerDynamicHueTest {
             artworkBackdropEnabled = false
         )
 
+        assertEquals(dynamicHue.primaryStrong, result.coverAccentColor)
         assertEquals(dynamicHue.primaryStrong, result.accentColor)
         assertEquals(dynamicHue.onPrimary, result.onAccentColor)
         assertEquals(colorScheme.background, result.backdropTintColor)
