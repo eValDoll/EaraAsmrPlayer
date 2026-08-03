@@ -738,9 +738,15 @@ fun MainContainer(
     volumeKeyEventTick: Long
 ) {
     val navController = rememberNavController()
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
     val mainRootView = LocalView.current
     val albumDetailPageWidthPx = mainRootView.width.toFloat().coerceAtLeast(1f)
-    val albumDetailPageOffsetX = remember(albumDetailPageWidthPx) {
+    val albumDetailTransitionKey = resolveAlbumDetailTransitionKey(
+        currentRoute = currentRoute,
+        backStackEntryId = navBackStackEntry?.id
+    )
+    val albumDetailPageOffsetX = remember(albumDetailPageWidthPx, albumDetailTransitionKey) {
         Animatable(albumDetailPageWidthPx)
     }
     val albumDetailHeroBlurGraphicsLayer = rememberGraphicsLayer()
@@ -777,8 +783,6 @@ fun MainContainer(
             }
         }
     }
-    val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
     val hasPreviousBackStackEntry = navController.previousBackStackEntry != null
     val currentPlaylistSystemType = navBackStackEntry?.arguments?.getString("type")
     val startRoute = remember(startRouteFromIntent) {
