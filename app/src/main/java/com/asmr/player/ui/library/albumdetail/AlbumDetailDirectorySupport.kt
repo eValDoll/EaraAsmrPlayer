@@ -178,6 +178,10 @@ private val DirectoryBrowserPanelCornerRadius = 10.dp
 private val DirectoryFolderRowCornerRadius = 10.dp
 private val DirectoryBrowserPanelVerticalPadding = 4.dp
 
+internal fun directoryBrowserHeaderBackground(colorScheme: AsmrColorScheme): Color {
+    return colorScheme.primarySoft.copy(alpha = if (colorScheme.isDark) 0.28f else 0.88f)
+}
+
 internal enum class DirectoryFolderPosition {
     Single,
     First,
@@ -2785,7 +2789,7 @@ internal fun DirectoryBrowserPanelV4(
         (screenHeight * 0.48f).coerceIn(240.dp, 460.dp)
     }
     val colorScheme = AsmrTheme.colorScheme
-    val headerSectionColor = colorScheme.primarySoft.copy(alpha = if (colorScheme.isDark) 0.14f else 0.22f)
+    val headerSectionColor = directoryBrowserHeaderBackground(colorScheme)
     val actionSectionColor = colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.24f else 0.42f)
     val listSectionColor = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.28f else 0.62f)
     val sectionDividerColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f)
