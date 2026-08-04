@@ -1100,80 +1100,6 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
     ) {
         item(key = "dlsite-header") { header() }
-        item(key = "dlsite-gallery-section") {
-            Column(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
-                AlbumDetailSectionHeading(
-                    title = "Gallery",
-                    modifier = Modifier.padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp)
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(DlsiteGallerySectionHeight)
-                        .dlsiteContentFade(galleryFadeState),
-                    contentAlignment = Alignment.Center
-                ) {
-                    when (galleryFadeState.panel.kind) {
-                        DlsiteContentKind.Loading -> DlsiteGalleryLoadingRow()
-                        DlsiteContentKind.Empty -> {
-                            DlsiteSectionEmptyState(
-                                text = "暂无样图",
-                                artworkKind = DlsiteEmptyArtworkKind.Gallery,
-                                modifier = Modifier.then(dlsiteAnimatedSectionModifier(Modifier, animateIntro))
-                            )
-                        }
-                        DlsiteContentKind.Content -> {
-                            val displayedGalleryUrls = galleryFadeState.panel.value.orEmpty()
-                            LazyRow(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding),
-                                horizontalArrangement = Arrangement.spacedBy(DlsiteGalleryThumbGap),
-                                contentPadding = PaddingValues(vertical = 10.dp)
-                            ) {
-                                items(items = displayedGalleryUrls, key = { it }, contentType = { "galleryThumb" }) { url ->
-                                    val model = remember(url) {
-                                        val headers = DlsiteAntiHotlink.headersForImageUrl(url)
-                                        if (headers.isEmpty()) url else CacheImageModel(data = url, headers = headers, keyTag = "dlsite")
-                                    }
-                                    Card(
-                                        modifier = Modifier.size(width = DlsiteGalleryThumbWidth, height = DlsiteGalleryThumbHeight).clickable {
-                                            buildGalleryImagePreviewRequest(
-                                                galleryUrls = displayedGalleryUrls,
-                                                clickedUrl = url,
-                                                toPreviewItem = { galleryUrl ->
-                                                    val headers = DlsiteAntiHotlink.headersForImageUrl(galleryUrl)
-                                                    val previewModel: Any = if (headers.isEmpty()) {
-                                                        galleryUrl
-                                                    } else {
-                                                        CacheImageModel(data = galleryUrl, headers = headers, keyTag = "dlsite")
-                                                    }
-                                                    ImagePreviewItem(
-                                                        key = galleryUrl,
-                                                        title = galleryUrl.substringBefore('?').substringAfterLast('/').ifBlank { "Gallery" },
-                                                        imageModel = previewModel,
-                                                        openPathOrUrl = galleryUrl
-                                                    )
-                                                }
-                                            )?.let(onPreviewImages)
-                                        },
-                                        shape = RoundedCornerShape(10.dp),
-                                        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
-                                    ) {
-                                        AsmrAsyncImage(
-                                            model = model,
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Crop,
-                                            placeholderCornerRadius = DlsiteGalleryThumbCornerRadius,
-                                            loading = NoImageLoadingIndicator,
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
         item(key = "dlsite-one-header") {
             AlbumDetailSectionHeading(
                 title = if (asmrOneTree.isNotEmpty()) "ONE（已收录）" else "ONE",
@@ -1330,6 +1256,80 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                             modifier = Modifier
                         )
                         DirectoryTreePanelState.MissingRj -> Unit
+                    }
+                }
+            }
+        }
+        item(key = "dlsite-gallery-section") {
+            Column(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
+                AlbumDetailSectionHeading(
+                    title = "Gallery",
+                    modifier = Modifier.padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp)
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(DlsiteGallerySectionHeight)
+                        .dlsiteContentFade(galleryFadeState),
+                    contentAlignment = Alignment.Center
+                ) {
+                    when (galleryFadeState.panel.kind) {
+                        DlsiteContentKind.Loading -> DlsiteGalleryLoadingRow()
+                        DlsiteContentKind.Empty -> {
+                            DlsiteSectionEmptyState(
+                                text = "暂无样图",
+                                artworkKind = DlsiteEmptyArtworkKind.Gallery,
+                                modifier = Modifier.then(dlsiteAnimatedSectionModifier(Modifier, animateIntro))
+                            )
+                        }
+                        DlsiteContentKind.Content -> {
+                            val displayedGalleryUrls = galleryFadeState.panel.value.orEmpty()
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding),
+                                horizontalArrangement = Arrangement.spacedBy(DlsiteGalleryThumbGap),
+                                contentPadding = PaddingValues(vertical = 10.dp)
+                            ) {
+                                items(items = displayedGalleryUrls, key = { it }, contentType = { "galleryThumb" }) { url ->
+                                    val model = remember(url) {
+                                        val headers = DlsiteAntiHotlink.headersForImageUrl(url)
+                                        if (headers.isEmpty()) url else CacheImageModel(data = url, headers = headers, keyTag = "dlsite")
+                                    }
+                                    Card(
+                                        modifier = Modifier.size(width = DlsiteGalleryThumbWidth, height = DlsiteGalleryThumbHeight).clickable {
+                                            buildGalleryImagePreviewRequest(
+                                                galleryUrls = displayedGalleryUrls,
+                                                clickedUrl = url,
+                                                toPreviewItem = { galleryUrl ->
+                                                    val headers = DlsiteAntiHotlink.headersForImageUrl(galleryUrl)
+                                                    val previewModel: Any = if (headers.isEmpty()) {
+                                                        galleryUrl
+                                                    } else {
+                                                        CacheImageModel(data = galleryUrl, headers = headers, keyTag = "dlsite")
+                                                    }
+                                                    ImagePreviewItem(
+                                                        key = galleryUrl,
+                                                        title = galleryUrl.substringBefore('?').substringAfterLast('/').ifBlank { "Gallery" },
+                                                        imageModel = previewModel,
+                                                        openPathOrUrl = galleryUrl
+                                                    )
+                                                }
+                                            )?.let(onPreviewImages)
+                                        },
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+                                    ) {
+                                        AsmrAsyncImage(
+                                            model = model,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            placeholderCornerRadius = DlsiteGalleryThumbCornerRadius,
+                                            loading = NoImageLoadingIndicator,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
