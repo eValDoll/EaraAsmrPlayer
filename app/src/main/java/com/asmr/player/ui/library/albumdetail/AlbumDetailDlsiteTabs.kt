@@ -209,7 +209,7 @@ private fun rememberStableOneDirectoryContainerHeight(): Dp {
 private fun DlsiteDirectoryLoadingPanel() {
     val fixedHeight = rememberDlsiteDirectoryListHeight()
     val colorScheme = AsmrTheme.colorScheme
-    val headerSectionColor = colorScheme.primarySoft.copy(alpha = if (colorScheme.isDark) 0.14f else 0.22f)
+    val headerSectionColor = directoryBrowserHeaderBackground(colorScheme)
     val actionSectionColor = colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.24f else 0.42f)
     val listSectionColor = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.28f else 0.62f)
     val sectionDividerColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f)
