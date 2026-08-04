@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.player
+package com.asmr.player.ui.player
 
 import android.app.Activity
 import android.content.Context
@@ -115,7 +115,8 @@ internal fun PlayerProgress(
     onLongPressSlice: (Long) -> Unit,
     onUpdateSliceRange: (sliceId: Long, startMs: Long, endMs: Long) -> Unit,
     activeColor: Color,
-    inactiveColor: Color
+    inactiveColor: Color,
+    compactLayout: Boolean = false
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val safeDuration = durationMs.coerceAtLeast(0L)
@@ -151,7 +152,10 @@ internal fun PlayerProgress(
         effectivePosition
     }
 
-    Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(if (compactLayout) 2.dp else 4.dp)
+    ) {
         Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             SliceScrubbableSeekBar(
                 enabled = rangeDuration > 0L,
@@ -163,6 +167,7 @@ internal fun PlayerProgress(
                 tempStartMs = sliceUiState.tempStartMs,
                 highlightedSliceId = highlightedSliceId,
                 selectedSliceId = sliceUiState.selectedSliceId,
+                compactLayout = compactLayout,
                 onSelectSlice = onSelectSlice,
                 onLongPressSlice = onLongPressSlice,
                 onEditCommit = onUpdateSliceRange,
@@ -187,12 +192,16 @@ internal fun PlayerProgress(
                     onScrubbingChanged(false)
                 }
             )
-            IconButton(onClick = onCutPressed, enabled = rangeDuration > 0L) {
+            IconButton(
+                onClick = onCutPressed,
+                enabled = rangeDuration > 0L,
+                modifier = Modifier.size(if (compactLayout) 40.dp else 48.dp)
+            ) {
                 Icon(
                     imageVector = Icons.Outlined.ContentCut,
                     contentDescription = "Cut",
                     tint = if (sliceUiState.tempStartMs != null) activeColor else colorScheme.onSurface.copy(alpha = 0.85f),
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(if (compactLayout) 20.dp else 22.dp)
                 )
             }
         }
@@ -231,6 +240,7 @@ private fun SliceScrubbableSeekBar(
     onLongPressSlice: (Long) -> Unit,
     onEditCommit: (sliceId: Long, startMs: Long, endMs: Long) -> Unit,
     onGestureActiveChanged: (Boolean) -> Unit,
+    compactLayout: Boolean,
     modifier: Modifier = Modifier,
     onScrubStart: (Float) -> Unit,
     onScrub: (Float) -> Unit,
@@ -277,7 +287,7 @@ private fun SliceScrubbableSeekBar(
     Canvas(
         modifier = modifier
             .fillMaxWidth()
-            .height(32.dp)
+            .height(if (compactLayout) 28.dp else 32.dp)
             .pointerInput(enabled, rangeDurationMs, slices, selectedSliceId) {
                 if (!enabled) return@pointerInput
                 val thumbRadiusPx = thumbRadius.toPx()

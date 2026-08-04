@@ -137,10 +137,9 @@ private const val NowPlayingHomeLayoutAnimationDurationMillis = 620
 private const val NowPlayingHomeLyricsFadeInDurationMillis = 240
 private const val NowPlayingHomeLyricsFadeOutDurationMillis = 160
 private val NowPlayingPortraitMaxContentWidth = 600.dp
-private val NowPlayingCompactShortScreenHeight = 620.dp
-private val NowPlayingHomeCompactTopPadding = 20.dp
+private val NowPlayingCompactShortScreenHeight = 700.dp
 private val NowPlayingClassicAudienceHeight = 18.dp
-private val NowPlayingClassicTrackInfoSingleLineHeight = 82.dp
+private val NowPlayingClassicTrackInfoSingleLineHeight = 88.dp
 private val NowPlayingClassicTrackInfoExtraTitleLineHeight = 20.dp
 private val NowPlayingHomeClassicLyricsReserveHeight = 56.dp
 private val NowPlayingHomeExpandedLyricsReserveHeight = 118.dp
@@ -154,38 +153,78 @@ private val NowPlayingLandscapeCoreRowHeight = 82.dp
 private val NowPlayingLandscapeProgressTopPadding = 12.dp
 private const val NowPlayingHomeClassicCompactCoverScale = 0.92f
 
-internal fun nowPlayingClassicTrackInfoHeight(titleLineCount: Int): Dp {
+internal data class NowPlayingPortraitLayoutMetrics(
+    val compact: Boolean,
+    val contentHorizontalPadding: Dp,
+    val topPadding: Dp,
+    val coverVerticalPadding: Dp,
+    val audienceHeight: Dp,
+    val trackInfoSingleLineHeight: Dp,
+    val trackInfoExtraTitleLineHeight: Dp,
+    val classicLyricsReserveHeight: Dp,
+    val expandedLyricsReserveHeight: Dp,
+    val minimumCoverWidth: Dp,
+    val expandedLyricsTopPadding: Dp,
+    val classicLyricsContainerHeight: Dp,
+    val classicLyricsBottomPadding: Dp,
+    val bottomPadding: Dp,
+    val bottomSectionSpacing: Dp
+)
+
+internal fun nowPlayingPortraitLayoutMetrics(
+    screenHeight: Dp,
+    widthClass: WindowWidthSizeClass
+): NowPlayingPortraitLayoutMetrics {
+    val compact = widthClass == WindowWidthSizeClass.Compact &&
+        screenHeight.isFiniteDp() &&
+        screenHeight <= NowPlayingCompactShortScreenHeight
+    if (compact) {
+        return NowPlayingPortraitLayoutMetrics(
+            compact = true,
+            contentHorizontalPadding = 20.dp,
+            topPadding = 8.dp,
+            coverVerticalPadding = 4.dp,
+            audienceHeight = 16.dp,
+            trackInfoSingleLineHeight = 65.dp,
+            trackInfoExtraTitleLineHeight = 15.dp,
+            classicLyricsReserveHeight = 46.dp,
+            expandedLyricsReserveHeight = 96.dp,
+            minimumCoverWidth = 148.dp,
+            expandedLyricsTopPadding = 8.dp,
+            classicLyricsContainerHeight = 48.dp,
+            classicLyricsBottomPadding = 2.dp,
+            bottomPadding = 8.dp,
+            bottomSectionSpacing = 2.dp
+        )
+    }
+    return NowPlayingPortraitLayoutMetrics(
+        compact = false,
+        contentHorizontalPadding = 24.dp,
+        topPadding = 24.dp,
+        coverVerticalPadding = if (widthClass == WindowWidthSizeClass.Compact) 16.dp else 32.dp,
+        audienceHeight = NowPlayingClassicAudienceHeight,
+        trackInfoSingleLineHeight = NowPlayingClassicTrackInfoSingleLineHeight,
+        trackInfoExtraTitleLineHeight = NowPlayingClassicTrackInfoExtraTitleLineHeight,
+        classicLyricsReserveHeight = NowPlayingHomeClassicLyricsReserveHeight,
+        expandedLyricsReserveHeight = NowPlayingHomeExpandedLyricsReserveHeight,
+        minimumCoverWidth = nowPlayingHomeMinCoverWidth(widthClass),
+        expandedLyricsTopPadding = 14.dp,
+        classicLyricsContainerHeight = 58.dp,
+        classicLyricsBottomPadding = NowPlayingHomeClassicLyricsBottomPadding,
+        bottomPadding = 16.dp,
+        bottomSectionSpacing = 4.dp
+    )
+}
+
+internal fun nowPlayingClassicTrackInfoHeight(
+    titleLineCount: Int,
+    metrics: NowPlayingPortraitLayoutMetrics? = null
+): Dp {
     val extraLineCount = titleLineCount.coerceIn(1, 2) - 1
-    return NowPlayingClassicTrackInfoSingleLineHeight +
-        NowPlayingClassicTrackInfoExtraTitleLineHeight * extraLineCount
-}
-
-internal fun nowPlayingHomeTopPadding(
-    expanded: Boolean,
-    screenHeight: Dp,
-    widthClass: WindowWidthSizeClass
-): Dp {
-    if (expanded) return 0.dp
-    return if (widthClass == WindowWidthSizeClass.Compact && screenHeight.isFiniteDp() &&
-        screenHeight < NowPlayingCompactShortScreenHeight
-    ) {
-        NowPlayingHomeCompactTopPadding
-    } else {
-        24.dp
-    }
-}
-
-internal fun nowPlayingHomeCoverVerticalPadding(
-    expanded: Boolean,
-    screenHeight: Dp,
-    widthClass: WindowWidthSizeClass
-): Dp {
-    if (expanded) return 0.dp
-    return when {
-        widthClass != WindowWidthSizeClass.Compact -> 32.dp
-        screenHeight.isFiniteDp() && screenHeight < NowPlayingCompactShortScreenHeight -> 8.dp
-        else -> 16.dp
-    }
+    val singleLineHeight = metrics?.trackInfoSingleLineHeight ?: NowPlayingClassicTrackInfoSingleLineHeight
+    val extraTitleLineHeight = metrics?.trackInfoExtraTitleLineHeight
+        ?: NowPlayingClassicTrackInfoExtraTitleLineHeight
+    return singleLineHeight + extraTitleLineHeight * extraLineCount
 }
 
 internal fun nowPlayingHomeCoverWidth(
@@ -202,7 +241,8 @@ internal fun nowPlayingHomeCoverWidth(
     } else {
         NowPlayingClassicAudienceHeight + nowPlayingClassicTrackInfoHeight(titleLineCount = 1)
     },
-    lyricsReserveHeight: Dp = if (expanded) NowPlayingHomeExpandedLyricsReserveHeight else NowPlayingHomeClassicLyricsReserveHeight
+    lyricsReserveHeight: Dp = if (expanded) NowPlayingHomeExpandedLyricsReserveHeight else NowPlayingHomeClassicLyricsReserveHeight,
+    minimumCoverWidth: Dp = nowPlayingHomeMinCoverWidth(widthClass)
 ): Dp {
     val fullWidth = availableWidth.coerceAtLeast(1.dp)
     val widthBound = if (expanded) {
@@ -226,7 +266,7 @@ internal fun nowPlayingHomeCoverWidth(
         identityHeight +
         lyricsReserveHeight
     val heightLimitedWidth = ((availableHeight - reservedHeight).coerceAtLeast(1.dp) * safeAspectRatio)
-        .coerceAtLeast(nowPlayingHomeMinCoverWidth(widthClass).coerceAtMost(widthBound))
+        .coerceAtLeast(minimumCoverWidth.coerceAtMost(widthBound))
     return widthBound.coerceAtMost(heightLimitedWidth)
 }
 
@@ -694,6 +734,7 @@ private fun ClassicPlayerIdentity(
     artistMeta: NowPlayingArtistMeta,
     accentColor: Color,
     onTitleLineCountChanged: (Int) -> Unit,
+    compactLayout: Boolean,
     modifier: Modifier = Modifier
 ) {
     val colorScheme = AsmrTheme.colorScheme
@@ -717,16 +758,17 @@ private fun ClassicPlayerIdentity(
         modifier = modifier
             .fillMaxWidth()
             .clipToBounds()
-            .padding(horizontal = 24.dp),
+            .padding(horizontal = if (compactLayout) 20.dp else 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(5.dp)
+        verticalArrangement = Arrangement.spacedBy(if (compactLayout) 3.dp else 5.dp)
     ) {
         Text(
             text = title.ifBlank { "未播放" },
             modifier = Modifier.fillMaxWidth(),
             style = MaterialTheme.typography.titleMedium.copy(
                 fontWeight = FontWeight.SemiBold,
-                lineHeight = 20.sp,
+                fontSize = if (compactLayout) 13.sp else 18.sp,
+                lineHeight = if (compactLayout) 15.sp else 20.sp,
                 shadow = textShadow
             ),
             color = colorScheme.textPrimary,
@@ -740,6 +782,7 @@ private fun ClassicPlayerIdentity(
         ClassicArtistRows(
             artistMeta = artistMeta,
             accentColor = accentColor,
+            compactLayout = compactLayout,
             modifier = Modifier.fillMaxWidth()
         )
     }
@@ -749,6 +792,7 @@ private fun ClassicPlayerIdentity(
 private fun ClassicArtistRows(
     artistMeta: NowPlayingArtistMeta,
     accentColor: Color,
+    compactLayout: Boolean,
     modifier: Modifier = Modifier
 ) {
     if (artistMeta.circle.isBlank() && artistMeta.cvNames.isEmpty()) return
@@ -756,20 +800,21 @@ private fun ClassicArtistRows(
     Column(
         modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(if (compactLayout) 6.dp else 10.dp)
     ) {
         if (artistMeta.circle.isNotBlank()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(22.dp),
+                    .height(NowPlayingClassicArtistChipHeight),
                 contentAlignment = Alignment.Center
             ) {
                 ClassicArtistChip(
                     label = "社团",
                     value = artistMeta.circle,
                     accentColor = accentColor,
-                    emphasized = true
+                    emphasized = true,
+                    compactLayout = compactLayout
                 )
             }
         }
@@ -777,10 +822,12 @@ private fun ClassicArtistRows(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(22.dp)
-                    .clipToBounds()
+                    .height(NowPlayingClassicArtistChipHeight)
                     .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(7.dp, Alignment.CenterHorizontally),
+                horizontalArrangement = Arrangement.spacedBy(
+                    if (compactLayout) 5.dp else 7.dp,
+                    Alignment.CenterHorizontally
+                ),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 artistMeta.cvNames.forEach { cv ->
@@ -788,7 +835,8 @@ private fun ClassicArtistRows(
                         label = "CV",
                         value = cv,
                         accentColor = accentColor,
-                        emphasized = false
+                        emphasized = false,
+                        compactLayout = compactLayout
                     )
                 }
             }
@@ -796,39 +844,50 @@ private fun ClassicArtistRows(
     }
 }
 
+private val NowPlayingClassicArtistChipHeight = 20.dp
+
 @Composable
 private fun ClassicArtistChip(
     label: String,
     value: String,
     accentColor: Color,
-    emphasized: Boolean
+    emphasized: Boolean,
+    compactLayout: Boolean
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val containerColor = accentColor.copy(alpha = if (emphasized) 0.16f else 0.10f)
-    Row(
+    val chipTextStyle = MaterialTheme.typography.labelMedium.copy(
+        fontSize = if (compactLayout) 11.sp else 12.sp,
+        lineHeight = if (compactLayout) 13.sp else 14.sp
+    )
+    Box(
         modifier = Modifier
+            .height(NowPlayingClassicArtistChipHeight)
             .background(containerColor, RoundedCornerShape(999.dp))
-            .padding(horizontal = 9.dp, vertical = 2.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(horizontal = if (compactLayout) 7.dp else 9.dp),
+        contentAlignment = Alignment.Center
     ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium.copy(
-                fontWeight = FontWeight.SemiBold,
-                lineHeight = 16.sp
-            ),
-            color = accentColor.copy(alpha = 0.92f),
-            maxLines = 1
-        )
-        Text(
-            text = value,
-            modifier = Modifier.widthIn(max = if (emphasized) 220.dp else 180.dp),
-            style = MaterialTheme.typography.labelMedium.copy(lineHeight = 16.sp),
-            color = if (emphasized) colorScheme.textPrimary else colorScheme.textSecondary,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(if (compactLayout) 3.dp else 4.dp)
+        ) {
+            Text(
+                text = label,
+                modifier = Modifier.alignByBaseline(),
+                style = chipTextStyle.copy(fontWeight = FontWeight.SemiBold),
+                color = accentColor.copy(alpha = 0.92f),
+                maxLines = 1
+            )
+            Text(
+                text = value,
+                modifier = Modifier
+                    .widthIn(max = if (emphasized) 220.dp else 180.dp)
+                    .alignByBaseline(),
+                style = chipTextStyle,
+                color = if (emphasized) colorScheme.textPrimary else colorScheme.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -1799,12 +1858,21 @@ internal fun NowPlayingScreen(
                 parseNowPlayingArtistMeta(portraitArtistText)
             }
             var classicTitleLineCount by remember(playerHeaderTitle) { mutableIntStateOf(1) }
-            val classicTrackInfoTargetHeight = nowPlayingClassicTrackInfoHeight(classicTitleLineCount)
+            val portraitScreenHeight = configuration.screenHeightDp.dp
+            val portraitLayoutMetrics = remember(portraitScreenHeight, widthClass) {
+                nowPlayingPortraitLayoutMetrics(
+                    screenHeight = portraitScreenHeight,
+                    widthClass = widthClass
+                )
+            }
+            val classicTrackInfoTargetHeight = nowPlayingClassicTrackInfoHeight(
+                titleLineCount = classicTitleLineCount,
+                metrics = portraitLayoutMetrics
+            )
             val homeLayoutSwipeHintAllowed = !nowPlayingHomeLayoutHintDismissed &&
                 !homeLayoutHintDismissedInSession &&
                 !isVideo
-            val portraitContentHorizontalPadding = 24.dp
-            val portraitScreenHeight = configuration.screenHeightDp.dp
+            val portraitContentHorizontalPadding = portraitLayoutMetrics.contentHorizontalPadding
             val homeBezier = remember { CubicBezierEasing(0.20f, 0f, 0f, 1f) }
             val homeLayoutDurationMillis = NowPlayingHomeLayoutAnimationDurationMillis
             val homeFadeInDurationMillis = NowPlayingHomeLyricsFadeInDurationMillis
@@ -1832,7 +1900,7 @@ internal fun NowPlayingScreen(
                 },
                 label = "nowPlayingHomeClassicAudienceHeight"
             ) { expanded ->
-                if (expanded) 0.dp else NowPlayingClassicAudienceHeight
+                if (expanded) 0.dp else portraitLayoutMetrics.audienceHeight
             }
             val classicTrackInfoHeight by homeLayoutTransition.animateDp(
                 transitionSpec = {
@@ -1870,11 +1938,7 @@ internal fun NowPlayingScreen(
                 },
                 label = "nowPlayingHomeTopPadding"
             ) { expanded ->
-                nowPlayingHomeTopPadding(
-                    expanded = expanded,
-                    screenHeight = portraitScreenHeight,
-                    widthClass = widthClass
-                )
+                if (expanded) 0.dp else portraitLayoutMetrics.topPadding
             }
             val coverVerticalPadding by homeLayoutTransition.animateDp(
                 transitionSpec = {
@@ -1882,13 +1946,9 @@ internal fun NowPlayingScreen(
                 },
                 label = "nowPlayingHomeCoverVerticalPadding"
             ) { expanded ->
-                nowPlayingHomeCoverVerticalPadding(
-                    expanded = expanded,
-                    screenHeight = portraitScreenHeight,
-                    widthClass = widthClass
-                )
+                if (expanded) 0.dp else portraitLayoutMetrics.coverVerticalPadding
             }
-            val expandedLyricsTopPadding = 14.dp
+            val expandedLyricsTopPadding = portraitLayoutMetrics.expandedLyricsTopPadding
             val homeCoverAspectRatio by homeLayoutTransition.animateFloat(
                 transitionSpec = {
                     tween(durationMillis = homeLayoutDurationMillis, easing = homeBezier)
@@ -2005,21 +2065,19 @@ internal fun NowPlayingScreen(
                                             widthClass = widthClass,
                                             contentHorizontalPadding = portraitContentHorizontalPadding,
                                             coverAspectRatio = if (expanded) artworkAspectRatio else 1f,
-                                            topPadding = nowPlayingHomeTopPadding(
-                                                expanded = expanded,
-                                                screenHeight = portraitScreenHeight,
-                                                widthClass = widthClass
-                                            ),
-                                            coverVerticalPadding = nowPlayingHomeCoverVerticalPadding(
-                                                expanded = expanded,
-                                                screenHeight = portraitScreenHeight,
-                                                widthClass = widthClass
-                                            ),
+                                            topPadding = if (expanded) 0.dp else portraitLayoutMetrics.topPadding,
+                                            coverVerticalPadding = if (expanded) 0.dp else portraitLayoutMetrics.coverVerticalPadding,
                                             identityHeight = if (expanded) {
                                                 0.dp
                                             } else {
-                                                NowPlayingClassicAudienceHeight + classicTrackInfoTargetHeight
-                                            }
+                                                portraitLayoutMetrics.audienceHeight + classicTrackInfoTargetHeight
+                                            },
+                                            lyricsReserveHeight = if (expanded) {
+                                                portraitLayoutMetrics.expandedLyricsReserveHeight
+                                            } else {
+                                                portraitLayoutMetrics.classicLyricsReserveHeight
+                                            },
+                                            minimumCoverWidth = portraitLayoutMetrics.minimumCoverWidth
                                         )
                                     }
                                     Box(
@@ -2081,6 +2139,7 @@ internal fun NowPlayingScreen(
                                         classicTitleLineCount = lineCount
                                     }
                                 },
+                                compactLayout = portraitLayoutMetrics.compact,
                                 modifier = portraitContentWidthModifier
                                     .height(classicTrackInfoHeight)
                                     .graphicsLayer { alpha = classicIdentityAlpha }
@@ -2132,10 +2191,10 @@ internal fun NowPlayingScreen(
                                         Box(
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .height(58.dp)
+                                                .height(portraitLayoutMetrics.classicLyricsContainerHeight)
                                                 .align(Alignment.BottomCenter)
                                                 .padding(horizontal = portraitContentHorizontalPadding)
-                                                .padding(bottom = NowPlayingHomeClassicLyricsBottomPadding)
+                                                .padding(bottom = portraitLayoutMetrics.classicLyricsBottomPadding)
                                                 .graphicsLayer { alpha = classicLyricsAlpha },
                                             contentAlignment = Alignment.Center
                                         ) {
@@ -2146,6 +2205,7 @@ internal fun NowPlayingScreen(
                                                     onOpenLyrics = showLyricsSurface,
                                                     colors = lyricColors,
                                                     interactionEnabled = lyricsClassicInteractionEnabled,
+                                                    compactLayout = portraitLayoutMetrics.compact,
                                                     modifier = Modifier.fillMaxWidth()
                                                 )
                                             }
@@ -2160,8 +2220,8 @@ internal fun NowPlayingScreen(
 
                     Column(
                         modifier = portraitContentWidthModifier
-                            .padding(bottom = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                            .padding(bottom = portraitLayoutMetrics.bottomPadding),
+                        verticalArrangement = Arrangement.spacedBy(portraitLayoutMetrics.bottomSectionSpacing)
                     ) {
                         key(item?.mediaId) {
                             Box(
@@ -2187,7 +2247,8 @@ internal fun NowPlayingScreen(
                                             viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
                                         },
                                         activeColor = accentColor,
-                                        inactiveColor = accentColor.copy(alpha = 0.2f)
+                                        inactiveColor = accentColor.copy(alpha = 0.2f),
+                                        compactLayout = portraitLayoutMetrics.compact
                                     )
                                 }
                             }
@@ -2212,7 +2273,8 @@ internal fun NowPlayingScreen(
                             actionRowModifier = actionRowMotion,
                             coreControlsModifier = controlsMotion,
                             primaryColor = accentColor,
-                            onPrimaryColor = onAccentColor
+                            onPrimaryColor = onAccentColor,
+                            compactLayout = portraitLayoutMetrics.compact
                         )
 
                         VolumeControl(
@@ -2229,7 +2291,8 @@ internal fun NowPlayingScreen(
                             audioOutputRouteKind = audioOutputRouteKind,
                             warningSessionState = warningSessionState,
                             expanded = volumeControlExpanded,
-                            onExpandedChange = { volumeControlExpanded = it }
+                            onExpandedChange = { volumeControlExpanded = it },
+                            compactLayout = portraitLayoutMetrics.compact
                         )
                     }
                 }
