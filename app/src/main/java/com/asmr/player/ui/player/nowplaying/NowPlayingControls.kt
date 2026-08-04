@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.player
+package com.asmr.player.ui.player
 
 import android.app.Activity
 import android.content.Context
@@ -122,9 +122,17 @@ internal fun PlaybackControls(
     coreControlsModifier: Modifier = Modifier,
     supplementalAction: (@Composable () -> Unit)? = null,
     primaryColor: Color = AsmrTheme.colorScheme.primary,
-    onPrimaryColor: Color = AsmrTheme.colorScheme.onPrimary
+    onPrimaryColor: Color = AsmrTheme.colorScheme.onPrimary,
+    compactLayout: Boolean = false
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val actionButtonSize = if (compactLayout) 40.dp else 48.dp
+    val actionIconSize = if (compactLayout) 22.dp else 24.dp
+    val coreButtonSize = if (compactLayout) 40.dp else 48.dp
+    val modeIconSize = if (compactLayout) 24.dp else 28.dp
+    val skipIconSize = if (compactLayout) 30.dp else 36.dp
+    val playButtonSize = if (compactLayout) 60.dp else 72.dp
+    val playIconSize = if (compactLayout) 30.dp else 36.dp
     val currentMediaId = playback.currentMediaItem?.mediaId
     var optimisticIsPlaying by remember { mutableStateOf<Boolean?>(null) }
     var stableMediaId by remember { mutableStateOf<String?>(currentMediaId) }
@@ -150,42 +158,57 @@ internal fun PlaybackControls(
         modifier = modifier
             .fillMaxWidth()
             .padding(bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(if (showActionRow) 20.dp else 12.dp)
+        verticalArrangement = Arrangement.spacedBy(
+            if (showActionRow) {
+                if (compactLayout) 8.dp else 20.dp
+            } else {
+                12.dp
+            }
+        )
     ) {
         if (showActionRow) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp)
+                    .padding(horizontal = if (compactLayout) 8.dp else 16.dp)
                     .then(actionRowModifier),
                 horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(onClick = { viewModel.toggleFavorite() }) {
+                IconButton(
+                    onClick = { viewModel.toggleFavorite() },
+                    modifier = Modifier.size(actionButtonSize)
+                ) {
                     Icon(
                         imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Outlined.FavoriteBorder,
                         contentDescription = "喜欢",
                         tint = if (isFavorite) Color.Red else colorScheme.onSurface.copy(alpha = 0.8f),
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(actionIconSize)
                     )
                 }
 
-                IconButton(onClick = onShowPlaylistPicker) {
+                IconButton(
+                    onClick = onShowPlaylistPicker,
+                    modifier = Modifier.size(actionButtonSize)
+                ) {
                     Icon(
                         Icons.AutoMirrored.Outlined.PlaylistAdd,
                         contentDescription = "添加到播放列表",
                         tint = colorScheme.onSurface.copy(alpha = 0.8f),
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(actionIconSize)
                     )
                 }
 
                 val floatingEnabled by viewModel.floatingLyricsEnabled.collectAsState()
-                IconButton(onClick = { viewModel.toggleFloatingLyrics() }) {
+                IconButton(
+                    onClick = { viewModel.toggleFloatingLyrics() },
+                    modifier = Modifier.size(actionButtonSize)
+                ) {
                     Icon(
                         imageVector = Icons.Rounded.Subtitles,
                         contentDescription = "悬浮歌词",
                         tint = if (floatingEnabled) primaryColor else colorScheme.onSurface.copy(alpha = 0.8f),
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(actionIconSize)
                     )
                 }
 
@@ -193,22 +216,26 @@ internal fun PlaybackControls(
                 IconButton(
                     onClick = {
                         if (isOnlineMedia) viewModel.showOnlineTagManageUnsupported() else onManageTags()
-                    }
+                    },
+                    modifier = Modifier.size(actionButtonSize)
                 ) {
                     Icon(
                         imageVector = if (isOnlineMedia) Icons.AutoMirrored.Outlined.LabelOff else Icons.AutoMirrored.Rounded.Label,
                         contentDescription = "标签管理",
                         tint = colorScheme.onSurface.copy(alpha = if (isOnlineMedia) 0.38f else 0.8f),
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(actionIconSize)
                     )
                 }
 
-                IconButton(onClick = onShowEqualizer) {
+                IconButton(
+                    onClick = onShowEqualizer,
+                    modifier = Modifier.size(actionButtonSize)
+                ) {
                     Icon(
                         imageVector = Icons.Rounded.Tune,
                         contentDescription = "均衡器",
                         tint = colorScheme.onSurface.copy(alpha = 0.8f),
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(actionIconSize)
                     )
                 }
 
@@ -219,12 +246,15 @@ internal fun PlaybackControls(
                     animationSpec = tween(240, easing = FastOutSlowInEasing),
                     label = "sliceModeTint"
                 )
-                IconButton(onClick = { viewModel.toggleSliceMode() }) {
+                IconButton(
+                    onClick = { viewModel.toggleSliceMode() },
+                    modifier = Modifier.size(actionButtonSize)
+                ) {
                     Icon(
                         painter = painterResource(R.drawable.ic_segment),
                         contentDescription = "切片播放",
                         tint = tint,
-                        modifier = Modifier.size(24.dp)
+                        modifier = Modifier.size(actionIconSize)
                     )
                 }
 
@@ -244,7 +274,10 @@ internal fun PlaybackControls(
             },
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = { viewModel.cyclePlayMode() }) {
+            IconButton(
+                onClick = { viewModel.cyclePlayMode() },
+                modifier = Modifier.size(coreButtonSize)
+            ) {
                 val icon = when {
                     playback.shuffleEnabled -> Icons.Rounded.Shuffle
                     playback.repeatMode == Player.REPEAT_MODE_ONE -> Icons.Rounded.RepeatOne
@@ -254,27 +287,34 @@ internal fun PlaybackControls(
                     icon,
                     contentDescription = "播放模式",
                     tint = colorScheme.onSurface,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(modeIconSize)
                 )
             }
 
-            IconButton(onClick = { viewModel.previous() }) {
+            IconButton(
+                onClick = { viewModel.previous() },
+                modifier = Modifier.size(coreButtonSize)
+            ) {
                 Icon(
                     Icons.Rounded.SkipPrevious,
                     contentDescription = "上一首",
                     tint = colorScheme.onSurface,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(skipIconSize)
                 )
             }
 
             val playButtonCorner by animateDpAsState(
-                targetValue = if (isPlayingEffective) 24.dp else 36.dp,
+                targetValue = if (isPlayingEffective) {
+                    if (compactLayout) 20.dp else 24.dp
+                } else {
+                    if (compactLayout) 30.dp else 36.dp
+                },
                 animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
                 label = "playButtonCorner"
             )
             val playButtonInteractionSource = remember { MutableInteractionSource() }
             Surface(
-                modifier = Modifier.size(72.dp),
+                modifier = Modifier.size(playButtonSize),
                 shape = RoundedCornerShape(playButtonCorner),
                 color = primaryColor,
                 contentColor = onPrimaryColor
@@ -302,27 +342,33 @@ internal fun PlaybackControls(
                         Icon(
                             imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                             contentDescription = "播放/暂停",
-                            modifier = Modifier.size(36.dp)
+                            modifier = Modifier.size(playIconSize)
                         )
                     }
                 }
             }
 
-            IconButton(onClick = { viewModel.next() }) {
+            IconButton(
+                onClick = { viewModel.next() },
+                modifier = Modifier.size(coreButtonSize)
+            ) {
                 Icon(
                     Icons.Rounded.SkipNext,
                     contentDescription = "下一首",
                     tint = colorScheme.onSurface,
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(skipIconSize)
                 )
             }
 
-            IconButton(onClick = { viewModel.seekForward10s() }) {
+            IconButton(
+                onClick = { viewModel.seekForward10s() },
+                modifier = Modifier.size(coreButtonSize)
+            ) {
                 Icon(
                     Icons.Rounded.FastForward,
                     contentDescription = "快进10秒",
                     tint = colorScheme.onSurface,
-                    modifier = Modifier.size(28.dp)
+                    modifier = Modifier.size(modeIconSize)
                 )
             }
             if (!showActionRow) {
@@ -340,6 +386,7 @@ internal fun SingleLineLyrics(
     onOpenLyrics: () -> Unit,
     colors: LyricReadableColors,
     interactionEnabled: Boolean = true,
+    compactLayout: Boolean = false,
     modifier: Modifier = Modifier,
 ) {
     val sortedLyrics = remember(lyrics) {
@@ -379,8 +426,11 @@ internal fun SingleLineLyrics(
     Column(
         modifier = modifier
             .clickable(enabled = interactionEnabled) { onOpenLyrics() }
-            .padding(horizontal = 16.dp, vertical = 4.dp),
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+            .padding(
+                horizontal = if (compactLayout) 14.dp else 16.dp,
+                vertical = if (compactLayout) 2.dp else 4.dp
+            ),
+        verticalArrangement = Arrangement.spacedBy(if (compactLayout) 2.dp else 4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         AnimatedLyricLine(
@@ -388,11 +438,12 @@ internal fun SingleLineLyrics(
             durationMs = lineDuration,
             colors = colors,
             fontWeight = FontWeight.ExtraBold,
+            compactLayout = compactLayout,
             modifier = Modifier.fillMaxWidth()
         )
         Box(
             modifier = Modifier
-                .width(52.dp)
+                .width(if (compactLayout) 44.dp else 52.dp)
                 .height(2.dp)
                 .clip(RoundedCornerShape(percent = 50))
                 .background(colors.accentEmphasis.copy(alpha = if (AsmrTheme.colorScheme.isDark) 0.72f else 0.56f))
@@ -407,6 +458,7 @@ private fun AnimatedLyricLine(
     durationMs: Long,
     colors: LyricReadableColors,
     fontWeight: FontWeight,
+    compactLayout: Boolean,
     modifier: Modifier = Modifier
 ) {
     AnimatedContent(
@@ -423,7 +475,11 @@ private fun AnimatedLyricLine(
         SlowMarqueeText(
             text = target,
             durationMs = durationMs,
-            style = MaterialTheme.typography.titleMedium,
+            style = if (compactLayout) {
+                MaterialTheme.typography.titleMedium.copy(fontSize = 16.sp, lineHeight = 18.sp)
+            } else {
+                MaterialTheme.typography.titleMedium
+            },
             colors = colors,
             fontWeight = fontWeight,
             modifier = modifier
@@ -529,7 +585,8 @@ internal fun VolumeControl(
     audioOutputRouteKind: AudioOutputRouteKind,
     warningSessionState: AppVolumeWarningSessionState,
     expanded: Boolean,
-    onExpandedChange: (Boolean) -> Unit
+    onExpandedChange: (Boolean) -> Unit,
+    compactLayout: Boolean = false
 ) {
     val volume by viewModel.appVolumePercent.collectAsState()
     var lastNonZeroVolume by remember { mutableIntStateOf(AppVolume.DefaultPercent) }
@@ -598,7 +655,7 @@ internal fun VolumeControl(
             Row(
                 modifier = modifier
                     .fillMaxWidth()
-                    .padding(vertical = 6.dp)
+                    .padding(vertical = if (compactLayout) 2.dp else 6.dp)
                     .combinedClickable(
                         onClick = {
                             if (volume > 0) {
@@ -619,12 +676,12 @@ internal fun VolumeControl(
                     routeKind = audioOutputRouteKind,
                     isMuted = isMuted,
                     tint = accentColor,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(if (compactLayout) 20.dp else 22.dp)
                 )
-                Spacer(modifier = Modifier.width(10.dp))
+                Spacer(modifier = Modifier.width(if (compactLayout) 8.dp else 10.dp))
                 Text(
                     text = "长按调整音量",
-                    style = MaterialTheme.typography.bodySmall,
+                    style = if (compactLayout) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
                     color = colorScheme.textTertiary
                 )
             }
@@ -632,9 +689,12 @@ internal fun VolumeControl(
             Column(
                 modifier = modifier
                     .fillMaxWidth()
-                    .padding(top = 6.dp, bottom = 2.dp)
+                    .padding(
+                        top = if (compactLayout) 2.dp else 6.dp,
+                        bottom = if (compactLayout) 0.dp else 2.dp
+                    )
                     .animateContentSize(),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(if (compactLayout) 4.dp else 6.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -645,7 +705,7 @@ internal fun VolumeControl(
                         isMuted = isMuted,
                         tint = accentColor,
                         modifier = Modifier
-                            .size(20.dp)
+                            .size(if (compactLayout) 18.dp else 20.dp)
                             .combinedClickable(
                                 onClick = {
                                     if (volume > 0) {
@@ -658,16 +718,16 @@ internal fun VolumeControl(
                                 onLongClick = {}
                             )
                     )
-                    Spacer(modifier = Modifier.width(10.dp))
+                    Spacer(modifier = Modifier.width(if (compactLayout) 8.dp else 10.dp))
                     Text(
                         text = "音量",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = if (compactLayout) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
                         color = colorScheme.textTertiary
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
                         text = "${AppVolume.clampPercent(volume)}%",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = if (compactLayout) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
                         color = colorScheme.textTertiary
                     )
                 }
