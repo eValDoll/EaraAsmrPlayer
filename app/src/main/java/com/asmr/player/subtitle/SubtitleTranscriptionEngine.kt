@@ -21,8 +21,13 @@ internal data class SubtitleTranscriptionModel(
     val optionName: String,
     val type: SubtitleTranscriptionModelType,
     val artifacts: List<SubtitleModelArtifact>,
-    val inputSampleRateHz: Int
+    val inputSampleRateHz: Int,
+    val inferenceBatchSize: Int = 1
 ) {
+    init {
+        require(inferenceBatchSize > 0)
+    }
+
     val artifactBytes: Long = artifacts.sumOf(SubtitleModelArtifact::bytes)
 }
 
@@ -105,7 +110,8 @@ internal object SubtitleTranscriptionModels {
                 sha256 = "f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc"
             )
         ),
-        inputSampleRateHz = 16_000
+        inputSampleRateHz = 16_000,
+        inferenceBatchSize = 2
     )
 
     val all: List<SubtitleTranscriptionModel> = listOf(

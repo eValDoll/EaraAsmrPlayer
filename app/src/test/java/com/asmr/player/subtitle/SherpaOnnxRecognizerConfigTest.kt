@@ -12,6 +12,18 @@ class SherpaOnnxRecognizerConfigTest {
     )
 
     @Test
+    fun modelBatchSizes_matchMeasuredDefaults() {
+        assertEquals(
+            1,
+            SubtitleTranscriptionModels.PARAKEET_TDT_CTC_06B_JA_INT8.inferenceBatchSize
+        )
+        assertEquals(
+            2,
+            SubtitleTranscriptionModels.SENSE_VOICE_SMALL_INT8.inferenceBatchSize
+        )
+    }
+
+    @Test
     fun parakeet_usesNemoCtcOnCpu() {
         val config = buildOfflineRecognizerConfig(
             model = SubtitleTranscriptionModels.PARAKEET_TDT_CTC_06B_JA_INT8,

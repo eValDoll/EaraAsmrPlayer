@@ -196,6 +196,15 @@ class OfflineRecognizer(
 
     fun decode(stream: OfflineStream) = decode(ptr, stream.ptr)
 
+    fun decode(streams: List<OfflineStream>) {
+        require(streams.isNotEmpty())
+        if (streams.size == 1) {
+            decode(streams.single())
+        } else {
+            decodeStreams(ptr, streams.map(OfflineStream::ptr).toLongArray())
+        }
+    }
+
     fun setConfig(config: OfflineRecognizerConfig) = setConfig(ptr, config)
 
     private external fun delete(ptr: Long)
@@ -208,5 +217,6 @@ class OfflineRecognizer(
     ): Long
     private external fun newFromFile(config: OfflineRecognizerConfig): Long
     private external fun decode(ptr: Long, streamPtr: Long)
+    private external fun decodeStreams(ptr: Long, streamPtrs: LongArray)
     private external fun getResult(streamPtr: Long): OfflineRecognizerResult
 }

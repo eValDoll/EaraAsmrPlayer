@@ -45,12 +45,14 @@ class SenseVoiceModelLoadingTest {
             val samples = assets.open("$ASSET_DIRECTORY/$JAPANESE_WAV").use { input ->
                 decodeMono16BitWav(input.readBytes())
             }
+            val batchedSamples = samples + FloatArray(model.inputSampleRateHz) + samples
             SherpaOnnxTranscriptionEngine(context, modelDirectory, model).use { engine ->
                 val result = engine.transcribe(
-                    channelSamples = listOf(samples),
+                    channelSamples = listOf(batchedSamples),
                     isCancelled = { false },
                     onProgress = {}
                 )
+                assertTrue(result.size >= model.inferenceBatchSize)
                 assertTrue(result.joinToString("") { it.text }.isNotBlank())
                 assertTrue(result.flatMap { it.tokens }.isNotEmpty())
             }

@@ -6,6 +6,7 @@ import com.k2fsa.sherpa.onnx.OfflineNemoEncDecCtcModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
 import com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig
+import com.k2fsa.sherpa.onnx.OfflineStream
 import com.k2fsa.sherpa.onnx.SileroVadModelConfig
 import com.k2fsa.sherpa.onnx.Vad
 import com.k2fsa.sherpa.onnx.VadModelConfig
@@ -80,48 +81,54 @@ internal class SherpaOnnxTranscriptionEngine(
         onProgress(VAD_PROGRESS_PERCENT)
         if (regions.isEmpty()) return emptyList()
 
-        return buildList(regions.size) {
-            regions.forEachIndexed { index, region ->
-                if (isCancelled()) return emptyList()
-                val speech = selectSpeechChannel(filteredChannels, region)
-                val prepared = SpeechAudioPreprocessor.normalizeSpeechSegment(
-                    speech,
-                    model.inputSampleRateHz
-                )
-                val stream = activeRecognizer.createStream()
-                try {
+        val segments = mutableListOf<SubtitleTranscriptionSegment>()
+        var completedRegionCount = 0
+        regions.chunked(model.inferenceBatchSize).forEach { batch ->
+            if (isCancelled()) return emptyList()
+            val pending = mutableListOf<Pair<SpeechRegion, OfflineStream>>()
+            try {
+                batch.forEach { region ->
+                    val speech = selectSpeechChannel(filteredChannels, region)
+                    val prepared = SpeechAudioPreprocessor.normalizeSpeechSegment(
+                        speech,
+                        model.inputSampleRateHz
+                    )
+                    val stream = activeRecognizer.createStream()
+                    pending += region to stream
                     stream.acceptWaveform(prepared, model.inputSampleRateHz)
-                    activeRecognizer.decode(stream)
-                    if (isCancelled()) return emptyList()
+                }
+                activeRecognizer.decode(pending.map { it.second })
+                if (isCancelled()) return emptyList()
+                pending.forEach { (region, stream) ->
                     val result = activeRecognizer.getResult(stream)
                     val text = cleanRecognizerText(result.text)
                     if (text.isNotEmpty()) {
                         val regionDurationMs =
                             (region.endSample - region.startSample) * 1_000L /
                                 model.inputSampleRateHz
-                        add(
-                            SubtitleTranscriptionSegment(
-                                startMs = region.startSample * 1_000L / model.inputSampleRateHz,
-                                endMs = region.endSample * 1_000L / model.inputSampleRateHz,
-                                text = text,
-                                tokens = buildRecognizerTokenTimeline(
-                                    tokens = result.tokens.toList(),
-                                    timestampsSeconds = result.timestamps.toList(),
-                                    durationsSeconds = result.durations.toList(),
-                                    segmentDurationMs = regionDurationMs
-                                )
+                        segments += SubtitleTranscriptionSegment(
+                            startMs = region.startSample * 1_000L / model.inputSampleRateHz,
+                            endMs = region.endSample * 1_000L / model.inputSampleRateHz,
+                            text = text,
+                            tokens = buildRecognizerTokenTimeline(
+                                tokens = result.tokens.toList(),
+                                timestampsSeconds = result.timestamps.toList(),
+                                durationsSeconds = result.durations.toList(),
+                                segmentDurationMs = regionDurationMs
                             )
                         )
                     }
-                } finally {
-                    stream.release()
+                    completedRegionCount += 1
+                    onProgress(
+                        VAD_PROGRESS_PERCENT +
+                            (completedRegionCount * (100 - VAD_PROGRESS_PERCENT) / regions.size)
+                    )
                 }
-                onProgress(
-                    VAD_PROGRESS_PERCENT +
-                        ((index + 1) * (100 - VAD_PROGRESS_PERCENT) / regions.size)
-                )
+            } finally {
+                pending.forEach { (_, stream) -> stream.release() }
             }
         }
+        return segments
     }
 
     override fun close() {
