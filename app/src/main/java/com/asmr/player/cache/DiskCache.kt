@@ -64,9 +64,10 @@ class DiskCache(
             clearGeneration to (removeGenerations[key] ?: 0L)
         }
         val f = fileForKey(key)
+        val threadKey = System.identityHashCode(Thread.currentThread())
         val tmp = File(
             directory,
-            "${f.name}.${Thread.currentThread().id}.${System.nanoTime()}.tmp"
+            "${f.name}.$threadKey.${System.nanoTime()}.tmp"
         )
         val now = System.currentTimeMillis()
         val writeSucceeded = runCatching {

@@ -12,16 +12,21 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.util.MessageManager
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class ImagePreviewDialogTest {
 
     @get:Rule
@@ -50,8 +55,9 @@ class ImagePreviewDialogTest {
         composeRule.onAllNodesWithTag(IMAGE_PREVIEW_PREV_TAG).assertCountEquals(0)
         composeRule.onAllNodesWithTag(IMAGE_PREVIEW_NEXT_TAG).assertCountEquals(0)
 
-        composeRule.onNodeWithTag(IMAGE_PREVIEW_CLOSE_TAG).performClick()
-        composeRule.onNodeWithTag(IMAGE_PREVIEW_OUTSIDE_TAG).performClick()
+        composeRule.onNodeWithTag(IMAGE_PREVIEW_CLOSE_TAG, useUnmergedTree = true).performClick()
+        composeRule.onNodeWithTag(IMAGE_PREVIEW_OUTSIDE_TAG, useUnmergedTree = true)
+            .performTouchInput { click(Offset(1f, 1f)) }
 
         assertEquals(2, dismissCount)
     }
@@ -74,13 +80,13 @@ class ImagePreviewDialogTest {
             }
         }
 
-        composeRule.onNodeWithTag(IMAGE_PREVIEW_COUNT_TAG).assert(
+        composeRule.onNodeWithTag(IMAGE_PREVIEW_COUNT_TAG, useUnmergedTree = true).assert(
             SemanticsMatcher.expectValue(SemanticsProperties.TestTag, IMAGE_PREVIEW_COUNT_TAG)
         )
-        composeRule.onNodeWithTag(IMAGE_PREVIEW_PREV_TAG).assert(
+        composeRule.onNodeWithTag(IMAGE_PREVIEW_PREV_TAG, useUnmergedTree = true).assert(
             SemanticsMatcher.expectValue(SemanticsProperties.TestTag, IMAGE_PREVIEW_PREV_TAG)
         )
-        composeRule.onNodeWithTag(IMAGE_PREVIEW_NEXT_TAG).assert(
+        composeRule.onNodeWithTag(IMAGE_PREVIEW_NEXT_TAG, useUnmergedTree = true).assert(
             SemanticsMatcher.expectValue(SemanticsProperties.TestTag, IMAGE_PREVIEW_NEXT_TAG)
         )
     }
@@ -144,7 +150,7 @@ class ImagePreviewDialogTest {
         }
 
         composeRule.waitUntil(timeoutMillis = 5_000) { prepareCount == 1 }
-        composeRule.onNodeWithTag(IMAGE_PREVIEW_NEXT_TAG).performClick()
+        composeRule.onNodeWithTag(IMAGE_PREVIEW_NEXT_TAG, useUnmergedTree = true).performClick()
         composeRule.waitUntil(timeoutMillis = 5_000) { prepareCount == 2 }
     }
 

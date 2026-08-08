@@ -4,7 +4,6 @@ import android.util.Log
 import android.webkit.CookieManager
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,6 +72,7 @@ import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 internal const val CLOUD_SYNC_SELECTION_DIALOG_TAG = "cloud_sync_selection_dialog"
 internal const val CLOUD_SYNC_SELECTION_PROGRESS_TAG = "cloud_sync_selection_progress"
 internal const val CLOUD_SYNC_SELECTION_LIST_TAG = "cloud_sync_selection_list"
+internal const val CLOUD_SYNC_SELECTION_CANDIDATE_TAG_PREFIX = "cloud_sync_selection_candidate"
 internal val CLOUD_SYNC_SELECTION_SECTION_SPACING = 8.dp
 internal val CLOUD_SYNC_SELECTION_ROW_SPACING = 8.dp
 internal val CLOUD_SYNC_SELECTION_ROW_HEIGHT = 86.dp
@@ -273,10 +273,11 @@ private fun CloudSyncSelectionCandidateRow(
     val colorScheme = AsmrTheme.colorScheme
     val coverShape = RoundedCornerShape(topStart = 16.dp, bottomStart = 16.dp, topEnd = 0.dp, bottomEnd = 0.dp)
     Surface(
+        onClick = onClick,
         modifier = Modifier
             .fillMaxWidth()
             .height(CLOUD_SYNC_SELECTION_ROW_HEIGHT)
-            .clickable(onClick = onClick),
+            .testTag("${CLOUD_SYNC_SELECTION_CANDIDATE_TAG_PREFIX}_${candidate.workno}"),
         shape = RoundedCornerShape(16.dp),
         color = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.62f else 0.5f),
         border = BorderStroke(

@@ -55,6 +55,7 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material.icons.rounded.Translate
+import androidx.compose.material3.Badge
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -139,6 +140,8 @@ fun DownloadsScreen(
     val tasks by viewModel.tasks.collectAsState()
     val translationSubtitleGroups by viewModel.translationSubtitleGroups.collectAsState()
     val subtitleTasks by viewModel.subtitleTasks.collectAsState()
+    val activeDownloadFileCount = remember(tasks) { countActiveDownloadFiles(tasks) }
+    val activeTranslationTaskCount = remember(subtitleTasks) { countActiveSubtitleTaskItems(subtitleTasks) }
     val expandedTasks = remember { mutableStateListOf<Long>() }
     val context = LocalContext.current
     var rjQuery by rememberSaveable { mutableStateOf("") }
@@ -222,6 +225,8 @@ fun DownloadsScreen(
         ) {
             DownloadManagementModeTabs(
                 selected = managementMode,
+                activeDownloadFileCount = activeDownloadFileCount,
+                activeTranslationTaskCount = activeTranslationTaskCount,
                 onSelected = { managementMode = it }
             )
 
@@ -506,6 +511,8 @@ private fun TaskAlbumCoverUi.hasImageSource(): Boolean =
 @Composable
 private fun DownloadManagementModeTabs(
     selected: DownloadManagementMode,
+    activeDownloadFileCount: Int,
+    activeTranslationTaskCount: Int,
     onSelected: (DownloadManagementMode) -> Unit
 ) {
     val colors = AsmrTheme.colorScheme
@@ -519,6 +526,10 @@ private fun DownloadManagementModeTabs(
     ) {
         DownloadManagementMode.entries.forEach { mode ->
             val isSelected = selected == mode
+            val activeTaskCount = when (mode) {
+                DownloadManagementMode.Downloads -> activeDownloadFileCount
+                DownloadManagementMode.Translations -> activeTranslationTaskCount
+            }
             Box(
                 modifier = Modifier
                     .weight(1f)
@@ -543,9 +554,31 @@ private fun DownloadManagementModeTabs(
                         style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                         color = if (isSelected) colors.primaryStrong else colors.textSecondary
                     )
+                    if (activeTaskCount > 0) {
+                        Badge(
+                            containerColor = colors.primaryStrong,
+                            contentColor = colors.onPrimary
+                        ) {
+                            Text(activeTaskCount.toString())
+                        }
+                    }
                 }
             }
         }
+    }
+}
+
+internal fun countActiveDownloadFiles(tasks: List<DownloadTaskUi>): Int {
+    return tasks.sumOf { task ->
+        task.items.count { item ->
+            item.state == DownloadItemState.RUNNING || item.state == DownloadItemState.ENQUEUED
+        }
+    }
+}
+
+internal fun countActiveSubtitleTaskItems(tasks: List<SubtitleTaskUi>): Int {
+    return tasks.sumOf { task ->
+        task.items.count { item -> item.state.isActivelyRunning() }
     }
 }
 

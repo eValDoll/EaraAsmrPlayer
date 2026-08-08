@@ -16,7 +16,10 @@ import com.asmr.player.ui.testWindowSizeClass
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class AlbumGroupDetailScreenTest {
     @get:Rule
     val composeRule = createComposeRule()
@@ -143,7 +146,10 @@ class AlbumGroupDetailScreenTest {
         composeRule.onNodeWithTag("$GROUP_DETAIL_SECTION_HEADER_TAG_PREFIX:101")
             .performClick()
 
-        composeRule.onNodeWithTag("$GROUP_DETAIL_TRACK_SUBTITLE_STAMP_TAG_PREFIX:/albums/a/1.mp3")
+        composeRule.onNodeWithTag(
+            "$GROUP_DETAIL_TRACK_SUBTITLE_STAMP_TAG_PREFIX:/albums/a/1.mp3",
+            useUnmergedTree = true
+        )
             .assert(
                 SemanticsMatcher.expectValue(
                     SemanticsProperties.TestTag,

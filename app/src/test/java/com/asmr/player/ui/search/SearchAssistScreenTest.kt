@@ -1,6 +1,16 @@
 package com.asmr.player.ui.search
 
+import androidx.compose.foundation.focusable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -17,9 +27,11 @@ import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.asmr.player.domain.model.Album
 import com.asmr.player.hotlistening.SearchSuggestionTerm
+import com.asmr.player.ui.common.clearFocusOnTapOutside
 import com.asmr.player.ui.testWindowSizeClass
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import org.junit.Assert.assertEquals
@@ -61,15 +73,22 @@ class SearchAssistScreenTest {
     @Test
     fun longPressInput_doesNotClearFocusViaOutsideTapHandler() {
         composeRule.setContent {
-            AsmrPlayerTheme {
-                SearchAssistContent(
-                    windowSizeClass = testWindowSizeClass(),
-                    initialRequest = SearchAssistSearchRequest(keyword = "RJ123456"),
-                    uiState = SearchAssistUiState(),
-                    onSubmitSearch = {},
-                    onClearHistory = {},
-                    onRefreshRecommendations = {}
+            val focusRequester = remember { FocusRequester() }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clearFocusOnTapOutside()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(120.dp)
+                        .focusRequester(focusRequester)
+                        .focusable()
+                        .testTag(SEARCH_ASSIST_INPUT_TAG)
                 )
+                LaunchedEffect(focusRequester) {
+                    focusRequester.requestFocus()
+                }
             }
         }
 

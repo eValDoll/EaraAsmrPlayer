@@ -51,6 +51,11 @@ class ImageCacheManager(
     private val decodeDispatcher: CoroutineDispatcher
 ) {
     companion object {
+        // Android 15 起不再发送这些级别，但旧系统仍会回调对应数值。
+        private const val TrimMemoryRunningLowCompat = 10
+        private const val TrimMemoryRunningCriticalCompat = 15
+        private const val TrimMemoryCompleteCompat = 80
+
         @Volatile
         private var initializedInstance: ImageCacheManager? = null
 
@@ -370,11 +375,11 @@ class ImageCacheManager(
     fun onTrimMemory(level: Int) {
         val maxSize = memoryCache.maxSizeBytes()
         val targetSize = when {
-            level >= ComponentCallbacks2.TRIM_MEMORY_COMPLETE -> 0
+            level >= TrimMemoryCompleteCompat -> 0
             level >= ComponentCallbacks2.TRIM_MEMORY_BACKGROUND -> maxSize / 4
             level == ComponentCallbacks2.TRIM_MEMORY_UI_HIDDEN -> maxSize / 2
-            level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> maxSize / 4
-            level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> maxSize / 2
+            level >= TrimMemoryRunningCriticalCompat -> maxSize / 4
+            level >= TrimMemoryRunningLowCompat -> maxSize / 2
             else -> return
         }
         synchronized(memoryStateLock) {

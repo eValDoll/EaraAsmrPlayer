@@ -9,7 +9,10 @@ import com.asmr.player.ui.nav.isPrimaryRoute
 import com.asmr.player.ui.nav.resolvePrimaryRoute
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class MainNavigationSupportTest {
 
     @Test

@@ -1659,6 +1659,46 @@ class AlbumDetailViewModel @Inject constructor(
                     )
                 }
 
+                suspend fun fallbackToJapaneseDirectoryIfAvailable(
+                    originalWorkId: String,
+                    site: Int?
+                ): Boolean {
+                    if (
+                        latest.isDlsiteLanguageUserSelected ||
+                        selectedLang.equals("JPN", ignoreCase = true)
+                    ) {
+                        return false
+                    }
+                    val crawlerTree = getAsmrOneTracksCached(site, originalWorkId)
+                    val backendTree = if (crawlerTree.isEmpty()) {
+                        fetchBackendAsmrOneTracksByRj(originalRj)?.second.orEmpty()
+                    } else {
+                        emptyList()
+                    }
+                    if (
+                        !shouldFallbackToJapaneseDirectory(
+                            selectedLang = selectedLang,
+                            isLanguageUserSelected = latest.isDlsiteLanguageUserSelected,
+                            hasSelectedDirectoryResources = false,
+                            hasJapaneseDirectoryResources = crawlerTree.isNotEmpty() || backendTree.isNotEmpty()
+                        )
+                    ) {
+                        return false
+                    }
+                    val fallbackKey = "directory:base:$originalRj|cur:$keyRj|to:JPN"
+                    if (!autoFallbackToJpnOnceByKey.add(fallbackKey)) return false
+
+                    val updated = (_uiState.value as? AlbumDetailUiState.Success)?.model ?: return true
+                    if (token != asmrOneLoadToken || !updated.rjCode.equals(keyRj, ignoreCase = true)) {
+                        return true
+                    }
+                    _uiState.value = AlbumDetailUiState.Success(
+                        model = updated.copy(isLoadingAsmrOne = false)
+                    )
+                    selectDlsiteLanguageInternal("JPN", isUserSelection = false)
+                    return true
+                }
+
                 if (preferInitialCollectedRj) {
                     val preferredInitial = resolveAsmrOneWork(latestBase)
                     if (preferredInitial != null) {
@@ -1754,11 +1794,13 @@ class AlbumDetailViewModel @Inject constructor(
                 }
                 if (workId.isNullOrBlank()) {
                     if (loadBackendFallbackAndFinishIfFound()) return@launch
+                    if (fallbackToJapaneseDirectoryIfAvailable(originalWorkId, site)) return@launch
                     asmrOneAttemptedRj.remove(keyRj)
                     finishAsmrOneLoad(keyRj, resolved = true)
                     return@launch
                 }
                 if (tree.isEmpty() && loadBackendFallbackAndFinishIfFound()) return@launch
+                if (tree.isEmpty() && fallbackToJapaneseDirectoryIfAvailable(originalWorkId, site)) return@launch
                 finishWithResolvedAsmrOneTree(workId = workId, site = site, tree = tree)
             } catch (e: CancellationException) {
                 asmrOneAttemptedRj.remove(keyRj)

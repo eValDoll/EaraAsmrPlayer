@@ -416,6 +416,18 @@ internal fun resolveAsmrOneTrackWorkId(
     return languageEdition?.id?.takeIf { it > 0 }?.toString()
 }
 
+internal fun shouldFallbackToJapaneseDirectory(
+    selectedLang: String,
+    isLanguageUserSelected: Boolean,
+    hasSelectedDirectoryResources: Boolean,
+    hasJapaneseDirectoryResources: Boolean
+): Boolean {
+    return !isLanguageUserSelected &&
+        !selectedLang.trim().equals("JPN", ignoreCase = true) &&
+        !hasSelectedDirectoryResources &&
+        hasJapaneseDirectoryResources
+}
+
 private fun asmrOneEditionMatchesLanguage(languageLabel: String, selectedLang: String): Boolean {
     val normalizedLabel = languageLabel.trim().uppercase()
     return when (selectedLang) {

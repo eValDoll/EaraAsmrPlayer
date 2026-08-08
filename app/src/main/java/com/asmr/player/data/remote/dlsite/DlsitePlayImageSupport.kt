@@ -1,9 +1,6 @@
 package com.asmr.player.data.remote.dlsite
 
 import android.graphics.Bitmap
-import android.graphics.Canvas
-import android.graphics.Paint
-import android.graphics.Rect
 import kotlin.math.ceil
 import kotlin.math.floor
 
@@ -44,8 +41,7 @@ internal fun descrambleDlsitePlayBitmap(src: Bitmap, seed: Int, width: Int, heig
     }
 
     val out = Bitmap.createBitmap(src.width, src.height, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(out)
-    val paint = Paint(Paint.FILTER_BITMAP_FLAG)
+    val tilePixels = IntArray(tileSize * tileSize)
     for (i in 0 until tileCount) {
         val srcIndex = reverse[i]
         val srcX = (srcIndex % tilesW) * tileSize
@@ -55,12 +51,8 @@ internal fun descrambleDlsitePlayBitmap(src: Bitmap, seed: Int, width: Int, heig
         val srcW = minOf(tileSize, src.width - srcX)
         val srcH = minOf(tileSize, src.height - srcY)
         if (srcW <= 0 || srcH <= 0) continue
-        canvas.drawBitmap(
-            src,
-            Rect(srcX, srcY, srcX + srcW, srcY + srcH),
-            Rect(dstX, dstY, dstX + srcW, dstY + srcH),
-            paint
-        )
+        src.getPixels(tilePixels, 0, srcW, srcX, srcY, srcW, srcH)
+        out.setPixels(tilePixels, 0, srcW, dstX, dstY, srcW, srcH)
     }
 
     val croppedWidth = width.coerceAtMost(out.width)
