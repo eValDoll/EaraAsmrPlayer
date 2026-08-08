@@ -965,7 +965,7 @@ fun SettingsScreen(
     if (showDeleteSubtitleModelConfirmation) {
         FlatActionDialog(
             onDismissRequest = { showDeleteSubtitleModelConfirmation = false },
-            message = "确定删除字幕模型？",
+            message = "确定删除字幕模型？约 29 MiB 的字幕运行时会保留，之后重新下载模型时无需重复安装。",
             actions = listOf(
                 FlatDialogAction("取消", onClick = { showDeleteSubtitleModelConfirmation = false }),
                 FlatDialogAction(
@@ -1152,6 +1152,11 @@ private fun SubtitleModelSettingsSection(
         style = MaterialTheme.typography.bodyMedium,
         fontWeight = FontWeight.SemiBold
     )
+    Text(
+        text = "首次下载会同时安装约 11 MiB 的字幕运行时；删除模型后运行时会保留。",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
 
     if (state !is SubtitleModelState.Available) {
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
@@ -1177,8 +1182,20 @@ private fun SubtitleModelSettingsSection(
 
     when (state) {
         SubtitleModelState.Missing -> Unit
-        is SubtitleModelState.Queued -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        is SubtitleModelState.Queued -> {
+            Text(
+                text = "等待下载字幕组件",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
         is SubtitleModelState.Downloading -> {
+            Text(
+                text = state.stage.displayName,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
             val progress = if (state.totalBytes > 0L) {
                 (state.downloadedBytes.toFloat() / state.totalBytes.toFloat()).coerceIn(0f, 1f)
             } else {
@@ -1190,7 +1207,14 @@ private fun SubtitleModelSettingsSection(
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
         }
-        is SubtitleModelState.Verifying -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        is SubtitleModelState.Verifying -> {
+            Text(
+                text = state.stage.displayName,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
         is SubtitleModelState.Available -> Unit
         is SubtitleModelState.Failed -> {
             Text(
@@ -1236,7 +1260,7 @@ private fun SubtitleModelSettingsSection(
                     when {
                         !deviceSupported -> "设备不支持"
                         !sourceConfigured -> "来源不可用"
-                        else -> "下载模型"
+                        else -> "下载字幕组件"
                     }
                 )
             }

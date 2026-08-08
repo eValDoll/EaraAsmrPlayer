@@ -38,7 +38,7 @@ jobs:
           fi
           printf '%s' "${EARA_RELEASE_JKS_BASE64}" | base64 --decode > eara-release.jks
           chmod 600 eara-release.jks
-      - name: Build release APKs
+      - name: Build release APK
         run: ./gradlew :app:assembleRelease
         env:
           EARA_RELEASE_STORE_FILE: eara-release.jks
@@ -51,36 +51,28 @@ jobs:
           set -euo pipefail
           mkdir -p dist
           mapfile -t APK_PATHS < <(find . -type f -path '*/outputs/apk/release/*.apk' -name '*.apk' | sort)
-          if [ "${#APK_PATHS[@]}" -eq 0 ]; then
-            echo "Release APK not found under outputs/apk/release"
+          if [ "${#APK_PATHS[@]}" -ne 1 ]; then
+            echo "Expected exactly one release APK, found ${#APK_PATHS[@]}"
             find . -maxdepth 4 -type d -name outputs -print
+            printf '%s\n' "${APK_PATHS[@]}"
             exit 1
           fi
-          for apk in "${APK_PATHS[@]}"; do
-            file_name="$(basename "$apk")"
-            case "$file_name" in
-              *universal*.apk)
-                target="AsmrPlayer-${{ github.ref_name }}-universal.apk"
-                ;;
-              *arm64-v8a*.apk)
-                target="AsmrPlayer-${{ github.ref_name }}-arm64-v8a.apk"
-                ;;
-              *armeabi-v7a*.apk)
-                target="AsmrPlayer-${{ github.ref_name }}-armeabi-v7a.apk"
-                ;;
-              *x86_64*.apk)
-                target="AsmrPlayer-${{ github.ref_name }}-x86_64.apk"
-                ;;
-              *x86*.apk)
-                target="AsmrPlayer-${{ github.ref_name }}-x86.apk"
-                ;;
-              *)
-                target="AsmrPlayer-${{ github.ref_name }}-${file_name}"
-                ;;
-            esac
-            echo "Copying $apk -> dist/$target"
-            cp "$apk" "dist/$target"
-          done
+
+          apk="${APK_PATHS[0]}"
+          max_apk_bytes=$((20 * 1024 * 1024))
+          apk_bytes="$(stat -c '%s' "$apk")"
+          if [ "$apk_bytes" -gt "$max_apk_bytes" ]; then
+            echo "Release APK is too large: $apk_bytes bytes (limit: $max_apk_bytes)"
+            exit 1
+          fi
+          if unzip -Z1 "$apk" | grep -Ei '^lib/[^/]+/lib(onnxruntime|sherpa-onnx).*\.so$'; then
+            echo "Release APK must not contain the on-demand sherpa-onnx runtime"
+            exit 1
+          fi
+
+          target="AsmrPlayer-${{ github.ref_name }}-universal.apk"
+          echo "Copying $apk -> dist/$target"
+          cp "$apk" "dist/$target"
           ls -lh dist
       - uses: softprops/action-gh-release@v2
         with:

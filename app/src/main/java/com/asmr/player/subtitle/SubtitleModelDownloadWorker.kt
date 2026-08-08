@@ -6,21 +6,18 @@ import android.content.Context
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.StatFs
-import android.os.SystemClock
 import androidx.core.app.NotificationCompat
 import androidx.work.CoroutineWorker
 import androidx.work.ForegroundInfo
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.asmr.player.R
-import com.asmr.player.data.remote.NetworkHeaders
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
 import java.io.File
 import java.io.FileInputStream
-import java.io.FileOutputStream
 import java.io.IOException
 import java.security.MessageDigest
 import kotlinx.coroutines.CancellationException
@@ -29,7 +26,6 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
-import okhttp3.Request
 
 internal class SubtitleModelDownloadWorker(
     appContext: Context,
@@ -48,44 +44,88 @@ internal class SubtitleModelDownloadWorker(
         if (!baseUrl.startsWith("https://")) return@withContext Result.failure()
 
         val repository = SubtitleModelRepository.get(applicationContext)
+        val runtimeRepository = SherpaOnnxRuntimeRepository.get(applicationContext)
+        val runtime = runtimeRepository.descriptor
+        if (!runtime.url.startsWith("https://")) return@withContext Result.failure()
         val model = SubtitleTranscriptionModels.PARAKEET_TDT_CTC_06B_JA_INT8
+        val totalBytes = repository.installationBytes()
+        var activeStage = SubtitleModelInstallStage.Runtime
         try {
             val modelDirectory = repository.ensureModelDirectory()
             if (repository.isModelAvailable()) {
                 repository.updateAvailable(source)
                 return@withContext Result.success()
             }
-            setForeground(createForegroundInfo(0L, model.artifactBytes, "准备下载"))
-            ensureFreeSpace(
-                destinationDirectory = modelDirectory,
-                expectedBytes = model.artifactBytes,
-                existingBytes = repository.downloadedModelBytes()
+            setForeground(
+                createForegroundInfo(
+                    repository.downloadedInstallationBytes(),
+                    totalBytes,
+                    "准备下载字幕组件"
+                )
             )
             val client = EntryPointAccessors.fromApplication(
                 applicationContext,
                 WorkerEntryPoint::class.java
             ).okHttpClient()
+
+            if (!runtimeRepository.isInstalled()) {
+                val runtimeDirectory = runtimeRepository.ensureDownloadDirectory()
+                val partialRuntime = runtimeRepository.partialArchiveFile()
+                ensureFreeSpace(
+                    destinationDirectory = runtimeDirectory,
+                    expectedBytes = runtime.archiveBytes + runtime.extractedBytes,
+                    existingBytes = runtimeRepository.downloadedArchiveBytes()
+                )
+                download(
+                    client = client,
+                    url = runtime.url,
+                    source = source,
+                    stage = SubtitleModelInstallStage.Runtime,
+                    destination = partialRuntime,
+                    expectedBytes = runtime.archiveBytes,
+                    completedBefore = repository.downloadedModelBytes(),
+                    totalBytes = totalBytes,
+                    repository = repository
+                )
+                activeStage = SubtitleModelInstallStage.RuntimeVerification
+                repository.updateVerifying(source, activeStage)
+                publishStage(
+                    stage = activeStage,
+                    downloadedBytes = runtime.archiveBytes + repository.downloadedModelBytes(),
+                    totalBytes = totalBytes
+                )
+                runtimeRepository.installDownloadedArchive()
+            }
+
+            activeStage = SubtitleModelInstallStage.Model
+            ensureFreeSpace(
+                destinationDirectory = modelDirectory,
+                expectedBytes = model.artifactBytes,
+                existingBytes = repository.downloadedModelBytes()
+            )
             model.artifacts.forEach { artifact ->
                 if (isInstalledSubtitleModelArtifact(repository.artifactFile(artifact), artifact.bytes)) {
                     return@forEach
                 }
                 val partialFile = repository.partialArtifactFile(artifact)
                 val currentPartialBytes = partialFile.length().coerceIn(0L, artifact.bytes)
-                val completedBefore = repository.downloadedModelBytes() - currentPartialBytes
+                val completedBefore = runtime.archiveBytes +
+                    repository.downloadedModelBytes() - currentPartialBytes
                 download(
                     client = client,
                     url = buildSubtitleModelArtifactUrl(baseUrl, artifact.fileName),
                     source = source,
+                    stage = activeStage,
                     destination = partialFile,
                     expectedBytes = artifact.bytes,
                     completedBefore = completedBefore,
-                    totalBytes = model.artifactBytes,
+                    totalBytes = totalBytes,
                     repository = repository
                 )
             }
-            repository.updateVerifying(source)
-            setProgress(workDataOf(KEY_STAGE to STAGE_VERIFYING))
-            setForeground(createForegroundInfo(model.artifactBytes, model.artifactBytes, "正在校验"))
+            activeStage = SubtitleModelInstallStage.ModelVerification
+            repository.updateVerifying(source, activeStage)
+            publishStage(activeStage, totalBytes, totalBytes)
             model.artifacts.forEach { artifact ->
                 val targetFile = repository.artifactFile(artifact)
                 if (isInstalledSubtitleModelArtifact(targetFile, artifact.bytes)) return@forEach
@@ -102,20 +142,21 @@ internal class SubtitleModelDownloadWorker(
             repository.updateAvailable(source)
             Result.success(
                 workDataOf(
-                    KEY_DOWNLOADED_BYTES to model.artifactBytes,
-                    KEY_TOTAL_BYTES to model.artifactBytes
+                    KEY_DOWNLOADED_BYTES to totalBytes,
+                    KEY_TOTAL_BYTES to totalBytes
                 )
             )
         } catch (cancelled: CancellationException) {
             repository.updateMissing()
             throw cancelled
         } catch (error: Throwable) {
-            val message = error.message?.trim().orEmpty().ifBlank { "模型下载失败" }
+            val message = error.message?.trim().orEmpty().ifBlank { "字幕组件下载失败" }
             if (runAttemptCount < MAX_RETRY_COUNT && error is IOException) {
                 repository.updateDownloading(
                     source,
-                    repository.downloadedModelBytes(),
-                    model.artifactBytes
+                    activeStage,
+                    repository.downloadedInstallationBytes(),
+                    totalBytes
                 )
                 Result.retry()
             } else {
@@ -129,84 +170,22 @@ internal class SubtitleModelDownloadWorker(
         client: OkHttpClient,
         url: String,
         source: SubtitleModelDownloadSource,
+        stage: SubtitleModelInstallStage,
         destination: File,
         expectedBytes: Long,
         completedBefore: Long,
         totalBytes: Long,
         repository: SubtitleModelRepository
     ) {
-        var existingBytes = destination.length().coerceIn(0L, expectedBytes)
-        if (destination.length() != existingBytes) {
-            check(destination.delete()) { "无法清理无效的临时模型" }
-            existingBytes = 0L
-        }
-        repository.updateDownloading(source, completedBefore + existingBytes, totalBytes)
-        if (existingBytes == expectedBytes) {
+        SubtitleArtifactDownloader.download(
+            client = client,
+            url = url,
+            destination = destination,
+            expectedBytes = expectedBytes
+        ) { downloadedBytes ->
             publishProgress(
                 source,
-                repository,
-                completedBefore + existingBytes,
-                totalBytes
-            )
-            return
-        }
-
-        val requestBuilder = Request.Builder()
-            .url(url)
-            .header("User-Agent", "Eara-Android")
-            .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
-        if (existingBytes > 0L) requestBuilder.header("Range", "bytes=$existingBytes-")
-
-        client.newCall(requestBuilder.get().build()).execute().use { response ->
-            if (!response.isSuccessful) {
-                throw IOException("下载失败：${response.code} ${response.message}")
-            }
-            val append = existingBytes > 0L && response.code == 206
-            if (append) {
-                val expectedRangePrefix = "bytes $existingBytes-"
-                val contentRange = response.header("Content-Range").orEmpty()
-                if (!contentRange.startsWith(expectedRangePrefix)) {
-                    destination.delete()
-                    throw IOException("下载源返回了无效的断点数据")
-                }
-            }
-            if (!append) {
-                existingBytes = 0L
-            }
-            val body = response.body ?: throw IOException("下载失败：空响应体")
-            var downloadedBytes = existingBytes
-            var lastUpdateAt = 0L
-            FileOutputStream(destination, append).use { output ->
-                body.byteStream().use { input ->
-                    val buffer = ByteArray(DOWNLOAD_BUFFER_BYTES)
-                    while (true) {
-                        currentCoroutineContext().ensureActive()
-                        val read = input.read(buffer)
-                        if (read < 0) break
-                        if (read == 0) continue
-                        output.write(buffer, 0, read)
-                        downloadedBytes += read.toLong()
-                        check(downloadedBytes <= expectedBytes) { "下载的模型文件大小异常" }
-                        val now = SystemClock.elapsedRealtime()
-                        if (now - lastUpdateAt >= PROGRESS_UPDATE_INTERVAL_MS) {
-                            publishProgress(
-                                source,
-                                repository,
-                                completedBefore + downloadedBytes,
-                                totalBytes
-                            )
-                            lastUpdateAt = now
-                        }
-                    }
-                }
-                output.flush()
-                output.fd.sync()
-            }
-            if (downloadedBytes != expectedBytes) {
-                throw IOException("模型下载不完整（${downloadedBytes}/${expectedBytes} 字节）")
-            }
-            publishProgress(
-                source,
+                stage,
                 repository,
                 completedBefore + downloadedBytes,
                 totalBytes
@@ -216,19 +195,35 @@ internal class SubtitleModelDownloadWorker(
 
     private suspend fun publishProgress(
         source: SubtitleModelDownloadSource,
+        stage: SubtitleModelInstallStage,
         repository: SubtitleModelRepository,
         downloadedBytes: Long,
         totalBytes: Long
     ) {
-        repository.updateDownloading(source, downloadedBytes, totalBytes)
+        repository.updateDownloading(source, stage, downloadedBytes, totalBytes)
         setProgress(
             workDataOf(
-                KEY_STAGE to STAGE_DOWNLOADING,
+                KEY_STAGE to stage.name,
                 KEY_DOWNLOADED_BYTES to downloadedBytes,
                 KEY_TOTAL_BYTES to totalBytes
             )
         )
-        setForeground(createForegroundInfo(downloadedBytes, totalBytes, "正在下载"))
+        setForeground(createForegroundInfo(downloadedBytes, totalBytes, stage.displayName))
+    }
+
+    private suspend fun publishStage(
+        stage: SubtitleModelInstallStage,
+        downloadedBytes: Long,
+        totalBytes: Long
+    ) {
+        setProgress(
+            workDataOf(
+                KEY_STAGE to stage.name,
+                KEY_DOWNLOADED_BYTES to downloadedBytes,
+                KEY_TOTAL_BYTES to totalBytes
+            )
+        )
+        setForeground(createForegroundInfo(downloadedBytes, totalBytes, stage.displayName))
     }
 
     private suspend fun sha256(file: File): String {
@@ -266,7 +261,7 @@ internal class SubtitleModelDownloadWorker(
             notificationManager.createNotificationChannel(
                 NotificationChannel(
                     NOTIFICATION_CHANNEL_ID,
-                    "日语字幕模型下载",
+                    "日语字幕组件下载",
                     NotificationManager.IMPORTANCE_LOW
                 )
             )
@@ -278,7 +273,7 @@ internal class SubtitleModelDownloadWorker(
         }
         val notification = NotificationCompat.Builder(applicationContext, NOTIFICATION_CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("日语字幕模型")
+            .setContentTitle("日语字幕组件")
             .setContentText(stage)
             .setOnlyAlertOnce(true)
             .setOngoing(true)
@@ -299,12 +294,7 @@ internal class SubtitleModelDownloadWorker(
         const val KEY_DOWNLOADED_BYTES = "downloadedBytes"
         const val KEY_TOTAL_BYTES = "totalBytes"
         const val KEY_ERROR_MESSAGE = "errorMessage"
-        const val STAGE_DOWNLOADING = "downloading"
-        const val STAGE_VERIFYING = "verifying"
-
-        private const val DOWNLOAD_BUFFER_BYTES = 256 * 1024
         private const val HASH_BUFFER_BYTES = 1024 * 1024
-        private const val PROGRESS_UPDATE_INTERVAL_MS = 250L
         private const val FREE_SPACE_RESERVE_BYTES = 128L * 1024L * 1024L
         private const val MAX_RETRY_COUNT = 2
         private const val NOTIFICATION_CHANNEL_ID = "subtitle_model_download"

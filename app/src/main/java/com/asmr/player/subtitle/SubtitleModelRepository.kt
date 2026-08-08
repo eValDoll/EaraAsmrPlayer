@@ -52,12 +52,14 @@ internal sealed interface SubtitleModelState {
 
     data class Downloading(
         val source: SubtitleModelDownloadSource,
+        val stage: SubtitleModelInstallStage,
         val downloadedBytes: Long,
         val totalBytes: Long
     ) : SubtitleModelState
 
     data class Verifying(
-        val source: SubtitleModelDownloadSource
+        val source: SubtitleModelDownloadSource,
+        val stage: SubtitleModelInstallStage
     ) : SubtitleModelState
 
     data class Available(
@@ -68,6 +70,13 @@ internal sealed interface SubtitleModelState {
         val source: SubtitleModelDownloadSource,
         val message: String
     ) : SubtitleModelState
+}
+
+internal enum class SubtitleModelInstallStage(val displayName: String) {
+    Runtime("正在下载字幕运行时"),
+    RuntimeVerification("正在校验并安装字幕运行时"),
+    Model("正在下载日语字幕模型"),
+    ModelVerification("正在校验日语字幕模型")
 }
 
 internal fun buildSubtitleModelArtifactUrl(baseUrl: String, fileName: String): String {
@@ -87,11 +96,13 @@ internal fun isInstalledSubtitleModelArtifact(
 internal class SubtitleModelRepository private constructor(context: Context) {
     private val appContext = context.applicationContext
     private val model = SubtitleTranscriptionModels.PARAKEET_TDT_CTC_06B_JA_INT8
+    private val runtimeRepository = SherpaOnnxRuntimeRepository.get(appContext)
     private val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
     private val _state = MutableStateFlow(initialState())
     val state: StateFlow<SubtitleModelState> = _state.asStateFlow()
 
-    fun isModelAvailable(): Boolean = installedModelDirectoryOrNull() != null
+    fun isModelAvailable(): Boolean =
+        runtimeRepository.isInstalled() && installedModelDirectoryOrNull() != null
 
     fun requireInstalledModelDirectory(): File {
         return installedModelDirectoryOrNull()
@@ -105,6 +116,9 @@ internal class SubtitleModelRepository private constructor(context: Context) {
         }
         val baseUrl = source.downloadBaseUrl().trim()
         require(baseUrl.startsWith("https://")) { "模型下载地址未配置" }
+        require(runtimeRepository.descriptor.url.trim().startsWith("https://")) {
+            "字幕运行时下载地址未配置"
+        }
         _state.value = SubtitleModelState.Queued(source)
         val request = OneTimeWorkRequestBuilder<SubtitleModelDownloadWorker>()
             .setInputData(
@@ -140,6 +154,7 @@ internal class SubtitleModelRepository private constructor(context: Context) {
             .result
             .get()
         deletePartialModelFiles()
+        runtimeRepository.deletePartialArchive()
         _state.value = initialState()
     }
 
@@ -159,18 +174,23 @@ internal class SubtitleModelRepository private constructor(context: Context) {
 
     internal fun updateDownloading(
         source: SubtitleModelDownloadSource,
+        stage: SubtitleModelInstallStage,
         downloadedBytes: Long,
         totalBytes: Long
     ) {
         _state.value = SubtitleModelState.Downloading(
             source = source,
+            stage = stage,
             downloadedBytes = downloadedBytes.coerceAtLeast(0L),
             totalBytes = totalBytes.coerceAtLeast(0L)
         )
     }
 
-    internal fun updateVerifying(source: SubtitleModelDownloadSource) {
-        _state.value = SubtitleModelState.Verifying(source)
+    internal fun updateVerifying(
+        source: SubtitleModelDownloadSource,
+        stage: SubtitleModelInstallStage
+    ) {
+        _state.value = SubtitleModelState.Verifying(source, stage)
     }
 
     internal fun updateAvailable(source: SubtitleModelDownloadSource) {
@@ -204,6 +224,18 @@ internal class SubtitleModelRepository private constructor(context: Context) {
         }
     }
 
+    internal fun downloadedInstallationBytes(): Long {
+        val runtimeBytes = if (runtimeRepository.isInstalled()) {
+            runtimeRepository.descriptor.archiveBytes
+        } else {
+            runtimeRepository.downloadedArchiveBytes()
+        }
+        return runtimeBytes + downloadedModelBytes()
+    }
+
+    internal fun installationBytes(): Long =
+        runtimeRepository.descriptor.archiveBytes + model.artifactBytes
+
     internal fun deletePartialModelFiles(): Boolean = model.artifacts.all { artifact ->
         deleteIfPresent(partialArtifactFile(artifact))
     }
@@ -226,6 +258,7 @@ internal class SubtitleModelRepository private constructor(context: Context) {
     }
 
     private fun initialState(): SubtitleModelState {
+        if (!runtimeRepository.isInstalled()) return SubtitleModelState.Missing
         installedModelDirectoryOrNull() ?: return SubtitleModelState.Missing
         val source = SubtitleModelDownloadSource.fromId(
             preferences.getString(KEY_INSTALLED_SOURCE, null)
@@ -240,7 +273,7 @@ internal class SubtitleModelRepository private constructor(context: Context) {
     private fun deleteIfPresent(file: File): Boolean = !file.exists() || file.delete()
 
     companion object {
-        const val MODEL_REQUIRED_MESSAGE = "请先在设置中下载日语字幕模型"
+        const val MODEL_REQUIRED_MESSAGE = "请先在设置中下载日语字幕组件"
 
         private const val MODEL_ROOT_DIRECTORY_NAME = "subtitle-models"
         private const val PREFERENCES_NAME = "subtitle_model_preferences"
