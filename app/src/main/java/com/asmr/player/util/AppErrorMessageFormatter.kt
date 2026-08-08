@@ -3,6 +3,17 @@ package com.asmr.player.util
 object AppErrorMessageFormatter {
     private val whitespaceRegex = Regex("""\s+""")
     private val rjSampleRegex = Regex("""[（(]\s*如\s*RJ\d{6,}\s*[)）]""", RegexOption.IGNORE_CASE)
+    private val userFacingSubtitleErrorPrefixes = listOf(
+        "本地转录失败：",
+        "本地转录未识别到",
+        "字幕在转录期间已被修改",
+        "字幕翻译失败：",
+        "字幕翻译模型返回格式错误：",
+        "DeepSeek ",
+        "无法连接 DeepSeek",
+        "无法与 DeepSeek",
+        "请先在设置中配置 DeepSeek API Key"
+    )
     private val technicalDetailRegexes = listOf(
         Regex("""\bHTTP\s*\d{3}\b""", RegexOption.IGNORE_CASE),
         Regex("""\b[A-Za-z]+Exception\b"""),
@@ -37,6 +48,7 @@ object AppErrorMessageFormatter {
 
     private fun explicitMessage(message: String): String? {
         return when {
+            userFacingSubtitleErrorPrefixes.any(message::startsWith) -> message
             message.startsWith("请输入有效 RJ 号") -> "请输入有效的作品编号"
             message.startsWith("仅支持本地库专辑手动绑定 RJ") -> "仅支持本地库专辑手动绑定作品编号"
             else -> null

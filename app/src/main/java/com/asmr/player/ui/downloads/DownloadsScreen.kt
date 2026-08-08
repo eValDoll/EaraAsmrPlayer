@@ -1026,7 +1026,7 @@ private fun TranslationSubtitleRow(
                     ?: "${subtitle.subtitleCount} 行字幕",
                 style = MaterialTheme.typography.labelSmall,
                 color = if (task?.state == SubtitleItemState.FAILED) colors.danger else colors.textTertiary,
-                maxLines = 1,
+                maxLines = if (task?.state == SubtitleItemState.FAILED) 2 else 1,
                 overflow = TextOverflow.Ellipsis
             )
             if (task != null) {
@@ -1075,7 +1075,7 @@ private fun TranslationSubtitleRow(
         }
         if (onRetryTask != null) {
             IconButton(onClick = onRetryTask, modifier = Modifier.size(32.dp)) {
-                Icon(Icons.Rounded.Refresh, "重新翻译完整字幕", tint = colors.primary, modifier = Modifier.size(16.dp))
+                Icon(Icons.Rounded.Refresh, "重试字幕任务", tint = colors.primary, modifier = Modifier.size(16.dp))
             }
         }
         if (onCancel != null) {
@@ -1185,8 +1185,8 @@ internal fun TranslationTaskRow(
                 Text(
                     text = task.message.ifBlank { task.stage },
                     style = MaterialTheme.typography.labelSmall,
-                    color = colors.textTertiary,
-                    maxLines = 1,
+                    color = if (task.state == SubtitleItemState.FAILED) colors.danger else colors.textTertiary,
+                    maxLines = if (task.state == SubtitleItemState.FAILED) 2 else 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
@@ -1211,7 +1211,7 @@ internal fun TranslationTaskRow(
                 onClick = onRetry,
                 modifier = Modifier.size(32.dp)
             ) {
-                Icon(Icons.Rounded.Refresh, "重新翻译完整字幕", tint = colors.primary, modifier = Modifier.size(16.dp))
+                Icon(Icons.Rounded.Refresh, "重试字幕任务", tint = colors.primary, modifier = Modifier.size(16.dp))
             }
             else -> IconButton(
                 onClick = onPause,

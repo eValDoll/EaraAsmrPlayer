@@ -314,7 +314,7 @@ internal class SubtitleTranslationClient(
             throw cancelled
         } catch (error: IOException) {
             throw SubtitleTranslationException(
-                message = "无法连接 DeepSeek 翻译服务",
+                message = SubtitleFailureMessages.network(error),
                 retryable = true,
                 cause = error
             )
@@ -323,20 +323,13 @@ internal class SubtitleTranslationClient(
             response.use {
                 val raw = it.body?.string().orEmpty()
                 if (!it.isSuccessful) {
-                    val retryable = it.code == 408 || it.code == 425 || it.code == 429 || it.code >= 500
-                    val serviceMessage = parseDeepSeekErrorMessage(raw)
+                    val failure = SubtitleFailureMessages.deepSeekHttp(
+                        statusCode = it.code,
+                        serviceMessage = parseDeepSeekErrorMessage(raw)
+                    )
                     throw SubtitleTranslationException(
-                        message = when (it.code) {
-                            401 -> "DeepSeek API Key 无效"
-                            402 -> "DeepSeek 账户余额不足"
-                            429 -> "DeepSeek 请求过于频繁"
-                            in 500..599 -> "DeepSeek 服务暂时不可用"
-                            else -> buildString {
-                                append("DeepSeek 翻译请求失败（HTTP ${it.code}）")
-                                serviceMessage?.let { message -> append("：$message") }
-                            }
-                        },
-                        retryable = retryable,
+                        message = failure.message,
+                        retryable = failure.retryable,
                         retryAfterMs = parseRetryAfterMillis(it.header("Retry-After"))
                     )
                 }
