@@ -22,6 +22,7 @@ import com.asmr.player.domain.model.Track
 import com.asmr.player.playback.MediaItemFactory
 import com.asmr.player.playback.PlayerConnection
 import com.asmr.player.subtitle.SubtitleItemState
+import com.asmr.player.subtitle.SubtitleTranscriptionModels
 import com.asmr.player.subtitle.SubtitleTaskMode
 import com.asmr.player.subtitle.SubtitleTaskOrigin
 import com.asmr.player.subtitle.SubtitleTaskState
@@ -372,6 +373,7 @@ class BenchmarkDataSeeder @Inject constructor(
                         },
                         transcriptionChunkCursor = if (translationReady) 6 else 3,
                         transcriptionProgress = if (translationReady) 100 else 42,
+                        transcriptionModelId = SubtitleTranscriptionModels.default.id,
                         transcribedMs = if (translationReady) {
                             (track.duration * 1_000.0).toLong()
                         } else {

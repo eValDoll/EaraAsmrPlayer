@@ -272,10 +272,14 @@ class SettingsViewModel @Inject constructor(
         appCacheManager.clearCache()
     }
 
-    internal fun downloadSubtitleModel(source: SubtitleModelDownloadSource) {
-        runCatching { subtitleModelRepository.enqueueDownload(source) }
+    internal fun downloadSubtitleModel(
+        modelId: String,
+        source: SubtitleModelDownloadSource
+    ) {
+        runCatching { subtitleModelRepository.enqueueDownload(modelId, source) }
             .onFailure { error ->
                 subtitleModelRepository.updateFailure(
+                    modelId,
                     source,
                     error.message?.takeIf { it.isNotBlank() } ?: "无法开始模型下载"
                 )
@@ -286,12 +290,16 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { subtitleModelRepository.cancelDownload() }
     }
 
-    fun deleteSubtitleModel() {
-        viewModelScope.launch { subtitleModelRepository.deleteModel() }
+    fun selectSubtitleModel(modelId: String) {
+        subtitleModelRepository.selectModel(modelId)
     }
 
-    fun clearSubtitleModelFailure() {
-        subtitleModelRepository.clearFailure()
+    fun deleteSubtitleModel(modelId: String) {
+        viewModelScope.launch { subtitleModelRepository.deleteModel(modelId) }
+    }
+
+    fun clearSubtitleModelFailure(modelId: String) {
+        subtitleModelRepository.clearFailure(modelId)
     }
 
     internal fun saveDeepSeekApiKey(apiKey: String) {

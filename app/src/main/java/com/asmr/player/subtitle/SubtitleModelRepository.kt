@@ -1,6 +1,7 @@
 package com.asmr.player.subtitle
 
 import android.content.Context
+import android.content.SharedPreferences
 import androidx.work.BackoffPolicy
 import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
@@ -26,57 +27,89 @@ internal enum class SubtitleModelDownloadSource(
     GitHub("github", "GitHub"),
     HuggingFace("hugging_face", "Hugging Face");
 
-    fun downloadBaseUrl(): String = when (this) {
-        GitHub -> BuildConfig.SUBTITLE_MODEL_GITHUB_URL
-        HuggingFace -> BuildConfig.SUBTITLE_MODEL_HUGGING_FACE_URL
-    }
-
-    fun artifactUrl(fileName: String): String = buildSubtitleModelArtifactUrl(
-        baseUrl = downloadBaseUrl(),
-        fileName = fileName
-    )
-
-    fun isConfigured(): Boolean = downloadBaseUrl().trim().startsWith("https://")
-
     companion object {
         fun fromId(id: String?): SubtitleModelDownloadSource? = entries.firstOrNull { it.id == id }
     }
 }
 
-internal sealed interface SubtitleModelState {
-    data object Missing : SubtitleModelState
-
-    data class Queued(
-        val source: SubtitleModelDownloadSource
-    ) : SubtitleModelState
-
-    data class Downloading(
-        val source: SubtitleModelDownloadSource,
-        val stage: SubtitleModelInstallStage,
-        val downloadedBytes: Long,
-        val totalBytes: Long
-    ) : SubtitleModelState
-
-    data class Verifying(
-        val source: SubtitleModelDownloadSource,
-        val stage: SubtitleModelInstallStage
-    ) : SubtitleModelState
+internal sealed interface SubtitleModelInstallationState {
+    data object Missing : SubtitleModelInstallationState
 
     data class Available(
         val source: SubtitleModelDownloadSource?
-    ) : SubtitleModelState
+    ) : SubtitleModelInstallationState
+}
+
+internal sealed interface SubtitleModelOperation {
+    val modelId: String
+    val source: SubtitleModelDownloadSource
+
+    data class Queued(
+        override val modelId: String,
+        override val source: SubtitleModelDownloadSource
+    ) : SubtitleModelOperation
+
+    data class Downloading(
+        override val modelId: String,
+        override val source: SubtitleModelDownloadSource,
+        val stage: SubtitleModelInstallStage,
+        val downloadedBytes: Long,
+        val totalBytes: Long
+    ) : SubtitleModelOperation
+
+    data class Verifying(
+        override val modelId: String,
+        override val source: SubtitleModelDownloadSource,
+        val stage: SubtitleModelInstallStage
+    ) : SubtitleModelOperation
 
     data class Failed(
-        val source: SubtitleModelDownloadSource,
+        override val modelId: String,
+        override val source: SubtitleModelDownloadSource,
         val message: String
-    ) : SubtitleModelState
+    ) : SubtitleModelOperation
 }
+
+internal data class SubtitleModelState(
+    val activeModelId: String,
+    val installations: Map<String, SubtitleModelInstallationState>,
+    val operation: SubtitleModelOperation? = null
+) {
+    fun installation(modelId: String): SubtitleModelInstallationState =
+        installations[modelId] ?: SubtitleModelInstallationState.Missing
+}
+
+internal data class InstalledSubtitleModel(
+    val model: SubtitleTranscriptionModel,
+    val directory: File
+)
 
 internal enum class SubtitleModelInstallStage(val displayName: String) {
     Runtime("正在下载字幕运行时"),
     RuntimeVerification("正在校验并安装字幕运行时"),
     Model("正在下载日语字幕模型"),
     ModelVerification("正在校验日语字幕模型")
+}
+
+internal fun subtitleModelDownloadBaseUrl(
+    model: SubtitleTranscriptionModel,
+    source: SubtitleModelDownloadSource
+): String = when (model.id) {
+    SubtitleTranscriptionModels.PARAKEET_TDT_CTC_06B_JA_INT8.id -> when (source) {
+        SubtitleModelDownloadSource.GitHub -> BuildConfig.SUBTITLE_MODEL_GITHUB_URL
+        SubtitleModelDownloadSource.HuggingFace -> BuildConfig.SUBTITLE_MODEL_HUGGING_FACE_URL
+    }
+    SubtitleTranscriptionModels.SENSE_VOICE_SMALL_INT8.id -> when (source) {
+        SubtitleModelDownloadSource.GitHub -> BuildConfig.SUBTITLE_SENSEVOICE_GITHUB_URL
+        SubtitleModelDownloadSource.HuggingFace -> BuildConfig.SUBTITLE_SENSEVOICE_HUGGING_FACE_URL
+    }
+    else -> ""
+}
+
+internal fun configuredSubtitleModelDownloadSources(
+    model: SubtitleTranscriptionModel
+): List<SubtitleModelDownloadSource> = SubtitleModelDownloadSource.entries.filter { source ->
+    subtitleModelDownloadBaseUrl(model, source).trim().startsWith("https://")
 }
 
 internal fun buildSubtitleModelArtifactUrl(baseUrl: String, fileName: String): String {
@@ -95,34 +128,57 @@ internal fun isInstalledSubtitleModelArtifact(
 
 internal class SubtitleModelRepository private constructor(context: Context) {
     private val appContext = context.applicationContext
-    private val model = SubtitleTranscriptionModels.PARAKEET_TDT_CTC_06B_JA_INT8
     private val runtimeRepository = SherpaOnnxRuntimeRepository.get(appContext)
     private val preferences = appContext.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
-    private val _state = MutableStateFlow(initialState())
-    val state: StateFlow<SubtitleModelState> = _state.asStateFlow()
+    private val _state: MutableStateFlow<SubtitleModelState>
+    val state: StateFlow<SubtitleModelState>
 
-    fun isModelAvailable(): Boolean =
-        runtimeRepository.isInstalled() && installedModelDirectoryOrNull() != null
-
-    fun requireInstalledModelDirectory(): File {
-        return installedModelDirectoryOrNull()
-            ?: throw IllegalStateException(MODEL_REQUIRED_MESSAGE)
+    init {
+        migrateLegacyPreferences(preferences)
+        _state = MutableStateFlow(buildState())
+        state = _state.asStateFlow()
     }
 
-    fun enqueueDownload(source: SubtitleModelDownloadSource) {
-        if (isModelAvailable()) {
-            refreshInstalledState()
+    fun activeModel(): SubtitleTranscriptionModel =
+        SubtitleTranscriptionModels.fromId(preferences.getString(KEY_ACTIVE_MODEL_ID, null))
+            ?: SubtitleTranscriptionModels.default
+
+    fun isModelAvailable(modelId: String = activeModel().id): Boolean {
+        val model = SubtitleTranscriptionModels.fromId(modelId) ?: return false
+        return runtimeRepository.isInstalled() && installedModelDirectoryOrNull(model) != null
+    }
+
+    fun requireInstalledModel(modelId: String = activeModel().id): InstalledSubtitleModel {
+        val model = SubtitleTranscriptionModels.fromId(modelId)
+            ?: throw IllegalStateException(MODEL_REQUIRED_MESSAGE)
+        val directory = installedModelDirectoryOrNull(model)
+            ?.takeIf { runtimeRepository.isInstalled() }
+            ?: throw IllegalStateException(MODEL_REQUIRED_MESSAGE)
+        return InstalledSubtitleModel(model, directory)
+    }
+
+    fun selectModel(modelId: String) {
+        require(isModelAvailable(modelId)) { "请先下载该日语字幕模型" }
+        preferences.edit().putString(KEY_ACTIVE_MODEL_ID, modelId).apply()
+        refreshState()
+    }
+
+    fun enqueueDownload(modelId: String, source: SubtitleModelDownloadSource) {
+        val model = requireNotNull(SubtitleTranscriptionModels.fromId(modelId)) { "未知的字幕模型" }
+        if (isModelAvailable(model.id)) {
+            refreshState()
             return
         }
-        val baseUrl = source.downloadBaseUrl().trim()
+        val baseUrl = subtitleModelDownloadBaseUrl(model, source).trim()
         require(baseUrl.startsWith("https://")) { "模型下载地址未配置" }
         require(runtimeRepository.descriptor.url.trim().startsWith("https://")) {
             "字幕运行时下载地址未配置"
         }
-        _state.value = SubtitleModelState.Queued(source)
+        refreshState(SubtitleModelOperation.Queued(model.id, source))
         val request = OneTimeWorkRequestBuilder<SubtitleModelDownloadWorker>()
             .setInputData(
                 workDataOf(
+                    SubtitleModelDownloadWorker.KEY_MODEL_ID to model.id,
                     SubtitleModelDownloadWorker.KEY_SOURCE to source.id,
                     SubtitleModelDownloadWorker.KEY_URL to baseUrl
                 )
@@ -142,133 +198,183 @@ internal class SubtitleModelRepository private constructor(context: Context) {
         )
     }
 
-    fun clearFailure() {
-        if (_state.value is SubtitleModelState.Failed) {
-            _state.value = SubtitleModelState.Missing
-        }
+    fun clearFailure(modelId: String) {
+        val failure = _state.value.operation as? SubtitleModelOperation.Failed ?: return
+        if (failure.modelId == modelId) refreshState(operation = null)
     }
 
     suspend fun cancelDownload() = withContext(Dispatchers.IO) {
+        val model = _state.value.operation?.modelId?.let(SubtitleTranscriptionModels::fromId)
         WorkManager.getInstance(appContext)
             .cancelUniqueWork(SubtitleModelDownloadWorker.UNIQUE_WORK_NAME)
             .result
             .get()
-        deletePartialModelFiles()
+        model?.let(::deletePartialModelFiles)
         runtimeRepository.deletePartialArchive()
-        _state.value = initialState()
+        refreshState(operation = null)
     }
 
-    suspend fun deleteModel() = withContext(Dispatchers.IO) {
-        WorkManager.getInstance(appContext)
-            .cancelUniqueWork(SubtitleModelDownloadWorker.UNIQUE_WORK_NAME)
-            .result
-            .get()
+    suspend fun deleteModel(modelId: String) = withContext(Dispatchers.IO) {
+        val model = requireNotNull(SubtitleTranscriptionModels.fromId(modelId)) { "未知的字幕模型" }
+        val operation = _state.value.operation
+        if (operation?.modelId == model.id) {
+            WorkManager.getInstance(appContext)
+                .cancelUniqueWork(SubtitleModelDownloadWorker.UNIQUE_WORK_NAME)
+                .result
+                .get()
+        }
         val deletedModel = model.artifacts.all { artifact ->
-            deleteIfPresent(artifactFile(artifact)) && deleteIfPresent(partialArtifactFile(artifact))
+            deleteIfPresent(artifactFile(model, artifact)) &&
+                deleteIfPresent(partialArtifactFile(model, artifact))
         }
         check(deletedModel) { "无法删除日语字幕模型" }
-        modelDirectory().takeIf { it.isDirectory && it.list().isNullOrEmpty() }?.delete()
-        preferences.edit().remove(KEY_INSTALLED_SOURCE).apply()
-        _state.value = SubtitleModelState.Missing
+        modelDirectory(model).takeIf { it.isDirectory && it.list().isNullOrEmpty() }?.delete()
+
+        val editor = preferences.edit().remove(installedSourceKey(model.id))
+        if (activeModel().id == model.id) {
+            val availableModelIds = SubtitleTranscriptionModels.all
+                .filter { candidate -> candidate.id != model.id && isModelAvailable(candidate.id) }
+                .mapTo(mutableSetOf(), SubtitleTranscriptionModel::id)
+            editor.putString(
+                KEY_ACTIVE_MODEL_ID,
+                fallbackSubtitleModelId(model.id, availableModelIds)
+            )
+        }
+        editor.apply()
+        refreshState(operation = operation?.takeUnless { it.modelId == model.id })
     }
 
     internal fun updateDownloading(
+        modelId: String,
         source: SubtitleModelDownloadSource,
         stage: SubtitleModelInstallStage,
         downloadedBytes: Long,
         totalBytes: Long
     ) {
-        _state.value = SubtitleModelState.Downloading(
-            source = source,
-            stage = stage,
-            downloadedBytes = downloadedBytes.coerceAtLeast(0L),
-            totalBytes = totalBytes.coerceAtLeast(0L)
+        refreshState(
+            SubtitleModelOperation.Downloading(
+                modelId = modelId,
+                source = source,
+                stage = stage,
+                downloadedBytes = downloadedBytes.coerceAtLeast(0L),
+                totalBytes = totalBytes.coerceAtLeast(0L)
+            )
         )
     }
 
     internal fun updateVerifying(
+        modelId: String,
         source: SubtitleModelDownloadSource,
         stage: SubtitleModelInstallStage
     ) {
-        _state.value = SubtitleModelState.Verifying(source, stage)
+        refreshState(SubtitleModelOperation.Verifying(modelId, source, stage))
     }
 
-    internal fun updateAvailable(source: SubtitleModelDownloadSource) {
-        preferences.edit().putString(KEY_INSTALLED_SOURCE, source.id).apply()
-        _state.value = SubtitleModelState.Available(source)
+    internal fun updateAvailable(modelId: String, source: SubtitleModelDownloadSource) {
+        preferences.edit().putString(installedSourceKey(modelId), source.id).apply()
+        refreshState(operation = null)
     }
 
-    internal fun updateFailure(source: SubtitleModelDownloadSource, message: String) {
-        _state.value = SubtitleModelState.Failed(
-            source = source,
-            message = message.trim().ifBlank { "模型下载失败" }
+    internal fun updateFailure(
+        modelId: String,
+        source: SubtitleModelDownloadSource,
+        message: String
+    ) {
+        refreshState(
+            SubtitleModelOperation.Failed(
+                modelId = modelId,
+                source = source,
+                message = message.trim().ifBlank { "模型下载失败" }
+            )
         )
     }
 
-    internal fun updateMissing() {
-        _state.value = initialState()
+    internal fun updateMissing(modelId: String) {
+        val operation = _state.value.operation
+        refreshState(operation = operation?.takeUnless { it.modelId == modelId })
     }
 
-    internal fun artifactFile(artifact: SubtitleModelArtifact): File =
-        File(modelDirectory(), artifact.fileName)
+    internal fun artifactFile(
+        model: SubtitleTranscriptionModel,
+        artifact: SubtitleModelArtifact
+    ): File = File(modelDirectory(model), artifact.fileName)
 
-    internal fun partialArtifactFile(artifact: SubtitleModelArtifact): File =
-        File(modelDirectory(), "${artifact.fileName}.part")
+    internal fun partialArtifactFile(
+        model: SubtitleTranscriptionModel,
+        artifact: SubtitleModelArtifact
+    ): File = File(modelDirectory(model), "${artifact.fileName}.part")
 
-    internal fun downloadedModelBytes(): Long = model.artifacts.sumOf { artifact ->
-        val installed = artifactFile(artifact)
-        if (isInstalledSubtitleModelArtifact(installed, artifact.bytes)) {
-            artifact.bytes
-        } else {
-            partialArtifactFile(artifact).length().coerceIn(0L, artifact.bytes)
+    internal fun downloadedModelBytes(model: SubtitleTranscriptionModel): Long =
+        model.artifacts.sumOf { artifact ->
+            val installed = artifactFile(model, artifact)
+            if (isInstalledSubtitleModelArtifact(installed, artifact.bytes)) {
+                artifact.bytes
+            } else {
+                partialArtifactFile(model, artifact).length().coerceIn(0L, artifact.bytes)
+            }
         }
-    }
 
-    internal fun downloadedInstallationBytes(): Long {
+    internal fun downloadedInstallationBytes(model: SubtitleTranscriptionModel): Long {
         val runtimeBytes = if (runtimeRepository.isInstalled()) {
             runtimeRepository.descriptor.archiveBytes
         } else {
             runtimeRepository.downloadedArchiveBytes()
         }
-        return runtimeBytes + downloadedModelBytes()
+        return runtimeBytes + downloadedModelBytes(model)
     }
 
-    internal fun installationBytes(): Long =
+    internal fun installationBytes(model: SubtitleTranscriptionModel): Long =
         runtimeRepository.descriptor.archiveBytes + model.artifactBytes
 
-    internal fun deletePartialModelFiles(): Boolean = model.artifacts.all { artifact ->
-        deleteIfPresent(partialArtifactFile(artifact))
+    internal fun deletePartialModelFiles(model: SubtitleTranscriptionModel): Boolean =
+        model.artifacts.all { artifact -> deleteIfPresent(partialArtifactFile(model, artifact)) }
+
+    internal fun ensureModelDirectory(model: SubtitleTranscriptionModel): File =
+        modelDirectory(model).apply {
+            check(exists() || mkdirs()) { "无法创建模型目录" }
+        }
+
+    private fun refreshState(operation: SubtitleModelOperation? = _state.value.operation) {
+        _state.value = buildState(operation)
     }
 
-    internal fun ensureModelDirectory(): File = modelDirectory().apply {
-        check(exists() || mkdirs()) { "无法创建模型目录" }
+    private fun buildState(operation: SubtitleModelOperation? = null): SubtitleModelState {
+        val installations = SubtitleTranscriptionModels.all.associate { model ->
+            val installation = if (
+                runtimeRepository.isInstalled() && installedModelDirectoryOrNull(model) != null
+            ) {
+                SubtitleModelInstallationState.Available(
+                    SubtitleModelDownloadSource.fromId(
+                        preferences.getString(installedSourceKey(model.id), null)
+                    )
+                )
+            } else {
+                SubtitleModelInstallationState.Missing
+            }
+            model.id to installation
+        }
+        return SubtitleModelState(
+            activeModelId = activeModel().id,
+            installations = installations,
+            operation = operation
+        )
     }
 
-    private fun refreshInstalledState() {
-        _state.value = initialState()
-    }
-
-    private fun installedModelDirectoryOrNull(): File? {
-        val directory = modelDirectory()
+    private fun installedModelDirectoryOrNull(model: SubtitleTranscriptionModel): File? {
+        val directory = modelDirectory(model)
         return directory.takeIf {
             it.isDirectory && model.artifacts.all { artifact ->
-                isInstalledSubtitleModelArtifact(artifactFile(artifact), artifact.bytes)
+                isInstalledSubtitleModelArtifact(artifactFile(model, artifact), artifact.bytes)
             }
         }
     }
 
-    private fun initialState(): SubtitleModelState {
-        if (!runtimeRepository.isInstalled()) return SubtitleModelState.Missing
-        installedModelDirectoryOrNull() ?: return SubtitleModelState.Missing
-        val source = SubtitleModelDownloadSource.fromId(
-            preferences.getString(KEY_INSTALLED_SOURCE, null)
-        )
-        return SubtitleModelState.Available(source)
-    }
-
-    private fun modelDirectory(): File = File(modelRootDirectory(), model.id)
+    private fun modelDirectory(model: SubtitleTranscriptionModel): File =
+        File(modelRootDirectory(), model.id)
 
     private fun modelRootDirectory(): File = File(appContext.filesDir, MODEL_ROOT_DIRECTORY_NAME)
+
+    private fun installedSourceKey(modelId: String): String = "$KEY_INSTALLED_SOURCE_PREFIX$modelId"
 
     private fun deleteIfPresent(file: File): Boolean = !file.exists() || file.delete()
 
@@ -277,7 +383,10 @@ internal class SubtitleModelRepository private constructor(context: Context) {
 
         private const val MODEL_ROOT_DIRECTORY_NAME = "subtitle-models"
         private const val PREFERENCES_NAME = "subtitle_model_preferences"
-        private const val KEY_INSTALLED_SOURCE = "installed_source"
+        private const val KEY_ACTIVE_MODEL_ID = "active_model_id"
+        private const val KEY_INSTALLED_SOURCE_PREFIX = "installed_source:"
+        private const val KEY_LEGACY_INSTALLED_SOURCE = "installed_source"
+
         @Volatile
         private var instance: SubtitleModelRepository? = null
 
@@ -286,5 +395,20 @@ internal class SubtitleModelRepository private constructor(context: Context) {
                 instance ?: SubtitleModelRepository(context).also { instance = it }
             }
         }
+
+        internal fun migrateLegacyPreferences(preferences: SharedPreferences) {
+            val legacySource = preferences.getString(KEY_LEGACY_INSTALLED_SOURCE, null) ?: return
+            val parakeetKey = "$KEY_INSTALLED_SOURCE_PREFIX${SubtitleTranscriptionModels.default.id}"
+            val editor = preferences.edit()
+            if (!preferences.contains(parakeetKey)) editor.putString(parakeetKey, legacySource)
+            editor.remove(KEY_LEGACY_INSTALLED_SOURCE).apply()
+        }
     }
 }
+
+internal fun fallbackSubtitleModelId(
+    deletedModelId: String,
+    availableModelIds: Set<String>
+): String = SubtitleTranscriptionModels.all.firstOrNull { model ->
+    model.id != deletedModelId && model.id in availableModelIds
+}?.id ?: SubtitleTranscriptionModels.default.id

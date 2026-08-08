@@ -10,12 +10,24 @@ internal data class SubtitleModelArtifact(
     val sha256: String
 )
 
+internal enum class SubtitleTranscriptionModelType {
+    NEMO_CTC,
+    SENSE_VOICE
+}
+
 internal data class SubtitleTranscriptionModel(
     val id: String,
     val displayName: String,
+    val optionName: String,
+    val type: SubtitleTranscriptionModelType,
     val artifacts: List<SubtitleModelArtifact>,
-    val inputSampleRateHz: Int
+    val inputSampleRateHz: Int,
+    val inferenceBatchSize: Int = 1
 ) {
+    init {
+        require(inferenceBatchSize > 0)
+    }
+
     val artifactBytes: Long = artifacts.sumOf(SubtitleModelArtifact::bytes)
 }
 
@@ -49,12 +61,13 @@ internal interface SubtitleTranscriptionEngineFactory {
 }
 
 internal object SubtitleTranscriptionEngineRegistry {
-    fun defaultFactory(context: Context): SubtitleTranscriptionEngineFactory {
+    fun factory(context: Context, modelId: String? = null): SubtitleTranscriptionEngineFactory {
         val repository = SubtitleModelRepository.get(context)
-        return ParakeetEngineFactory(
+        val installed = repository.requireInstalledModel(modelId ?: repository.activeModel().id)
+        return SherpaOnnxTranscriptionEngineFactory(
             context = context.applicationContext,
-            modelDirectory = repository.requireInstalledModelDirectory(),
-            model = SubtitleTranscriptionModels.PARAKEET_TDT_CTC_06B_JA_INT8
+            modelDirectory = installed.directory,
+            model = installed.model
         )
     }
 }
@@ -63,6 +76,8 @@ internal object SubtitleTranscriptionModels {
     val PARAKEET_TDT_CTC_06B_JA_INT8 = SubtitleTranscriptionModel(
         id = "parakeet-tdt-ctc-0.6b-ja-35000-int8",
         displayName = "Parakeet TDT-CTC 0.6B Japanese INT8",
+        optionName = "高精度",
+        type = SubtitleTranscriptionModelType.NEMO_CTC,
         artifacts = listOf(
             SubtitleModelArtifact(
                 fileName = "model.int8.onnx",
@@ -77,4 +92,39 @@ internal object SubtitleTranscriptionModels {
         ),
         inputSampleRateHz = 16_000
     )
+
+    val SENSE_VOICE_SMALL_INT8 = SubtitleTranscriptionModel(
+        id = "sense-voice-small-zh-en-ja-ko-yue-int8-2024-07-17",
+        displayName = "SenseVoiceSmall INT8",
+        optionName = "轻量快速",
+        type = SubtitleTranscriptionModelType.SENSE_VOICE,
+        artifacts = listOf(
+            SubtitleModelArtifact(
+                fileName = "model.int8.onnx",
+                bytes = 239_233_841L,
+                sha256 = "c71f0ce00bec95b07744e116345e33d8cbbe08cef896382cf907bf4b51a2cd51"
+            ),
+            SubtitleModelArtifact(
+                fileName = "tokens.txt",
+                bytes = 315_894L,
+                sha256 = "f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc"
+            )
+        ),
+        inputSampleRateHz = 16_000,
+        inferenceBatchSize = 2
+    )
+
+    val all: List<SubtitleTranscriptionModel> = listOf(
+        PARAKEET_TDT_CTC_06B_JA_INT8,
+        SENSE_VOICE_SMALL_INT8
+    )
+
+    val default: SubtitleTranscriptionModel = PARAKEET_TDT_CTC_06B_JA_INT8
+
+    fun fromId(id: String?): SubtitleTranscriptionModel? = all.firstOrNull { it.id == id }
 }
+
+internal fun resolveTranscriptionModelId(
+    persistedModelId: String,
+    activeModelId: String
+): String = persistedModelId.ifBlank { activeModelId }

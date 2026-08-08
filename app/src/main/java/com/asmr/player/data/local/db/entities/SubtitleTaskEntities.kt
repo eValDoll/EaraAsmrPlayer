@@ -52,6 +52,7 @@ data class SubtitleTaskItemEntity(
     val suspendedFromState: String,
     val transcriptionChunkCursor: Int,
     val transcriptionProgress: Int,
+    val transcriptionModelId: String,
     val transcribedMs: Long,
     val totalDurationMs: Long,
     val translationCursor: Int,

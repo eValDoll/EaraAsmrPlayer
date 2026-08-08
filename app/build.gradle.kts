@@ -73,6 +73,14 @@ android {
         System.getenv("SUBTITLE_MODEL_HUGGING_FACE_URL")
             ?: (project.findProperty("SUBTITLE_MODEL_HUGGING_FACE_URL") as? String)
             ?: "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt_ctc-0.6b-ja-35000-int8/resolve/main/"
+    val subtitleSenseVoiceHuggingFaceUrl =
+        System.getenv("SUBTITLE_SENSEVOICE_HUGGING_FACE_URL")
+            ?: (project.findProperty("SUBTITLE_SENSEVOICE_HUGGING_FACE_URL") as? String)
+            ?: "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/"
+    val subtitleSenseVoiceGitHubUrl =
+        System.getenv("SUBTITLE_SENSEVOICE_GITHUB_URL")
+            ?: (project.findProperty("SUBTITLE_SENSEVOICE_GITHUB_URL") as? String)
+            ?: "https://github.com/eValDoll/EaraAsmrPlayer/releases/download/subtitle-model-parakeet-ja-int8/sensevoice-{fileName}"
     val subtitleRuntimeUrl =
         System.getenv("SUBTITLE_RUNTIME_URL")
             ?: (project.findProperty("SUBTITLE_RUNTIME_URL") as? String)
@@ -89,6 +97,8 @@ android {
         buildConfigField("String", "LISTEN_TOGETHER_BASE_URL", "\"$listenTogetherBaseUrl\"")
         buildConfigField("String", "SUBTITLE_MODEL_GITHUB_URL", "\"$subtitleModelGitHubUrl\"")
         buildConfigField("String", "SUBTITLE_MODEL_HUGGING_FACE_URL", "\"$subtitleModelHuggingFaceUrl\"")
+        buildConfigField("String", "SUBTITLE_SENSEVOICE_GITHUB_URL", "\"$subtitleSenseVoiceGitHubUrl\"")
+        buildConfigField("String", "SUBTITLE_SENSEVOICE_HUGGING_FACE_URL", "\"$subtitleSenseVoiceHuggingFaceUrl\"")
         buildConfigField("String", "SUBTITLE_RUNTIME_URL", "\"$subtitleRuntimeUrl\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -101,6 +111,9 @@ android {
         release {
             isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (project.hasProperty("releaseAndroidTest")) {
+                proguardFiles("proguard-android-test.pro")
+            }
             signingConfig = signingConfigs.getByName("earaRelease")
         }
         create("benchmark") {

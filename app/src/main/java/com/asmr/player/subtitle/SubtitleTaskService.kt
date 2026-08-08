@@ -365,23 +365,24 @@ internal class SubtitleTaskService : Service() {
         val dao = database.subtitleTaskDao()
         val initial = dao.getItem(itemId) ?: return
         if (initial.state != SubtitleItemState.QUEUED_TRANSCRIPTION) return
-        dao.updateItem(
-            initial.copy(
-                state = SubtitleItemState.TRANSCRIBING,
-                errorMessage = "",
-                updatedAt = System.currentTimeMillis()
-            )
+        val modelId = resolveTranscriptionModelId(
+            persistedModelId = initial.transcriptionModelId,
+            activeModelId = SubtitleModelRepository.get(applicationContext).activeModel().id
         )
-        repository.refreshTaskState(initial.taskId)
+        val activeItem = initial.copy(
+            state = SubtitleItemState.TRANSCRIBING,
+            transcriptionModelId = modelId,
+            errorMessage = "",
+            updatedAt = System.currentTimeMillis()
+        )
+        dao.updateItem(activeItem)
+        repository.refreshTaskState(activeItem.taskId)
         try {
-            val engine = transcriptionEngine ?: SubtitleTranscriptionEngineRegistry
-                .defaultFactory(applicationContext)
-                .create()
-                .also { transcriptionEngine = it }
+            val engine = requireTranscriptionEngine(modelId)
             val existingChunks = dao.getChunks(itemId)
             val resumeAtMs = existingChunks.lastOrNull()?.endMs ?: 0L
             LocalAudioDecoder(applicationContext, engine.model.inputSampleRateHz).decode(
-                path = initial.trackPath,
+                path = activeItem.trackPath,
                 startAtMs = resumeAtMs
             ) { chunk ->
                 coroutineContext.ensureActive()
@@ -791,6 +792,18 @@ internal class SubtitleTaskService : Service() {
         runCatching { engine.close() }
             .onFailure { error -> Log.w(TAG, "转录失败后释放模型失败", error) }
         transcriptionEngine = null
+    }
+
+    private fun requireTranscriptionEngine(modelId: String): SubtitleTranscriptionEngine {
+        transcriptionEngine?.takeIf { it.model.id == modelId }?.let { return it }
+        transcriptionEngine?.let { staleEngine ->
+            runCatching { staleEngine.close() }
+                .onFailure { error -> Log.w(TAG, "切换转录模型时释放旧模型失败", error) }
+        }
+        transcriptionEngine = null
+        return SubtitleTranscriptionEngineRegistry.factory(applicationContext, modelId)
+            .create()
+            .also { transcriptionEngine = it }
     }
 
     private suspend fun updateForegroundNotification() {

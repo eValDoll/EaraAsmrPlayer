@@ -92,4 +92,13 @@ class SubtitleTaskStateMachineTest {
             SubtitleItemState.requireTransition(SubtitleItemState.SUCCEEDED, SubtitleItemState.CANCEL_REQUESTED)
         }
     }
+
+    @Test
+    fun transcriptionModel_isCapturedOnceAndKeptAcrossResume() {
+        val parakeet = SubtitleTranscriptionModels.PARAKEET_TDT_CTC_06B_JA_INT8.id
+        val senseVoice = SubtitleTranscriptionModels.SENSE_VOICE_SMALL_INT8.id
+
+        assertEquals(senseVoice, resolveTranscriptionModelId("", senseVoice))
+        assertEquals(parakeet, resolveTranscriptionModelId(parakeet, senseVoice))
+    }
 }
