@@ -69,6 +69,52 @@ class SubtitleTranslationClientTest {
     }
 
     @Test
+    fun successfulResponse_reportsTotalTokenUsage() = runBlocking {
+        val responseBody = Gson().toJson(
+            mapOf(
+                "choices" to listOf(
+                    mapOf(
+                        "finish_reason" to "stop",
+                        "message" to mapOf(
+                            "role" to "assistant",
+                            "content" to """{"work_title":"晚安","tracks":[{"track_id":13,"title":"耳语"}]}"""
+                        )
+                    )
+                ),
+                "usage" to mapOf("total_tokens" to 1_234L)
+            )
+        )
+        val httpClient = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .body(responseBody.toResponseBody("application/json".toMediaType()))
+                    .build()
+            }
+            .build()
+        val tokenUsage = mutableListOf<Long>()
+        val client = SubtitleTranslationClient(
+            okHttpClient = httpClient,
+            gson = Gson(),
+            apiKey = "test-key",
+            apiUrl = "https://example.test/chat",
+            onTokenUsage = tokenUsage::add
+        )
+
+        client.translateDisplayNames(
+            albumTitle = "おやすみ",
+            circle = "",
+            cv = "",
+            trackTitles = listOf(13L to "囁き")
+        )
+
+        assertEquals(listOf(1_234L), tokenUsage)
+    }
+
+    @Test
     fun manualPrompt_forbidsMergingImportedSubtitleLines() {
         val prompt = subtitleToolTranslationSystemPrompt(listOf(0, 2), allowMerging = false)
 

@@ -69,6 +69,7 @@ internal class SubtitleTaskService : Service() {
         fun gson(): Gson
         fun settingsRepository(): SettingsRepository
         fun messageManager(): MessageManager
+        fun deepSeekAccountRepository(): DeepSeekAccountRepository
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -80,11 +81,15 @@ internal class SubtitleTaskService : Service() {
     private lateinit var deepSeekOkHttpClient: OkHttpClient
     private lateinit var settingsRepository: SettingsRepository
     private lateinit var messageManager: MessageManager
+    private lateinit var deepSeekAccountRepository: DeepSeekAccountRepository
     private var transcriptionJob: Job? = null
     private var transcriptionItemId: String? = null
     private val translationJobs = ConcurrentHashMap<String, Job>()
     private val titleTranslationJobs = ConcurrentHashMap<String, Job>()
     private val titleTranslationRetryAt = ConcurrentHashMap<String, Long>()
+    private val balanceRefreshLock = Any()
+    private var balanceRefreshRequested = false
+    private var balanceRefreshJob: Job? = null
     private var transcriptionEngine: SubtitleTranscriptionEngine? = null
     private var stoppingSafely = false
     private var wakeLock: PowerManager.WakeLock? = null
@@ -108,6 +113,7 @@ internal class SubtitleTaskService : Service() {
         deepSeekOkHttpClient = entryPoint.deepSeekOkHttpClient()
         settingsRepository = entryPoint.settingsRepository()
         messageManager = entryPoint.messageManager()
+        deepSeekAccountRepository = entryPoint.deepSeekAccountRepository()
         createNotificationChannel()
         startAsForeground(buildNotification(emptyList()))
         wakeLock = getSystemService(PowerManager::class.java)
@@ -324,12 +330,16 @@ internal class SubtitleTaskService : Service() {
         albums.forEach { album ->
             val albumTracks = tracksByAlbum[album.id].orEmpty()
             if (albumTracks.isEmpty()) return@forEach
-            val translated = client.translateDisplayNames(
-                albumTitle = album.title,
-                circle = album.circle,
-                cv = album.cv,
-                trackTitles = albumTracks.map { it.id to it.title }
-            )
+            val translated = try {
+                client.translateDisplayNames(
+                    albumTitle = album.title,
+                    circle = album.circle,
+                    cv = album.cv,
+                    trackTitles = albumTracks.map { it.id to it.title }
+                )
+            } finally {
+                requestBalanceRefresh()
+            }
             database.withTransaction {
                 database.subtitleTaskDao().getTask(taskId) ?: return@withTransaction
                 val items = database.subtitleTaskDao().getItemsForTask(taskId)
@@ -569,17 +579,22 @@ internal class SubtitleTaskService : Service() {
         val dao = database.subtitleTaskDao()
         val sources = sourceEntities.map { it.toGeneratedSource() }
         val confirmed = dao.getCommittedCaptions(itemId).map { it.toGeneratedCaption() }
-        requireTranslationClient().translateSubtitles(
-            sources = sources,
-            allowMerging = allowMerging,
-            confirmedCaptions = confirmed
-        ) { captions ->
-            commitTranslationProgress(
-                itemId = itemId,
-                captions = captions,
-                sourceEntities = sourceEntities,
-                generated = allowMerging
-            )
+        val client = requireTranslationClient()
+        try {
+            client.translateSubtitles(
+                sources = sources,
+                allowMerging = allowMerging,
+                confirmedCaptions = confirmed
+            ) { captions ->
+                commitTranslationProgress(
+                    itemId = itemId,
+                    captions = captions,
+                    sourceEntities = sourceEntities,
+                    generated = allowMerging
+                )
+            }
+        } finally {
+            requestBalanceRefresh()
         }
         repository.finishSucceeded(itemId)
     }
@@ -786,6 +801,7 @@ internal class SubtitleTaskService : Service() {
     private suspend fun stopWhenIdle() {
         if (transcriptionJob?.isActive == true || translationJobs.values.any(Job::isActive)) return
         if (titleTranslationJobs.values.any(Job::isActive)) return
+        if (balanceRefreshJob != null) return
         if (database.subtitleTaskDao().countRunnableItems() > 0) return
         val pendingTitleTaskIds = database.subtitleTitleOwnerDao().getPendingTaskIds()
         if (pendingTitleTaskIds.any { titleTranslationRetryAt[it] != TITLE_TRANSLATION_DISABLED_RETRY_AT }) return
@@ -889,12 +905,41 @@ internal class SubtitleTaskService : Service() {
     private suspend fun requireTranslationClient(): SubtitleTranslationClient {
         val apiKey = DeepSeekApiKeyStore.get(applicationContext).read()
         check(apiKey.isNotBlank()) { "请先在设置中配置 DeepSeek API Key" }
+        deepSeekAccountRepository.bindApiKey(apiKey)
         return SubtitleTranslationClient(
             okHttpClient = deepSeekOkHttpClient,
             gson = gson,
             apiKey = apiKey,
-            settings = settingsRepository.loadDeepSeekTranslationSettings()
+            settings = settingsRepository.loadDeepSeekTranslationSettings(),
+            onTokenUsage = { totalTokens ->
+                deepSeekAccountRepository.recordTokenUsage(apiKey, totalTokens)
+            }
         )
+    }
+
+    private fun requestBalanceRefresh() {
+        val jobToStart = synchronized(balanceRefreshLock) {
+            balanceRefreshRequested = true
+            if (balanceRefreshJob != null) return@synchronized null
+            serviceScope.launch(Dispatchers.IO, start = CoroutineStart.LAZY) {
+                while (true) {
+                    val shouldRefresh = synchronized(balanceRefreshLock) {
+                        if (balanceRefreshRequested) {
+                            balanceRefreshRequested = false
+                            true
+                        } else {
+                            balanceRefreshJob = null
+                            false
+                        }
+                    }
+                    if (!shouldRefresh) break
+                    val apiKey = DeepSeekApiKeyStore.get(applicationContext).read()
+                    if (apiKey.isNotBlank()) deepSeekAccountRepository.refreshBalance(apiKey)
+                }
+                signalWake()
+            }.also { balanceRefreshJob = it }
+        }
+        jobToStart?.start()
     }
 
     companion object {

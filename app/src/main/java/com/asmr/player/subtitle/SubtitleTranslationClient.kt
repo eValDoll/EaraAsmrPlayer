@@ -77,7 +77,13 @@ private data class DeepSeekFunctionDefinition(
 )
 
 private data class DeepSeekChatResponse(
-    val choices: List<DeepSeekChoice> = emptyList()
+    val choices: List<DeepSeekChoice> = emptyList(),
+    val usage: DeepSeekChatUsage? = null
+)
+
+private data class DeepSeekChatUsage(
+    @SerializedName("total_tokens")
+    val totalTokens: Long = 0L
 )
 
 private data class DeepSeekChoice(
@@ -114,9 +120,13 @@ internal class SubtitleTranslationClient(
     private val gson: Gson,
     apiKey: String,
     private val settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings(),
-    private val apiUrl: String = DEEPSEEK_CHAT_COMPLETIONS_URL
+    private val apiUrl: String = DEEPSEEK_CHAT_COMPLETIONS_URL,
+    private val onTokenUsage: (Long) -> Unit = {}
 ) {
-    private val authorization = "Bearer ${apiKey.trim().also { require(it.isNotEmpty()) { "请先在设置中配置 DeepSeek API Key" } }}"
+    private val normalizedApiKey = apiKey.trim().also {
+        require(it.isNotEmpty()) { "请先在设置中配置 DeepSeek API Key" }
+    }
+    private val authorization = "Bearer $normalizedApiKey"
     private val callFactory: Call.Factory = okHttpClient.newBuilder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(5, TimeUnit.MINUTES)
@@ -336,6 +346,10 @@ internal class SubtitleTranslationClient(
                 val deepSeekResponse = runCatching {
                     gson.fromJson(raw, DeepSeekChatResponse::class.java)
                 }.getOrNull()
+                deepSeekResponse?.usage?.totalTokens?.takeIf { totalTokens -> totalTokens > 0L }?.let { totalTokens ->
+                    runCatching { onTokenUsage(totalTokens) }
+                        .onFailure { error -> Log.w(TAG, "记录 DeepSeek token 用量失败", error) }
+                }
                 val choice = deepSeekResponse?.choices?.firstOrNull()
                 val message = choice?.message ?: DeepSeekChatMessage(role = "assistant")
                 val content = message.content.orEmpty()
