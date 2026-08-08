@@ -29,6 +29,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material3.Icon as MaterialIcon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -46,7 +48,12 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
+import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.layout.findRootCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -74,6 +81,22 @@ private val AlbumItemCoverContentSpacing = 8.dp
 private val AlbumGridInfoHorizontalPadding = 6.dp
 private val AlbumGridInfoVerticalPadding = 8.dp
 private val AlbumDetailSkeletonHeight = 18.dp
+private val AlbumListBadgeScrim = Brush.verticalGradient(
+    colors = listOf(
+        Color.Transparent,
+        Color.Black.copy(alpha = 0.18f),
+        Color.Black.copy(alpha = 0.42f),
+        Color.Black.copy(alpha = 0.68f)
+    )
+)
+private val AlbumGridBadgeScrim = Brush.verticalGradient(
+    colors = listOf(
+        Color.Transparent,
+        Color.Black.copy(alpha = 0.18f),
+        Color.Black.copy(alpha = 0.44f),
+        Color.Black.copy(alpha = 0.70f)
+    )
+)
 private val AlbumOnlineDetailResizeSpring = spring<IntSize>(
     dampingRatio = Spring.DampingRatioNoBouncy,
     stiffness = Spring.StiffnessMediumLow
@@ -104,9 +127,12 @@ fun AlbumItem(
     coverBadge: AlbumCoverBadge? = null,
     onlineDetailLoading: Boolean = false,
     onlineCvLoading: Boolean = onlineDetailLoading,
+    animateOnlineDetails: Boolean = true,
     coverFadeIn: Boolean = true,
     coverReloadKey: Any? = null,
     coverRetainPainterDuringReload: Boolean = false,
+    containerColor: Color? = null,
+    cacheDrawLayer: Boolean = false,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val shape = remember { RoundedCornerShape(AlbumListItemCornerRadius) }
@@ -124,14 +150,47 @@ fun AlbumItem(
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
     val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
     val coverSize = listItemHeight
+    val density = LocalDensity.current
+    val coverRequestSize = remember(coverSize, density) {
+        val sizePx = with(density) { coverSize.roundToPx() }
+        IntSize(sizePx, sizePx)
+    }
+    var isNearWindow by remember { mutableStateOf(true) }
 
     Box(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = AlbumItemHorizontalPadding, vertical = AlbumItemVerticalPadding)
             .testTag(ALBUM_ITEM_CARD_TAG)
+            .onGloballyPositioned { coordinates ->
+                val position = coordinates.positionInWindow()
+                val itemHeight = coordinates.size.height.toFloat().coerceAtLeast(1f)
+                val rootHeight = coordinates.findRootCoordinates().size.height.toFloat()
+                // Lazy 的复用槽会保留已经离开窗口的 Modifier.Node。提前在卡片越过
+                // 一个自身高度后撤销离屏合成，让复用槽只保存显示列表，不继续占用
+                // 大块 GPU 纹理；上下各留一张卡片作为滚入前的预热区。
+                val nearWindow =
+                    position.y + itemHeight >= -itemHeight &&
+                        position.y <= rootHeight + itemHeight
+                if (isNearWindow != nearWindow) {
+                    isNearWindow = nearWindow
+                }
+            }
+            .then(
+                if (cacheDrawLayer) {
+                    Modifier.graphicsLayer {
+                        compositingStrategy = if (isNearWindow) {
+                            CompositingStrategy.Offscreen
+                        } else {
+                            CompositingStrategy.Auto
+                        }
+                    }
+                } else {
+                    Modifier
+                }
+            )
             .clip(shape)
-            .background(colorScheme.surface.copy(alpha = 0.5f))
+            .background(containerColor ?: colorScheme.surface.copy(alpha = 0.5f))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -159,6 +218,7 @@ fun AlbumItem(
                         reloadKey = coverReloadKey,
                         retainPainterDuringReload = coverRetainPainterDuringReload,
                         peekAnySizeForInitial = true,
+                        requestSize = coverRequestSize,
                         loading = NoImageLoadingIndicator,
                         modifier = Modifier.fillMaxSize().clip(coverShape),
                     )
@@ -168,16 +228,7 @@ fun AlbumItem(
                                 .align(Alignment.BottomCenter)
                                 .fillMaxWidth()
                                 .fillMaxHeight(0.34f)
-                                .background(
-                                    Brush.verticalGradient(
-                                        colors = listOf(
-                                            Color.Transparent,
-                                            Color.Black.copy(alpha = 0.18f),
-                                            Color.Black.copy(alpha = 0.42f),
-                                            Color.Black.copy(alpha = 0.68f)
-                                        )
-                                    )
-                                )
+                                .background(AlbumListBadgeScrim)
                         )
                     }
                     coverBadge?.let { badge ->
@@ -222,6 +273,9 @@ fun AlbumItem(
                         }
                     }
                 }
+                val tagsStateContent = remember(album.tags) {
+                    album.tags.joinToString(separator = "\n")
+                }
 
                 BalancedColumn(
                     modifier = Modifier
@@ -251,7 +305,8 @@ fun AlbumItem(
 
                     AlbumOnlineDetailAnimatedLine(
                         content = if (onlineCvLoading) "" else album.cv,
-                        loading = onlineCvLoading
+                        loading = onlineCvLoading,
+                        animated = animateOnlineDetails,
                     ) {
                         AlbumCvChipsSingleLine(
                             cvText = album.cv,
@@ -262,8 +317,9 @@ fun AlbumItem(
                         )
                     }
                     AlbumOnlineDetailAnimatedLine(
-                        content = album.tags.joinToString(separator = "\n"),
+                        content = tagsStateContent,
                         loading = onlineDetailLoading,
+                        animated = animateOnlineDetails,
                         loadingContent = {
                             AlbumDetailSkeletonLine(widthFraction = 0.86f)
                         }
@@ -282,6 +338,7 @@ fun AlbumItem(
                     AlbumOnlineDetailAnimatedLine(
                         content = statsText,
                         loading = onlineDetailLoading && !album.hasRatingInfo(),
+                        animated = animateOnlineDetails,
                         modifier = Modifier.testTag(ALBUM_ITEM_STATS_TAG)
                     ) {
                         Text(
@@ -315,17 +372,23 @@ internal fun BalancedColumn(
     content: @Composable () -> Unit,
 ) {
     Layout(content = content, modifier = modifier) { measurables, constraints ->
-        val placeables = measurables.map { measurable ->
-            measurable.measure(constraints.copy(minHeight = 0))
+        val childConstraints = constraints.copy(minHeight = 0)
+        val placeables = ArrayList<Placeable>(measurables.size)
+        var childrenHeight = 0
+        var widestChild = 0
+        for (index in measurables.indices) {
+            val placeable = measurables[index].measure(childConstraints)
+            placeables.add(placeable)
+            childrenHeight += placeable.height
+            if (placeable.width > widestChild) widestChild = placeable.width
         }
 
         val layoutWidth = if (constraints.maxWidth != Constraints.Infinity) {
             constraints.maxWidth
         } else {
-            maxOf(constraints.minWidth, placeables.maxOfOrNull { it.width } ?: 0)
+            maxOf(constraints.minWidth, widestChild)
         }
 
-        val childrenHeight = placeables.sumOf { it.height }
         val layoutHeight = if (constraints.maxHeight != Constraints.Infinity) {
             maxOf(constraints.minHeight, constraints.maxHeight, childrenHeight)
         } else {
@@ -335,13 +398,16 @@ internal fun BalancedColumn(
         val remaining = (layoutHeight - childrenHeight).coerceAtLeast(0)
         val gapCount = placeables.size + 1
         val idealGap = if (gapCount > 0) remaining / gapCount else 0
-        val gap = idealGap.coerceIn(minGap.roundToPx(), maxGap.roundToPx())
+        val minGapPx = minGap.roundToPx()
+        val maxGapPx = maxGap.roundToPx()
+        val gap = idealGap.coerceIn(minGapPx, maxGapPx)
         val used = gap * gapCount
         val extra = remaining - used
 
         layout(layoutWidth, layoutHeight) {
             var y = (extra / 2) + gap
-            placeables.forEach { placeable ->
+            for (index in placeables.indices) {
+                val placeable = placeables[index]
                 placeable.placeRelative(0, y)
                 y += placeable.height + gap
             }
@@ -366,9 +432,11 @@ fun AlbumGridItem(
     coverBadge: AlbumCoverBadge? = null,
     onlineDetailLoading: Boolean = false,
     onlineCvLoading: Boolean = onlineDetailLoading,
+    animateOnlineDetails: Boolean = true,
     coverFadeIn: Boolean = true,
     coverReloadKey: Any? = null,
     coverRetainPainterDuringReload: Boolean = false,
+    containerColor: Color? = null,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val shape = remember { RoundedCornerShape(AlbumGridItemCornerRadius) }
@@ -386,7 +454,7 @@ fun AlbumGridItem(
     Column(
         modifier = modifier
             .clip(shape)
-            .background(colorScheme.surface.copy(alpha = 0.3f))
+            .background(containerColor ?: colorScheme.surface.copy(alpha = 0.3f))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -411,16 +479,7 @@ fun AlbumGridItem(
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
                         .fillMaxHeight(0.36f)
-                        .background(
-                            Brush.verticalGradient(
-                                colors = listOf(
-                                    Color.Transparent,
-                                    Color.Black.copy(alpha = 0.18f),
-                                    Color.Black.copy(alpha = 0.44f),
-                                    Color.Black.copy(alpha = 0.70f)
-                                )
-                            )
-                        )
+                        .background(AlbumGridBadgeScrim)
                 )
             }
             
@@ -448,6 +507,7 @@ fun AlbumGridItem(
 
             AlbumOnlineDetailAnimatedOverlay(
                 visible = album.releaseDate.isNotBlank(),
+                animated = animateOnlineDetails,
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(8.dp)
@@ -506,6 +566,7 @@ fun AlbumGridItem(
             AlbumOnlineDetailAnimatedLine(
                 content = if (onlineCvLoading) "" else album.cv,
                 loading = onlineCvLoading,
+                animated = animateOnlineDetails,
                 loadingContent = {
                     AlbumDetailSkeletonLine(widthFraction = 0.72f)
                 }
@@ -532,10 +593,14 @@ fun AlbumGridItem(
                     }
                 }
             }
+            val tagsStateContent = remember(album.tags) {
+                album.tags.joinToString(separator = "\n")
+            }
 
             AlbumOnlineDetailAnimatedLine(
-                content = album.tags.joinToString(separator = "\n"),
+                content = tagsStateContent,
                 loading = onlineDetailLoading,
+                animated = animateOnlineDetails,
                 loadingContent = {
                     AlbumDetailSkeletonLine(widthFraction = 0.92f)
                 }
@@ -551,7 +616,8 @@ fun AlbumGridItem(
 
             AlbumOnlineDetailAnimatedLine(
                 content = statsText,
-                loading = onlineDetailLoading && !album.hasRatingInfo()
+                loading = onlineDetailLoading && !album.hasRatingInfo(),
+                animated = animateOnlineDetails,
             ) {
                 Text(
                     text = statsText,
@@ -569,12 +635,24 @@ fun AlbumGridItem(
 private fun AlbumOnlineDetailAnimatedLine(
     content: String,
     loading: Boolean,
+    animated: Boolean,
     modifier: Modifier = Modifier,
     loadingContent: @Composable () -> Unit = {
         AlbumDetailSkeletonLine(widthFraction = 0.62f)
     },
     contentBlock: @Composable () -> Unit,
 ) {
+    if (!animated) {
+        when {
+            content.isNotBlank() -> Box(modifier = modifier.fillMaxWidth()) {
+                contentBlock()
+            }
+            loading -> Box(modifier = modifier.fillMaxWidth()) {
+                loadingContent()
+            }
+        }
+        return
+    }
     val stateKey = onlineDetailLineStateKey(content = content, loading = loading)
     var keepMounted by remember { mutableStateOf(stateKey != "empty") }
     LaunchedEffect(stateKey) {
@@ -612,9 +690,18 @@ private fun onlineDetailLineStateKey(
 @Composable
 private fun AlbumOnlineDetailAnimatedOverlay(
     visible: Boolean,
+    animated: Boolean,
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit,
 ) {
+    if (!animated) {
+        if (visible) {
+            Box(modifier = modifier) {
+                content()
+            }
+        }
+        return
+    }
     AnimatedContent(
         targetState = visible,
         modifier = modifier,

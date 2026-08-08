@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.library
+package com.asmr.player.ui.library
 
 import android.content.Intent
 import android.net.Uri
@@ -8,7 +8,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
@@ -21,6 +20,7 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -28,7 +28,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
@@ -68,7 +67,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.state.ToggleableState
@@ -119,7 +118,6 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 
 import androidx.compose.ui.draw.clip
@@ -140,8 +138,6 @@ import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.ImagePreviewItem
 import com.asmr.player.ui.common.ImagePreviewPreparedItem
 import com.asmr.player.ui.common.ImagePreviewRequest
-import com.asmr.player.ui.common.collapsibleHeaderUiState
-import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.theme.AsmrTheme
@@ -173,24 +169,26 @@ private fun DlsiteGalleryLoadingRow() {
         items(placeholders, key = { it }, contentType = { "galleryLoadingThumb" }) {
             AsmrShimmerPlaceholder(
                 modifier = Modifier.size(width = DlsiteGalleryThumbWidth, height = DlsiteGalleryThumbHeight),
-                cornerRadius = DlsiteGalleryThumbCornerRadius
+                cornerRadius = DlsiteGalleryThumbCornerRadius,
+                animateHighlight = false,
             )
         }
     }
 }
 
 @Composable
-private fun DlsiteSectionPlaceholderLine(
+private fun DlsiteStaticPlaceholderLine(
     widthFraction: Float,
     modifier: Modifier = Modifier,
     height: Dp = 14.dp,
-    cornerRadius: Int = 8
+    cornerRadius: Int = 8,
 ) {
     AsmrShimmerPlaceholder(
         modifier = modifier
             .fillMaxWidth(widthFraction)
             .height(height),
-        cornerRadius = cornerRadius
+        cornerRadius = cornerRadius,
+        animateHighlight = false,
     )
 }
 
@@ -210,81 +208,215 @@ private fun rememberStableOneDirectoryContainerHeight(): Dp {
 @Composable
 private fun DlsiteDirectoryLoadingPanel() {
     val fixedHeight = rememberDlsiteDirectoryListHeight()
+    val colorScheme = AsmrTheme.colorScheme
+    val headerSectionColor = directoryBrowserHeaderBackground(colorScheme)
+    val actionSectionColor = colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.24f else 0.42f)
+    val listSectionColor = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.28f else 0.62f)
+    val sectionDividerColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f)
     Surface(
         shape = RoundedCornerShape(12.dp),
         tonalElevation = 1.dp,
-        color = AsmrTheme.colorScheme.surface.copy(alpha = 0.44f),
+        color = colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.28f else 0.46f),
+        border = BorderStroke(0.5.dp, sectionDividerColor),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 4.dp)
     ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            Column(
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(listSectionColor)
+        ) {
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .background(headerSectionColor)
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                DlsiteSectionPlaceholderLine(widthFraction = 0.56f, height = 16.dp)
-                DlsiteSectionPlaceholderLine(widthFraction = 0.32f, height = 12.dp)
+                AsmrShimmerPlaceholder(
+                    modifier = Modifier.size(22.dp),
+                    cornerRadius = 7,
+                    animateHighlight = false,
+                )
+                AsmrShimmerPlaceholder(
+                    modifier = Modifier.size(width = 54.dp, height = 22.dp),
+                    cornerRadius = 8,
+                    animateHighlight = false,
+                )
+                AsmrShimmerPlaceholder(
+                    modifier = Modifier.size(width = 5.dp, height = 12.dp),
+                    cornerRadius = 3,
+                    animateHighlight = false,
+                )
+                AsmrShimmerPlaceholder(
+                    modifier = Modifier.size(width = 82.dp, height = 22.dp),
+                    cornerRadius = 8,
+                    animateHighlight = false,
+                )
             }
             HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 12.dp),
                 thickness = 0.5.dp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+                color = sectionDividerColor,
             )
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .background(actionSectionColor)
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    DlsiteStaticPlaceholderLine(
+                        widthFraction = 0.42f,
+                        height = 12.dp,
+                        cornerRadius = 6,
+                    )
+                    DlsiteStaticPlaceholderLine(
+                        widthFraction = 0.64f,
+                        height = 9.dp,
+                        cornerRadius = 5,
+                    )
+                }
                 AsmrShimmerPlaceholder(
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(40.dp),
-                    cornerRadius = 12
-                )
-                AsmrShimmerPlaceholder(
-                    modifier = Modifier.size(width = 92.dp, height = 34.dp),
-                    cornerRadius = 16
+                    modifier = Modifier.size(width = 78.dp, height = 30.dp),
+                    cornerRadius = 15,
+                    animateHighlight = false,
                 )
             }
             HorizontalDivider(
-                modifier = Modifier.padding(horizontal = 12.dp),
                 thickness = 0.5.dp,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.18f)
+                color = sectionDividerColor,
             )
-            Column(
+            LazyColumn(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(fixedHeight)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                    .height(fixedHeight),
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp),
+                userScrollEnabled = false,
             ) {
-                repeat(5) { index ->
-                    Row(
+                item(key = "directoryLoadingFolders", contentType = "folderLoadingGroup") {
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(start = if (index % 3 == 0) 0.dp else 14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                colorScheme.surfaceVariant.copy(
+                                    alpha = if (colorScheme.isDark) 0.52f else 0.72f
+                                )
+                            )
                     ) {
-                        val iconSize = if (index % 3 == 0) 18.dp else 14.dp
-                        AsmrShimmerPlaceholder(
-                            modifier = Modifier.size(iconSize),
-                            cornerRadius = 999
-                        )
-                        DlsiteSectionPlaceholderLine(
-                            widthFraction = if (index % 3 == 0) 0.72f else 0.54f,
-                            modifier = Modifier.weight(1f),
-                            height = 14.dp
-                        )
+                        repeat(2) { index ->
+                            DlsiteDirectoryFolderPlaceholder(
+                                titleWidthFraction = if (index == 0) 0.64f else 0.48f,
+                            )
+                        }
                     }
+                }
+                items(
+                    count = 4,
+                    key = { index -> "directoryLoadingFile:$index" },
+                    contentType = { "fileLoading" },
+                ) { index ->
+                    DlsiteDirectoryFilePlaceholder(
+                        titleWidthFraction = when (index) {
+                            0 -> 0.78f
+                            1 -> 0.58f
+                            2 -> 0.70f
+                            else -> 0.52f
+                        },
+                        metaWidthFraction = if (index % 2 == 0) 0.36f else 0.24f,
+                        showThumbnail = index == 1,
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun DlsiteDirectoryFolderPlaceholder(
+    titleWidthFraction: Float,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 42.dp)
+            .padding(horizontal = 12.dp, vertical = 5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        AsmrShimmerPlaceholder(
+            modifier = Modifier.size(18.dp),
+            cornerRadius = 5,
+            animateHighlight = false,
+        )
+        Spacer(modifier = Modifier.width(10.dp))
+        Box(modifier = Modifier.weight(1f)) {
+            DlsiteStaticPlaceholderLine(
+                widthFraction = titleWidthFraction,
+                height = 14.dp,
+                cornerRadius = 7,
+            )
+        }
+        AsmrShimmerPlaceholder(
+            modifier = Modifier.size(18.dp),
+            cornerRadius = 6,
+            animateHighlight = false,
+        )
+    }
+}
+
+@Composable
+private fun DlsiteDirectoryFilePlaceholder(
+    titleWidthFraction: Float,
+    metaWidthFraction: Float,
+    showThumbnail: Boolean,
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .defaultMinSize(minHeight = 58.dp)
+            .padding(start = 8.dp, top = 8.dp, end = 4.dp, bottom = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            modifier = Modifier.width(if (showThumbnail) 42.dp else 24.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            AsmrShimmerPlaceholder(
+                modifier = Modifier.size(if (showThumbnail) 42.dp else 21.dp),
+                cornerRadius = if (showThumbnail) 8 else 5,
+                animateHighlight = false,
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            DlsiteStaticPlaceholderLine(
+                widthFraction = titleWidthFraction,
+                height = 13.dp,
+                cornerRadius = 7,
+            )
+            DlsiteStaticPlaceholderLine(
+                widthFraction = metaWidthFraction,
+                height = 9.dp,
+                cornerRadius = 5,
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        AsmrShimmerPlaceholder(
+            modifier = Modifier.size(20.dp),
+            cornerRadius = 6,
+            animateHighlight = false,
+        )
+        Spacer(modifier = Modifier.width(8.dp))
     }
 }
 
@@ -309,11 +441,11 @@ private fun DlsiteTrialLoadingList() {
                         .padding(14.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    DlsiteSectionPlaceholderLine(
+                    DlsiteStaticPlaceholderLine(
                         widthFraction = if (index == 0) 0.62f else 0.48f,
                         height = 15.dp
                     )
-                    DlsiteSectionPlaceholderLine(
+                    DlsiteStaticPlaceholderLine(
                         widthFraction = if (index == 2) 0.26f else 0.18f,
                         height = 11.dp
                     )
@@ -648,7 +780,7 @@ private fun DlsiteRecommendationsLoadingBlocks() {
     ) {
         placeholders.forEach { sectionIndex ->
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                DlsiteSectionPlaceholderLine(
+                DlsiteStaticPlaceholderLine(
                     widthFraction = when (sectionIndex) {
                         0 -> 0.34f
                         1 -> 0.28f
@@ -672,14 +804,15 @@ private fun DlsiteRecommendationsLoadingBlocks() {
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .aspectRatio(1f),
-                                    cornerRadius = 14
+                                    cornerRadius = 14,
+                                    animateHighlight = false,
                                 )
                                 Column(
                                     modifier = Modifier.padding(horizontal = 10.dp),
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    DlsiteSectionPlaceholderLine(widthFraction = 0.88f, height = 12.dp)
-                                    DlsiteSectionPlaceholderLine(widthFraction = 0.46f, height = 10.dp)
+                                    DlsiteStaticPlaceholderLine(widthFraction = 0.88f, height = 12.dp)
+                                    DlsiteStaticPlaceholderLine(widthFraction = 0.46f, height = 10.dp)
                                 }
                             }
                         }
@@ -702,57 +835,96 @@ private enum class DirectoryTreePanelState {
     MissingRj
 }
 
+private enum class DlsiteContentKind {
+    Loading,
+    Content,
+    Empty
+}
+
+private data class DlsiteContentPanel<T>(
+    val kind: DlsiteContentKind,
+    val value: T? = null
+)
+
+@Stable
+private class DlsiteContentFadeState<T>(initialPanel: DlsiteContentPanel<T>) {
+    var panel by mutableStateOf(initialPanel)
+        private set
+
+    val alpha = Animatable(1f)
+
+    suspend fun update(targetPanel: DlsiteContentPanel<T>) {
+        if (panel.kind != targetPanel.kind) {
+            alpha.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 90)
+            )
+        }
+        panel = targetPanel
+        alpha.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
+        )
+    }
+}
+
+@Composable
+private fun <T> rememberDlsiteContentFadeState(
+    targetPanel: DlsiteContentPanel<T>,
+    stateKey: Any
+): DlsiteContentFadeState<T> {
+    val state = remember(stateKey) { DlsiteContentFadeState(targetPanel) }
+    LaunchedEffect(state, targetPanel) {
+        state.update(targetPanel)
+    }
+    return state
+}
+
+private fun <T> Modifier.dlsiteContentFade(state: DlsiteContentFadeState<T>): Modifier {
+    return graphicsLayer {
+        alpha = state.alpha.value
+        compositingStrategy = CompositingStrategy.ModulateAlpha
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 private fun LazyItemScope.dlsiteAnimatedSectionModifier(
     modifier: Modifier = Modifier,
     animateIntro: Boolean = true
 ): Modifier {
     if (!animateIntro) return modifier
-    return dlsiteSectionRevealModifier(
-        modifier = modifier.animateItemPlacement(animationSpec = DlsiteSectionPlacementTweenSpec),
-        enabled = true
+    return modifier.animateItem(
+        fadeInSpec = null,
+        placementSpec = DlsiteSectionPlacementTweenSpec,
+        fadeOutSpec = null,
     )
 }
 
 @Composable
 private fun StableOneDirectoryTreeContent(
     targetState: DirectoryTreePanelState,
+    stateKey: Any,
     modifier: Modifier = Modifier,
     content: @Composable (DirectoryTreePanelState) -> Unit
 ) {
-    val contentAlpha = remember { Animatable(if (targetState == DirectoryTreePanelState.Content) 0f else 1f) }
-    LaunchedEffect(targetState) {
-        if (targetState == DirectoryTreePanelState.Content) {
-            contentAlpha.snapTo(0f)
-            contentAlpha.animateTo(1f, animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing))
-        } else {
-            contentAlpha.snapTo(1f)
-        }
-    }
-    AnimatedContent(
-        targetState = targetState,
+    val targetPanel = DlsiteContentPanel(
+        kind = when (targetState) {
+            DirectoryTreePanelState.Loading -> DlsiteContentKind.Loading
+            DirectoryTreePanelState.Content -> DlsiteContentKind.Content
+            DirectoryTreePanelState.Empty,
+            DirectoryTreePanelState.MissingRj -> DlsiteContentKind.Empty
+        },
+        value = targetState
+    )
+    val fadeState = rememberDlsiteContentFadeState(targetPanel, stateKey)
+    Box(
         modifier = modifier
             .height(rememberStableOneDirectoryContainerHeight())
-            .clipToBounds(),
-        transitionSpec = {
-            fadeIn(animationSpec = tween(durationMillis = 140))
-                .togetherWith(fadeOut(animationSpec = tween(durationMillis = 90)))
-        },
-        label = "stableAsmrOneDirectoryTree",
-        content = { state ->
-            val stateModifier = if (state == DirectoryTreePanelState.Content) {
-                Modifier.graphicsLayer {
-                    alpha = contentAlpha.value
-                    compositingStrategy = CompositingStrategy.ModulateAlpha
-                }
-            } else {
-                Modifier
-            }
-            Box(modifier = stateModifier.fillMaxSize()) {
-                content(state)
-            }
-        }
-    )
+            .clipToBounds()
+            .dlsiteContentFade(fadeState)
+    ) {
+        content(fadeState.panel.value ?: targetState)
+    }
 }
 
 @Composable
@@ -764,9 +936,7 @@ private fun DirectoryTreeAnimatedContent(
 ) {
     AnimatedContent(
         targetState = targetState,
-        modifier = modifier.animateContentSize(
-            animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing)
-        ),
+        modifier = modifier,
         transitionSpec = {
             (
                 fadeIn(animationSpec = tween(durationMillis = 180, delayMillis = 60)) +
@@ -847,7 +1017,6 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     treeStateKey: String,
     initialCurrentPath: String,
     topContentPadding: Dp,
-    chromeState: com.asmr.player.ui.common.CollapsibleHeaderState,
     animateIntro: Boolean,
     onPersistCurrentPath: (String) -> Unit,
     initialScroll: Pair<Int, Int>,
@@ -857,8 +1026,11 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     loadRemoteFileSize: suspend (String) -> Long?
 ) {
     val scope = rememberCoroutineScope()
-    val videoTracks = remember(trialTracks) { trialTracks.filter { isVideoPreviewUrl(it.path) } }
-    val audioTracks = remember(trialTracks) { trialTracks.filterNot { isVideoPreviewUrl(it.path) } }
+    val colorScheme = AsmrTheme.colorScheme
+    val sectionActionIconColors = IconButtonDefaults.iconButtonColors(
+        contentColor = colorScheme.textPrimary,
+        disabledContentColor = colorScheme.textTertiary.copy(alpha = 0.7f)
+    )
     var currentPath by rememberSaveable(treeStateKey) { mutableStateOf(initialCurrentPath.trim().trim('/')) }
     val asmrLeafTracks by produceState(initialValue = emptyList<AsmrOneLeafUi>(), key1 = asmrOneTree) {
         value = withContext(Dispatchers.Default) { flattenAsmrOneTracksForUi(asmrOneTree) }
@@ -883,20 +1055,11 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     val listState = rememberSaveable("scroll:$treeStateKey", saver = LazyListState.Saver) {
         LazyListState(initialScroll.first, initialScroll.second)
     }
-    LaunchedEffect(listState, treeStateKey) {
-        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-            .distinctUntilChanged()
-            .collect { (idx, off) -> onPersistScroll(idx, off) }
-    }
-    LaunchedEffect(listState, treeStateKey) {
-        snapshotFlow {
-            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
-        }
-            .distinctUntilChanged()
-            .collect { atTop ->
-                if (atTop) chromeState.expand()
-            }
-    }
+    PersistAlbumDetailListScroll(
+        listState = listState,
+        stateKey = treeStateKey,
+        onPersistScroll = onPersistScroll
+    )
     LaunchedEffect(currentPath, treeStateKey) {
         onPersistCurrentPath(currentPath)
     }
@@ -908,110 +1071,52 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         hasAsmrOneTree = asmrOneTree.isNotEmpty(),
         hasDirectoryBrowser = browser != null
     )
+    val galleryPanelTarget: DlsiteContentPanel<List<String>> = when {
+        galleryUrls.isEmpty() && isInitialDlsiteLoading -> DlsiteContentPanel(DlsiteContentKind.Loading)
+        galleryUrls.isEmpty() -> DlsiteContentPanel(DlsiteContentKind.Empty)
+        else -> DlsiteContentPanel(DlsiteContentKind.Content, galleryUrls)
+    }
+    val galleryFadeState = rememberDlsiteContentFadeState(galleryPanelTarget, treeStateKey)
+    val trialPanelTarget: DlsiteContentPanel<List<Track>> = when {
+        trialTracks.isNotEmpty() -> DlsiteContentPanel(DlsiteContentKind.Content, trialTracks)
+        isInitialDlsiteLoading || isLoadingTrial -> DlsiteContentPanel(DlsiteContentKind.Loading)
+        else -> DlsiteContentPanel(DlsiteContentKind.Empty)
+    }
+    val trialFadeState = rememberDlsiteContentFadeState(trialPanelTarget, treeStateKey)
+    val displayedTrialTracks = trialFadeState.panel.value.orEmpty()
+    val videoTracks = remember(displayedTrialTracks) {
+        displayedTrialTracks.filter { isVideoPreviewUrl(it.path) }
+    }
+    val audioTracks = remember(displayedTrialTracks) {
+        displayedTrialTracks.filterNot { isVideoPreviewUrl(it.path) }
+    }
 
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .nestedScroll(chromeState.nestedScrollConnection)
             .thinScrollbar(listState),
         state = listState,
         flingBehavior = rememberCalmScrollableFlingBehavior(),
         contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
     ) {
         item(key = "dlsite-header") { header() }
-        item(key = "dlsite-gallery-section") {
-            Column(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
-                Text(
-                    text = "Gallery",
-                    modifier = Modifier.padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(DlsiteGallerySectionHeight),
-                    contentAlignment = Alignment.Center
-                ) {
-                    when {
-                        galleryUrls.isEmpty() && isInitialDlsiteLoading -> {
-                            DlsiteGalleryLoadingRow()
-                        }
-                        galleryUrls.isEmpty() -> {
-                            DlsiteSectionEmptyState(
-                                text = "暂无样图",
-                                artworkKind = DlsiteEmptyArtworkKind.Gallery,
-                                modifier = Modifier.then(dlsiteAnimatedSectionModifier(Modifier, animateIntro))
-                            )
-                        }
-                        else -> {
-                            LazyRow(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding),
-                                horizontalArrangement = Arrangement.spacedBy(DlsiteGalleryThumbGap),
-                                contentPadding = PaddingValues(vertical = 10.dp)
-                            ) {
-                                items(items = galleryUrls, key = { it }, contentType = { "galleryThumb" }) { url ->
-                                    val model = remember(url) {
-                                        val headers = DlsiteAntiHotlink.headersForImageUrl(url)
-                                        if (headers.isEmpty()) url else CacheImageModel(data = url, headers = headers, keyTag = "dlsite")
-                                    }
-                                    Card(
-                                        modifier = Modifier.size(width = DlsiteGalleryThumbWidth, height = DlsiteGalleryThumbHeight).clickable {
-                                            buildGalleryImagePreviewRequest(
-                                                galleryUrls = galleryUrls,
-                                                clickedUrl = url,
-                                                toPreviewItem = { galleryUrl ->
-                                                    val headers = DlsiteAntiHotlink.headersForImageUrl(galleryUrl)
-                                                    val previewModel: Any = if (headers.isEmpty()) {
-                                                        galleryUrl
-                                                    } else {
-                                                        CacheImageModel(data = galleryUrl, headers = headers, keyTag = "dlsite")
-                                                    }
-                                                    ImagePreviewItem(
-                                                        key = galleryUrl,
-                                                        title = galleryUrl.substringBefore('?').substringAfterLast('/').ifBlank { "Gallery" },
-                                                        imageModel = previewModel,
-                                                        openPathOrUrl = galleryUrl
-                                                    )
-                                                }
-                                            )?.let(onPreviewImages)
-                                        },
-                                        shape = RoundedCornerShape(10.dp)
-                                    ) {
-                                        AsmrAsyncImage(
-                                            model = model,
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Crop,
-                                            placeholderCornerRadius = DlsiteGalleryThumbCornerRadius,
-                                            loading = NoImageLoadingIndicator,
-                                            modifier = Modifier.fillMaxSize()
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
         item(key = "dlsite-one-header") {
-            Row(
+            AlbumDetailSectionHeading(
+                title = if (asmrOneTree.isNotEmpty()) "ONE（已收录）" else "ONE",
                 modifier = dlsiteAnimatedSectionModifier(
                     Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
                     animateIntro = animateIntro
                 ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = if (asmrOneTree.isNotEmpty()) "ONE（已收录）" else "ONE",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                IconButton(onClick = onRefreshAsmrOne, enabled = !isLoadingAsmrOne) {
-                    Icon(Icons.Rounded.Refresh, contentDescription = "刷新")
+                actions = {
+                    IconButton(
+                        onClick = onRefreshAsmrOne,
+                        enabled = !isLoadingAsmrOne,
+                        colors = sectionActionIconColors
+                    ) {
+                        Icon(Icons.Rounded.Refresh, contentDescription = "刷新")
+                    }
                 }
-            }
+            )
         }
         val asmrOnePanelState = when {
             asmrOneTree.isNotEmpty() && browser != null -> DirectoryTreePanelState.Content
@@ -1022,6 +1127,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
                 StableOneDirectoryTreeContent(
                     targetState = asmrOnePanelState,
+                    stateKey = treeStateKey,
                     modifier = Modifier.fillMaxWidth()
                 ) { panelState ->
                     when (panelState) {
@@ -1042,7 +1148,6 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                                     onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
                                     onAddMediaItemsToQueue = onAddMediaItemsToQueue,
                                     animateIntro = false,
-                                    parentChromeState = chromeState,
                                     folderKeyPrefix = "asmr-folder",
                                     fileKeyPrefix = "asmr-file",
                                     fileContent = { file, selectionMode, selected, enterSelectionMode, onSelectedChange ->
@@ -1155,86 +1260,184 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                 }
             }
         }
+        item(key = "dlsite-gallery-section") {
+            Column(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
+                AlbumDetailSectionHeading(
+                    title = "Gallery",
+                    modifier = Modifier.padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp)
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(DlsiteGallerySectionHeight)
+                        .dlsiteContentFade(galleryFadeState),
+                    contentAlignment = Alignment.Center
+                ) {
+                    when (galleryFadeState.panel.kind) {
+                        DlsiteContentKind.Loading -> DlsiteGalleryLoadingRow()
+                        DlsiteContentKind.Empty -> {
+                            DlsiteSectionEmptyState(
+                                text = "暂无样图",
+                                artworkKind = DlsiteEmptyArtworkKind.Gallery,
+                                modifier = Modifier.then(dlsiteAnimatedSectionModifier(Modifier, animateIntro))
+                            )
+                        }
+                        DlsiteContentKind.Content -> {
+                            val displayedGalleryUrls = galleryFadeState.panel.value.orEmpty()
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding),
+                                horizontalArrangement = Arrangement.spacedBy(DlsiteGalleryThumbGap),
+                                contentPadding = PaddingValues(vertical = 10.dp)
+                            ) {
+                                items(items = displayedGalleryUrls, key = { it }, contentType = { "galleryThumb" }) { url ->
+                                    val model = remember(url) {
+                                        val headers = DlsiteAntiHotlink.headersForImageUrl(url)
+                                        if (headers.isEmpty()) url else CacheImageModel(data = url, headers = headers, keyTag = "dlsite")
+                                    }
+                                    Card(
+                                        modifier = Modifier.size(width = DlsiteGalleryThumbWidth, height = DlsiteGalleryThumbHeight).clickable {
+                                            buildGalleryImagePreviewRequest(
+                                                galleryUrls = displayedGalleryUrls,
+                                                clickedUrl = url,
+                                                toPreviewItem = { galleryUrl ->
+                                                    val headers = DlsiteAntiHotlink.headersForImageUrl(galleryUrl)
+                                                    val previewModel: Any = if (headers.isEmpty()) {
+                                                        galleryUrl
+                                                    } else {
+                                                        CacheImageModel(data = galleryUrl, headers = headers, keyTag = "dlsite")
+                                                    }
+                                                    ImagePreviewItem(
+                                                        key = galleryUrl,
+                                                        title = galleryUrl.substringBefore('?').substringAfterLast('/').ifBlank { "Gallery" },
+                                                        imageModel = previewModel,
+                                                        openPathOrUrl = galleryUrl
+                                                    )
+                                                }
+                                            )?.let(onPreviewImages)
+                                        },
+                                        shape = RoundedCornerShape(10.dp),
+                                        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+                                    ) {
+                                        AsmrAsyncImage(
+                                            model = model,
+                                            contentDescription = null,
+                                            contentScale = ContentScale.Crop,
+                                            placeholderCornerRadius = DlsiteGalleryThumbCornerRadius,
+                                            loading = NoImageLoadingIndicator,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         item(key = "dlsite-trial-header") {
-            Row(
+            AlbumDetailSectionHeading(
+                title = "试听 / 试看",
                 modifier = dlsiteAnimatedSectionModifier(
                     Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
                     animateIntro = animateIntro
                 ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = "试听 / 试看",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.weight(1f))
-                IconButton(onClick = onRefreshTrial, enabled = !isLoading && !isLoadingTrial) {
-                    Icon(Icons.Rounded.Refresh, contentDescription = "刷新")
+                actions = {
+                    IconButton(
+                        onClick = onRefreshTrial,
+                        enabled = !isLoading && !isLoadingTrial,
+                        colors = sectionActionIconColors
+                    ) {
+                        Icon(Icons.Rounded.Refresh, contentDescription = "刷新")
+                    }
+                    IconButton(
+                        onClick = onDownloadTrial,
+                        enabled = trialDownloadEnabled,
+                        colors = sectionActionIconColors
+                    ) {
+                        Icon(Icons.Rounded.Download, contentDescription = "下载")
+                    }
                 }
-                IconButton(onClick = onDownloadTrial, enabled = trialDownloadEnabled) {
-                    Icon(Icons.Rounded.Download, contentDescription = "下载")
-                }
-            }
+            )
         }
-        if (trialTracks.isEmpty()) {
-            item(key = "dlsite-trial-content") {
-                if (isInitialDlsiteLoading || isLoadingTrial) {
+        when (trialFadeState.panel.kind) {
+            DlsiteContentKind.Loading -> {
+                item(key = "dlsite-trial-content") {
                     Box(
-                        modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro),
+                        modifier = dlsiteAnimatedSectionModifier(
+                            Modifier
+                                .fillMaxWidth()
+                                .dlsiteContentFade(trialFadeState),
+                            animateIntro
+                        ),
                         contentAlignment = Alignment.Center
                     ) {
                         DlsiteTrialLoadingList()
                     }
-                } else {
+                }
+            }
+            DlsiteContentKind.Empty -> {
+                item(key = "dlsite-trial-content") {
                     DlsiteSectionEmptyState(
                         text = "暂无试听 / 试看",
                         artworkKind = DlsiteEmptyArtworkKind.Trial,
-                        modifier = dlsiteAnimatedSectionModifier(Modifier, animateIntro)
-                    )
-                }
-            }
-        } else {
-            if (isLoadingTrial) {
-                item(key = "dlsite-trial-progress") {
-                    LinearProgressIndicator(
                         modifier = dlsiteAnimatedSectionModifier(
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = AlbumDetailHorizontalPadding),
-                            animateIntro = animateIntro
+                            Modifier.dlsiteContentFade(trialFadeState),
+                            animateIntro
                         )
                     )
                 }
             }
-            items(items = videoTracks, key = { track -> if (track.id > 0L) track.id else track.path }, contentType = { "trialVideo" }) { track ->
-                Column(
-                    modifier = dlsiteAnimatedSectionModifier(
-                        Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
-                        animateIntro = animateIntro
-                    )
-                ) {
-                    Text(
-                        text = track.title,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    InlineVideoPlayer(
-                        url = track.path,
-                        modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
-                    )
+            DlsiteContentKind.Content -> {
+                if (isLoadingTrial && trialPanelTarget.kind == DlsiteContentKind.Content) {
+                    item(key = "dlsite-trial-progress") {
+                        LinearProgressIndicator(
+                            modifier = dlsiteAnimatedSectionModifier(
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = AlbumDetailHorizontalPadding)
+                                    .dlsiteContentFade(trialFadeState),
+                                animateIntro = animateIntro
+                            )
+                        )
+                    }
                 }
-            }
-            items(items = audioTracks, key = { track -> if (track.id > 0L) track.id else track.path }, contentType = { "trialAudioTrack" }) { track ->
-                Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
-                    DlsiteTrialAudioItem(
-                        track = track,
-                        onClick = { onPlayTracks(album, audioTracks, track) },
-                        onAddToPlaylist = { onAddToPlaylist(track) }
-                    )
+                items(items = videoTracks, key = { track -> if (track.id > 0L) track.id else track.path }, contentType = { "trialVideo" }) { track ->
+                    Column(
+                        modifier = dlsiteAnimatedSectionModifier(
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp)
+                                .dlsiteContentFade(trialFadeState),
+                            animateIntro = animateIntro
+                        )
+                    ) {
+                        Text(
+                            text = track.title,
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        InlineVideoPlayer(
+                            url = track.path,
+                            modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f)
+                        )
+                    }
+                }
+                items(items = audioTracks, key = { track -> if (track.id > 0L) track.id else track.path }, contentType = { "trialAudioTrack" }) { track ->
+                    Box(
+                        modifier = dlsiteAnimatedSectionModifier(
+                            Modifier.fillMaxWidth().dlsiteContentFade(trialFadeState),
+                            animateIntro
+                        )
+                    ) {
+                        DlsiteTrialAudioItem(
+                            track = track,
+                            onClick = { onPlayTracks(album, audioTracks, track) },
+                            onAddToPlaylist = { onAddToPlaylist(track) }
+                        )
+                    }
                 }
             }
         }
@@ -1277,7 +1480,6 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
     treeStateKey: String,
     initialCurrentPath: String,
     topContentPadding: Dp,
-    chromeState: com.asmr.player.ui.common.CollapsibleHeaderState,
     animateIntro: Boolean,
     onPersistCurrentPath: (String) -> Unit,
     initialScroll: Pair<Int, Int>,
@@ -1325,23 +1527,12 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
     val listState = rememberSaveable("scroll:$treeStateKey", saver = LazyListState.Saver) {
         LazyListState(restoredIndex, initialScroll.second)
     }
-    LaunchedEffect(listState, treeStateKey) {
-        snapshotFlow { listState.firstVisibleItemIndex to listState.firstVisibleItemScrollOffset }
-            .distinctUntilChanged()
-            .collect { (idx, off) ->
-                val persistedIndex = (idx - headerItemCount).coerceAtLeast(0)
-                onPersistScroll(persistedIndex, off)
-            }
-    }
-    LaunchedEffect(listState, treeStateKey) {
-        snapshotFlow {
-            listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
-        }
-            .distinctUntilChanged()
-            .collect { atTop ->
-                if (atTop) chromeState.expand()
-            }
-    }
+    PersistAlbumDetailListScroll(
+        listState = listState,
+        stateKey = treeStateKey,
+        indexOffset = headerItemCount,
+        onPersistScroll = onPersistScroll
+    )
 
     val rj = rjCode.trim().uppercase()
     var currentPath by rememberSaveable(treeStateKey) { mutableStateOf(initialCurrentPath.trim().trim('/')) }
@@ -1379,7 +1570,6 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
-            .nestedScroll(chromeState.nestedScrollConnection)
             .thinScrollbar(listState),
         state = listState,
         flingBehavior = rememberCalmScrollableFlingBehavior(),
@@ -1456,7 +1646,6 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
                                 onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
                                 onAddMediaItemsToQueue = onAddMediaItemsToQueue,
                                 animateIntro = animateIntro,
-                                parentChromeState = chromeState,
                                 folderKeyPrefix = "dlplay-folder",
                                 fileKeyPrefix = "dlplay-file",
                                 fileContent = { file, selectionMode, selected, enterSelectionMode, onSelectedChange ->

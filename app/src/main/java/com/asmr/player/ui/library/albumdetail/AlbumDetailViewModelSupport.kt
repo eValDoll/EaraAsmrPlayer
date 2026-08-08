@@ -2,6 +2,7 @@ package com.asmr.player.ui.library
 
 import android.content.Context
 import android.util.Log
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.room.withTransaction
@@ -104,6 +105,7 @@ internal fun centerCropSquare(src: Bitmap, size: Int): Bitmap {
     return out
 }
 
+@Immutable
 sealed class AlbumDetailUiState {
     object Loading : AlbumDetailUiState()
     data class Success(val model: AlbumDetailModel) : AlbumDetailUiState()
@@ -145,6 +147,7 @@ internal fun extractRemoteFileSize(response: Response): Long? {
     return bodyLength?.takeIf { it > 0L }
 }
 
+@Immutable
 data class AlbumDetailModel(
     val baseRjCode: String,
     val rjCode: String,
@@ -221,7 +224,10 @@ internal fun buildDisplayAlbum(
     fallbackCoverUrl: String = ""
 ): Album {
     val base = dlsiteInfo ?: localAlbum ?: Album(title = rjCode.ifBlank { "专辑" }, path = "")
+    val displayTitle = localAlbum?.displayTitle?.takeIf { it.isNotBlank() }
     return base.copy(
+        title = displayTitle ?: base.title,
+        displayTitle = displayTitle.orEmpty(),
         workId = asmrOneWorkId?.takeIf { it.isNotBlank() } ?: base.workId,
         rjCode = rjCode.ifBlank { base.rjCode.ifBlank { base.workId } },
         cv = base.cv.ifBlank { fallbackCv },
@@ -408,6 +414,18 @@ internal fun resolveAsmrOneTrackWorkId(
         asmrOneEditionMatchesLanguage(edition.lang.orEmpty(), normalizedLang)
     }
     return languageEdition?.id?.takeIf { it > 0 }?.toString()
+}
+
+internal fun shouldFallbackToJapaneseDirectory(
+    selectedLang: String,
+    isLanguageUserSelected: Boolean,
+    hasSelectedDirectoryResources: Boolean,
+    hasJapaneseDirectoryResources: Boolean
+): Boolean {
+    return !isLanguageUserSelected &&
+        !selectedLang.trim().equals("JPN", ignoreCase = true) &&
+        !hasSelectedDirectoryResources &&
+        hasJapaneseDirectoryResources
 }
 
 private fun asmrOneEditionMatchesLanguage(languageLabel: String, selectedLang: String): Boolean {

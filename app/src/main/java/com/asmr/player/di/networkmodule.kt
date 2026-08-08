@@ -22,10 +22,18 @@ import javax.inject.Named
 
 import com.asmr.player.data.remote.TrafficStatsInterceptor
 import com.asmr.player.data.remote.NetworkHeaders
+import com.asmr.player.subtitle.DEEPSEEK_TRANSLATION_CONCURRENCY
 import com.asmr.player.util.MessageManager
 import com.asmr.player.util.DlsiteAntiHotlink
 import com.google.gson.Gson
 import java.io.IOException
+
+internal const val DEEPSEEK_HTTP_CLIENT = "deepseek"
+
+internal fun createDeepSeekDispatcher(): Dispatcher = Dispatcher().apply {
+    maxRequests = DEEPSEEK_TRANSLATION_CONCURRENCY
+    maxRequestsPerHost = DEEPSEEK_TRANSLATION_CONCURRENCY
+}
 
 @Module
 @InstallIn(SingletonComponent::class)
@@ -43,6 +51,7 @@ object NetworkModule {
         deviceIdentityStore: DeviceIdentityStore
     ): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
+            redactHeader("Authorization")
             level = HttpLoggingInterceptor.Level.BASIC
         }
         val asmrHeaders = Interceptor { chain ->
@@ -108,12 +117,21 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @Named(DEEPSEEK_HTTP_CLIENT)
+    fun provideDeepSeekOkHttpClient(okHttpClient: OkHttpClient): OkHttpClient =
+        okHttpClient.newBuilder()
+            .dispatcher(createDeepSeekDispatcher())
+            .build()
+
+    @Provides
+    @Singleton
     @Named("image")
     fun provideImageOkHttpClient(
         trafficStatsInterceptor: TrafficStatsInterceptor,
         deviceIdentityStore: DeviceIdentityStore
     ): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
+            redactHeader("Authorization")
             level = HttpLoggingInterceptor.Level.BASIC
         }
         val headers = Interceptor { chain ->

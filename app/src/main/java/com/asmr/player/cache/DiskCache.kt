@@ -9,7 +9,7 @@ import java.io.IOException
 
 class DiskCache(
     private val directory: File,
-    private val maxSizeBytes: Long,
+    maxSizeBytes: Long,
     private val ttlMs: Long
 ) {
     private val lock = Any()
@@ -17,6 +17,8 @@ class DiskCache(
     private var currentSizeBytes: Long? = null
     private var clearGeneration = 0L
     private val removeGenerations = mutableMapOf<String, Long>()
+    private var directoryReady = false
+    private var maxSizeBytes = maxSizeBytes.coerceAtLeast(0L)
 
     data class Entry(
         val bytes: ByteArray,
@@ -24,11 +26,8 @@ class DiskCache(
         val height: Int
     )
 
-    init {
-        directory.mkdirs()
-    }
-
     fun get(key: String): Entry? = synchronized(lock) {
+        if (!ensureDirectoryReady()) return@synchronized null
         val f = fileForKey(key)
         if (!f.exists()) return@synchronized null
         val now = System.currentTimeMillis()
@@ -60,13 +59,15 @@ class DiskCache(
 
     fun put(key: String, entry: Entry) {
         val (clearGenerationAtStart, removeGenerationAtStart) = synchronized(lock) {
+            if (!ensureDirectoryReady()) return
             ensureSizeInitialized()
             clearGeneration to (removeGenerations[key] ?: 0L)
         }
         val f = fileForKey(key)
+        val threadKey = System.identityHashCode(Thread.currentThread())
         val tmp = File(
             directory,
-            "${f.name}.${Thread.currentThread().id}.${System.nanoTime()}.tmp"
+            "${f.name}.$threadKey.${System.nanoTime()}.tmp"
         )
         val now = System.currentTimeMillis()
         val writeSucceeded = runCatching {
@@ -105,6 +106,7 @@ class DiskCache(
 
     fun remove(key: String) = synchronized(lock) {
         removeGenerations[key] = (removeGenerations[key] ?: 0L) + 1L
+        if (!ensureDirectoryReady()) return@synchronized
         val file = fileForKey(key)
         if (!file.exists()) return@synchronized
         val length = file.length()
@@ -120,8 +122,25 @@ class DiskCache(
     fun clear() = synchronized(lock) {
         clearGeneration += 1L
         removeGenerations.clear()
+        if (!ensureDirectoryReady()) {
+            currentSizeBytes = 0L
+            return@synchronized
+        }
         directory.listFiles()?.forEach { it.delete() }
         currentSizeBytes = calculateSizeBytes()
+    }
+
+    fun updateMaxSizeBytes(maxSizeBytes: Long) = synchronized(lock) {
+        this.maxSizeBytes = maxSizeBytes.coerceAtLeast(0L)
+        if (!ensureDirectoryReady()) return@synchronized
+        ensureSizeInitialized()
+        trimToSize()
+    }
+
+    fun sizeBytes(): Long = synchronized(lock) {
+        if (!ensureDirectoryReady()) return@synchronized 0L
+        ensureSizeInitialized()
+        currentSizeBytes ?: 0L
     }
 
     private fun fileForKey(key: String): File {
@@ -159,6 +178,12 @@ class DiskCache(
             }
         }
         currentSizeBytes = totalSize
+    }
+
+    private fun ensureDirectoryReady(): Boolean {
+        if (directoryReady) return true
+        directoryReady = directory.isDirectory || directory.mkdirs()
+        return directoryReady
     }
 
     private fun calculateSizeBytes(): Long {

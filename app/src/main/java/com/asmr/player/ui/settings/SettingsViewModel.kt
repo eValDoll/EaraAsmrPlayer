@@ -6,14 +6,23 @@ import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.asmr.player.BuildConfig
+import com.asmr.player.cache.AppCacheManager
+import com.asmr.player.cache.AppCacheState
 import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.update.GitHubUpdateClient
 import com.asmr.player.data.remote.update.UpdateRelease
 import com.asmr.player.data.settings.CoverPreviewMode
+import com.asmr.player.data.settings.DeepSeekReasoningEffort
+import com.asmr.player.data.settings.DeepSeekTranslationSettings
 import com.asmr.player.data.settings.FloatingLyricsSettings
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.SettingsRepository
+import com.asmr.player.subtitle.SubtitleModelDownloadSource
+import com.asmr.player.subtitle.SubtitleModelRepository
+import com.asmr.player.subtitle.SubtitleModelState
+import com.asmr.player.subtitle.DeepSeekApiKeyStore
+import com.asmr.player.subtitle.DeepSeekAccountRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -39,6 +48,13 @@ enum class UpdateCheckSource {
 
 private const val UPDATE_APK_PREFIX = "eara-"
 private const val UPDATE_APK_SUFFIX = ".apk"
+
+internal data class DeepSeekApiKeyUiState(
+    val configured: Boolean = false,
+    val saving: Boolean = false,
+    val errorMessage: String? = null,
+    val saveVersion: Long = 0L
+)
 
 sealed interface AppUpdateState {
     data object Idle : AppUpdateState
@@ -72,9 +88,14 @@ sealed interface AppUpdateState {
 class SettingsViewModel @Inject constructor(
     private val settingsRepository: SettingsRepository,
     private val settingsDataStore: SettingsDataStore,
+    private val appCacheManager: AppCacheManager,
     private val okHttpClient: OkHttpClient,
+    private val deepSeekAccountRepository: DeepSeekAccountRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
+    private val subtitleModelRepository = SubtitleModelRepository.get(context)
+    private val deepSeekApiKeyStore = DeepSeekApiKeyStore.get(context)
+
     val floatingLyricsEnabled: StateFlow<Boolean> = settingsRepository.floatingLyricsEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
@@ -135,11 +156,37 @@ class SettingsViewModel @Inject constructor(
     val searchBlockedKeywords: StateFlow<List<String>> = settingsRepository.searchBlockedKeywords
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    internal val deepSeekTranslationSettings: StateFlow<DeepSeekTranslationSettings> =
+        settingsRepository.deepSeekTranslationSettings.stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            DeepSeekTranslationSettings()
+        )
+
+    val appCacheState: StateFlow<AppCacheState> = appCacheManager.state
+    internal val subtitleModelState: StateFlow<SubtitleModelState> = subtitleModelRepository.state
+    private val _deepSeekApiKeyState = MutableStateFlow(DeepSeekApiKeyUiState())
+    internal val deepSeekApiKeyState = _deepSeekApiKeyState.asStateFlow()
+    internal val deepSeekAccountState = deepSeekAccountRepository.state
+
     private val updateClient = GitHubUpdateClient(okHttpClient)
     private val _updateState = MutableStateFlow<AppUpdateState>(AppUpdateState.Idle)
     val updateState = _updateState.asStateFlow()
     private var updateJob: Job? = null
     private var automaticCheckStarted = false
+
+    init {
+        appCacheManager.start()
+        viewModelScope.launch(Dispatchers.IO) {
+            val apiKey = deepSeekApiKeyStore.read()
+            val configured = apiKey.isNotBlank()
+            _deepSeekApiKeyState.value = _deepSeekApiKeyState.value.copy(configured = configured)
+            if (configured) {
+                deepSeekAccountRepository.bindApiKey(apiKey)
+                deepSeekAccountRepository.refreshBalance(apiKey)
+            }
+        }
+    }
 
     fun setFloatingLyricsEnabled(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setFloatingLyricsEnabled(enabled) }
@@ -211,6 +258,84 @@ class SettingsViewModel @Inject constructor(
 
     fun removeSearchBlockedKeyword(keyword: String) {
         viewModelScope.launch { settingsRepository.removeSearchBlockedKeyword(keyword) }
+    }
+
+    fun setAppCacheMaxSizeMb(sizeMb: Int) {
+        viewModelScope.launch { settingsRepository.setAppCacheMaxSizeMb(sizeMb) }
+    }
+
+    fun refreshAppCacheSize() {
+        appCacheManager.refreshSize()
+    }
+
+    fun clearAppCache() {
+        appCacheManager.clearCache()
+    }
+
+    internal fun downloadSubtitleModel(
+        modelId: String,
+        source: SubtitleModelDownloadSource
+    ) {
+        runCatching { subtitleModelRepository.enqueueDownload(modelId, source) }
+            .onFailure { error ->
+                subtitleModelRepository.updateFailure(
+                    modelId,
+                    source,
+                    error.message?.takeIf { it.isNotBlank() } ?: "无法开始模型下载"
+                )
+            }
+    }
+
+    fun cancelSubtitleModelDownload() {
+        viewModelScope.launch { subtitleModelRepository.cancelDownload() }
+    }
+
+    fun selectSubtitleModel(modelId: String) {
+        subtitleModelRepository.selectModel(modelId)
+    }
+
+    fun deleteSubtitleModel(modelId: String) {
+        viewModelScope.launch { subtitleModelRepository.deleteModel(modelId) }
+    }
+
+    fun clearSubtitleModelFailure(modelId: String) {
+        subtitleModelRepository.clearFailure(modelId)
+    }
+
+    internal fun saveDeepSeekApiKey(apiKey: String) {
+        val normalized = apiKey.trim()
+        if (normalized.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            _deepSeekApiKeyState.value = _deepSeekApiKeyState.value.copy(
+                saving = true,
+                errorMessage = null
+            )
+            val saved = runCatching { deepSeekApiKeyStore.save(normalized) }.isSuccess
+            if (saved) {
+                deepSeekAccountRepository.bindApiKey(normalized)
+                val current = _deepSeekApiKeyState.value
+                _deepSeekApiKeyState.value = current.copy(
+                    configured = true,
+                    saving = false,
+                    errorMessage = null,
+                    saveVersion = current.saveVersion + 1L
+                )
+                deepSeekAccountRepository.refreshBalance(normalized)
+            } else {
+                _deepSeekApiKeyState.value = _deepSeekApiKeyState.value.copy(
+                    saving = false,
+                    errorMessage = "API Key 保存失败"
+                )
+            }
+        }
+    }
+
+    internal fun setDeepSeekThinkingEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setDeepSeekThinkingEnabled(enabled) }
+    }
+
+    internal fun setDeepSeekReasoningEffort(effort: DeepSeekReasoningEffort) {
+        viewModelScope.launch { settingsRepository.setDeepSeekReasoningEffort(effort) }
     }
 
     fun setAutoUpdateCheckEnabled(enabled: Boolean) {

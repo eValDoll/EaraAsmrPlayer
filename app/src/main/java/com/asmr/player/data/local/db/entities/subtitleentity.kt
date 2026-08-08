@@ -13,6 +13,7 @@ data class SubtitleEntity(
     val trackId: Long,
     val startMs: Long,
     val endMs: Long,
-    val text: String
+    val text: String,
+    val japaneseText: String = ""
 )
 

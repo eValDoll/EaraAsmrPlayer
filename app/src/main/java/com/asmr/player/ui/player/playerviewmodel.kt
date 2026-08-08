@@ -45,6 +45,8 @@ import javax.inject.Inject
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
+import com.asmr.player.data.local.db.entities.TrackEntity
+import com.asmr.player.data.local.db.entities.titleForDisplay
 import androidx.core.net.toUri
 import androidx.media3.common.Player
 import android.os.Bundle
@@ -615,7 +617,7 @@ class PlayerViewModel @Inject constructor(
                 Track(
                     id = it.id,
                     albumId = it.albumId,
-                    title = it.title,
+                    title = it.titleForDisplay,
                     path = it.path,
                     duration = it.duration,
                     group = it.group,

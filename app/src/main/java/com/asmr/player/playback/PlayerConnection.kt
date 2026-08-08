@@ -3,7 +3,10 @@ package com.asmr.player.playback
 import android.content.ComponentName
 import android.content.Context
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import android.os.SystemClock
+import android.view.Choreographer
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
@@ -96,6 +99,7 @@ class PlayerConnection @Inject constructor(
     private val meteredWarnedMediaIds = LinkedHashSet<String>()
     private var lastMeteredWarnAtMs: Long = 0L
     private val connectMutex = Mutex()
+    private val mainHandler = Handler(Looper.getMainLooper())
     private var videoSurfaceVisible: Boolean = false
     @Volatile private var reconnecting = false
 
@@ -139,6 +143,9 @@ class PlayerConnection @Inject constructor(
         }
         scope.launch {
             while (isActive) {
+                if (controller != null) {
+                    awaitFrameCommit()
+                }
                 val c = controller
                 if (c != null) {
                     val duration = c.duration.coerceAtLeast(0L)
@@ -351,9 +358,9 @@ class PlayerConnection @Inject constructor(
                 if (mediaId.isBlank()) return@mapNotNull null
                 val uri = runCatching { item.uri }.getOrNull().orEmpty().trim()
                 val remoteSubtitleSources = runCatching { item.remoteSubtitleSources }.getOrNull().orEmpty()
-                    .mapNotNull { sourceItem ->
+                    .mapNotNull subtitleSource@{ sourceItem ->
                         val url = runCatching { sourceItem.url }.getOrNull().orEmpty().trim()
-                        if (url.isBlank()) return@mapNotNull null
+                        if (url.isBlank()) return@subtitleSource null
                         PersistedRemoteSubtitleSource(
                             url = url,
                             language = sourceItem.language,
@@ -429,9 +436,9 @@ class PlayerConnection @Inject constructor(
                     duration = track.duration,
                     group = track.group,
                     lyricsRelativePathNoExt = "",
-                    remoteSubtitleSources = persisted.remoteSubtitleSources.mapNotNull { persistedSource ->
+                    remoteSubtitleSources = persisted.remoteSubtitleSources.mapNotNull subtitleSource@{ persistedSource ->
                         val url = persistedSource.url.trim()
-                        if (url.isBlank()) return@mapNotNull null
+                        if (url.isBlank()) return@subtitleSource null
                         RemoteSubtitleSource(
                             url = url,
                             language = persistedSource.language.orEmpty().ifBlank { "default" },
@@ -441,9 +448,9 @@ class PlayerConnection @Inject constructor(
                 )
                 MediaItemFactory.fromTrack(album, t)
             } else {
-                val restoredRemoteSubtitleSources = persisted.remoteSubtitleSources.mapNotNull { persistedSource ->
+                val restoredRemoteSubtitleSources = persisted.remoteSubtitleSources.mapNotNull subtitleSource@{ persistedSource ->
                     val url = persistedSource.url.trim()
-                    if (url.isBlank()) return@mapNotNull null
+                    if (url.isBlank()) return@subtitleSource null
                     RemoteSubtitleSource(
                         url = url,
                         language = persistedSource.language.orEmpty().ifBlank { "default" },
@@ -793,6 +800,29 @@ class PlayerConnection @Inject constructor(
             1_000L
         } else {
             250L
+        }
+    }
+
+    /**
+     * 播放位置轮询会更新多个 Compose 状态。把这段工作放到当前帧提交之后，避免固定 250ms
+     * 定时器随机插进测量、绘制或 RenderThread 同步阶段；轮询频率和进度显示行为保持不变。
+     */
+    private suspend fun awaitFrameCommit() {
+        suspendCancellableCoroutine { continuation ->
+            val choreographer = Choreographer.getInstance()
+            val commitAction = Runnable {
+                if (continuation.isActive) continuation.resume(Unit)
+            }
+            val frameCallback = Choreographer.FrameCallback {
+                // Choreographer 的帧回调先于 traversal；投递到主消息队列后会在整个
+                // doFrame（包括绘制与提交）返回之后执行。
+                mainHandler.post(commitAction)
+            }
+            choreographer.postFrameCallback(frameCallback)
+            continuation.invokeOnCancellation {
+                choreographer.removeFrameCallback(frameCallback)
+                mainHandler.removeCallbacks(commitAction)
+            }
         }
     }
 

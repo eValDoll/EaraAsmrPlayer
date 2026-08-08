@@ -11,6 +11,9 @@ keystore.properties
 *.jks
 *.keystore
 
+# 本地 LLM 提示词明文库（不入库；仓库中只存 XOR+Base64 编码后的资源）
+prompts/
+
 .gradle/
 .gradle-home
 .gradle-user-home/
@@ -18,6 +21,7 @@ keystore.properties
 **/build/
 .build_asmr_player_android/
 .debug_device_db/
+.local-model-cache/
 captures/
 
 app/.cxx/
@@ -33,6 +37,7 @@ app/.cxx/
 *.xml
 !app/src/**/*.xml
 app/src/**/generated/baselineProfiles/
+app/src/main/assets/models/*.bin
 
 *.apk
 *.aab

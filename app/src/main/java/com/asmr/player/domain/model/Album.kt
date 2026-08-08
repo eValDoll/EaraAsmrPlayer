@@ -6,6 +6,8 @@ import androidx.compose.runtime.Immutable
 data class Album(
     val id: Long = 0L,
     val title: String,
+    /** 本地库翻译任务写入的显示名覆盖；为空时用 title。仅来自本地库实体，在线作品恒为空。 */
+    val displayTitle: String = "",
     val path: String,
     val localPath: String? = null,
     val downloadPath: String? = null,

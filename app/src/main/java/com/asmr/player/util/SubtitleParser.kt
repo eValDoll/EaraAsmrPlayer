@@ -47,7 +47,7 @@ object SubtitleParser {
         val trimmed = content.trimStart()
         if (!(trimmed.startsWith("{") || trimmed.startsWith("["))) return content
 
-        val element = runCatching { JsonParser().parse(trimmed) }.getOrNull() ?: return content
+        val element = runCatching { JsonParser.parseString(trimmed) }.getOrNull() ?: return content
         val items = extractWebvttItems(element) ?: return content
 
         val lines = mutableListOf("WEBVTT", "")

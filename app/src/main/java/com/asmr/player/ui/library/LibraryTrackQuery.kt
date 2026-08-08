@@ -18,7 +18,7 @@ object LibraryTrackQueryBuilder {
             SELECT
                 t.id AS trackId,
                 t.albumId AS albumId,
-                t.title AS trackTitle,
+                COALESCE(NULLIF(t.displayTitle, ''), t.title) AS trackTitle,
                 t.path AS trackPath,
                 t.duration AS duration,
                 (
@@ -26,7 +26,7 @@ object LibraryTrackQueryBuilder {
                     EXISTS(SELECT 1 FROM remote_subtitle_sources rs WHERE rs.trackId = t.id LIMIT 1)
                 ) AS hasSubtitles,
                 t.`group` AS trackGroup,
-                a.title AS albumTitle,
+                COALESCE(NULLIF(a.displayTitle, ''), a.title) AS albumTitle,
                 a.circle AS circle,
                 a.cv AS cv,
                 a.coverUrl AS coverUrl,
@@ -144,7 +144,7 @@ object LibraryTrackQueryBuilder {
             SELECT
                 t.id AS trackId,
                 t.albumId AS albumId,
-                t.title AS trackTitle,
+                COALESCE(NULLIF(t.displayTitle, ''), t.title) AS trackTitle,
                 t.path AS trackPath,
                 t.duration AS duration,
                 (
@@ -152,7 +152,7 @@ object LibraryTrackQueryBuilder {
                     EXISTS(SELECT 1 FROM remote_subtitle_sources rs WHERE rs.trackId = t.id LIMIT 1)
                 ) AS hasSubtitles,
                 t.`group` AS trackGroup,
-                a.title AS albumTitle,
+                COALESCE(NULLIF(a.displayTitle, ''), a.title) AS albumTitle,
                 a.circle AS circle,
                 a.cv AS cv,
                 a.coverUrl AS coverUrl,
@@ -272,7 +272,7 @@ object LibraryTrackQueryBuilder {
             """
             SELECT DISTINCT
                 a.id AS albumId,
-                a.title AS albumTitle,
+                COALESCE(NULLIF(a.displayTitle, ''), a.title) AS albumTitle,
                 a.circle AS circle,
                 a.cv AS cv,
                 a.coverUrl AS coverUrl,

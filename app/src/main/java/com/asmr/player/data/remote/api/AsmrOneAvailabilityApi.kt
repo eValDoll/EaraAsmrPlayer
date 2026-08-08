@@ -4,6 +4,7 @@ import android.os.Build
 import com.asmr.player.BuildConfig
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.awaitResponse
+import com.asmr.player.data.remote.withOnlineDirectoryRequestTimeouts
 import com.asmr.player.data.remote.withSearchTimeouts
 import com.asmr.player.listentogether.XxHash64
 import com.google.gson.Gson
@@ -17,7 +18,6 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.io.IOException
-import java.util.concurrent.TimeUnit
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -127,7 +127,7 @@ class AsmrOneAvailabilityApi @Inject constructor(
     private val deviceFingerprint = buildDeviceFingerprint()
     private val userAgent = buildUserAgent()
     private val requestClient by lazy { okHttpClient.withSearchTimeouts() }
-    private val trackTreeClient by lazy { okHttpClient.withBackendTrackTreeTimeouts() }
+    private val trackTreeClient by lazy { okHttpClient.withOnlineDirectoryRequestTimeouts() }
 
     val isBackendConfigured: Boolean
         get() = backendBaseUrl.isNotBlank()
@@ -368,11 +368,3 @@ private fun AsmrOneAvailabilityItem.matchedRequestRjs(requested: Set<String>): L
         .distinct()
         .toList()
 }
-
-private fun OkHttpClient.withBackendTrackTreeTimeouts(): OkHttpClient =
-    newBuilder()
-        .callTimeout(3, TimeUnit.SECONDS)
-        .connectTimeout(2, TimeUnit.SECONDS)
-        .readTimeout(3, TimeUnit.SECONDS)
-        .writeTimeout(3, TimeUnit.SECONDS)
-        .build()

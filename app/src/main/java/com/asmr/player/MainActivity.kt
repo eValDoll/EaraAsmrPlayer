@@ -1,4 +1,4 @@
-﻿package com.asmr.player
+package com.asmr.player
 
 import android.os.Bundle
 import android.view.KeyEvent
@@ -104,9 +104,12 @@ import com.asmr.player.ui.nav.isPrimaryRoute
 import com.asmr.player.ui.nav.resolvePrimaryPagerRoutes
 import com.asmr.player.ui.nav.resolvePrimaryRoute
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.DiscPlaceholderBitmapCache
 import com.asmr.player.ui.splash.EaraSplashOverlay
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.net.URLDecoder
 import java.net.URLEncoder
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -194,7 +197,6 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.runBlocking
 
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
@@ -234,14 +236,25 @@ class MainActivity : ComponentActivity() {
     private val volumeKeyEventTick = MutableStateFlow(0L)
     private var volumeKeyEventSeq = 0L
 
-    @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        initialThemeBootstrapPreferences = runBlocking {
-            settingsDataStore.loadThemeBootstrapPreferences()
+        lifecycleScope.launch {
+            initialThemeBootstrapPreferences = settingsDataStore.loadThemeBootstrapPreferences()
+            if (isFinishing || isDestroyed) return@launch
+            val recentAlbumsPanelExpandedInitial = false
+            val startRouteFromIntent = intent.getStringExtra("start_route")
+            setAppContent(
+                recentAlbumsPanelExpandedInitial = recentAlbumsPanelExpandedInitial,
+                startRouteFromIntent = startRouteFromIntent
+            )
         }
-        val recentAlbumsPanelExpandedInitial = false
-        val startRouteFromIntent = intent.getStringExtra("start_route")
+    }
+
+    @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
+    private fun setAppContent(
+        recentAlbumsPanelExpandedInitial: Boolean,
+        startRouteFromIntent: String?
+    ) {
         setContent {
             val windowSizeClass = calculateWindowSizeClass(this)
             val context = LocalContext.current
@@ -269,6 +282,14 @@ class MainActivity : ComponentActivity() {
             val systemDark = isSystemInDarkTheme()
             val themePref = themeBootstrap.theme
             val mode = resolveThemeMode(themePref = themePref, systemDark = systemDark)
+            LaunchedEffect(mode.isDark, context.applicationContext) {
+                withContext(Dispatchers.IO) {
+                    DiscPlaceholderBitmapCache.preload(
+                        resources = context.applicationContext.resources,
+                        darkTheme = mode.isDark
+                    )
+                }
+            }
             val artworkUri = themeMediaSource.artworkUri
             val videoUri = themeMediaSource.videoUri
             val isVideo = themeMediaSource.isVideo
@@ -578,7 +599,6 @@ class MainActivity : ComponentActivity() {
                         onShowQueue = { overlaySheet = OverlaySheet.Queue },
                         onShowSleepTimer = { overlaySheet = OverlaySheet.SleepTimer },
                         onContentReady = { contentReady = true },
-                        visibleMessages = visibleMessagesSnapshot,
                         showMiniPlayerBar = showMiniPlayerBar,
                         coverBackgroundEnabled = coverBackgroundEnabled,
                         coverBackgroundClarity = coverBackgroundClarity,
@@ -589,6 +609,7 @@ class MainActivity : ComponentActivity() {
                         forceImmersive = showSplash,
                         volumeKeyEventTick = volumeKeyTick
                     )
+                    NonTouchableAppMessageOverlay(messages = visibleMessagesSnapshot)
 
                     if (showSplash) {
                         EaraSplashOverlay(

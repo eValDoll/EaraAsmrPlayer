@@ -2,7 +2,9 @@ package com.asmr.player.ui.library
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -13,9 +15,11 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
 import com.asmr.player.ui.theme.AsmrPlayerTheme
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -120,21 +124,25 @@ class CloudSyncSelectionDialogTest {
 
     @Test
     fun dialog_allowsSwitchingToNextRequestAfterSelection() {
+        var selectionCount = 0
         composeRule.setContent {
-            var state by mutableStateOf<CloudSyncSelectionDialogState?>(
-                CloudSyncSelectionDialogState(
-                    albumTitle = "Album A",
-                    candidates = listOf(candidate("RJ000111", "Candidate One", "CV A")),
-                    currentPosition = 1,
-                    totalCount = 2
+            var state by remember {
+                mutableStateOf<CloudSyncSelectionDialogState?>(
+                    CloudSyncSelectionDialogState(
+                        albumTitle = "Album A",
+                        candidates = listOf(candidate("RJ000111", "Candidate One", "CV A")),
+                        currentPosition = 1,
+                        totalCount = 2
+                    )
                 )
-            )
+            }
 
             AsmrPlayerTheme {
                 state?.let {
                     CloudSyncSelectionDialog(
                         state = it,
                         onSelect = {
+                            selectionCount += 1
                             state = CloudSyncSelectionDialogState(
                                 albumTitle = "Album B",
                                 candidates = listOf(candidate("RJ000222", "Candidate Two", "CV B")),
@@ -149,7 +157,11 @@ class CloudSyncSelectionDialogTest {
             }
         }
 
-        composeRule.onNodeWithText("Candidate One").performClick()
+        composeRule.onNodeWithTag(
+            "${CLOUD_SYNC_SELECTION_CANDIDATE_TAG_PREFIX}_RJ000111",
+            useUnmergedTree = true
+        ).performSemanticsAction(SemanticsActions.OnClick)
+        composeRule.runOnIdle { assertEquals(1, selectionCount) }
         composeRule.onNodeWithText("Album B").assert(existsMatcher)
         composeRule.onNodeWithText("Candidate Two").assert(existsMatcher)
         composeRule.onNodeWithText("待确认 2 / 2").assert(existsMatcher)

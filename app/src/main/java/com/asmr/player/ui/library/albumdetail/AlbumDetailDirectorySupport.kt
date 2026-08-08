@@ -64,7 +64,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.state.ToggleableState
@@ -88,6 +87,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
 import com.asmr.player.data.local.db.AppDatabaseProvider
 import com.asmr.player.data.local.db.entities.LocalTreeCacheEntity
+import com.asmr.player.data.local.db.entities.OnlineSavedResourceEntity
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
@@ -95,6 +95,7 @@ import com.asmr.player.data.remote.scraper.DlsiteRecommendations
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.playback.MediaItemFactory
+import com.asmr.player.subtitle.SubtitleGenerationPolicy
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
@@ -153,6 +154,8 @@ import com.asmr.player.util.MessageManager
 import com.asmr.player.util.RemoteSubtitleSource
 import com.asmr.player.util.isOnlineTrackPath
 
+private const val LOCAL_TREE_CACHE_PARSER_VERSION = 2L
+
 internal sealed class AsmrTreeUiEntry {
     abstract val path: String
     abstract val title: String
@@ -177,6 +180,10 @@ internal sealed class AsmrTreeUiEntry {
 private val DirectoryBrowserPanelCornerRadius = 10.dp
 private val DirectoryFolderRowCornerRadius = 10.dp
 private val DirectoryBrowserPanelVerticalPadding = 4.dp
+
+internal fun directoryBrowserHeaderBackground(colorScheme: AsmrColorScheme): Color {
+    return colorScheme.primarySoft.copy(alpha = if (colorScheme.isDark) 0.28f else 0.88f)
+}
 
 internal enum class DirectoryFolderPosition {
     Single,
@@ -272,6 +279,7 @@ internal fun treeFileTypeForNode(title: String, url: String?, remoteType: String
         fromTitle != TreeFileType.Other -> fromTitle
         fromUrl != TreeFileType.Other -> fromUrl
         fromRemoteType != TreeFileType.Other -> fromRemoteType
+        !url.isNullOrBlank() -> TreeFileType.Audio
         else -> TreeFileType.Other
     }
 }
@@ -289,12 +297,17 @@ internal fun isPlayableTreeFileType(fileType: TreeFileType): Boolean {
 }
 
 private fun fileExtensionFromName(name: String): String {
-    val clean = name
+    val fileName = name
         .trim()
-        .substringBefore('#')
-        .substringBefore('?')
         .substringAfterLast('/')
         .substringAfterLast('\\')
+    val withoutQuery = fileName.substringBefore('?')
+    val fragmentIndex = withoutQuery.indexOf('#')
+    val clean = if (fragmentIndex > 0 && withoutQuery.substring(0, fragmentIndex).contains('.')) {
+        withoutQuery.substring(0, fragmentIndex)
+    } else {
+        withoutQuery
+    }
     val ext = clean.substringAfterLast('.', missingDelimiterValue = "")
         .lowercase()
         .trim()
@@ -595,6 +608,75 @@ internal fun siblingPlayableNodesForEntry(index: LocalTreeIndex, entryPath: Stri
         .toList()
 }
 
+internal fun isSupportedSubtitleGenerationAudioName(name: String): Boolean {
+    return SubtitleGenerationPolicy.supportsFileName(name)
+}
+
+internal fun subtitleGenerationTrackForFile(
+    file: DirectoryFileItem,
+    unavailableTrackIds: Set<Long>
+): Track? {
+    val track = file.track ?: return null
+    return track.takeIf {
+        file.fileType == TreeFileType.Audio &&
+            isSupportedSubtitleGenerationAudioName(file.path) &&
+            it.id > 0L &&
+            !file.isOnline &&
+            file.sizeSource is FileSizeSource.Local &&
+            !isOnlineTrackPath(it.path) &&
+            it.id !in unavailableTrackIds
+    }
+}
+
+internal fun collectSubtitleGenerationTracks(
+    index: LocalTreeIndex,
+    currentPath: String,
+    unavailableTrackIds: Set<Long>
+): List<Track> {
+    val currentNode = findLocalTreeNode(index.root, currentPath) ?: return emptyList()
+    val tracks = mutableListOf<Track>()
+
+    fun collect(node: LocalTreeNode) {
+        if (node.children.isEmpty()) {
+            val track = node.track
+            val absolutePath = node.absolutePath.orEmpty()
+            if (
+                node.fileType == TreeFileType.Audio &&
+                isSupportedSubtitleGenerationAudioName(node.name) &&
+                track != null &&
+                track.id > 0L &&
+                !isOnlineTrackPath(track.path) &&
+                !absolutePath.startsWith("http", ignoreCase = true) &&
+                track.id !in unavailableTrackIds
+            ) {
+                tracks += track
+            }
+            return
+        }
+        node.children.values
+            .sortedBy { SmartSortKey.of(it.name) }
+            .forEach(::collect)
+    }
+
+    collect(currentNode)
+    return tracks.distinctBy { it.id }
+}
+
+internal fun subtitleTranslationTrackForFile(
+    file: DirectoryFileItem,
+    localSubtitleTrackIds: Set<Long>
+): Track? {
+    val track = file.track ?: return null
+    return track.takeIf {
+        file.fileType == TreeFileType.Audio &&
+            it.id > 0L &&
+            it.id in localSubtitleTrackIds &&
+            !file.isOnline &&
+            file.sizeSource is FileSizeSource.Local &&
+            !isOnlineTrackPath(it.path)
+    }
+}
+
 internal fun buildLocalDirectoryBrowser(
     index: LocalTreeIndex,
     currentPath: String,
@@ -620,6 +702,7 @@ internal fun buildLocalDirectoryBrowser(
         .sortedBy { SmartSortKey.of(it.name) }
         .mapNotNull { child ->
             val absolutePath = child.absolutePath ?: return@mapNotNull null
+            val isRemoteResource = absolutePath.startsWith("http", ignoreCase = true)
             val displayTitle = child.track?.title?.ifBlank { child.name.substringBeforeLast('.') }
                 ?: child.name.substringBeforeLast('.')
             val playlistTarget = when (child.fileType) {
@@ -634,7 +717,11 @@ internal fun buildLocalDirectoryBrowser(
                 isPlayable = child.track != null || child.fileType == TreeFileType.Video,
                 isOnline = isOnlineDirectoryAudio(child.fileType, absolutePath, child.track),
                 durationSeconds = child.track?.duration?.takeIf { it > 0.0 },
-                sizeSource = FileSizeSource.Local(path = absolutePath, sizeBytes = child.sizeBytes),
+                sizeSource = if (isRemoteResource) {
+                    FileSizeSource.Remote(absolutePath)
+                } else {
+                    FileSizeSource.Local(path = absolutePath, sizeBytes = child.sizeBytes)
+                },
                 absolutePath = absolutePath,
                 url = absolutePath,
                 track = child.track,
@@ -650,6 +737,11 @@ internal fun buildLocalDirectoryBrowser(
         folders = folders,
         files = files
     )
+}
+
+internal fun canSetDirectoryImageAsLocalCover(file: DirectoryFileItem): Boolean {
+    return file.fileType == TreeFileType.Image &&
+        !file.absolutePath.startsWith("http", ignoreCase = true)
 }
 
 internal class RemoteTreeNode(
@@ -894,6 +986,22 @@ internal data class LocalTreeLeafCacheEntry(
     val sizeBytes: Long? = null
 )
 
+internal fun onlineSavedResourceTreeLeaf(
+    resource: OnlineSavedResourceEntity
+): LocalTreeLeafCacheEntry? {
+    val relativePath = resource.relativePath.replace('\\', '/').trim().trimStart('/')
+    val url = resource.url.trim()
+    if (relativePath.isBlank() || !url.startsWith("http", ignoreCase = true)) return null
+    val fileType = runCatching { TreeFileType.valueOf(resource.fileType) }
+        .getOrElse { treeFileTypeForNode(relativePath, url) }
+    if (!isLibraryResourceSavableTreeFileType(fileType) || isPlayableTreeFileType(fileType)) return null
+    return LocalTreeLeafCacheEntry(
+        relativePath = relativePath,
+        absolutePath = url,
+        fileType = fileType
+    )
+}
+
 internal data class LocalTreeIndexBuildResult(
     val index: LocalTreeIndex,
     val leaves: List<LocalTreeLeafCacheEntry>
@@ -903,14 +1011,20 @@ internal suspend fun loadOrBuildLocalTreeIndex(
     context: android.content.Context,
     albumId: Long,
     albumPaths: List<String>,
-    tracks: List<Track>
+    tracks: List<Track>,
+    onlineSavedResources: List<OnlineSavedResourceEntity> = emptyList()
 ): LocalTreeIndex {
     val gson = Gson()
     val cacheKey = albumPaths.map { it.trim() }.filter { it.isNotBlank() }.sorted().joinToString("|")
-    val stamp = computeAlbumPathsStamp(context, albumPaths)
+    val stamp = computeLocalTreeCacheStamp(context, albumPaths, tracks)
     val dao = AppDatabaseProvider.get(context).localTreeCacheDao()
     val onlineTracks = tracks.filter { it.path.trim().startsWith("http", ignoreCase = true) }
     val onlineUrlSet = onlineTracks.map { it.path.trim() }.filter { it.isNotBlank() }.toSet()
+    val savedResourceKeys = onlineSavedResources.mapNotNull { resource ->
+        val relativePath = resource.relativePath.replace('\\', '/').trim().trimStart('/')
+        val url = resource.url.trim()
+        if (relativePath.isBlank() || url.isBlank()) null else relativePath to url
+    }.toSet()
 
     fun sanitizeSeg(name: String): String {
         return name.trim().ifEmpty { "item" }.replace(Regex("""[\\/:*?"<>|]"""), "_")
@@ -951,14 +1065,27 @@ internal suspend fun loadOrBuildLocalTreeIndex(
         }
     }
 
-    fun mergeLeaves(localLeaves: List<LocalTreeLeafCacheEntry>, onlineLeaves: List<LocalTreeLeafCacheEntry>): List<LocalTreeLeafCacheEntry> {
+    fun buildSavedResourceLeaves(): List<LocalTreeLeafCacheEntry> {
+        return onlineSavedResources.mapNotNull(::onlineSavedResourceTreeLeaf)
+    }
+
+    fun mergeLeaves(
+        localLeaves: List<LocalTreeLeafCacheEntry>,
+        onlineLeaves: List<LocalTreeLeafCacheEntry>,
+        savedResourceLeaves: List<LocalTreeLeafCacheEntry>
+    ): List<LocalTreeLeafCacheEntry> {
         val filteredLocal = localLeaves.filter { leaf ->
             val abs = leaf.absolutePath.trim()
-            !(abs.startsWith("http", ignoreCase = true) && !onlineUrlSet.contains(abs))
+            !(
+                abs.startsWith("http", ignoreCase = true) &&
+                    !onlineUrlSet.contains(abs) &&
+                    !savedResourceKeys.contains(leaf.relativePath to abs)
+            )
         }
         val byRel = linkedMapOf<String, LocalTreeLeafCacheEntry>()
         filteredLocal.forEach { byRel[it.relativePath] = it }
-        onlineLeaves.forEach { leaf ->
+
+        fun mergeRemoteLeaf(leaf: LocalTreeLeafCacheEntry) {
             val existing = byRel[leaf.relativePath]
             if (existing == null) {
                 byRel[leaf.relativePath] = leaf
@@ -967,16 +1094,24 @@ internal suspend fun loadOrBuildLocalTreeIndex(
                 if (abs.startsWith("http", ignoreCase = true)) byRel[leaf.relativePath] = leaf
             }
         }
+
+        onlineLeaves.forEach(::mergeRemoteLeaf)
+        savedResourceLeaves.forEach(::mergeRemoteLeaf)
         return byRel.values.toList()
     }
     val onlineLeaves = buildOnlineLeaves()
+    val savedResourceLeaves = buildSavedResourceLeaves()
 
     val cached = dao.getByAlbumAndKey(albumId = albumId, cacheKey = cacheKey)
     if (cached != null && cached.stamp == stamp && cached.payloadJson.isNotBlank()) {
         val type = object : TypeToken<List<LocalTreeLeafCacheEntry>>() {}.type
         val leaves = runCatching { gson.fromJson<List<LocalTreeLeafCacheEntry>>(cached.payloadJson, type) }
             .getOrDefault(emptyList())
-        val merged = mergeLeaves(localLeaves = leaves, onlineLeaves = onlineLeaves)
+        val merged = mergeLeaves(
+            localLeaves = leaves,
+            onlineLeaves = onlineLeaves,
+            savedResourceLeaves = savedResourceLeaves
+        )
         val missingLocalSizeMetadata = leaves.any { leaf ->
             val abs = leaf.absolutePath.trim()
             abs.isNotBlank() &&
@@ -989,7 +1124,11 @@ internal suspend fun loadOrBuildLocalTreeIndex(
     }
 
     val built = buildLocalTreeIndexByScanning(context = context, albumPaths = albumPaths, tracks = tracks)
-    val merged = mergeLeaves(localLeaves = built.leaves, onlineLeaves = onlineLeaves)
+    val merged = mergeLeaves(
+        localLeaves = built.leaves,
+        onlineLeaves = onlineLeaves,
+        savedResourceLeaves = savedResourceLeaves
+    )
     dao.upsert(
         LocalTreeCacheEntity(
             albumId = albumId,
@@ -1013,6 +1152,28 @@ internal fun computeAlbumPathsStamp(context: android.content.Context, albumPaths
         }
         acc = (acc xor v) * 1099511628211L
     }
+    return acc
+}
+
+internal fun computeLocalTreeCacheStamp(
+    context: android.content.Context,
+    albumPaths: List<String>,
+    tracks: List<Track>
+): Long {
+    return combineLocalTreeCacheStamp(computeAlbumPathsStamp(context, albumPaths), tracks)
+}
+
+internal fun combineLocalTreeCacheStamp(albumPathsStamp: Long, tracks: List<Track>): Long {
+    var acc = (albumPathsStamp xor LOCAL_TREE_CACHE_PARSER_VERSION) * 1099511628211L
+    val localTrackPaths = tracks.asSequence()
+        .map { it.path.trim() }
+        .filter { it.isNotBlank() && !it.startsWith("http", ignoreCase = true) }
+        .sorted()
+        .toList()
+    localTrackPaths.forEach { path ->
+        acc = (acc xor path.hashCode().toLong()) * 1099511628211L
+    }
+    acc = (acc xor localTrackPaths.size.toLong()) * 1099511628211L
     return acc
 }
 
@@ -2102,13 +2263,23 @@ internal fun DirectoryActionGroupButton(
     icon: ImageVector,
     enabled: Boolean,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onDisabledClick: (() -> Unit)? = null
 ) {
     TextButton(
-        onClick = onClick,
-        enabled = enabled,
+        onClick = {
+            if (enabled) onClick() else onDisabledClick?.invoke()
+        },
+        enabled = enabled || onDisabledClick != null,
         modifier = modifier.height(34.dp),
-        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp)
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
+        colors = ButtonDefaults.textButtonColors(
+            contentColor = if (enabled) {
+                MaterialTheme.colorScheme.primary
+            } else {
+                AsmrTheme.colorScheme.textTertiary
+            }
+        )
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp))
         Spacer(modifier = Modifier.width(4.dp))
@@ -2556,7 +2727,12 @@ internal fun DirectoryBatchBarEmbeddedV5(
     modifier: Modifier = Modifier,
     onAddToFavorites: (List<MediaItem>) -> Unit,
     onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
-    onAddMediaItemsToQueue: (List<MediaItem>) -> Unit
+    onAddMediaItemsToQueue: (List<MediaItem>) -> Unit,
+    showTranslateAction: Boolean = false,
+    subtitleGenerationText: String = "生成并翻译字幕",
+    subtitleGenerationEnabled: Boolean = false,
+    onGenerateSubtitles: () -> Unit = {},
+    onSubtitleGenerationUnavailable: (() -> Unit)? = null
 ) {
     val mediaItems = remember(targets) { targets.map { it.toMediaItem() } }
     val hasMediaItems = mediaItems.isNotEmpty()
@@ -2614,7 +2790,25 @@ internal fun DirectoryBatchBarEmbeddedV5(
                     enabled = hasMediaItems,
                     onClick = { onAddMediaItemsToQueue(mediaItems) }
                 )
+                if (showTranslateAction) {
+                    Text("|", color = AsmrTheme.colorScheme.textTertiary, style = MaterialTheme.typography.labelMedium)
+                    DirectoryActionGroupButton(
+                        text = subtitleGenerationText,
+                        icon = Icons.Rounded.Translate,
+                        enabled = subtitleGenerationEnabled,
+                        onClick = onGenerateSubtitles,
+                        onDisabledClick = onSubtitleGenerationUnavailable
+                    )
+                }
             }
+        } else if (showTranslateAction) {
+            DirectoryActionGroupButton(
+                text = subtitleGenerationText,
+                icon = Icons.Rounded.Translate,
+                enabled = subtitleGenerationEnabled,
+                onClick = onGenerateSubtitles,
+                onDisabledClick = onSubtitleGenerationUnavailable
+            )
         }
     }
 }
@@ -2631,6 +2825,12 @@ internal fun DirectoryBrowserPanelV4(
     onAddToFavorites: (List<MediaItem>) -> Unit,
     onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
     onAddMediaItemsToQueue: (List<MediaItem>) -> Unit,
+    onGenerateSubtitlesForCurrentDirectory: (() -> Unit)? = null,
+    subtitleGenerationForCurrentDirectoryEnabled: Boolean = false,
+    onGenerateSubtitlesForSelectedFiles: ((List<DirectoryFileItem>) -> Unit)? = null,
+    canGenerateSubtitleForSelectedFile: ((DirectoryFileItem) -> Boolean)? = null,
+    subtitleModelAvailable: Boolean = true,
+    onSubtitleGenerationUnavailable: (() -> Unit)? = null,
     animateIntro: Boolean = true,
     parentChromeState: CollapsibleHeaderState? = null,
     preferredPath: String = "",
@@ -2694,6 +2894,26 @@ internal fun DirectoryBrowserPanelV4(
     val batchHintText = remember(selectionMode) {
         if (selectionMode) "点击文件可增减选择" else "长按可批量操作"
     }
+    val showTranslateAction = if (selectionMode) {
+        onGenerateSubtitlesForSelectedFiles != null
+    } else {
+        onGenerateSubtitlesForCurrentDirectory != null
+    }
+    val hasSubtitleGenerationTargets = if (selectionMode) {
+        val predicate = canGenerateSubtitleForSelectedFile
+        predicate != null && selectedFiles.any(predicate)
+    } else {
+        subtitleGenerationForCurrentDirectoryEnabled
+    }
+    val subtitleGenerationEnabled = hasSubtitleGenerationTargets && subtitleModelAvailable
+    val onGenerateSubtitles: () -> Unit = {
+        if (selectionMode) {
+            onGenerateSubtitlesForSelectedFiles?.invoke(selectedFiles)
+        } else {
+            onGenerateSubtitlesForCurrentDirectory?.invoke()
+        }
+        Unit
+    }
     LaunchedEffect(preferredPath) {
         preferredPathState = preferredPath.trim().trim('/')
     }
@@ -2706,7 +2926,7 @@ internal fun DirectoryBrowserPanelV4(
         (screenHeight * 0.48f).coerceIn(240.dp, 460.dp)
     }
     val colorScheme = AsmrTheme.colorScheme
-    val headerSectionColor = colorScheme.primarySoft.copy(alpha = if (colorScheme.isDark) 0.14f else 0.22f)
+    val headerSectionColor = directoryBrowserHeaderBackground(colorScheme)
     val actionSectionColor = colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.24f else 0.42f)
     val listSectionColor = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.28f else 0.62f)
     val sectionDividerColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f)
@@ -2763,7 +2983,14 @@ internal fun DirectoryBrowserPanelV4(
                     modifier = Modifier.weight(1f),
                     onAddToFavorites = onAddToFavorites,
                     onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
-                    onAddMediaItemsToQueue = onAddMediaItemsToQueue
+                    onAddMediaItemsToQueue = onAddMediaItemsToQueue,
+                    showTranslateAction = showTranslateAction,
+                    subtitleGenerationText = if (selectionMode) "生成并翻译" else "批量生成并翻译",
+                    subtitleGenerationEnabled = subtitleGenerationEnabled,
+                    onGenerateSubtitles = onGenerateSubtitles,
+                    onSubtitleGenerationUnavailable = onSubtitleGenerationUnavailable.takeIf {
+                        hasSubtitleGenerationTargets && !subtitleModelAvailable
+                    }
                 )
                 if (onTogglePreferredPath != null && !selectionMode) {
                     val preferredIcon = if (isPreferredPath) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder
@@ -2908,6 +3135,8 @@ internal fun DirectoryFileRow(
     onDownload: (() -> Unit)? = null,
     onAddToQueue: (() -> Unit)? = null,
     onAddToPlaylist: (() -> Unit)? = null,
+    onGenerateSubtitles: (() -> Unit)? = null,
+    subtitleGenerationEnabled: Boolean = true,
     onManageTags: (() -> Unit)? = null,
     onRemoveFromAlbum: (() -> Unit)? = null
 ) {
@@ -2935,7 +3164,7 @@ internal fun DirectoryFileRow(
     }
 
     val showPrimaryAction = file.isPlayable
-    val showMenu = showPrimaryAction || onDownload != null || onAddToQueue != null || onAddToPlaylist != null || onManageTags != null || onRemoveFromAlbum != null
+    val showMenu = showPrimaryAction || onDownload != null || onAddToQueue != null || onAddToPlaylist != null || onGenerateSubtitles != null || onManageTags != null || onRemoveFromAlbum != null
     val showTrailing = selectionMode || onSetAsCover != null || file.showSubtitleStamp || showMenu
 
     Surface(
@@ -3126,6 +3355,23 @@ internal fun DirectoryFileRow(
                                             },
                                             leadingIcon = {
                                                 Icon(Icons.AutoMirrored.Rounded.PlaylistAdd, contentDescription = null, tint = colorScheme.textSecondary)
+                                            }
+                                        )
+                                    }
+                                    if (onGenerateSubtitles != null) {
+                                        val subtitleGenerationColor = if (subtitleGenerationEnabled) {
+                                            colorScheme.textSecondary
+                                        } else {
+                                            colorScheme.textTertiary
+                                        }
+                                        DropdownMenuItem(
+                                            text = { Text("生成并翻译字幕", color = subtitleGenerationColor) },
+                                            onClick = {
+                                                onGenerateSubtitles()
+                                                showMenuExpanded = false
+                                            },
+                                            leadingIcon = {
+                                                Icon(Icons.Rounded.Subtitles, contentDescription = null, tint = subtitleGenerationColor)
                                             }
                                         )
                                     }

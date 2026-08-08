@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.playlists
+package com.asmr.player.ui.playlists
 
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.gestures.stopScroll
@@ -35,7 +35,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -63,6 +62,7 @@ import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
+import com.asmr.player.ui.common.collectAsStateWhileActive
 
 private val PlaylistsPageHorizontalPadding = 8.dp
 private val PlaylistRowActionButtonSize = 34.dp
@@ -72,11 +72,12 @@ private val PlaylistRowActionIconSize = 18.dp
 fun PlaylistsScreen(
     windowSizeClass: WindowSizeClass,
     isActive: Boolean = true,
+    isDataActive: Boolean = isActive,
     onPlaylistClick: (PlaylistEntity) -> Unit,
     scrollToTopSignal: Long = 0L,
     viewModel: PlaylistsViewModel = hiltViewModel()
 ) {
-    val playlists by viewModel.playlists.collectAsState()
+    val playlists by viewModel.playlists.collectAsStateWhileActive(isDataActive)
     val colorScheme = AsmrTheme.colorScheme
     val listState = rememberLazyListState()
     var showCreate by remember { mutableStateOf(false) }

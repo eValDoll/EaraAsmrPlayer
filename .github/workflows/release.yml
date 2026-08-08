@@ -45,24 +45,40 @@ jobs:
           EARA_RELEASE_STORE_PASSWORD: ${{ secrets.EARA_RELEASE_STORE_PASSWORD }}
           EARA_RELEASE_KEY_ALIAS: ${{ secrets.EARA_RELEASE_KEY_ALIAS }}
           EARA_RELEASE_KEY_PASSWORD: ${{ secrets.EARA_RELEASE_KEY_PASSWORD }}
-      - name: Prepare release artifact
+      - name: Prepare release artifacts
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
-          APK_PATH="$(find . -type f -path '*/outputs/apk/release/*.apk' -name '*release*.apk' | head -n 1)"
-          if [ -z "$APK_PATH" ]; then
-            echo "Release APK not found under outputs/apk/release"
+          mapfile -t APK_PATHS < <(find . -type f -path '*/outputs/apk/release/*.apk' -name '*.apk' | sort)
+          if [ "${#APK_PATHS[@]}" -ne 1 ]; then
+            echo "Expected exactly one release APK, found ${#APK_PATHS[@]}"
             find . -maxdepth 4 -type d -name outputs -print
+            printf '%s\n' "${APK_PATHS[@]}"
             exit 1
           fi
-          echo "Using APK: $APK_PATH"
-          cp "$APK_PATH" "dist/AsmrPlayer-${{ github.ref_name }}-release.apk"
+
+          apk="${APK_PATHS[0]}"
+          max_apk_bytes=$((20 * 1024 * 1024))
+          apk_bytes="$(stat -c '%s' "$apk")"
+          if [ "$apk_bytes" -gt "$max_apk_bytes" ]; then
+            echo "Release APK is too large: $apk_bytes bytes (limit: $max_apk_bytes)"
+            exit 1
+          fi
+          if unzip -Z1 "$apk" | grep -Ei '^lib/[^/]+/lib(onnxruntime|sherpa-onnx).*\.so$'; then
+            echo "Release APK must not contain the on-demand sherpa-onnx runtime"
+            exit 1
+          fi
+
+          target="AsmrPlayer-${{ github.ref_name }}-universal.apk"
+          echo "Copying $apk -> dist/$target"
+          cp "$apk" "dist/$target"
+          ls -lh dist
       - uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
           overwrite: true
-          files: dist/AsmrPlayer-${{ github.ref_name }}-release.apk
+          files: dist/*.apk
           token: ${{ secrets.GITHUB_TOKEN }}

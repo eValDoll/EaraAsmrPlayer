@@ -43,7 +43,7 @@ object PlaylistMediaItemMapper {
         val normalizedUri = repairPlayableUri(item.uri)
         if (normalizedUri.isBlank() || normalizedUri.equals("null", ignoreCase = true)) return null
         return MediaItemFactory.fromDetails(
-            mediaId = repairMediaId(item.mediaId, normalizedUri),
+            mediaId = item.mediaId.trim().ifBlank { normalizedUri },
             uri = normalizedUri,
             title = item.title,
             artist = item.artist,
@@ -64,15 +64,6 @@ object PlaylistMediaItemMapper {
         val trimmed = raw.trim()
         if (!trimmed.startsWith("content://", ignoreCase = true)) return trimmed
         return repairDocumentUri(trimmed)
-    }
-
-    private fun repairMediaId(raw: String, fallbackUri: String): String {
-        val trimmed = raw.trim().ifBlank { fallbackUri }
-        return if (trimmed.startsWith("content://", ignoreCase = true)) {
-            repairDocumentUri(trimmed)
-        } else {
-            trimmed
-        }
     }
 
     private fun repairDocumentUri(raw: String): String {

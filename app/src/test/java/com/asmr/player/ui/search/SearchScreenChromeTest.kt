@@ -3,7 +3,9 @@ package com.asmr.player.ui.search
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -11,6 +13,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -28,6 +31,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.asmr.player.ui.common.CollapsibleHeaderState
+import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import org.junit.Assert.assertEquals
 import org.junit.Rule
@@ -164,7 +168,7 @@ class SearchScreenChromeTest {
         composeRule.onNodeWithTag(SEARCH_CLEAR_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_LANGUAGE_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_SUBMIT_BUTTON_TAG).assertIsNotEnabled()
-        composeRule.onNodeWithTag(SEARCH_SUBMIT_SPINNER_TAG).assert(
+        composeRule.onNodeWithTag(SEARCH_SUBMIT_SPINNER_TAG, useUnmergedTree = true).assert(
             SemanticsMatcher.expectValue(SemanticsProperties.TestTag, SEARCH_SUBMIT_SPINNER_TAG)
         )
     }
@@ -194,12 +198,16 @@ class SearchScreenChromeTest {
         }
 
         composeRule.onNodeWithTag(SEARCH_SCOPE_BUTTON_TAG).performClick()
-        composeRule.onNodeWithText("中文作品").assertExists()
+        composeRule.onNodeWithTag(
+            "${SEARCH_SCOPE_OPTION_TAG_PREFIX}_${SearchFilterOption.ChineseTranslated.name}"
+        ).assertExists()
         composeRule.onNodeWithText("已购").assertExists()
         composeRule.onNodeWithText("预售").assertExists()
         composeRule.onNodeWithText("已收录").assertExists()
         composeRule.onNodeWithText("人气顺序").assertExists()
-        composeRule.onNodeWithText("最新发售").assertExists()
+        composeRule.onNodeWithTag(
+            "${SEARCH_SCOPE_OPTION_TAG_PREFIX}_${SearchFilterOption.ReleaseNew.name}"
+        ).assertExists()
         composeRule.onNodeWithText("销量最高").assertExists()
         composeRule.onNodeWithText("价格最高").assertExists()
     }
@@ -228,7 +236,9 @@ class SearchScreenChromeTest {
         }
 
         composeRule.onNodeWithTag(SEARCH_COLLECTED_SORT_BUTTON_TAG).performClick()
-        composeRule.onNodeWithText("最新发售").assertExists()
+        composeRule.onNodeWithTag(
+            "${SEARCH_COLLECTED_SORT_OPTION_TAG_PREFIX}_${SearchCollectedSortOption.ReleaseNew.name}"
+        ).assertExists()
         composeRule.onNodeWithText("最新收录").assertExists()
         composeRule.onNodeWithText("评分最高").assertExists()
         composeRule.onNodeWithTag("${SEARCH_COLLECTED_SORT_OPTION_TAG_PREFIX}_${SearchCollectedSortOption.ReleaseNew.name}").assert(
@@ -513,5 +523,63 @@ class SearchScreenChromeTest {
         composeRule.onNodeWithTag(SEARCH_CHROME_TAG).assert(
             SemanticsMatcher.expectValue(SemanticsProperties.StateDescription, "expanded")
         )
+    }
+
+    @Test
+    fun collapsedSearchChrome_doesNotBlockUnderlyingItemTap() {
+        composeRule.mainClock.autoAdvance = false
+        lateinit var chromeState: CollapsibleHeaderState
+        var itemClicks = 0
+
+        composeRule.setContent {
+            chromeState = remember { CollapsibleHeaderState() }
+
+            AsmrPlayerTheme {
+                Box(modifier = Modifier.interruptScrollableFlingOnPointerDown {}) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(64.dp)
+                            .testTag("search_top_item")
+                            .clickable { itemClicks += 1 }
+                    )
+                    SearchChrome(
+                        keyword = "RJ123456",
+                        onKeywordChange = {},
+                        selectedFilter = SearchFilterOption.Trend,
+                        selectedLocale = "ja_JP",
+                        filterControlsLocked = false,
+                        searchSubmitLocked = false,
+                        showSearchSpinner = false,
+                        showPagination = true,
+                        page = 2,
+                        canGoPrev = true,
+                        canGoNext = true,
+                        controlsLocked = false,
+                        rightPanelToggle = null,
+                        chromeState = chromeState,
+                        onMeasured = { chromeState.updateHeight(it.height.toFloat()) },
+                        onSearchSubmit = {},
+                        onFilterSelected = {},
+                        onLocaleSelected = {},
+                        onFirstPage = {},
+                        onPrev = {},
+                        onNext = {}
+                    )
+                }
+            }
+        }
+
+        composeRule.waitForIdle()
+        composeRule.runOnIdle { chromeState.collapse() }
+        composeRule.mainClock.advanceTimeBy(250)
+        composeRule.waitForIdle()
+
+        composeRule.onNodeWithTag("search_top_item").performTouchInput {
+            down(center)
+            up()
+        }
+
+        composeRule.runOnIdle { assertEquals(1, itemClicks) }
     }
 }

@@ -5,8 +5,18 @@ import android.content.res.Configuration
 import androidx.compose.ui.unit.IntSize
 import coil.request.ImageRequest
 import java.security.MessageDigest
+import java.util.LinkedHashMap
 
 object CacheKeyFactory {
+    private const val MaxRememberedHashes = 2048
+    private val hashCacheLock = Any()
+    private val hashCache = object : LinkedHashMap<String, String>(256, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean {
+            return size > MaxRememberedHashes
+        }
+    }
+    private val md5Digest = ThreadLocal.withInitial { MessageDigest.getInstance("MD5") }
+
     fun createKey(
         context: Context,
         model: Any,
@@ -17,7 +27,7 @@ object CacheKeyFactory {
         val w = size?.width ?: -1
         val h = size?.height ?: -1
         val dark = isDarkMode(context)
-        return md5("$version|$dark|$w|$h|$data")
+        return cachedMd5("$version|$dark|$w|$h|$data")
     }
 
     /**
@@ -31,7 +41,7 @@ object CacheKeyFactory {
     ): String {
         val data = normalizeModel(model)
         val dark = isDarkMode(context)
-        return md5("$version|$dark|$data")
+        return cachedMd5("$version|$dark|$data")
     }
 
     private fun normalizeModel(model: Any): String {
@@ -55,10 +65,24 @@ object CacheKeyFactory {
         return uiMode == Configuration.UI_MODE_NIGHT_YES
     }
 
-    private fun md5(input: String): String {
-        val digest = MessageDigest.getInstance("MD5").digest(input.toByteArray(Charsets.UTF_8))
-        return buildString(digest.size * 2) {
-            for (b in digest) append(((b.toInt() and 0xFF) + 0x100).toString(16).substring(1))
+    private fun cachedMd5(input: String): String {
+        synchronized(hashCacheLock) {
+            hashCache[input]?.let { return it }
+        }
+        val digest = checkNotNull(md5Digest.get())
+        digest.reset()
+        val bytes = digest.digest(input.toByteArray(Charsets.UTF_8))
+        val chars = CharArray(bytes.size * 2)
+        for (index in bytes.indices) {
+            val value = bytes[index].toInt() and 0xFF
+            chars[index * 2] = HexDigits[value ushr 4]
+            chars[index * 2 + 1] = HexDigits[value and 0x0F]
+        }
+        val hash = String(chars)
+        return synchronized(hashCacheLock) {
+            hashCache[input] ?: hash.also { hashCache[input] = it }
         }
     }
+
+    private const val HexDigits = "0123456789abcdef"
 }

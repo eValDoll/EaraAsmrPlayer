@@ -9,7 +9,10 @@ import com.asmr.player.ui.nav.isPrimaryRoute
 import com.asmr.player.ui.nav.resolvePrimaryRoute
 import org.junit.Assert.assertEquals
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class MainNavigationSupportTest {
 
     @Test
@@ -108,11 +111,11 @@ class MainNavigationSupportTest {
     }
 
     @Test
-    fun resolvePrimaryPagerBeyondBoundsPageCount_keepsAllPrimaryPagesComposed() {
+    fun resolvePrimaryPagerBeyondBoundsPageCount_keepsOnlyAdjacentPageComposed() {
         assertEquals(0, resolvePrimaryPagerBeyondBoundsPageCount(0))
         assertEquals(0, resolvePrimaryPagerBeyondBoundsPageCount(1))
         assertEquals(1, resolvePrimaryPagerBeyondBoundsPageCount(2))
-        assertEquals(7, resolvePrimaryPagerBeyondBoundsPageCount(8))
+        assertEquals(1, resolvePrimaryPagerBeyondBoundsPageCount(8))
     }
 
     @Test
@@ -205,6 +208,19 @@ class MainNavigationSupportTest {
         assertEquals(false, shouldHideStatusBarForImmersivePage("search", false))
         assertEquals(false, shouldHideStatusBarForImmersivePage("settings", false))
         assertEquals(false, shouldHideStatusBarForImmersivePage(null, false))
+    }
+
+    @Test
+    fun resolveAlbumDetailTransitionKey_isolatesEachDetailBackStackEntry() {
+        assertEquals(
+            "online-detail-entry",
+            resolveAlbumDetailTransitionKey("album_detail_online/{rj}", "online-detail-entry")
+        )
+        assertEquals(
+            "local-detail-entry",
+            resolveAlbumDetailTransitionKey("album_detail/{albumId}", "local-detail-entry")
+        )
+        assertEquals(null, resolveAlbumDetailTransitionKey("library", "library-entry"))
     }
 
     @Test

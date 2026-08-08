@@ -276,7 +276,7 @@ internal fun shouldClearPendingPrimaryNavigationRoute(
 }
 
 internal fun resolvePrimaryPagerBeyondBoundsPageCount(pageCount: Int): Int {
-    return (pageCount - 1).coerceAtLeast(0)
+    return (pageCount - 1).coerceIn(0, 1)
 }
 
 internal fun resolveCurrentPrimaryDestinationRoute(
@@ -302,6 +302,13 @@ internal fun shouldHideStatusBarForImmersivePage(
 ): Boolean {
     if (nowPlayingVisible) return true
     return currentRoute?.startsWith("album_detail") == true
+}
+
+internal fun resolveAlbumDetailTransitionKey(
+    currentRoute: String?,
+    backStackEntryId: String?
+): String? {
+    return backStackEntryId.takeIf { currentRoute?.startsWith("album_detail") == true }
 }
 
 internal fun NavHostController.navigateSingleTop(route: String, popUpToRoute: String? = null) {
@@ -351,7 +358,6 @@ internal fun shouldTriggerPrimaryRouteScrollToTop(
     )
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun PrimaryTopBarBrand(
     appName: String,
@@ -388,17 +394,18 @@ internal fun PrimaryTopBarBrand(
 
     Row(
         modifier = modifier
-            .fillMaxHeight()
-            .padding(start = 10.dp)
-            .then(clickModifier),
+            .padding(start = 6.dp)
+            .height(44.dp)
+            .then(clickModifier)
+            .padding(start = 2.dp, end = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp)
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         Icon(
             painter = painterResource(R.drawable.ic_launcher_foreground),
             contentDescription = null,
             tint = tint,
-            modifier = Modifier.size(42.dp)
+            modifier = Modifier.size(38.dp)
         )
         Text(
             text = appName,

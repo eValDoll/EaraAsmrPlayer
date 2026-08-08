@@ -11,7 +11,7 @@ import kotlin.math.log10
 import kotlin.math.sqrt
 
 @UnstableApi
-class VolumeThresholdAudioProcessor : BaseAudioProcessor() {
+class VolumeThresholdAudioProcessor : BaseAudioProcessor(), RuntimeAudioProcessor {
 
     companion object {
         const val MODE_THRESHOLD = 0
@@ -43,6 +43,8 @@ class VolumeThresholdAudioProcessor : BaseAudioProcessor() {
     private var limiterGain = 1f
     private var sampleRateHz = 44_100
     private val peakSafety = 0.95f
+    private val gateOpenDb = -70f
+    private val gateCloseDb = -75f
     private var gateOpen = false
     private var momentaryEmaPower = 0.0
     private var shortTermEmaPower = 0.0
@@ -90,6 +92,8 @@ class VolumeThresholdAudioProcessor : BaseAudioProcessor() {
         return inputAudioFormat
     }
 
+    override fun isRuntimeActive(): Boolean = !passthrough && enabled
+
     override fun onFlush() {
         resetForNewItem()
     }
@@ -125,6 +129,8 @@ class VolumeThresholdAudioProcessor : BaseAudioProcessor() {
 
         val modeSnapshot = mode
         val minGain = 0.125f
+        if (db >= gateOpenDb) gateOpen = true
+        if (db <= gateCloseDb) gateOpen = false
         if (dtSec > 0.0) elapsedSec += dtSec
 
         var desiredGain = when (modeSnapshot) {

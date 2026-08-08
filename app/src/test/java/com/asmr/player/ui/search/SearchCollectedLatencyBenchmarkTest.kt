@@ -280,13 +280,13 @@ class SearchCollectedLatencyBenchmarkTest {
             if (code == 404) continue
             if (code !in 200..299) return CollectedResult.Unknown
             if (body.isBlank()) return CollectedResult.Unknown
-            val obj = runCatching { Gson().fromJson(body, Map::class.java) as? Map<*, *> }.getOrNull() ?: return CollectedResult.Unknown
+            val obj = runCatching { Gson().fromJson(body, Map::class.java) }.getOrNull() ?: return CollectedResult.Unknown
             val sourceId = (obj["source_id"] as? String).orEmpty().trim().uppercase()
             val original = (obj["original_workno"] as? String).orEmpty().trim().uppercase()
             if (sourceId == normalized || original == normalized) return CollectedResult.Collected
             val editions = obj["language_editions"] as? List<*> ?: emptyList<Any>()
-            val hitEdition = editions.any { e ->
-                val em = e as? Map<*, *> ?: return@any false
+            val hitEdition = editions.any edition@ { e ->
+                val em = e as? Map<*, *> ?: return@edition false
                 (em["workno"] as? String).orEmpty().trim().uppercase() == normalized
             }
             return if (hitEdition) CollectedResult.Collected else CollectedResult.Unknown
@@ -308,16 +308,16 @@ class SearchCollectedLatencyBenchmarkTest {
             resp.body?.string().orEmpty()
         }
         if (body.isBlank()) return CollectedResult.Unknown
-        val obj = runCatching { Gson().fromJson(body, Map::class.java) as? Map<*, *> }.getOrNull() ?: return CollectedResult.Unknown
+        val obj = runCatching { Gson().fromJson(body, Map::class.java) }.getOrNull() ?: return CollectedResult.Unknown
         val works = obj["works"] as? List<*> ?: return CollectedResult.Unknown
-        val hit = works.any { w ->
-            val m = w as? Map<*, *> ?: return@any false
+        val hit = works.any work@ { w ->
+            val m = w as? Map<*, *> ?: return@work false
             val sourceId = (m["source_id"] as? String).orEmpty().trim().uppercase()
             val original = (m["original_workno"] as? String).orEmpty().trim().uppercase()
-            if (sourceId == normalized || original == normalized) return@any true
-            val editions = m["language_editions"] as? List<*> ?: return@any false
-            editions.any { e ->
-                val em = e as? Map<*, *> ?: return@any false
+            if (sourceId == normalized || original == normalized) return@work true
+            val editions = m["language_editions"] as? List<*> ?: return@work false
+            editions.any edition@ { e ->
+                val em = e as? Map<*, *> ?: return@edition false
                 (em["workno"] as? String).orEmpty().trim().uppercase() == normalized
             }
         }

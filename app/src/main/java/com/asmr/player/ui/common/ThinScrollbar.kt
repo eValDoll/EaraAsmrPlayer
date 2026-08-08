@@ -9,13 +9,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.asmr.player.ui.theme.AsmrTheme
+import com.asmr.player.performance.UiFrameWorkCoordinator
 import kotlin.math.ceil
 
 private const val InvalidThinScrollbarMetrics = Long.MIN_VALUE
@@ -113,6 +113,7 @@ private fun Modifier.drawThinScrollbar(
 ): Modifier {
     return then(
         Modifier.drawWithContent {
+            if (state.isScrollInProgress) UiFrameWorkCoordinator.markFrameCritical()
             drawContent()
             if (!state.canScrollBackward && !state.canScrollForward) return@drawWithContent
             drawThinScrollbarThumb(
@@ -141,6 +142,7 @@ private fun Modifier.drawThinScrollbar(
 ): Modifier {
     return then(
         Modifier.drawWithContent {
+            if (state.isScrollInProgress) UiFrameWorkCoordinator.markFrameCritical()
             drawContent()
             if (!state.canScrollBackward && !state.canScrollForward) return@drawWithContent
             drawThinScrollbarThumb(
@@ -169,6 +171,7 @@ private fun Modifier.drawThinScrollbar(
 ): Modifier {
     return then(
         Modifier.drawWithContent {
+            if (state.isScrollInProgress) UiFrameWorkCoordinator.markFrameCritical()
             drawContent()
             if (!state.canScrollBackward && !state.canScrollForward) return@drawWithContent
             drawThinScrollbarThumb(
@@ -213,11 +216,30 @@ private fun DrawScope.drawThinScrollbarThumb(
         minThumbLengthPx = minThumbLength.toPx()
     ) ?: return
     val thumbOffsetY = trackTop + (trackHeight - thumbHeight) * offsetFraction
-    drawRoundRect(
-        color = color.copy(alpha = alpha),
+    val resolvedColor = color.copy(alpha = alpha)
+    val radius = barWidth / 2f
+    val topCenterY = thumbOffsetY + radius
+    val bottomCenterY = thumbOffsetY + thumbHeight - radius
+    drawArc(
+        color = resolvedColor,
+        startAngle = 180f,
+        sweepAngle = 180f,
+        useCenter = true,
         topLeft = Offset(barX, thumbOffsetY),
-        size = Size(barWidth, thumbHeight),
-        cornerRadius = CornerRadius(barWidth / 2f, barWidth / 2f)
+        size = Size(barWidth, barWidth),
+    )
+    drawRect(
+        color = resolvedColor,
+        topLeft = Offset(barX, topCenterY),
+        size = Size(barWidth, (bottomCenterY - topCenterY).coerceAtLeast(0f)),
+    )
+    drawArc(
+        color = resolvedColor,
+        startAngle = 0f,
+        sweepAngle = 180f,
+        useCenter = true,
+        topLeft = Offset(barX, bottomCenterY - radius),
+        size = Size(barWidth, barWidth),
     )
 }
 

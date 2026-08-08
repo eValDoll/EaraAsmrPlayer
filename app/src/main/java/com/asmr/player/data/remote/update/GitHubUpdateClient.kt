@@ -1,5 +1,6 @@
 package com.asmr.player.data.remote.update
 
+import android.os.Build
 import com.asmr.player.data.remote.NetworkHeaders
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
@@ -19,7 +20,8 @@ data class UpdateRelease(
 
 class GitHubUpdateClient(
     private val okHttpClient: OkHttpClient,
-    private val gson: Gson = Gson()
+    private val gson: Gson = Gson(),
+    private val supportedAbis: List<String> = Build.SUPPORTED_ABIS.toList()
 ) {
     suspend fun fetchLatestRelease(owner: String, repo: String): UpdateRelease {
         val url = "https://api.github.com/repos/$owner/$repo/releases/latest"
@@ -42,7 +44,7 @@ class GitHubUpdateClient(
             val parsed = gson.fromJson(bodyStr, GitHubReleaseResponse::class.java)
             val tag = parsed.tagName.orEmpty().trim()
             val version = normalizeVersionName(tag)
-            val asset = pickApkAsset(parsed.assets.orEmpty())
+            val asset = pickApkAssetForDevice(parsed.assets.orEmpty(), supportedAbis)
                 ?: throw IllegalStateException("Release 未包含 APK 资源")
             return UpdateRelease(
                 tagName = tag,
@@ -65,16 +67,6 @@ class GitHubUpdateClient(
         val s = tagOrVersion.trim()
         if (s.startsWith("v", ignoreCase = true) && s.length > 1) return s.substring(1)
         return s
-    }
-
-    private fun pickApkAsset(assets: List<GitHubReleaseAsset>): GitHubReleaseAsset? {
-        val apks = assets.filter { it.name.orEmpty().lowercase().endsWith(".apk") }
-        if (apks.isEmpty()) return null
-        val prefer = apks.firstOrNull { it.name.orEmpty().contains("universal", ignoreCase = true) }
-            ?: apks.firstOrNull { it.name.orEmpty().contains("arm64", ignoreCase = true) }
-            ?: apks.firstOrNull { it.name.orEmpty().contains("debug", ignoreCase = true) }
-            ?: apks.first()
-        return prefer.takeIf { it.browserDownloadUrl.orEmpty().startsWith("http", ignoreCase = true) }
     }
 
     private fun compareVersion(a: String, b: String): Int {
@@ -120,3 +112,30 @@ data class GitHubReleaseAsset(
     @SerializedName("browser_download_url") val browserDownloadUrl: String? = null,
     val size: Long? = null
 )
+
+internal fun pickApkAssetForDevice(
+    assets: List<GitHubReleaseAsset>,
+    supportedAbis: List<String>
+): GitHubReleaseAsset? {
+    val apks = assets.filter { it.name.orEmpty().lowercase().endsWith(".apk") }
+    if (apks.isEmpty()) return null
+    val preferred = supportedAbis.firstNotNullOfOrNull { abi ->
+        apks.firstOrNull { asset -> assetNameMatchesAbi(asset.name.orEmpty(), abi) }
+    }
+        ?: apks.firstOrNull { it.name.orEmpty().contains("universal", ignoreCase = true) }
+        ?: apks.firstOrNull { it.name.orEmpty().contains("debug", ignoreCase = true) }
+        ?: apks.first()
+    return preferred.takeIf {
+        it.browserDownloadUrl.orEmpty().startsWith("http", ignoreCase = true)
+    }
+}
+
+private fun assetNameMatchesAbi(name: String, abi: String): Boolean = when (abi.lowercase()) {
+    "arm64-v8a" -> name.contains("arm64-v8a", ignoreCase = true) ||
+        name.contains("arm64", ignoreCase = true)
+    "armeabi-v7a" -> name.contains("armeabi-v7a", ignoreCase = true) ||
+        name.contains("armv7", ignoreCase = true)
+    "x86_64" -> name.contains("x86_64", ignoreCase = true)
+    "x86" -> Regex("(^|[-_])x86([-.]|$)", RegexOption.IGNORE_CASE).containsMatchIn(name)
+    else -> name.contains(abi, ignoreCase = true)
+}

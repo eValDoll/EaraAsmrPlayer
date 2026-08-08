@@ -38,7 +38,13 @@ object AppDatabaseProvider {
                 AppDatabaseMigrations.MIGRATION_19_20,
                 AppDatabaseMigrations.MIGRATION_20_21,
                 AppDatabaseMigrations.MIGRATION_21_22,
-                AppDatabaseMigrations.MIGRATION_22_23
+                AppDatabaseMigrations.MIGRATION_22_23,
+                AppDatabaseMigrations.MIGRATION_23_24,
+                AppDatabaseMigrations.MIGRATION_24_25,
+                AppDatabaseMigrations.MIGRATION_25_26,
+                AppDatabaseMigrations.MIGRATION_26_27,
+                AppDatabaseMigrations.MIGRATION_27_28,
+                AppDatabaseMigrations.MIGRATION_28_29
             )
             // Never wipe the local database during app upgrades.
             // If a migration is missing, fail loudly so user data can still be recovered.

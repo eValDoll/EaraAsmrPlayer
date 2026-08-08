@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.data.local.db.entities.AlbumEntity
+import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.domain.model.Album
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.player.PlayerViewModel
@@ -506,7 +507,7 @@ private fun RecentAlbumRow(
                 verticalArrangement = if (featured) Arrangement.Bottom else Arrangement.Center
             ) {
                 Text(
-                    text = item.album.title,
+                    text = item.album.titleForDisplay,
                     color = textColor,
                     style = (if (featured) MaterialTheme.typography.bodyMedium else MaterialTheme.typography.labelSmall)
                         .copy(fontWeight = FontWeight.SemiBold),
@@ -564,7 +565,7 @@ internal fun formatRecentProgressPosition(ms: Long): String {
 private fun albumDomain(album: AlbumEntity): Album {
     return Album(
         id = album.id,
-        title = album.title,
+        title = album.titleForDisplay,
         path = album.path,
         localPath = album.localPath,
         downloadPath = album.downloadPath,

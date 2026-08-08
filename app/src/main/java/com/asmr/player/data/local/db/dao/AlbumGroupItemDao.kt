@@ -18,7 +18,7 @@ interface AlbumGroupItemDao {
             i.createdAt AS createdAt,
             t.id AS trackId,
             t.albumId AS albumId,
-            t.title AS trackTitle,
+            COALESCE(NULLIF(t.displayTitle, ''), t.title) AS trackTitle,
             t.duration AS trackDuration,
             (
                 EXISTS(SELECT 1 FROM subtitles s WHERE s.trackId = t.id LIMIT 1) OR
@@ -26,7 +26,7 @@ interface AlbumGroupItemDao {
             ) AS hasSubtitles,
             t.path AS trackPath,
             t.`group` AS trackGroup,
-            a.title AS albumTitle,
+            COALESCE(NULLIF(a.displayTitle, ''), a.title) AS albumTitle,
             a.cv AS albumCv,
             a.rjCode AS albumRjCode,
             a.workId AS albumWorkId,

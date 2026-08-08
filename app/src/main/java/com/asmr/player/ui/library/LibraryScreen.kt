@@ -2,11 +2,9 @@ package com.asmr.player.ui.library
 
 import android.content.Intent
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -52,6 +50,7 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.foundation.layout.fillMaxHeight
 import com.asmr.player.util.Formatting
 import com.asmr.player.util.isOnlineTrackPath
+import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
@@ -66,6 +65,7 @@ import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
+import com.asmr.player.ui.common.lightweightVerticalStretchOverscroll
 import com.asmr.player.ui.common.rememberAudioMeta
 import com.asmr.player.ui.common.rememberAudioMetaText
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
@@ -94,6 +94,7 @@ import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -180,7 +181,9 @@ import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
+import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
 import com.asmr.player.ui.common.thinScrollbar
+import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.playback.MediaItemFactory
 
 internal const val LIBRARY_CHROME_TAG = "library_chrome"
@@ -252,6 +255,7 @@ private fun LibraryActionItem(
 fun LibraryScreen(
     windowSizeClass: WindowSizeClass,
     isActive: Boolean = true,
+    isDataActive: Boolean = isActive,
     onAlbumClick: (Album) -> Unit,
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
     onOpenPlaylistPicker: (MediaItem) -> Unit = {},
@@ -263,19 +267,19 @@ fun LibraryScreen(
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val materialColorScheme = MaterialTheme.colorScheme
-    val uiState by viewModel.uiState.collectAsState()
-    val viewMode by viewModel.libraryViewMode.collectAsState()
-    val querySpec by viewModel.querySpec.collectAsState()
-    val hasActiveFilters by viewModel.hasActiveFilters.collectAsState()
-    val tags by viewModel.availableTags.collectAsState()
-    val userTagsByAlbumId by viewModel.userTagsByAlbumId.collectAsState()
-    val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsState()
-    val isGlobalSyncRunning by viewModel.isGlobalSyncRunning.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWhileActive(isDataActive)
+    val viewMode by viewModel.libraryViewMode.collectAsStateWhileActive(isDataActive)
+    val querySpec by viewModel.querySpec.collectAsStateWhileActive(isDataActive)
+    val hasActiveFilters by viewModel.hasActiveFilters.collectAsStateWhileActive(isDataActive)
+    val tags by viewModel.availableTags.collectAsStateWhileActive(isDataActive)
+    val userTagsByAlbumId by viewModel.userTagsByAlbumId.collectAsStateWhileActive(isDataActive)
+    val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsStateWhileActive(isDataActive)
+    val isGlobalSyncRunning by viewModel.isGlobalSyncRunning.collectAsStateWhileActive(isDataActive)
     val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
     val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
     val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
     val settingsViewModel: SettingsViewModel = hiltViewModel()
-    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsState()
+    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsStateWhileActive(isDataActive)
     val playerViewModel: PlayerViewModel = hiltViewModel()
     val scope = rememberCoroutineScope()
     var searchText by rememberSaveable { mutableStateOf(querySpec.textQuery.orEmpty()) }
@@ -306,7 +310,7 @@ fun LibraryScreen(
         if (newText != searchText) searchText = newText
     }
 
-    val listState = rememberSaveable(saver = LazyListState.Saver) { LazyListState(0, 0) }
+    val listState = rememberSaveablePrefetchedLazyListState(stateKey = "library")
     val gridState = rememberSaveable(saver = androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState.Saver) {
         androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState()
     }
@@ -321,7 +325,7 @@ fun LibraryScreen(
     val pagedAlbumIndices = remember(pagedAlbumSnapshot.items.size) { List(pagedAlbumSnapshot.items.size) { it } }
     val loadedTrackAlbumHeaders = pagedTrackAlbumHeaders.itemSnapshotList.items
     val expandedAlbumTracks by (if (isTrackList) viewModel.expandedTrackAlbumTracks else flowOf(emptyMap())).collectAsState(initial = emptyMap())
-    val expandedAlbumIds by viewModel.expandedTrackAlbumIds.collectAsState()
+    val expandedAlbumIds by viewModel.expandedTrackAlbumIds.collectAsStateWhileActive(isDataActive)
     var actionAlbum by remember { mutableStateOf<Album?>(null) }
     var showAlbumActions by remember { mutableStateOf(false) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
@@ -418,7 +422,7 @@ fun LibraryScreen(
                         onAlbumClick(
                             Album(
                                 id = a.id,
-                                title = a.title,
+                                title = a.titleForDisplay,
                                 path = a.path,
                                 localPath = a.localPath,
                                 downloadPath = a.downloadPath,
@@ -532,7 +536,12 @@ fun LibraryScreen(
                             }
                         } else {
                             // Main content area
-                            Box(modifier = Modifier.fillMaxSize()) {
+                            CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
+                                ) {
                                 val isTrackListLoading = isTrackList &&
                                     (pagedTrackAlbumHeaders.loadState.refresh is LoadState.Loading) &&
                                     pagedTrackAlbumHeaders.itemCount == 0
@@ -599,6 +608,10 @@ fun LibraryScreen(
                                         state = listState,
                                         modifier = Modifier
                                             .fillMaxSize()
+                                            .lightweightVerticalStretchOverscroll(
+                                                isAtStart = { !listState.canScrollBackward },
+                                                isAtEnd = { !listState.canScrollForward },
+                                            )
                                             .clearFocusOnTapOutside()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(listState),
@@ -794,8 +807,8 @@ fun LibraryScreen(
                                     LazyStaggeredGridPreloader(
                                         state = gridState,
                                         itemCount = pagedAlbums.itemCount,
+                                        enabled = isActive,
                                         preloadNext = 24,
-                                        preloadNextWhileScrolling = 16,
                                         preloadSize = gridPreloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->
@@ -807,6 +820,10 @@ fun LibraryScreen(
                                         state = gridState,
                                         modifier = Modifier
                                             .fillMaxSize()
+                                            .lightweightVerticalStretchOverscroll(
+                                                isAtStart = { !gridState.canScrollBackward },
+                                                isAtEnd = { !gridState.canScrollForward },
+                                            )
                                             .clearFocusOnTapOutside()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(gridState),
@@ -837,7 +854,7 @@ fun LibraryScreen(
                                                 onRjClick = { copyMeta("RJ", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
                                                 onCircleLongClick = ::openMetaActions,
-                                                onCvClick = { copyMeta("CV", it) },
+                                                onCvClick = { copyMeta("声优", it) },
                                                 onCvLongClick = ::openMetaActions,
                                                 onTagClick = { copyMeta("标签", it) },
                                                 onTagLongClick = ::openMetaActions,
@@ -860,8 +877,8 @@ fun LibraryScreen(
                                     LazyListPreloader(
                                         state = listState,
                                         itemCount = pagedAlbums.itemCount,
+                                        enabled = isActive,
                                         preloadNext = 24,
-                                        preloadNextWhileScrolling = 16,
                                         preloadSize = preloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->
@@ -872,6 +889,10 @@ fun LibraryScreen(
                                         state = listState,
                                         modifier = Modifier
                                             .fillMaxSize()
+                                            .lightweightVerticalStretchOverscroll(
+                                                isAtStart = { !listState.canScrollBackward },
+                                                isAtEnd = { !listState.canScrollForward },
+                                            )
                                             .clearFocusOnTapOutside()
                                             .nestedScroll(chromeState.nestedScrollConnection)
                                             .thinScrollbar(listState),
@@ -900,7 +921,7 @@ fun LibraryScreen(
                                                 onRjClick = { copyMeta("RJ", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
                                                 onCircleLongClick = ::openMetaActions,
-                                                onCvClick = { copyMeta("CV", it) },
+                                                onCvClick = { copyMeta("声优", it) },
                                                 onCvLongClick = ::openMetaActions,
                                                 onTagClick = { copyMeta("标签", it) },
                                                 onTagLongClick = ::openMetaActions,
@@ -911,9 +932,7 @@ fun LibraryScreen(
                                 }
 
                                 LibraryChrome(
-                                    modifier = Modifier
-                                        .align(Alignment.TopCenter)
-                                        .interruptScrollableFlingOnPointerDown { stopActiveScroll() },
+                                    modifier = Modifier.align(Alignment.TopCenter),
                                     searchText = searchText,
                                     onSearchTextChange = {
                                         searchText = it
@@ -936,6 +955,7 @@ fun LibraryScreen(
                                     chromeState = chromeState,
                                     onMeasured = { chromeState.updateHeight(it.height.toFloat()) }
                                 )
+                            }
                             }
                         }
                     }
@@ -1144,11 +1164,6 @@ internal fun LibraryChrome(
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val collapseOvershootPx = with(LocalDensity.current) { LibraryChromeCollapseOvershoot.toPx() }
-    val animatedChromeOffsetPx = animateFloatAsState(
-        targetValue = chromeState.offsetPx,
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-        label = "libraryChromeOffset"
-    )
     val collapseStateDescription by remember(chromeState) {
         derivedStateOf { collapsibleHeaderUiState(chromeState.collapseFraction) }
     }
@@ -1166,7 +1181,7 @@ internal fun LibraryChrome(
             .onSizeChanged(onMeasured)
             .graphicsLayer {
                 val collapseFraction = chromeState.collapseFraction.coerceIn(0f, 1f)
-                translationY = animatedChromeOffsetPx.value - (collapseFraction * collapseOvershootPx)
+                translationY = chromeState.offsetPx - (collapseFraction * collapseOvershootPx)
                 alpha = 1f - (collapseFraction * 0.1f)
             }
             .semantics { stateDescription = collapseStateDescription }

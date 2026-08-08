@@ -71,13 +71,13 @@ private fun Modifier.activeWavyUnderline(active: Boolean, color: Color): Modifie
         val path = Path().apply { moveTo(0f, baselineY) }
         var x = 0f
         while (x < size.width) {
-            path.relativeQuadraticBezierTo(
+            path.relativeQuadraticTo(
                 wavelength / 4f,
                 -amplitude,
                 wavelength / 2f,
                 0f
             )
-            path.relativeQuadraticBezierTo(
+            path.relativeQuadraticTo(
                 wavelength / 4f,
                 amplitude,
                 wavelength / 2f,

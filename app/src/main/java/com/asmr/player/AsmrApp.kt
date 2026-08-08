@@ -2,22 +2,22 @@ package com.asmr.player
 
 import android.app.Application
 import androidx.work.Configuration
-import coil.disk.DiskCache
 import coil.ImageLoader
 import coil.ImageLoaderFactory
 import coil.memory.MemoryCache
+import com.asmr.player.cache.AppCacheManager
 import com.asmr.player.data.local.db.AppDatabaseProvider
 import com.asmr.player.cache.ImageCacheManager
 import com.asmr.player.data.remote.download.DownloadQueueCoordinator
 import com.asmr.player.data.remote.download.DownloadRuntimeConfig
 import com.asmr.player.data.settings.SettingsRepository
+import com.asmr.player.subtitle.SubtitleTaskRepository
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
-import java.io.File
 import javax.inject.Inject
 import javax.inject.Named
 
@@ -32,11 +32,21 @@ class AsmrApp : Application(), ImageLoaderFactory, Configuration.Provider {
     @Inject
     lateinit var settingsRepository: SettingsRepository
 
+    @Inject
+    lateinit var appCacheManager: AppCacheManager
+
     override fun onCreate() {
         super.onCreate()
+        appCacheManager.start()
+        applicationScope.launch {
+            runCatching {
+                getSharedPreferences("album_detail_tree_prefs", MODE_PRIVATE).all
+            }
+        }
         applicationScope.launch {
             runCatching { settingsRepository.clearSleepTimer() }
             runCatching { AppDatabaseProvider.get(applicationContext) }
+            runCatching { SubtitleTaskRepository.get(applicationContext).reconcileOnAppLaunch() }
             runCatching { DownloadQueueCoordinator.recoverDownloadsOnAppLaunch(applicationContext) }
         }
     }
@@ -61,12 +71,7 @@ class AsmrApp : Application(), ImageLoaderFactory, Configuration.Provider {
                     .maxSizePercent(0.15)
                     .build()
             }
-            .diskCache {
-                DiskCache.Builder()
-                    .directory(File(cacheDir, "coil_cache"))
-                    .maxSizeBytes(200L * 1024 * 1024)
-                    .build()
-            }
+            .diskCache(null)
             .build()
     }
 }

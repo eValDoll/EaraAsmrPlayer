@@ -53,7 +53,6 @@ import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -64,7 +63,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -79,6 +78,7 @@ import com.asmr.player.data.local.db.entities.ListeningSessionEntity
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.albumCoverImageModel
+import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.theme.AsmrColorScheme
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.util.ListeningDay
@@ -97,32 +97,35 @@ import kotlin.math.roundToLong
 @Composable
 fun ListeningCalendarScreen(
     windowSizeClass: WindowSizeClass,
+    isActive: Boolean = true,
+    isDataActive: Boolean = isActive,
     onOpenDlsiteLogin: () -> Unit,
     onOpenAlbum: (ListeningSessionEntity) -> Unit,
     viewModel: ListeningCalendarViewModel = hiltViewModel()
 ) {
-    val summary by viewModel.summary.collectAsState()
-    val summaryArtwork by viewModel.summaryArtwork.collectAsState()
-    val summaryComparison by viewModel.summaryComparison.collectAsState()
-    val comparisonGranularity by viewModel.comparisonGranularity.collectAsState()
-    val heatmap by viewModel.heatmap.collectAsState()
-    val availableYears by viewModel.availableYears.collectAsState()
-    val selectedYear by viewModel.selectedYear.collectAsState()
-    val selectedDate by viewModel.selectedDate.collectAsState()
-    val selectedSessions by viewModel.selectedSessions.collectAsState()
-    val isDlsiteLoggedIn by viewModel.isDlsiteLoggedIn.collectAsState()
+    val summary by viewModel.summary.collectAsStateWhileActive(isDataActive)
+    val summaryArtwork by viewModel.summaryArtwork.collectAsStateWhileActive(isDataActive)
+    val summaryComparison by viewModel.summaryComparison.collectAsStateWhileActive(isDataActive)
+    val comparisonGranularity by viewModel.comparisonGranularity.collectAsStateWhileActive(isDataActive)
+    val heatmap by viewModel.heatmap.collectAsStateWhileActive(isDataActive)
+    val availableYears by viewModel.availableYears.collectAsStateWhileActive(isDataActive)
+    val selectedYear by viewModel.selectedYear.collectAsStateWhileActive(isDataActive)
+    val selectedDate by viewModel.selectedDate.collectAsStateWhileActive(isDataActive)
+    val selectedSessions by viewModel.selectedSessions.collectAsStateWhileActive(isDataActive)
+    val isDlsiteLoggedIn by viewModel.isDlsiteLoggedIn.collectAsStateWhileActive(isDataActive)
     val colorScheme = AsmrTheme.colorScheme
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
     val bottomOverlayPadding = LocalBottomOverlayPadding.current
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(isActive) {
+        if (!isActive) return@LaunchedEffect
         viewModel.refreshDlsiteLoginState()
     }
 
-    DisposableEffect(lifecycleOwner, viewModel) {
+    DisposableEffect(lifecycleOwner, viewModel, isActive) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME) {
+            if (isActive && event == Lifecycle.Event.ON_RESUME) {
                 viewModel.refreshDlsiteLoginState()
             }
         }

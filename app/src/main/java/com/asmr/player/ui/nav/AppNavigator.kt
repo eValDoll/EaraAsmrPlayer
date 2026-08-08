@@ -48,7 +48,8 @@ internal fun resolveAlbumDetailPopUpToRoute(currentRoute: String?): String {
 }
 
 class AppNavigator(
-    private val navController: NavHostController
+    private val navController: NavHostController,
+    private val scheduleAlbumDetailNavigation: (() -> Unit) -> Unit = { navigation -> navigation() }
 ) {
     fun openAlbumDetail(albumId: Long?, rj: String?, preferDlsitePlay: Boolean = false) {
         val normalizedRj = rj?.trim().orEmpty()
@@ -63,19 +64,15 @@ class AppNavigator(
             append(id)
             if (preferDlsitePlay) append("?initialTab=dlsitePlay")
         }
-        val refreshToken = System.currentTimeMillis()
-        val currentRoute = navController.currentBackStackEntry?.destination?.route
-        val popToRoute = resolveAlbumDetailPopUpToRoute(currentRoute)
-        navController.navigate(route) {
-            launchSingleTop = true
-            restoreState = false
-            popUpTo(popToRoute) { inclusive = false; saveState = true }
+        scheduleAlbumDetailNavigation {
+            val currentRoute = navController.currentBackStackEntry?.destination?.route
+            val popToRoute = resolveAlbumDetailPopUpToRoute(currentRoute)
+            navController.navigate(route) {
+                launchSingleTop = true
+                restoreState = false
+                popUpTo(popToRoute) { inclusive = false; saveState = true }
+            }
         }
-        runCatching { navController.getBackStackEntry(route) }
-            .getOrNull()
-            ?.savedStateHandle
-            ?.set("refreshToken", refreshToken)
-            ?: navController.currentBackStackEntry?.savedStateHandle?.set("refreshToken", refreshToken)
     }
 
     fun openAlbumDetailByRj(rj: String, preferDlsitePlay: Boolean = false) {
@@ -85,28 +82,26 @@ class AppNavigator(
             normalized,
             initialTab = if (preferDlsitePlay) "dlsitePlay" else null
         )
-        val refreshToken = System.currentTimeMillis()
-        val currentRoute = navController.currentBackStackEntry?.destination?.route
-        val popToRoute = resolveAlbumDetailPopUpToRoute(currentRoute)
-        navController.navigate(route) {
-            launchSingleTop = true
-            restoreState = false
-            popUpTo(popToRoute) { inclusive = false; saveState = true }
+        scheduleAlbumDetailNavigation {
+            val currentRoute = navController.currentBackStackEntry?.destination?.route
+            val popToRoute = resolveAlbumDetailPopUpToRoute(currentRoute)
+            navController.navigate(route) {
+                launchSingleTop = true
+                restoreState = false
+                popUpTo(popToRoute) { inclusive = false; saveState = true }
+            }
         }
-        runCatching { navController.getBackStackEntry(route) }
-            .getOrNull()
-            ?.savedStateHandle
-            ?.set("refreshToken", refreshToken)
-            ?: navController.currentBackStackEntry?.savedStateHandle?.set("refreshToken", refreshToken)
     }
 
     fun openAlbumDetailByRjStacked(rj: String) {
         val normalized = rj.trim().uppercase()
         if (normalized.isBlank()) return
         val route = Routes.albumDetailByRj(normalized)
-        navController.navigate(route) {
-            launchSingleTop = false
-            restoreState = false
+        scheduleAlbumDetailNavigation {
+            navController.navigate(route) {
+                launchSingleTop = false
+                restoreState = false
+            }
         }
     }
 }

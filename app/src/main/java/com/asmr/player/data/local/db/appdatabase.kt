@@ -11,6 +11,7 @@ import com.asmr.player.data.local.db.dao.DownloadDao
 import com.asmr.player.data.local.db.dao.ListeningSessionDao
 import com.asmr.player.data.local.db.dao.LocalTreeCacheDao
 import com.asmr.player.data.local.db.dao.ManualLyricsSourceDao
+import com.asmr.player.data.local.db.dao.OnlineSavedResourceDao
 import com.asmr.player.data.local.db.dao.PlaylistDao
 import com.asmr.player.data.local.db.dao.PlaylistItemDao
 import com.asmr.player.data.local.db.dao.PlayStatDao
@@ -18,6 +19,8 @@ import com.asmr.player.data.local.db.dao.TagDao
 import com.asmr.player.data.local.db.dao.TrackTagDao
 import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.local.db.dao.RemoteSubtitleSourceDao
+import com.asmr.player.data.local.db.dao.SubtitleTaskDao
+import com.asmr.player.data.local.db.dao.SubtitleTitleOwnerDao
 import com.asmr.player.data.local.db.dao.TrackSliceDao
 import com.asmr.player.data.local.db.dao.TrackPlaybackProgressDao
 import com.asmr.player.data.local.db.entities.AlbumGroupEntity
@@ -32,10 +35,19 @@ import com.asmr.player.data.local.db.entities.DownloadTaskEntity
 import com.asmr.player.data.local.db.entities.ListeningSessionEntity
 import com.asmr.player.data.local.db.entities.LocalTreeCacheEntity
 import com.asmr.player.data.local.db.entities.ManualLyricsSourceEntity
+import com.asmr.player.data.local.db.entities.OnlineSavedResourceEntity
 import com.asmr.player.data.local.db.entities.PlaylistEntity
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
 import com.asmr.player.data.local.db.entities.PlaylistTrackCrossRef
 import com.asmr.player.data.local.db.entities.SubtitleEntity
+import com.asmr.player.data.local.db.entities.SubtitleCommittedCaptionEntity
+import com.asmr.player.data.local.db.entities.SubtitleFallbackCaptionEntity
+import com.asmr.player.data.local.db.entities.SubtitleTaskEntity
+import com.asmr.player.data.local.db.entities.SubtitleTitleOwnerEntity
+import com.asmr.player.data.local.db.entities.SubtitleTaskItemEntity
+import com.asmr.player.data.local.db.entities.SubtitleTaskSnapshotEntity
+import com.asmr.player.data.local.db.entities.SubtitleTranscriptionChunkEntity
+import com.asmr.player.data.local.db.entities.SubtitleTranslationSourceEntity
 import com.asmr.player.data.local.db.entities.TagEntity
 import com.asmr.player.data.local.db.entities.TrackTagEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
@@ -66,9 +78,18 @@ import com.asmr.player.data.local.db.entities.TrackPlaybackProgressEntity
         ManualLyricsSourceEntity::class,
         TrackSliceEntity::class,
         TrackPlaybackProgressEntity::class,
-        ListeningSessionEntity::class
+        ListeningSessionEntity::class,
+        OnlineSavedResourceEntity::class,
+        SubtitleTaskEntity::class,
+        SubtitleTaskItemEntity::class,
+        SubtitleTaskSnapshotEntity::class,
+        SubtitleTranscriptionChunkEntity::class,
+        SubtitleTranslationSourceEntity::class,
+        SubtitleFallbackCaptionEntity::class,
+        SubtitleCommittedCaptionEntity::class,
+        SubtitleTitleOwnerEntity::class
     ],
-    version = 23,
+    version = 29,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -90,6 +111,9 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun trackSliceDao(): TrackSliceDao
     abstract fun trackPlaybackProgressDao(): TrackPlaybackProgressDao
     abstract fun listeningSessionDao(): ListeningSessionDao
+    abstract fun onlineSavedResourceDao(): OnlineSavedResourceDao
+    abstract fun subtitleTaskDao(): SubtitleTaskDao
+    abstract fun subtitleTitleOwnerDao(): SubtitleTitleOwnerDao
 
     companion object {
         const val DATABASE_NAME = "asmr_player.db"

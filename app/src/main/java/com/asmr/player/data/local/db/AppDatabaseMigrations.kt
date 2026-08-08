@@ -413,4 +413,160 @@ object AppDatabaseMigrations {
             )
         }
     }
+
+    val MIGRATION_23_24: Migration = object : Migration(23, 24) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `online_saved_resources` (" +
+                    "`id` INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT, " +
+                    "`albumId` INTEGER NOT NULL, " +
+                    "`relativePath` TEXT NOT NULL, " +
+                    "`url` TEXT NOT NULL, " +
+                    "`fileType` TEXT NOT NULL)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_online_saved_resources_albumId` " +
+                    "ON `online_saved_resources` (`albumId`)"
+            )
+        }
+    }
+
+    val MIGRATION_24_25: Migration = object : Migration(24, 25) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `subtitle_task_results` (" +
+                    "`trackId` INTEGER NOT NULL, " +
+                    "`workId` TEXT NOT NULL, " +
+                    "`state` TEXT NOT NULL, " +
+                    "`message` TEXT NOT NULL, " +
+                    "`updatedAt` INTEGER NOT NULL, " +
+                    "PRIMARY KEY(`trackId`), " +
+                    "FOREIGN KEY(`trackId`) REFERENCES `tracks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE)"
+            )
+        }
+    }
+
+    val MIGRATION_25_26: Migration = object : Migration(25, 26) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("DROP TABLE IF EXISTS `subtitle_task_results`")
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `subtitle_tasks` (" +
+                    "`id` TEXT NOT NULL, `origin` TEXT NOT NULL, `title` TEXT NOT NULL, " +
+                    "`rjCode` TEXT NOT NULL, `state` TEXT NOT NULL, `warning` TEXT NOT NULL, " +
+                    "`createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))"
+            )
+            db.execSQL(
+                "CREATE TABLE IF NOT EXISTS `subtitle_task_items` (" +
+                    "`id` TEXT NOT NULL, `taskId` TEXT NOT NULL, `trackId` INTEGER NOT NULL, " +
+                    "`trackTitle` TEXT NOT NULL, `trackPath` TEXT NOT NULL, `mode` TEXT NOT NULL, " +
+                    "`queueSequence` INTEGER NOT NULL, `state` TEXT NOT NULL, `suspendedFromState` TEXT NOT NULL, " +
+                    "`transcriptionChunkCursor` INTEGER NOT NULL, `transcriptionProgress` INTEGER NOT NULL, " +
+                    "`transcribedMs` INTEGER NOT NULL, `totalDurationMs` INTEGER NOT NULL, " +
+                    "`translationCursor` INTEGER NOT NULL, `translationTotal` INTEGER NOT NULL, " +
+                    "`translationBatchIndex` INTEGER NOT NULL, `translationBatchTotal` INTEGER NOT NULL, " +
+                    "`attempt` INTEGER NOT NULL, `nextAttemptAt` INTEGER NOT NULL, `errorMessage` TEXT NOT NULL, " +
+                    "`originalHash` TEXT NOT NULL, `lastPublishedHash` TEXT NOT NULL, " +
+                    "`createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`), " +
+                    "FOREIGN KEY(`taskId`) REFERENCES `subtitle_tasks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE, " +
+                    "FOREIGN KEY(`trackId`) REFERENCES `tracks`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE)"
+            )
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_subtitle_task_items_taskId` ON `subtitle_task_items` (`taskId`)")
+            db.execSQL("CREATE UNIQUE INDEX IF NOT EXISTS `index_subtitle_task_items_trackId` ON `subtitle_task_items` (`trackId`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_subtitle_task_items_state_queueSequence` ON `subtitle_task_items` (`state`, `queueSequence`)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS `index_subtitle_task_items_nextAttemptAt` ON `subtitle_task_items` (`nextAttemptAt`)")
+
+            createItemChildTable(
+                db = db,
+                table = "subtitle_task_snapshots",
+                columns = "`captionIndex` INTEGER NOT NULL, `startMs` INTEGER NOT NULL, `endMs` INTEGER NOT NULL, `text` TEXT NOT NULL",
+                secondPrimaryKey = "captionIndex"
+            )
+            createItemChildTable(
+                db = db,
+                table = "subtitle_transcription_chunks",
+                columns = "`chunkIndex` INTEGER NOT NULL, `startMs` INTEGER NOT NULL, `endMs` INTEGER NOT NULL, " +
+                    "`segmentsJson` TEXT NOT NULL, `tokensJson` TEXT NOT NULL, `createdAt` INTEGER NOT NULL",
+                secondPrimaryKey = "chunkIndex"
+            )
+            createItemChildTable(
+                db = db,
+                table = "subtitle_translation_sources",
+                columns = "`sourceIndex` INTEGER NOT NULL, `startMs` INTEGER NOT NULL, `endMs` INTEGER NOT NULL, `text` TEXT NOT NULL",
+                secondPrimaryKey = "sourceIndex"
+            )
+            createItemChildTable(
+                db = db,
+                table = "subtitle_fallback_captions",
+                columns = "`captionIndex` INTEGER NOT NULL, `firstSourceIndex` INTEGER NOT NULL, `lastSourceIndex` INTEGER NOT NULL, " +
+                    "`startMs` INTEGER NOT NULL, `endMs` INTEGER NOT NULL, `text` TEXT NOT NULL",
+                secondPrimaryKey = "captionIndex"
+            )
+            createItemChildTable(
+                db = db,
+                table = "subtitle_committed_captions",
+                columns = "`captionIndex` INTEGER NOT NULL, `firstSourceIndex` INTEGER NOT NULL, `lastSourceIndex` INTEGER NOT NULL, " +
+                    "`startMs` INTEGER NOT NULL, `endMs` INTEGER NOT NULL, `correctedJapanese` TEXT NOT NULL, `chineseText` TEXT NOT NULL",
+                secondPrimaryKey = "captionIndex"
+            )
+        }
+    }
+
+    val MIGRATION_26_27: Migration = object : Migration(26, 27) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE albums ADD COLUMN `displayTitle` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE tracks ADD COLUMN `displayTitle` TEXT NOT NULL DEFAULT ''")
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `subtitle_title_owners` (
+                    `taskId` TEXT NOT NULL,
+                    `kind` TEXT NOT NULL,
+                    `targetId` INTEGER NOT NULL,
+                    `displayTitle` TEXT NOT NULL DEFAULT '',
+                    `createdAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`taskId`, `kind`, `targetId`),
+                    FOREIGN KEY(`taskId`) REFERENCES `subtitle_tasks`(`id`)
+                        ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_subtitle_title_owners_kind_targetId` " +
+                    "ON `subtitle_title_owners` (`kind`, `targetId`)"
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_subtitle_title_owners_taskId` " +
+                    "ON `subtitle_title_owners` (`taskId`)"
+            )
+        }
+    }
+
+    val MIGRATION_27_28: Migration = object : Migration(27, 28) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE subtitles ADD COLUMN `japaneseText` TEXT NOT NULL DEFAULT ''")
+        }
+    }
+
+    val MIGRATION_28_29: Migration = object : Migration(28, 29) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE subtitle_task_items " +
+                    "ADD COLUMN `transcriptionModelId` TEXT NOT NULL DEFAULT ''"
+            )
+        }
+    }
+
+    private fun createItemChildTable(
+        db: SupportSQLiteDatabase,
+        table: String,
+        columns: String,
+        secondPrimaryKey: String
+    ) {
+        db.execSQL(
+            "CREATE TABLE IF NOT EXISTS `$table` (`itemId` TEXT NOT NULL, $columns, " +
+                "PRIMARY KEY(`itemId`, `$secondPrimaryKey`), " +
+                "FOREIGN KEY(`itemId`) REFERENCES `subtitle_task_items`(`id`) " +
+                "ON UPDATE NO ACTION ON DELETE CASCADE)"
+        )
+        db.execSQL("CREATE INDEX IF NOT EXISTS `index_${table}_itemId` ON `$table` (`itemId`)")
+    }
 }

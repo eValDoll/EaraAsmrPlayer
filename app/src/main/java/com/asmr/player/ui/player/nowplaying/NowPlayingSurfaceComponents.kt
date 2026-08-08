@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.player
+package com.asmr.player.ui.player
 
 import android.app.Activity
 import android.content.Context
@@ -114,13 +114,16 @@ internal fun PlayerSurfaceHeader(
     onShowQueue: () -> Unit,
     onManualBindLyrics: (() -> Unit)? = null,
     navigationEnabled: Boolean,
+    showTitle: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val headerShadow = if (colorScheme.isDark) {
-        Shadow(color = Color.Black.copy(alpha = 0.5f), offset = Offset(0f, 2f), blurRadius = 4f)
-    } else {
-        Shadow(color = Color.Black.copy(alpha = 0.15f), offset = Offset(0f, 1f), blurRadius = 2f)
+    val headerShadow = remember(colorScheme.isDark) {
+        if (colorScheme.isDark) {
+            Shadow(color = Color.Black.copy(alpha = 0.5f), offset = Offset(0f, 2f), blurRadius = 4f)
+        } else {
+            Shadow(color = Color.Black.copy(alpha = 0.15f), offset = Offset(0f, 1f), blurRadius = 2f)
+        }
     }
     val dividerColor = colorScheme.onSurface.copy(
         alpha = if (colorScheme.isDark) 0.16f else 0.10f
@@ -139,19 +142,23 @@ internal fun PlayerSurfaceHeader(
                 tint = colorScheme.onSurface
             )
         }
-        Text(
-            text = title.ifBlank { "未播放" },
-            style = MaterialTheme.typography.titleSmall.copy(
-                fontSize = if (isLandscape) 14.sp else 16.sp,
-                shadow = headerShadow
-            ),
-            modifier = Modifier
-                .weight(1f)
-                .basicMarquee(),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            color = colorScheme.textPrimary
-        )
+        if (showTitle) {
+            Text(
+                text = title.ifBlank { "未播放" },
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontSize = if (isLandscape) 14.sp else 16.sp,
+                    shadow = headerShadow
+                ),
+                modifier = Modifier
+                    .weight(1f)
+                    .basicMarquee(),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                color = colorScheme.textPrimary
+            )
+        } else {
+            Spacer(modifier = Modifier.weight(1f))
+        }
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (onManualBindLyrics != null) {
                 IconButton(onClick = onManualBindLyrics) {

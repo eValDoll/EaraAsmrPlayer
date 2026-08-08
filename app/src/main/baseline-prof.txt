@@ -1,3 +1,4 @@
+HSPLcom/asmr/player/**->**(**)**
 HPLandroidx/lifecycle/LifecycleRegistry;->backwardPass(Landroidx/lifecycle/LifecycleOwner;)V
 HPLandroidx/profileinstaller/Encoding;->read(Ljava/io/InputStream;I)[B
 HPLandroidx/profileinstaller/Encoding;->readUInt(Ljava/io/InputStream;I)J

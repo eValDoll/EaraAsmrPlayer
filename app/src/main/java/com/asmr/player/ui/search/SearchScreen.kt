@@ -1,12 +1,11 @@
 package com.asmr.player.ui.search
 
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.background
@@ -67,11 +66,12 @@ import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -110,6 +110,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.domain.model.Album
+import com.asmr.player.data.local.db.entities.AlbumEntity
+import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.cache.LazyListPreloader
 import com.asmr.player.cache.LazyStaggeredGridPreloader
@@ -128,9 +130,11 @@ import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.consumeTapThrough
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
+import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
+import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.library.AlbumGridItem
 import com.asmr.player.ui.library.AlbumGridItemSpacing
 import com.asmr.player.ui.library.AlbumItem
@@ -144,6 +148,7 @@ import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
 import com.asmr.player.ui.theme.AsmrTheme
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.runtime.snapshotFlow
@@ -169,6 +174,7 @@ private val SearchChromeContentGap = 16.dp
 private const val SearchPullRefreshFollowRatio = 0.86f
 private val SearchPullRefreshSettleDistance = 68.dp
 private val SearchPullRefreshMaxDistance = 112.dp
+private const val SearchPullRefreshMinFeedbackMillis = 420L
 private val SearchPullActionHintHeight = 58.dp
 private val SearchPageHorizontalPadding = 8.dp
 private const val SearchPullNextPageDragResistance = 0.82f
@@ -178,6 +184,10 @@ private const val SearchPullNextPageVerticalBias = 1.25f
 private val SearchPullNextPageTriggerDistance = 96.dp
 private val SearchPullNextPageMaxDistance = 172.dp
 private val SearchPullNextPageMaxLift = 108.dp
+private val SearchPullNextPageReturnSpring = spring<Float>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = Spring.StiffnessMediumLow
+)
 private val SearchResultPlacementSpring = spring<IntOffset>(
     dampingRatio = Spring.DampingRatioNoBouncy,
     stiffness = Spring.StiffnessMediumLow
@@ -279,6 +289,7 @@ private fun SearchFilterIconView(
 fun SearchScreen(
     windowSizeClass: WindowSizeClass,
     isActive: Boolean = true,
+    isDataActive: Boolean = isActive,
     onAlbumClick: (Album, Boolean, Boolean) -> Unit,
     onOpenSearchAssist: (SearchAssistSearchRequest) -> Unit = {},
     submittedSearchKeyword: String = "",
@@ -317,24 +328,24 @@ fun SearchScreen(
             collectedOnly = collectedOnly
         )
     }
-    val viewMode by viewModel.viewMode.collectAsState()
-    val uiState by viewModel.uiState.collectAsState()
-    val hotKeywordTerms by viewModel.hotKeywordTerms.collectAsState()
-    val showHotKeywordFallback by viewModel.showHotKeywordFallback.collectAsState()
+    val viewMode by viewModel.viewMode.collectAsStateWhileActive(isDataActive)
+    val uiState by viewModel.uiState.collectAsStateWhileActive(isDataActive)
+    val hotKeywordTerms by viewModel.hotKeywordTerms.collectAsStateWhileActive(isDataActive)
+    val showHotKeywordFallback by viewModel.showHotKeywordFallback.collectAsStateWhileActive(isDataActive)
     val hotKeywordCarouselItem = rememberSearchHotKeywordCarouselItem(
         terms = hotKeywordTerms,
         showFallback = showHotKeywordFallback
     )
     val success = uiState as? SearchUiState.Success
     val resultScrollKey = searchResultScrollKey(success)
-    val listState = rememberSaveable(resultScrollKey, saver = LazyListState.Saver) { LazyListState(0, 0) }
+    val listState = rememberSaveablePrefetchedLazyListState(stateKey = resultScrollKey)
     val gridState = rememberSaveable(resultScrollKey, saver = LazyStaggeredGridState.Saver) { LazyStaggeredGridState() }
     val colorScheme = AsmrTheme.colorScheme
     val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
     val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
     val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
     val settingsViewModel: SettingsViewModel = hiltViewModel()
-    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsState()
+    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsStateWhileActive(isDataActive)
     val scope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
@@ -544,6 +555,7 @@ fun SearchScreen(
     }
 
     val pullToRefreshState = rememberPullToRefreshState()
+    var pullRefreshStartedAtMs by remember { mutableLongStateOf(0L) }
     val pullNextPageEnabled =
         success?.results?.isNotEmpty() == true &&
             canGoNext &&
@@ -556,8 +568,13 @@ fun SearchScreen(
     val pullNextPageMaxLiftPx =
         with(androidx.compose.ui.platform.LocalDensity.current) { SearchPullNextPageMaxLift.toPx() }
     var pullNextPageDragPx by remember(resultScrollKey, viewMode) { mutableFloatStateOf(0f) }
+    var pullNextPageGestureActive by remember(resultScrollKey, viewMode) { mutableStateOf(false) }
+    var pullNextPageReturnInProgress by remember(resultScrollKey, viewMode) { mutableStateOf(false) }
+    var pullNextPageRequestAfterReturn by remember(resultScrollKey, viewMode) { mutableStateOf(false) }
+    var searchPointerPressed by remember(resultScrollKey, viewMode) { mutableStateOf(false) }
     val pullNextPageArmed = pullNextPageDragPx >= pullNextPageTriggerDistancePx
-    val latestPullNextPageEnabled = rememberUpdatedState(pullNextPageEnabled)
+    val pullNextPageGestureEnabled = pullNextPageEnabled && !pullNextPageReturnInProgress
+    val latestPullNextPageEnabled = rememberUpdatedState(pullNextPageGestureEnabled)
     val latestIsAtBottom = rememberUpdatedState(
         if (viewMode == 0) !listState.canScrollForward else !gridState.canScrollForward
     )
@@ -577,17 +594,45 @@ fun SearchScreen(
             followRatio = SearchPullNextPageFollowRatio
         )
     }
-    val pullNextPageVisualOffsetPx = pullNextPageVisualTargetPx
+    val pullNextPageVisualOffsetPx by animateFloatAsState(
+        targetValue = pullNextPageVisualTargetPx,
+        animationSpec = if (pullNextPageGestureActive) {
+            snap()
+        } else {
+            SearchPullNextPageReturnSpring
+        },
+        finishedListener = { settledOffset ->
+            // 翻页请求必须等待回落动画完整结束，避免松手瞬间跳页。
+            if (settledOffset <= 0.5f && pullNextPageReturnInProgress) {
+                val shouldRequestNextPage = pullNextPageRequestAfterReturn
+                pullNextPageRequestAfterReturn = false
+                pullNextPageReturnInProgress = false
+                if (shouldRequestNextPage) {
+                    latestRequestNextPage.value()
+                }
+            }
+        },
+        label = "searchPullNextPageOffset"
+    )
     val pullNextPageProgress =
         (pullNextPageVisualOffsetPx / pullNextPageMaxLiftPx).coerceIn(0f, 1f)
-    val finishPullNextPageGesture = rememberUpdatedState {
+    val finishPullNextPageGesture = rememberUpdatedState finish@{
+        if (
+            pullNextPageReturnInProgress &&
+                !pullNextPageGestureActive &&
+                pullNextPageDragPx <= 0f
+        ) {
+            return@finish
+        }
+        val hasPullOffset = pullNextPageDragPx > 0f
         val shouldTrigger =
+            hasPullOffset &&
             latestPullNextPageEnabled.value &&
                 pullNextPageDragPx >= latestPullNextPageTriggerDistancePx.value
+        pullNextPageGestureActive = false
+        pullNextPageRequestAfterReturn = shouldTrigger
+        pullNextPageReturnInProgress = hasPullOffset
         pullNextPageDragPx = 0f
-        if (shouldTrigger) {
-            latestRequestNextPage.value()
-        }
     }
     val refreshGestureEnabled = !pullToRefreshState.isRefreshing
     val topPaddingPx = with(androidx.compose.ui.platform.LocalDensity.current) { topPadding.toPx() }
@@ -616,10 +661,17 @@ fun SearchScreen(
     )
     val pullContentOffsetPx by animateFloatAsState(
         targetValue = pullContentOffsetTargetPx,
-        animationSpec = if (pullToRefreshState.progress > 0f && !pullToRefreshState.isRefreshing) {
+        animationSpec = if (
+            searchPointerPressed &&
+                pullToRefreshState.progress > 0f &&
+                !pullToRefreshState.isRefreshing
+        ) {
             snap()
         } else {
-            tween(durationMillis = 220, easing = FastOutSlowInEasing)
+            spring(
+                dampingRatio = 0.72f,
+                stiffness = Spring.StiffnessMediumLow
+            )
         },
         label = "searchPullContentOffset"
     )
@@ -648,14 +700,22 @@ fun SearchScreen(
     val latestHorizontalPagerScrollLockChanged = rememberUpdatedState(onHorizontalPagerScrollLockChanged)
     fun stopActiveScroll() {
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            pullNextPageDragPx = 0f
-            latestHorizontalPagerScrollLockChanged.value(false)
+            if (!pullNextPageReturnInProgress) {
+                pullNextPageDragPx = 0f
+                pullNextPageGestureActive = false
+                pullNextPageRequestAfterReturn = false
+                latestHorizontalPagerScrollLockChanged.value(false)
+            }
             runCatching { listState.stopScroll(MutatePriority.UserInput) }
             runCatching { gridState.stopScroll(MutatePriority.UserInput) }
         }
     }
     LaunchedEffect(pullToRefreshState.isRefreshing) {
-        if (!pullToRefreshState.isRefreshing) return@LaunchedEffect
+        if (!pullToRefreshState.isRefreshing) {
+            pullRefreshStartedAtMs = 0L
+            return@LaunchedEffect
+        }
+        pullRefreshStartedAtMs = android.os.SystemClock.elapsedRealtime()
         when (val state = uiState) {
             is SearchUiState.Success -> {
                 if (state.isBusy) {
@@ -676,18 +736,33 @@ fun SearchScreen(
             is SearchUiState.Loading -> false
             else -> true
         }
-        if (canEnd) pullToRefreshState.endRefresh()
+        if (canEnd) {
+            val elapsedMillis = android.os.SystemClock.elapsedRealtime() - pullRefreshStartedAtMs
+            val remainingFeedbackMillis =
+                (SearchPullRefreshMinFeedbackMillis - elapsedMillis).coerceAtLeast(0L)
+            if (remainingFeedbackMillis > 0L) delay(remainingFeedbackMillis)
+            if (pullToRefreshState.isRefreshing) pullToRefreshState.endRefresh()
+        }
     }
     LaunchedEffect(resultScrollKey, pullNextPageEnabled) {
         if (!pullNextPageEnabled) {
-            if (pullNextPageDragPx != 0f) {
-                pullNextPageDragPx = 0f
-            }
+            pullNextPageDragPx = 0f
+            pullNextPageGestureActive = false
+            pullNextPageRequestAfterReturn = false
+            pullNextPageReturnInProgress = false
             latestHorizontalPagerScrollLockChanged.value(false)
         }
     }
-    LaunchedEffect(pullNextPageDragPx > 0f) {
-        latestHorizontalPagerScrollLockChanged.value(pullNextPageDragPx > 0f)
+    LaunchedEffect(
+        pullNextPageDragPx > 0f,
+        pullNextPageGestureActive,
+        pullNextPageReturnInProgress
+    ) {
+        latestHorizontalPagerScrollLockChanged.value(
+            pullNextPageDragPx > 0f ||
+                pullNextPageGestureActive ||
+                pullNextPageReturnInProgress
+        )
     }
     LaunchedEffect(Unit) {
         try {
@@ -725,6 +800,9 @@ fun SearchScreen(
     LaunchedEffect(scrollToTopSignal) {
         if (scrollToTopSignal == 0L) return@LaunchedEffect
         pullNextPageDragPx = 0f
+        pullNextPageGestureActive = false
+        pullNextPageRequestAfterReturn = false
+        pullNextPageReturnInProgress = false
         when (viewMode) {
             0 -> {
                 runCatching { listState.stopScroll(MutatePriority.PreventUserInput) }
@@ -744,6 +822,9 @@ fun SearchScreen(
             else -> gridState.stopScroll(MutatePriority.PreventUserInput)
         }
         pullNextPageDragPx = 0f
+        pullNextPageGestureActive = false
+        pullNextPageRequestAfterReturn = false
+        pullNextPageReturnInProgress = false
         latestHorizontalPagerScrollLockChanged.value(false)
     }
 
@@ -763,7 +844,7 @@ fun SearchScreen(
                         onAlbumClick(
                             Album(
                                 id = album.id,
-                                title = album.title,
+                                title = album.titleForDisplay,
                                 path = album.path,
                                 localPath = album.localPath,
                                 downloadPath = album.downloadPath,
@@ -790,22 +871,26 @@ fun SearchScreen(
                 modifier = contentModifier,
                 contentAlignment = if (hasRightPanel) Alignment.TopStart else Alignment.TopCenter
             ) {
+                val searchContentModifier = if (isCompact || hasRightPanel) {
+                    Modifier.fillMaxSize()
+                } else {
+                    Modifier
+                        .fillMaxHeight()
+                        .widthIn(max = 800.dp)
+                        .fillMaxWidth()
+                }
                 Box(
-                    modifier = if (isCompact || hasRightPanel) {
-                        Modifier.fillMaxSize()
-                    } else {
-                        Modifier
-                            .fillMaxHeight()
-                            .widthIn(max = 800.dp)
-                            .fillMaxWidth()
-                    }
+                    modifier = searchContentModifier
+                        .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .pointerInput(resultScrollKey, viewMode) {
+                    CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .pointerInput(resultScrollKey, viewMode) {
                                 awaitEachGesture {
                                     val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+                                    searchPointerPressed = true
                                     var trackedPointerId = down.id
                                     var previousPosition = down.position
                                     var dragFromDown = Offset.Zero
@@ -836,6 +921,7 @@ fun SearchScreen(
                                                             latestIsAtBottom.value &&
                                                             latestPullNextPageEnabled.value
                                                     if (pullNextGestureActive) {
+                                                        pullNextPageGestureActive = true
                                                         latestHorizontalPagerScrollLockChanged.value(true)
                                                     }
                                                 }
@@ -848,6 +934,7 @@ fun SearchScreen(
                                                     if (pullNextPageDragPx != 0f) {
                                                         pullNextPageDragPx = 0f
                                                     }
+                                                    pullNextPageGestureActive = false
                                                 }
 
                                                 deltaY < 0f && latestIsAtBottom.value && pullNextGestureActive -> {
@@ -864,6 +951,7 @@ fun SearchScreen(
                                                         (pullNextPageDragPx - deltaY).coerceAtLeast(0f)
                                                     if (pullNextPageDragPx == 0f) {
                                                         pullNextGestureActive = false
+                                                        pullNextPageGestureActive = false
                                                         latestHorizontalPagerScrollLockChanged.value(false)
                                                     }
                                                     change.consume()
@@ -875,11 +963,12 @@ fun SearchScreen(
 
                                                 !latestIsAtBottom.value && pullNextPageDragPx > 0f -> {
                                                     pullNextPageDragPx = 0f
+                                                    pullNextPageGestureActive = false
                                                 }
                                             }
                                         }
                                     } while (event.changes.any { it.pressed })
-                                    latestHorizontalPagerScrollLockChanged.value(false)
+                                    searchPointerPressed = false
                                     finishPullNextPageGesture.value()
                                 }
                             }
@@ -890,8 +979,8 @@ fun SearchScreen(
                                     Modifier
                                 }
                             )
-                            .clipToBounds()
-                    ) {
+                                .clipToBounds()
+                        ) {
                         if (pullRefreshHintVisible) {
                             SearchPullActionHint(
                                 progress = pullRefreshProgress,
@@ -962,8 +1051,8 @@ fun SearchScreen(
                                     LazyListPreloader(
                                         state = listState,
                                         itemCount = state.results.size,
+                                        enabled = isActive,
                                         preloadNext = 24,
-                                        preloadNextWhileScrolling = 16,
                                         preloadSize = preloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->
@@ -991,7 +1080,11 @@ fun SearchScreen(
                                             AlbumItem(
                                                 album = album,
                                                 onClick = { onAlbumClick(album, state.purchasedOnly, hasResolvedDetail) },
-                                                modifier = Modifier.animateItemPlacement(SearchResultPlacementSpring),
+                                                modifier = Modifier.animateItem(
+                                                    fadeInSpec = null,
+                                                    placementSpec = SearchResultPlacementSpring,
+                                                    fadeOutSpec = null,
+                                                ),
                                                 onlineDetailLoading = onlineDetailLoading,
                                                 onlineCvLoading = onlineDetailLoading,
                                                 coverFadeIn = coverFadeIn,
@@ -999,7 +1092,7 @@ fun SearchScreen(
                                                 onRjClick = { copyMeta("RJ", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
                                                 onCircleLongClick = ::openMetaActions,
-                                                onCvClick = { copyMeta("CV", it) },
+                                                onCvClick = { copyMeta("声优", it) },
                                                 onCvLongClick = ::openMetaActions,
                                                 onTagClick = { copyMeta("标签", it) },
                                                 onTagLongClick = ::openMetaActions,
@@ -1020,8 +1113,8 @@ fun SearchScreen(
                                     LazyStaggeredGridPreloader(
                                         state = gridState,
                                         itemCount = state.results.size,
+                                        enabled = isActive,
                                         preloadNext = 24,
-                                        preloadNextWhileScrolling = 16,
                                         preloadSize = gridPreloadSize,
                                         cacheManagerProvider = { cacheManager },
                                         modelAt = { idx ->
@@ -1057,7 +1150,11 @@ fun SearchScreen(
                                             AlbumGridItem(
                                                 album = album,
                                                 onClick = { onAlbumClick(album, state.purchasedOnly, hasResolvedDetail) },
-                                                modifier = Modifier.animateItemPlacement(SearchResultPlacementSpring),
+                                                modifier = Modifier.animateItem(
+                                                    fadeInSpec = null,
+                                                    placementSpec = SearchResultPlacementSpring,
+                                                    fadeOutSpec = null,
+                                                ),
                                                 onlineDetailLoading = onlineDetailLoading,
                                                 onlineCvLoading = onlineDetailLoading,
                                                 coverFadeIn = coverFadeIn,
@@ -1065,7 +1162,7 @@ fun SearchScreen(
                                                 onRjClick = { copyMeta("RJ", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
                                                 onCircleLongClick = ::openMetaActions,
-                                                onCvClick = { copyMeta("CV", it) },
+                                                onCvClick = { copyMeta("声优", it) },
                                                 onCvLongClick = ::openMetaActions,
                                                 onTagClick = { copyMeta("标签", it) },
                                                 onTagLongClick = ::openMetaActions,
@@ -1123,7 +1220,7 @@ fun SearchScreen(
                             ) {
                                 SearchPullActionHint(
                                     progress = pullNextPageProgress,
-                                    active = false,
+                                    active = pullNextPageRequestAfterReturn,
                                     armed = pullNextPageArmed,
                                     direction = if (pullNextPageArmed) {
                                         SearchPullActionDirection.Down
@@ -1136,12 +1233,11 @@ fun SearchScreen(
                                 )
                             }
                         }
+                        }
                     }
 
                     SearchChrome(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .interruptScrollableFlingOnPointerDown { stopActiveScroll() },
+                        modifier = Modifier.align(Alignment.TopCenter),
                         keyword = keyword,
                         onKeywordChange = { keyword = it },
                         placeholder = hotKeywordCarouselItem.placeholder,
@@ -1362,11 +1458,6 @@ internal fun SearchChrome(
     onPrev: () -> Unit,
     onNext: () -> Unit
 ) {
-    val animatedOffsetPx = animateFloatAsState(
-        targetValue = chromeState.offsetPx,
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-        label = "searchChromeOffset"
-    )
     val collapseStateDescription by remember(chromeState) {
         derivedStateOf { collapsibleHeaderUiState(chromeState.collapseFraction) }
     }
@@ -1375,7 +1466,7 @@ internal fun SearchChrome(
             .onSizeChanged(onMeasured)
             // Use layout offset instead of a graphics layer so Android text selection
             // toolbars anchor to the real on-screen position of the editable field.
-            .offset { IntOffset(x = 0, y = animatedOffsetPx.value.roundToInt()) }
+            .offset { IntOffset(x = 0, y = chromeState.offsetPx.roundToInt()) }
             .semantics { stateDescription = collapseStateDescription }
             .testTag(chromeTestTag)
     ) {

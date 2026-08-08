@@ -11,6 +11,8 @@ import com.asmr.player.data.local.db.entities.DownloadItemEntity
 import com.asmr.player.data.local.db.entities.DownloadTaskEntity
 import com.asmr.player.data.local.db.entities.PlaylistEntity
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
+import com.asmr.player.data.local.db.entities.SubtitleTaskEntity
+import com.asmr.player.data.local.db.entities.SubtitleTaskItemEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.data.repository.PlaylistRepository
 import com.asmr.player.data.remote.download.DOWNLOAD_STATE_QUEUED
@@ -19,6 +21,11 @@ import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.playback.MediaItemFactory
 import com.asmr.player.playback.PlayerConnection
+import com.asmr.player.subtitle.SubtitleItemState
+import com.asmr.player.subtitle.SubtitleTranscriptionModels
+import com.asmr.player.subtitle.SubtitleTaskMode
+import com.asmr.player.subtitle.SubtitleTaskOrigin
+import com.asmr.player.subtitle.SubtitleTaskState
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -57,6 +64,7 @@ class BenchmarkDataSeeder @Inject constructor(
         private const val UserGroupCount = 1_200
         private const val DownloadTaskCount = 180
         private const val DownloadItemsPerTask = 4
+        private const val SubtitleTaskCount = 180
         private const val QueueConnectTimeoutMs = 15_000L
 
         private const val FavoritesPlaylistName = PlaylistRepository.PLAYLIST_FAVORITES
@@ -71,20 +79,43 @@ class BenchmarkDataSeeder @Inject constructor(
             if (scenario == BenchmarkScenario.LibraryTracks) 2 else 0
         )
 
-        clearPlayerQueue()
+        if (scenario != BenchmarkScenario.PerformancePlayback) {
+            clearPlayerQueue()
+        }
 
         if (scenario == BenchmarkScenario.SearchNetwork) {
             return BenchmarkSeedSummary()
         }
 
-        val summary = seedLocalData()
+        val summary = seedLocalData(scenario)
         if (scenario == BenchmarkScenario.Queue) {
             prepareQueue(summary)
+        } else if (scenario == BenchmarkScenario.PerformancePlayback) {
+            resumeExistingPlayback()
         }
         return summary
     }
 
-    private suspend fun seedLocalData(): BenchmarkSeedSummary = withContext(Dispatchers.IO) {
+    private suspend fun resumeExistingPlayback() {
+        withTimeout(QueueConnectTimeoutMs) {
+            playerConnection.snapshot
+                .filter { it.isConnected }
+                .first()
+        }
+        check((playerConnection.getControllerOrNull()?.mediaItemCount ?: 0) > 0) {
+            "Performance playback scenario requires an existing playback queue"
+        }
+        withContext(Dispatchers.Main) {
+            playerConnection.play()
+        }
+        withTimeout(QueueConnectTimeoutMs) {
+            playerConnection.snapshot
+                .filter { it.isPlaying }
+                .first()
+        }
+    }
+
+    private suspend fun seedLocalData(scenario: BenchmarkScenario): BenchmarkSeedSummary = withContext(Dispatchers.IO) {
         database.clearAllTables()
         database.withTransaction {
             val albumDao = database.albumDao()
@@ -205,6 +236,9 @@ class BenchmarkDataSeeder @Inject constructor(
             }
             groupItemDao.upsertItems(genericGroupItems + detailGroupItems)
             seedDownloadTasks(downloadDao)
+            if (scenario == BenchmarkScenario.TranslationTasks) {
+                seedSubtitleTasks(trackSeeds.take(SubtitleTaskCount))
+            }
 
             val sample = trackSeeds.first()
             BenchmarkSeedSummary(
@@ -287,6 +321,79 @@ class BenchmarkDataSeeder @Inject constructor(
                     )
                 )
             }
+        }
+    }
+
+    private suspend fun seedSubtitleTasks(tracks: List<BenchmarkTrackSeed>) {
+        val dao = database.subtitleTaskDao()
+        val now = System.currentTimeMillis()
+        val states = listOf(
+            SubtitleItemState.TRANSCRIBING,
+            SubtitleItemState.TRANSLATING,
+            SubtitleItemState.WAITING_SLOT,
+            SubtitleItemState.PAUSED,
+            SubtitleItemState.FAILED
+        )
+        tracks.forEachIndexed { index, track ->
+            val state = states[index % states.size]
+            val taskId = "benchmark-subtitle-task-${index + 1}"
+            val translationReady = state != SubtitleItemState.TRANSCRIBING
+            val taskState = when (state) {
+                SubtitleItemState.PAUSED -> SubtitleTaskState.PAUSED
+                SubtitleItemState.FAILED -> SubtitleTaskState.FAILED
+                else -> SubtitleTaskState.ACTIVE
+            }
+            dao.insertTask(
+                SubtitleTaskEntity(
+                    id = taskId,
+                    origin = SubtitleTaskOrigin.GENERATED,
+                    title = track.albumTitle,
+                    rjCode = track.rjCode,
+                    state = taskState,
+                    warning = "",
+                    createdAt = now - index,
+                    updatedAt = now - index
+                )
+            )
+            dao.insertItems(
+                listOf(
+                    SubtitleTaskItemEntity(
+                        id = "benchmark-subtitle-item-${index + 1}",
+                        taskId = taskId,
+                        trackId = track.trackId,
+                        trackTitle = track.trackTitle,
+                        trackPath = track.trackPath,
+                        mode = SubtitleTaskMode.GENERATED,
+                        queueSequence = index + 1L,
+                        state = state,
+                        suspendedFromState = if (state == SubtitleItemState.PAUSED) {
+                            SubtitleItemState.TRANSLATING
+                        } else {
+                            ""
+                        },
+                        transcriptionChunkCursor = if (translationReady) 6 else 3,
+                        transcriptionProgress = if (translationReady) 100 else 42,
+                        transcriptionModelId = SubtitleTranscriptionModels.default.id,
+                        transcribedMs = if (translationReady) {
+                            (track.duration * 1_000.0).toLong()
+                        } else {
+                            (track.duration * 420.0).toLong()
+                        },
+                        totalDurationMs = (track.duration * 1_000.0).toLong(),
+                        translationCursor = if (translationReady) 48 else 0,
+                        translationTotal = if (translationReady) 180 else 0,
+                        translationBatchIndex = if (translationReady) 2 else 0,
+                        translationBatchTotal = if (translationReady) 3 else 0,
+                        attempt = 0,
+                        nextAttemptAt = 0L,
+                        errorMessage = if (state == SubtitleItemState.FAILED) "Benchmark 翻译失败" else "",
+                        originalHash = "benchmark-original-$index",
+                        lastPublishedHash = "benchmark-published-$index",
+                        createdAt = now - index,
+                        updatedAt = now - index
+                    )
+                )
+            )
         }
     }
 

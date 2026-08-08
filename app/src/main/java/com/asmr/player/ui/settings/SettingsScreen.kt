@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.settings
+package com.asmr.player.ui.settings
 
 import android.Manifest
 import android.content.Intent
@@ -22,10 +22,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.FormatAlignLeft
 import androidx.compose.material.icons.automirrored.rounded.FormatAlignRight
 import androidx.compose.material.icons.rounded.CloudSync
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -54,9 +56,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.IntOffset
@@ -65,9 +69,24 @@ import androidx.compose.ui.window.PopupProperties
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.BuildConfig
+import com.asmr.player.cache.AppCacheLimits
+import com.asmr.player.cache.AppCacheState
 import com.asmr.player.data.settings.CoverPreviewMode
+import com.asmr.player.data.settings.DeepSeekReasoningEffort
+import com.asmr.player.data.settings.DeepSeekTranslationSettings
 import com.asmr.player.data.settings.FloatingLyricsSettings
 import com.asmr.player.data.settings.LyricsPageSettings
+import com.asmr.player.subtitle.SubtitleDeviceCapability
+import com.asmr.player.subtitle.SubtitleModelDownloadSource
+import com.asmr.player.subtitle.SubtitleModelInstallationState
+import com.asmr.player.subtitle.SubtitleModelOperation
+import com.asmr.player.subtitle.SubtitleModelState
+import com.asmr.player.subtitle.SubtitleTranscriptionModels
+import com.asmr.player.subtitle.configuredSubtitleModelDownloadSources
+import com.asmr.player.subtitle.DEEPSEEK_SUBTITLE_MODEL
+import com.asmr.player.subtitle.DeepSeekAccountState
+import com.asmr.player.subtitle.formatDeepSeekBalances
+import com.asmr.player.subtitle.formatDeepSeekTokenTotal
 import com.asmr.player.ui.library.BulkPhase
 import com.asmr.player.ui.library.LibraryViewModel
 import com.asmr.player.ui.common.AppSupportStatusSection
@@ -82,8 +101,11 @@ import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
+import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.update.launchDownloadedApkInstall
+import com.asmr.player.util.Formatting
 import kotlin.math.abs
+import kotlin.math.roundToInt
 
 private val SettingsPageHorizontalPadding = 8.dp
 private const val MONOCHROME_THEME_SENTINEL = 0x01000000
@@ -93,34 +115,40 @@ private const val MONOCHROME_THEME_SENTINEL = 0x01000000
 fun SettingsScreen(
     windowSizeClass: WindowSizeClass,
     isActive: Boolean = true,
+    isDataActive: Boolean = isActive,
     viewModel: SettingsViewModel = hiltViewModel(),
     libraryViewModel: LibraryViewModel = hiltViewModel(),
     scrollToTopSignal: Long = 0L,
     onHorizontalControlInteractionChanged: (Boolean) -> Unit = {},
 ) {
-    val floatingLyricsEnabled by viewModel.floatingLyricsEnabled.collectAsState()
-    val floatingSettings by viewModel.floatingLyricsSettings.collectAsState()
-    val lyricsPageSettings by viewModel.lyricsPageSettings.collectAsState()
-    val dynamicPlayerHueEnabled by viewModel.dynamicPlayerHueEnabled.collectAsState()
-    val themeMode by viewModel.themeMode.collectAsState()
-    val staticHueArgbLight by viewModel.staticHueArgbLight.collectAsState()
-    val staticHueArgbDark by viewModel.staticHueArgbDark.collectAsState()
-    val coverBackgroundEnabled by viewModel.coverBackgroundEnabled.collectAsState()
-    val coverBackgroundClarity by viewModel.coverBackgroundClarity.collectAsState()
-    val coverPreviewMode by viewModel.coverPreviewMode.collectAsState()
-    val pauseOnOutputDisconnect by viewModel.pauseOnOutputDisconnect.collectAsState()
-    val resumeOnOutputConnect by viewModel.resumeOnOutputConnect.collectAsState()
-    val pauseOnOtherAudio by viewModel.pauseOnOtherAudio.collectAsState()
-    val playFadeInMs by viewModel.playFadeInMs.collectAsState()
-    val pauseFadeOutMs by viewModel.pauseFadeOutMs.collectAsState()
-    val sfwHideSystemControls by viewModel.sfwHideSystemControls.collectAsState()
-    val showMiniPlayerBar by viewModel.showMiniPlayerBar.collectAsState()
-    val searchBlockedKeywords by viewModel.searchBlockedKeywords.collectAsState()
-    val updateState by viewModel.updateState.collectAsState()
-    val autoUpdateCheckEnabled by viewModel.autoUpdateCheckEnabled.collectAsState()
-    val scanRoots by libraryViewModel.scanRoots.collectAsState()
-    val bulkProgress by libraryViewModel.bulkProgress.collectAsState()
-    val isGlobalSyncRunning by libraryViewModel.isGlobalSyncRunning.collectAsState()
+    val floatingLyricsEnabled by viewModel.floatingLyricsEnabled.collectAsStateWhileActive(isDataActive)
+    val floatingSettings by viewModel.floatingLyricsSettings.collectAsStateWhileActive(isDataActive)
+    val lyricsPageSettings by viewModel.lyricsPageSettings.collectAsStateWhileActive(isDataActive)
+    val dynamicPlayerHueEnabled by viewModel.dynamicPlayerHueEnabled.collectAsStateWhileActive(isDataActive)
+    val themeMode by viewModel.themeMode.collectAsStateWhileActive(isDataActive)
+    val staticHueArgbLight by viewModel.staticHueArgbLight.collectAsStateWhileActive(isDataActive)
+    val staticHueArgbDark by viewModel.staticHueArgbDark.collectAsStateWhileActive(isDataActive)
+    val coverBackgroundEnabled by viewModel.coverBackgroundEnabled.collectAsStateWhileActive(isDataActive)
+    val coverBackgroundClarity by viewModel.coverBackgroundClarity.collectAsStateWhileActive(isDataActive)
+    val coverPreviewMode by viewModel.coverPreviewMode.collectAsStateWhileActive(isDataActive)
+    val pauseOnOutputDisconnect by viewModel.pauseOnOutputDisconnect.collectAsStateWhileActive(isDataActive)
+    val resumeOnOutputConnect by viewModel.resumeOnOutputConnect.collectAsStateWhileActive(isDataActive)
+    val pauseOnOtherAudio by viewModel.pauseOnOtherAudio.collectAsStateWhileActive(isDataActive)
+    val playFadeInMs by viewModel.playFadeInMs.collectAsStateWhileActive(isDataActive)
+    val pauseFadeOutMs by viewModel.pauseFadeOutMs.collectAsStateWhileActive(isDataActive)
+    val sfwHideSystemControls by viewModel.sfwHideSystemControls.collectAsStateWhileActive(isDataActive)
+    val showMiniPlayerBar by viewModel.showMiniPlayerBar.collectAsStateWhileActive(isDataActive)
+    val searchBlockedKeywords by viewModel.searchBlockedKeywords.collectAsStateWhileActive(isDataActive)
+    val appCacheState by viewModel.appCacheState.collectAsStateWhileActive(isDataActive)
+    val subtitleModelState by viewModel.subtitleModelState.collectAsStateWhileActive(isDataActive)
+    val deepSeekApiKeyState by viewModel.deepSeekApiKeyState.collectAsStateWhileActive(isDataActive)
+    val deepSeekAccountState by viewModel.deepSeekAccountState.collectAsStateWhileActive(isDataActive)
+    val deepSeekTranslationSettings by viewModel.deepSeekTranslationSettings.collectAsStateWhileActive(isDataActive)
+    val updateState by viewModel.updateState.collectAsStateWhileActive(isDataActive)
+    val autoUpdateCheckEnabled by viewModel.autoUpdateCheckEnabled.collectAsStateWhileActive(isDataActive)
+    val scanRoots by libraryViewModel.scanRoots.collectAsStateWhileActive(isDataActive)
+    val bulkProgress by libraryViewModel.bulkProgress.collectAsStateWhileActive(isDataActive)
+    val isGlobalSyncRunning by libraryViewModel.isGlobalSyncRunning.collectAsStateWhileActive(isDataActive)
     val context = LocalContext.current
     val colorScheme = AsmrTheme.colorScheme
     val listState = rememberLazyListState()
@@ -130,12 +158,35 @@ fun SettingsScreen(
         activeBorderColor = colorScheme.primaryStrong,
         inactiveContainerColor = Color.Transparent,
         inactiveContentColor = colorScheme.onSurfaceVariant,
-        inactiveBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+        inactiveBorderColor = colorScheme.primaryStrong.copy(alpha = 0.4f),
+        disabledActiveContainerColor = colorScheme.primarySoft.copy(alpha = 0.48f),
+        disabledActiveContentColor = if (colorScheme.isDark) {
+            colorScheme.onPrimaryContainer.copy(alpha = 0.48f)
+        } else {
+            colorScheme.primaryStrong.copy(alpha = 0.48f)
+        },
+        disabledActiveBorderColor = colorScheme.primaryStrong.copy(alpha = 0.24f),
+        disabledInactiveContainerColor = Color.Transparent,
+        disabledInactiveContentColor = colorScheme.primaryStrong.copy(alpha = 0.38f),
+        disabledInactiveBorderColor = colorScheme.primaryStrong.copy(alpha = 0.2f)
     )
     
     var overlayGranted by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
     var activeTipKey by remember { mutableStateOf<String?>(null) }
     var searchBlockedKeywordInput by rememberSaveable { mutableStateOf("") }
+    var showClearAppCacheConfirmation by remember { mutableStateOf(false) }
+    var pendingDeleteSubtitleModelId by remember { mutableStateOf<String?>(null) }
+    val subtitleModelSourceIds = remember {
+        mutableStateMapOf<String, String>().apply {
+            SubtitleTranscriptionModels.all.forEach { model ->
+                this[model.id] = SubtitleModelDownloadSource.HuggingFace.id
+            }
+        }
+    }
+    var deepSeekApiKeyInput by remember { mutableStateOf("") }
+    LaunchedEffect(deepSeekApiKeyState.saveVersion) {
+        if (deepSeekApiKeyState.saveVersion > 0L) deepSeekApiKeyInput = ""
+    }
     DisposableEffect(onHorizontalControlInteractionChanged) {
         onDispose { onHorizontalControlInteractionChanged(false) }
     }
@@ -169,7 +220,11 @@ fun SettingsScreen(
     ) { padding ->
         LaunchedEffect(isActive) {
             if (isActive) return@LaunchedEffect
+            deepSeekApiKeyInput = ""
             listState.stopScroll(MutatePriority.PreventUserInput)
+        }
+        LaunchedEffect(isDataActive) {
+            if (isDataActive) viewModel.refreshAppCacheSize()
         }
         LaunchedEffect(scrollToTopSignal) {
             if (scrollToTopSignal == 0L) return@LaunchedEffect
@@ -434,13 +489,6 @@ fun SettingsScreen(
                             checked = coverBackgroundEnabled,
                             onCheckedChange = viewModel::setCoverBackgroundEnabled
                         )
-                        /*
-                        SettingsToggleRow(
-                            text = "封面随手机转动查看完整图片",
-                            checked = coverMotionEnabled,
-                            onCheckedChange = viewModel::setCoverMotionEnabled
-                        )
-                        */
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
@@ -721,6 +769,39 @@ fun SettingsScreen(
                         }
                     }
                 }
+                item(key = "group:translation_config") {
+                    SettingsGroup(title = "翻译配置") {
+                        SubtitleModelSettingsSection(
+                            state = subtitleModelState,
+                            selectedSourceIds = subtitleModelSourceIds,
+                            deviceSupported = remember(context) {
+                                SubtitleDeviceCapability.evaluate(context).supported
+                            },
+                            segmentedButtonColors = segmentedButtonColors,
+                            onSourceSelected = { modelId, source ->
+                                subtitleModelSourceIds[modelId] = source.id
+                            },
+                            onDownload = viewModel::downloadSubtitleModel,
+                            onCancelDownload = viewModel::cancelSubtitleModelDownload,
+                            onSelect = viewModel::selectSubtitleModel,
+                            onDelete = { modelId -> pendingDeleteSubtitleModelId = modelId },
+                            onClearFailure = viewModel::clearSubtitleModelFailure
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
+                        DeepSeekTranslationSettingsSection(
+                            state = deepSeekApiKeyState,
+                            accountState = deepSeekAccountState,
+                            settings = deepSeekTranslationSettings,
+                            apiKeyInput = deepSeekApiKeyInput,
+                            compact = isCompact,
+                            segmentedButtonColors = segmentedButtonColors,
+                            onApiKeyInputChanged = { deepSeekApiKeyInput = it },
+                            onSave = { viewModel.saveDeepSeekApiKey(deepSeekApiKeyInput) },
+                            onThinkingEnabledChanged = viewModel::setDeepSeekThinkingEnabled,
+                            onReasoningEffortChanged = viewModel::setDeepSeekReasoningEffort
+                        )
+                    }
+                }
                 item(key = "group:about_update") {
                     SettingsGroup(title = "关于") {
                         val isDark = AsmrTheme.colorScheme.isDark
@@ -839,6 +920,17 @@ fun SettingsScreen(
                     }
                 }
 
+                item(key = "group:app_cache") {
+                    SettingsGroup(title = "APP 缓存") {
+                        AppCacheSettingsSection(
+                            state = appCacheState,
+                            onMaxSizeChanged = viewModel::setAppCacheMaxSizeMb,
+                            onClearClick = { showClearAppCacheConfirmation = true },
+                            onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged,
+                        )
+                    }
+                }
+
                 item(key = "bottom_spacer") {
                     Spacer(modifier = Modifier.height(40.dp))
                 }
@@ -868,6 +960,527 @@ fun SettingsScreen(
                 )
             )
         )
+    }
+    if (showClearAppCacheConfirmation) {
+        FlatActionDialog(
+            onDismissRequest = { showClearAppCacheConfirmation = false },
+            message = "将清理网络图片、在线音频播放和在线预览产生的缓存，不会删除下载内容、本地媒体或收藏数据。",
+            actions = listOf(
+                FlatDialogAction("取消", onClick = { showClearAppCacheConfirmation = false }),
+                FlatDialogAction(
+                    text = "清理",
+                    tone = FlatDialogActionTone.Danger,
+                    onClick = {
+                        showClearAppCacheConfirmation = false
+                        viewModel.clearAppCache()
+                    }
+                )
+            )
+        )
+    }
+    pendingDeleteSubtitleModelId?.let { modelId ->
+        val modelName = SubtitleTranscriptionModels.fromId(modelId)?.optionName ?: "字幕"
+        FlatActionDialog(
+            onDismissRequest = { pendingDeleteSubtitleModelId = null },
+            message = "确定删除“$modelName”模型？约 29 MiB 的公共运行时会保留，之后下载任一模型时无需重复安装。",
+            actions = listOf(
+                FlatDialogAction("取消", onClick = { pendingDeleteSubtitleModelId = null }),
+                FlatDialogAction(
+                    text = "删除模型",
+                    tone = FlatDialogActionTone.Danger,
+                    onClick = {
+                        pendingDeleteSubtitleModelId = null
+                        viewModel.deleteSubtitleModel(modelId)
+                    }
+                )
+            )
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun DeepSeekTranslationSettingsSection(
+    state: DeepSeekApiKeyUiState,
+    accountState: DeepSeekAccountState = DeepSeekAccountState(),
+    settings: DeepSeekTranslationSettings,
+    apiKeyInput: String,
+    compact: Boolean,
+    segmentedButtonColors: SegmentedButtonColors,
+    onApiKeyInputChanged: (String) -> Unit,
+    onSave: () -> Unit,
+    onThinkingEnabledChanged: (Boolean) -> Unit,
+    onReasoningEffortChanged: (DeepSeekReasoningEffort) -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val actionButtonColors = settingsPrimaryTonalButtonColors()
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = DEEPSEEK_SUBTITLE_MODEL,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .weight(1f)
+                .testTag("deepseek_model_name")
+        )
+        if (state.configured) {
+            Row(
+                modifier = Modifier.width(if (compact) 208.dp else 248.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Token ${formatDeepSeekTokenTotal(accountState.totalTokens)} · 余额 ${formatDeepSeekBalances(accountState.balances)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (accountState.balanceAvailable == false) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("deepseek_account_summary")
+                )
+                Icon(
+                    imageVector = Icons.Rounded.CheckCircle,
+                    contentDescription = "API Key 已配置",
+                    tint = Color(0xFF3E9B63),
+                    modifier = Modifier
+                        .size(20.dp)
+                        .testTag("deepseek_api_key_configured")
+                )
+            }
+        }
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val inputModifier = if (compact) {
+            Modifier.weight(1f)
+        } else {
+            Modifier.widthIn(max = 280.dp)
+        }
+        OutlinedTextField(
+            value = apiKeyInput,
+            onValueChange = onApiKeyInputChanged,
+            modifier = inputModifier
+                .height(48.dp)
+                .testTag("deepseek_api_key_input"),
+            placeholder = {
+                Text(
+                    text = "API Key（sk-…）",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            enabled = !state.saving,
+            isError = state.errorMessage != null
+        )
+        FilledTonalButton(
+            onClick = onSave,
+            enabled = apiKeyInput.isNotBlank() && !state.saving,
+            modifier = Modifier
+                .height(48.dp)
+                .testTag("deepseek_api_key_action"),
+            colors = actionButtonColors,
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            if (state.saving) {
+                EaraLogoLoadingIndicator(size = 18.dp)
+            } else {
+                Text(if (state.configured) "替换" else "保存")
+            }
+        }
+    }
+    state.errorMessage?.let { message ->
+        Text(
+            text = message,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.error
+        )
+    }
+
+    SettingsToggleRow(
+        text = "思考模式",
+        checked = settings.thinkingEnabled,
+        onCheckedChange = onThinkingEnabledChanged
+    )
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = "思考等级",
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (settings.thinkingEnabled) colorScheme.textPrimary else colorScheme.textTertiary
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        SingleChoiceSegmentedButtonRow(
+            modifier = Modifier
+                .widthIn(max = 220.dp)
+                .testTag("deepseek_reasoning_effort")
+        ) {
+            DeepSeekReasoningEffort.entries.forEachIndexed { index, effort ->
+                SegmentedButton(
+                    selected = settings.reasoningEffort == effort,
+                    onClick = { onReasoningEffortChanged(effort) },
+                    enabled = settings.thinkingEnabled,
+                    modifier = Modifier.testTag("deepseek_reasoning_${effort.wireValue}"),
+                    shape = SegmentedButtonDefaults.itemShape(
+                        index = index,
+                        count = DeepSeekReasoningEffort.entries.size
+                    ),
+                    colors = segmentedButtonColors,
+                    icon = {},
+                    label = {
+                        Text(
+                            when (effort) {
+                                DeepSeekReasoningEffort.HIGH -> "High"
+                                DeepSeekReasoningEffort.MAX -> "Max"
+                            }
+                        )
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun SubtitleModelSettingsSection(
+    state: SubtitleModelState,
+    selectedSourceIds: Map<String, String>,
+    deviceSupported: Boolean,
+    segmentedButtonColors: SegmentedButtonColors,
+    onSourceSelected: (String, SubtitleModelDownloadSource) -> Unit,
+    onDownload: (String, SubtitleModelDownloadSource) -> Unit,
+    onCancelDownload: () -> Unit,
+    onSelect: (String) -> Unit,
+    onDelete: (String) -> Unit,
+    onClearFailure: (String) -> Unit
+) {
+    var selectedModelId by rememberSaveable {
+        mutableStateOf(
+            state.operation?.modelId ?: SubtitleTranscriptionModels.SENSE_VOICE_SMALL_INT8.id
+        )
+    }
+    LaunchedEffect(state.operation?.modelId) {
+        state.operation?.modelId?.let { selectedModelId = it }
+    }
+    val model = SubtitleTranscriptionModels.fromId(selectedModelId)
+        ?: SubtitleTranscriptionModels.default
+    val installation = state.installation(model.id)
+    val installed = installation is SubtitleModelInstallationState.Available
+    val isActive = state.activeModelId == model.id
+    val operation = state.operation?.takeIf { it.modelId == model.id }
+    val running = operation is SubtitleModelOperation.Queued ||
+        operation is SubtitleModelOperation.Downloading ||
+        operation is SubtitleModelOperation.Verifying
+    val anotherOperationRunning = state.operation != null &&
+        state.operation.modelId != model.id &&
+        state.operation !is SubtitleModelOperation.Failed
+    val availableSources = configuredSubtitleModelDownloadSources(model)
+    val selectedSource = operation?.source
+        ?: SubtitleModelDownloadSource.fromId(selectedSourceIds[model.id])
+        ?: availableSources.firstOrNull()
+        ?: SubtitleModelDownloadSource.HuggingFace
+    val colors = AsmrTheme.colorScheme
+
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            SubtitleTranscriptionModels.all.forEachIndexed { index, candidate ->
+                SegmentedButton(
+                    selected = model.id == candidate.id,
+                    onClick = { selectedModelId = candidate.id },
+                    shape = SegmentedButtonDefaults.itemShape(
+                        index = index,
+                        count = SubtitleTranscriptionModels.all.size
+                    ),
+                    colors = segmentedButtonColors,
+                    icon = {},
+                    modifier = Modifier.testTag("subtitle_model_choice_${candidate.id}"),
+                    label = {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = if (state.activeModelId == candidate.id) {
+                                    "${candidate.optionName} · 当前"
+                                } else {
+                                    candidate.optionName
+                                },
+                                maxLines = 1
+                            )
+                            Text(
+                                text = Formatting.formatFileSize(candidate.artifactBytes),
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                )
+            }
+        }
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = model.displayName,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Text(
+                text = when {
+                    isActive && installed -> "当前使用"
+                    isActive -> "当前（未安装）"
+                    installed -> "已安装"
+                    else -> "未安装"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = if (isActive) colors.primaryStrong else colors.textSecondary,
+                modifier = Modifier.testTag("subtitle_model_status_${model.id}")
+            )
+        }
+
+        if (!installed && availableSources.size > 1) {
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                availableSources.forEachIndexed { index, source ->
+                    SegmentedButton(
+                        selected = selectedSource == source,
+                        onClick = {
+                            onClearFailure(model.id)
+                            onSourceSelected(model.id, source)
+                        },
+                        enabled = !running && !anotherOperationRunning,
+                        shape = SegmentedButtonDefaults.itemShape(index, availableSources.size),
+                        colors = segmentedButtonColors,
+                        icon = {},
+                        label = { Text(source.displayName) }
+                    )
+                }
+            }
+        }
+
+        when (operation) {
+            null -> Unit
+            is SubtitleModelOperation.Queued -> {
+                Text("等待下载字幕组件", style = MaterialTheme.typography.bodySmall)
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+            is SubtitleModelOperation.Downloading -> {
+                Text(operation.stage.displayName, style = MaterialTheme.typography.bodySmall)
+                if (operation.totalBytes > 0L) {
+                    val progress = (operation.downloadedBytes.toFloat() / operation.totalBytes)
+                        .coerceIn(0f, 1f)
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            }
+            is SubtitleModelOperation.Verifying -> {
+                Text(operation.stage.displayName, style = MaterialTheme.typography.bodySmall)
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+            is SubtitleModelOperation.Failed -> Text(
+                text = operation.message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+
+        when {
+            running -> FilledTonalButton(
+                onClick = onCancelDownload,
+                modifier = Modifier.fillMaxWidth(),
+                colors = settingsPrimaryTonalButtonColors()
+            ) {
+                Text("取消下载")
+            }
+            installed && !isActive -> Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilledTonalButton(
+                    onClick = { onSelect(model.id) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("subtitle_model_select_${model.id}"),
+                    colors = settingsPrimaryTonalButtonColors()
+                ) {
+                    Text("设为当前")
+                }
+                FilledTonalButton(
+                    onClick = { onDelete(model.id) },
+                    colors = subtitleModelDeleteButtonColors()
+                ) {
+                    Icon(Icons.Rounded.Delete, contentDescription = "删除模型")
+                }
+            }
+            installed -> FilledTonalButton(
+                onClick = { onDelete(model.id) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = subtitleModelDeleteButtonColors()
+            ) {
+                Icon(Icons.Rounded.Delete, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("删除模型")
+            }
+            else -> FilledTonalButton(
+                onClick = { onDownload(model.id, selectedSource) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("subtitle_model_download_${model.id}"),
+                enabled = deviceSupported && availableSources.contains(selectedSource) &&
+                    !anotherOperationRunning,
+                colors = settingsPrimaryTonalButtonColors()
+            ) {
+                Text(
+                    when {
+                        !deviceSupported -> "设备不支持"
+                        availableSources.isEmpty() -> "来源不可用"
+                        anotherOperationRunning -> "其他模型正在下载"
+                        operation is SubtitleModelOperation.Failed -> "重新下载"
+                        else -> "下载模型"
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun subtitleModelDeleteButtonColors(): ButtonColors =
+    ButtonDefaults.filledTonalButtonColors(
+        containerColor = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        disabledContainerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.48f),
+        disabledContentColor = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.48f)
+    )
+
+@Composable
+private fun settingsPrimaryTonalButtonColors(): ButtonColors {
+    val colorScheme = AsmrTheme.colorScheme
+    val contentColor = if (colorScheme.isDark) {
+        colorScheme.onPrimaryContainer
+    } else {
+        colorScheme.primaryStrong
+    }
+    return ButtonDefaults.filledTonalButtonColors(
+        containerColor = colorScheme.primarySoft,
+        contentColor = contentColor,
+        disabledContainerColor = colorScheme.primarySoft.copy(alpha = 0.48f),
+        disabledContentColor = contentColor.copy(alpha = 0.48f)
+    )
+}
+
+@Composable
+private fun AppCacheSettingsSection(
+    state: AppCacheState,
+    onMaxSizeChanged: (Int) -> Unit,
+    onClearClick: () -> Unit,
+    onHorizontalControlInteractionChanged: (Boolean) -> Unit,
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val interactionSource = remember { MutableInteractionSource() }
+    val isDragging by interactionSource.collectIsDraggedAsState()
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val isInteracting = isDragging || isPressed
+    var draftSizeMb by remember { mutableFloatStateOf(state.maxSizeMb.toFloat()) }
+
+    LaunchedEffect(state.maxSizeMb, isInteracting) {
+        if (!isInteracting) draftSizeMb = state.maxSizeMb.toFloat()
+    }
+
+    Text(
+        text = "当前占用：${formatCacheSize(state.usedSizeBytes)}",
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.SemiBold,
+    )
+    Text(
+        text = "空间由网络图片、在线音频播放和在线预览缓存共享。缓存满后会优先清理较早使用的资源。",
+        style = MaterialTheme.typography.bodySmall,
+        color = colorScheme.textSecondary,
+    )
+    SettingsSliderRow(
+        text = "缓存空间上限：${draftSizeMb.roundToInt()} MB",
+        value = draftSizeMb,
+        range = AppCacheLimits.MinSizeMb.toFloat()..AppCacheLimits.MaxSizeMb.toFloat(),
+        stepSize = AppCacheLimits.SizeStepMb.toFloat(),
+        onValueChange = { draftSizeMb = it },
+        onValueChangeFinished = { onMaxSizeChanged(draftSizeMb.roundToInt()) },
+        interactionSource = interactionSource,
+        onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged,
+    )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(
+            text = "最小 ${AppCacheLimits.MinSizeMb} MB",
+            style = MaterialTheme.typography.labelSmall,
+            color = colorScheme.textSecondary,
+        )
+        Text(
+            text = "最大 ${AppCacheLimits.MaxSizeMb} MB",
+            style = MaterialTheme.typography.labelSmall,
+            color = colorScheme.textSecondary,
+        )
+    }
+    FilledTonalButton(
+        onClick = onClearClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .testTag("clearAppCacheButton"),
+        enabled = !state.isClearing,
+        colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = colorScheme.primarySoft,
+            contentColor = if (colorScheme.isDark) colorScheme.onPrimaryContainer else colorScheme.primaryStrong,
+        ),
+    ) {
+        if (state.isClearing) {
+            EaraLogoLoadingIndicator(size = 18.dp)
+            Spacer(modifier = Modifier.width(10.dp))
+            Text("正在清理…")
+        } else {
+            Icon(Icons.Rounded.Delete, contentDescription = null)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("清理 APP 缓存")
+        }
+    }
+}
+
+private fun formatCacheSize(sizeBytes: Long): String {
+    val safeBytes = sizeBytes.coerceAtLeast(0L)
+    val megabytes = safeBytes / (1024.0 * 1024.0)
+    return if (megabytes < 0.1) {
+        "0 MB"
+    } else if (megabytes < 10.0) {
+        String.format(java.util.Locale.ROOT, "%.1f MB", megabytes)
+    } else {
+        "${megabytes.roundToInt()} MB"
     }
 }
 
@@ -1365,115 +1978,6 @@ private fun SettingsGroup(
     }
 }
 
-/*
-@Composable
-internal fun BackgroundEffectTypeSelectorRow(
-    backgroundEffectEnabled: Boolean,
-    selectedType: BackgroundEffectType,
-    onBackgroundEffectEnabledChange: (Boolean) -> Unit,
-    onSelected: (BackgroundEffectType) -> Unit
-) {
-    val colorScheme = AsmrTheme.colorScheme
-    val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
-    val selectorShape = RoundedCornerShape(12.dp)
-    val selectorBorderColor = MaterialTheme.colorScheme.outline.copy(
-        alpha = if (colorScheme.isDark) 0.26f else 0.18f
-    )
-    var expanded by remember { mutableStateOf(false) }
-    val selectedLabel = if (!backgroundEffectEnabled) {
-        "关闭"
-    } else {
-        when (selectedType) {
-            BackgroundEffectType.Flow -> "光点"
-            BackgroundEffectType.Ripple -> "呼吸波纹"
-        }
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(BACKGROUND_EFFECT_TYPE_ROW_TAG),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("背景特效", style = MaterialTheme.typography.bodyMedium)
-        Spacer(modifier = Modifier.weight(1f))
-        Box(
-            modifier = Modifier.wrapContentSize(Alignment.TopEnd)
-        ) {
-            Surface(
-                shape = selectorShape,
-                color = dynamicContainerColor,
-                contentColor = colorScheme.onSurface,
-                border = BorderStroke(1.dp, selectorBorderColor),
-                modifier = Modifier
-                    .clip(selectorShape)
-                    .clickable { expanded = true }
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = selectedLabel,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colorScheme.textSecondary,
-                        modifier = Modifier.testTag(BACKGROUND_EFFECT_VALUE_TAG)
-                    )
-                    Text(
-                        text = "▼",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            MaterialTheme(
-                colorScheme = MaterialTheme.colorScheme.copy(
-                    surface = dynamicContainerColor,
-                    surfaceContainer = dynamicContainerColor
-                )
-            ) {
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false },
-                    offset = DpOffset(x = 0.dp, y = 6.dp),
-                    modifier = Modifier.background(dynamicContainerColor)
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("关闭") },
-                        onClick = {
-                            expanded = false
-                            onBackgroundEffectEnabledChange(false)
-                        }
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                    )
-                    DropdownMenuItem(
-                        text = { Text("光点") },
-                        onClick = {
-                            expanded = false
-                            onSelected(BackgroundEffectType.Flow)
-                            onBackgroundEffectEnabledChange(true)
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("呼吸波纹") },
-                        onClick = {
-                            expanded = false
-                            onSelected(BackgroundEffectType.Ripple)
-                            onBackgroundEffectEnabledChange(true)
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
-*/
 @Composable
 private fun SettingsToggleRow(
     text: String,

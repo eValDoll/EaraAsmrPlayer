@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.collectAsState
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -12,17 +11,19 @@ import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
 import com.asmr.player.data.repository.PlaylistRepository
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
+import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.theme.AsmrTheme
 
 @Composable
 fun SystemPlaylistScreen(
     windowSizeClass: WindowSizeClass,
     isActive: Boolean = true,
+    isDataActive: Boolean = isActive,
     onPlayAll: (List<PlaylistItemEntity>, PlaylistItemEntity) -> Unit,
     scrollToTopSignal: Long = 0L,
     viewModel: PlaylistsViewModel = hiltViewModel()
 ) {
-    val playlists by viewModel.playlists.collectAsState()
+    val playlists by viewModel.playlists.collectAsStateWhileActive(isDataActive)
     val targetName = PlaylistRepository.PLAYLIST_FAVORITES
     val playlist = playlists.firstOrNull { it.name == targetName }
 
@@ -36,6 +37,7 @@ fun SystemPlaylistScreen(
     PlaylistDetailScreen(
         windowSizeClass = windowSizeClass,
         isActive = isActive,
+        isDataActive = isDataActive,
         playlistId = playlist.id,
         title = playlist.name,
         onPlayAll = onPlayAll,

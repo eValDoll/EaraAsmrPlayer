@@ -12,6 +12,7 @@ val Context.settingsDataStore by preferencesDataStore(name = "settings")
 
 object SettingsKeys {
     val APP_VOLUME_PERCENT = intPreferencesKey("app_volume_percent")
+    val APP_CACHE_MAX_SIZE_MB = intPreferencesKey("app_cache_max_size_mb")
 
     val EQ_ENABLED = booleanPreferencesKey("eq_enabled")
     fun eqBandLevel(index: Int) = intPreferencesKey("eq_band_$index")
@@ -83,4 +84,7 @@ object SettingsKeys {
     val PAUSE_FADE_OUT_MS = intPreferencesKey("pause_fade_out_ms")
     val SFW_HIDE_SYSTEM_CONTROLS = booleanPreferencesKey("sfw_hide_system_controls")
     val SHOW_MINI_PLAYER_BAR = booleanPreferencesKey("show_mini_player_bar")
+
+    val DEEPSEEK_THINKING_ENABLED = booleanPreferencesKey("deepseek_thinking_enabled")
+    val DEEPSEEK_REASONING_EFFORT = stringPreferencesKey("deepseek_reasoning_effort")
 }

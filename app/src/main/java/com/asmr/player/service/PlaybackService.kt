@@ -54,7 +54,6 @@ import com.asmr.player.playback.AsmrRenderersFactory
 import com.asmr.player.playback.BalanceAudioProcessor
 import com.asmr.player.playback.ChannelModeAudioProcessor
 import com.asmr.player.playback.FadingPlayer
-import com.asmr.player.playback.GainAudioProcessor
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.playback.AppVolumeBoostController
 import com.asmr.player.playback.GraphicEqualizerAudioProcessor
@@ -91,6 +90,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import java.util.concurrent.atomic.AtomicLong
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -103,7 +103,6 @@ class PlaybackService : MediaSessionService() {
     private lateinit var appVolumeBoostController: AppVolumeBoostController
     private var startupAppVolumePercent: Int? = null
     private val graphicEqualizerAudioProcessor = GraphicEqualizerAudioProcessor()
-    private val gainAudioProcessor = GainAudioProcessor()
     private val balanceAudioProcessor = BalanceAudioProcessor()
     private val stereoOrbitAudioProcessor = StereoOrbitAudioProcessor()
     private val sceneEffectAudioProcessor = SceneEffectAudioProcessor()
@@ -225,6 +224,7 @@ class PlaybackService : MediaSessionService() {
     private var isCurrentTrackCounted: Boolean = false
     private var currentMediaId: String? = null
     private var lastProgressPersistElapsedMs: Long = 0L
+    private val pendingNetworkTrafficBytes = AtomicLong(0L)
 
     @androidx.annotation.OptIn(UnstableApi::class)
     override fun onCreate() {
@@ -238,7 +238,7 @@ class PlaybackService : MediaSessionService() {
         applyPlaybackRuntimeSettings(runtimeSettings)
         val currentAppVolumePercent = appVolumeBoostController.currentVolumePercent()
         startupAppVolumePercent = currentAppVolumePercent
-        runBlocking {
+        val startupAppVolumeSyncJob = serviceScope.launch(Dispatchers.IO) {
             settingsRepository.syncAppVolumePercentFromSystem(currentAppVolumePercent)
         }
         runCatching {
@@ -264,13 +264,10 @@ class PlaybackService : MediaSessionService() {
             override fun onTransferInitializing(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {}
             override fun onTransferStart(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {}
             override fun onBytesTransferred(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean, bytesTransferred: Int) {
-                if (isNetwork) {
-                    val bytes = bytesTransferred.toLong()
-                    serviceScope.launch {
-                        statisticsRepository.addNetworkTraffic(bytes)
-                        // 音频流量归入当前收听会话（若存在）。
-                        listeningRecordRepository.addTraffic(bytes)
-                    }
+                if (isNetwork && bytesTransferred > 0) {
+                    // 该回调位于加载线程且调用非常频繁。只做无锁累加，由后台统计心跳
+                    // 批量入库，避免每个网络缓冲都唤醒应用主线程并启动两次数据库切换。
+                    pendingNetworkTrafficBytes.addAndGet(bytesTransferred.toLong())
                 }
             }
             override fun onTransferEnd(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {}
@@ -323,7 +320,6 @@ class PlaybackService : MediaSessionService() {
                 AsmrRenderersFactory(
                     this,
                     graphicEqualizerAudioProcessor,
-                    gainAudioProcessor,
                     balanceAudioProcessor,
                     stereoOrbitAudioProcessor,
                     sceneEffectAudioProcessor,
@@ -356,7 +352,7 @@ class PlaybackService : MediaSessionService() {
             onPlayRequested = { requestPlaybackAudioFocus() }
         )
         registerPlaybackRouteListeners()
-        startEffectLoops()
+        startEffectLoops(startupAppVolumeSyncJob)
         mediaSession = buildMediaSession()
 
         notificationProvider = LyricMediaNotificationProvider(
@@ -438,26 +434,43 @@ class PlaybackService : MediaSessionService() {
         })
         StereoSpectrumBus.playbackActive = exoPlayer.isPlaying
 
-        statsJob = serviceScope.launch {
+        statsJob = serviceScope.launch(Dispatchers.Default) {
             while (isActive) {
-                if (exoPlayer.isPlaying) {
+                val tick = withContext(Dispatchers.Main.immediate) {
+                    if (!exoPlayer.isPlaying) {
+                        null
+                    } else {
+                        currentTrackListenedMs += 1000L
+                        val totalDuration = exoPlayer.duration
+                        val shouldIncrementTrackCount =
+                            !isCurrentTrackCounted &&
+                                totalDuration > 0L &&
+                                currentTrackListenedMs > totalDuration * 0.25
+                        if (shouldIncrementTrackCount) {
+                            isCurrentTrackCounted = true
+                        }
+                        PlaybackStatsTick(
+                            trackContext = currentListeningTrackContext(),
+                            incrementTrackCount = shouldIncrementTrackCount,
+                        )
+                    }
+                }
+
+                if (tick != null) {
                     statisticsRepository.addListeningDuration(1000L)
 
                     // 会话级记录：把这一秒计入当前作品的收听会话。
-                    val trackContext = currentListeningTrackContext()
-                    if (trackContext != null) {
-                        listeningRecordRepository.recordTick(trackContext, 1000L)
+                    if (tick.trackContext != null) {
+                        listeningRecordRepository.recordTick(tick.trackContext, 1000L)
                     }
 
-                    currentTrackListenedMs += 1000L
-                    val totalDuration = exoPlayer.duration
-                    if (!isCurrentTrackCounted && totalDuration > 0 && currentTrackListenedMs > totalDuration * 0.25) {
+                    if (tick.incrementTrackCount) {
                         statisticsRepository.incrementTrackCount()
                         listeningRecordRepository.incrementTrackCount()
-                        isCurrentTrackCounted = true
                     }
                     persistCurrentTrackProgressIfNeeded(force = false)
                 }
+                flushPendingNetworkTraffic()
                 delay(1000L)
             }
         }
@@ -638,6 +651,14 @@ class PlaybackService : MediaSessionService() {
             albumTitle = metadata.albumTitle?.toString().orEmpty(),
             artworkUri = metadata.artworkUri?.toString()
         )
+    }
+
+    private suspend fun flushPendingNetworkTraffic() {
+        val bytes = pendingNetworkTrafficBytes.getAndSet(0L)
+        if (bytes <= 0L) return
+        statisticsRepository.addNetworkTraffic(bytes)
+        // 音频流量归入当前收听会话（若存在）。
+        listeningRecordRepository.addTraffic(bytes)
     }
 
     private suspend fun persistCurrentTrackProgressIfNeeded(force: Boolean) {
@@ -849,18 +870,14 @@ class PlaybackService : MediaSessionService() {
             addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
         }
         registerReceiver(outputBroadcastReceiver, intentFilter)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
-            audioManager.registerAudioDeviceCallback(audioDeviceCallback, null)
-        }
+        val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+        audioManager.registerAudioDeviceCallback(audioDeviceCallback, null)
     }
 
     private fun unregisterPlaybackRouteListeners() {
         runCatching { unregisterReceiver(outputBroadcastReceiver) }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
-            runCatching { audioManager.unregisterAudioDeviceCallback(audioDeviceCallback) }
-        }
+        val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+        runCatching { audioManager.unregisterAudioDeviceCallback(audioDeviceCallback) }
     }
 
     private fun handlePotentialOutputDisconnect(reason: String) {
@@ -892,7 +909,6 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun hasResumeEligibleOutputDevice(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
         val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
         return audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
             .any { it.isResumeEligibleOutputDevice() }
@@ -923,6 +939,10 @@ class PlaybackService : MediaSessionService() {
     private fun buildMediaSession(): MediaSession {
         return MediaSession.Builder(this, sessionPlayer)
             .setSessionActivity(createContentIntent())
+            // Media3 默认每 3 秒把仅位置变化的 PLAYING 状态重新广播给所有系统控制器。
+            // 系统本就能根据 position/speed/eventTime 外推位置；关闭这类周期广播可避免
+            // MIUI 同期唤醒蓝牙、妙播、灵动岛和媒体面板，真实播放状态变化仍会立即通知。
+            .setPeriodicPositionUpdateEnabled(false)
             .setCallback(object : MediaSession.Callback {
                 override fun onConnect(
                     session: MediaSession,
@@ -1221,7 +1241,7 @@ class PlaybackService : MediaSessionService() {
         return rawDelay.coerceIn(200L, maxDelay)
     }
 
-    private fun startEffectLoops() {
+    private fun startEffectLoops(startupAppVolumeSyncJob: Job) {
         effectApplyJob?.cancel()
         effectApplyJob = serviceScope.launch {
             combine(
@@ -1235,7 +1255,6 @@ class PlaybackService : MediaSessionService() {
                 lastEffectiveSettings = settings
                 graphicEqualizerAudioProcessor.setEnabled(settings.enabled)
                 graphicEqualizerAudioProcessor.setBandLevels(settings.bandLevels)
-                gainAudioProcessor.setGain(1f)
                 val stereoEnabled = settings.stereoEnabled
                 val panActive = stereoEnabled && (settings.orbitEnabled || settings.orbitAzimuthDeg != 0f)
                 balanceAudioProcessor.setBalance(if (stereoEnabled && !panActive) settings.balance else 0f)
@@ -1255,6 +1274,7 @@ class PlaybackService : MediaSessionService() {
             }
         }
         serviceScope.launch {
+            startupAppVolumeSyncJob.join()
             var skipStartupApplyPercent = startupAppVolumePercent
             settingsRepository.appVolumePercent
                 .distinctUntilChanged()
@@ -1293,6 +1313,9 @@ class PlaybackService : MediaSessionService() {
     override fun onDestroy() {
         overlay?.hide()
         statsJob?.cancel()
+        runBlocking(Dispatchers.IO) {
+            flushPendingNetworkTraffic()
+        }
         cancelPlaybackRecovery(resetPolicy = true)
         effectApplyJob?.cancel()
         sleepTimerJob?.cancel()
@@ -1329,3 +1352,8 @@ class PlaybackService : MediaSessionService() {
         private const val NETWORK_MINIMUM_LOADABLE_RETRY_COUNT = 6
     }
 }
+
+private data class PlaybackStatsTick(
+    val trackContext: ListeningTrackContext?,
+    val incrementTrackCount: Boolean,
+)

@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.nav
+package com.asmr.player.ui.nav
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
@@ -1225,7 +1225,7 @@ private fun buildBottomNavContainerPath(
     return Path().apply {
         moveTo(barRadius, bottom)
         lineTo(rightCornerStartX, bottom)
-        quadraticBezierTo(right, bottom, right, bottomCornerStartY)
+        quadraticTo(right, bottom, right, bottomCornerStartY)
         lineTo(right, barTop + barRadius)
         arcTo(
             rect = rightArcRect,
@@ -1271,9 +1271,9 @@ private fun buildBottomNavContainerPath(
             barTop
         )
         lineTo(barRadius, barTop)
-        quadraticBezierTo(0f, barTop, 0f, barTop + barRadius)
+        quadraticTo(0f, barTop, 0f, barTop + barRadius)
         lineTo(0f, bottomCornerStartY)
-        quadraticBezierTo(0f, bottom, barRadius, bottom)
+        quadraticTo(0f, bottom, barRadius, bottom)
         close()
     }
 }

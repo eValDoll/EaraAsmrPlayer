@@ -1,29 +1,26 @@
 package com.asmr.player.playback
 
-import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.AudioProcessor.AudioFormat
 import androidx.media3.common.audio.BaseAudioProcessor
 import androidx.media3.common.util.UnstableApi
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import kotlin.math.max
-import kotlin.math.min
 
 @UnstableApi
-class BalanceAudioProcessor : BaseAudioProcessor() {
+class BalanceAudioProcessor : BaseAudioProcessor(), RuntimeAudioProcessor {
 
-    private var balance = 0f // -1.0 (Left) to 1.0 (Right)
-    private var leftGain = 1f
-    private var rightGain = 1f
+    @Volatile
+    private var gains = BalanceGains()
     private var passthrough = false
 
     fun setBalance(balance: Float) {
-        if (this.balance != balance) {
-            this.balance = balance.coerceIn(-1f, 1f)
-            // Linear gain reduction
-            leftGain = if (balance > 0) 1f - balance else 1f
-            rightGain = if (balance < 0) 1f + balance else 1f
-        }
+        val resolvedBalance = balance.coerceIn(-1f, 1f)
+        if (gains.balance == resolvedBalance) return
+        gains = BalanceGains(
+            balance = resolvedBalance,
+            left = if (resolvedBalance > 0f) 1f - resolvedBalance else 1f,
+            right = if (resolvedBalance < 0f) 1f + resolvedBalance else 1f,
+        )
     }
 
     override fun onConfigure(inputAudioFormat: AudioFormat): AudioFormat {
@@ -33,14 +30,20 @@ class BalanceAudioProcessor : BaseAudioProcessor() {
         return inputAudioFormat
     }
 
+    override fun isRuntimeActive(): Boolean {
+        val currentGains = gains
+        return !passthrough && (currentGains.left != 1f || currentGains.right != 1f)
+    }
+
     override fun queueInput(inputBuffer: ByteBuffer) {
         if (!inputBuffer.hasRemaining()) return
 
         val count = inputBuffer.remaining()
         val outputBuffer = replaceOutputBuffer(count)
         outputBuffer.order(ByteOrder.LITTLE_ENDIAN)
+        val currentGains = gains
 
-        if (passthrough || (leftGain == 1f && rightGain == 1f)) {
+        if (passthrough || (currentGains.left == 1f && currentGains.right == 1f)) {
             outputBuffer.put(inputBuffer)
         } else {
             inputBuffer.order(ByteOrder.LITTLE_ENDIAN)
@@ -49,8 +52,8 @@ class BalanceAudioProcessor : BaseAudioProcessor() {
                 while (inputBuffer.remaining() >= 8) {
                     val left = inputBuffer.float
                     val right = inputBuffer.float
-                    val newLeft = (left * leftGain).coerceIn(-1f, 1f)
-                    val newRight = (right * rightGain).coerceIn(-1f, 1f)
+                    val newLeft = (left * currentGains.left).coerceIn(-1f, 1f)
+                    val newRight = (right * currentGains.right).coerceIn(-1f, 1f)
                     outputBuffer.putFloat(newLeft)
                     outputBuffer.putFloat(newRight)
                 }
@@ -61,8 +64,8 @@ class BalanceAudioProcessor : BaseAudioProcessor() {
                 while (inputBuffer.remaining() >= 4) {
                     val left = inputBuffer.short
                     val right = inputBuffer.short
-                    val newLeft = (left * leftGain).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
-                    val newRight = (right * rightGain).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                    val newLeft = (left * currentGains.left).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
+                    val newRight = (right * currentGains.right).toInt().coerceIn(Short.MIN_VALUE.toInt(), Short.MAX_VALUE.toInt()).toShort()
                     outputBuffer.putShort(newLeft)
                     outputBuffer.putShort(newRight)
                 }
@@ -74,3 +77,9 @@ class BalanceAudioProcessor : BaseAudioProcessor() {
         outputBuffer.flip()
     }
 }
+
+private data class BalanceGains(
+    val balance: Float = 0f,
+    val left: Float = 1f,
+    val right: Float = 1f,
+)

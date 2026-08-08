@@ -24,7 +24,10 @@ fun LazyItemScope.ReorderableItem(
     key = key,
     modifier = modifier,
     draggingDecorationModifier = draggingDecorationModifier,
-    defaultDraggingModifier = Modifier.animateItemPlacement(),
+    defaultDraggingModifier = Modifier.animateItem(
+        fadeInSpec = null,
+        fadeOutSpec = null,
+    ),
     orientationLocked = orientationLocked,
     index = index,
     content = content

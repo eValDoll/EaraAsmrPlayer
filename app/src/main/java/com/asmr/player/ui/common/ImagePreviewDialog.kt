@@ -273,7 +273,7 @@ internal fun ImagePreviewDialog(
                                 .fillMaxSize()
                                 .clipToBounds()
                                 .testTag(IMAGE_PREVIEW_PAGER_TAG),
-                            beyondBoundsPageCount = 0,
+                            beyondViewportPageCount = 0,
                             userScrollEnabled = canNavigate && allowPaging,
                             key = { index -> items[index].key }
                         ) { page ->

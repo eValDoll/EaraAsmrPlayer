@@ -3,7 +3,6 @@ package com.asmr.player.baselineprofile
 import android.content.Intent
 import android.os.SystemClock
 import androidx.benchmark.macro.MacrobenchmarkScope
-import androidx.benchmark.macro.StartupMode
 import androidx.benchmark.macro.junit4.BaselineProfileRule
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.UiDevice
@@ -31,6 +30,7 @@ internal object BenchmarkScenarioValue {
     const val PlaylistsList = "playlists_list"
     const val PlaylistDetail = "playlist_detail"
     const val DownloadsList = "downloads_list"
+    const val TranslationTasks = "translation_tasks"
     const val PlaylistPicker = "playlist_picker"
     const val GroupsList = "groups_list"
     const val GroupDetail = "group_detail"
@@ -301,4 +301,15 @@ internal fun UiDevice.expandFirstVisibleDownloadTask() {
     SystemClock.sleep(300)
 }
 
-internal fun defaultFrameTimingStartupMode(): StartupMode = StartupMode.WARM
+internal fun UiDevice.openAndExpandTranslationTasks() {
+    val translationTab = wait(
+        Until.findObject(By.text("翻译任务")),
+        BenchmarkWaitTimeoutMs
+    ) ?: error("Translation task tab was not visible")
+    translationTab.click()
+    waitForIdle()
+    SystemClock.sleep(300)
+    click(displayWidth / 2, (displayHeight * 0.28f).toInt())
+    waitForIdle()
+    SystemClock.sleep(300)
+}

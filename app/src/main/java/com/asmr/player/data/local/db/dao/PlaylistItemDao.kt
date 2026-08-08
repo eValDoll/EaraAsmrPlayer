@@ -22,9 +22,9 @@ interface PlaylistItemDao {
         SELECT
             pi.playlistId,
             pi.mediaId,
-            pi.title,
+            COALESCE(NULLIF(t.displayTitle, ''), t.title, pi.title) AS title,
             pi.artist,
-            pi.albumTitle,
+            COALESCE(NULLIF(a.displayTitle, ''), a.title, pi.albumTitle) AS albumTitle,
             COALESCE(a.cv, '') AS albumCv,
             pi.uri,
             COALESCE(t.duration, 0) AS duration,

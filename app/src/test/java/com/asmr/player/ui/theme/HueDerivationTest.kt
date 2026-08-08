@@ -3,11 +3,15 @@ package com.asmr.player.ui.theme
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.ColorUtils
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 import kotlin.math.sqrt
 
+@RunWith(RobolectricTestRunner::class)
 class HueDerivationTest {
 
     @Test
@@ -29,7 +33,7 @@ class HueDerivationTest {
         ColorUtils.colorToHSL(hue.background.toArgb(), bgHsl)
 
         assertTrue(hsl[1] <= 0.12f)
-        assertTrue(colorDistanceLab(hue.primaryStrong.toArgb(), primary.toArgb()) < 18.0)
+        assertEquals(primary, hue.primary)
         assertTrue(colorDistanceLab(hue.primarySoft.toArgb(), neutral.surface.toArgb()) > 3.0)
         assertTrue(bgHsl[1] <= 0.10f)
         assertTrue(colorDistanceLab(hue.background.toArgb(), neutral.background.toArgb()) < 10.0)

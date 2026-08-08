@@ -6,20 +6,9 @@ import org.junit.Test
 
 class AlbumHeaderMetaRevealTest {
     @Test
-    fun shouldExpandAlbumHeaderMetaReveal_expandsOnlineHintMeta() {
-        assertTrue(
-            shouldExpandAlbumHeaderMetaReveal(
-                deferMetaRevealExpected = true,
-                presentInitially = true
-            )
-        )
-    }
-
-    @Test
-    fun shouldExpandAlbumHeaderMetaReveal_keepsLocalInitialMetaStable() {
+    fun shouldExpandAlbumHeaderMetaReveal_keepsInitialMetaStable() {
         assertFalse(
             shouldExpandAlbumHeaderMetaReveal(
-                deferMetaRevealExpected = false,
                 presentInitially = true
             )
         )
@@ -29,7 +18,6 @@ class AlbumHeaderMetaRevealTest {
     fun shouldExpandAlbumHeaderMetaReveal_expandsLateMeta() {
         assertTrue(
             shouldExpandAlbumHeaderMetaReveal(
-                deferMetaRevealExpected = false,
                 presentInitially = false
             )
         )

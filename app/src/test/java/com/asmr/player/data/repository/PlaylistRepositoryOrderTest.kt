@@ -155,7 +155,7 @@ class PlaylistRepositoryOrderTest {
     private fun mediaItem(mediaId: String, title: String): MediaItem {
         return MediaItem.Builder()
             .setMediaId(mediaId)
-            .setUri("file:///$mediaId.mp3")
+            .setUri(mediaId)
             .setMimeType("audio/flac")
             .setMediaMetadata(
                 MediaMetadata.Builder()

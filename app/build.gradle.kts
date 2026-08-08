@@ -10,7 +10,7 @@ import java.util.Properties
 
 android {
     namespace = "com.asmr.player"
-    compileSdk = 34
+    compileSdk = 36
 
     val earaKeystoreProps =
         Properties().apply {
@@ -65,16 +65,41 @@ android {
         System.getenv("LISTEN_TOGETHER_BASE_URL")
             ?: (project.findProperty("LISTEN_TOGETHER_BASE_URL") as? String)
             ?: "https://earaasmr.com"
+    val subtitleModelGitHubUrl =
+        System.getenv("SUBTITLE_MODEL_GITHUB_URL")
+            ?: (project.findProperty("SUBTITLE_MODEL_GITHUB_URL") as? String)
+            ?: "https://github.com/eValDoll/EaraAsmrPlayer/releases/download/subtitle-model-parakeet-ja-int8/"
+    val subtitleModelHuggingFaceUrl =
+        System.getenv("SUBTITLE_MODEL_HUGGING_FACE_URL")
+            ?: (project.findProperty("SUBTITLE_MODEL_HUGGING_FACE_URL") as? String)
+            ?: "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt_ctc-0.6b-ja-35000-int8/resolve/main/"
+    val subtitleSenseVoiceHuggingFaceUrl =
+        System.getenv("SUBTITLE_SENSEVOICE_HUGGING_FACE_URL")
+            ?: (project.findProperty("SUBTITLE_SENSEVOICE_HUGGING_FACE_URL") as? String)
+            ?: "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-2024-07-17/resolve/main/"
+    val subtitleSenseVoiceGitHubUrl =
+        System.getenv("SUBTITLE_SENSEVOICE_GITHUB_URL")
+            ?: (project.findProperty("SUBTITLE_SENSEVOICE_GITHUB_URL") as? String)
+            ?: "https://github.com/eValDoll/EaraAsmrPlayer/releases/download/subtitle-model-parakeet-ja-int8/sensevoice-{fileName}"
+    val subtitleRuntimeUrl =
+        System.getenv("SUBTITLE_RUNTIME_URL")
+            ?: (project.findProperty("SUBTITLE_RUNTIME_URL") as? String)
+            ?: "https://github.com/eValDoll/EaraAsmrPlayer/releases/download/subtitle-model-parakeet-ja-int8/sherpa-onnx-runtime-1.13.2-android-arm64-v8a.zip"
 
     defaultConfig {
         applicationId = "com.asmr.player"
         minSdk = 24
         targetSdk = 34
-        versionCode = 10107
-        versionName = "1.1.6"
+        versionCode = 10200
+        versionName = "1.2.0"
         buildConfigField("String", "UPDATE_REPO_OWNER", "\"eValDoll\"")
         buildConfigField("String", "UPDATE_REPO_NAME", "\"EaraAsmrPlayer\"")
         buildConfigField("String", "LISTEN_TOGETHER_BASE_URL", "\"$listenTogetherBaseUrl\"")
+        buildConfigField("String", "SUBTITLE_MODEL_GITHUB_URL", "\"$subtitleModelGitHubUrl\"")
+        buildConfigField("String", "SUBTITLE_MODEL_HUGGING_FACE_URL", "\"$subtitleModelHuggingFaceUrl\"")
+        buildConfigField("String", "SUBTITLE_SENSEVOICE_GITHUB_URL", "\"$subtitleSenseVoiceGitHubUrl\"")
+        buildConfigField("String", "SUBTITLE_SENSEVOICE_HUGGING_FACE_URL", "\"$subtitleSenseVoiceHuggingFaceUrl\"")
+        buildConfigField("String", "SUBTITLE_RUNTIME_URL", "\"$subtitleRuntimeUrl\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -84,8 +109,11 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (project.hasProperty("releaseAndroidTest")) {
+                proguardFiles("proguard-android-test.pro")
+            }
             signingConfig = signingConfigs.getByName("earaRelease")
         }
         create("benchmark") {
@@ -101,6 +129,10 @@ android {
     }
     kotlinOptions {
         jvmTarget = "1.8"
+        freeCompilerArgs += listOf(
+            "-P",
+            "plugin:androidx.compose.compiler.plugins.kotlin:experimentalStrongSkipping=true"
+        )
     }
     buildFeatures {
         compose = true
@@ -120,6 +152,14 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    if (project.hasProperty("releaseAndroidTest")) {
+        testBuildType = "release"
+    }
+    (project.findProperty("subtitleRuntimeTestAssets") as? String)
+        ?.takeIf(String::isNotBlank)
+        ?.let { assetDirectory ->
+            sourceSets.getByName("androidTest").assets.srcDir(rootProject.file(assetDirectory))
+        }
 }
 
 dependencies {
@@ -135,6 +175,7 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
     implementation(platform("androidx.compose:compose-bom:2024.02.00"))
+    implementation("androidx.compose.foundation:foundation:1.7.8")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -197,6 +238,7 @@ dependencies {
     testImplementation("androidx.test.ext:junit:1.1.5")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("org.robolectric:robolectric:4.11.1")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.02.00"))
