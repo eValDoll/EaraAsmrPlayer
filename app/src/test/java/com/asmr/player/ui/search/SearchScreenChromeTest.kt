@@ -168,7 +168,7 @@ class SearchScreenChromeTest {
         composeRule.onNodeWithTag(SEARCH_CLEAR_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_LANGUAGE_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_SUBMIT_BUTTON_TAG).assertIsNotEnabled()
-        composeRule.onNodeWithTag(SEARCH_SUBMIT_SPINNER_TAG).assert(
+        composeRule.onNodeWithTag(SEARCH_SUBMIT_SPINNER_TAG, useUnmergedTree = true).assert(
             SemanticsMatcher.expectValue(SemanticsProperties.TestTag, SEARCH_SUBMIT_SPINNER_TAG)
         )
     }
@@ -198,12 +198,16 @@ class SearchScreenChromeTest {
         }
 
         composeRule.onNodeWithTag(SEARCH_SCOPE_BUTTON_TAG).performClick()
-        composeRule.onNodeWithText("中文作品").assertExists()
+        composeRule.onNodeWithTag(
+            "${SEARCH_SCOPE_OPTION_TAG_PREFIX}_${SearchFilterOption.ChineseTranslated.name}"
+        ).assertExists()
         composeRule.onNodeWithText("已购").assertExists()
         composeRule.onNodeWithText("预售").assertExists()
         composeRule.onNodeWithText("已收录").assertExists()
         composeRule.onNodeWithText("人气顺序").assertExists()
-        composeRule.onNodeWithText("最新发售").assertExists()
+        composeRule.onNodeWithTag(
+            "${SEARCH_SCOPE_OPTION_TAG_PREFIX}_${SearchFilterOption.ReleaseNew.name}"
+        ).assertExists()
         composeRule.onNodeWithText("销量最高").assertExists()
         composeRule.onNodeWithText("价格最高").assertExists()
     }
@@ -232,7 +236,9 @@ class SearchScreenChromeTest {
         }
 
         composeRule.onNodeWithTag(SEARCH_COLLECTED_SORT_BUTTON_TAG).performClick()
-        composeRule.onNodeWithText("最新发售").assertExists()
+        composeRule.onNodeWithTag(
+            "${SEARCH_COLLECTED_SORT_OPTION_TAG_PREFIX}_${SearchCollectedSortOption.ReleaseNew.name}"
+        ).assertExists()
         composeRule.onNodeWithText("最新收录").assertExists()
         composeRule.onNodeWithText("评分最高").assertExists()
         composeRule.onNodeWithTag("${SEARCH_COLLECTED_SORT_OPTION_TAG_PREFIX}_${SearchCollectedSortOption.ReleaseNew.name}").assert(

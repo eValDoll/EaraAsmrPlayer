@@ -550,6 +550,7 @@ private fun SecondaryPageBackground(
     }
 }
 
+@Suppress("DEPRECATION")
 private fun applyMainContainerSystemUi(
     window: android.view.Window,
     forceImmersive: Boolean,
@@ -636,6 +637,7 @@ private fun applyMainContainerSystemUi(
     }
 }
 
+@Suppress("DEPRECATION")
 private fun restoreMainContainerSystemUi(
     window: android.view.Window,
     defaultSystemUi: DefaultSystemUiState?
@@ -660,6 +662,32 @@ private fun restoreMainContainerSystemUi(
             }
         }
     }
+}
+
+@Suppress("DEPRECATION")
+private fun captureDefaultSystemUiState(window: android.view.Window): DefaultSystemUiState {
+    val controller = WindowInsetsControllerCompat(window, window.decorView)
+    return DefaultSystemUiState(
+        statusBarColor = window.statusBarColor,
+        navigationBarColor = window.navigationBarColor,
+        lightStatusBars = controller.isAppearanceLightStatusBars,
+        lightNavigationBars = controller.isAppearanceLightNavigationBars,
+        statusBarContrastEnforced = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isStatusBarContrastEnforced
+        } else {
+            null
+        },
+        navigationBarContrastEnforced = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            window.isNavigationBarContrastEnforced
+        } else {
+            null
+        },
+        layoutInDisplayCutoutMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            window.attributes.layoutInDisplayCutoutMode
+        } else {
+            null
+        }
+    )
 }
 
 @Composable
@@ -1356,30 +1384,7 @@ fun MainContainer(
     val drawerContainerColor = if (colorScheme.isDark) Color(0xFF121212) else Color.White
 
     val defaultSystemUi = remember(activity) {
-        activity?.let { act ->
-            val controller = WindowInsetsControllerCompat(act.window, act.window.decorView)
-            DefaultSystemUiState(
-                statusBarColor = act.window.statusBarColor,
-                navigationBarColor = act.window.navigationBarColor,
-                lightStatusBars = controller.isAppearanceLightStatusBars,
-                lightNavigationBars = controller.isAppearanceLightNavigationBars,
-                statusBarContrastEnforced = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    act.window.isStatusBarContrastEnforced
-                } else {
-                    null
-                },
-                navigationBarContrastEnforced = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                    act.window.isNavigationBarContrastEnforced
-                } else {
-                    null
-                },
-                layoutInDisplayCutoutMode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
-                    act.window.attributes.layoutInDisplayCutoutMode
-                } else {
-                    null
-                }
-            )
-        }
+        activity?.let { act -> captureDefaultSystemUiState(act.window) }
     }
 
     DisposableEffect(activity) {

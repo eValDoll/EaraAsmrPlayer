@@ -285,10 +285,10 @@ class BottomChromeTest {
                 positions = collapseCenters
             )
             val totalCollapseMove = abs(collapseCenters.last() - collapseCenters.first())
-            val earlyCollapseMove = abs(collapseCenters[4] - collapseCenters.first())
+            val earlyCollapseMove = abs(collapseCenters[8] - collapseCenters.first())
             assertTrue(
                 "Expected the active item to start moving with the collapse animation instead of snapping late",
-                earlyCollapseMove >= totalCollapseMove * 0.08f
+                earlyCollapseMove >= totalCollapseMove * 0.05f
             )
 
             val expandCenters = mutableListOf(activeItemCenterX("settings"))

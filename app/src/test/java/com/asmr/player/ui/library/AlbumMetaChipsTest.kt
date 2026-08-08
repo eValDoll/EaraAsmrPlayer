@@ -21,7 +21,10 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+@RunWith(RobolectricTestRunner::class)
 class AlbumMetaChipsTest {
     @get:Rule
     val composeRule = createComposeRule()
@@ -50,7 +53,7 @@ class AlbumMetaChipsTest {
             AsmrPlayerTheme {
                 Column(modifier = Modifier.width(240.dp)) {
                     AlbumHeaderTagsFlow(
-                        tags = List(12) { index -> "标签${index + 1}" },
+                        tags = List(20) { index -> "较长标签${index + 1}" },
                     )
                     Text("后续内容")
                 }
@@ -81,9 +84,15 @@ class AlbumMetaChipsTest {
 
     private fun assertTextDoesNotOverflow(text: String) {
         val textLayoutResults = mutableListOf<TextLayoutResult>()
-        composeRule.onNodeWithText(text).performSemanticsAction(SemanticsActions.GetTextLayoutResult) {
+        val node = composeRule.onNodeWithText(text)
+        node.performSemanticsAction(SemanticsActions.GetTextLayoutResult) {
             it(textLayoutResults)
         }
-        assertFalse(textLayoutResults.single().hasVisualOverflow)
+        val layout = textLayoutResults.single()
+        assertFalse(
+            "$text should not ellipsize: size=${layout.size}, lines=${layout.lineCount}, " +
+                "bounds=${node.getUnclippedBoundsInRoot()}",
+            layout.isLineEllipsized(0)
+        )
     }
 }

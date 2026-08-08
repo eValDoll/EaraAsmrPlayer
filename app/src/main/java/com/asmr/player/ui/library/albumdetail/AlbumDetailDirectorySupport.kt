@@ -279,6 +279,7 @@ internal fun treeFileTypeForNode(title: String, url: String?, remoteType: String
         fromTitle != TreeFileType.Other -> fromTitle
         fromUrl != TreeFileType.Other -> fromUrl
         fromRemoteType != TreeFileType.Other -> fromRemoteType
+        !url.isNullOrBlank() -> TreeFileType.Audio
         else -> TreeFileType.Other
     }
 }

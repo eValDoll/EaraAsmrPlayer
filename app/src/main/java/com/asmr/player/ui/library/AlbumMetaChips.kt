@@ -42,6 +42,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -442,6 +443,9 @@ private fun AlbumHeaderMetaFlow(
     val labelGap = with(LocalDensity.current) {
         minOf(horizontalSpacing, MaterialTheme.typography.labelSmall.fontSize.toDp() / 2f)
     }
+    val labelTextMinWidth = with(LocalDensity.current) {
+        MaterialTheme.typography.labelSmall.fontSize.toDp() * label.length + 4.dp
+    }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -458,6 +462,7 @@ private fun AlbumHeaderMetaFlow(
             shape = AlbumMetaTagShape,
             textWeight = FontWeight.SemiBold,
             leadingIcon = labelIcon,
+            minTextWidth = labelTextMinWidth,
         )
         AlbumMetaMeasuredFlow(
             modifier = Modifier.weight(1f),
@@ -519,6 +524,7 @@ private fun AlbumMetaMeasuredFlow(
                         text = "展开 $itemCount",
                         expanded = false,
                         onClick = { onExpandedChange(true) },
+                        modifier = Modifier.clearAndSetSemantics {},
                     )
                 }.single().measure(childConstraints)
                 val visibleCount = albumMetaCollapsedVisibleCount(
@@ -562,10 +568,11 @@ private fun AlbumMetaToggleAction(
     text: String,
     expanded: Boolean,
     onClick: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     Row(
-        modifier = Modifier
+        modifier = modifier
             .clip(AlbumMetaTagShape)
             .clickable(onClick = onClick)
             .padding(start = 5.dp, end = 3.dp, top = 2.dp, bottom = 2.dp),
@@ -743,6 +750,7 @@ private fun AlbumMetaBadge(
     textWeight: FontWeight? = null,
     appearance: AlbumMetaAppearance = AlbumMetaAppearance.Default,
     leadingIcon: AlbumMetaLeadingIconKind? = null,
+    minTextWidth: Dp? = null,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val palette = albumMetaPalette(tone, colorScheme, appearance)
@@ -781,6 +789,9 @@ private fun AlbumMetaBadge(
         if (text.isNotBlank()) {
             Text(
                 text = text,
+                modifier = Modifier.then(
+                    if (minTextWidth != null) Modifier.widthIn(min = minTextWidth) else Modifier
+                ),
                 style = MaterialTheme.typography.labelSmall,
                 fontWeight = textWeight,
                 color = palette.content,

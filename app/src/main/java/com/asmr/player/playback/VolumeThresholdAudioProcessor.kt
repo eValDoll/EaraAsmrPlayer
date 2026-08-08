@@ -43,6 +43,8 @@ class VolumeThresholdAudioProcessor : BaseAudioProcessor(), RuntimeAudioProcesso
     private var limiterGain = 1f
     private var sampleRateHz = 44_100
     private val peakSafety = 0.95f
+    private val gateOpenDb = -70f
+    private val gateCloseDb = -75f
     private var gateOpen = false
     private var momentaryEmaPower = 0.0
     private var shortTermEmaPower = 0.0
@@ -127,6 +129,8 @@ class VolumeThresholdAudioProcessor : BaseAudioProcessor(), RuntimeAudioProcesso
 
         val modeSnapshot = mode
         val minGain = 0.125f
+        if (db >= gateOpenDb) gateOpen = true
+        if (db <= gateCloseDb) gateOpen = false
         if (dtSec > 0.0) elapsedSec += dtSec
 
         var desiredGain = when (modeSnapshot) {

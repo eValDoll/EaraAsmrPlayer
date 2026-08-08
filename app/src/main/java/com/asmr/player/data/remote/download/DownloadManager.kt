@@ -363,6 +363,9 @@ class DownloadManager @Inject constructor(
 object DownloadQueueCoordinator {
     private const val ACTIVE_WORK_RECONCILE_GRACE_MS = 30_000L
     private const val MEMORY_RETRY_DELAY_MS = 15_000L
+    // Android 15 起不再发送运行时内存级别，保留数值以兼容旧系统回调。
+    private const val TRIM_MEMORY_RUNNING_LOW_COMPAT = 10
+    private const val TRIM_MEMORY_RUNNING_CRITICAL_COMPAT = 15
     private const val TRIM_MEMORY_RUNNING_LOW_BACKOFF_MS = 20_000L
     private const val TRIM_MEMORY_RUNNING_CRITICAL_BACKOFF_MS = 45_000L
 
@@ -434,8 +437,8 @@ object DownloadQueueCoordinator {
     fun onTrimMemory(context: Context, level: Int) {
         val now = System.currentTimeMillis()
         val backoffMs = when {
-            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_CRITICAL -> TRIM_MEMORY_RUNNING_CRITICAL_BACKOFF_MS
-            level >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW -> TRIM_MEMORY_RUNNING_LOW_BACKOFF_MS
+            level >= TRIM_MEMORY_RUNNING_CRITICAL_COMPAT -> TRIM_MEMORY_RUNNING_CRITICAL_BACKOFF_MS
+            level >= TRIM_MEMORY_RUNNING_LOW_COMPAT -> TRIM_MEMORY_RUNNING_LOW_BACKOFF_MS
             else -> 0L
         }
         if (backoffMs > 0L) {
