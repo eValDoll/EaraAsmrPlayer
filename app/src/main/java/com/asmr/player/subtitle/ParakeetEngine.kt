@@ -23,6 +23,10 @@ internal class ParakeetEngine(
     modelDirectory: File,
     override val model: SubtitleTranscriptionModel
 ) : SubtitleTranscriptionEngine {
+    init {
+        SherpaOnnxNativeLoader.load(context)
+    }
+
     private var recognizer: OfflineRecognizer? = createRecognizer(modelDirectory)
     private var vad: Vad? = Vad(
         assetManager = context.assets,

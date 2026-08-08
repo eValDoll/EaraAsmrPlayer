@@ -73,18 +73,23 @@ android {
         System.getenv("SUBTITLE_MODEL_HUGGING_FACE_URL")
             ?: (project.findProperty("SUBTITLE_MODEL_HUGGING_FACE_URL") as? String)
             ?: "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt_ctc-0.6b-ja-35000-int8/resolve/main/"
+    val subtitleRuntimeUrl =
+        System.getenv("SUBTITLE_RUNTIME_URL")
+            ?: (project.findProperty("SUBTITLE_RUNTIME_URL") as? String)
+            ?: "https://github.com/eValDoll/EaraAsmrPlayer/releases/download/subtitle-model-parakeet-ja-int8/sherpa-onnx-runtime-1.13.2-android-arm64-v8a.zip"
 
     defaultConfig {
         applicationId = "com.asmr.player"
         minSdk = 24
         targetSdk = 34
-        versionCode = 10107
-        versionName = "1.1.6"
+        versionCode = 10200
+        versionName = "1.2.0"
         buildConfigField("String", "UPDATE_REPO_OWNER", "\"eValDoll\"")
         buildConfigField("String", "UPDATE_REPO_NAME", "\"EaraAsmrPlayer\"")
         buildConfigField("String", "LISTEN_TOGETHER_BASE_URL", "\"$listenTogetherBaseUrl\"")
         buildConfigField("String", "SUBTITLE_MODEL_GITHUB_URL", "\"$subtitleModelGitHubUrl\"")
         buildConfigField("String", "SUBTITLE_MODEL_HUGGING_FACE_URL", "\"$subtitleModelHuggingFaceUrl\"")
+        buildConfigField("String", "SUBTITLE_RUNTIME_URL", "\"$subtitleRuntimeUrl\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -120,14 +125,6 @@ android {
         compose = true
         buildConfig = true
     }
-    splits {
-        abi {
-            isEnable = true
-            reset()
-            include("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
-            isUniversalApk = true
-        }
-    }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.8"
     }
@@ -142,6 +139,14 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    if (project.hasProperty("releaseAndroidTest")) {
+        testBuildType = "release"
+    }
+    (project.findProperty("subtitleRuntimeTestAssets") as? String)
+        ?.takeIf(String::isNotBlank)
+        ?.let { assetDirectory ->
+            sourceSets.getByName("androidTest").assets.srcDir(rootProject.file(assetDirectory))
+        }
 }
 
 dependencies {
@@ -149,8 +154,6 @@ dependencies {
     val room_version = "2.6.1"
     val hilt_version = "2.49"
     val paging_version = "3.2.1"
-
-    implementation(files("libs/sherpa-onnx-1.13.2.aar"))
 
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime:2.7.0")
@@ -222,6 +225,7 @@ dependencies {
     testImplementation("androidx.test.ext:junit:1.1.5")
     testImplementation("androidx.compose.ui:ui-test-junit4")
     testImplementation("org.robolectric:robolectric:4.11.1")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
     androidTestImplementation(platform("androidx.compose:compose-bom:2024.02.00"))
