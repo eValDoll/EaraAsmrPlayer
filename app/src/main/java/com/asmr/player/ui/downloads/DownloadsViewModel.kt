@@ -10,6 +10,7 @@ import androidx.work.ExistingWorkPolicy
 import androidx.work.WorkManager
 import com.asmr.player.data.local.db.AppDatabaseProvider
 import com.asmr.player.data.local.db.dao.DownloadDao
+import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.remote.download.DOWNLOAD_STATE_QUEUED
 import com.asmr.player.data.remote.download.DownloadQueueCoordinator
 import com.asmr.player.data.remote.download.FinalizeDownloadTaskWorker
@@ -27,7 +28,15 @@ import java.util.UUID
 import androidx.work.workDataOf
 import javax.inject.Inject
 import com.asmr.player.util.MessageManager
+import com.asmr.player.subtitle.SubtitleItemState
+import com.asmr.player.subtitle.SubtitleTaskRepository
+import com.asmr.player.subtitle.SubtitleTaskUi
+import com.asmr.player.subtitle.SubtitleTranslationTarget
 import kotlin.math.max
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.withContext
+
+private const val AlbumCoverQueryBatchSize = 900
 
 enum class DownloadItemState {
     ENQUEUED,
@@ -63,98 +72,212 @@ data class DownloadTaskUi(
     val downloadedBytes: Long,
     val totalBytes: Long?,
     val speed: Long,
+    val albumCover: TaskAlbumCoverUi,
     val items: List<DownloadItemUi>
+)
+
+data class TaskAlbumCoverUi(
+    val coverThumbPath: String = "",
+    val coverPath: String = "",
+    val coverUrl: String = ""
+)
+
+private fun TaskAlbumCoverUi.hasSource(): Boolean =
+    coverThumbPath.isNotBlank() || coverPath.isNotBlank() || coverUrl.isNotBlank()
+
+data class TranslationSubtitleUi(
+    val trackId: Long,
+    val title: String,
+    val subtitleCount: Int
+)
+
+data class TranslationSubtitleGroupUi(
+    val rjCode: String,
+    val title: String,
+    val albumCover: TaskAlbumCoverUi,
+    val subtitles: List<TranslationSubtitleUi>
 )
 
 @HiltViewModel
 class DownloadsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val downloadDao: DownloadDao,
+    private val trackDao: TrackDao,
     private val messageManager: MessageManager
 ) : ViewModel() {
     private val workManager = WorkManager.getInstance(context)
+    private val subtitleTaskRepository = SubtitleTaskRepository.get(context)
 
     val tasks: StateFlow<List<DownloadTaskUi>> =
-        downloadDao.observeTasksWithItems()
-            .map { list ->
-                list.map { taskWithItems ->
-                    val task = taskWithItems.task
-                    val items = taskWithItems.items.map { item ->
-                        val state = when (item.state) {
-                            "PAUSED" -> DownloadItemState.PAUSED
-                            DOWNLOAD_STATE_QUEUED -> DownloadItemState.ENQUEUED
-                            else -> when (runCatching { WorkInfo.State.valueOf(item.state) }.getOrDefault(WorkInfo.State.ENQUEUED)) {
-                                WorkInfo.State.RUNNING -> DownloadItemState.RUNNING
-                                WorkInfo.State.SUCCEEDED -> DownloadItemState.SUCCEEDED
-                                WorkInfo.State.FAILED -> DownloadItemState.FAILED
-                                WorkInfo.State.CANCELLED -> DownloadItemState.CANCELLED
-                                else -> DownloadItemState.ENQUEUED
-                            }
+        combine(
+            downloadDao.observeTasksWithItems(),
+            downloadDao.observeTaskAlbumCovers()
+        ) { list, albumCoverRows ->
+            val albumCoversByTaskId = albumCoverRows.groupBy { it.taskId }
+            list.map { taskWithItems ->
+                val task = taskWithItems.task
+                val items = taskWithItems.items.map { item ->
+                    val state = when (item.state) {
+                        "PAUSED" -> DownloadItemState.PAUSED
+                        DOWNLOAD_STATE_QUEUED -> DownloadItemState.ENQUEUED
+                        else -> when (runCatching { WorkInfo.State.valueOf(item.state) }.getOrDefault(WorkInfo.State.ENQUEUED)) {
+                            WorkInfo.State.RUNNING -> DownloadItemState.RUNNING
+                            WorkInfo.State.SUCCEEDED -> DownloadItemState.SUCCEEDED
+                            WorkInfo.State.FAILED -> DownloadItemState.FAILED
+                            WorkInfo.State.CANCELLED -> DownloadItemState.CANCELLED
+                            else -> DownloadItemState.ENQUEUED
                         }
-                        DownloadItemUi(
-                            taskId = item.taskId,
-                            workId = item.workId,
-                            relativePath = item.relativePath,
-                            fileName = item.fileName,
-                            targetDir = item.targetDir,
-                            filePath = item.filePath,
-                            state = state,
-                            downloaded = item.downloaded,
-                            total = item.total,
-                            speed = item.speed
-                        )
-                    }.sortedBy { it.relativePath }
-
-                    val hasRunning = items.any { it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED }
-                    val hasFailed = items.any { it.state == DownloadItemState.FAILED }
-                    val hasPaused = items.any { it.state == DownloadItemState.PAUSED }
-                    val allCancelled = items.isNotEmpty() && items.all { it.state == DownloadItemState.CANCELLED }
-                    val allSucceeded = items.isNotEmpty() && items.all { it.state == DownloadItemState.SUCCEEDED }
-                    val state = when {
-                        hasRunning -> DownloadItemState.RUNNING
-                        hasFailed -> DownloadItemState.FAILED
-                        allSucceeded -> DownloadItemState.SUCCEEDED
-                        hasPaused -> DownloadItemState.PAUSED
-                        allCancelled -> DownloadItemState.CANCELLED
-                        else -> DownloadItemState.ENQUEUED
                     }
-
-                    val hasUnknownTotalRunning = items.any {
-                        (it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED) && it.total <= 0
-                    }
-                    val progressFraction = resolveTaskProgress(
-                        items = items,
-                        allSucceeded = allSucceeded,
-                        hasUnknownTotalRunning = hasUnknownTotalRunning
-                    )
-                    val downloadedBytes = items.sumOf { it.downloaded.coerceAtLeast(0L) }
-                    val totalBytes = resolveTaskTotalBytes(
-                        items = items,
-                        allSucceeded = allSucceeded,
-                        progressFraction = progressFraction
-                    )
-                    val speed = items.sumOf { item ->
-                        if (item.state == DownloadItemState.RUNNING) item.speed.coerceAtLeast(0L) else 0L
-                    }
-
-                    DownloadTaskUi(
-                        taskId = task.id,
-                        taskKey = task.taskKey,
-                        title = task.title,
-                        subtitle = task.subtitle,
-                        rootDir = task.rootDir,
+                    DownloadItemUi(
+                        taskId = item.taskId,
+                        workId = item.workId,
+                        relativePath = item.relativePath,
+                        fileName = item.fileName,
+                        targetDir = item.targetDir,
+                        filePath = item.filePath,
                         state = state,
-                        progressFraction = progressFraction,
-                        hasUnknownTotalRunning = hasUnknownTotalRunning,
-                        downloadedBytes = downloadedBytes,
-                        totalBytes = totalBytes,
-                        speed = speed,
-                        items = items
+                        downloaded = item.downloaded,
+                        total = item.total,
+                        speed = item.speed
+                    )
+                }.sortedBy { it.relativePath }
+
+                val hasRunning = items.any { it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED }
+                val hasFailed = items.any { it.state == DownloadItemState.FAILED }
+                val hasPaused = items.any { it.state == DownloadItemState.PAUSED }
+                val allCancelled = items.isNotEmpty() && items.all { it.state == DownloadItemState.CANCELLED }
+                val allSucceeded = items.isNotEmpty() && items.all { it.state == DownloadItemState.SUCCEEDED }
+                val state = when {
+                    hasRunning -> DownloadItemState.RUNNING
+                    hasFailed -> DownloadItemState.FAILED
+                    allSucceeded -> DownloadItemState.SUCCEEDED
+                    hasPaused -> DownloadItemState.PAUSED
+                    allCancelled -> DownloadItemState.CANCELLED
+                    else -> DownloadItemState.ENQUEUED
+                }
+
+                val hasUnknownTotalRunning = items.any {
+                    (it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED) && it.total <= 0
+                }
+                val progressFraction = resolveTaskProgress(
+                    items = items,
+                    allSucceeded = allSucceeded,
+                    hasUnknownTotalRunning = hasUnknownTotalRunning
+                )
+                val downloadedBytes = items.sumOf { it.downloaded.coerceAtLeast(0L) }
+                val totalBytes = resolveTaskTotalBytes(
+                    items = items,
+                    allSucceeded = allSucceeded,
+                    hasUnknownTotalRunning = hasUnknownTotalRunning
+                )
+                val speed = items.sumOf { item ->
+                    if (item.state == DownloadItemState.RUNNING) item.speed.coerceAtLeast(0L) else 0L
+                }
+
+                val albumCover = albumCoversByTaskId[task.id]
+                    .orEmpty()
+                    .asSequence()
+                    .map { row ->
+                        TaskAlbumCoverUi(
+                            coverThumbPath = row.coverThumbPath,
+                            coverPath = row.coverPath,
+                            coverUrl = row.coverUrl
+                        )
+                    }
+                    .firstOrNull { it.hasSource() }
+                    ?: TaskAlbumCoverUi(coverUrl = task.albumCoverUrl)
+                DownloadTaskUi(
+                    taskId = task.id,
+                    taskKey = task.taskKey,
+                    title = task.title,
+                    subtitle = task.subtitle,
+                    rootDir = task.rootDir,
+                    state = state,
+                    progressFraction = progressFraction,
+                    hasUnknownTotalRunning = hasUnknownTotalRunning,
+                    downloadedBytes = downloadedBytes,
+                    totalBytes = totalBytes,
+                    speed = speed,
+                    albumCover = albumCover,
+                    items = items
+                )
+            }
+        }
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val translationSubtitleGroups: StateFlow<List<TranslationSubtitleGroupUi>> =
+        trackDao.observeSubtitleTrackSummaries()
+            .map { rows ->
+                rows.groupBy { row ->
+                    row.rjCode.trim()
+                        .ifBlank { row.workId.trim() }
+                        .ifBlank { "未知RJ" }
+                }.map { (rjCode, groupRows) ->
+                    TranslationSubtitleGroupUi(
+                        rjCode = rjCode,
+                        title = groupRows.firstOrNull()?.albumTitle.orEmpty(),
+                        albumCover = groupRows.asSequence()
+                            .map { row ->
+                                TaskAlbumCoverUi(
+                                    coverThumbPath = row.coverThumbPath,
+                                    coverPath = row.coverPath,
+                                    coverUrl = row.coverUrl
+                                )
+                            }
+                            .firstOrNull { it.hasSource() }
+                            ?: TaskAlbumCoverUi(),
+                        subtitles = groupRows.map { row ->
+                            TranslationSubtitleUi(
+                                trackId = row.trackId,
+                                title = row.trackTitle.ifBlank { "本地字幕" },
+                                subtitleCount = row.subtitleCount
+                            )
+                        }
+                    )
+            }
+        }
+            .flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    internal val subtitleTasks: StateFlow<List<SubtitleTaskUi>> = subtitleTaskRepository.tasks
+        .flowOn(Dispatchers.IO)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    suspend fun loadTranslationAlbumCovers(trackIds: List<Long>): Map<Long, TaskAlbumCoverUi> {
+        if (trackIds.isEmpty()) return emptyMap()
+        return withContext(Dispatchers.IO) {
+            val normalizedTrackIds = trackIds
+                .filter { it > 0L }
+                .distinct()
+            val rows = buildList {
+                normalizedTrackIds.chunked(AlbumCoverQueryBatchSize).forEach { ids ->
+                    addAll(trackDao.getAlbumCoversForTracks(ids))
+                }
+            }
+            rows.associate { row ->
+                row.trackId to TaskAlbumCoverUi(
+                    coverThumbPath = row.coverThumbPath,
+                    coverPath = row.coverPath,
+                    coverUrl = row.coverUrl
+                )
+            }
+        }
+    }
+
+    val activeSubtitleTaskCount: StateFlow<Int> = subtitleTaskRepository.tasks
+        .map { tasks ->
+            tasks.sumOf { task ->
+                task.items.count { item ->
+                    item.state !in setOf(
+                        SubtitleItemState.PAUSED,
+                        SubtitleItemState.INTERRUPTED,
+                        SubtitleItemState.FAILED
                     )
                 }
             }
-            .flowOn(Dispatchers.Default)
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     private fun resolveTaskProgress(
         items: List<DownloadItemUi>,
@@ -203,34 +326,28 @@ class DownloadsViewModel @Inject constructor(
     private fun resolveTaskTotalBytes(
         items: List<DownloadItemUi>,
         allSucceeded: Boolean,
-        progressFraction: Float?
+        hasUnknownTotalRunning: Boolean
     ): Long? {
         if (items.isEmpty()) return null
-
-        val downloadedBytes = items.sumOf { it.downloaded.coerceAtLeast(0L) }
-        val knownTotalBytes = items.sumOf { item ->
-            when {
-                item.total > 0L -> item.total
-                item.state == DownloadItemState.SUCCEEDED -> item.downloaded.coerceAtLeast(0L)
-                else -> 0L
-            }
-        }
 
         if (allSucceeded) {
             return items.sumOf { item -> max(item.total, item.downloaded).coerceAtLeast(0L) }
         }
 
-        val estimatedTotalBytes = progressFraction
-            ?.takeIf { it > 0f && it < 1f && downloadedBytes > 0L }
-            ?.let { fraction ->
-                (downloadedBytes.toDouble() / fraction.toDouble()).toLong().coerceAtLeast(downloadedBytes)
-            }
+        // A file's size is fixed once the server reports it, so the task total is
+        // simply the sum of the known item sizes and must never fluctuate while a
+        // download is in progress. If an active item's size is still unknown, we
+        // cannot present a trustworthy denominator, so hide it and let the UI show
+        // an indeterminate state instead of a changing estimate.
+        if (hasUnknownTotalRunning) return null
 
-        return when {
-            estimatedTotalBytes != null -> max(estimatedTotalBytes, knownTotalBytes).takeIf { it > 0L }
-            knownTotalBytes > downloadedBytes -> knownTotalBytes
-            else -> null
-        }
+        return items.sumOf { item ->
+            when {
+                item.total > 0L -> item.total
+                item.state == DownloadItemState.SUCCEEDED -> item.downloaded.coerceAtLeast(0L)
+                else -> 0L
+            }
+        }.takeIf { it > 0L }
     }
 
     fun cancelItem(workId: String) {
@@ -431,6 +548,76 @@ class DownloadsViewModel @Inject constructor(
         }
     }
 
+    fun deleteSubtitleTrack(trackId: Long) {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val activeItem = AppDatabaseProvider.get(context).subtitleTaskDao().getItemForTrack(trackId)
+                if (activeItem != null) {
+                    subtitleTaskRepository.cancelItem(activeItem.id)
+                    messageManager.showInfo("已先取消对应字幕任务，清理完成后可删除字幕")
+                    return@launch
+                }
+                trackDao.deleteSubtitlesForTrack(trackId)
+            }
+                .onFailure {
+                    messageManager.showError("删除字幕失败")
+                }
+        }
+    }
+
+    fun deleteSubtitleTracks(trackIds: List<Long>) {
+        val distinctTrackIds = trackIds.filter { it > 0L }.distinct()
+        if (distinctTrackIds.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val subtitleTaskDao = AppDatabaseProvider.get(context).subtitleTaskDao()
+                val activeItems = distinctTrackIds.mapNotNull { subtitleTaskDao.getItemForTrack(it) }
+                if (activeItems.isNotEmpty()) {
+                    activeItems.forEach { subtitleTaskRepository.cancelItem(it.id) }
+                    messageManager.showInfo("已先取消对应字幕任务，清理完成后可删除字幕")
+                    return@launch
+                }
+                trackDao.deleteSubtitlesForTracks(distinctTrackIds)
+                messageManager.showInfo("已删除 ${distinctTrackIds.size} 个字幕")
+            }.onFailure {
+                messageManager.showError("删除字幕失败")
+            }
+        }
+    }
+
+    fun retrySubtitleTranslation(trackId: Long, title: String) {
+        if (trackId <= 0L) return
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                val handle = subtitleTaskRepository.enqueueTranslation(
+                    SubtitleTranslationTarget(
+                        trackId = trackId,
+                        title = title.ifBlank { "本地字幕" }
+                    )
+                )
+                messageManager.showInfo(
+                    if (handle.reusedExisting) "该音频已有可继续的字幕任务" else "已加入全局翻译队列"
+                )
+            }.onFailure { error ->
+                messageManager.showError(error.message?.takeIf { it.isNotBlank() } ?: "无法重新翻译字幕")
+            }
+        }
+    }
+
+    fun pauseSubtitleItem(itemId: String) = viewModelScope.launch { subtitleTaskRepository.pauseItem(itemId) }
+
+    fun resumeSubtitleItem(itemId: String) = viewModelScope.launch { subtitleTaskRepository.resumeItem(itemId) }
+
+    fun cancelSubtitleItem(itemId: String) = viewModelScope.launch { subtitleTaskRepository.cancelItem(itemId) }
+
+    fun retrySubtitleItem(itemId: String) = viewModelScope.launch { subtitleTaskRepository.retryItem(itemId) }
+
+    fun pauseSubtitleTask(taskId: String) = viewModelScope.launch { subtitleTaskRepository.pauseTask(taskId) }
+
+    fun resumeSubtitleTask(taskId: String) = viewModelScope.launch { subtitleTaskRepository.resumeTask(taskId) }
+
+    fun cancelSubtitleTask(taskId: String) = viewModelScope.launch { subtitleTaskRepository.cancelTask(taskId) }
+
     private suspend fun syncLibraryAfterDownloadedFileDeleted(filePath: String, rootDir: String) {
         if (filePath.isBlank()) return
         val db = AppDatabaseProvider.get(context)
@@ -533,4 +720,5 @@ class DownloadsViewModel @Inject constructor(
             runCatching { target.delete() }.getOrDefault(false)
         }
     }
+
 }

@@ -10,7 +10,7 @@ import java.util.Properties
 
 android {
     namespace = "com.asmr.player"
-    compileSdk = 34
+    compileSdk = 36
 
     val earaKeystoreProps =
         Properties().apply {
@@ -65,6 +65,14 @@ android {
         System.getenv("LISTEN_TOGETHER_BASE_URL")
             ?: (project.findProperty("LISTEN_TOGETHER_BASE_URL") as? String)
             ?: "https://earaasmr.com"
+    val subtitleModelGitHubUrl =
+        System.getenv("SUBTITLE_MODEL_GITHUB_URL")
+            ?: (project.findProperty("SUBTITLE_MODEL_GITHUB_URL") as? String)
+            ?: "https://github.com/eValDoll/EaraAsmrPlayer/releases/download/subtitle-model-parakeet-ja-int8/"
+    val subtitleModelHuggingFaceUrl =
+        System.getenv("SUBTITLE_MODEL_HUGGING_FACE_URL")
+            ?: (project.findProperty("SUBTITLE_MODEL_HUGGING_FACE_URL") as? String)
+            ?: "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt_ctc-0.6b-ja-35000-int8/resolve/main/"
 
     defaultConfig {
         applicationId = "com.asmr.player"
@@ -75,6 +83,8 @@ android {
         buildConfigField("String", "UPDATE_REPO_OWNER", "\"eValDoll\"")
         buildConfigField("String", "UPDATE_REPO_NAME", "\"EaraAsmrPlayer\"")
         buildConfigField("String", "LISTEN_TOGETHER_BASE_URL", "\"$listenTogetherBaseUrl\"")
+        buildConfigField("String", "SUBTITLE_MODEL_GITHUB_URL", "\"$subtitleModelGitHubUrl\"")
+        buildConfigField("String", "SUBTITLE_MODEL_HUGGING_FACE_URL", "\"$subtitleModelHuggingFaceUrl\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -110,6 +120,14 @@ android {
         compose = true
         buildConfig = true
     }
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+            isUniversalApk = true
+        }
+    }
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.8"
     }
@@ -131,6 +149,8 @@ dependencies {
     val room_version = "2.6.1"
     val hilt_version = "2.49"
     val paging_version = "3.2.1"
+
+    implementation(files("libs/sherpa-onnx-1.13.2.aar"))
 
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime:2.7.0")

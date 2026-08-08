@@ -85,6 +85,11 @@ import com.asmr.player.data.remote.scraper.DlsiteRecommendations
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.playback.MediaItemFactory
+import com.asmr.player.subtitle.SubtitleDeviceCapability
+import com.asmr.player.subtitle.SubtitleGenerationTarget
+import com.asmr.player.subtitle.SubtitleTaskRepository
+import com.asmr.player.subtitle.SubtitleModelRepository
+import com.asmr.player.subtitle.SubtitleModelState
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
@@ -157,6 +162,9 @@ internal fun AlbumLocalBreadcrumbTabV2(
     onSetCoverFromImage: (String) -> Unit,
     onPreviewImages: (ImagePreviewRequest) -> Unit,
     onPreviewFile: (LocalTreeUiEntry.File) -> Unit,
+    onSubtitleGenerationError: (String) -> Unit,
+    onSubtitleGenerationUnavailable: (String) -> Unit,
+    onSubtitleGenerationQueued: (String) -> Unit,
 ) {
     val queueTracks = remember(album.id, album.tracks) { album.tracks.sortedBy { it.path } }
     val queueTrackIds = remember(queueTracks) {
@@ -164,6 +172,11 @@ internal fun AlbumLocalBreadcrumbTabV2(
     }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val subtitleModelRepository = remember(context) { SubtitleModelRepository.get(context) }
+    val subtitleModelState by subtitleModelRepository.state.collectAsState()
+    val subtitleDeviceCapability = remember(context) { SubtitleDeviceCapability.evaluate(context) }
+    val subtitleFeatureSupported = subtitleDeviceCapability.supported
+    val subtitleModelAvailable = subtitleFeatureSupported && subtitleModelState is SubtitleModelState.Available
     val allPaths = remember(album) { album.getAllLocalPaths() }
     var currentPath by rememberSaveable(stateKey) { mutableStateOf(initialCurrentPath.trim().trim('/')) }
 
@@ -180,10 +193,10 @@ internal fun AlbumLocalBreadcrumbTabV2(
     }
 
     val subtitleTrackIds by produceState(initialValue = emptySet<Long>(), key1 = queueTrackIds) {
-        value = withContext(Dispatchers.IO) {
-            if (queueTrackIds.isEmpty()) emptySet()
-            else AppDatabaseProvider.get(context).trackDao().getTrackIdsWithSubtitles(queueTrackIds).toSet()
-        }
+        if (queueTrackIds.isEmpty()) return@produceState
+        AppDatabaseProvider.get(context).trackDao()
+            .observeTrackIdsWithSubtitles(queueTrackIds)
+            .collect { value = it.toSet() }
     }
     val remoteSubtitleTrackIds by produceState(initialValue = emptySet<Long>(), key1 = queueTrackIds) {
         value = withContext(Dispatchers.IO) {
@@ -230,7 +243,43 @@ internal fun AlbumLocalBreadcrumbTabV2(
             )
         }
     }
-
+    val currentDirectorySubtitleGenerationTracks = remember(
+        treeIndex,
+        currentPath
+    ) {
+        treeIndex?.let { index ->
+            collectSubtitleGenerationTracks(
+                index = index,
+                currentPath = currentPath,
+                unavailableTrackIds = emptySet()
+            )
+        }.orEmpty()
+    }
+    val startSubtitleGeneration: (List<Track>) -> Unit = { tracks ->
+        val targets = tracks.distinctBy { it.id }.map { track ->
+            SubtitleGenerationTarget(
+                trackId = track.id,
+                title = track.title
+            )
+        }
+        if (targets.isNotEmpty()) {
+            scope.launch {
+                try {
+                    if (tracks.any { it.id in subtitleTrackIds }) {
+                        onSubtitleGenerationQueued("已有字幕，将覆盖后重新生成并翻译")
+                    }
+                    val handle = SubtitleTaskRepository.get(context).enqueueGeneration(targets)
+                    onSubtitleGenerationQueued(
+                        if (handle.reusedExisting) "所选音频已有可继续的字幕任务" else "已加入字幕任务队列"
+                    )
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (error: Throwable) {
+                    onSubtitleGenerationError(error.message?.takeIf { it.isNotBlank() } ?: "无法开始生成并翻译字幕")
+                }
+            }
+        }
+    }
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -265,6 +314,37 @@ internal fun AlbumLocalBreadcrumbTabV2(
                     onAddToFavorites = onAddMediaItemsToFavorites,
                     onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
                     onAddMediaItemsToQueue = onAddMediaItemsToQueue,
+                    onGenerateSubtitlesForCurrentDirectory = {
+                        startSubtitleGeneration(currentDirectorySubtitleGenerationTracks)
+                    },
+                    subtitleGenerationForCurrentDirectoryEnabled = subtitleFeatureSupported &&
+                        currentDirectorySubtitleGenerationTracks.isNotEmpty(),
+                    onGenerateSubtitlesForSelectedFiles = if (subtitleFeatureSupported) { selectedFiles ->
+                        startSubtitleGeneration(
+                            selectedFiles.mapNotNull { file ->
+                                subtitleGenerationTrackForFile(
+                                    file = file,
+                                    unavailableTrackIds = emptySet()
+                                )
+                            }
+                        )
+                    } else null,
+                    canGenerateSubtitleForSelectedFile = if (subtitleFeatureSupported) { file ->
+                        subtitleGenerationTrackForFile(
+                            file = file,
+                            unavailableTrackIds = emptySet()
+                        ) != null
+                    } else null,
+                    subtitleModelAvailable = subtitleModelAvailable,
+                    onSubtitleGenerationUnavailable = {
+                        onSubtitleGenerationUnavailable(
+                            if (subtitleFeatureSupported) {
+                                SubtitleModelRepository.MODEL_REQUIRED_MESSAGE
+                            } else {
+                                subtitleDeviceCapability.message
+                            }
+                        )
+                    },
                     animateIntro = animateIntro,
                     preferredPath = preferredCurrentPath,
                     onTogglePreferredPath = { enabled ->
@@ -385,6 +465,21 @@ internal fun AlbumLocalBreadcrumbTabV2(
                             onDownload = null,
                             onAddToQueue = track?.let { { onAddToQueue(it); Unit } },
                             onAddToPlaylist = track?.let { { onAddToPlaylist(it) } },
+                            onGenerateSubtitles = if (subtitleFeatureSupported) {
+                                subtitleGenerationTrackForFile(
+                                    file = file,
+                                    unavailableTrackIds = emptySet()
+                                )?.let { subtitleGenerationTrack ->
+                                    {
+                                        if (subtitleModelAvailable) {
+                                            startSubtitleGeneration(listOf(subtitleGenerationTrack))
+                                        } else {
+                                            onSubtitleGenerationUnavailable(SubtitleModelRepository.MODEL_REQUIRED_MESSAGE)
+                                        }
+                                    }
+                                }
+                            } else null,
+                            subtitleGenerationEnabled = subtitleModelAvailable,
                             onManageTags = track?.let { if (!isOnlineTrackPath(it.path)) { { onManageTrackTags(it) } } else null },
                             onRemoveFromAlbum = track?.let { { onRemoveTrack(it) } }
                         )
@@ -393,4 +488,5 @@ internal fun AlbumLocalBreadcrumbTabV2(
             }
         }
     }
+
 }

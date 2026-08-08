@@ -62,6 +62,10 @@ class BaselineProfileGenerator {
         device.expandFirstVisibleDownloadTask()
         device.performLongListScrollProfile()
 
+        startHarnessScenario(BenchmarkScenarioValue.TranslationTasks)
+        device.openAndExpandTranslationTasks()
+        device.performLongListScrollProfile()
+
         startHarnessScenario(BenchmarkScenarioValue.Settings)
         device.performLongListScrollProfile()
 

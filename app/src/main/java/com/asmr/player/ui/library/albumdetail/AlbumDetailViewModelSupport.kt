@@ -224,7 +224,10 @@ internal fun buildDisplayAlbum(
     fallbackCoverUrl: String = ""
 ): Album {
     val base = dlsiteInfo ?: localAlbum ?: Album(title = rjCode.ifBlank { "专辑" }, path = "")
+    val displayTitle = localAlbum?.displayTitle?.takeIf { it.isNotBlank() }
     return base.copy(
+        title = displayTitle ?: base.title,
+        displayTitle = displayTitle.orEmpty(),
         workId = asmrOneWorkId?.takeIf { it.isNotBlank() } ?: base.workId,
         rjCode = rjCode.ifBlank { base.rjCode.ifBlank { base.workId } },
         cv = base.cv.ifBlank { fallbackCv },

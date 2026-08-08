@@ -40,6 +40,9 @@ interface TrackDao {
     @Query("UPDATE tracks SET duration = :duration WHERE id = :trackId")
     suspend fun updateTrackDuration(trackId: Long, duration: Double)
 
+    @Query("UPDATE tracks SET displayTitle = :displayTitle WHERE id = :trackId")
+    suspend fun updateTrackDisplayTitle(trackId: Long, displayTitle: String)
+
     @Query("SELECT * FROM tracks WHERE path = :path LIMIT 1")
     suspend fun getTrackByPathOnce(path: String): TrackEntity?
 
@@ -48,6 +51,9 @@ interface TrackDao {
 
     @Query("SELECT * FROM tracks WHERE id = :id LIMIT 1")
     suspend fun getTrackByIdOnce(id: Long): TrackEntity?
+
+    @Query("SELECT * FROM tracks WHERE id IN (:ids)")
+    suspend fun getTracksByIdsOnce(ids: List<Long>): List<TrackEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertTrack(track: TrackEntity): Long
@@ -82,11 +88,50 @@ interface TrackDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertSubtitles(subtitles: List<SubtitleEntity>): List<Long>
 
+    @Update
+    suspend fun updateSubtitles(subtitles: List<SubtitleEntity>)
+
     @Query("SELECT * FROM subtitles WHERE trackId = :trackId")
     suspend fun getSubtitlesForTrack(trackId: Long): List<SubtitleEntity>
 
     @Query("SELECT DISTINCT trackId FROM subtitles WHERE trackId IN (:trackIds)")
     suspend fun getTrackIdsWithSubtitles(trackIds: List<Long>): List<Long>
+
+    @Query("SELECT DISTINCT trackId FROM subtitles WHERE trackId IN (:trackIds)")
+    fun observeTrackIdsWithSubtitles(trackIds: List<Long>): Flow<List<Long>>
+
+    @Query(
+        """
+        SELECT t.id AS trackId,
+               COALESCE(NULLIF(t.displayTitle, ''), t.title) AS trackTitle,
+               a.rjCode AS rjCode,
+               a.workId AS workId,
+               COALESCE(NULLIF(a.displayTitle, ''), a.title) AS albumTitle,
+               a.coverUrl AS coverUrl,
+               a.coverPath AS coverPath,
+               a.coverThumbPath AS coverThumbPath,
+               COUNT(s.id) AS subtitleCount
+        FROM tracks t
+        INNER JOIN subtitles s ON s.trackId = t.id
+        INNER JOIN albums a ON a.id = t.albumId
+        GROUP BY t.id
+        ORDER BY a.rjCode COLLATE NOCASE ASC, a.workId COLLATE NOCASE ASC, t.path COLLATE NOCASE ASC
+        """
+    )
+    fun observeSubtitleTrackSummaries(): Flow<List<SubtitleTrackSummaryRow>>
+
+    @Query(
+        """
+        SELECT t.id AS trackId,
+               a.coverUrl AS coverUrl,
+               a.coverPath AS coverPath,
+               a.coverThumbPath AS coverThumbPath
+        FROM tracks t
+        INNER JOIN albums a ON a.id = t.albumId
+        WHERE t.id IN (:trackIds)
+        """
+    )
+    suspend fun getAlbumCoversForTracks(trackIds: List<Long>): List<TranslationTrackAlbumCoverRow>
 
     @RawQuery(
         observedEntities = [
@@ -140,4 +185,23 @@ interface TrackDao {
 data class AlbumTrackCountRow(
     val albumId: Long,
     val totalCount: Long
+)
+
+data class SubtitleTrackSummaryRow(
+    val trackId: Long,
+    val trackTitle: String,
+    val rjCode: String,
+    val workId: String,
+    val albumTitle: String,
+    val coverUrl: String,
+    val coverPath: String,
+    val coverThumbPath: String,
+    val subtitleCount: Int
+)
+
+data class TranslationTrackAlbumCoverRow(
+    val trackId: Long,
+    val coverUrl: String,
+    val coverPath: String,
+    val coverThumbPath: String
 )

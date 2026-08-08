@@ -110,6 +110,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.domain.model.Album
+import com.asmr.player.data.local.db.entities.AlbumEntity
+import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.cache.LazyListPreloader
 import com.asmr.player.cache.LazyStaggeredGridPreloader
@@ -842,7 +844,7 @@ fun SearchScreen(
                         onAlbumClick(
                             Album(
                                 id = album.id,
-                                title = album.title,
+                                title = album.titleForDisplay,
                                 path = album.path,
                                 localPath = album.localPath,
                                 downloadPath = album.downloadPath,

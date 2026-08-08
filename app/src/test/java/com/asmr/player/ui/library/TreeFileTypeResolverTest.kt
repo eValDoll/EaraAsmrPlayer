@@ -14,6 +14,18 @@ class TreeFileTypeResolverTest {
     }
 
     @Test
+    fun treeFileTypeForName_keepsLeadingHashInLocalFileName() {
+        assertEquals(TreeFileType.Audio, treeFileTypeForName("#2,track.wav"))
+        assertEquals(TreeFileType.Audio, treeFileTypeForName("album/#1.track.flac"))
+    }
+
+    @Test
+    fun treeFileTypeForName_stripsUrlQueryAndFragment() {
+        assertEquals(TreeFileType.Audio, treeFileTypeForName("https://example.com/track.wav?token=1"))
+        assertEquals(TreeFileType.Audio, treeFileTypeForName("https://example.com/track.wav#t=1"))
+    }
+
+    @Test
     fun treeFileTypeForNode_prefersUrlWhenRecognized() {
         assertEquals(
             TreeFileType.Text,

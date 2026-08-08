@@ -84,6 +84,94 @@ class AlbumDetailDirectorySupportTest {
     }
 
     @Test
+    fun collectSubtitleGenerationTracks_includesMp3AndWavRecursively() {
+        val tracks = listOf(
+            Track(id = 1L, albumId = 7L, title = "root mp3", path = "/album/root.mp3"),
+            Track(id = 2L, albumId = 7L, title = "nested wav", path = "/album/disc/nested.wav"),
+            Track(id = 3L, albumId = 7L, title = "nested flac", path = "/album/disc/nested.flac"),
+            Track(id = 4L, albumId = 7L, title = "online mp3", path = "https://example.com/online.mp3")
+        )
+        val index = buildLocalTreeIndexFromLeaves(
+            leaves = listOf(
+                LocalTreeLeafCacheEntry("root.mp3", tracks[0].path, TreeFileType.Audio),
+                LocalTreeLeafCacheEntry("disc/nested.wav", tracks[1].path, TreeFileType.Audio),
+                LocalTreeLeafCacheEntry("disc/nested.flac", tracks[2].path, TreeFileType.Audio),
+                LocalTreeLeafCacheEntry("disc/online.mp3", tracks[3].path, TreeFileType.Audio)
+            ),
+            tracks = tracks
+        )
+
+        val rootResult = collectSubtitleGenerationTracks(
+            index = index,
+            currentPath = "",
+            unavailableTrackIds = emptySet()
+        )
+        val nestedResult = collectSubtitleGenerationTracks(
+            index = index,
+            currentPath = "disc",
+            unavailableTrackIds = setOf(2L)
+        )
+
+        assertEquals(listOf(2L, 1L), rootResult.map { it.id })
+        assertTrue(nestedResult.isEmpty())
+    }
+
+    @Test
+    fun subtitleGenerationTrackForFile_rejectsUnsupportedAndExistingSubtitles() {
+        val track = Track(
+            id = 9L,
+            albumId = 7L,
+            title = "track",
+            path = "/album/track.mp3"
+        )
+        val file = DirectoryFileItem(
+            path = "track.mp3",
+            title = "track",
+            fileType = TreeFileType.Audio,
+            isPlayable = true,
+            sizeSource = FileSizeSource.Local(track.path),
+            absolutePath = track.path,
+            track = track
+        )
+
+        assertEquals(track, subtitleGenerationTrackForFile(file, emptySet()))
+        assertEquals(null, subtitleGenerationTrackForFile(file, setOf(track.id)))
+        assertEquals(
+            null,
+            subtitleGenerationTrackForFile(file.copy(path = "track.flac"), emptySet())
+        )
+    }
+
+    @Test
+    fun subtitleTranslationTrackForFile_requiresLocalSubtitles() {
+        val track = Track(
+            id = 10L,
+            albumId = 7L,
+            title = "track",
+            path = "/album/track.mp3"
+        )
+        val file = DirectoryFileItem(
+            path = "track.mp3",
+            title = "track",
+            fileType = TreeFileType.Audio,
+            isPlayable = true,
+            sizeSource = FileSizeSource.Local(track.path),
+            absolutePath = track.path,
+            track = track
+        )
+
+        assertEquals(track, subtitleTranslationTrackForFile(file, setOf(track.id)))
+        assertEquals(null, subtitleTranslationTrackForFile(file, emptySet()))
+        assertEquals(
+            null,
+            subtitleTranslationTrackForFile(
+                file.copy(isOnline = true, sizeSource = FileSizeSource.Remote("https://example.com/track.mp3")),
+                setOf(track.id)
+            )
+        )
+    }
+
+    @Test
     fun flattenAsmrOneTracksForUi_matchesSubtitleFromOtherFolderUnderSameRoot() {
         val tree = listOf(
             AsmrOneTrackNodeResponse(

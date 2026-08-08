@@ -5,3 +5,6 @@
 
 gradlew text eol=lf
 *.sh text eol=lf
+
+app/src/main/assets/models/*.bin filter=lfs diff=lfs merge=lfs -text
+app/libs/*.aar filter=lfs diff=lfs merge=lfs -text

@@ -11,3 +11,6 @@
 # eligible for shrinking and method optimization.
 -keep class com.google.gson.reflect.TypeToken { *; }
 -keep class * extends com.google.gson.reflect.TypeToken { *; }
+
+# sherpa-onnx 通过 JNI 解析 Kotlin 配置和推理结果。
+-keep class com.k2fsa.sherpa.onnx.** { *; }

@@ -15,6 +15,39 @@ interface DownloadDao {
     @Query("SELECT * FROM download_tasks ORDER BY createdAt DESC")
     fun observeTasksWithItems(): Flow<List<DownloadTaskWithItems>>
 
+    @Query(
+        """
+        SELECT d.id AS taskId,
+               a.coverUrl AS coverUrl,
+               a.coverPath AS coverPath,
+               a.coverThumbPath AS coverThumbPath
+        FROM download_tasks d
+        INNER JOIN albums a ON
+            (
+                TRIM(d.albumRjCode) != '' AND
+                (
+                    a.rjCode = TRIM(d.albumRjCode) COLLATE NOCASE OR
+                    a.workId = TRIM(d.albumRjCode) COLLATE NOCASE
+                )
+            ) OR (
+                TRIM(d.albumWorkId) != '' AND
+                (
+                    a.rjCode = TRIM(d.albumWorkId) COLLATE NOCASE OR
+                    a.workId = TRIM(d.albumWorkId) COLLATE NOCASE
+                )
+            ) OR (
+                TRIM(d.albumRjCode) = '' AND
+                TRIM(d.albumWorkId) = '' AND
+                (
+                    a.rjCode = TRIM(d.title) COLLATE NOCASE OR
+                    a.workId = TRIM(d.title) COLLATE NOCASE
+                )
+            )
+        ORDER BY a.id DESC
+        """
+    )
+    fun observeTaskAlbumCovers(): Flow<List<DownloadTaskAlbumCoverRow>>
+
     @Query("SELECT * FROM download_tasks WHERE id = :taskId LIMIT 1")
     suspend fun getTaskById(taskId: Long): DownloadTaskEntity?
 
@@ -142,3 +175,10 @@ interface DownloadDao {
     @Query("SELECT COUNT(*) FROM download_items WHERE state = 'PAUSED'")
     suspend fun countPausedItems(): Int
 }
+
+data class DownloadTaskAlbumCoverRow(
+    val taskId: Long,
+    val coverUrl: String,
+    val coverPath: String,
+    val coverThumbPath: String
+)

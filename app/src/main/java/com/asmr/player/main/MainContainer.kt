@@ -1522,7 +1522,7 @@ fun MainContainer(
                         Triple(Icons.Rounded.Favorite, "我的收藏", "playlist_system/favorites"),
                         Triple(Icons.AutoMirrored.Rounded.QueueMusic, "我的列表", "playlists"),
                         Triple(Icons.Rounded.Folder, "我的分组", "groups"),
-                        Triple(Icons.Rounded.Download, "下载管理", "downloads"),
+                        Triple(Icons.Rounded.Sync, "任务管理", "downloads"),
                         Triple(Icons.Rounded.Route, "ASMR 看板", "listening_calendar"),
                         Triple(Icons.Rounded.Settings, "设置", "settings")
                     )
@@ -1729,7 +1729,7 @@ fun MainContainer(
                                                     resolvedTitleRoute == "group/{groupId}/{groupName}" ->
                                                         groupName.ifBlank { "我的分组" }
                                                     resolvedTitleRoute == "settings" -> "设置"
-                                                    resolvedTitleRoute == "downloads" -> "下载管理"
+                                                    resolvedTitleRoute == "downloads" -> "任务管理"
                                                     resolvedTitleRoute == "listening_calendar" -> "ASMR 看板"
                                                     resolvedTitleRoute == "dlsite_login" -> "DLsite 登录"
                                                     resolvedTitleRoute?.startsWith("playlist_picker") == true -> "添加到我的列表"
@@ -1807,6 +1807,7 @@ fun MainContainer(
                                                         (isPrimaryRoute(headerActionRoute) || headerActionRoute == "playlist_system/{type}")
                                                     ) {
                                                         val downloadTasks by downloadsViewModel.tasks.collectAsState()
+                                                        val activeSubtitleTaskCount by downloadsViewModel.activeSubtitleTaskCount.collectAsState()
                                                         val activeDownloadCount = remember(downloadTasks) {
                                                             downloadTasks.sumOf { task ->
                                                                 task.items.count {
@@ -1814,19 +1815,20 @@ fun MainContainer(
                                                                 }
                                                             }
                                                         }
+                                                        val activeTaskCount = activeDownloadCount + activeSubtitleTaskCount
                                                         Box {
                                                             EaraTopBarIconButton(
                                                                 onClick = { navController.navigate("downloads") },
                                                                 modifier = Modifier.padding(end = 4.dp)
                                                             ) {
-                                                                Icon(Icons.Rounded.Download, contentDescription = "下载管理")
+                                                                Icon(Icons.Rounded.Inbox, contentDescription = "任务管理")
                                                             }
-                                                            if (activeDownloadCount > 0) {
+                                                            if (activeTaskCount > 0) {
                                                                 Badge(
                                                                     modifier = Modifier
                                                                         .align(Alignment.TopEnd)
                                                                 ) {
-                                                                    Text(activeDownloadCount.toString())
+                                                                    Text(activeTaskCount.toString())
                                                                 }
                                                             }
                                                         }

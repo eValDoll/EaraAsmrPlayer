@@ -38,31 +38,55 @@ jobs:
           fi
           printf '%s' "${EARA_RELEASE_JKS_BASE64}" | base64 --decode > eara-release.jks
           chmod 600 eara-release.jks
-      - name: Build release APK
+      - name: Build release APKs
         run: ./gradlew :app:assembleRelease
         env:
           EARA_RELEASE_STORE_FILE: eara-release.jks
           EARA_RELEASE_STORE_PASSWORD: ${{ secrets.EARA_RELEASE_STORE_PASSWORD }}
           EARA_RELEASE_KEY_ALIAS: ${{ secrets.EARA_RELEASE_KEY_ALIAS }}
           EARA_RELEASE_KEY_PASSWORD: ${{ secrets.EARA_RELEASE_KEY_PASSWORD }}
-      - name: Prepare release artifact
+      - name: Prepare release artifacts
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p dist
-          APK_PATH="$(find . -type f -path '*/outputs/apk/release/*.apk' -name '*release*.apk' | head -n 1)"
-          if [ -z "$APK_PATH" ]; then
+          mapfile -t APK_PATHS < <(find . -type f -path '*/outputs/apk/release/*.apk' -name '*.apk' | sort)
+          if [ "${#APK_PATHS[@]}" -eq 0 ]; then
             echo "Release APK not found under outputs/apk/release"
             find . -maxdepth 4 -type d -name outputs -print
             exit 1
           fi
-          echo "Using APK: $APK_PATH"
-          cp "$APK_PATH" "dist/AsmrPlayer-${{ github.ref_name }}-release.apk"
+          for apk in "${APK_PATHS[@]}"; do
+            file_name="$(basename "$apk")"
+            case "$file_name" in
+              *universal*.apk)
+                target="AsmrPlayer-${{ github.ref_name }}-universal.apk"
+                ;;
+              *arm64-v8a*.apk)
+                target="AsmrPlayer-${{ github.ref_name }}-arm64-v8a.apk"
+                ;;
+              *armeabi-v7a*.apk)
+                target="AsmrPlayer-${{ github.ref_name }}-armeabi-v7a.apk"
+                ;;
+              *x86_64*.apk)
+                target="AsmrPlayer-${{ github.ref_name }}-x86_64.apk"
+                ;;
+              *x86*.apk)
+                target="AsmrPlayer-${{ github.ref_name }}-x86.apk"
+                ;;
+              *)
+                target="AsmrPlayer-${{ github.ref_name }}-${file_name}"
+                ;;
+            esac
+            echo "Copying $apk -> dist/$target"
+            cp "$apk" "dist/$target"
+          done
+          ls -lh dist
       - uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
           tag_name: ${{ github.ref_name }}
           generate_release_notes: true
           overwrite: true
-          files: dist/AsmrPlayer-${{ github.ref_name }}-release.apk
+          files: dist/*.apk
           token: ${{ secrets.GITHUB_TOKEN }}

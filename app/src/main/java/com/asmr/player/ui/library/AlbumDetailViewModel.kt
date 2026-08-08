@@ -28,6 +28,7 @@ import com.asmr.player.data.local.db.entities.TagEntity
 import com.asmr.player.data.local.db.entities.TagSource
 import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.data.local.db.entities.TrackTagEntity
+import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.data.lyrics.LyricsLoader
 import com.asmr.player.data.lyrics.deriveLyricsRelativePathNoExt
 import com.asmr.player.data.remote.NetworkHeaders
@@ -1961,7 +1962,8 @@ class AlbumDetailViewModel @Inject constructor(
         val tracks = loadLocalTracks(entity)
         return Album(
             id = entity.id,
-            title = entity.title,
+            title = entity.titleForDisplay,
+            displayTitle = entity.displayTitle,
             path = entity.path,
             localPath = entity.localPath,
             downloadPath = entity.downloadPath,
@@ -2732,7 +2734,7 @@ class AlbumDetailViewModel @Inject constructor(
         return Track(
             id = id,
             albumId = albumId,
-            title = title,
+            title = titleForDisplay,
             path = path,
             duration = duration,
             group = group,

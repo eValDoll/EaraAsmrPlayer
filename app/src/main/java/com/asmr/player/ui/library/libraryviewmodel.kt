@@ -36,6 +36,7 @@ import com.asmr.player.data.local.db.entities.TagEntity
 import com.asmr.player.data.local.db.entities.TagSource
 import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.data.local.db.entities.TrackTagEntity
+import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.data.remote.api.AsmrOneApi
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncResolveResult
@@ -305,7 +306,8 @@ class LibraryViewModel @Inject constructor(
             .toList()
         return Album(
             id = id,
-            title = title,
+            title = titleForDisplay,
+            displayTitle = displayTitle,
             path = path,
             localPath = localPath,
             downloadPath = downloadPath,
