@@ -28,6 +28,7 @@ import java.util.UUID
 import androidx.work.workDataOf
 import javax.inject.Inject
 import com.asmr.player.util.MessageManager
+import com.asmr.player.subtitle.SubtitleFailureMessages
 import com.asmr.player.subtitle.SubtitleItemState
 import com.asmr.player.subtitle.SubtitleTaskRepository
 import com.asmr.player.subtitle.SubtitleTaskUi
@@ -599,7 +600,12 @@ class DownloadsViewModel @Inject constructor(
                     if (handle.reusedExisting) "该音频已有可继续的字幕任务" else "已加入全局翻译队列"
                 )
             }.onFailure { error ->
-                messageManager.showError(error.message?.takeIf { it.isNotBlank() } ?: "无法重新翻译字幕")
+                val message = error.message?.takeIf { it.isNotBlank() } ?: "无法重新翻译字幕"
+                if (SubtitleFailureMessages.isUserActionWarning(message)) {
+                    messageManager.showWarning(message)
+                } else {
+                    messageManager.showError(message)
+                }
             }
         }
     }

@@ -22,6 +22,7 @@ import com.asmr.player.subtitle.SubtitleModelDownloadSource
 import com.asmr.player.subtitle.SubtitleModelRepository
 import com.asmr.player.subtitle.SubtitleModelState
 import com.asmr.player.subtitle.DeepSeekApiKeyStore
+import com.asmr.player.subtitle.DeepSeekAccountRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -89,6 +90,7 @@ class SettingsViewModel @Inject constructor(
     private val settingsDataStore: SettingsDataStore,
     private val appCacheManager: AppCacheManager,
     private val okHttpClient: OkHttpClient,
+    private val deepSeekAccountRepository: DeepSeekAccountRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
     private val subtitleModelRepository = SubtitleModelRepository.get(context)
@@ -165,6 +167,7 @@ class SettingsViewModel @Inject constructor(
     internal val subtitleModelState: StateFlow<SubtitleModelState> = subtitleModelRepository.state
     private val _deepSeekApiKeyState = MutableStateFlow(DeepSeekApiKeyUiState())
     internal val deepSeekApiKeyState = _deepSeekApiKeyState.asStateFlow()
+    internal val deepSeekAccountState = deepSeekAccountRepository.state
 
     private val updateClient = GitHubUpdateClient(okHttpClient)
     private val _updateState = MutableStateFlow<AppUpdateState>(AppUpdateState.Idle)
@@ -175,8 +178,13 @@ class SettingsViewModel @Inject constructor(
     init {
         appCacheManager.start()
         viewModelScope.launch(Dispatchers.IO) {
-            val configured = deepSeekApiKeyStore.isConfigured()
+            val apiKey = deepSeekApiKeyStore.read()
+            val configured = apiKey.isNotBlank()
             _deepSeekApiKeyState.value = _deepSeekApiKeyState.value.copy(configured = configured)
+            if (configured) {
+                deepSeekAccountRepository.bindApiKey(apiKey)
+                deepSeekAccountRepository.refreshBalance(apiKey)
+            }
         }
     }
 
@@ -294,22 +302,23 @@ class SettingsViewModel @Inject constructor(
                 saving = true,
                 errorMessage = null
             )
-            runCatching { deepSeekApiKeyStore.save(normalized) }
-                .onSuccess {
-                    val current = _deepSeekApiKeyState.value
-                    _deepSeekApiKeyState.value = current.copy(
-                        configured = true,
-                        saving = false,
-                        errorMessage = null,
-                        saveVersion = current.saveVersion + 1L
-                    )
-                }
-                .onFailure {
-                    _deepSeekApiKeyState.value = _deepSeekApiKeyState.value.copy(
-                        saving = false,
-                        errorMessage = "API Key 保存失败"
-                    )
-                }
+            val saved = runCatching { deepSeekApiKeyStore.save(normalized) }.isSuccess
+            if (saved) {
+                deepSeekAccountRepository.bindApiKey(normalized)
+                val current = _deepSeekApiKeyState.value
+                _deepSeekApiKeyState.value = current.copy(
+                    configured = true,
+                    saving = false,
+                    errorMessage = null,
+                    saveVersion = current.saveVersion + 1L
+                )
+                deepSeekAccountRepository.refreshBalance(normalized)
+            } else {
+                _deepSeekApiKeyState.value = _deepSeekApiKeyState.value.copy(
+                    saving = false,
+                    errorMessage = "API Key 保存失败"
+                )
+            }
         }
     }
 

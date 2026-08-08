@@ -58,6 +58,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
@@ -80,6 +81,9 @@ import com.asmr.player.subtitle.SubtitleModelDownloadSource
 import com.asmr.player.subtitle.SubtitleModelState
 import com.asmr.player.subtitle.SubtitleTranscriptionModels
 import com.asmr.player.subtitle.DEEPSEEK_SUBTITLE_MODEL
+import com.asmr.player.subtitle.DeepSeekAccountState
+import com.asmr.player.subtitle.formatDeepSeekBalances
+import com.asmr.player.subtitle.formatDeepSeekTokenTotal
 import com.asmr.player.ui.library.BulkPhase
 import com.asmr.player.ui.library.LibraryViewModel
 import com.asmr.player.ui.common.AppSupportStatusSection
@@ -96,6 +100,7 @@ import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.update.launchDownloadedApkInstall
+import com.asmr.player.util.Formatting
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -134,6 +139,7 @@ fun SettingsScreen(
     val appCacheState by viewModel.appCacheState.collectAsStateWhileActive(isDataActive)
     val subtitleModelState by viewModel.subtitleModelState.collectAsStateWhileActive(isDataActive)
     val deepSeekApiKeyState by viewModel.deepSeekApiKeyState.collectAsStateWhileActive(isDataActive)
+    val deepSeekAccountState by viewModel.deepSeekAccountState.collectAsStateWhileActive(isDataActive)
     val deepSeekTranslationSettings by viewModel.deepSeekTranslationSettings.collectAsStateWhileActive(isDataActive)
     val updateState by viewModel.updateState.collectAsStateWhileActive(isDataActive)
     val autoUpdateCheckEnabled by viewModel.autoUpdateCheckEnabled.collectAsStateWhileActive(isDataActive)
@@ -775,6 +781,7 @@ fun SettingsScreen(
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
                         DeepSeekTranslationSettingsSection(
                             state = deepSeekApiKeyState,
+                            accountState = deepSeekAccountState,
                             settings = deepSeekTranslationSettings,
                             apiKeyInput = deepSeekApiKeyInput,
                             compact = isCompact,
@@ -985,6 +992,7 @@ fun SettingsScreen(
 @Composable
 internal fun DeepSeekTranslationSettingsSection(
     state: DeepSeekApiKeyUiState,
+    accountState: DeepSeekAccountState = DeepSeekAccountState(),
     settings: DeepSeekTranslationSettings,
     apiKeyInput: String,
     compact: Boolean,
@@ -1006,17 +1014,41 @@ internal fun DeepSeekTranslationSettingsSection(
             text = DEEPSEEK_SUBTITLE_MODEL,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f)
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .weight(1f)
+                .testTag("deepseek_model_name")
         )
         if (state.configured) {
-            Icon(
-                imageVector = Icons.Rounded.CheckCircle,
-                contentDescription = "API Key 已配置",
-                tint = Color(0xFF3E9B63),
-                modifier = Modifier
-                    .size(20.dp)
-                    .testTag("deepseek_api_key_configured")
-            )
+            Row(
+                modifier = Modifier.width(if (compact) 208.dp else 248.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Token ${formatDeepSeekTokenTotal(accountState.totalTokens)} · 余额 ${formatDeepSeekBalances(accountState.balances)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (accountState.balanceAvailable == false) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("deepseek_account_summary")
+                )
+                Icon(
+                    imageVector = Icons.Rounded.CheckCircle,
+                    contentDescription = "API Key 已配置",
+                    tint = Color(0xFF3E9B63),
+                    modifier = Modifier
+                        .size(20.dp)
+                        .testTag("deepseek_api_key_configured")
+                )
+            }
         }
     }
     Row(
@@ -1147,16 +1179,27 @@ private fun SubtitleModelSettingsSection(
         state is SubtitleModelState.Downloading ||
         state is SubtitleModelState.Verifying
 
-    Text(
-        text = model.displayName,
-        style = MaterialTheme.typography.bodyMedium,
-        fontWeight = FontWeight.SemiBold
-    )
-    Text(
-        text = "首次下载会同时安装约 11 MiB 的字幕运行时；删除模型后运行时会保留。",
-        style = MaterialTheme.typography.bodySmall,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = model.displayName,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+        Text(
+            text = Formatting.formatFileSize(model.artifactBytes),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+            modifier = Modifier.widthIn(min = 72.dp)
+        )
+    }
 
     if (state !is SubtitleModelState.Available) {
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {

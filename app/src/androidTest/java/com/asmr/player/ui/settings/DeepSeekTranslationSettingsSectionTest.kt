@@ -12,8 +12,11 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.asmr.player.data.settings.DeepSeekReasoningEffort
 import com.asmr.player.data.settings.DeepSeekTranslationSettings
+import com.asmr.player.subtitle.DeepSeekAccountState
+import com.asmr.player.subtitle.DeepSeekBalance
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -59,6 +62,11 @@ class DeepSeekTranslationSettingsSectionTest {
                 Column {
                     DeepSeekTranslationSettingsSection(
                         state = DeepSeekApiKeyUiState(configured = true),
+                        accountState = DeepSeekAccountState(
+                            totalTokens = 12_345L,
+                            balances = listOf(DeepSeekBalance("CNY", "8.50")),
+                            balanceAvailable = true
+                        ),
                         settings = DeepSeekTranslationSettings(
                             thinkingEnabled = false,
                             reasoningEffort = DeepSeekReasoningEffort.MAX
@@ -76,8 +84,17 @@ class DeepSeekTranslationSettingsSectionTest {
         }
 
         composeRule.onNodeWithText("替换").assertExists()
+        composeRule.onNodeWithText("Token 12.3K · 余额 ¥8.5").assertExists()
         composeRule.onNodeWithContentDescription("API Key 已配置").assertExists()
         composeRule.onNodeWithTag("deepseek_reasoning_high").assertIsNotEnabled()
         composeRule.onNodeWithTag("deepseek_reasoning_max").assertIsNotEnabled()
+        val summaryBounds = composeRule.onNodeWithTag("deepseek_account_summary")
+            .getUnclippedBoundsInRoot()
+        val summaryWidth = summaryBounds.right - summaryBounds.left
+        assertTrue(summaryWidth.value >= 170f)
+        val modelBounds = composeRule.onNodeWithTag("deepseek_model_name")
+            .getUnclippedBoundsInRoot()
+        val modelHeight = modelBounds.bottom - modelBounds.top
+        assertTrue(modelHeight.value <= 24f)
     }
 }

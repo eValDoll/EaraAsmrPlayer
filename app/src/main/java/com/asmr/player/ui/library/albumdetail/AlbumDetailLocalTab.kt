@@ -86,6 +86,7 @@ import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.playback.MediaItemFactory
 import com.asmr.player.subtitle.SubtitleDeviceCapability
+import com.asmr.player.subtitle.SubtitleFailureMessages
 import com.asmr.player.subtitle.SubtitleGenerationTarget
 import com.asmr.player.subtitle.SubtitleTaskRepository
 import com.asmr.player.subtitle.SubtitleModelRepository
@@ -275,7 +276,12 @@ internal fun AlbumLocalBreadcrumbTabV2(
                 } catch (cancelled: kotlinx.coroutines.CancellationException) {
                     throw cancelled
                 } catch (error: Throwable) {
-                    onSubtitleGenerationError(error.message?.takeIf { it.isNotBlank() } ?: "无法开始生成并翻译字幕")
+                    val message = error.message?.takeIf { it.isNotBlank() } ?: "无法开始生成并翻译字幕"
+                    if (SubtitleFailureMessages.isUserActionWarning(message)) {
+                        onSubtitleGenerationUnavailable(message)
+                    } else {
+                        onSubtitleGenerationError(message)
+                    }
                 }
             }
         }

@@ -77,7 +77,13 @@ private data class DeepSeekFunctionDefinition(
 )
 
 private data class DeepSeekChatResponse(
-    val choices: List<DeepSeekChoice> = emptyList()
+    val choices: List<DeepSeekChoice> = emptyList(),
+    val usage: DeepSeekChatUsage? = null
+)
+
+private data class DeepSeekChatUsage(
+    @SerializedName("total_tokens")
+    val totalTokens: Long = 0L
 )
 
 private data class DeepSeekChoice(
@@ -114,9 +120,13 @@ internal class SubtitleTranslationClient(
     private val gson: Gson,
     apiKey: String,
     private val settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings(),
-    private val apiUrl: String = DEEPSEEK_CHAT_COMPLETIONS_URL
+    private val apiUrl: String = DEEPSEEK_CHAT_COMPLETIONS_URL,
+    private val onTokenUsage: (Long) -> Unit = {}
 ) {
-    private val authorization = "Bearer ${apiKey.trim().also { require(it.isNotEmpty()) { "请先在设置中配置 DeepSeek API Key" } }}"
+    private val normalizedApiKey = apiKey.trim().also {
+        require(it.isNotEmpty()) { "请先在设置中配置 DeepSeek API Key" }
+    }
+    private val authorization = "Bearer $normalizedApiKey"
     private val callFactory: Call.Factory = okHttpClient.newBuilder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(5, TimeUnit.MINUTES)
@@ -314,7 +324,7 @@ internal class SubtitleTranslationClient(
             throw cancelled
         } catch (error: IOException) {
             throw SubtitleTranslationException(
-                message = "无法连接 DeepSeek 翻译服务",
+                message = SubtitleFailureMessages.network(error),
                 retryable = true,
                 cause = error
             )
@@ -323,26 +333,23 @@ internal class SubtitleTranslationClient(
             response.use {
                 val raw = it.body?.string().orEmpty()
                 if (!it.isSuccessful) {
-                    val retryable = it.code == 408 || it.code == 425 || it.code == 429 || it.code >= 500
-                    val serviceMessage = parseDeepSeekErrorMessage(raw)
+                    val failure = SubtitleFailureMessages.deepSeekHttp(
+                        statusCode = it.code,
+                        serviceMessage = parseDeepSeekErrorMessage(raw)
+                    )
                     throw SubtitleTranslationException(
-                        message = when (it.code) {
-                            401 -> "DeepSeek API Key 无效"
-                            402 -> "DeepSeek 账户余额不足"
-                            429 -> "DeepSeek 请求过于频繁"
-                            in 500..599 -> "DeepSeek 服务暂时不可用"
-                            else -> buildString {
-                                append("DeepSeek 翻译请求失败（HTTP ${it.code}）")
-                                serviceMessage?.let { message -> append("：$message") }
-                            }
-                        },
-                        retryable = retryable,
+                        message = failure.message,
+                        retryable = failure.retryable,
                         retryAfterMs = parseRetryAfterMillis(it.header("Retry-After"))
                     )
                 }
                 val deepSeekResponse = runCatching {
                     gson.fromJson(raw, DeepSeekChatResponse::class.java)
                 }.getOrNull()
+                deepSeekResponse?.usage?.totalTokens?.takeIf { totalTokens -> totalTokens > 0L }?.let { totalTokens ->
+                    runCatching { onTokenUsage(totalTokens) }
+                        .onFailure { error -> Log.w(TAG, "记录 DeepSeek token 用量失败", error) }
+                }
                 val choice = deepSeekResponse?.choices?.firstOrNull()
                 val message = choice?.message ?: DeepSeekChatMessage(role = "assistant")
                 val content = message.content.orEmpty()
