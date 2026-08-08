@@ -78,8 +78,11 @@ import com.asmr.player.data.settings.FloatingLyricsSettings
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.subtitle.SubtitleDeviceCapability
 import com.asmr.player.subtitle.SubtitleModelDownloadSource
+import com.asmr.player.subtitle.SubtitleModelInstallationState
+import com.asmr.player.subtitle.SubtitleModelOperation
 import com.asmr.player.subtitle.SubtitleModelState
 import com.asmr.player.subtitle.SubtitleTranscriptionModels
+import com.asmr.player.subtitle.configuredSubtitleModelDownloadSources
 import com.asmr.player.subtitle.DEEPSEEK_SUBTITLE_MODEL
 import com.asmr.player.subtitle.DeepSeekAccountState
 import com.asmr.player.subtitle.formatDeepSeekBalances
@@ -172,9 +175,13 @@ fun SettingsScreen(
     var activeTipKey by remember { mutableStateOf<String?>(null) }
     var searchBlockedKeywordInput by rememberSaveable { mutableStateOf("") }
     var showClearAppCacheConfirmation by remember { mutableStateOf(false) }
-    var showDeleteSubtitleModelConfirmation by remember { mutableStateOf(false) }
-    var subtitleModelSourceId by rememberSaveable {
-        mutableStateOf(SubtitleModelDownloadSource.HuggingFace.id)
+    var pendingDeleteSubtitleModelId by remember { mutableStateOf<String?>(null) }
+    val subtitleModelSourceIds = remember {
+        mutableStateMapOf<String, String>().apply {
+            SubtitleTranscriptionModels.all.forEach { model ->
+                this[model.id] = SubtitleModelDownloadSource.HuggingFace.id
+            }
+        }
     }
     var deepSeekApiKeyInput by remember { mutableStateOf("") }
     LaunchedEffect(deepSeekApiKeyState.saveVersion) {
@@ -766,16 +773,18 @@ fun SettingsScreen(
                     SettingsGroup(title = "翻译配置") {
                         SubtitleModelSettingsSection(
                             state = subtitleModelState,
-                            selectedSource = SubtitleModelDownloadSource.fromId(subtitleModelSourceId)
-                                ?: SubtitleModelDownloadSource.HuggingFace,
+                            selectedSourceIds = subtitleModelSourceIds,
                             deviceSupported = remember(context) {
                                 SubtitleDeviceCapability.evaluate(context).supported
                             },
                             segmentedButtonColors = segmentedButtonColors,
-                            onSourceSelected = { source -> subtitleModelSourceId = source.id },
+                            onSourceSelected = { modelId, source ->
+                                subtitleModelSourceIds[modelId] = source.id
+                            },
                             onDownload = viewModel::downloadSubtitleModel,
                             onCancelDownload = viewModel::cancelSubtitleModelDownload,
-                            onDelete = { showDeleteSubtitleModelConfirmation = true },
+                            onSelect = viewModel::selectSubtitleModel,
+                            onDelete = { modelId -> pendingDeleteSubtitleModelId = modelId },
                             onClearFailure = viewModel::clearSubtitleModelFailure
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
@@ -969,18 +978,19 @@ fun SettingsScreen(
             )
         )
     }
-    if (showDeleteSubtitleModelConfirmation) {
+    pendingDeleteSubtitleModelId?.let { modelId ->
+        val modelName = SubtitleTranscriptionModels.fromId(modelId)?.optionName ?: "字幕"
         FlatActionDialog(
-            onDismissRequest = { showDeleteSubtitleModelConfirmation = false },
-            message = "确定删除字幕模型？约 29 MiB 的字幕运行时会保留，之后重新下载模型时无需重复安装。",
+            onDismissRequest = { pendingDeleteSubtitleModelId = null },
+            message = "确定删除“$modelName”模型？约 29 MiB 的公共运行时会保留，之后下载任一模型时无需重复安装。",
             actions = listOf(
-                FlatDialogAction("取消", onClick = { showDeleteSubtitleModelConfirmation = false }),
+                FlatDialogAction("取消", onClick = { pendingDeleteSubtitleModelId = null }),
                 FlatDialogAction(
                     text = "删除模型",
                     tone = FlatDialogActionTone.Danger,
                     onClick = {
-                        showDeleteSubtitleModelConfirmation = false
-                        viewModel.deleteSubtitleModel()
+                        pendingDeleteSubtitleModelId = null
+                        viewModel.deleteSubtitleModel(modelId)
                     }
                 )
             )
@@ -1153,163 +1163,222 @@ internal fun DeepSeekTranslationSettingsSection(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SubtitleModelSettingsSection(
+internal fun SubtitleModelSettingsSection(
     state: SubtitleModelState,
-    selectedSource: SubtitleModelDownloadSource,
+    selectedSourceIds: Map<String, String>,
     deviceSupported: Boolean,
     segmentedButtonColors: SegmentedButtonColors,
-    onSourceSelected: (SubtitleModelDownloadSource) -> Unit,
-    onDownload: (SubtitleModelDownloadSource) -> Unit,
+    onSourceSelected: (String, SubtitleModelDownloadSource) -> Unit,
+    onDownload: (String, SubtitleModelDownloadSource) -> Unit,
     onCancelDownload: () -> Unit,
-    onDelete: () -> Unit,
-    onClearFailure: () -> Unit
+    onSelect: (String) -> Unit,
+    onDelete: (String) -> Unit,
+    onClearFailure: (String) -> Unit
 ) {
-    val actionButtonColors = settingsPrimaryTonalButtonColors()
-    val model = SubtitleTranscriptionModels.PARAKEET_TDT_CTC_06B_JA_INT8
-    val effectiveSource = when (state) {
-        is SubtitleModelState.Queued -> state.source
-        is SubtitleModelState.Downloading -> state.source
-        is SubtitleModelState.Verifying -> state.source
-        is SubtitleModelState.Failed -> state.source
-        is SubtitleModelState.Available -> state.source ?: selectedSource
-        SubtitleModelState.Missing -> selectedSource
-    }
-    val sourceConfigured = effectiveSource.isConfigured()
-    val isDownloading = state is SubtitleModelState.Queued ||
-        state is SubtitleModelState.Downloading ||
-        state is SubtitleModelState.Verifying
-
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(
-            text = model.displayName,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f)
-        )
-        Text(
-            text = Formatting.formatFileSize(model.artifactBytes),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.End,
-            modifier = Modifier.widthIn(min = 72.dp)
+    var selectedModelId by rememberSaveable {
+        mutableStateOf(
+            state.operation?.modelId ?: SubtitleTranscriptionModels.SENSE_VOICE_SMALL_INT8.id
         )
     }
+    LaunchedEffect(state.operation?.modelId) {
+        state.operation?.modelId?.let { selectedModelId = it }
+    }
+    val model = SubtitleTranscriptionModels.fromId(selectedModelId)
+        ?: SubtitleTranscriptionModels.default
+    val installation = state.installation(model.id)
+    val installed = installation is SubtitleModelInstallationState.Available
+    val isActive = state.activeModelId == model.id
+    val operation = state.operation?.takeIf { it.modelId == model.id }
+    val running = operation is SubtitleModelOperation.Queued ||
+        operation is SubtitleModelOperation.Downloading ||
+        operation is SubtitleModelOperation.Verifying
+    val anotherOperationRunning = state.operation != null &&
+        state.operation.modelId != model.id &&
+        state.operation !is SubtitleModelOperation.Failed
+    val availableSources = configuredSubtitleModelDownloadSources(model)
+    val selectedSource = operation?.source
+        ?: SubtitleModelDownloadSource.fromId(selectedSourceIds[model.id])
+        ?: availableSources.firstOrNull()
+        ?: SubtitleModelDownloadSource.HuggingFace
+    val colors = AsmrTheme.colorScheme
 
-    if (state !is SubtitleModelState.Available) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-            SubtitleModelDownloadSource.entries.forEachIndexed { index, source ->
+            SubtitleTranscriptionModels.all.forEachIndexed { index, candidate ->
                 SegmentedButton(
-                    selected = effectiveSource == source,
-                    onClick = {
-                        onClearFailure()
-                        onSourceSelected(source)
-                    },
-                    enabled = !isDownloading,
+                    selected = model.id == candidate.id,
+                    onClick = { selectedModelId = candidate.id },
                     shape = SegmentedButtonDefaults.itemShape(
                         index = index,
-                        count = SubtitleModelDownloadSource.entries.size
+                        count = SubtitleTranscriptionModels.all.size
                     ),
                     colors = segmentedButtonColors,
                     icon = {},
-                    label = { Text(source.displayName) }
+                    modifier = Modifier.testTag("subtitle_model_choice_${candidate.id}"),
+                    label = {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                text = if (state.activeModelId == candidate.id) {
+                                    "${candidate.optionName} · 当前"
+                                } else {
+                                    candidate.optionName
+                                },
+                                maxLines = 1
+                            )
+                            Text(
+                                text = Formatting.formatFileSize(candidate.artifactBytes),
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1
+                            )
+                        }
+                    }
                 )
             }
         }
-    }
 
-    when (state) {
-        SubtitleModelState.Missing -> Unit
-        is SubtitleModelState.Queued -> {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.Top,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
             Text(
-                text = "等待下载字幕组件",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = model.displayName,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
             )
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            Text(
+                text = when {
+                    isActive && installed -> "当前使用"
+                    isActive -> "当前（未安装）"
+                    installed -> "已安装"
+                    else -> "未安装"
+                },
+                style = MaterialTheme.typography.labelMedium,
+                color = if (isActive) colors.primaryStrong else colors.textSecondary,
+                modifier = Modifier.testTag("subtitle_model_status_${model.id}")
+            )
         }
-        is SubtitleModelState.Downloading -> {
-            Text(
-                text = state.stage.displayName,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            val progress = if (state.totalBytes > 0L) {
-                (state.downloadedBytes.toFloat() / state.totalBytes.toFloat()).coerceIn(0f, 1f)
-            } else {
-                null
+
+        if (!installed && availableSources.size > 1) {
+            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                availableSources.forEachIndexed { index, source ->
+                    SegmentedButton(
+                        selected = selectedSource == source,
+                        onClick = {
+                            onClearFailure(model.id)
+                            onSourceSelected(model.id, source)
+                        },
+                        enabled = !running && !anotherOperationRunning,
+                        shape = SegmentedButtonDefaults.itemShape(index, availableSources.size),
+                        colors = segmentedButtonColors,
+                        icon = {},
+                        label = { Text(source.displayName) }
+                    )
+                }
             }
-            if (progress != null) {
-                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
-            } else {
+        }
+
+        when (operation) {
+            null -> Unit
+            is SubtitleModelOperation.Queued -> {
+                Text("等待下载字幕组件", style = MaterialTheme.typography.bodySmall)
                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
             }
-        }
-        is SubtitleModelState.Verifying -> {
-            Text(
-                text = state.stage.displayName,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-        }
-        is SubtitleModelState.Available -> Unit
-        is SubtitleModelState.Failed -> {
-            Text(
-                text = state.message,
+            is SubtitleModelOperation.Downloading -> {
+                Text(operation.stage.displayName, style = MaterialTheme.typography.bodySmall)
+                if (operation.totalBytes > 0L) {
+                    val progress = (operation.downloadedBytes.toFloat() / operation.totalBytes)
+                        .coerceIn(0f, 1f)
+                    LinearProgressIndicator(
+                        progress = { progress },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                } else {
+                    LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                }
+            }
+            is SubtitleModelOperation.Verifying -> {
+                Text(operation.stage.displayName, style = MaterialTheme.typography.bodySmall)
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+            is SubtitleModelOperation.Failed -> Text(
+                text = operation.message,
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.error
             )
         }
-    }
 
-    when {
-        state is SubtitleModelState.Available -> {
-            FilledTonalButton(
-                onClick = onDelete,
+        when {
+            running -> FilledTonalButton(
+                onClick = onCancelDownload,
                 modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.filledTonalButtonColors(
-                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                    contentColor = MaterialTheme.colorScheme.onErrorContainer
-                )
+                colors = settingsPrimaryTonalButtonColors()
+            ) {
+                Text("取消下载")
+            }
+            installed && !isActive -> Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                FilledTonalButton(
+                    onClick = { onSelect(model.id) },
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("subtitle_model_select_${model.id}"),
+                    colors = settingsPrimaryTonalButtonColors()
+                ) {
+                    Text("设为当前")
+                }
+                FilledTonalButton(
+                    onClick = { onDelete(model.id) },
+                    colors = subtitleModelDeleteButtonColors()
+                ) {
+                    Icon(Icons.Rounded.Delete, contentDescription = "删除模型")
+                }
+            }
+            installed -> FilledTonalButton(
+                onClick = { onDelete(model.id) },
+                modifier = Modifier.fillMaxWidth(),
+                colors = subtitleModelDeleteButtonColors()
             ) {
                 Icon(Icons.Rounded.Delete, contentDescription = null)
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("删除模型")
             }
-        }
-        isDownloading -> {
-            FilledTonalButton(
-                onClick = onCancelDownload,
-                modifier = Modifier.fillMaxWidth(),
-                colors = actionButtonColors
-            ) {
-                Text("取消下载")
-            }
-        }
-        else -> {
-            FilledTonalButton(
-                onClick = { onDownload(effectiveSource) },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = deviceSupported && sourceConfigured,
-                colors = actionButtonColors
+            else -> FilledTonalButton(
+                onClick = { onDownload(model.id, selectedSource) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("subtitle_model_download_${model.id}"),
+                enabled = deviceSupported && availableSources.contains(selectedSource) &&
+                    !anotherOperationRunning,
+                colors = settingsPrimaryTonalButtonColors()
             ) {
                 Text(
                     when {
                         !deviceSupported -> "设备不支持"
-                        !sourceConfigured -> "来源不可用"
-                        else -> "下载字幕组件"
+                        availableSources.isEmpty() -> "来源不可用"
+                        anotherOperationRunning -> "其他模型正在下载"
+                        operation is SubtitleModelOperation.Failed -> "重新下载"
+                        else -> "下载模型"
                     }
                 )
             }
         }
     }
 }
+
+@Composable
+private fun subtitleModelDeleteButtonColors(): ButtonColors =
+    ButtonDefaults.filledTonalButtonColors(
+        containerColor = MaterialTheme.colorScheme.errorContainer,
+        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+        disabledContainerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.48f),
+        disabledContentColor = MaterialTheme.colorScheme.onErrorContainer.copy(alpha = 0.48f)
+    )
 
 @Composable
 private fun settingsPrimaryTonalButtonColors(): ButtonColors {

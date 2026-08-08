@@ -131,6 +131,7 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
                     suspendedFromState = "",
                     transcriptionChunkCursor = 0,
                     transcriptionProgress = if (mode == SubtitleTaskMode.MANUAL) 100 else 0,
+                    transcriptionModelId = "",
                     transcribedMs = 0L,
                     totalDurationMs = (track.duration * 1_000.0).toLong().coerceAtLeast(0L),
                     translationCursor = 0,

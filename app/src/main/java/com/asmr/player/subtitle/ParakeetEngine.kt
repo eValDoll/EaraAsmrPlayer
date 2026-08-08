@@ -5,6 +5,7 @@ import com.k2fsa.sherpa.onnx.OfflineModelConfig
 import com.k2fsa.sherpa.onnx.OfflineNemoEncDecCtcModelConfig
 import com.k2fsa.sherpa.onnx.OfflineRecognizer
 import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig
+import com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig
 import com.k2fsa.sherpa.onnx.SileroVadModelConfig
 import com.k2fsa.sherpa.onnx.Vad
 import com.k2fsa.sherpa.onnx.VadModelConfig
@@ -18,7 +19,7 @@ internal data class SpeechRegion(
     val endSample: Int
 )
 
-internal class ParakeetEngine(
+internal class SherpaOnnxTranscriptionEngine(
     context: Context,
     modelDirectory: File,
     override val model: SubtitleTranscriptionModel
@@ -93,7 +94,7 @@ internal class ParakeetEngine(
                     activeRecognizer.decode(stream)
                     if (isCancelled()) return emptyList()
                     val result = activeRecognizer.getResult(stream)
-                    val text = cleanParakeetText(result.text)
+                    val text = cleanRecognizerText(result.text)
                     if (text.isNotEmpty()) {
                         val regionDurationMs =
                             (region.endSample - region.startSample) * 1_000L /
@@ -103,7 +104,7 @@ internal class ParakeetEngine(
                                 startMs = region.startSample * 1_000L / model.inputSampleRateHz,
                                 endMs = region.endSample * 1_000L / model.inputSampleRateHz,
                                 text = text,
-                                tokens = buildParakeetTokenTimeline(
+                                tokens = buildRecognizerTokenTimeline(
                                     tokens = result.tokens.toList(),
                                     timestampsSeconds = result.timestamps.toList(),
                                     durationsSeconds = result.durations.toList(),
@@ -139,18 +140,10 @@ internal class ParakeetEngine(
             }
         }
         return OfflineRecognizer(
-            config = OfflineRecognizerConfig(
-                modelConfig = OfflineModelConfig(
-                    nemo = OfflineNemoEncDecCtcModelConfig(
-                        model = artifacts.getValue(MODEL_FILE_NAME).absolutePath
-                    ),
-                    numThreads = preferredThreadCount(),
-                    debug = false,
-                    provider = "cpu",
-                    tokens = artifacts.getValue(TOKENS_FILE_NAME).absolutePath
-                ),
-                decodingMethod = "greedy_search",
-                maxActivePaths = 4
+            config = buildOfflineRecognizerConfig(
+                model = model,
+                artifactPaths = artifacts.mapValues { it.value.absolutePath },
+                numThreads = preferredThreadCount()
             )
         )
     }
@@ -218,12 +211,12 @@ internal class ParakeetEngine(
     }
 }
 
-internal class ParakeetEngineFactory(
+internal class SherpaOnnxTranscriptionEngineFactory(
     private val context: Context,
     private val modelDirectory: File,
     override val model: SubtitleTranscriptionModel
 ) : SubtitleTranscriptionEngineFactory {
-    override fun create(): SubtitleTranscriptionEngine = ParakeetEngine(
+    override fun create(): SubtitleTranscriptionEngine = SherpaOnnxTranscriptionEngine(
         context = context,
         modelDirectory = modelDirectory,
         model = model
@@ -383,7 +376,7 @@ private fun selectSpeechChannel(
 private fun squareEnergy(samples: FloatArray): Double =
     samples.sumOf { sample -> sample.toDouble() * sample }
 
-internal fun buildParakeetTokenTimeline(
+internal fun buildRecognizerTokenTimeline(
     tokens: List<String>,
     timestampsSeconds: List<Float>,
     durationsSeconds: List<Float> = emptyList(),
@@ -400,7 +393,7 @@ internal fun buildParakeetTokenTimeline(
             ?.coerceAtMost(segmentDurationMs)
     }
     return tokens.mapIndexedNotNull { index, rawToken ->
-        val text = cleanParakeetToken(rawToken)
+        val text = cleanRecognizerToken(rawToken)
         val startMs = starts[index]
         if (text.isEmpty() || startMs == null || startMs >= segmentDurationMs) {
             return@mapIndexedNotNull null
@@ -422,11 +415,43 @@ internal fun buildParakeetTokenTimeline(
 
 private const val MAX_TOKEN_DURATION_MS = 400L
 
-private fun cleanParakeetToken(text: String): String = text
+internal fun buildOfflineRecognizerConfig(
+    model: SubtitleTranscriptionModel,
+    artifactPaths: Map<String, String>,
+    numThreads: Int
+): OfflineRecognizerConfig {
+    val modelFile = artifactPaths.getValue("model.int8.onnx")
+    val modelConfig = OfflineModelConfig(
+        numThreads = numThreads,
+        debug = false,
+        provider = "cpu",
+        tokens = artifactPaths.getValue("tokens.txt")
+    )
+    when (model.type) {
+        SubtitleTranscriptionModelType.NEMO_CTC -> {
+            modelConfig.nemo = OfflineNemoEncDecCtcModelConfig(model = modelFile)
+        }
+
+        SubtitleTranscriptionModelType.SENSE_VOICE -> {
+            modelConfig.senseVoice = OfflineSenseVoiceModelConfig(
+                model = modelFile,
+                language = "ja",
+                useInverseTextNormalization = true
+            )
+        }
+    }
+    return OfflineRecognizerConfig(
+        modelConfig = modelConfig,
+        decodingMethod = "greedy_search",
+        maxActivePaths = 4
+    )
+}
+
+private fun cleanRecognizerToken(text: String): String = text
     .replace('▁', ' ')
     .replace(Regex("[\\t\\r\\n ]+"), " ")
     .trim()
 
-private fun cleanParakeetText(text: String): String = text
+private fun cleanRecognizerText(text: String): String = text
     .replace(Regex("[\\t\\r\\n ]+"), " ")
     .trim()

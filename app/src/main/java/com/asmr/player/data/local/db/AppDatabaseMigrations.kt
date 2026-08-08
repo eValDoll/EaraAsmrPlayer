@@ -546,6 +546,15 @@ object AppDatabaseMigrations {
         }
     }
 
+    val MIGRATION_28_29: Migration = object : Migration(28, 29) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE subtitle_task_items " +
+                    "ADD COLUMN `transcriptionModelId` TEXT NOT NULL DEFAULT ''"
+            )
+        }
+    }
+
     private fun createItemChildTable(
         db: SupportSQLiteDatabase,
         table: String,

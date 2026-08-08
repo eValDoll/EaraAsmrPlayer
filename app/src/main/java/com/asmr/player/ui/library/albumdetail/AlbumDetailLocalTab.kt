@@ -90,7 +90,7 @@ import com.asmr.player.subtitle.SubtitleFailureMessages
 import com.asmr.player.subtitle.SubtitleGenerationTarget
 import com.asmr.player.subtitle.SubtitleTaskRepository
 import com.asmr.player.subtitle.SubtitleModelRepository
-import com.asmr.player.subtitle.SubtitleModelState
+import com.asmr.player.subtitle.SubtitleModelInstallationState
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
@@ -177,7 +177,9 @@ internal fun AlbumLocalBreadcrumbTabV2(
     val subtitleModelState by subtitleModelRepository.state.collectAsState()
     val subtitleDeviceCapability = remember(context) { SubtitleDeviceCapability.evaluate(context) }
     val subtitleFeatureSupported = subtitleDeviceCapability.supported
-    val subtitleModelAvailable = subtitleFeatureSupported && subtitleModelState is SubtitleModelState.Available
+    val subtitleModelAvailable = subtitleFeatureSupported &&
+        subtitleModelState.installation(subtitleModelState.activeModelId) is
+        SubtitleModelInstallationState.Available
     val allPaths = remember(album) { album.getAllLocalPaths() }
     var currentPath by rememberSaveable(stateKey) { mutableStateOf(initialCurrentPath.trim().trim('/')) }
 

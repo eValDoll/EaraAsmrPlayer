@@ -15,6 +15,57 @@ import java.io.File
 @Config(application = Application::class, sdk = [34])
 class AppDatabaseMigrationsTest {
     @Test
+    fun migration28To29_preservesTaskItemAndAddsEmptyModelSnapshot() {
+        val context = RuntimeEnvironment.getApplication()
+        val dbName = "migration-test-${System.nanoTime()}.db"
+        val dbFile = context.getDatabasePath(dbName)
+        dbFile.parentFile?.mkdirs()
+        if (dbFile.exists()) dbFile.delete()
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(context)
+                .name(dbName)
+                .callback(object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(28) {
+                    override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                        db.execSQL(
+                            "CREATE TABLE subtitle_task_items (" +
+                                "`id` TEXT NOT NULL PRIMARY KEY, `trackTitle` TEXT NOT NULL, " +
+                                "`transcriptionProgress` INTEGER NOT NULL)"
+                        )
+                        db.execSQL(
+                            "INSERT INTO subtitle_task_items VALUES('item-1','晚安音声',37)"
+                        )
+                    }
+
+                    override fun onUpgrade(
+                        db: androidx.sqlite.db.SupportSQLiteDatabase,
+                        oldVersion: Int,
+                        newVersion: Int
+                    ) = Unit
+                })
+                .build()
+        )
+        val db = helper.writableDatabase
+
+        AppDatabaseMigrations.MIGRATION_28_29.migrate(db)
+
+        db.query(
+            "SELECT trackTitle, transcriptionProgress, transcriptionModelId " +
+                "FROM subtitle_task_items WHERE id = 'item-1'"
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("晚安音声", cursor.getString(0))
+            assertEquals(37, cursor.getInt(1))
+            assertEquals("", cursor.getString(2))
+        }
+
+        db.close()
+        helper.close()
+        File(dbFile.absolutePath).delete()
+        File(dbFile.absolutePath + "-wal").delete()
+        File(dbFile.absolutePath + "-shm").delete()
+    }
+
+    @Test
     fun migration27To28_preservesChineseAndAddsHiddenJapaneseText() {
         val context = RuntimeEnvironment.getApplication()
         val dbName = "migration-test-${System.nanoTime()}.db"

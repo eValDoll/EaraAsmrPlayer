@@ -116,6 +116,7 @@ class SubtitleTaskDaoTest {
             suspendedFromState = "",
             transcriptionChunkCursor = 0,
             transcriptionProgress = 0,
+            transcriptionModelId = "",
             transcribedMs = 0L,
             totalDurationMs = 0L,
             translationCursor = 0,

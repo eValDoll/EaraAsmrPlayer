@@ -38,6 +38,8 @@ internal class SubtitleModelDownloadWorker(
     }
 
     override suspend fun doWork(): Result = withContext(Dispatchers.IO) {
+        val model = SubtitleTranscriptionModels.fromId(inputData.getString(KEY_MODEL_ID))
+            ?: return@withContext Result.failure()
         val source = SubtitleModelDownloadSource.fromId(inputData.getString(KEY_SOURCE))
             ?: return@withContext Result.failure()
         val baseUrl = inputData.getString(KEY_URL).orEmpty()
@@ -47,18 +49,17 @@ internal class SubtitleModelDownloadWorker(
         val runtimeRepository = SherpaOnnxRuntimeRepository.get(applicationContext)
         val runtime = runtimeRepository.descriptor
         if (!runtime.url.startsWith("https://")) return@withContext Result.failure()
-        val model = SubtitleTranscriptionModels.PARAKEET_TDT_CTC_06B_JA_INT8
-        val totalBytes = repository.installationBytes()
+        val totalBytes = repository.installationBytes(model)
         var activeStage = SubtitleModelInstallStage.Runtime
         try {
-            val modelDirectory = repository.ensureModelDirectory()
-            if (repository.isModelAvailable()) {
-                repository.updateAvailable(source)
+            val modelDirectory = repository.ensureModelDirectory(model)
+            if (repository.isModelAvailable(model.id)) {
+                repository.updateAvailable(model.id, source)
                 return@withContext Result.success()
             }
             setForeground(
                 createForegroundInfo(
-                    repository.downloadedInstallationBytes(),
+                    repository.downloadedInstallationBytes(model),
                     totalBytes,
                     "准备下载字幕组件"
                 )
@@ -83,15 +84,17 @@ internal class SubtitleModelDownloadWorker(
                     stage = SubtitleModelInstallStage.Runtime,
                     destination = partialRuntime,
                     expectedBytes = runtime.archiveBytes,
-                    completedBefore = repository.downloadedModelBytes(),
+                    completedBefore = repository.downloadedModelBytes(model),
                     totalBytes = totalBytes,
+                    modelId = model.id,
                     repository = repository
                 )
                 activeStage = SubtitleModelInstallStage.RuntimeVerification
-                repository.updateVerifying(source, activeStage)
+                repository.updateVerifying(model.id, source, activeStage)
                 publishStage(
+                    modelId = model.id,
                     stage = activeStage,
-                    downloadedBytes = runtime.archiveBytes + repository.downloadedModelBytes(),
+                    downloadedBytes = runtime.archiveBytes + repository.downloadedModelBytes(model),
                     totalBytes = totalBytes
                 )
                 runtimeRepository.installDownloadedArchive()
@@ -101,16 +104,16 @@ internal class SubtitleModelDownloadWorker(
             ensureFreeSpace(
                 destinationDirectory = modelDirectory,
                 expectedBytes = model.artifactBytes,
-                existingBytes = repository.downloadedModelBytes()
+                existingBytes = repository.downloadedModelBytes(model)
             )
             model.artifacts.forEach { artifact ->
-                if (isInstalledSubtitleModelArtifact(repository.artifactFile(artifact), artifact.bytes)) {
+                if (isInstalledSubtitleModelArtifact(repository.artifactFile(model, artifact), artifact.bytes)) {
                     return@forEach
                 }
-                val partialFile = repository.partialArtifactFile(artifact)
+                val partialFile = repository.partialArtifactFile(model, artifact)
                 val currentPartialBytes = partialFile.length().coerceIn(0L, artifact.bytes)
                 val completedBefore = runtime.archiveBytes +
-                    repository.downloadedModelBytes() - currentPartialBytes
+                    repository.downloadedModelBytes(model) - currentPartialBytes
                 download(
                     client = client,
                     url = buildSubtitleModelArtifactUrl(baseUrl, artifact.fileName),
@@ -120,17 +123,18 @@ internal class SubtitleModelDownloadWorker(
                     expectedBytes = artifact.bytes,
                     completedBefore = completedBefore,
                     totalBytes = totalBytes,
+                    modelId = model.id,
                     repository = repository
                 )
             }
             activeStage = SubtitleModelInstallStage.ModelVerification
-            repository.updateVerifying(source, activeStage)
-            publishStage(activeStage, totalBytes, totalBytes)
+            repository.updateVerifying(model.id, source, activeStage)
+            publishStage(model.id, activeStage, totalBytes, totalBytes)
             model.artifacts.forEach { artifact ->
-                val targetFile = repository.artifactFile(artifact)
+                val targetFile = repository.artifactFile(model, artifact)
                 if (isInstalledSubtitleModelArtifact(targetFile, artifact.bytes)) return@forEach
 
-                val partialFile = repository.partialArtifactFile(artifact)
+                val partialFile = repository.partialArtifactFile(model, artifact)
                 val actualHash = sha256(partialFile)
                 check(actualHash.equals(artifact.sha256, ignoreCase = true)) {
                     partialFile.delete()
@@ -139,29 +143,36 @@ internal class SubtitleModelDownloadWorker(
                 if (targetFile.exists()) check(targetFile.delete()) { "无法替换旧模型文件" }
                 check(partialFile.renameTo(targetFile)) { "无法保存日语字幕模型" }
             }
-            repository.updateAvailable(source)
+            repository.updateAvailable(model.id, source)
             Result.success(
                 workDataOf(
+                    KEY_MODEL_ID to model.id,
                     KEY_DOWNLOADED_BYTES to totalBytes,
                     KEY_TOTAL_BYTES to totalBytes
                 )
             )
         } catch (cancelled: CancellationException) {
-            repository.updateMissing()
+            repository.updateMissing(model.id)
             throw cancelled
         } catch (error: Throwable) {
             val message = error.message?.trim().orEmpty().ifBlank { "字幕组件下载失败" }
             if (runAttemptCount < MAX_RETRY_COUNT && error is IOException) {
                 repository.updateDownloading(
+                    model.id,
                     source,
                     activeStage,
-                    repository.downloadedInstallationBytes(),
+                    repository.downloadedInstallationBytes(model),
                     totalBytes
                 )
                 Result.retry()
             } else {
-                repository.updateFailure(source, message)
-                Result.failure(workDataOf(KEY_ERROR_MESSAGE to message))
+                repository.updateFailure(model.id, source, message)
+                Result.failure(
+                    workDataOf(
+                        KEY_MODEL_ID to model.id,
+                        KEY_ERROR_MESSAGE to message
+                    )
+                )
             }
         }
     }
@@ -175,6 +186,7 @@ internal class SubtitleModelDownloadWorker(
         expectedBytes: Long,
         completedBefore: Long,
         totalBytes: Long,
+        modelId: String,
         repository: SubtitleModelRepository
     ) {
         SubtitleArtifactDownloader.download(
@@ -184,6 +196,7 @@ internal class SubtitleModelDownloadWorker(
             expectedBytes = expectedBytes
         ) { downloadedBytes ->
             publishProgress(
+                modelId,
                 source,
                 stage,
                 repository,
@@ -194,15 +207,17 @@ internal class SubtitleModelDownloadWorker(
     }
 
     private suspend fun publishProgress(
+        modelId: String,
         source: SubtitleModelDownloadSource,
         stage: SubtitleModelInstallStage,
         repository: SubtitleModelRepository,
         downloadedBytes: Long,
         totalBytes: Long
     ) {
-        repository.updateDownloading(source, stage, downloadedBytes, totalBytes)
+        repository.updateDownloading(modelId, source, stage, downloadedBytes, totalBytes)
         setProgress(
             workDataOf(
+                KEY_MODEL_ID to modelId,
                 KEY_STAGE to stage.name,
                 KEY_DOWNLOADED_BYTES to downloadedBytes,
                 KEY_TOTAL_BYTES to totalBytes
@@ -212,12 +227,14 @@ internal class SubtitleModelDownloadWorker(
     }
 
     private suspend fun publishStage(
+        modelId: String,
         stage: SubtitleModelInstallStage,
         downloadedBytes: Long,
         totalBytes: Long
     ) {
         setProgress(
             workDataOf(
+                KEY_MODEL_ID to modelId,
                 KEY_STAGE to stage.name,
                 KEY_DOWNLOADED_BYTES to downloadedBytes,
                 KEY_TOTAL_BYTES to totalBytes
@@ -288,6 +305,7 @@ internal class SubtitleModelDownloadWorker(
 
     companion object {
         const val UNIQUE_WORK_NAME = "subtitle_model_download"
+        const val KEY_MODEL_ID = "modelId"
         const val KEY_SOURCE = "source"
         const val KEY_URL = "url"
         const val KEY_STAGE = "stage"

@@ -7,7 +7,7 @@ import org.junit.Test
 class ParakeetTokenTimelineTest {
     @Test
     fun `token timestamps become bounded millisecond segments`() {
-        val result = buildParakeetTokenTimeline(
+        val result = buildRecognizerTokenTimeline(
             tokens = listOf(" ", "日本", "語", "?", "って"),
             timestampsSeconds = listOf(0f, 1.04f, 1.36f, 4.72f, 4.96f),
             segmentDurationMs = 5_500L
@@ -25,7 +25,7 @@ class ParakeetTokenTimelineTest {
 
     @Test
     fun `reported token duration takes precedence when available`() {
-        val result = buildParakeetTokenTimeline(
+        val result = buildRecognizerTokenTimeline(
             tokens = listOf("▁おやすみ"),
             timestampsSeconds = listOf(0.25f),
             durationsSeconds = listOf(0.12f),
@@ -40,7 +40,7 @@ class ParakeetTokenTimelineTest {
 
     @Test
     fun `mismatched token timestamps are rejected for safe fallback`() {
-        val result = buildParakeetTokenTimeline(
+        val result = buildRecognizerTokenTimeline(
             tokens = listOf("今日", "は"),
             timestampsSeconds = listOf(0f),
             segmentDurationMs = 1_000L
