@@ -58,6 +58,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
@@ -1013,31 +1014,41 @@ internal fun DeepSeekTranslationSettingsSection(
             text = DEEPSEEK_SUBTITLE_MODEL,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
-            modifier = Modifier.weight(1f)
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .weight(1f)
+                .testTag("deepseek_model_name")
         )
         if (state.configured) {
-            Text(
-                text = "Token ${formatDeepSeekTokenTotal(accountState.totalTokens)} · 余额 ${formatDeepSeekBalances(accountState.balances)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = if (accountState.balanceAvailable == false) {
-                    MaterialTheme.colorScheme.error
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant
-                },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .widthIn(max = 190.dp)
-                    .testTag("deepseek_account_summary")
-            )
-            Icon(
-                imageVector = Icons.Rounded.CheckCircle,
-                contentDescription = "API Key 已配置",
-                tint = Color(0xFF3E9B63),
-                modifier = Modifier
-                    .size(20.dp)
-                    .testTag("deepseek_api_key_configured")
-            )
+            Row(
+                modifier = Modifier.width(if (compact) 208.dp else 248.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text(
+                    text = "Token ${formatDeepSeekTokenTotal(accountState.totalTokens)} · 余额 ${formatDeepSeekBalances(accountState.balances)}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (accountState.balanceAvailable == false) {
+                        MaterialTheme.colorScheme.error
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .weight(1f)
+                        .testTag("deepseek_account_summary")
+                )
+                Icon(
+                    imageVector = Icons.Rounded.CheckCircle,
+                    contentDescription = "API Key 已配置",
+                    tint = Color(0xFF3E9B63),
+                    modifier = Modifier
+                        .size(20.dp)
+                        .testTag("deepseek_api_key_configured")
+                )
+            }
         }
     }
     Row(
@@ -1177,12 +1188,16 @@ private fun SubtitleModelSettingsSection(
             text = model.displayName,
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
             modifier = Modifier.weight(1f)
         )
         Text(
             text = Formatting.formatFileSize(model.artifactBytes),
             style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.End,
+            modifier = Modifier.widthIn(min = 72.dp)
         )
     }
 
