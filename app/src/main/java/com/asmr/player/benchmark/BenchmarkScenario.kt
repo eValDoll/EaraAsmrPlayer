@@ -13,6 +13,7 @@ enum class BenchmarkScenario(
     PlaylistDetail("playlist_detail"),
     PlaylistPicker("playlist_picker"),
     DownloadsList("downloads_list"),
+    TranslationTasks("translation_tasks"),
     GroupsList("groups_list"),
     GroupDetail("group_detail"),
     GroupPicker("group_picker"),

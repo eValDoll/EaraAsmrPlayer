@@ -98,6 +98,23 @@ class LongListPerformanceBenchmark {
     }
 
     @Test
+    fun translationTasksFrameTiming() {
+        benchmarkRule.measureRepeated(
+            packageName = PackageName,
+            metrics = listOf(FrameTimingGfxInfoMetric()),
+            compilationMode = CompilationMode.Partial(BaselineProfileMode.Require),
+            startupMode = null,
+            iterations = FrameTimingIterations,
+            setupBlock = {
+                startHarnessScenario(BenchmarkScenarioValue.TranslationTasks)
+                device.openAndExpandTranslationTasks()
+            }
+        ) {
+            device.performSlowDragAndFling()
+        }
+    }
+
+    @Test
     fun settingsFrameTiming() = measureScenarioFrameTiming(BenchmarkScenarioValue.Settings)
 
     @Test

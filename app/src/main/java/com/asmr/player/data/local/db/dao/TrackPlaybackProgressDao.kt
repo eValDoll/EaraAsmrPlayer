@@ -25,7 +25,7 @@ interface TrackPlaybackProgressDao {
             p.mediaId AS mediaId,
             p.positionMs AS positionMs,
             p.updatedAt AS updatedAt,
-            t.title AS trackTitle
+            COALESCE(NULLIF(t.displayTitle, ''), t.title) AS trackTitle
         FROM track_playback_progress p
         LEFT JOIN tracks t ON t.path = p.mediaId
         WHERE p.albumId IN (:albumIds)

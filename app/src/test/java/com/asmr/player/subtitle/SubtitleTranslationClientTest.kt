@@ -1,0 +1,541 @@
+package com.asmr.player.subtitle
+
+import com.asmr.player.data.settings.DeepSeekReasoningEffort
+import com.asmr.player.data.settings.DeepSeekTranslationSettings
+import com.google.gson.Gson
+import com.google.gson.JsonParser
+import kotlinx.coroutines.runBlocking
+import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
+import okio.Buffer
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertThrows
+import org.junit.Test
+
+class SubtitleTranslationClientTest {
+    @Test
+    fun retryAfter_acceptsSecondsAndHttpDate() {
+        assertEquals(4_000L, parseRetryAfterMillis("4", nowMs = 0L))
+        assertEquals(
+            5_000L,
+            parseRetryAfterMillis("Thu, 01 Jan 1970 00:00:10 GMT", nowMs = 5_000L)
+        )
+        assertNull(parseRetryAfterMillis("稍后重试", nowMs = 0L))
+    }
+
+    @Test
+    fun deepSeekError_extractsServiceMessage() {
+        assertEquals(
+            "Thinking mode does not support this tool_choice",
+            parseDeepSeekErrorMessage(
+                """{"error":{"message":"Thinking mode does not support this tool_choice"}}"""
+            )
+        )
+        assertNull(parseDeepSeekErrorMessage("not-json"))
+    }
+
+    @Test
+    fun prompt_allowsOnDemandReadAndWriteToolCalls() {
+        val prompt = subtitleToolTranslationSystemPrompt(listOf(0, 1, 2), allowMerging = true)
+        val noMerge = subtitleToolTranslationSystemPrompt(listOf(0, 1, 2), allowMerging = false)
+
+        assert(prompt.contains(SUBTITLE_READ_TOOL_NAME))
+        assert(prompt.contains(SUBTITLE_WRITE_TOOL_NAME))
+        assert(prompt.contains("next_untranslated_index"))
+        assert(prompt.contains("source_indices"))
+        assert(prompt.contains("start_ms"))
+        assert(prompt.contains("end_ms"))
+        assert(prompt.contains("japanese"))
+        assert(prompt.contains("chinese"))
+        assert(prompt.contains("3"))
+        assert(prompt != noMerge)
+        assert(!prompt.contains("{{"))
+        assert(prompt.length > 1_000)
+    }
+
+    @Test
+    fun displayNameParser_acceptsUnchangedJapaneseProperNames() {
+        val result = parseDisplayNameTranslationResponse(
+            content = """{"work_title":"Omega01","tracks":[{"track_id":13,"title":"ASMRパート"}]}""",
+            expectedTrackIds = listOf(13L)
+        )
+
+        assertEquals("Omega01", result.albumTitle)
+        assertEquals("ASMRパート", result.trackTitles.getValue(13L))
+    }
+
+    @Test
+    fun manualPrompt_forbidsMergingImportedSubtitleLines() {
+        val prompt = subtitleToolTranslationSystemPrompt(listOf(0, 2), allowMerging = false)
+
+        assert(prompt.contains("source_indices"))
+        assert(prompt != subtitleToolTranslationSystemPrompt(listOf(0, 2), allowMerging = true))
+        assert(prompt.isNotBlank())
+    }
+
+    @Test
+    fun request_exposesReadAndWriteToolsWithoutForcingToolChoice() {
+        val sources = sources(3)
+        val confirmed = listOf(
+            GeneratedSubtitleCaption(listOf(0), 0L, 900L, "おやすみ", "晚安")
+        )
+        val root = JsonParser.parseString(
+            buildDeepSeekSubtitleTranslationRequest(
+                gson = Gson(),
+                sources = sources,
+                allowMerging = true,
+                confirmedCaptions = confirmed
+            )
+        ).asJsonObject
+        val messages = root.getAsJsonArray("messages")
+        val payload = JsonParser.parseString(messages[1].asJsonObject.get("content").asString).asJsonObject
+        val tools = root.getAsJsonArray("tools")
+        val writeTool = tools.first { element ->
+            element.asJsonObject.getAsJsonObject("function").get("name").asString == SUBTITLE_WRITE_TOOL_NAME
+        }.asJsonObject
+        val toolParameters = writeTool
+            .getAsJsonObject("function")
+            .getAsJsonObject("parameters")
+        val captionProperties = toolParameters.getAsJsonObject("properties")
+            .getAsJsonObject("captions")
+            .getAsJsonObject("items")
+            .getAsJsonObject("properties")
+
+        assertEquals(DEEPSEEK_SUBTITLE_MODEL, root.get("model").asString)
+        assertEquals("disabled", root.getAsJsonObject("thinking").get("type").asString)
+        assertEquals(false, root.has("reasoning_effort"))
+        assertEquals(false, root.has("response_format"))
+        assertEquals(false, root.has("tool_choice"))
+        assertEquals("translate_current_audio_track_subtitles", payload.get("task").asString)
+        assertEquals(3, payload.get("source_count").asInt)
+        assertEquals(1, payload.get("completed_source_count").asInt)
+        assertEquals(false, payload.has("segments"))
+        assertEquals(
+            listOf("source_indices", "start_ms", "end_ms", "japanese", "chinese"),
+            captionProperties.keySet().toList()
+        )
+        assertEquals(
+            listOf(SUBTITLE_READ_TOOL_NAME, SUBTITLE_WRITE_TOOL_NAME),
+            tools.map { it.asJsonObject.getAsJsonObject("function").get("name").asString }
+        )
+    }
+
+    @Test
+    fun agentRequest_appendsAssistantReadCallAndCurrentSubtitleState() {
+        val gson = Gson()
+        val sources = sources(3)
+        val confirmed = listOf(
+            GeneratedSubtitleCaption(listOf(0), 0L, 900L, "目を閉じて", "闭上眼睛")
+        )
+        val messages = buildSubtitleAgentInitialMessages(
+            gson = gson,
+            sources = sources,
+            allowMerging = false
+        ).toMutableList()
+        messages += DeepSeekChatMessage(
+            role = "assistant",
+            content = "",
+            reasoningContent = "先读取当前状态。",
+            toolCalls = listOf(
+                DeepSeekToolCall(
+                    id = "call-1",
+                    function = DeepSeekToolCallFunction(
+                        name = SUBTITLE_READ_TOOL_NAME,
+                        arguments = "{}"
+                    )
+                )
+            )
+        )
+        messages += buildSubtitleReadToolResultMessage(
+            gson = gson,
+            toolCallId = "call-1",
+            sources = sources,
+            confirmedCaptions = confirmed
+        )
+
+        val root = JsonParser.parseString(
+            buildDeepSeekSubtitleAgentRequest(
+                gson = gson,
+                messages = messages,
+                settings = DeepSeekTranslationSettings(thinkingEnabled = true)
+            )
+        ).asJsonObject
+        val serializedMessages = root.getAsJsonArray("messages")
+        val assistant = serializedMessages[2].asJsonObject
+        val tool = serializedMessages[3].asJsonObject
+        val toolResult = JsonParser.parseString(tool.get("content").asString).asJsonObject
+
+        assertEquals(4, serializedMessages.size())
+        assertEquals("assistant", assistant.get("role").asString)
+        assertEquals("先读取当前状态。", assistant.get("reasoning_content").asString)
+        assertEquals("call-1", assistant.getAsJsonArray("tool_calls")[0].asJsonObject.get("id").asString)
+        assertEquals("tool", tool.get("role").asString)
+        assertEquals("call-1", tool.get("tool_call_id").asString)
+        assertEquals(3, toolResult.getAsJsonArray("japanese_subtitles").size())
+        assertEquals(1, toolResult.getAsJsonArray("completed_chinese_subtitles").size())
+        assertEquals(1, toolResult.get("completed_source_count").asInt)
+        assertEquals(1, toolResult.get("next_untranslated_index").asInt)
+        assert(toolResult.get("next_action").asString.isNotBlank())
+    }
+
+    @Test
+    fun translateSubtitles_allowsReadAndOrdinaryTurnsBeforeWritingSubtitles() = runBlocking {
+        val gson = Gson()
+        val requestBodies = mutableListOf<String>()
+        val responses = ArrayDeque(
+            listOf(
+                toolCallResponse(
+                    id = "call-1",
+                    name = SUBTITLE_READ_TOOL_NAME,
+                    reasoning = "先读取完整字幕。",
+                    arguments = "{}"
+                ),
+                assistantResponse(content = "我会结合完整上下文处理字幕。"),
+                toolCallResponse(
+                    id = "call-2",
+                    name = SUBTITLE_WRITE_TOOL_NAME,
+                    reasoning = "现在写入完成的中文字幕。",
+                    arguments = """{"captions":[{"source_indices":[0],"start_ms":0,"end_ms":900,"japanese":"目を閉じて","chinese":"闭上眼睛"},{"source_indices":[1],"start_ms":1000,"end_ms":1900,"japanese":"おやすみ","chinese":"晚安"}]}"""
+                )
+            )
+        )
+        val httpClient = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                requestBodies += Buffer().also { chain.request().body?.writeTo(it) }.readUtf8()
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .body(responses.removeFirst().toResponseBody("application/json".toMediaType()))
+                    .build()
+            }
+            .build()
+        val confirmedBatches = mutableListOf<List<GeneratedSubtitleCaption>>()
+        val client = SubtitleTranslationClient(
+            okHttpClient = httpClient,
+            gson = gson,
+            apiKey = "test-key",
+            settings = DeepSeekTranslationSettings(thinkingEnabled = true),
+            apiUrl = "https://example.test/chat"
+        )
+
+        val result = client.translateSubtitles(
+            sources = sources(2),
+            allowMerging = false,
+            onCaptionsConfirmed = { confirmedBatches += it }
+        )
+
+        assertEquals(3, requestBodies.size)
+        assertEquals(listOf("闭上眼睛", "晚安"), result.map(GeneratedSubtitleCaption::chineseText))
+        assertEquals(1, confirmedBatches.size)
+        val secondMessages = JsonParser.parseString(requestBodies[1]).asJsonObject.getAsJsonArray("messages")
+        assertEquals(4, secondMessages.size())
+        assertEquals(
+            "先读取完整字幕。",
+            secondMessages[2].asJsonObject.get("reasoning_content").asString
+        )
+        assertEquals("call-1", secondMessages[3].asJsonObject.get("tool_call_id").asString)
+        val readResult = JsonParser.parseString(secondMessages[3].asJsonObject.get("content").asString).asJsonObject
+        assertEquals(2, readResult.getAsJsonArray("japanese_subtitles").size())
+        val thirdMessages = JsonParser.parseString(requestBodies[2]).asJsonObject.getAsJsonArray("messages")
+        assertEquals("user", thirdMessages.last().asJsonObject.get("role").asString)
+    }
+
+    @Test
+    fun translateSubtitles_returnsInvalidWriteAsToolErrorForAgentToRepair() = runBlocking {
+        val gson = Gson()
+        val requestBodies = mutableListOf<String>()
+        val responses = ArrayDeque(
+            listOf(
+                toolCallResponse(
+                    id = "bad-write",
+                    name = SUBTITLE_WRITE_TOOL_NAME,
+                    reasoning = "尝试写入。",
+                    arguments = """{"captions":"invalid"}"""
+                ),
+                toolCallResponse(
+                    id = "fixed-write",
+                    name = SUBTITLE_WRITE_TOOL_NAME,
+                    reasoning = "根据工具错误修正参数。",
+                    arguments = """{"captions":[{"source_indices":[0],"start_ms":0,"end_ms":900,"japanese":"目を閉じて","chinese":"闭上眼睛"}]}"""
+                )
+            )
+        )
+        val httpClient = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                requestBodies += Buffer().also { chain.request().body?.writeTo(it) }.readUtf8()
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(200)
+                    .message("OK")
+                    .body(responses.removeFirst().toResponseBody("application/json".toMediaType()))
+                    .build()
+            }
+            .build()
+        val client = SubtitleTranslationClient(
+            okHttpClient = httpClient,
+            gson = gson,
+            apiKey = "test-key",
+            apiUrl = "https://example.test/chat"
+        )
+
+        val result = client.translateSubtitles(
+            sources = sources(1),
+            allowMerging = false,
+            onCaptionsConfirmed = {}
+        )
+
+        assertEquals("闭上眼睛", result.single().chineseText)
+        val secondMessages = JsonParser.parseString(requestBodies[1]).asJsonObject.getAsJsonArray("messages")
+        val toolResult = JsonParser.parseString(secondMessages.last().asJsonObject.get("content").asString).asJsonObject
+        assertEquals("error", toolResult.get("status").asString)
+        assert(toolResult.get("message").asString.contains("captions 不是数组"))
+    }
+
+    @Test
+    fun request_supportsThinkingMaxAndDisabledModes() {
+        val source = sources(1)
+        val maxRequest = JsonParser.parseString(
+            buildDeepSeekSubtitleTranslationRequest(
+                gson = Gson(),
+                sources = source,
+                allowMerging = false,
+                settings = DeepSeekTranslationSettings(
+                    thinkingEnabled = true,
+                    reasoningEffort = DeepSeekReasoningEffort.MAX
+                )
+            )
+        ).asJsonObject
+        val disabledRequest = JsonParser.parseString(
+            buildDeepSeekSubtitleTranslationRequest(
+                gson = Gson(),
+                sources = source,
+                allowMerging = false,
+                settings = DeepSeekTranslationSettings(
+                    thinkingEnabled = false,
+                    reasoningEffort = DeepSeekReasoningEffort.MAX
+                )
+            )
+        ).asJsonObject
+
+        assertEquals("max", maxRequest.get("reasoning_effort").asString)
+        assertEquals("disabled", disabledRequest.getAsJsonObject("thinking").get("type").asString)
+        assertEquals(false, disabledRequest.has("reasoning_effort"))
+    }
+
+    @Test
+    fun toolArguments_acceptContiguousConfirmedPrefixAndRetainJapanese() {
+        val result = parseSubtitleWriteToolArguments(
+            arguments = """
+                {"captions":[
+                  {"source_indices":[0,1],"start_ms":0,"end_ms":1900,"japanese":"目を閉じて、おやすみ","chinese":"闭上眼睛，晚安"}
+                ]}
+            """.trimIndent(),
+            expectedRemainingSources = sources(3),
+            allowMerging = true
+        )
+
+        assertEquals(listOf(0, 1), result.single().sourceIndices)
+        assertEquals("目を閉じて、おやすみ", result.single().correctedJapanese)
+        assertEquals("闭上眼睛，晚安", result.single().chineseText)
+    }
+
+    @Test
+    fun toolArguments_acceptManualLinesWithoutMerging() {
+        val result = parseSubtitleWriteToolArguments(
+            arguments = """
+                {"captions":[
+                  {"source_indices":[0],"start_ms":0,"end_ms":900,"japanese":"目を閉じて","chinese":"闭上眼睛"},
+                  {"source_indices":[1],"start_ms":1000,"end_ms":1900,"japanese":"おやすみ","chinese":"晚安"}
+                ]}
+            """.trimIndent(),
+            expectedRemainingSources = sources(3),
+            allowMerging = false
+        )
+
+        assertEquals(listOf(listOf(0), listOf(1)), result.map(GeneratedSubtitleCaption::sourceIndices))
+    }
+
+    @Test
+    fun toolArguments_keepStructuralChecksButNormalizeTimeline() {
+        val skipped = """{"captions":[{"source_indices":[1],"start_ms":1000,"end_ms":1900,"japanese":"おやすみ","chinese":"晚安"}]}"""
+        val wrongTimeline = """{"captions":[{"source_indices":[0],"start_ms":1,"end_ms":900,"japanese":"目を閉じて","chinese":"闭上眼睛"}]}"""
+        val merged = """{"captions":[{"source_indices":[0,1],"start_ms":0,"end_ms":1900,"japanese":"目を閉じて、おやすみ","chinese":"闭上眼睛，晚安"}]}"""
+
+        assertThrows(IllegalArgumentException::class.java) {
+            parseSubtitleWriteToolArguments(skipped, sources(3), allowMerging = true)
+        }
+        val normalized = parseSubtitleWriteToolArguments(wrongTimeline, sources(3), allowMerging = true)
+        assertEquals(0L, normalized.single().startMs)
+        assertEquals(900L, normalized.single().endMs)
+        assertThrows(IllegalArgumentException::class.java) {
+            parseSubtitleWriteToolArguments(merged, sources(3), allowMerging = false)
+        }
+    }
+
+    @Test
+    fun toolArguments_leaveTranslationQualityToAgent() {
+        val arguments = """{"captions":[{"source_indices":[0],"start_ms":0,"end_ms":900,"japanese":"おやすみ","chinese":"おやすみ"}]}"""
+
+        val result = parseSubtitleWriteToolArguments(arguments, sources(1), allowMerging = false)
+
+        assertEquals("おやすみ", result.single().chineseText)
+    }
+
+    @Test
+    fun toolArguments_reportTruncatedToolPayloadPrecisely() {
+        val error = assertThrows(IllegalArgumentException::class.java) {
+            parseSubtitleWriteToolArguments(
+                arguments = """{"captions":[{"source_indices":[0],"chinese"""",
+                expectedRemainingSources = sources(1),
+                allowMerging = false
+            )
+        }
+
+        assertEquals("字幕工具调用参数被截断，未形成完整 JSON 对象", error.message)
+    }
+
+    @Test
+    fun retry_retriesRecoverableFailuresAndStopsAfterSuccess() = runBlocking {
+        val attempts = mutableListOf<Int>()
+        val delays = mutableListOf<Long>()
+        val previousErrors = mutableListOf<String?>()
+        var invocationCount = 0
+
+        val result = retrySubtitleTranslation(
+            maxAttempts = 4,
+            onAttempt = { attempt, _ -> attempts += attempt },
+            delayProvider = { delays += it }
+        ) { previousError ->
+            previousErrors += previousError?.message
+            invocationCount += 1
+            if (invocationCount < 3) {
+                throw SubtitleTranslationException("暂时失败", retryable = true)
+            }
+            "完成"
+        }
+
+        assertEquals("完成", result)
+        assertEquals(listOf(1, 2, 3), attempts)
+        assertEquals(listOf(1_000L, 2_000L), delays)
+        assertEquals(listOf(null, "暂时失败", "暂时失败"), previousErrors)
+    }
+
+    @Test
+    fun retry_doesNotRetryPermanentFailure() {
+        var invocationCount = 0
+
+        assertThrows(SubtitleTranslationException::class.java) {
+            runBlocking {
+                retrySubtitleTranslation(delayProvider = {}) { _ ->
+                    invocationCount += 1
+                    throw SubtitleTranslationException("请求无效", retryable = false)
+                }
+            }
+        }
+        assertEquals(1, invocationCount)
+    }
+
+    @Test
+    fun encodedPrompts_decodeToExpectedContent() {
+        assert(TranslationPrompts.displayNameSystemPrompt().isNotBlank())
+        assert(TranslationPrompts.subtitleStyleGuide().isNotBlank())
+        assert(TranslationPrompts.subtitleAdultReferenceTable().isNotBlank())
+        assert(TranslationPrompts.subtitleProgressInstruction().isNotBlank())
+        assert(TranslationPrompts.subtitleSegmentationRulesMerge().isNotBlank())
+        assert(TranslationPrompts.subtitleSegmentationRulesNoMerge().isNotBlank())
+        assert(TranslationPrompts.subtitleContinueMessageLengthLimited().isNotBlank())
+        assert(TranslationPrompts.subtitleContinueMessageGeneric().isNotBlank())
+        assert(TranslationPrompts.subtitleInitialUserMessage().isNotBlank())
+        assert(TranslationPrompts.subtitleToolErrorInstruction().isNotBlank())
+        assert(TranslationPrompts.subtitleToolReadDescription().isNotBlank())
+        assert(TranslationPrompts.subtitleToolWriteDescription().isNotBlank())
+        assert(TranslationPrompts.subtitleToolChineseFieldDescription().isNotBlank())
+        assert(TranslationPrompts.subtitleAgentSystemPromptTemplate().contains("{{SOURCE_COUNT}}"))
+        assert(TranslationPrompts.subtitleAgentSystemPromptTemplate().contains("{{ADULT_REFERENCE_TABLE}}"))
+    }
+
+    @Test
+    fun composedPrompt_hasNoLeftoverPlaceholders() {
+        val merge = subtitleToolTranslationSystemPrompt(listOf(0, 1, 2), allowMerging = true)
+        val noMerge = subtitleToolTranslationSystemPrompt(listOf(0, 1, 2), allowMerging = false)
+
+        assert(!merge.contains("{{"))
+        assert(!noMerge.contains("{{"))
+        assert(merge != noMerge)
+        assert(merge.length > 1_000)
+        assert(merge.contains("3"))
+    }
+
+    @Test
+    fun base64_decodesKnownVectors() {
+        assertEquals("你好", String(TranslationPromptsCodec.decodeBase64("5L2g5aW9"), Charsets.UTF_8))
+        assertEquals("Hello", String(TranslationPromptsCodec.decodeBase64("SGVsbG8="), Charsets.UTF_8))
+        assertEquals("a", String(TranslationPromptsCodec.decodeBase64("YQ=="), Charsets.UTF_8))
+        assertEquals("", String(TranslationPromptsCodec.decodeBase64(""), Charsets.UTF_8))
+    }
+
+    private fun sources(count: Int): List<GeneratedSubtitleSource> = List(count) { index ->
+        GeneratedSubtitleSource(
+            index = index,
+            startMs = index * 1_000L,
+            endMs = index * 1_000L + 900L,
+            text = when (index) {
+                0 -> "目を閉じて"
+                1 -> "おやすみ"
+                else -> "また明日"
+            }
+        )
+    }
+
+    private fun toolCallResponse(
+        id: String,
+        name: String,
+        reasoning: String,
+        arguments: String
+    ): String =
+        Gson().toJson(
+            mapOf(
+                "choices" to listOf(
+                    mapOf(
+                        "finish_reason" to "tool_calls",
+                        "message" to mapOf(
+                            "role" to "assistant",
+                            "content" to "",
+                            "reasoning_content" to reasoning,
+                            "tool_calls" to listOf(
+                                mapOf(
+                                    "id" to id,
+                                    "type" to "function",
+                                    "function" to mapOf(
+                                        "name" to name,
+                                        "arguments" to arguments
+                                    )
+                                )
+                            )
+                        )
+                    )
+                )
+            )
+        )
+
+    private fun assistantResponse(content: String): String = Gson().toJson(
+        mapOf(
+            "choices" to listOf(
+                mapOf(
+                    "finish_reason" to "stop",
+                    "message" to mapOf(
+                        "role" to "assistant",
+                        "content" to content
+                    )
+                )
+            )
+        )
+    )
+}

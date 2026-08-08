@@ -870,18 +870,14 @@ class PlaybackService : MediaSessionService() {
             addAction(BluetoothAdapter.ACTION_STATE_CHANGED)
         }
         registerReceiver(outputBroadcastReceiver, intentFilter)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
-            audioManager.registerAudioDeviceCallback(audioDeviceCallback, null)
-        }
+        val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+        audioManager.registerAudioDeviceCallback(audioDeviceCallback, null)
     }
 
     private fun unregisterPlaybackRouteListeners() {
         runCatching { unregisterReceiver(outputBroadcastReceiver) }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
-            runCatching { audioManager.unregisterAudioDeviceCallback(audioDeviceCallback) }
-        }
+        val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
+        runCatching { audioManager.unregisterAudioDeviceCallback(audioDeviceCallback) }
     }
 
     private fun handlePotentialOutputDisconnect(reason: String) {
@@ -913,7 +909,6 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun hasResumeEligibleOutputDevice(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) return true
         val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
         return audioManager.getDevices(AudioManager.GET_DEVICES_OUTPUTS)
             .any { it.isResumeEligibleOutputDevice() }

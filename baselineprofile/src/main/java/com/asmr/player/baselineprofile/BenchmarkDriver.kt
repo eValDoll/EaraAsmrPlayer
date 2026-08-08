@@ -30,6 +30,7 @@ internal object BenchmarkScenarioValue {
     const val PlaylistsList = "playlists_list"
     const val PlaylistDetail = "playlist_detail"
     const val DownloadsList = "downloads_list"
+    const val TranslationTasks = "translation_tasks"
     const val PlaylistPicker = "playlist_picker"
     const val GroupsList = "groups_list"
     const val GroupDetail = "group_detail"
@@ -295,6 +296,19 @@ internal fun UiDevice.pullToRefreshSearch() {
 }
 
 internal fun UiDevice.expandFirstVisibleDownloadTask() {
+    click(displayWidth / 2, (displayHeight * 0.28f).toInt())
+    waitForIdle()
+    SystemClock.sleep(300)
+}
+
+internal fun UiDevice.openAndExpandTranslationTasks() {
+    val translationTab = wait(
+        Until.findObject(By.text("翻译任务")),
+        BenchmarkWaitTimeoutMs
+    ) ?: error("Translation task tab was not visible")
+    translationTab.click()
+    waitForIdle()
+    SystemClock.sleep(300)
     click(displayWidth / 2, (displayHeight * 0.28f).toInt())
     waitForIdle()
     SystemClock.sleep(300)

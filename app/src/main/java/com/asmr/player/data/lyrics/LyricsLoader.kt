@@ -10,6 +10,7 @@ import com.asmr.player.data.local.db.entities.LocalTreeCacheEntity
 import com.asmr.player.data.local.db.entities.RemoteSubtitleSourceEntity
 import com.asmr.player.data.local.db.entities.SubtitleEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
+import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.remote.auth.buildDlsiteCookieHeader
@@ -73,7 +74,7 @@ class LyricsLoader @Inject constructor(
         val trackByPath = trackDao.getTrackByPathOnce(target.mediaId)
         val trackById = target.trackId.takeIf { it > 0L }?.let { id -> trackDao.getTrackByIdOnce(id) }
         val track = trackByPath ?: trackById
-        val title = track?.title?.takeIf { it.isNotBlank() } ?: fallbackTitle.ifBlank { target.mediaId }
+        val title = track?.titleForDisplay?.takeIf { it.isNotBlank() } ?: fallbackTitle.ifBlank { target.mediaId }
 
         val manualLyrics = loadManualLyrics(target)
         if (manualLyrics.isNotEmpty()) {

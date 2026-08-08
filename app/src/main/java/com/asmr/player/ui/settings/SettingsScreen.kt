@@ -22,10 +22,12 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.FormatAlignLeft
 import androidx.compose.material.icons.automirrored.rounded.FormatAlignRight
 import androidx.compose.material.icons.rounded.CloudSync
+import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.ExpandLess
 import androidx.compose.material.icons.rounded.ExpandMore
@@ -54,9 +56,10 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.IntOffset
@@ -68,8 +71,15 @@ import com.asmr.player.BuildConfig
 import com.asmr.player.cache.AppCacheLimits
 import com.asmr.player.cache.AppCacheState
 import com.asmr.player.data.settings.CoverPreviewMode
+import com.asmr.player.data.settings.DeepSeekReasoningEffort
+import com.asmr.player.data.settings.DeepSeekTranslationSettings
 import com.asmr.player.data.settings.FloatingLyricsSettings
 import com.asmr.player.data.settings.LyricsPageSettings
+import com.asmr.player.subtitle.SubtitleDeviceCapability
+import com.asmr.player.subtitle.SubtitleModelDownloadSource
+import com.asmr.player.subtitle.SubtitleModelState
+import com.asmr.player.subtitle.SubtitleTranscriptionModels
+import com.asmr.player.subtitle.DEEPSEEK_SUBTITLE_MODEL
 import com.asmr.player.ui.library.BulkPhase
 import com.asmr.player.ui.library.LibraryViewModel
 import com.asmr.player.ui.common.AppSupportStatusSection
@@ -122,6 +132,9 @@ fun SettingsScreen(
     val showMiniPlayerBar by viewModel.showMiniPlayerBar.collectAsStateWhileActive(isDataActive)
     val searchBlockedKeywords by viewModel.searchBlockedKeywords.collectAsStateWhileActive(isDataActive)
     val appCacheState by viewModel.appCacheState.collectAsStateWhileActive(isDataActive)
+    val subtitleModelState by viewModel.subtitleModelState.collectAsStateWhileActive(isDataActive)
+    val deepSeekApiKeyState by viewModel.deepSeekApiKeyState.collectAsStateWhileActive(isDataActive)
+    val deepSeekTranslationSettings by viewModel.deepSeekTranslationSettings.collectAsStateWhileActive(isDataActive)
     val updateState by viewModel.updateState.collectAsStateWhileActive(isDataActive)
     val autoUpdateCheckEnabled by viewModel.autoUpdateCheckEnabled.collectAsStateWhileActive(isDataActive)
     val scanRoots by libraryViewModel.scanRoots.collectAsStateWhileActive(isDataActive)
@@ -136,13 +149,31 @@ fun SettingsScreen(
         activeBorderColor = colorScheme.primaryStrong,
         inactiveContainerColor = Color.Transparent,
         inactiveContentColor = colorScheme.onSurfaceVariant,
-        inactiveBorderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+        inactiveBorderColor = colorScheme.primaryStrong.copy(alpha = 0.4f),
+        disabledActiveContainerColor = colorScheme.primarySoft.copy(alpha = 0.48f),
+        disabledActiveContentColor = if (colorScheme.isDark) {
+            colorScheme.onPrimaryContainer.copy(alpha = 0.48f)
+        } else {
+            colorScheme.primaryStrong.copy(alpha = 0.48f)
+        },
+        disabledActiveBorderColor = colorScheme.primaryStrong.copy(alpha = 0.24f),
+        disabledInactiveContainerColor = Color.Transparent,
+        disabledInactiveContentColor = colorScheme.primaryStrong.copy(alpha = 0.38f),
+        disabledInactiveBorderColor = colorScheme.primaryStrong.copy(alpha = 0.2f)
     )
     
     var overlayGranted by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
     var activeTipKey by remember { mutableStateOf<String?>(null) }
     var searchBlockedKeywordInput by rememberSaveable { mutableStateOf("") }
     var showClearAppCacheConfirmation by remember { mutableStateOf(false) }
+    var showDeleteSubtitleModelConfirmation by remember { mutableStateOf(false) }
+    var subtitleModelSourceId by rememberSaveable {
+        mutableStateOf(SubtitleModelDownloadSource.HuggingFace.id)
+    }
+    var deepSeekApiKeyInput by remember { mutableStateOf("") }
+    LaunchedEffect(deepSeekApiKeyState.saveVersion) {
+        if (deepSeekApiKeyState.saveVersion > 0L) deepSeekApiKeyInput = ""
+    }
     DisposableEffect(onHorizontalControlInteractionChanged) {
         onDispose { onHorizontalControlInteractionChanged(false) }
     }
@@ -176,6 +207,7 @@ fun SettingsScreen(
     ) { padding ->
         LaunchedEffect(isActive) {
             if (isActive) return@LaunchedEffect
+            deepSeekApiKeyInput = ""
             listState.stopScroll(MutatePriority.PreventUserInput)
         }
         LaunchedEffect(isDataActive) {
@@ -444,13 +476,6 @@ fun SettingsScreen(
                             checked = coverBackgroundEnabled,
                             onCheckedChange = viewModel::setCoverBackgroundEnabled
                         )
-                        /*
-                        SettingsToggleRow(
-                            text = "封面随手机转动查看完整图片",
-                            checked = coverMotionEnabled,
-                            onCheckedChange = viewModel::setCoverMotionEnabled
-                        )
-                        */
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
@@ -731,6 +756,36 @@ fun SettingsScreen(
                         }
                     }
                 }
+                item(key = "group:translation_config") {
+                    SettingsGroup(title = "翻译配置") {
+                        SubtitleModelSettingsSection(
+                            state = subtitleModelState,
+                            selectedSource = SubtitleModelDownloadSource.fromId(subtitleModelSourceId)
+                                ?: SubtitleModelDownloadSource.HuggingFace,
+                            deviceSupported = remember(context) {
+                                SubtitleDeviceCapability.evaluate(context).supported
+                            },
+                            segmentedButtonColors = segmentedButtonColors,
+                            onSourceSelected = { source -> subtitleModelSourceId = source.id },
+                            onDownload = viewModel::downloadSubtitleModel,
+                            onCancelDownload = viewModel::cancelSubtitleModelDownload,
+                            onDelete = { showDeleteSubtitleModelConfirmation = true },
+                            onClearFailure = viewModel::clearSubtitleModelFailure
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
+                        DeepSeekTranslationSettingsSection(
+                            state = deepSeekApiKeyState,
+                            settings = deepSeekTranslationSettings,
+                            apiKeyInput = deepSeekApiKeyInput,
+                            compact = isCompact,
+                            segmentedButtonColors = segmentedButtonColors,
+                            onApiKeyInputChanged = { deepSeekApiKeyInput = it },
+                            onSave = { viewModel.saveDeepSeekApiKey(deepSeekApiKeyInput) },
+                            onThinkingEnabledChanged = viewModel::setDeepSeekThinkingEnabled,
+                            onReasoningEffortChanged = viewModel::setDeepSeekReasoningEffort
+                        )
+                    }
+                }
                 item(key = "group:about_update") {
                     SettingsGroup(title = "关于") {
                         val isDark = AsmrTheme.colorScheme.isDark
@@ -907,6 +962,302 @@ fun SettingsScreen(
             )
         )
     }
+    if (showDeleteSubtitleModelConfirmation) {
+        FlatActionDialog(
+            onDismissRequest = { showDeleteSubtitleModelConfirmation = false },
+            message = "确定删除字幕模型？",
+            actions = listOf(
+                FlatDialogAction("取消", onClick = { showDeleteSubtitleModelConfirmation = false }),
+                FlatDialogAction(
+                    text = "删除模型",
+                    tone = FlatDialogActionTone.Danger,
+                    onClick = {
+                        showDeleteSubtitleModelConfirmation = false
+                        viewModel.deleteSubtitleModel()
+                    }
+                )
+            )
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun DeepSeekTranslationSettingsSection(
+    state: DeepSeekApiKeyUiState,
+    settings: DeepSeekTranslationSettings,
+    apiKeyInput: String,
+    compact: Boolean,
+    segmentedButtonColors: SegmentedButtonColors,
+    onApiKeyInputChanged: (String) -> Unit,
+    onSave: () -> Unit,
+    onThinkingEnabledChanged: (Boolean) -> Unit,
+    onReasoningEffortChanged: (DeepSeekReasoningEffort) -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val actionButtonColors = settingsPrimaryTonalButtonColors()
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = DEEPSEEK_SUBTITLE_MODEL,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.SemiBold,
+            modifier = Modifier.weight(1f)
+        )
+        if (state.configured) {
+            Icon(
+                imageVector = Icons.Rounded.CheckCircle,
+                contentDescription = "API Key 已配置",
+                tint = Color(0xFF3E9B63),
+                modifier = Modifier
+                    .size(20.dp)
+                    .testTag("deepseek_api_key_configured")
+            )
+        }
+    }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        val inputModifier = if (compact) {
+            Modifier.weight(1f)
+        } else {
+            Modifier.widthIn(max = 280.dp)
+        }
+        OutlinedTextField(
+            value = apiKeyInput,
+            onValueChange = onApiKeyInputChanged,
+            modifier = inputModifier
+                .height(48.dp)
+                .testTag("deepseek_api_key_input"),
+            placeholder = {
+                Text(
+                    text = "API Key（sk-…）",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            },
+            singleLine = true,
+            visualTransformation = PasswordVisualTransformation(),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            enabled = !state.saving,
+            isError = state.errorMessage != null
+        )
+        FilledTonalButton(
+            onClick = onSave,
+            enabled = apiKeyInput.isNotBlank() && !state.saving,
+            modifier = Modifier
+                .height(48.dp)
+                .testTag("deepseek_api_key_action"),
+            colors = actionButtonColors,
+            shape = RoundedCornerShape(14.dp)
+        ) {
+            if (state.saving) {
+                EaraLogoLoadingIndicator(size = 18.dp)
+            } else {
+                Text(if (state.configured) "替换" else "保存")
+            }
+        }
+    }
+    state.errorMessage?.let { message ->
+        Text(
+            text = message,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.error
+        )
+    }
+
+    SettingsToggleRow(
+        text = "思考模式",
+        checked = settings.thinkingEnabled,
+        onCheckedChange = onThinkingEnabledChanged
+    )
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = "思考等级",
+            style = MaterialTheme.typography.bodyMedium,
+            color = if (settings.thinkingEnabled) colorScheme.textPrimary else colorScheme.textTertiary
+        )
+        Spacer(modifier = Modifier.weight(1f))
+        SingleChoiceSegmentedButtonRow(
+            modifier = Modifier
+                .widthIn(max = 220.dp)
+                .testTag("deepseek_reasoning_effort")
+        ) {
+            DeepSeekReasoningEffort.entries.forEachIndexed { index, effort ->
+                SegmentedButton(
+                    selected = settings.reasoningEffort == effort,
+                    onClick = { onReasoningEffortChanged(effort) },
+                    enabled = settings.thinkingEnabled,
+                    modifier = Modifier.testTag("deepseek_reasoning_${effort.wireValue}"),
+                    shape = SegmentedButtonDefaults.itemShape(
+                        index = index,
+                        count = DeepSeekReasoningEffort.entries.size
+                    ),
+                    colors = segmentedButtonColors,
+                    icon = {},
+                    label = {
+                        Text(
+                            when (effort) {
+                                DeepSeekReasoningEffort.HIGH -> "High"
+                                DeepSeekReasoningEffort.MAX -> "Max"
+                            }
+                        )
+                    }
+                )
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SubtitleModelSettingsSection(
+    state: SubtitleModelState,
+    selectedSource: SubtitleModelDownloadSource,
+    deviceSupported: Boolean,
+    segmentedButtonColors: SegmentedButtonColors,
+    onSourceSelected: (SubtitleModelDownloadSource) -> Unit,
+    onDownload: (SubtitleModelDownloadSource) -> Unit,
+    onCancelDownload: () -> Unit,
+    onDelete: () -> Unit,
+    onClearFailure: () -> Unit
+) {
+    val actionButtonColors = settingsPrimaryTonalButtonColors()
+    val model = SubtitleTranscriptionModels.PARAKEET_TDT_CTC_06B_JA_INT8
+    val effectiveSource = when (state) {
+        is SubtitleModelState.Queued -> state.source
+        is SubtitleModelState.Downloading -> state.source
+        is SubtitleModelState.Verifying -> state.source
+        is SubtitleModelState.Failed -> state.source
+        is SubtitleModelState.Available -> state.source ?: selectedSource
+        SubtitleModelState.Missing -> selectedSource
+    }
+    val sourceConfigured = effectiveSource.isConfigured()
+    val isDownloading = state is SubtitleModelState.Queued ||
+        state is SubtitleModelState.Downloading ||
+        state is SubtitleModelState.Verifying
+
+    Text(
+        text = model.displayName,
+        style = MaterialTheme.typography.bodyMedium,
+        fontWeight = FontWeight.SemiBold
+    )
+
+    if (state !is SubtitleModelState.Available) {
+        SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+            SubtitleModelDownloadSource.entries.forEachIndexed { index, source ->
+                SegmentedButton(
+                    selected = effectiveSource == source,
+                    onClick = {
+                        onClearFailure()
+                        onSourceSelected(source)
+                    },
+                    enabled = !isDownloading,
+                    shape = SegmentedButtonDefaults.itemShape(
+                        index = index,
+                        count = SubtitleModelDownloadSource.entries.size
+                    ),
+                    colors = segmentedButtonColors,
+                    icon = {},
+                    label = { Text(source.displayName) }
+                )
+            }
+        }
+    }
+
+    when (state) {
+        SubtitleModelState.Missing -> Unit
+        is SubtitleModelState.Queued -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        is SubtitleModelState.Downloading -> {
+            val progress = if (state.totalBytes > 0L) {
+                (state.downloadedBytes.toFloat() / state.totalBytes.toFloat()).coerceIn(0f, 1f)
+            } else {
+                null
+            }
+            if (progress != null) {
+                LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
+            } else {
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+            }
+        }
+        is SubtitleModelState.Verifying -> LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        is SubtitleModelState.Available -> Unit
+        is SubtitleModelState.Failed -> {
+            Text(
+                text = state.message,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+    }
+
+    when {
+        state is SubtitleModelState.Available -> {
+            FilledTonalButton(
+                onClick = onDelete,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.filledTonalButtonColors(
+                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                    contentColor = MaterialTheme.colorScheme.onErrorContainer
+                )
+            ) {
+                Icon(Icons.Rounded.Delete, contentDescription = null)
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("删除模型")
+            }
+        }
+        isDownloading -> {
+            FilledTonalButton(
+                onClick = onCancelDownload,
+                modifier = Modifier.fillMaxWidth(),
+                colors = actionButtonColors
+            ) {
+                Text("取消下载")
+            }
+        }
+        else -> {
+            FilledTonalButton(
+                onClick = { onDownload(effectiveSource) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = deviceSupported && sourceConfigured,
+                colors = actionButtonColors
+            ) {
+                Text(
+                    when {
+                        !deviceSupported -> "设备不支持"
+                        !sourceConfigured -> "来源不可用"
+                        else -> "下载模型"
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun settingsPrimaryTonalButtonColors(): ButtonColors {
+    val colorScheme = AsmrTheme.colorScheme
+    val contentColor = if (colorScheme.isDark) {
+        colorScheme.onPrimaryContainer
+    } else {
+        colorScheme.primaryStrong
+    }
+    return ButtonDefaults.filledTonalButtonColors(
+        containerColor = colorScheme.primarySoft,
+        contentColor = contentColor,
+        disabledContainerColor = colorScheme.primarySoft.copy(alpha = 0.48f),
+        disabledContentColor = contentColor.copy(alpha = 0.48f)
+    )
 }
 
 @Composable
@@ -1491,115 +1842,6 @@ private fun SettingsGroup(
     }
 }
 
-/*
-@Composable
-internal fun BackgroundEffectTypeSelectorRow(
-    backgroundEffectEnabled: Boolean,
-    selectedType: BackgroundEffectType,
-    onBackgroundEffectEnabledChange: (Boolean) -> Unit,
-    onSelected: (BackgroundEffectType) -> Unit
-) {
-    val colorScheme = AsmrTheme.colorScheme
-    val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
-    val selectorShape = RoundedCornerShape(12.dp)
-    val selectorBorderColor = MaterialTheme.colorScheme.outline.copy(
-        alpha = if (colorScheme.isDark) 0.26f else 0.18f
-    )
-    var expanded by remember { mutableStateOf(false) }
-    val selectedLabel = if (!backgroundEffectEnabled) {
-        "关闭"
-    } else {
-        when (selectedType) {
-            BackgroundEffectType.Flow -> "光点"
-            BackgroundEffectType.Ripple -> "呼吸波纹"
-        }
-    }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .testTag(BACKGROUND_EFFECT_TYPE_ROW_TAG),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text("背景特效", style = MaterialTheme.typography.bodyMedium)
-        Spacer(modifier = Modifier.weight(1f))
-        Box(
-            modifier = Modifier.wrapContentSize(Alignment.TopEnd)
-        ) {
-            Surface(
-                shape = selectorShape,
-                color = dynamicContainerColor,
-                contentColor = colorScheme.onSurface,
-                border = BorderStroke(1.dp, selectorBorderColor),
-                modifier = Modifier
-                    .clip(selectorShape)
-                    .clickable { expanded = true }
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        text = selectedLabel,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colorScheme.textSecondary,
-                        modifier = Modifier.testTag(BACKGROUND_EFFECT_VALUE_TAG)
-                    )
-                    Text(
-                        text = "▼",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            MaterialTheme(
-                colorScheme = MaterialTheme.colorScheme.copy(
-                    surface = dynamicContainerColor,
-                    surfaceContainer = dynamicContainerColor
-                )
-            ) {
-                DropdownMenu(
-                    expanded = expanded,
-                    onDismissRequest = { expanded = false },
-                    offset = DpOffset(x = 0.dp, y = 6.dp),
-                    modifier = Modifier.background(dynamicContainerColor)
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("关闭") },
-                        onClick = {
-                            expanded = false
-                            onBackgroundEffectEnabledChange(false)
-                        }
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 8.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f)
-                    )
-                    DropdownMenuItem(
-                        text = { Text("光点") },
-                        onClick = {
-                            expanded = false
-                            onSelected(BackgroundEffectType.Flow)
-                            onBackgroundEffectEnabledChange(true)
-                        }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("呼吸波纹") },
-                        onClick = {
-                            expanded = false
-                            onSelected(BackgroundEffectType.Ripple)
-                            onBackgroundEffectEnabledChange(true)
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
-*/
 @Composable
 private fun SettingsToggleRow(
     text: String,

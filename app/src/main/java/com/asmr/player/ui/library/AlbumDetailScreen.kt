@@ -849,6 +849,9 @@ fun AlbumDetailScreen(
                                                 },
                                                 onPreviewImages = { request -> imagePreviewRequest = request },
                                                 onPreviewFile = { localPreviewFile = it },
+                                                onSubtitleGenerationError = viewModel.messageManager::showError,
+                                                onSubtitleGenerationUnavailable = viewModel.messageManager::showInfo,
+                                                onSubtitleGenerationQueued = viewModel.messageManager::showInfo,
                                                 animateIntro = shouldPlayInitialAnimations
                                             )
                                         } else {

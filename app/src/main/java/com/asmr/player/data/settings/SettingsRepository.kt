@@ -1,6 +1,8 @@
 package com.asmr.player.data.settings
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
 import com.asmr.player.cache.AppCacheLimits
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.hotlistening.HotListeningSortMode
@@ -25,10 +27,38 @@ data class PlaybackRuntimeSettings(
     val floatingLyricsEnabled: Boolean = false
 )
 
+enum class DeepSeekReasoningEffort(val wireValue: String) {
+    HIGH("high"),
+    MAX("max");
+
+    companion object {
+        fun fromWireValue(value: String?): DeepSeekReasoningEffort =
+            entries.firstOrNull { it.wireValue == value } ?: HIGH
+    }
+}
+
+data class DeepSeekTranslationSettings(
+    val thinkingEnabled: Boolean = false,
+    val reasoningEffort: DeepSeekReasoningEffort = DeepSeekReasoningEffort.HIGH
+)
+
+private class SettingsStoreOwner(
+    val settingsDataStore: DataStore<Preferences>
+)
+
 @Singleton
-class SettingsRepository @Inject constructor(
-    @ApplicationContext private val context: Context
+class SettingsRepository private constructor(
+    private val context: SettingsStoreOwner
 ) {
+    @Inject
+    constructor(@ApplicationContext context: Context) : this(
+        SettingsStoreOwner(context.settingsDataStore)
+    )
+
+    internal constructor(dataStore: DataStore<Preferences>) : this(
+        SettingsStoreOwner(dataStore)
+    )
+
     private val systemVolumeSyncLock = Any()
     private var pendingSystemVolumeSyncPercent: Int? = null
 
@@ -193,6 +223,16 @@ class SettingsRepository @Inject constructor(
         prefs[SettingsKeys.SHOW_MINI_PLAYER_BAR] ?: true
     }
 
+    val deepSeekTranslationSettings: Flow<DeepSeekTranslationSettings> =
+        context.settingsDataStore.data.map { prefs ->
+            DeepSeekTranslationSettings(
+                thinkingEnabled = prefs[SettingsKeys.DEEPSEEK_THINKING_ENABLED] ?: false,
+                reasoningEffort = DeepSeekReasoningEffort.fromWireValue(
+                    prefs[SettingsKeys.DEEPSEEK_REASONING_EFFORT]
+                )
+            )
+        }
+
     suspend fun loadPlaybackRuntimeSettings(): PlaybackRuntimeSettings {
         return withContext(Dispatchers.IO) {
             val prefs = context.settingsDataStore.data.first()
@@ -207,6 +247,17 @@ class SettingsRepository @Inject constructor(
             )
         }
     }
+
+    suspend fun loadDeepSeekTranslationSettings(): DeepSeekTranslationSettings =
+        withContext(Dispatchers.IO) {
+            val prefs = context.settingsDataStore.data.first()
+            DeepSeekTranslationSettings(
+                thinkingEnabled = prefs[SettingsKeys.DEEPSEEK_THINKING_ENABLED] ?: false,
+                reasoningEffort = DeepSeekReasoningEffort.fromWireValue(
+                    prefs[SettingsKeys.DEEPSEEK_REASONING_EFFORT]
+                )
+            )
+        }
 
     suspend fun setSleepTimerEndAtMs(endAtMs: Long) {
         withContext(Dispatchers.IO) {
@@ -263,6 +314,20 @@ class SettingsRepository @Inject constructor(
     suspend fun setShowMiniPlayerBar(enabled: Boolean) {
         withContext(Dispatchers.IO) {
             context.settingsDataStore.edit { it[SettingsKeys.SHOW_MINI_PLAYER_BAR] = enabled }
+        }
+    }
+
+    suspend fun setDeepSeekThinkingEnabled(enabled: Boolean) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { it[SettingsKeys.DEEPSEEK_THINKING_ENABLED] = enabled }
+        }
+    }
+
+    suspend fun setDeepSeekReasoningEffort(effort: DeepSeekReasoningEffort) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit {
+                it[SettingsKeys.DEEPSEEK_REASONING_EFFORT] = effort.wireValue
+            }
         }
     }
 

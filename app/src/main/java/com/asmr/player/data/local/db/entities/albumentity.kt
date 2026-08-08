@@ -7,6 +7,7 @@ import androidx.room.PrimaryKey
 data class AlbumEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,
     val title: String,
+    val displayTitle: String = "",
     val path: String,
     val localPath: String? = null,
     val downloadPath: String? = null,

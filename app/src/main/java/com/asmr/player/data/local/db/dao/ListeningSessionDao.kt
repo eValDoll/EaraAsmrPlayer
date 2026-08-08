@@ -47,10 +47,32 @@ interface ListeningSessionDao {
     suspend fun getById(id: Long): ListeningSessionEntity?
 
     /** 某收听日的全部会话，按开始时间降序（用于顶部最新、底部最旧的垂直时间线）。 */
-    @Query("SELECT * FROM listening_sessions WHERE listeningDate = :date ORDER BY startAtMs DESC")
+    @Query(
+        "SELECT ls.id AS id, ls.albumId AS albumId, ls.rjCode AS rjCode, " +
+            "COALESCE(NULLIF(a.displayTitle, ''), a.title, ls.title) AS title, " +
+            "ls.circle AS circle, ls.cv AS cv, ls.tags AS tags, " +
+            "ls.coverUrl AS coverUrl, ls.coverPath AS coverPath, ls.coverThumbPath AS coverThumbPath, " +
+            "ls.listeningDate AS listeningDate, ls.startAtMs AS startAtMs, " +
+            "ls.lastActiveAtMs AS lastActiveAtMs, ls.durationMs AS durationMs, " +
+            "ls.trafficBytes AS trafficBytes, ls.trackCount AS trackCount " +
+            "FROM listening_sessions ls " +
+            "LEFT JOIN albums a ON ls.albumId > 0 AND a.id = ls.albumId " +
+            "WHERE ls.listeningDate = :date ORDER BY ls.startAtMs DESC"
+    )
     fun observeSessionsForDate(date: String): Flow<List<ListeningSessionEntity>>
 
-    @Query("SELECT * FROM listening_sessions WHERE listeningDate = :date ORDER BY startAtMs DESC")
+    @Query(
+        "SELECT ls.id AS id, ls.albumId AS albumId, ls.rjCode AS rjCode, " +
+            "COALESCE(NULLIF(a.displayTitle, ''), a.title, ls.title) AS title, " +
+            "ls.circle AS circle, ls.cv AS cv, ls.tags AS tags, " +
+            "ls.coverUrl AS coverUrl, ls.coverPath AS coverPath, ls.coverThumbPath AS coverThumbPath, " +
+            "ls.listeningDate AS listeningDate, ls.startAtMs AS startAtMs, " +
+            "ls.lastActiveAtMs AS lastActiveAtMs, ls.durationMs AS durationMs, " +
+            "ls.trafficBytes AS trafficBytes, ls.trackCount AS trackCount " +
+            "FROM listening_sessions ls " +
+            "LEFT JOIN albums a ON ls.albumId > 0 AND a.id = ls.albumId " +
+            "WHERE ls.listeningDate = :date ORDER BY ls.startAtMs DESC"
+    )
     suspend fun getSessionsForDate(date: String): List<ListeningSessionEntity>
 
     @Query(
@@ -109,24 +131,28 @@ interface ListeningSessionDao {
 
     /** 区间内按作品聚合的收听排行（时长降序）。 */
     @Query(
-        "SELECT albumId AS albumId, rjCode AS rjCode, title AS title, circle AS circle, cv AS cv, " +
-            "coverUrl AS coverUrl, coverPath AS coverPath, coverThumbPath AS coverThumbPath, " +
-            "SUM(durationMs) AS durationMs, COUNT(*) AS sessionCount FROM listening_sessions " +
-            "WHERE listeningDate BETWEEN :startDate AND :endDate AND rjCode != '' " +
-            "GROUP BY rjCode ORDER BY durationMs DESC LIMIT :limit"
+        "SELECT ls.albumId AS albumId, ls.rjCode AS rjCode, " +
+            "COALESCE(NULLIF(a.displayTitle, ''), a.title, ls.title) AS title, ls.circle AS circle, ls.cv AS cv, " +
+            "ls.coverUrl AS coverUrl, ls.coverPath AS coverPath, ls.coverThumbPath AS coverThumbPath, " +
+            "SUM(ls.durationMs) AS durationMs, COUNT(*) AS sessionCount FROM listening_sessions ls " +
+            "LEFT JOIN albums a ON ls.albumId > 0 AND a.id = ls.albumId " +
+            "WHERE ls.listeningDate BETWEEN :startDate AND :endDate AND ls.rjCode != '' " +
+            "GROUP BY ls.rjCode ORDER BY durationMs DESC LIMIT :limit"
     )
     suspend fun topAlbums(startDate: String, endDate: String, limit: Int): List<AlbumListeningRow>
 
     /** 区间内累计收听时长最高的作品，用于当前收听面板封面背景。 */
     @Query(
-        "SELECT albumId AS albumId, rjCode AS rjCode, title AS title, circle AS circle, cv AS cv, " +
-            "coverUrl AS coverUrl, coverPath AS coverPath, coverThumbPath AS coverThumbPath, " +
-            "SUM(durationMs) AS durationMs, COUNT(*) AS sessionCount FROM listening_sessions " +
-            "WHERE listeningDate BETWEEN :startDate AND :endDate AND durationMs > 0 " +
+        "SELECT ls.albumId AS albumId, ls.rjCode AS rjCode, " +
+            "COALESCE(NULLIF(a.displayTitle, ''), a.title, ls.title) AS title, ls.circle AS circle, ls.cv AS cv, " +
+            "ls.coverUrl AS coverUrl, ls.coverPath AS coverPath, ls.coverThumbPath AS coverThumbPath, " +
+            "SUM(ls.durationMs) AS durationMs, COUNT(*) AS sessionCount FROM listening_sessions ls " +
+            "LEFT JOIN albums a ON ls.albumId > 0 AND a.id = ls.albumId " +
+            "WHERE ls.listeningDate BETWEEN :startDate AND :endDate AND ls.durationMs > 0 " +
             "GROUP BY CASE " +
-            "WHEN rjCode != '' THEN rjCode " +
-            "WHEN albumId > 0 THEN 'album:' || albumId " +
-            "ELSE title END " +
+            "WHEN ls.rjCode != '' THEN ls.rjCode " +
+            "WHEN ls.albumId > 0 THEN 'album:' || ls.albumId " +
+            "ELSE ls.title END " +
             "ORDER BY durationMs DESC LIMIT 1"
     )
     fun observeTopAlbum(startDate: String, endDate: String): Flow<AlbumListeningRow?>

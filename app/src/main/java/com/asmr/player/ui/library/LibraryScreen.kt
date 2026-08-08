@@ -50,6 +50,7 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.foundation.layout.fillMaxHeight
 import com.asmr.player.util.Formatting
 import com.asmr.player.util.isOnlineTrackPath
+import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
@@ -421,7 +422,7 @@ fun LibraryScreen(
                         onAlbumClick(
                             Album(
                                 id = a.id,
-                                title = a.title,
+                                title = a.titleForDisplay,
                                 path = a.path,
                                 localPath = a.localPath,
                                 downloadPath = a.downloadPath,
