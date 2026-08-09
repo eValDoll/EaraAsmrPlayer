@@ -22,6 +22,7 @@ import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -846,10 +847,8 @@ private fun TranslationTaskGroupCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                color = colors.surface.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(6.dp)
-            )
+            .clip(RoundedCornerShape(6.dp))
+            .background(colors.surface.copy(alpha = 0.5f))
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
@@ -863,8 +862,8 @@ private fun TranslationTaskGroupCard(
                 summaryColor = if (activeTask != null || isPolishing) colors.primary else colors.textSecondary,
                 albumCover = group.albumCover,
                 progress = if (isPolishing) null else activeTask?.progress,
-                progressIndeterminate = isPolishing,
-                reserveProgressSpace = controlledTask != null || isPolishing,
+                progressIndeterminate = false,
+                reserveProgressSpace = !isPolishing && controlledTask != null,
                 summaryOnTitleLine = true,
                 onToggleExpanded = onToggleExpanded
             )
@@ -920,7 +919,31 @@ private fun TranslationTaskGroupCard(
                 }
             }
         }
+        if (isPolishing) {
+            FinalPolishBottomProgress(
+                trackColor = colors.primary.copy(alpha = 0.14f),
+                progressColor = colors.primary
+            )
+        }
     }
+}
+
+internal const val FINAL_POLISH_PROGRESS_TAG = "final_polish_bottom_progress"
+
+@Composable
+internal fun BoxScope.FinalPolishBottomProgress(
+    trackColor: Color,
+    progressColor: Color
+) {
+    LinearProgressIndicator(
+        modifier = Modifier
+            .align(Alignment.BottomStart)
+            .fillMaxWidth()
+            .height(1.dp)
+            .testTag(FINAL_POLISH_PROGRESS_TAG),
+        color = progressColor,
+        trackColor = trackColor
+    )
 }
 
 @Composable

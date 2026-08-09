@@ -799,7 +799,9 @@ fun SettingsScreen(
                             onSave = { viewModel.saveDeepSeekApiKey(deepSeekApiKeyInput) },
                             onThinkingEnabledChanged = viewModel::setDeepSeekThinkingEnabled,
                             onReasoningEffortChanged = viewModel::setDeepSeekReasoningEffort,
-                            onFinalPolishEnabledChanged = viewModel::setDeepSeekFinalPolishEnabled
+                            onFinalPolishEnabledChanged = viewModel::setDeepSeekFinalPolishEnabled,
+                            activeTipKey = activeTipKey,
+                            onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
                         )
                     }
                 }
@@ -1012,7 +1014,9 @@ internal fun DeepSeekTranslationSettingsSection(
     onSave: () -> Unit,
     onThinkingEnabledChanged: (Boolean) -> Unit,
     onReasoningEffortChanged: (DeepSeekReasoningEffort) -> Unit,
-    onFinalPolishEnabledChanged: (Boolean) -> Unit
+    onFinalPolishEnabledChanged: (Boolean) -> Unit,
+    activeTipKey: String? = null,
+    onToggleTip: ((String) -> Unit)? = null
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val actionButtonColors = settingsPrimaryTonalButtonColors()
@@ -1165,12 +1169,12 @@ internal fun DeepSeekTranslationSettingsSection(
     SettingsToggleRow(
         text = "最终润色",
         checked = settings.finalPolishEnabled,
-        onCheckedChange = onFinalPolishEnabledChanged
-    )
-    Text(
-        text = "开启后在翻译任务列表中左滑作品卡片，可手动对其中已有字幕的音轨执行一次语序、人称、称呼、用词、语气与标点的局部精修。会额外消耗较多 Token，且不影响翻译失败时的结果。",
-        style = MaterialTheme.typography.labelSmall,
-        color = colorScheme.textTertiary
+        onCheckedChange = onFinalPolishEnabledChanged,
+        infoKey = "final_polish",
+        infoTitle = "最终润色",
+        infoText = "翻译完成后，可在任务管理中左滑作品卡片，对现有中文字幕进行整体润色。此操作会额外消耗 Token。",
+        activeTipKey = activeTipKey,
+        onToggleTip = onToggleTip
     )
 }
 
@@ -2142,7 +2146,7 @@ private fun SettingsInfoTip(active: Boolean, title: String, text: String, onTogg
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Info,
-                    contentDescription = null,
+                    contentDescription = "${title}说明",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(14.dp)
                 )
