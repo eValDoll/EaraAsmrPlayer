@@ -2,6 +2,8 @@ package com.asmr.player.data.remote.dlsite
 
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.awaitResponse
+import com.asmr.player.data.remote.scraper.DLSITE_DOMAIN
+import com.asmr.player.data.remote.scraper.storeSegment
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -57,7 +59,7 @@ class DlsiteProductInfoClient @Inject constructor(
         val clean = productId.trim().uppercase()
         if (clean.isBlank()) return@withContext emptyList()
 
-        val url = "https://www.dlsite.com/maniax/product/info/ajax".toHttpUrl()
+        val url = "$DLSITE_DOMAIN${storeSegment()}/product/info/ajax".toHttpUrl()
             .newBuilder()
             .addQueryParameter("product_id", clean)
             .addQueryParameter("cdn_cache_min", "1")

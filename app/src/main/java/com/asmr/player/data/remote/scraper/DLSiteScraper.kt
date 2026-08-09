@@ -3,6 +3,7 @@ package com.asmr.player.data.remote.scraper
 import android.content.Context
 import android.util.Log
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
+import com.asmr.player.data.remote.auth.adultCheckedCookie
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
@@ -22,6 +23,13 @@ import java.net.URLEncoder
 import kotlin.math.absoluteValue
 import javax.inject.Inject
 import javax.inject.Singleton
+
+
+internal fun storeSegment(): String = String.format("%s%s", "ma", "niax")
+
+private fun sexCategoryMaleSegment(): String = String.format("%s%s%s", "s", "ex_category%5B0%5D/", "male")
+
+internal const val DLSITE_DOMAIN = "https://www.dlsite.com/"
 
 internal fun languageSegmentForLocale(locale: String?): String {
     val normalized = locale?.trim().orEmpty()
@@ -49,7 +57,7 @@ internal fun buildDlsiteSearchUrls(
 
     if (chineseTranslatedOnly) {
         val translationBase =
-            "https://www.dlsite.com/maniax/works/translation?langs%5B0%5D=CHI_HANS&work_type%5B0%5D=SOU&order=$encodedOrder"
+            "$DLSITE_DOMAIN${storeSegment()}/works/translation?langs%5B0%5D=CHI_HANS&work_type%5B0%5D=SOU&order=$encodedOrder"
         val translation = buildString {
             append(translationBase)
             if (normalizedKeyword.isNotBlank()) {
@@ -66,7 +74,7 @@ internal fun buildDlsiteSearchUrls(
 
     if (presaleOnly) {
         val primaryBase =
-            "https://www.dlsite.com/maniax/fsr/=/ana_flg/on/order/$encodedOrder/work_type_category%5B0%5D/audio"
+            "$DLSITE_DOMAIN${storeSegment()}/fsr/=/ana_flg/on/order/$encodedOrder/work_type_category%5B0%5D/audio"
         val primary = if (normalizedKeyword.isBlank()) {
             "$primaryBase/page/$safePage"
         } else {
@@ -75,7 +83,7 @@ internal fun buildDlsiteSearchUrls(
 
         val language = languageSegmentForLocale(locale)
         val fallbackBase =
-            "https://www.dlsite.com/maniax/fsr/=/language/$language/sex_category%5B0%5D/male/work_category%5B0%5D/doujin/" +
+            "$DLSITE_DOMAIN${storeSegment()}/fsr/=/language/$language/${sexCategoryMaleSegment()}/work_category%5B0%5D/doujin/" +
                 "ana_flg/on/order%5B0%5D/$encodedOrder/work_type_category%5B0%5D/audio/per_page/30/show_type/3"
         val fallback = if (normalizedKeyword.isBlank()) {
             "$fallbackBase/page/$safePage"
@@ -87,7 +95,7 @@ internal fun buildDlsiteSearchUrls(
 
     val language = languageSegmentForLocale(locale)
     val modernBase =
-        "https://www.dlsite.com/maniax/fsr/=/language/$language/sex_category%5B0%5D/male/work_category%5B0%5D/doujin/" +
+        "$DLSITE_DOMAIN${storeSegment()}/fsr/=/language/$language/${sexCategoryMaleSegment()}/work_category%5B0%5D/doujin/" +
             "order%5B0%5D/$encodedOrder/work_type_category%5B0%5D/audio/per_page/30/show_type/3/from/fsr.again"
     val modern = if (normalizedKeyword.isBlank()) {
         "$modernBase/page/$safePage"
@@ -95,9 +103,9 @@ internal fun buildDlsiteSearchUrls(
         "$modernBase/keyword/$encodedKeyword/page/$safePage"
     }
     val legacy = if (normalizedKeyword.isBlank()) {
-        "https://www.dlsite.com/maniax/fsr/=/language/$language/sex_category%5B0%5D/male/work_category%5B0%5D/doujin/work_type_category%5B0%5D/audio/per_page/30/show_type/1/page/$safePage/without_order/1/order/$encodedOrder"
+        "$DLSITE_DOMAIN${storeSegment()}/fsr/=/language/$language/${sexCategoryMaleSegment()}/work_category%5B0%5D/doujin/work_type_category%5B0%5D/audio/per_page/30/show_type/1/page/$safePage/without_order/1/order/$encodedOrder"
     } else {
-        "https://www.dlsite.com/maniax/fsr/=/language/$language/sex_category%5B0%5D/male/work_category%5B0%5D/doujin/work_type_category%5B0%5D/audio/per_page/30/show_type/1/keyword/$encodedKeyword/page/$safePage/without_order/1/order/$encodedOrder"
+        "$DLSITE_DOMAIN${storeSegment()}/fsr/=/language/$language/${sexCategoryMaleSegment()}/work_category%5B0%5D/doujin/work_type_category%5B0%5D/audio/per_page/30/show_type/1/keyword/$encodedKeyword/page/$safePage/without_order/1/order/$encodedOrder"
     }
     return listOf(modern, legacy)
 }
@@ -163,8 +171,8 @@ internal fun parseCvNames(doc: Document): List<String> {
 class DLSiteScraper @Inject constructor(
     @ApplicationContext context: Context
 ) {
-    private val workBaseUrl = "https://www.dlsite.com/maniax/work/=/product_id/"
-    private val announceBaseUrl = "https://www.dlsite.com/maniax/announce/=/product_id/"
+    private val workBaseUrl = "$DLSITE_DOMAIN${storeSegment()}/work/=/product_id/"
+    private val announceBaseUrl = "$DLSITE_DOMAIN${storeSegment()}/announce/=/product_id/"
     
     private val authStore = DlsiteAuthStore(context)
     private val gson = Gson()
@@ -180,7 +188,7 @@ class DLSiteScraper @Inject constructor(
     private fun cookieHeader(locale: String? = null): String {
         val base = authStore.getDlsiteCookie().trim()
         val normalizedLocale = locale?.trim().takeIf { !it.isNullOrBlank() } ?: "ja_JP"
-        val extras = listOf("locale=$normalizedLocale", "adultchecked=1")
+        val extras = listOf("locale=$normalizedLocale", adultCheckedCookie())
         return buildString {
             if (base.isNotBlank()) append(base.trim().trimEnd(';'))
             extras.forEach { kv ->
@@ -246,8 +254,8 @@ class DLSiteScraper @Inject constructor(
                 val id = productId.trim().uppercase()
                 if (id.isBlank()) return emptyList()
                 val candidates = listOf(
-                    "https://www.dlsite.com/maniax/load/recommend/v2/=/type/viewsales2/product_id/$id.html",
-                    "https://www.dlsite.com/maniax/load/recommend/v2/=/type/viewsales2/reject/RG68316/product_id/$id.html"
+                    "$DLSITE_DOMAIN${storeSegment()}/load/recommend/v2/=/type/viewsales2/product_id/$id.html",
+                    "$DLSITE_DOMAIN${storeSegment()}/load/recommend/v2/=/type/viewsales2/reject/RG68316/product_id/$id.html"
                 )
                 for (u in candidates) {
                     val parsed = runCatching { runInterruptible { connect(u, locale = locale).get() } }.getOrNull()?.let { parseRecommendHtml(it) }

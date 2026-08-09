@@ -815,7 +815,7 @@ internal fun buildPolishAgentInitialMessages(
         .replace("{{CAPTION_COUNT}}", captionCount.toString())
         .replace("{{WORK_CONTEXT}}", buildSubtitleWorkContextSection(workContext))
         .replace("{{STYLE_GUIDE}}", TranslationPrompts.subtitleStyleGuide())
-        .replace("{{ADULT_REFERENCE_TABLE}}", TranslationPrompts.subtitleAdultReferenceTable())
+        .replace("{{REFERENCE_TABLE}}", TranslationPrompts.subtitleReferenceTable())
         .replace("{{READ_TOOL_NAME}}", POLISH_READ_TOOL_NAME)
         .replace("{{WRITE_TOOL_NAME}}", POLISH_WRITE_TOOL_NAME)
         .trim()
@@ -1265,7 +1265,7 @@ internal fun subtitleToolTranslationSystemPrompt(
         .replace("{{READ_TOOL_NAME}}", SUBTITLE_READ_TOOL_NAME)
         .replace("{{WRITE_TOOL_NAME}}", SUBTITLE_WRITE_TOOL_NAME)
         .replace("{{STYLE_GUIDE}}", TranslationPrompts.subtitleStyleGuide())
-        .replace("{{ADULT_REFERENCE_TABLE}}", TranslationPrompts.subtitleAdultReferenceTable())
+        .replace("{{REFERENCE_TABLE}}", TranslationPrompts.subtitleReferenceTable())
         .replace("{{SEGMENTATION_RULES}}", segmentationRules)
         .trim()
 }

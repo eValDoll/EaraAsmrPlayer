@@ -529,7 +529,7 @@ class SubtitleTranslationClientTest {
     fun encodedPrompts_decodeToExpectedContent() {
         assert(TranslationPrompts.displayNameSystemPrompt().isNotBlank())
         assert(TranslationPrompts.subtitleStyleGuide().isNotBlank())
-        assert(TranslationPrompts.subtitleAdultReferenceTable().isNotBlank())
+        assert(TranslationPrompts.subtitleReferenceTable().isNotBlank())
         assert(TranslationPrompts.subtitleProgressInstruction().isNotBlank())
         assert(TranslationPrompts.subtitleSegmentationRulesMerge().isNotBlank())
         assert(TranslationPrompts.subtitleSegmentationRulesNoMerge().isNotBlank())
@@ -541,7 +541,7 @@ class SubtitleTranslationClientTest {
         assert(TranslationPrompts.subtitleToolWriteDescription().isNotBlank())
         assert(TranslationPrompts.subtitleToolChineseFieldDescription().isNotBlank())
         assert(TranslationPrompts.subtitleAgentSystemPromptTemplate().contains("{{SOURCE_COUNT}}"))
-        assert(TranslationPrompts.subtitleAgentSystemPromptTemplate().contains("{{ADULT_REFERENCE_TABLE}}"))
+        assert(TranslationPrompts.subtitleAgentSystemPromptTemplate().contains("{{REFERENCE_TABLE}}"))
         // 翻译提示词包含结构级翻译腔归化约束
         assert(TranslationPrompts.subtitleAgentSystemPromptTemplate().contains("修饰语＋人名"))
         assert(TranslationPrompts.subtitleAgentSystemPromptTemplate().contains("〜してしまう"))
