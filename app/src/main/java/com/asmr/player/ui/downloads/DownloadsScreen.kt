@@ -42,6 +42,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.InsertDriveFile
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Download
@@ -140,6 +141,7 @@ fun DownloadsScreen(
     val tasks by viewModel.tasks.collectAsState()
     val translationSubtitleGroups by viewModel.translationSubtitleGroups.collectAsState()
     val subtitleTasks by viewModel.subtitleTasks.collectAsState()
+    val polishingRjCodes by viewModel.polishingRjCodes.collectAsState()
     val activeDownloadFileCount = remember(tasks) { countActiveDownloadFiles(tasks) }
     val activeTranslationTaskCount = remember(subtitleTasks) { countActiveSubtitleTaskItems(subtitleTasks) }
     val expandedTasks = remember { mutableStateListOf<Long>() }
@@ -377,6 +379,7 @@ fun DownloadsScreen(
                         listState = listState,
                         subtitleGroups = translationSubtitleGroups,
                         subtitleTasks = subtitleTasks,
+                        polishingRjCodes = polishingRjCodes,
                         loadAlbumCovers = viewModel::loadTranslationAlbumCovers,
                         revealedRj = revealedTranslationRj,
                         onRevealedRjChange = { revealedTranslationRj = it },
@@ -392,6 +395,7 @@ fun DownloadsScreen(
                             )
                         },
                         onRetrySubtitle = viewModel::retrySubtitleTranslation,
+                        onPolishAlbum = viewModel::polishSubtitleAlbum,
                         onPauseItem = viewModel::pauseSubtitleItem,
                         onResumeItem = viewModel::resumeSubtitleItem,
                         onCancelItem = viewModel::cancelSubtitleItem,
@@ -486,7 +490,8 @@ private data class TranslationTaskGroupUi(
     val title: String,
     val albumCover: TaskAlbumCoverUi,
     val subtitles: List<TranslationSubtitleUi>,
-    val tasks: List<TranslationTaskUi>
+    val tasks: List<TranslationTaskUi>,
+    val isPolishing: Boolean = false
 )
 
 internal data class TranslationTaskUi(
@@ -588,6 +593,7 @@ private fun TranslationManagementContent(
     listState: androidx.compose.foundation.lazy.LazyListState,
     subtitleGroups: List<TranslationSubtitleGroupUi>,
     subtitleTasks: List<SubtitleTaskUi>,
+    polishingRjCodes: Set<String>,
     loadAlbumCovers: suspend (List<Long>) -> Map<Long, TaskAlbumCoverUi>,
     revealedRj: String?,
     onRevealedRjChange: (String?) -> Unit,
@@ -595,6 +601,7 @@ private fun TranslationManagementContent(
     onDeleteSubtitle: (trackId: Long, title: String) -> Unit,
     onDeleteSubtitleGroup: (rjCode: String, trackIds: List<Long>) -> Unit,
     onRetrySubtitle: (trackId: Long, title: String) -> Unit,
+    onPolishAlbum: (rjCode: String) -> Unit,
     onPauseItem: (String) -> Unit,
     onResumeItem: (String) -> Unit,
     onCancelItem: (String) -> Unit,
@@ -621,6 +628,7 @@ private fun TranslationManagementContent(
         displayedTasks,
         subtitleGroups,
         taskAlbumCovers,
+        polishingRjCodes,
         normalizedQuery
     ) {
         val tasksByRj = displayedTasks
@@ -653,7 +661,8 @@ private fun TranslationManagementContent(
                         ?: tasks.firstOrNull { it.title.isNotBlank() }?.title.orEmpty(),
                     albumCover = albumCover,
                     subtitles = subtitleGroup?.subtitles.orEmpty(),
-                    tasks = tasks
+                    tasks = tasks,
+                    isPolishing = polishingRjCodes.contains(rjCode)
                 )
             }
             .filter { it.subtitles.isNotEmpty() || it.tasks.isNotEmpty() }
@@ -689,7 +698,10 @@ private fun TranslationManagementContent(
             val expanded = expandedGroups.contains(group.rjCode)
             val activeTask = group.tasks.firstOrNull { it.state.isActivelyRunning() }
             val controlledTask = activeTask ?: group.tasks.firstOrNull()
-            val actionCount = if (controlledTask == null) 1 else 2
+            // 操作列：暂停/继续、润色、（有任务时）取消；（只有字幕时）润色、删除
+            val actionCount = if (controlledTask == null) 2 else 3
+            val groupActionsEnabled = !group.isPolishing
+            val polishEnabled = groupActionsEnabled && activeTask == null
             SwipeRevealActionsBox(
                 modifier = Modifier.fillMaxWidth(),
                 revealed = revealedRj == group.rjCode,
@@ -714,6 +726,7 @@ private fun TranslationManagementContent(
                                     tint = colors.onPrimary,
                                     icon = Icons.Rounded.PlayArrow,
                                     contentDescription = "继续字幕任务",
+                                    enabled = groupActionsEnabled,
                                     onClick = { onResumeTask(task.taskId) }
                                 )
                             }
@@ -723,17 +736,27 @@ private fun TranslationManagementContent(
                                     tint = colors.onPrimary,
                                     icon = Icons.Rounded.Pause,
                                     contentDescription = "暂停字幕任务",
+                                    enabled = groupActionsEnabled,
                                     onClick = { onPauseTask(task.taskId) }
                                 )
                             }
                         }
                     }
+                    SwipeRevealAction(
+                        backgroundColor = colors.primaryContainer,
+                        tint = colors.onPrimaryContainer,
+                        icon = Icons.Rounded.AutoAwesome,
+                        contentDescription = if (group.isPolishing) "润色中" else "润色该作品字幕",
+                        enabled = polishEnabled,
+                        onClick = { onPolishAlbum(group.rjCode) }
+                    )
                     if (controlledTask != null) {
                         SwipeRevealAction(
                             backgroundColor = colors.danger,
                             tint = Color.White,
                             icon = Icons.Rounded.Close,
                             contentDescription = "取消字幕任务",
+                            enabled = groupActionsEnabled,
                             onClick = { onCancelTask(controlledTask.taskId) }
                         )
                     } else {
@@ -742,6 +765,7 @@ private fun TranslationManagementContent(
                             tint = Color.White,
                             icon = Icons.Rounded.Close,
                             contentDescription = "删除该作品的全部字幕",
+                            enabled = groupActionsEnabled,
                             onClick = {
                                 onDeleteSubtitleGroup(
                                     group.rjCode,
@@ -788,10 +812,12 @@ private fun TranslationTaskGroupCard(
     onRetryItem: (String) -> Unit
 ) {
     val colors = AsmrTheme.colorScheme
+    val isPolishing = group.isPolishing
     val activeTask = remember(group.tasks) { group.tasks.firstOrNull { it.state.isActivelyRunning() } }
     val controlledTask = remember(group.tasks, activeTask) { activeTask ?: group.tasks.firstOrNull() }
-    val summary = remember(group.subtitles, group.tasks, activeTask) {
+    val summary = remember(group.subtitles, group.tasks, activeTask, isPolishing) {
         when {
+            isPolishing -> "润色中"
             activeTask != null -> activeTask.stage
             group.subtitles.isNotEmpty() -> "${group.subtitles.size} 个字幕"
             else -> "暂无字幕"
@@ -814,7 +840,7 @@ private fun TranslationTaskGroupCard(
                 title = group.rjCode,
                 subtitle = group.title,
                 summary = summary,
-                summaryColor = if (activeTask != null) colors.primary else colors.textSecondary,
+                summaryColor = if (activeTask != null || isPolishing) colors.primary else colors.textSecondary,
                 albumCover = group.albumCover,
                 progress = activeTask?.progress,
                 progressIndeterminate = false,
@@ -836,11 +862,13 @@ private fun TranslationTaskGroupCard(
                         .filter { task -> task.trackId !in subtitleTrackIds }
                         .forEach { task -> add(TranslationRowUi.Task(task)) }
                 }
+                val actionsEnabled = !isPolishing
                 rows.forEachIndexed { index, row ->
                     when (row) {
                         is TranslationRowUi.Subtitle -> TranslationSubtitleRow(
                             subtitle = row.subtitle,
                             task = row.task,
+                            actionsEnabled = actionsEnabled,
                             onDelete = { onDeleteSubtitle(row.subtitle.trackId, row.subtitle.title) },
                             onRetry = { onRetrySubtitle(row.subtitle.trackId, row.subtitle.title) },
                             onPause = row.task?.takeIf { it.state.isActivelyRunning() }
@@ -854,6 +882,7 @@ private fun TranslationTaskGroupCard(
 
                         is TranslationRowUi.Task -> TranslationTaskRow(
                             task = row.task,
+                            actionsEnabled = actionsEnabled,
                             onPause = { onPauseItem(row.task.itemId) },
                             onResume = { onResumeItem(row.task.itemId) },
                             onCancel = { onCancelItem(row.task.itemId) },
@@ -1023,6 +1052,7 @@ private fun TaskGroupCover(albumCover: TaskAlbumCoverUi) {
 private fun TranslationSubtitleRow(
     subtitle: TranslationSubtitleUi,
     task: TranslationTaskUi?,
+    actionsEnabled: Boolean = true,
     onDelete: () -> Unit,
     onRetry: () -> Unit,
     onPause: (() -> Unit)?,
@@ -1097,23 +1127,24 @@ private fun TranslationSubtitleRow(
             }
         }
         if (onPause != null) {
-            IconButton(onClick = onPause, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = onPause, enabled = actionsEnabled, modifier = Modifier.size(32.dp)) {
                 Icon(Icons.Rounded.Pause, "暂停字幕任务", tint = colors.textSecondary, modifier = Modifier.size(16.dp))
             }
         }
         if (onResume != null) {
-            IconButton(onClick = onResume, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = onResume, enabled = actionsEnabled, modifier = Modifier.size(32.dp)) {
                 Icon(Icons.Rounded.PlayArrow, "继续字幕任务", tint = colors.primary, modifier = Modifier.size(16.dp))
             }
         }
         if (onRetryTask != null) {
-            IconButton(onClick = onRetryTask, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = onRetryTask, enabled = actionsEnabled, modifier = Modifier.size(32.dp)) {
                 Icon(Icons.Rounded.Refresh, "重试字幕任务", tint = colors.primary, modifier = Modifier.size(16.dp))
             }
         }
         if (onCancel != null) {
             IconButton(
                 onClick = onCancel,
+                enabled = actionsEnabled,
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(
@@ -1127,6 +1158,7 @@ private fun TranslationSubtitleRow(
         if (task == null) {
             IconButton(
                 onClick = onRetry,
+                enabled = actionsEnabled,
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(
@@ -1138,6 +1170,7 @@ private fun TranslationSubtitleRow(
             }
             IconButton(
                 onClick = onDelete,
+                enabled = actionsEnabled,
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(
@@ -1154,6 +1187,7 @@ private fun TranslationSubtitleRow(
 @Composable
 internal fun TranslationTaskRow(
     task: TranslationTaskUi,
+    actionsEnabled: Boolean = true,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onCancel: () -> Unit,
@@ -1236,18 +1270,21 @@ internal fun TranslationTaskRow(
         when (task.state) {
             SubtitleItemState.PAUSED, SubtitleItemState.INTERRUPTED -> IconButton(
                 onClick = onResume,
+                enabled = actionsEnabled,
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(Icons.Rounded.PlayArrow, "继续字幕任务", tint = colors.primary, modifier = Modifier.size(16.dp))
             }
             SubtitleItemState.FAILED -> IconButton(
                 onClick = onRetry,
+                enabled = actionsEnabled,
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(Icons.Rounded.Refresh, "重试字幕任务", tint = colors.primary, modifier = Modifier.size(16.dp))
             }
             else -> IconButton(
                 onClick = onPause,
+                enabled = actionsEnabled,
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(Icons.Rounded.Pause, "暂停字幕任务", tint = colors.textSecondary, modifier = Modifier.size(16.dp))
@@ -1256,6 +1293,7 @@ internal fun TranslationTaskRow(
         run {
             IconButton(
                 onClick = onCancel,
+                enabled = actionsEnabled,
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(
@@ -2089,14 +2127,16 @@ private fun RowScope.SwipeRevealAction(
     tint: Color,
     icon: ImageVector,
     contentDescription: String,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
             .weight(1f)
             .fillMaxHeight()
-            .background(backgroundColor)
+            .background(backgroundColor.copy(alpha = if (enabled) 1f else 0.45f))
             .clickable(
+                enabled = enabled,
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick
@@ -2106,7 +2146,7 @@ private fun RowScope.SwipeRevealAction(
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = tint,
+            tint = if (enabled) tint else tint.copy(alpha = 0.55f),
             modifier = Modifier.size(20.dp)
         )
     }

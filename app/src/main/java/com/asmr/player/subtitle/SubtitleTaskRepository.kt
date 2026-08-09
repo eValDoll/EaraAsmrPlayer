@@ -18,7 +18,11 @@ import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -31,8 +35,52 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
     private val startupMutex = Mutex()
     @Volatile private var startupReconciled = false
 
+    private val _polishingRjCodes = MutableStateFlow<Set<String>>(emptySet())
+
+    /** 当前正在进行作品级最终润色的作品（rjCode 维度），供 UI 做按钮禁用。 */
+    val polishingRjCodes: StateFlow<Set<String>> = _polishingRjCodes.asStateFlow()
+
     val tasks: Flow<List<SubtitleTaskUi>> = dao.observeTasks().map { rows ->
         rows.map(SubtitleTaskWithItems::toUi).filter { it.items.isNotEmpty() }
+    }
+
+    /**
+     * 请求对某个作品执行一次手动最终润色。
+     *
+     * @return null 表示已受理（润色由后台服务执行）；否则返回给用户看的错误提示。
+     */
+    suspend fun requestAlbumPolish(albumId: Long): String? {
+        val album = database.albumDao().getAlbumById(albumId)
+            ?: return "找不到对应的作品，无法润色"
+        val rjCode = album.rjCode.trim().ifBlank { album.workId.trim() }
+        if (rjCode.isNotBlank() && _polishingRjCodes.value.contains(rjCode)) {
+            return "该作品正在润色中，请稍候"
+        }
+        SubtitleTaskService.requestPolishAlbum(appContext, albumId)
+        return null
+    }
+
+    internal suspend fun markPolishStarted(albumId: Long) {
+        val rjCode = database.albumDao().getAlbumById(albumId)
+            ?.run { rjCode.trim().ifBlank { workId.trim() } }
+        if (!rjCode.isNullOrBlank()) {
+            _polishingRjCodes.update { it + rjCode }
+        }
+    }
+
+    internal suspend fun markPolishFinished(albumId: Long) {
+        val rjCode = database.albumDao().getAlbumById(albumId)
+            ?.run { rjCode.trim().ifBlank { workId.trim() } }
+        if (rjCode.isNullOrBlank()) {
+            _polishingRjCodes.update { emptySet() }
+        } else {
+            _polishingRjCodes.update { it - rjCode }
+        }
+    }
+
+    /** 清空全部润色中状态（服务销毁、润色任务被中断时调用，避免 UI 残留禁用）。 */
+    internal fun clearPolishState() {
+        _polishingRjCodes.update { emptySet() }
     }
 
     suspend fun enqueueGeneration(targets: List<SubtitleGenerationTarget>): SubtitleTaskHandle {

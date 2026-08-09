@@ -58,6 +58,43 @@ class SubtitleTranslationClientTest {
     }
 
     @Test
+    fun prompt_injectsStaticWorkContextAndKeepsNameConsistencyRule() {
+        val context = SubtitleWorkContext(
+            workTitleJapanese = "架空のサンプル作品タイトル",
+            workTitleChinese = "虚构的示例作品标题",
+            trackTitleJapanese = "サンプルトラック",
+            trackTitleChinese = "示例音轨",
+            circle = "サンプルサークル",
+            cv = "サンプル声優"
+        )
+        val prompt = subtitleToolTranslationSystemPrompt(
+            listOf(0, 1, 2),
+            allowMerging = true,
+            workContext = context
+        )
+        val withoutContext = subtitleToolTranslationSystemPrompt(listOf(0, 1, 2), allowMerging = true)
+
+        assert(prompt.contains("作品标题（日文）：架空のサンプル作品タイトル"))
+        assert(prompt.contains("作品标题（中文）：虚构的示例作品标题"))
+        assert(prompt.contains("当前音轨标题（日文）：サンプルトラック"))
+        assert(prompt.contains("当前音轨标题（中文）：示例音轨"))
+        assert(prompt.contains("社团：サンプルサークル"))
+        assert(prompt.contains("声优：サンプル声優"))
+        assert(prompt.contains("同一角色在整轨及跨轨使用同一中文译名"))
+        assert(withoutContext.contains("作品上下文：无"))
+        assert(!withoutContext.contains("作品标题（日文）"))
+    }
+
+    @Test
+    fun workContextSection_fallsBackToNoContextMessage() {
+        val section = buildSubtitleWorkContextSection(null)
+        assert(section.contains("作品上下文：无"))
+        val empty = buildSubtitleWorkContextSection(SubtitleWorkContext())
+        assert(empty.contains("作品上下文（用于统一人名"))
+        assert(!empty.contains("作品标题（日文）"))
+    }
+
+    @Test
     fun displayNameParser_acceptsUnchangedJapaneseProperNames() {
         val result = parseDisplayNameTranslationResponse(
             content = """{"work_title":"Omega01","tracks":[{"track_id":13,"title":"ASMRパート"}]}""",
@@ -505,6 +542,129 @@ class SubtitleTranslationClientTest {
         assert(TranslationPrompts.subtitleToolChineseFieldDescription().isNotBlank())
         assert(TranslationPrompts.subtitleAgentSystemPromptTemplate().contains("{{SOURCE_COUNT}}"))
         assert(TranslationPrompts.subtitleAgentSystemPromptTemplate().contains("{{ADULT_REFERENCE_TABLE}}"))
+        // 翻译提示词包含结构级翻译腔归化约束
+        assert(TranslationPrompts.subtitleAgentSystemPromptTemplate().contains("修饰语＋人名"))
+        assert(TranslationPrompts.subtitleAgentSystemPromptTemplate().contains("〜してしまう"))
+        assert(TranslationPrompts.subtitleAgentSystemPromptTemplate().contains("被字句"))
+        // 润色提示词包含同等的结构级精修项
+        assert(TranslationPrompts.subtitlePolishSystemPromptTemplate().contains("形容词＋人名"))
+        assert(TranslationPrompts.subtitlePolishSystemPromptTemplate().contains("被字句"))
+        assert(TranslationPrompts.subtitlePolishSystemPromptTemplate().isNotBlank())
+        assert(TranslationPrompts.subtitlePolishSystemPromptTemplate().contains("{{TRACK_COUNT}}"))
+        assert(TranslationPrompts.subtitlePolishToolReadDescription().isNotBlank())
+        assert(TranslationPrompts.subtitlePolishToolWriteDescription().isNotBlank())
+        assert(TranslationPrompts.subtitlePolishInitialUserMessage().isNotBlank())
+        assert(TranslationPrompts.subtitlePolishProgressInstruction().isNotBlank())
+        assert(TranslationPrompts.subtitlePolishContinueMessageGeneric().isNotBlank())
+    }
+
+    @Test
+    fun polishInitialMessages_injectTrackCountAndWorkContext() {
+        val tracks = listOf(
+            PolishTrackInput(
+                trackIndex = 0,
+                trackTitleJapanese = "サンプルトラックA",
+                trackTitleChinese = "示例音轨A",
+                captions = listOf(
+                    PolishCaptionInput(captionId = 1L, sourceIndex = 0, japanese = "あ", chinese = "啊"),
+                    PolishCaptionInput(captionId = 2L, sourceIndex = 1, japanese = "い", chinese = "咦")
+                )
+            ),
+            PolishTrackInput(
+                trackIndex = 1,
+                trackTitleJapanese = "サンプルトラックB",
+                trackTitleChinese = "示例音轨B",
+                captions = listOf(PolishCaptionInput(captionId = 3L, sourceIndex = 0, japanese = "う", chinese = "嗯"))
+            )
+        )
+        val messages = buildPolishAgentInitialMessages(
+            gson = Gson(),
+            tracks = tracks,
+            workContext = SubtitleWorkContext(
+                workTitleJapanese = "架空のサンプル作品タイトル",
+                workTitleChinese = "虚构的示例作品标题"
+            )
+        )
+        val system = messages[0].content.orEmpty()
+        assert(system.contains("2 个音轨、3 条已翻译字幕"))
+        assert(system.contains("作品标题（日文）：架空のサンプル作品タイトル"))
+        assert(system.contains(POLISH_READ_TOOL_NAME))
+        assert(system.contains(POLISH_WRITE_TOOL_NAME))
+        // 润色 agent 必须拿到与翻译 agent 相同的风格指南与词汇对照表
+        assert(system.contains("共同翻译风格"))
+        assert(system.contains("ちんぽ / ちんこ / ちんちん"))
+        assert(system.contains("寝取らせ"))
+        assert(!system.contains("{{"))
+        val user = messages[1].content.orEmpty()
+        assert(user.contains("polish_translated_chinese_subtitles"))
+    }
+
+    @Test
+    fun polishRead_pagesByOffsetAndMarksCompletion() {
+        val tracks = listOf(
+            PolishTrackInput(
+                trackIndex = 0,
+                captions = (1L..3L).map { id ->
+                    PolishCaptionInput(captionId = id, sourceIndex = id.toInt() - 1, japanese = "ja$id", chinese = "zh$id")
+                }
+            )
+        )
+        val gson = Gson()
+        val first = buildPolishReadToolResultMessage(gson, "c1", tracks, emptyMap(), offset = 0)
+        val firstJson = JsonParser.parseString(first.content).asJsonObject
+        assertEquals(3, firstJson.getAsJsonArray("subtitles").size())
+        assertEquals(0, firstJson.get("offset").asInt)
+        assertEquals(true, firstJson.get("completed").asBoolean)
+
+        val polished = mapOf(1L to "改过了")
+        val second = buildPolishReadToolResultMessage(gson, "c2", tracks, polished, offset = 3)
+        val secondJson = JsonParser.parseString(second.content).asJsonObject
+        assertEquals(0, secondJson.getAsJsonArray("subtitles").size())
+        assertEquals(true, secondJson.get("completed").asBoolean)
+        assertEquals(true, firstJson.getAsJsonArray("subtitles").get(0).asJsonObject.get("japanese").asString == "ja1")
+    }
+
+    @Test
+    fun polishRead_returnsPolishedChineseWhenAvailable() {
+        val tracks = listOf(
+            PolishTrackInput(
+                trackIndex = 0,
+                captions = listOf(
+                    PolishCaptionInput(captionId = 7L, sourceIndex = 0, japanese = "元", chinese = "原译文")
+                )
+            )
+        )
+        val gson = Gson()
+        val msg = buildPolishReadToolResultMessage(gson, "c1", tracks, mapOf(7L to "精修后"), offset = 0)
+        val json = JsonParser.parseString(msg.content).asJsonObject
+        val subtitle = json.getAsJsonArray("subtitles").get(0).asJsonObject
+        assertEquals("精修后", subtitle.get("chinese").asString)
+    }
+
+    @Test
+    fun polishWrite_rejectsUnknownOrDuplicateCaptionIds() {
+        val expected = listOf(
+            PolishCaptionInput(captionId = 1L, sourceIndex = 0, japanese = "a", chinese = "b")
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            parsePolishWriteToolArguments(
+                """{"captions":[{"caption_id":999,"chinese":"x"}]}""",
+                expected
+            )
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            parsePolishWriteToolArguments(
+                """{"captions":[{"caption_id":1,"chinese":"x"},{"caption_id":1,"chinese":"y"}]}""",
+                expected
+            )
+        }
+        val ok = parsePolishWriteToolArguments(
+            """{"captions":[{"caption_id":1,"chinese":"精修后的中文"}]}""",
+            expected
+        )
+        assertEquals(1, ok.size)
+        assertEquals(1L, ok[0].captionId)
+        assertEquals("精修后的中文", ok[0].chinese)
     }
 
     @Test

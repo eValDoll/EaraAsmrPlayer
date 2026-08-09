@@ -41,6 +41,9 @@ interface SubtitleTaskDao {
     @Query("SELECT * FROM subtitle_task_items WHERE taskId = :taskId ORDER BY queueSequence")
     suspend fun getItemsForTask(taskId: String): List<SubtitleTaskItemEntity>
 
+    @Query("SELECT * FROM subtitle_task_items WHERE trackId IN (:trackIds)")
+    suspend fun getItemsForTracks(trackIds: List<Long>): List<SubtitleTaskItemEntity>
+
     @Query("SELECT * FROM subtitle_task_items ORDER BY queueSequence")
     suspend fun getAllItems(): List<SubtitleTaskItemEntity>
 

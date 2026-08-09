@@ -798,7 +798,8 @@ fun SettingsScreen(
                             onApiKeyInputChanged = { deepSeekApiKeyInput = it },
                             onSave = { viewModel.saveDeepSeekApiKey(deepSeekApiKeyInput) },
                             onThinkingEnabledChanged = viewModel::setDeepSeekThinkingEnabled,
-                            onReasoningEffortChanged = viewModel::setDeepSeekReasoningEffort
+                            onReasoningEffortChanged = viewModel::setDeepSeekReasoningEffort,
+                            onFinalPolishEnabledChanged = viewModel::setDeepSeekFinalPolishEnabled
                         )
                     }
                 }
@@ -1010,7 +1011,8 @@ internal fun DeepSeekTranslationSettingsSection(
     onApiKeyInputChanged: (String) -> Unit,
     onSave: () -> Unit,
     onThinkingEnabledChanged: (Boolean) -> Unit,
-    onReasoningEffortChanged: (DeepSeekReasoningEffort) -> Unit
+    onReasoningEffortChanged: (DeepSeekReasoningEffort) -> Unit,
+    onFinalPolishEnabledChanged: (Boolean) -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val actionButtonColors = settingsPrimaryTonalButtonColors()
@@ -1159,6 +1161,17 @@ internal fun DeepSeekTranslationSettingsSection(
             }
         }
     }
+
+    SettingsToggleRow(
+        text = "最终润色",
+        checked = settings.finalPolishEnabled,
+        onCheckedChange = onFinalPolishEnabledChanged
+    )
+    Text(
+        text = "开启后在翻译任务列表中左滑作品卡片，可手动对其中已有字幕的音轨执行一次语序、人称、称呼、用词、语气与标点的局部精修。会额外消耗较多 Token，且不影响翻译失败时的结果。",
+        style = MaterialTheme.typography.labelSmall,
+        color = colorScheme.textTertiary
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

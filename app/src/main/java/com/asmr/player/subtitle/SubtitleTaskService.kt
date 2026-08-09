@@ -29,6 +29,8 @@ import com.asmr.player.data.local.db.entities.SubtitleTaskItemEntity
 import com.asmr.player.data.local.db.entities.SubtitleTranscriptionChunkEntity
 import com.asmr.player.data.local.db.entities.SubtitleTitleOwnerKind
 import com.asmr.player.data.local.db.entities.SubtitleTranslationSourceEntity
+import com.asmr.player.data.local.db.entities.TrackEntity
+import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.di.DEEPSEEK_HTTP_CLIENT
 import com.asmr.player.util.MessageManager
@@ -87,6 +89,7 @@ internal class SubtitleTaskService : Service() {
     private val translationJobs = ConcurrentHashMap<String, Job>()
     private val titleTranslationJobs = ConcurrentHashMap<String, Job>()
     private val titleTranslationRetryAt = ConcurrentHashMap<String, Long>()
+    private val polishingAlbumIds = ConcurrentHashMap.newKeySet<Long>()
     private val balanceRefreshLock = Any()
     private var balanceRefreshRequested = false
     private var balanceRefreshJob: Job? = null
@@ -131,6 +134,12 @@ internal class SubtitleTaskService : Service() {
         when (intent?.action) {
             ACTION_PAUSE_ALL -> serviceScope.launch { pauseAll() }
             ACTION_CANCEL_ALL -> serviceScope.launch { cancelAll() }
+            ACTION_POLISH_ALBUM -> {
+                val albumId = intent.getLongExtra(EXTRA_ALBUM_ID, -1L)
+                if (albumId > 0L) {
+                    serviceScope.launch { startPolishAlbum(albumId) }
+                }
+            }
             else -> signalWake()
         }
         return START_NOT_STICKY
@@ -149,6 +158,9 @@ internal class SubtitleTaskService : Service() {
         wakeLock = null
         runCatching { transcriptionEngine?.close() }
         transcriptionEngine = null
+        // 润色 job 随 serviceScope 一并取消，清空内存中的“润色中”标记，避免 UI 残留禁用
+        repository.clearPolishState()
+        polishingAlbumIds.clear()
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -585,7 +597,8 @@ internal class SubtitleTaskService : Service() {
             client.translateSubtitles(
                 sources = sources,
                 allowMerging = allowMerging,
-                confirmedCaptions = confirmed
+                confirmedCaptions = confirmed,
+                workContext = buildSubtitleWorkContext(itemId)
             ) { captions ->
                 commitTranslationProgress(
                     itemId = itemId,
@@ -598,6 +611,149 @@ internal class SubtitleTaskService : Service() {
             requestBalanceRefresh()
         }
         repository.finishSucceeded(itemId)
+    }
+
+    /**
+     * 手动触发的作品级最终润色入口（由用户在翻译任务列表左滑操作中触发）。
+     *
+     * 互斥规则：
+     * - 该作品当前没有进行中的润色；
+     * - 用户已开启"最终润色"；
+     * - 该作品下至少有一个已有字幕的音轨；
+     * - 该作品下没有进行中的转录或翻译任务。
+     *
+     * 校验通过后在独立后台 job 中执行润色（非阻塞，失败不影响已有字幕），
+     * 并把"润色中"状态通过 [SubtitleTaskRepository.markPolishStarted] 暴露给 UI。
+     */
+    private suspend fun startPolishAlbum(albumId: Long) {
+        if (!polishingAlbumIds.add(albumId)) return
+        var started = false
+        try {
+            val settings = settingsRepository.loadDeepSeekTranslationSettings()
+            if (!settings.finalPolishEnabled) {
+                messageManager.showWarning("请先在设置中开启“最终润色”后再执行润色")
+                return
+            }
+            val tracks = database.trackDao().getTracksForAlbumOrderedOnce(albumId)
+            if (tracks.isEmpty()) return
+            val trackIds = tracks.map(TrackEntity::id)
+            val tracksWithSubtitles = database.trackDao().getTrackIdsWithSubtitles(trackIds).toSet()
+            val polishableTracks = tracks.filter { it.id in tracksWithSubtitles }
+            if (polishableTracks.isEmpty()) {
+                messageManager.showWarning("该作品暂无可润色的字幕")
+                return
+            }
+            if (database.subtitleTaskDao().getItemsForTracks(trackIds).any { it.state !in POLISH_BLOCKED_ITEM_STATES }) {
+                messageManager.showWarning("该作品下仍有进行中的转录或翻译，请等待完成后再润色")
+                return
+            }
+            started = true
+            repository.markPolishStarted(albumId)
+            messageManager.showInfo("已开始润色该作品字幕，完成后会自动更新")
+            Log.i(TAG, "开始作品级手动润色 albumId=$albumId tracks=${polishableTracks.size}")
+            serviceScope.launch {
+                runCatching { polishAlbum(albumId, polishableTracks) }
+                    .onFailure { error ->
+                        Log.w(TAG, "作品级润色失败 albumId=$albumId（不影响已有字幕）", error)
+                    }
+                    .onSuccess { changedCount ->
+                        Log.i(TAG, "作品级润色完成 albumId=$albumId 修改字幕=$changedCount 条")
+                    }
+                repository.markPolishFinished(albumId)
+                polishingAlbumIds.remove(albumId)
+                signalWake()
+            }
+        } finally {
+            if (!started) polishingAlbumIds.remove(albumId)
+        }
+    }
+
+    /**
+     * 为字幕翻译 agent 构建作品级静态元数据（标题日/中、音轨标题日/中、声优、社团）。
+     * 只读一次本地库，不依赖其他音轨的翻译进度，各轨并行时也能拿到一致的名称信息。
+     */
+    private suspend fun buildSubtitleWorkContext(itemId: String): SubtitleWorkContext? {
+        val dao = database.subtitleTaskDao()
+        val item = dao.getItem(itemId) ?: return null
+        val track = database.trackDao().getTrackByIdOnce(item.trackId) ?: return null
+        val album = database.albumDao().getAlbumById(track.albumId)
+        return SubtitleWorkContext(
+            workTitleJapanese = album?.title.orEmpty(),
+            workTitleChinese = album?.titleForDisplay?.takeIf { it != album.title }.orEmpty(),
+            trackTitleJapanese = track.title,
+            trackTitleChinese = track.titleForDisplay.takeIf { it != track.title }.orEmpty(),
+            circle = album?.circle.orEmpty(),
+            cv = album?.cv.orEmpty()
+        )
+    }
+
+    /**
+     * 作品级最终润色：读取作品全部音轨的已翻译字幕，交给润色 agent 逐条精修
+     * 中文文本后写回 subtitles 表。只精修 chinese，不改结构、不改日文。
+     *
+     * 非阻塞语义：本方法由独立后台 job 调用，任何异常都不影响已有字幕。
+     *
+     * @return 实际发生修改的字幕条数
+     */
+    private suspend fun polishAlbum(albumId: Long, tracks: List<TrackEntity>): Int {
+        val album = database.albumDao().getAlbumById(albumId) ?: return 0
+        // captionId -> 数据库中的原始字幕行（用于精确写回 text）
+        val subtitleByCaptionId = HashMap<Long, SubtitleEntity>()
+        val polishInputs = tracks.mapIndexedNotNull { index, track ->
+            val subtitles = database.trackDao().getSubtitlesForTrack(track.id).sortedWith(SUBTITLE_ORDER)
+            if (subtitles.isEmpty()) return@mapIndexedNotNull null
+            subtitles.forEach { subtitle -> subtitleByCaptionId[subtitle.id] = subtitle }
+            PolishTrackInput(
+                trackIndex = index,
+                trackTitleJapanese = track.title,
+                trackTitleChinese = track.titleForDisplay.takeIf { it != track.title }.orEmpty(),
+                captions = subtitles.mapIndexed { captionIndex, subtitle ->
+                    PolishCaptionInput(
+                        captionId = subtitle.id,
+                        sourceIndex = captionIndex,
+                        japanese = subtitle.japaneseText,
+                        chinese = subtitle.text
+                    )
+                }
+            )
+        }
+        if (polishInputs.isEmpty()) return 0
+        val workContext = SubtitleWorkContext(
+            workTitleJapanese = album.title,
+            workTitleChinese = album.titleForDisplay.takeIf { it != album.title }.orEmpty(),
+            trackTitleJapanese = tracks.firstOrNull()?.title.orEmpty(),
+            trackTitleChinese = tracks.firstOrNull()?.titleForDisplay
+                ?.takeIf { it != tracks.firstOrNull()?.title }.orEmpty(),
+            circle = album.circle,
+            cv = album.cv
+        )
+        val client = requireTranslationClient()
+        val results = client.polishSubtitles(
+            tracks = polishInputs,
+            workContext = workContext
+        ) { batch -> commitPolishedCaptions(batch, subtitleByCaptionId) }
+        return results.count { result ->
+            val original = subtitleByCaptionId[result.captionId]?.text
+            original != null && original != result.chinese
+        }
+    }
+
+    /**
+     * 把润色 agent 的逐批结果写回 subtitles 表。只更新 text（中文），不动 japaneseText。
+     */
+    private suspend fun commitPolishedCaptions(
+        results: List<PolishCaptionResult>,
+        subtitleByCaptionId: Map<Long, SubtitleEntity>
+    ) {
+        if (results.isEmpty()) return
+        val updated = results.mapNotNull { result ->
+            val existing = subtitleByCaptionId[result.captionId] ?: return@mapNotNull null
+            if (existing.text == result.chinese) return@mapNotNull null
+            existing.copy(text = result.chinese)
+        }
+        if (updated.isNotEmpty()) {
+            database.trackDao().updateSubtitles(updated)
+        }
     }
 
     private suspend fun commitTranslationProgress(
@@ -814,6 +970,7 @@ internal class SubtitleTaskService : Service() {
     private suspend fun stopWhenIdle() {
         if (transcriptionJob?.isActive == true || translationJobs.values.any(Job::isActive)) return
         if (titleTranslationJobs.values.any(Job::isActive)) return
+        if (polishingAlbumIds.isNotEmpty()) return
         if (balanceRefreshJob != null) return
         if (database.subtitleTaskDao().countRunnableItems() > 0) return
         val pendingTitleTaskIds = database.subtitleTitleOwnerDao().getPendingTaskIds()
@@ -969,6 +1126,8 @@ internal class SubtitleTaskService : Service() {
         private const val ACTION_WAKE = "com.asmr.player.subtitle.WAKE"
         private const val ACTION_PAUSE_ALL = "com.asmr.player.subtitle.PAUSE_ALL"
         private const val ACTION_CANCEL_ALL = "com.asmr.player.subtitle.CANCEL_ALL"
+        private const val ACTION_POLISH_ALBUM = "com.asmr.player.subtitle.POLISH_ALBUM"
+        private const val EXTRA_ALBUM_ID = "album_id"
         private const val NOTIFICATION_CHANNEL_ID = "subtitle_tasks"
         private const val NOTIFICATION_ID = 7412
         private const val WARNING_NOTIFICATION_ID = 7413
@@ -980,10 +1139,28 @@ internal class SubtitleTaskService : Service() {
         private const val TITLE_TRANSLATION_DISABLED_RETRY_AT = Long.MAX_VALUE
         private const val TAG = "SubtitleTaskService"
 
+        /** 视为“进行中的转录或翻译”之外的任务状态；存在这些状态的任务会阻塞作品润色。 */
+        private val POLISH_BLOCKED_ITEM_STATES = setOf(
+            SubtitleItemState.PAUSED,
+            SubtitleItemState.INTERRUPTED,
+            SubtitleItemState.FAILED,
+            SubtitleItemState.SUCCEEDED,
+            SubtitleItemState.CANCELED
+        )
+
         fun wake(context: Context) {
             ContextCompat.startForegroundService(
                 context.applicationContext,
                 Intent(context.applicationContext, SubtitleTaskService::class.java).setAction(ACTION_WAKE)
+            )
+        }
+
+        fun requestPolishAlbum(context: Context, albumId: Long) {
+            ContextCompat.startForegroundService(
+                context.applicationContext,
+                Intent(context.applicationContext, SubtitleTaskService::class.java)
+                    .setAction(ACTION_POLISH_ALBUM)
+                    .putExtra(EXTRA_ALBUM_ID, albumId)
             )
         }
     }

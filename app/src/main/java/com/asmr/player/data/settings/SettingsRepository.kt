@@ -39,7 +39,8 @@ enum class DeepSeekReasoningEffort(val wireValue: String) {
 
 data class DeepSeekTranslationSettings(
     val thinkingEnabled: Boolean = false,
-    val reasoningEffort: DeepSeekReasoningEffort = DeepSeekReasoningEffort.HIGH
+    val reasoningEffort: DeepSeekReasoningEffort = DeepSeekReasoningEffort.HIGH,
+    val finalPolishEnabled: Boolean = false
 )
 
 private class SettingsStoreOwner(
@@ -229,7 +230,8 @@ class SettingsRepository private constructor(
                 thinkingEnabled = prefs[SettingsKeys.DEEPSEEK_THINKING_ENABLED] ?: false,
                 reasoningEffort = DeepSeekReasoningEffort.fromWireValue(
                     prefs[SettingsKeys.DEEPSEEK_REASONING_EFFORT]
-                )
+                ),
+                finalPolishEnabled = prefs[SettingsKeys.DEEPSEEK_FINAL_POLISH_ENABLED] ?: false
             )
         }
 
@@ -255,7 +257,8 @@ class SettingsRepository private constructor(
                 thinkingEnabled = prefs[SettingsKeys.DEEPSEEK_THINKING_ENABLED] ?: false,
                 reasoningEffort = DeepSeekReasoningEffort.fromWireValue(
                     prefs[SettingsKeys.DEEPSEEK_REASONING_EFFORT]
-                )
+                ),
+                finalPolishEnabled = prefs[SettingsKeys.DEEPSEEK_FINAL_POLISH_ENABLED] ?: false
             )
         }
 
@@ -328,6 +331,12 @@ class SettingsRepository private constructor(
             context.settingsDataStore.edit {
                 it[SettingsKeys.DEEPSEEK_REASONING_EFFORT] = effort.wireValue
             }
+        }
+    }
+
+    suspend fun setDeepSeekFinalPolishEnabled(enabled: Boolean) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { it[SettingsKeys.DEEPSEEK_FINAL_POLISH_ENABLED] = enabled }
         }
     }
 
