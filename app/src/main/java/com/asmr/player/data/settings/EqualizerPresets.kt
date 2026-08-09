@@ -20,12 +20,12 @@ object EqualizerPresets {
             virtualizerStrength = 0
         ),
         AsmrPreset(
-            name = "耳语 (Whisper)",
+            name = "清亮 (Bright)",
             bandLevels = listOf(-400, -300, -200, -100, 0, 200, 400, 700, 900, 800),
             virtualizerStrength = 200
         ),
         AsmrPreset(
-            name = "舔耳 (Ear Licking)",
+            name = "低音增强 (Bass Boost)",
             bandLevels = listOf(300, 250, 200, 150, 100, 0, -100, -250, -400, -500),
             virtualizerStrength = 500
         ),

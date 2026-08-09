@@ -3,12 +3,15 @@ package com.asmr.player.ui.settings
 import androidx.compose.foundation.layout.Column
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.performClick
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.asmr.player.data.settings.DeepSeekReasoningEffort
 import com.asmr.player.data.settings.DeepSeekTranslationSettings
@@ -41,7 +44,8 @@ class DeepSeekTranslationSettingsSectionTest {
                         onApiKeyInputChanged = {},
                         onSave = {},
                         onThinkingEnabledChanged = {},
-                        onReasoningEffortChanged = {}
+                        onReasoningEffortChanged = {},
+                        onFinalPolishEnabledChanged = {}
                     )
                 }
             }
@@ -77,7 +81,8 @@ class DeepSeekTranslationSettingsSectionTest {
                         onApiKeyInputChanged = {},
                         onSave = {},
                         onThinkingEnabledChanged = {},
-                        onReasoningEffortChanged = {}
+                        onReasoningEffortChanged = {},
+                        onFinalPolishEnabledChanged = {}
                     )
                 }
             }
@@ -96,5 +101,37 @@ class DeepSeekTranslationSettingsSectionTest {
             .getUnclippedBoundsInRoot()
         val modelHeight = modelBounds.bottom - modelBounds.top
         assertTrue(modelHeight.value <= 24f)
+    }
+
+    @Test
+    fun finalPolish_showsConciseDescriptionOnlyAfterInfoClick() {
+        composeRule.setContent {
+            AsmrPlayerTheme {
+                val activeTipKey = remember { mutableStateOf<String?>(null) }
+                Column {
+                    DeepSeekTranslationSettingsSection(
+                        state = DeepSeekApiKeyUiState(configured = true),
+                        settings = DeepSeekTranslationSettings(finalPolishEnabled = true),
+                        apiKeyInput = "",
+                        compact = true,
+                        segmentedButtonColors = SegmentedButtonDefaults.colors(),
+                        onApiKeyInputChanged = {},
+                        onSave = {},
+                        onThinkingEnabledChanged = {},
+                        onReasoningEffortChanged = {},
+                        onFinalPolishEnabledChanged = {},
+                        activeTipKey = activeTipKey.value,
+                        onToggleTip = { key ->
+                            activeTipKey.value = if (activeTipKey.value == key) null else key
+                        }
+                    )
+                }
+            }
+        }
+
+        val description = "翻译完成后，可在任务管理中左滑作品卡片，对现有中文字幕进行整体润色。此操作会额外消耗 Token。"
+        composeRule.onNodeWithText(description).assertDoesNotExist()
+        composeRule.onNodeWithContentDescription("最终润色说明").performClick()
+        composeRule.onNodeWithText(description).assertExists()
     }
 }

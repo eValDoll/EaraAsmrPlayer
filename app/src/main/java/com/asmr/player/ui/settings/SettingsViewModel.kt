@@ -338,6 +338,10 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setDeepSeekReasoningEffort(effort) }
     }
 
+    internal fun setDeepSeekFinalPolishEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsRepository.setDeepSeekFinalPolishEnabled(enabled) }
+    }
+
     fun setAutoUpdateCheckEnabled(enabled: Boolean) {
         viewModelScope.launch { settingsDataStore.setAutoUpdateCheckEnabled(enabled) }
     }

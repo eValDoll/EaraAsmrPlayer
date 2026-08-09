@@ -9,6 +9,7 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.ExistingWorkPolicy
 import androidx.work.WorkManager
 import com.asmr.player.data.local.db.AppDatabaseProvider
+import com.asmr.player.data.local.db.dao.AlbumDao
 import com.asmr.player.data.local.db.dao.DownloadDao
 import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.remote.download.DOWNLOAD_STATE_QUEUED
@@ -104,6 +105,7 @@ class DownloadsViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val downloadDao: DownloadDao,
     private val trackDao: TrackDao,
+    private val albumDao: AlbumDao,
     private val messageManager: MessageManager
 ) : ViewModel() {
     private val workManager = WorkManager.getInstance(context)
@@ -244,6 +246,9 @@ class DownloadsViewModel @Inject constructor(
     internal val subtitleTasks: StateFlow<List<SubtitleTaskUi>> = subtitleTaskRepository.tasks
         .flowOn(Dispatchers.IO)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /** 正在执行作品级最终润色的作品 rjCode 集合。 */
+    internal val polishingRjCodes: StateFlow<Set<String>> = subtitleTaskRepository.polishingRjCodes
 
     suspend fun loadTranslationAlbumCovers(trackIds: List<Long>): Map<Long, TaskAlbumCoverUi> {
         if (trackIds.isEmpty()) return emptyMap()
@@ -503,7 +508,7 @@ class DownloadsViewModel @Inject constructor(
             downloadDao.deleteItemsForTask(taskId)
             downloadDao.deleteTaskById(taskId)
             DownloadQueueCoordinator.requestSchedule(context)
-            messageManager.showInfo("已删除任务：${task.title}")
+            messageManager.showInfo("已删除任务")
         }
     }
 
@@ -600,12 +605,27 @@ class DownloadsViewModel @Inject constructor(
                     if (handle.reusedExisting) "该音频已有可继续的字幕任务" else "已加入全局翻译队列"
                 )
             }.onFailure { error ->
-                val message = error.message?.takeIf { it.isNotBlank() } ?: "无法重新翻译字幕"
-                if (SubtitleFailureMessages.isUserActionWarning(message)) {
-                    messageManager.showWarning(message)
-                } else {
-                    messageManager.showError(message)
-                }
+                showSubtitleActionFailure(error, fallback = "无法重新翻译字幕")
+            }
+        }
+    }
+
+    /** 手动触发某作品（按 rjCode 定位）的字幕最终润色。 */
+    fun polishSubtitleAlbum(rjCode: String) = viewModelScope.launch {
+        if (rjCode.isBlank()) return@launch
+        val album = withContext(Dispatchers.IO) {
+            runCatching { albumDao.getAlbumByWorkIdOnce(rjCode) }.getOrNull()
+        }
+        if (album == null) {
+            messageManager.showWarning("找不到对应作品，无法润色")
+            return@launch
+        }
+        val error = subtitleTaskRepository.requestAlbumPolish(album.id)
+        if (error != null) {
+            if (SubtitleFailureMessages.isUserActionWarning(error)) {
+                messageManager.showWarning(error)
+            } else {
+                messageManager.showError(error)
             }
         }
     }
@@ -616,13 +636,27 @@ class DownloadsViewModel @Inject constructor(
 
     fun cancelSubtitleItem(itemId: String) = viewModelScope.launch { subtitleTaskRepository.cancelItem(itemId) }
 
-    fun retrySubtitleItem(itemId: String) = viewModelScope.launch { subtitleTaskRepository.retryItem(itemId) }
+    fun retrySubtitleItem(itemId: String) = viewModelScope.launch {
+        runCatching { subtitleTaskRepository.retryItem(itemId) }
+            .onFailure { error ->
+                showSubtitleActionFailure(error, fallback = "无法重试字幕任务")
+            }
+    }
 
     fun pauseSubtitleTask(taskId: String) = viewModelScope.launch { subtitleTaskRepository.pauseTask(taskId) }
 
     fun resumeSubtitleTask(taskId: String) = viewModelScope.launch { subtitleTaskRepository.resumeTask(taskId) }
 
     fun cancelSubtitleTask(taskId: String) = viewModelScope.launch { subtitleTaskRepository.cancelTask(taskId) }
+
+    private fun showSubtitleActionFailure(error: Throwable, fallback: String) {
+        val message = error.message?.takeIf { it.isNotBlank() } ?: fallback
+        if (SubtitleFailureMessages.isUserActionWarning(message)) {
+            messageManager.showWarning(message)
+        } else {
+            messageManager.showError(message)
+        }
+    }
 
     private suspend fun syncLibraryAfterDownloadedFileDeleted(filePath: String, rootDir: String) {
         if (filePath.isBlank()) return

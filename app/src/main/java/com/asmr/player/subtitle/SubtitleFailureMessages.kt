@@ -20,6 +20,9 @@ internal object SubtitleFailureMessages {
         val normalized = message.trim()
         return normalized.contains("API Key") ||
             normalized.contains("账户余额不足") ||
+            normalized == SubtitleTaskRepository.ALBUM_ALREADY_POLISHING_MESSAGE ||
+            normalized == SubtitleTaskRepository.ACTIVE_TASKS_BLOCK_POLISH_MESSAGE ||
+            normalized == SubtitleTaskRepository.POLISHING_BLOCKS_RETRY_MESSAGE ||
             normalized.startsWith(SubtitleModelRepository.MODEL_REQUIRED_MESSAGE) ||
             normalized.startsWith("当前设备不支持本地字幕生成")
     }

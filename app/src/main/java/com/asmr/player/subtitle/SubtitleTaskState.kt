@@ -1,5 +1,7 @@
 package com.asmr.player.subtitle
 
+import java.util.Locale
+
 internal object SubtitleTaskOrigin {
     const val GENERATED = "GENERATED"
     const val MANUAL_TRANSLATION = "MANUAL_TRANSLATION"
@@ -51,6 +53,13 @@ internal object SubtitleItemState {
         SUCCEEDED to emptySet(),
         CANCELED to emptySet()
     )
+    private val albumPolishNonBlockingStates = setOf(
+        PAUSED,
+        INTERRUPTED,
+        FAILED,
+        SUCCEEDED,
+        CANCELED
+    )
 
     fun requireTransition(from: String, to: String) {
         require(to in transitions[from].orEmpty()) { "非法字幕任务状态转换：$from → $to" }
@@ -71,6 +80,8 @@ internal object SubtitleItemState {
             QUEUED_TRANSCRIPTION
         }
     }
+
+    fun blocksAlbumPolish(state: String): Boolean = state !in albumPolishNonBlockingStates
 }
 
 internal object SubtitleDispatchPolicy {
@@ -138,3 +149,5 @@ internal data class SubtitleTranslationTarget(
     val trackId: Long,
     val title: String
 )
+
+internal fun String.normalizedSubtitleAlbumKey(): String = trim().uppercase(Locale.ROOT)

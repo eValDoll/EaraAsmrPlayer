@@ -789,13 +789,8 @@ class AlbumDetailViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            val token = syncCoordinator.tryBegin("绑定RJ并云同步") ?: run {
-                val currentLabel = syncCoordinator.state.value?.label
-                if (currentLabel.isNullOrBlank()) {
-                    messageManager.showInfo("正在执行同步任务，请稍后再试")
-                } else {
-                    messageManager.showInfo("正在执行：$current，请等待完成或取消后再同步")
-                }
+            val token = syncCoordinator.tryBegin() ?: run {
+                messageManager.showInfo("同步任务进行中，请等待完成或取消后再同步")
                 return@launch
             }
             _uiState.value = AlbumDetailUiState.Loading
@@ -2036,7 +2031,7 @@ class AlbumDetailViewModel @Inject constructor(
                 existingLocalKeysNoGroup.add(TrackKeyNormalizer.buildKey(t.title, "", null))
             }
         
-        messageManager.showInfo("正在加入下载队列：${album.title}")
+        messageManager.showInfo("正在加入下载队列")
         
         val folderName = safeFolderName(album.rjCode.ifBlank { album.workId }.ifBlank { album.title })
         val baseDir = File(context.getExternalFilesDir(null), "albums")
@@ -2159,7 +2154,7 @@ class AlbumDetailViewModel @Inject constructor(
             albumRjCode = album.rjCode
         )
 
-        messageManager.showInfo("正在加入无损下载队列：${album.title}")
+        messageManager.showInfo("正在加入无损下载队列")
     }
 
     fun downloadDlsiteTrialSelected(selectedLeafPaths: Set<String>) {
@@ -2925,11 +2920,11 @@ class AlbumDetailViewModel @Inject constructor(
         }
 
         if (skipped > 0 && enqueued == 0) {
-            messageManager.showInfo("本地已存在，已跳过下载（${skipped}项）：${album.title}")
+            messageManager.showInfo("本地已存在，已跳过下载（${skipped}项）")
         } else if (skipped > 0) {
-            messageManager.showInfo("已加入下载队列（${enqueued}项），跳过已存在（${skipped}项）：${album.title}")
+            messageManager.showInfo("已加入下载队列（${enqueued}项），跳过已存在（${skipped}项）")
         } else if (enqueued > 0) {
-            messageManager.showInfo("正在加入下载队列（${enqueued}项）：${album.title}")
+            messageManager.showInfo("正在加入下载队列（${enqueued}项）")
         }
     }
 

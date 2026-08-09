@@ -14,6 +14,9 @@ keystore.properties
 # 本地 LLM 提示词明文库（不入库；仓库中只存 XOR+Base64 编码后的资源）
 prompts/
 
+# 本地开发/分析临时数据（设备备份、字幕导出样本等）
+.dev-data/
+
 .gradle/
 .gradle-home
 .gradle-user-home/

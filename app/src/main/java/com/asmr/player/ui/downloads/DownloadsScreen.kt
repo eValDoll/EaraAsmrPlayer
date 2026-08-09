@@ -1,8 +1,10 @@
 package com.asmr.player.ui.downloads
 
+import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.exponentialDecay
-import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.MutatePriority
@@ -20,6 +22,7 @@ import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -42,6 +45,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.InsertDriveFile
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Download
@@ -67,13 +71,17 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -109,6 +117,7 @@ import com.asmr.player.subtitle.SubtitleItemState
 import com.asmr.player.subtitle.SubtitleTaskMode
 import com.asmr.player.subtitle.SubtitleTaskItemUi
 import com.asmr.player.subtitle.SubtitleTaskUi
+import com.asmr.player.subtitle.normalizedSubtitleAlbumKey
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.FlatActionDialog
@@ -125,10 +134,15 @@ import java.io.File
 import kotlin.math.roundToInt
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
 
 private val DownloadsPageHorizontalPadding = 8.dp
 private val SwipeActionButtonWidth = 56.dp
 private val SwipeActionHeaderHeight = 68.dp
+private val SwipeRevealSpringSpec = spring<Float>(
+    dampingRatio = Spring.DampingRatioNoBouncy,
+    stiffness = Spring.StiffnessMediumLow
+)
 
 @Composable
 fun DownloadsScreen(
@@ -140,6 +154,7 @@ fun DownloadsScreen(
     val tasks by viewModel.tasks.collectAsState()
     val translationSubtitleGroups by viewModel.translationSubtitleGroups.collectAsState()
     val subtitleTasks by viewModel.subtitleTasks.collectAsState()
+    val polishingRjCodes by viewModel.polishingRjCodes.collectAsState()
     val activeDownloadFileCount = remember(tasks) { countActiveDownloadFiles(tasks) }
     val activeTranslationTaskCount = remember(subtitleTasks) { countActiveSubtitleTaskItems(subtitleTasks) }
     val expandedTasks = remember { mutableStateListOf<Long>() }
@@ -151,6 +166,7 @@ fun DownloadsScreen(
     var revealedTranslationRj by remember { mutableStateOf<String?>(null) }
     var revealedTaskBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
     var pagePositionInRoot by remember { mutableStateOf(Offset.Zero) }
+    val swipeRevealCloseController = remember { SwipeRevealCloseController() }
     val downloadRoot = remember {
         File(context.getExternalFilesDir(null), "albums").absolutePath
     }
@@ -201,6 +217,7 @@ fun DownloadsScreen(
                     )
                     val downInRoot = down.position + pagePositionInRoot
                     if (revealedTaskBoundsInRoot?.contains(downInRoot) != true) {
+                        swipeRevealCloseController.requestClose()
                         revealedDownloadTaskId = null
                         revealedTranslationRj = null
                         revealedTaskBoundsInRoot = null
@@ -292,6 +309,7 @@ fun DownloadsScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     revealed = revealedDownloadTaskId == task.taskId,
                                     enabled = !expanded,
+                                    closeController = swipeRevealCloseController,
                                     onRevealedBoundsChanged = { revealedTaskBoundsInRoot = it },
                                     onRevealedChange = { open ->
                                         revealedDownloadTaskId = when {
@@ -377,8 +395,10 @@ fun DownloadsScreen(
                         listState = listState,
                         subtitleGroups = translationSubtitleGroups,
                         subtitleTasks = subtitleTasks,
+                        polishingRjCodes = polishingRjCodes,
                         loadAlbumCovers = viewModel::loadTranslationAlbumCovers,
                         revealedRj = revealedTranslationRj,
+                        closeController = swipeRevealCloseController,
                         onRevealedRjChange = { revealedTranslationRj = it },
                         onRevealedBoundsChanged = { revealedTaskBoundsInRoot = it },
                         onDeleteSubtitle = { trackId, title ->
@@ -392,6 +412,7 @@ fun DownloadsScreen(
                             )
                         },
                         onRetrySubtitle = viewModel::retrySubtitleTranslation,
+                        onPolishAlbum = viewModel::polishSubtitleAlbum,
                         onPauseItem = viewModel::pauseSubtitleItem,
                         onResumeItem = viewModel::resumeSubtitleItem,
                         onCancelItem = viewModel::cancelSubtitleItem,
@@ -486,7 +507,8 @@ private data class TranslationTaskGroupUi(
     val title: String,
     val albumCover: TaskAlbumCoverUi,
     val subtitles: List<TranslationSubtitleUi>,
-    val tasks: List<TranslationTaskUi>
+    val tasks: List<TranslationTaskUi>,
+    val isPolishing: Boolean = false
 )
 
 internal data class TranslationTaskUi(
@@ -588,13 +610,16 @@ private fun TranslationManagementContent(
     listState: androidx.compose.foundation.lazy.LazyListState,
     subtitleGroups: List<TranslationSubtitleGroupUi>,
     subtitleTasks: List<SubtitleTaskUi>,
+    polishingRjCodes: Set<String>,
     loadAlbumCovers: suspend (List<Long>) -> Map<Long, TaskAlbumCoverUi>,
     revealedRj: String?,
+    closeController: SwipeRevealCloseController,
     onRevealedRjChange: (String?) -> Unit,
     onRevealedBoundsChanged: (Rect) -> Unit,
     onDeleteSubtitle: (trackId: Long, title: String) -> Unit,
     onDeleteSubtitleGroup: (rjCode: String, trackIds: List<Long>) -> Unit,
     onRetrySubtitle: (trackId: Long, title: String) -> Unit,
+    onPolishAlbum: (rjCode: String) -> Unit,
     onPauseItem: (String) -> Unit,
     onResumeItem: (String) -> Unit,
     onCancelItem: (String) -> Unit,
@@ -621,6 +646,7 @@ private fun TranslationManagementContent(
         displayedTasks,
         subtitleGroups,
         taskAlbumCovers,
+        polishingRjCodes,
         normalizedQuery
     ) {
         val tasksByRj = displayedTasks
@@ -653,7 +679,8 @@ private fun TranslationManagementContent(
                         ?: tasks.firstOrNull { it.title.isNotBlank() }?.title.orEmpty(),
                     albumCover = albumCover,
                     subtitles = subtitleGroup?.subtitles.orEmpty(),
-                    tasks = tasks
+                    tasks = tasks,
+                    isPolishing = polishingRjCodes.contains(rjCode.normalizedSubtitleAlbumKey())
                 )
             }
             .filter { it.subtitles.isNotEmpty() || it.tasks.isNotEmpty() }
@@ -689,11 +716,14 @@ private fun TranslationManagementContent(
             val expanded = expandedGroups.contains(group.rjCode)
             val activeTask = group.tasks.firstOrNull { it.state.isActivelyRunning() }
             val controlledTask = activeTask ?: group.tasks.firstOrNull()
-            val actionCount = if (controlledTask == null) 1 else 2
+            // 操作列：暂停/继续、润色、（有任务时）取消；（只有字幕时）润色、删除
+            val actionCount = if (controlledTask == null) 2 else 3
+            val groupActionsEnabled = !group.isPolishing
             SwipeRevealActionsBox(
                 modifier = Modifier.fillMaxWidth(),
                 revealed = revealedRj == group.rjCode,
                 enabled = !expanded,
+                closeController = closeController,
                 onRevealedBoundsChanged = onRevealedBoundsChanged,
                 onRevealedChange = { open ->
                     onRevealedRjChange(
@@ -714,6 +744,7 @@ private fun TranslationManagementContent(
                                     tint = colors.onPrimary,
                                     icon = Icons.Rounded.PlayArrow,
                                     contentDescription = "继续字幕任务",
+                                    enabled = groupActionsEnabled,
                                     onClick = { onResumeTask(task.taskId) }
                                 )
                             }
@@ -723,17 +754,30 @@ private fun TranslationManagementContent(
                                     tint = colors.onPrimary,
                                     icon = Icons.Rounded.Pause,
                                     contentDescription = "暂停字幕任务",
+                                    enabled = groupActionsEnabled,
                                     onClick = { onPauseTask(task.taskId) }
                                 )
                             }
                         }
                     }
+                    SwipeRevealAction(
+                        backgroundColor = colors.primaryContainer,
+                        tint = colors.onPrimaryContainer,
+                        icon = Icons.Rounded.AutoAwesome,
+                        contentDescription = if (group.isPolishing) "润色中" else "润色该作品字幕",
+                        enabled = groupActionsEnabled,
+                        onClick = {
+                            onRevealedRjChange(null)
+                            onPolishAlbum(group.rjCode)
+                        }
+                    )
                     if (controlledTask != null) {
                         SwipeRevealAction(
                             backgroundColor = colors.danger,
                             tint = Color.White,
                             icon = Icons.Rounded.Close,
                             contentDescription = "取消字幕任务",
+                            enabled = groupActionsEnabled,
                             onClick = { onCancelTask(controlledTask.taskId) }
                         )
                     } else {
@@ -742,6 +786,7 @@ private fun TranslationManagementContent(
                             tint = Color.White,
                             icon = Icons.Rounded.Close,
                             contentDescription = "删除该作品的全部字幕",
+                            enabled = groupActionsEnabled,
                             onClick = {
                                 onDeleteSubtitleGroup(
                                     group.rjCode,
@@ -788,10 +833,12 @@ private fun TranslationTaskGroupCard(
     onRetryItem: (String) -> Unit
 ) {
     val colors = AsmrTheme.colorScheme
+    val isPolishing = group.isPolishing
     val activeTask = remember(group.tasks) { group.tasks.firstOrNull { it.state.isActivelyRunning() } }
     val controlledTask = remember(group.tasks, activeTask) { activeTask ?: group.tasks.firstOrNull() }
-    val summary = remember(group.subtitles, group.tasks, activeTask) {
+    val summary = remember(group.subtitles, group.tasks, activeTask, isPolishing) {
         when {
+            isPolishing -> "整体润色中"
             activeTask != null -> activeTask.stage
             group.subtitles.isNotEmpty() -> "${group.subtitles.size} 个字幕"
             else -> "暂无字幕"
@@ -800,10 +847,8 @@ private fun TranslationTaskGroupCard(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                color = colors.surface.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(6.dp)
-            )
+            .clip(RoundedCornerShape(6.dp))
+            .background(colors.surface.copy(alpha = 0.5f))
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
@@ -814,11 +859,11 @@ private fun TranslationTaskGroupCard(
                 title = group.rjCode,
                 subtitle = group.title,
                 summary = summary,
-                summaryColor = if (activeTask != null) colors.primary else colors.textSecondary,
+                summaryColor = if (activeTask != null || isPolishing) colors.primary else colors.textSecondary,
                 albumCover = group.albumCover,
-                progress = activeTask?.progress,
+                progress = if (isPolishing) null else activeTask?.progress,
                 progressIndeterminate = false,
-                reserveProgressSpace = controlledTask != null,
+                reserveProgressSpace = !isPolishing && controlledTask != null,
                 summaryOnTitleLine = true,
                 onToggleExpanded = onToggleExpanded
             )
@@ -836,11 +881,14 @@ private fun TranslationTaskGroupCard(
                         .filter { task -> task.trackId !in subtitleTrackIds }
                         .forEach { task -> add(TranslationRowUi.Task(task)) }
                 }
+                val actionsEnabled = !isPolishing
                 rows.forEachIndexed { index, row ->
                     when (row) {
                         is TranslationRowUi.Subtitle -> TranslationSubtitleRow(
                             subtitle = row.subtitle,
                             task = row.task,
+                            actionsEnabled = actionsEnabled,
+                            retryEnabled = true,
                             onDelete = { onDeleteSubtitle(row.subtitle.trackId, row.subtitle.title) },
                             onRetry = { onRetrySubtitle(row.subtitle.trackId, row.subtitle.title) },
                             onPause = row.task?.takeIf { it.state.isActivelyRunning() }
@@ -854,6 +902,8 @@ private fun TranslationTaskGroupCard(
 
                         is TranslationRowUi.Task -> TranslationTaskRow(
                             task = row.task,
+                            actionsEnabled = actionsEnabled,
+                            retryEnabled = true,
                             onPause = { onPauseItem(row.task.itemId) },
                             onResume = { onResumeItem(row.task.itemId) },
                             onCancel = { onCancelItem(row.task.itemId) },
@@ -869,7 +919,31 @@ private fun TranslationTaskGroupCard(
                 }
             }
         }
+        if (isPolishing) {
+            FinalPolishBottomProgress(
+                trackColor = colors.primary.copy(alpha = 0.14f),
+                progressColor = colors.primary
+            )
+        }
     }
+}
+
+internal const val FINAL_POLISH_PROGRESS_TAG = "final_polish_bottom_progress"
+
+@Composable
+internal fun BoxScope.FinalPolishBottomProgress(
+    trackColor: Color,
+    progressColor: Color
+) {
+    LinearProgressIndicator(
+        modifier = Modifier
+            .align(Alignment.BottomStart)
+            .fillMaxWidth()
+            .height(1.dp)
+            .testTag(FINAL_POLISH_PROGRESS_TAG),
+        color = progressColor,
+        trackColor = trackColor
+    )
 }
 
 @Composable
@@ -1023,6 +1097,8 @@ private fun TaskGroupCover(albumCover: TaskAlbumCoverUi) {
 private fun TranslationSubtitleRow(
     subtitle: TranslationSubtitleUi,
     task: TranslationTaskUi?,
+    actionsEnabled: Boolean = true,
+    retryEnabled: Boolean = actionsEnabled,
     onDelete: () -> Unit,
     onRetry: () -> Unit,
     onPause: (() -> Unit)?,
@@ -1097,23 +1173,24 @@ private fun TranslationSubtitleRow(
             }
         }
         if (onPause != null) {
-            IconButton(onClick = onPause, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = onPause, enabled = actionsEnabled, modifier = Modifier.size(32.dp)) {
                 Icon(Icons.Rounded.Pause, "暂停字幕任务", tint = colors.textSecondary, modifier = Modifier.size(16.dp))
             }
         }
         if (onResume != null) {
-            IconButton(onClick = onResume, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = onResume, enabled = actionsEnabled, modifier = Modifier.size(32.dp)) {
                 Icon(Icons.Rounded.PlayArrow, "继续字幕任务", tint = colors.primary, modifier = Modifier.size(16.dp))
             }
         }
         if (onRetryTask != null) {
-            IconButton(onClick = onRetryTask, modifier = Modifier.size(32.dp)) {
+            IconButton(onClick = onRetryTask, enabled = retryEnabled, modifier = Modifier.size(32.dp)) {
                 Icon(Icons.Rounded.Refresh, "重试字幕任务", tint = colors.primary, modifier = Modifier.size(16.dp))
             }
         }
         if (onCancel != null) {
             IconButton(
                 onClick = onCancel,
+                enabled = actionsEnabled,
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(
@@ -1127,6 +1204,7 @@ private fun TranslationSubtitleRow(
         if (task == null) {
             IconButton(
                 onClick = onRetry,
+                enabled = retryEnabled,
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(
@@ -1138,6 +1216,7 @@ private fun TranslationSubtitleRow(
             }
             IconButton(
                 onClick = onDelete,
+                enabled = actionsEnabled,
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(
@@ -1154,6 +1233,8 @@ private fun TranslationSubtitleRow(
 @Composable
 internal fun TranslationTaskRow(
     task: TranslationTaskUi,
+    actionsEnabled: Boolean = true,
+    retryEnabled: Boolean = actionsEnabled,
     onPause: () -> Unit,
     onResume: () -> Unit,
     onCancel: () -> Unit,
@@ -1236,18 +1317,21 @@ internal fun TranslationTaskRow(
         when (task.state) {
             SubtitleItemState.PAUSED, SubtitleItemState.INTERRUPTED -> IconButton(
                 onClick = onResume,
+                enabled = actionsEnabled,
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(Icons.Rounded.PlayArrow, "继续字幕任务", tint = colors.primary, modifier = Modifier.size(16.dp))
             }
             SubtitleItemState.FAILED -> IconButton(
                 onClick = onRetry,
+                enabled = retryEnabled,
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(Icons.Rounded.Refresh, "重试字幕任务", tint = colors.primary, modifier = Modifier.size(16.dp))
             }
             else -> IconButton(
                 onClick = onPause,
+                enabled = actionsEnabled,
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(Icons.Rounded.Pause, "暂停字幕任务", tint = colors.textSecondary, modifier = Modifier.size(16.dp))
@@ -1256,6 +1340,7 @@ internal fun TranslationTaskRow(
         run {
             IconButton(
                 onClick = onCancel,
+                enabled = actionsEnabled,
                 modifier = Modifier.size(32.dp)
             ) {
                 Icon(
@@ -1959,6 +2044,27 @@ private fun formatSpeed(bytesPerSec: Long): String {
 
 private enum class RevealAnchor { Closed, Open }
 
+internal class SwipeRevealCloseController {
+    private var owner: Any? = null
+    private var closeAction: (() -> Unit)? = null
+
+    fun register(owner: Any, closeAction: () -> Unit) {
+        this.owner = owner
+        this.closeAction = closeAction
+    }
+
+    fun unregister(owner: Any) {
+        if (this.owner === owner) {
+            this.owner = null
+            closeAction = null
+        }
+    }
+
+    fun requestClose() {
+        closeAction?.invoke()
+    }
+}
+
 /**
  * Swipe-left-to-reveal container for task-level (RJ number) cards. The trailing
  * [actions] are hidden behind the card by default; the card translates left while
@@ -1968,10 +2074,11 @@ private enum class RevealAnchor { Closed, Open }
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun SwipeRevealActionsBox(
+internal fun SwipeRevealActionsBox(
     modifier: Modifier = Modifier,
     revealed: Boolean,
     enabled: Boolean,
+    closeController: SwipeRevealCloseController,
     onRevealedBoundsChanged: (Rect) -> Unit,
     onRevealedChange: (Boolean) -> Unit,
     actionWidth: Dp,
@@ -1984,7 +2091,10 @@ private fun SwipeRevealActionsBox(
     }
 
     val density = LocalDensity.current
+    val coroutineScope = rememberCoroutineScope()
+    val closeControllerOwner = remember { Any() }
     val currentOnRevealedChange by rememberUpdatedState(onRevealedChange)
+    val currentOnRevealedBoundsChanged by rememberUpdatedState(onRevealedBoundsChanged)
     val actionWidthPx = with(density) { actionWidth.toPx() }
     val state = remember(actionWidthPx) {
         AnchoredDraggableState(
@@ -1995,35 +2105,69 @@ private fun SwipeRevealActionsBox(
             },
             positionalThreshold = { distance -> distance * 0.35f },
             velocityThreshold = { with(density) { 125.dp.toPx() } },
-            snapAnimationSpec = tween(
-                durationMillis = 180,
-                easing = FastOutSlowInEasing
-            ),
+            snapAnimationSpec = SwipeRevealSpringSpec,
             decayAnimationSpec = exponentialDecay()
         )
     }
+    var internallyReportedRevealed by remember(state) { mutableStateOf(false) }
     LaunchedEffect(revealed, enabled, state) {
         val target = if (revealed && enabled) RevealAnchor.Open else RevealAnchor.Closed
-        if (state.settledValue != target && state.targetValue != target) {
-            state.animateTo(target)
+        if (!enabled || revealed != internallyReportedRevealed || state.targetValue != target) {
+            if (target == RevealAnchor.Closed) {
+                state.animateToFromRest(target)
+            } else {
+                state.animateTo(target)
+            }
         }
     }
     LaunchedEffect(state) {
-        snapshotFlow { state.settledValue }
+        snapshotFlow { state.currentValue == RevealAnchor.Open }
             .distinctUntilChanged()
-            .collect { anchor ->
-                currentOnRevealedChange(anchor == RevealAnchor.Open)
+            .collect { open ->
+                internallyReportedRevealed = open
+                currentOnRevealedChange(open)
             }
+    }
+    val interceptContentTap by remember(state, revealed, enabled) {
+        derivedStateOf {
+            enabled && (revealed || state.requireOffset() < 0f)
+        }
+    }
+    val closeFromRest = remember(state, coroutineScope) {
+        {
+            coroutineScope.launch {
+                state.animateToFromRest(RevealAnchor.Closed)
+            }
+            Unit
+        }
+    }
+    SideEffect {
+        if (revealed && enabled) {
+            closeController.register(closeControllerOwner, closeFromRest)
+        } else {
+            closeController.unregister(closeControllerOwner)
+        }
+    }
+    DisposableEffect(closeController, closeControllerOwner) {
+        onDispose { closeController.unregister(closeControllerOwner) }
     }
 
     val colors = AsmrTheme.colorScheme
+    var boundsInRoot by remember { mutableStateOf<Rect?>(null) }
+    LaunchedEffect(revealed, boundsInRoot) {
+        if (revealed) {
+            boundsInRoot?.let(currentOnRevealedBoundsChanged)
+        }
+    }
 
     Box(
         modifier = modifier
             .clipToBounds()
             .onGloballyPositioned { coordinates ->
+                val currentBounds = coordinates.boundsInRoot()
+                boundsInRoot = currentBounds
                 if (revealed) {
-                    onRevealedBoundsChanged(coordinates.boundsInRoot())
+                    currentOnRevealedBoundsChanged(currentBounds)
                 }
             }
     ) {
@@ -2049,7 +2193,8 @@ private fun SwipeRevealActionsBox(
                     if (enabled) {
                         Modifier.anchoredDraggable(
                             state = state,
-                            orientation = Orientation.Horizontal
+                            orientation = Orientation.Horizontal,
+                            startDragImmediately = false
                         )
                     } else {
                         Modifier.pointerInput(Unit) {
@@ -2060,8 +2205,8 @@ private fun SwipeRevealActionsBox(
         ) {
             content()
         }
-        // 已展开时，前景可点击收起，也继续接收向右拖动，避免遮罩抢占手势。
-        if (revealed && enabled) {
+        // 收起动画完全归零前持续拦截卡片点击，避免快速再次点击穿透并展开详情。
+        if (interceptContentTap) {
             Box(
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -2070,15 +2215,35 @@ private fun SwipeRevealActionsBox(
                     .padding(end = actionWidth)
                     .anchoredDraggable(
                         state = state,
-                        orientation = Orientation.Horizontal
+                        orientation = Orientation.Horizontal,
+                        startDragImmediately = false
                     )
                     .clickable(
                         interactionSource = remember { MutableInteractionSource() },
                         indication = null
                     ) {
-                        onRevealedChange(false)
+                        closeFromRest()
                     }
             )
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+private suspend fun AnchoredDraggableState<RevealAnchor>.animateToFromRest(
+    target: RevealAnchor
+) {
+    anchoredDrag(targetValue = target) { anchors, latestTarget ->
+        val targetOffset = anchors.positionOf(latestTarget)
+        if (targetOffset.isNaN()) return@anchoredDrag
+
+        animate(
+            initialValue = requireOffset(),
+            targetValue = targetOffset,
+            initialVelocity = 0f,
+            animationSpec = SwipeRevealSpringSpec
+        ) { value, velocity ->
+            dragTo(value, velocity)
         }
     }
 }
@@ -2089,14 +2254,16 @@ private fun RowScope.SwipeRevealAction(
     tint: Color,
     icon: ImageVector,
     contentDescription: String,
+    enabled: Boolean = true,
     onClick: () -> Unit
 ) {
     Box(
         modifier = Modifier
             .weight(1f)
             .fillMaxHeight()
-            .background(backgroundColor)
+            .background(backgroundColor.copy(alpha = if (enabled) 1f else 0.45f))
             .clickable(
+                enabled = enabled,
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick
@@ -2106,7 +2273,7 @@ private fun RowScope.SwipeRevealAction(
         Icon(
             imageVector = icon,
             contentDescription = contentDescription,
-            tint = tint,
+            tint = if (enabled) tint else tint.copy(alpha = 0.55f),
             modifier = Modifier.size(20.dp)
         )
     }

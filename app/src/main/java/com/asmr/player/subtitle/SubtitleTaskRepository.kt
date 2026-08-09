@@ -18,7 +18,11 @@ import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -31,8 +35,65 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
     private val startupMutex = Mutex()
     @Volatile private var startupReconciled = false
 
+    private val _polishingRjCodes = MutableStateFlow<Set<String>>(emptySet())
+    private val polishingAlbumIds = MutableStateFlow<Set<Long>>(emptySet())
+
+    /** 当前正在进行作品级最终润色的作品（rjCode 维度），供 UI 做按钮禁用。 */
+    val polishingRjCodes: StateFlow<Set<String>> = _polishingRjCodes.asStateFlow()
+
     val tasks: Flow<List<SubtitleTaskUi>> = dao.observeTasks().map { rows ->
         rows.map(SubtitleTaskWithItems::toUi).filter { it.items.isNotEmpty() }
+    }
+
+    /**
+     * 请求对某个作品执行一次手动最终润色。
+     *
+     * @return null 表示已受理（润色由后台服务执行）；否则返回给用户看的错误提示。
+     */
+    suspend fun requestAlbumPolish(albumId: Long): String? {
+        if (database.albumDao().getAlbumById(albumId) == null) {
+            return "找不到对应的作品，无法润色"
+        }
+        if (albumId in polishingAlbumIds.value) {
+            return ALBUM_ALREADY_POLISHING_MESSAGE
+        }
+        val trackIds = database.trackDao().getTracksForAlbumOrderedOnce(albumId).map { it.id }
+        if (
+            trackIds.isNotEmpty() &&
+            dao.getItemsForTracks(trackIds).any { SubtitleItemState.blocksAlbumPolish(it.state) }
+        ) {
+            return ACTIVE_TASKS_BLOCK_POLISH_MESSAGE
+        }
+        SubtitleTaskService.requestPolishAlbum(appContext, albumId)
+        return null
+    }
+
+    internal suspend fun markPolishStarted(albumId: Long) {
+        polishingAlbumIds.update { it + albumId }
+        val albumKey = database.albumDao().getAlbumById(albumId)
+            ?.run { rjCode.trim().ifBlank { workId.trim() } }
+            ?.normalizedSubtitleAlbumKey()
+        if (!albumKey.isNullOrBlank()) {
+            _polishingRjCodes.update { it + albumKey }
+        }
+    }
+
+    internal suspend fun markPolishFinished(albumId: Long) {
+        polishingAlbumIds.update { it - albumId }
+        val albumKey = database.albumDao().getAlbumById(albumId)
+            ?.run { rjCode.trim().ifBlank { workId.trim() } }
+            ?.normalizedSubtitleAlbumKey()
+        if (albumKey.isNullOrBlank()) {
+            _polishingRjCodes.update { emptySet() }
+        } else {
+            _polishingRjCodes.update { it - albumKey }
+        }
+    }
+
+    /** 清空全部润色中状态（服务销毁、润色任务被中断时调用，避免 UI 残留禁用）。 */
+    internal fun clearPolishState() {
+        _polishingRjCodes.update { emptySet() }
+        polishingAlbumIds.update { emptySet() }
     }
 
     suspend fun enqueueGeneration(targets: List<SubtitleGenerationTarget>): SubtitleTaskHandle {
@@ -63,6 +124,7 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
         reconcileOnAppLaunch()
         return enqueueMutex.withLock {
             require(target.trackId > 0L) { "字幕所属音轨无效" }
+            ensureTrackAlbumNotPolishing(target.trackId)
             check(DeepSeekApiKeyStore.get(appContext).isConfigured()) {
                 "请先在设置中配置 DeepSeek API Key"
             }
@@ -263,7 +325,11 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
         SubtitleTaskService.wake(appContext)
     }
 
-    suspend fun retryItem(itemId: String) = resumeItem(itemId)
+    suspend fun retryItem(itemId: String) {
+        val item = dao.getItem(itemId) ?: return
+        ensureTrackAlbumNotPolishing(item.trackId)
+        resumeItem(itemId)
+    }
 
     suspend fun cancelItem(itemId: String) = mutateItem(itemId) { item ->
         if (item.state in setOf(SubtitleItemState.SUCCEEDED, SubtitleItemState.CANCELED)) return@mutateItem item
@@ -420,6 +486,11 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
         SubtitleTaskService.wake(appContext)
     }
 
+    private suspend fun ensureTrackAlbumNotPolishing(trackId: Long) {
+        val albumId = database.trackDao().getTrackByIdOnce(trackId)?.albumId ?: return
+        check(albumId !in polishingAlbumIds.value) { POLISHING_BLOCKS_RETRY_MESSAGE }
+    }
+
     companion object {
         private val RUNNING_STATES = setOf(
             SubtitleItemState.QUEUED_TRANSCRIPTION,
@@ -442,6 +513,12 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
         private const val LEGACY_GENERATION_WORK = "on_device_subtitle_generation"
         private const val LEGACY_TRANSLATION_WORK = "subtitle_file_translation"
         private const val LEGACY_REQUEST_DIRECTORY = "subtitle-generation-requests"
+
+        const val ALBUM_ALREADY_POLISHING_MESSAGE = "该作品正在整体润色，请稍候"
+        const val ACTIVE_TASKS_BLOCK_POLISH_MESSAGE =
+            "请等待该作品的转录和翻译任务全部完成后再整体润色"
+        const val POLISHING_BLOCKS_RETRY_MESSAGE =
+            "该作品正在整体润色，请等待润色完成后再重试翻译"
 
         @Volatile
         private var instance: SubtitleTaskRepository? = null

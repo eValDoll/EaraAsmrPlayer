@@ -798,7 +798,10 @@ fun SettingsScreen(
                             onApiKeyInputChanged = { deepSeekApiKeyInput = it },
                             onSave = { viewModel.saveDeepSeekApiKey(deepSeekApiKeyInput) },
                             onThinkingEnabledChanged = viewModel::setDeepSeekThinkingEnabled,
-                            onReasoningEffortChanged = viewModel::setDeepSeekReasoningEffort
+                            onReasoningEffortChanged = viewModel::setDeepSeekReasoningEffort,
+                            onFinalPolishEnabledChanged = viewModel::setDeepSeekFinalPolishEnabled,
+                            activeTipKey = activeTipKey,
+                            onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
                         )
                     }
                 }
@@ -1010,7 +1013,10 @@ internal fun DeepSeekTranslationSettingsSection(
     onApiKeyInputChanged: (String) -> Unit,
     onSave: () -> Unit,
     onThinkingEnabledChanged: (Boolean) -> Unit,
-    onReasoningEffortChanged: (DeepSeekReasoningEffort) -> Unit
+    onReasoningEffortChanged: (DeepSeekReasoningEffort) -> Unit,
+    onFinalPolishEnabledChanged: (Boolean) -> Unit,
+    activeTipKey: String? = null,
+    onToggleTip: ((String) -> Unit)? = null
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val actionButtonColors = settingsPrimaryTonalButtonColors()
@@ -1159,6 +1165,17 @@ internal fun DeepSeekTranslationSettingsSection(
             }
         }
     }
+
+    SettingsToggleRow(
+        text = "最终润色",
+        checked = settings.finalPolishEnabled,
+        onCheckedChange = onFinalPolishEnabledChanged,
+        infoKey = "final_polish",
+        infoTitle = "最终润色",
+        infoText = "翻译完成后，可在任务管理中左滑作品卡片，对现有中文字幕进行整体润色。此操作会额外消耗 Token。",
+        activeTipKey = activeTipKey,
+        onToggleTip = onToggleTip
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -1700,10 +1717,10 @@ private fun SearchBlockedKeywordsHelpDialog(
         )
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            SearchHelpText("和 搜索(空格分割)：「学校 制服」，表示同时包含指定关键词")
-            SearchHelpText("或 搜索(英文竖线分割)：「学校|制服」，表示包含一个或多个指定关键词均可")
-            SearchHelpText("排除 搜索(空格与减号)：「学校 -制服」，表示排除指定关键词")
-            SearchHelpText("完整 搜索(英文双引号包裹)：「\"【简体中文】 舔耳\"」，表示将多个词当做完整词组搜索")
+            SearchHelpText("和 搜索(空格分割)：「雨声 助眠」，表示同时包含指定关键词")
+            SearchHelpText("或 搜索(英文竖线分割)：「雨声|助眠」，表示包含一个或多个指定关键词均可")
+            SearchHelpText("排除 搜索(空格与减号)：「雨声 -助眠」，表示排除指定关键词")
+            SearchHelpText("完整 搜索(英文双引号包裹)：「\"【简体中文】 雨声\"」，表示将多个词当做完整词组搜索")
         }
     }
 }
@@ -1860,7 +1877,7 @@ private fun SearchBlockedKeywordInputField(
                     ) {
                         if (value.isEmpty()) {
                             Text(
-                                text = "屏蔽关键词，例如：NTR",
+                                text = "屏蔽关键词，例如：同人",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = colorScheme.textTertiary,
                                 maxLines = 1,
@@ -2129,7 +2146,7 @@ private fun SettingsInfoTip(active: Boolean, title: String, text: String, onTogg
             ) {
                 Icon(
                     imageVector = Icons.Rounded.Info,
-                    contentDescription = null,
+                    contentDescription = "${title}说明",
                     tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(14.dp)
                 )

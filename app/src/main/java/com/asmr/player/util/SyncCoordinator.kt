@@ -11,7 +11,6 @@ import javax.inject.Singleton
 
 data class GlobalSyncState(
     val tokenId: Long,
-    val label: String,
     val startedAtElapsedMs: Long
 )
 
@@ -24,12 +23,11 @@ class SyncCoordinator @Inject constructor() {
     private val _state = MutableStateFlow<GlobalSyncState?>(null)
     val state: StateFlow<GlobalSyncState?> = _state.asStateFlow()
 
-    fun tryBegin(label: String): Token? {
+    fun tryBegin(): Token? {
         if (!mutex.tryLock()) return null
         val id = nextTokenId.getAndIncrement()
         _state.value = GlobalSyncState(
             tokenId = id,
-            label = label.trim().ifBlank { "同步" },
             startedAtElapsedMs = SystemClock.elapsedRealtime()
         )
         return Token(id)

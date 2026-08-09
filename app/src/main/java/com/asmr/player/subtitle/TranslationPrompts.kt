@@ -31,9 +31,21 @@ internal object TranslationPrompts {
 
     internal fun subtitleAgentSystemPromptTemplate(): String = raw(KEY_SUBTITLE_AGENT_SYSTEM_PROMPT_TEMPLATE)
 
+    internal fun subtitlePolishSystemPromptTemplate(): String = raw(KEY_SUBTITLE_POLISH_SYSTEM_PROMPT)
+
+    internal fun subtitlePolishToolReadDescription(): String = raw(KEY_SUBTITLE_POLISH_TOOL_READ_DESCRIPTION)
+
+    internal fun subtitlePolishToolWriteDescription(): String = raw(KEY_SUBTITLE_POLISH_TOOL_WRITE_DESCRIPTION)
+
+    internal fun subtitlePolishInitialUserMessage(): String = raw(KEY_SUBTITLE_POLISH_INITIAL_USER_MESSAGE)
+
+    internal fun subtitlePolishProgressInstruction(): String = raw(KEY_SUBTITLE_POLISH_PROGRESS_INSTRUCTION)
+
+    internal fun subtitlePolishContinueMessageGeneric(): String = raw(KEY_SUBTITLE_POLISH_CONTINUE_MESSAGE_GENERIC)
+
     internal fun subtitleStyleGuide(): String = raw(KEY_SUBTITLE_STYLE_GUIDE)
 
-    internal fun subtitleAdultReferenceTable(): String = raw(KEY_SUBTITLE_ADULT_REFERENCE_TABLE)
+    internal fun subtitleReferenceTable(): String = raw(KEY_SUBTITLE_REFERENCE_TABLE)
 
     internal fun subtitleSegmentationRulesMerge(): String = raw(KEY_SUBTITLE_SEGMENTATION_RULES_MERGE)
 
@@ -57,8 +69,14 @@ internal object TranslationPrompts {
 
     internal const val KEY_DISPLAY_NAME_SYSTEM_PROMPT = "display_name_system_prompt"
     internal const val KEY_SUBTITLE_AGENT_SYSTEM_PROMPT_TEMPLATE = "subtitle_agent_system_prompt_template"
+    internal const val KEY_SUBTITLE_POLISH_SYSTEM_PROMPT = "subtitle_polish_system_prompt"
+    internal const val KEY_SUBTITLE_POLISH_TOOL_READ_DESCRIPTION = "subtitle_polish_tool_read_description"
+    internal const val KEY_SUBTITLE_POLISH_TOOL_WRITE_DESCRIPTION = "subtitle_polish_tool_write_description"
+    internal const val KEY_SUBTITLE_POLISH_INITIAL_USER_MESSAGE = "subtitle_polish_initial_user_message"
+    internal const val KEY_SUBTITLE_POLISH_PROGRESS_INSTRUCTION = "subtitle_polish_progress_instruction"
+    internal const val KEY_SUBTITLE_POLISH_CONTINUE_MESSAGE_GENERIC = "subtitle_polish_continue_message_generic"
     internal const val KEY_SUBTITLE_STYLE_GUIDE = "subtitle_style_guide"
-    internal const val KEY_SUBTITLE_ADULT_REFERENCE_TABLE = "subtitle_adult_reference_table"
+    internal const val KEY_SUBTITLE_REFERENCE_TABLE = "subtitle_reference_table"
     internal const val KEY_SUBTITLE_SEGMENTATION_RULES_MERGE = "subtitle_segmentation_rules_merge"
     internal const val KEY_SUBTITLE_SEGMENTATION_RULES_NO_MERGE = "subtitle_segmentation_rules_no_merge"
     internal const val KEY_SUBTITLE_PROGRESS_INSTRUCTION = "subtitle_progress_instruction"

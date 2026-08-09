@@ -661,12 +661,7 @@ class LibraryViewModel @Inject constructor(
     }
 
     private fun showSyncBusy(nextAction: String) {
-        val current = syncCoordinator.state.value?.label
-        if (current.isNullOrBlank()) {
-            messageManager.showInfo("正在执行同步任务，请稍后再试")
-        } else {
-            messageManager.showInfo("正在执行：$current，请等待完成或取消后再$nextAction")
-        }
+        messageManager.showInfo("同步任务进行中，请等待完成或取消后再$nextAction")
     }
 
     private fun tryRegisterAlbumJob(albumId: Long, taskName: String): Boolean {
@@ -1002,7 +997,7 @@ class LibraryViewModel @Inject constructor(
 
     fun scanAllRoots() {
         viewModelScope.launch {
-            val token = syncCoordinator.tryBegin("刷新本地") ?: run {
+            val token = syncCoordinator.tryBegin() ?: run {
                 showSyncBusy("刷新本地")
                 return@launch
             }
@@ -1067,7 +1062,7 @@ class LibraryViewModel @Inject constructor(
     fun scanSingleRoot(uriString: String) {
         if (uriString.isBlank()) return
         viewModelScope.launch {
-            val token = syncCoordinator.tryBegin("刷新目录") ?: run {
+            val token = syncCoordinator.tryBegin() ?: run {
                 showSyncBusy("刷新目录")
                 return@launch
             }
@@ -1114,7 +1109,7 @@ class LibraryViewModel @Inject constructor(
 
     fun syncMetadata() {
         viewModelScope.launch {
-            val token = syncCoordinator.tryBegin("云同步（全量）") ?: run {
+            val token = syncCoordinator.tryBegin() ?: run {
                 showSyncBusy("云同步")
                 return@launch
             }
@@ -1146,7 +1141,7 @@ class LibraryViewModel @Inject constructor(
     fun syncMetadataForRoot(uriString: String) {
         if (uriString.isBlank()) return
         viewModelScope.launch {
-            val token = syncCoordinator.tryBegin("云同步（目录）") ?: run {
+            val token = syncCoordinator.tryBegin() ?: run {
                 showSyncBusy("云同步")
                 return@launch
             }
@@ -1184,7 +1179,7 @@ class LibraryViewModel @Inject constructor(
         if (!tryRegisterAlbumJob(album.id, "云同步")) return
         val job = viewModelScope.launch {
             val ownerJob = currentCoroutineContext()[Job]
-            val token = syncCoordinator.tryBegin("云同步：${album.title}") ?: run {
+            val token = syncCoordinator.tryBegin() ?: run {
                 showSyncBusy("云同步")
                 albumJobs.remove(album.id, ownerJob)
                 return@launch
@@ -1193,7 +1188,7 @@ class LibraryViewModel @Inject constructor(
                 val entity = withContext(Dispatchers.IO) { albumDao.getAlbumById(album.id) } ?: return@launch
                 withContext(Dispatchers.IO) { syncAlbumMetadataInternal(entity) }
             } catch (e: CancellationException) {
-                messageManager.showInfo("已取消云同步：${album.title}")
+                messageManager.showInfo("已取消云同步")
             } finally {
                 albumJobs.remove(album.id, ownerJob)
                 syncCoordinator.end(token)
@@ -1308,7 +1303,7 @@ class LibraryViewModel @Inject constructor(
                     is DlsiteCloudSyncResolveResult.Success -> {
                         applyResolvedCloudSync(entity, selectedResult)
                         if (!silent) {
-                            messageManager.showSuccess("元数据同步成功：${selectedResult.details.title}")
+                            messageManager.showSuccess("元数据同步成功")
                         }
                     }
 
@@ -1361,9 +1356,8 @@ class LibraryViewModel @Inject constructor(
             currentCoroutineContext().ensureActive()
             when (result) {
                 is DlsiteCloudSyncResolveResult.Success -> {
-                    val details = result.details
                     applyResolvedCloudSync(entity, result)
-                    if (!silent) messageManager.showSuccess("元数据同步成功：${details.title}")
+                    if (!silent) messageManager.showSuccess("元数据同步成功")
                 }
 
                 is DlsiteCloudSyncResolveResult.Ambiguous -> {
@@ -1536,7 +1530,7 @@ class LibraryViewModel @Inject constructor(
         if (!tryRegisterAlbumJob(album.id, "本地同步")) return
         val job = viewModelScope.launch {
             val ownerJob = currentCoroutineContext()[Job]
-            val token = syncCoordinator.tryBegin("本地同步：${album.title}") ?: run {
+            val token = syncCoordinator.tryBegin() ?: run {
                 showSyncBusy("本地同步")
                 albumJobs.remove(album.id, ownerJob)
                 return@launch

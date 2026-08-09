@@ -94,6 +94,21 @@ class SubtitleTaskStateMachineTest {
     }
 
     @Test
+    fun albumPolish_isBlockedOnlyByActiveOrTransitioningItems() {
+        assertTrue(SubtitleItemState.blocksAlbumPolish(SubtitleItemState.TRANSCRIBING))
+        assertTrue(SubtitleItemState.blocksAlbumPolish(SubtitleItemState.TRANSLATING))
+        assertTrue(SubtitleItemState.blocksAlbumPolish(SubtitleItemState.PAUSE_REQUESTED))
+        assertFalse(SubtitleItemState.blocksAlbumPolish(SubtitleItemState.PAUSED))
+        assertFalse(SubtitleItemState.blocksAlbumPolish(SubtitleItemState.FAILED))
+        assertFalse(SubtitleItemState.blocksAlbumPolish(SubtitleItemState.SUCCEEDED))
+    }
+
+    @Test
+    fun subtitleAlbumKey_isCaseAndWhitespaceInsensitive() {
+        assertEquals("RJ01413836", "  rj01413836 ".normalizedSubtitleAlbumKey())
+    }
+
+    @Test
     fun transcriptionModel_isCapturedOnceAndKeptAcrossResume() {
         val parakeet = SubtitleTranscriptionModels.PARAKEET_TDT_CTC_06B_JA_INT8.id
         val senseVoice = SubtitleTranscriptionModels.SENSE_VOICE_SMALL_INT8.id

@@ -138,6 +138,7 @@ internal class SubtitleTranslationClient(
         sources: List<GeneratedSubtitleSource>,
         allowMerging: Boolean,
         confirmedCaptions: List<GeneratedSubtitleCaption> = emptyList(),
+        workContext: SubtitleWorkContext? = null,
         onCaptionsConfirmed: suspend (List<GeneratedSubtitleCaption>) -> Unit
     ): List<GeneratedSubtitleCaption> {
         require(sources.isNotEmpty()) { "完整字幕不能为空" }
@@ -158,7 +159,8 @@ internal class SubtitleTranslationClient(
             gson = gson,
             sources = sources,
             allowMerging = allowMerging,
-            confirmedCaptions = confirmed
+            confirmedCaptions = confirmed,
+            workContext = workContext
         ).toMutableList()
         var stalledTurnCount = 0
         while (confirmedSourceCount < sources.size) {
@@ -282,15 +284,150 @@ internal class SubtitleTranslationClient(
         }
     }
 
+    /**
+     * 作品级最终润色：在所有音轨翻译完成后，让 agent 通过 read/write 工具逐条
+     * 精修中文字幕（语序、人称、称呼、用词、语气、标点）。
+     *
+     * 非阻塞语义：本方法只负责与模型交互并返回精修结果，由调用方决定是否/何时
+     * 落库；异常由调用方按"不阻塞任务完成"的策略处理。
+     */
+    suspend fun polishSubtitles(
+        tracks: List<PolishTrackInput>,
+        workContext: SubtitleWorkContext? = null,
+        onCaptionsPolished: suspend (List<PolishCaptionResult>) -> Unit
+    ): List<PolishCaptionResult> {
+        require(tracks.isNotEmpty()) { "润色音轨列表不能为空" }
+        val allCaptions = tracks.flatMap(PolishTrackInput::captions)
+        require(allCaptions.map(PolishCaptionInput::captionId).distinct().size == allCaptions.size) {
+            "润色字幕主键不能重复"
+        }
+        val messages = buildPolishAgentInitialMessages(
+            gson = gson,
+            tracks = tracks,
+            workContext = workContext
+        ).toMutableList()
+        val polishedByCaptionId = HashMap<Long, String>()
+        // 服务端维护读取游标：read 每次翻页，直至全部条目展示完毕即视为检查完成。
+        var nextReadOffset = 0
+        var readCompleted = false
+        var stalledTurnCount = 0
+        while (!readCompleted) {
+            val response = requestSubtitleAgentResponse(
+                messages = messages,
+                targetIndices = emptyList(),
+                polishMode = true
+            )
+            messages += response.assistantMessage
+            val toolCalls = response.assistantMessage.toolCalls.orEmpty()
+            var madeProgress = false
+            if (toolCalls.isEmpty()) {
+                stalledTurnCount += 1
+                messages += DeepSeekChatMessage(
+                    role = "user",
+                    content = TranslationPrompts.subtitlePolishContinueMessageGeneric()
+                )
+            } else {
+                toolCalls.forEach { toolCall ->
+                    val toolCallId = toolCall.id.trim()
+                    if (toolCallId.isEmpty()) {
+                        throw SubtitleTranslationException(
+                            message = "润色模型返回的工具调用缺少 id",
+                            retryable = true
+                        )
+                    }
+                    val toolResult = when (toolCall.function.name.orEmpty()) {
+                        POLISH_READ_TOOL_NAME -> {
+                            val resultMessage = buildPolishReadToolResultMessage(
+                                gson = gson,
+                                toolCallId = toolCallId,
+                                tracks = tracks,
+                                polishedByCaptionId = polishedByCaptionId,
+                                offset = nextReadOffset
+                            )
+                            // read 翻页：每次调用展示一页，游标前进；全部展示完则完成。
+                            if (nextReadOffset < allCaptions.size) {
+                                nextReadOffset = (nextReadOffset + POLISH_READ_PAGE_SIZE)
+                                    .coerceAtMost(allCaptions.size)
+                                madeProgress = true
+                            } else {
+                                readCompleted = true
+                            }
+                            resultMessage
+                        }
+
+                        POLISH_WRITE_TOOL_NAME -> {
+                            val parsed = runCatching {
+                                parsePolishWriteToolArguments(
+                                    arguments = toolCall.function.arguments.orEmpty(),
+                                    expectedCaptions = allCaptions
+                                )
+                            }
+                            parsed.fold(
+                                onSuccess = { results ->
+                                    onCaptionsPolished(results)
+                                    results.forEach { polishedByCaptionId[it.captionId] = it.chinese }
+                                    madeProgress = true
+                                    buildPolishWriteToolResultMessage(
+                                        gson = gson,
+                                        toolCallId = toolCallId,
+                                        results = results,
+                                        allCaptions = allCaptions,
+                                        polishedByCaptionId = polishedByCaptionId
+                                    )
+                                },
+                                onFailure = { error ->
+                                    buildSubtitleToolErrorMessage(
+                                        gson = gson,
+                                        toolCallId = toolCallId,
+                                        message = error.message.orEmpty().ifBlank { "润色参数无效" }
+                                    )
+                                }
+                            )
+                        }
+
+                        else -> buildSubtitleToolErrorMessage(
+                            gson = gson,
+                            toolCallId = toolCallId,
+                            message = "未知工具：${toolCall.function.name.orEmpty()}"
+                        )
+                    }
+                    messages += toolResult
+                }
+                stalledTurnCount = if (madeProgress) 0 else stalledTurnCount + 1
+            }
+            if (stalledTurnCount >= MAX_POLISH_AGENT_STALLED_TURNS) {
+                throw SubtitleTranslationException(
+                    message = "润色 agent 连续多轮没有写入字幕",
+                    retryable = true
+                )
+            }
+        }
+        return allCaptions.map { caption ->
+            PolishCaptionResult(
+                captionId = caption.captionId,
+                chinese = polishedByCaptionId[caption.captionId] ?: caption.chinese
+            )
+        }
+    }
+
     private suspend fun requestSubtitleAgentResponse(
         messages: List<DeepSeekChatMessage>,
-        targetIndices: List<Int>
+        targetIndices: List<Int>,
+        polishMode: Boolean = false
     ): SubtitleAgentResponse {
-        val requestBody = buildDeepSeekSubtitleAgentRequest(
-            gson = gson,
-            messages = messages,
-            settings = settings
-        )
+        val requestBody = if (polishMode) {
+            buildPolishAgentRequest(
+                gson = gson,
+                messages = messages,
+                settings = settings
+            )
+        } else {
+            buildDeepSeekSubtitleAgentRequest(
+                gson = gson,
+                messages = messages,
+                settings = settings
+            )
+        }
         return executeTranslationRequest(
             requestBody,
             targetIndices
@@ -470,8 +607,66 @@ internal fun parseRetryAfterMillis(
 internal const val DEEPSEEK_SUBTITLE_MODEL = "deepseek-v4-flash"
 internal const val SUBTITLE_READ_TOOL_NAME = "read_subtitle_translation_state"
 internal const val SUBTITLE_WRITE_TOOL_NAME = "write_timed_chinese_subtitles"
+internal const val POLISH_READ_TOOL_NAME = "read_subtitle_polish_state"
+internal const val POLISH_WRITE_TOOL_NAME = "write_polished_chinese_subtitles"
 private const val DEEPSEEK_CHAT_COMPLETIONS_URL = "https://api.deepseek.com/chat/completions"
 private const val MAX_SUBTITLE_AGENT_STALLED_TURNS = 4
+private const val MAX_POLISH_AGENT_STALLED_TURNS = 4
+private const val POLISH_READ_PAGE_SIZE = 40
+
+/**
+ * 字幕翻译 agent 可用的作品级静态元数据。
+ *
+ * 各音轨并行翻译时彼此独立、完成顺序不定，因此这里只注入翻译开始前就已确定的
+ * 静态信息（作品标题、当前音轨标题、声优、社团），不依赖其他音轨的翻译进度，
+ * 用于让人名、称呼、术语在跨轨时保持一致。
+ */
+internal data class SubtitleWorkContext(
+    val workTitleJapanese: String = "",
+    val workTitleChinese: String = "",
+    val trackTitleJapanese: String = "",
+    val trackTitleChinese: String = "",
+    val circle: String = "",
+    val cv: String = ""
+)
+
+/**
+ * 润色 agent 的输入：一个音轨的日文原文 + 当前中文字幕条目。
+ * [captionId] 是 subtitles 表主键，用于把精修结果精确写回。
+ */
+internal data class PolishTrackInput(
+    val trackIndex: Int,
+    val trackTitleJapanese: String = "",
+    val trackTitleChinese: String = "",
+    val captions: List<PolishCaptionInput>
+)
+
+internal data class PolishCaptionInput(
+    val captionId: Long,
+    val sourceIndex: Int,
+    val japanese: String,
+    val chinese: String
+)
+
+/** 润色结果：按字幕主键返回精修后的中文文本。 */
+internal data class PolishCaptionResult(
+    val captionId: Long,
+    val chinese: String
+)
+
+internal fun buildSubtitleWorkContextSection(context: SubtitleWorkContext?): String {
+    val c = context ?: return "作品上下文：无（未提供）。请从日文原文推断人名、称呼，并在整轨内保持一致。"
+    return buildString {
+        append("作品上下文（用于统一人名、称呼与术语，必须严格遵守）：")
+        c.workTitleJapanese.takeIf(String::isNotBlank)?.let { append("\n- 作品标题（日文）：$it") }
+        c.workTitleChinese.takeIf(String::isNotBlank)?.let { append("\n- 作品标题（中文）：$it") }
+        c.trackTitleJapanese.takeIf(String::isNotBlank)?.let { append("\n- 当前音轨标题（日文）：$it") }
+        c.trackTitleChinese.takeIf(String::isNotBlank)?.let { append("\n- 当前音轨标题（中文）：$it") }
+        c.circle.takeIf(String::isNotBlank)?.let { append("\n- 社团：$it") }
+        c.cv.takeIf(String::isNotBlank)?.let { append("\n- 声优：$it") }
+        append("\n- 人名、身份、称呼必须与本上下文一致；同一角色在整轨及跨轨使用同一中文译名，禁止另造或混用。")
+    }.trim()
+}
 
 internal fun buildDeepSeekTitleTranslationRequest(
     gson: Gson,
@@ -544,13 +739,15 @@ internal fun buildDeepSeekSubtitleTranslationRequest(
     sources: List<GeneratedSubtitleSource>,
     allowMerging: Boolean,
     confirmedCaptions: List<GeneratedSubtitleCaption> = emptyList(),
+    workContext: SubtitleWorkContext? = null,
     settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings()
 ): String {
     val messages = buildSubtitleAgentInitialMessages(
         gson = gson,
         sources = sources,
         allowMerging = allowMerging,
-        confirmedCaptions = confirmedCaptions
+        confirmedCaptions = confirmedCaptions,
+        workContext = workContext
     )
     return buildDeepSeekSubtitleAgentRequest(gson, messages, settings)
 }
@@ -559,7 +756,8 @@ internal fun buildSubtitleAgentInitialMessages(
     gson: Gson,
     sources: List<GeneratedSubtitleSource>,
     allowMerging: Boolean,
-    confirmedCaptions: List<GeneratedSubtitleCaption> = emptyList()
+    confirmedCaptions: List<GeneratedSubtitleCaption> = emptyList(),
+    workContext: SubtitleWorkContext? = null
 ): List<DeepSeekChatMessage> {
     require(sources.isNotEmpty())
     val confirmedSourceCount = confirmedCaptions.sumOf { it.sourceIndices.size }
@@ -574,7 +772,7 @@ internal fun buildSubtitleAgentInitialMessages(
     return listOf(
         DeepSeekChatMessage(
             role = "system",
-            content = subtitleToolTranslationSystemPrompt(targetIndices, allowMerging)
+            content = subtitleToolTranslationSystemPrompt(targetIndices, allowMerging, workContext)
         ),
         DeepSeekChatMessage(
             role = "user",
@@ -603,6 +801,197 @@ internal fun buildDeepSeekSubtitleAgentRequest(
         )
     )
 }
+
+internal fun buildPolishAgentInitialMessages(
+    gson: Gson,
+    tracks: List<PolishTrackInput>,
+    workContext: SubtitleWorkContext? = null
+): List<DeepSeekChatMessage> {
+    require(tracks.isNotEmpty())
+    val trackCount = tracks.size
+    val captionCount = tracks.sumOf { it.captions.size }
+    val systemPrompt = TranslationPrompts.subtitlePolishSystemPromptTemplate()
+        .replace("{{TRACK_COUNT}}", trackCount.toString())
+        .replace("{{CAPTION_COUNT}}", captionCount.toString())
+        .replace("{{WORK_CONTEXT}}", buildSubtitleWorkContextSection(workContext))
+        .replace("{{STYLE_GUIDE}}", TranslationPrompts.subtitleStyleGuide())
+        .replace("{{REFERENCE_TABLE}}", TranslationPrompts.subtitleReferenceTable())
+        .replace("{{READ_TOOL_NAME}}", POLISH_READ_TOOL_NAME)
+        .replace("{{WRITE_TOOL_NAME}}", POLISH_WRITE_TOOL_NAME)
+        .trim()
+    val userPayload = mapOf(
+        "task" to "polish_translated_chinese_subtitles",
+        "track_count" to trackCount,
+        "caption_count" to captionCount,
+        "message" to TranslationPrompts.subtitlePolishInitialUserMessage()
+    )
+    return listOf(
+        DeepSeekChatMessage(role = "system", content = systemPrompt),
+        DeepSeekChatMessage(role = "user", content = gson.toJson(userPayload))
+    )
+}
+
+internal fun buildPolishAgentRequest(
+    gson: Gson,
+    messages: List<DeepSeekChatMessage>,
+    settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings()
+): String {
+    require(messages.isNotEmpty())
+    return gson.toJson(
+        DeepSeekChatRequest(
+            messages = messages,
+            thinking = DeepSeekThinking(
+                type = if (settings.thinkingEnabled) "enabled" else "disabled"
+            ),
+            reasoningEffort = settings.reasoningEffort.wireValue.takeIf {
+                settings.thinkingEnabled
+            },
+            responseFormat = null,
+            tools = subtitlePolishTools()
+        )
+    )
+}
+
+/**
+ * 润色 read 工具：按服务端维护的 offset 分页返回字幕条目；已精修的条目附带最新中文。
+ */
+internal fun buildPolishReadToolResultMessage(
+    gson: Gson,
+    toolCallId: String,
+    tracks: List<PolishTrackInput>,
+    polishedByCaptionId: Map<Long, String>,
+    offset: Int
+): DeepSeekChatMessage {
+    require(toolCallId.isNotBlank())
+    val allCaptions = tracks.flatMap(PolishTrackInput::captions)
+    val trackSummaries = tracks.mapIndexed { index, track ->
+        val polishedCount = track.captions.count { it.captionId in polishedByCaptionId }
+        mapOf(
+            "track_index" to index,
+            "track_title_japanese" to track.trackTitleJapanese,
+            "track_title_chinese" to track.trackTitleChinese,
+            "caption_count" to track.captions.size,
+            "polished_count" to polishedCount
+        )
+    }
+    val page = allCaptions.drop(offset).take(POLISH_READ_PAGE_SIZE)
+    val result = buildMap<String, Any> {
+        put("tracks", trackSummaries)
+        put("offset", offset)
+        put("page_size", POLISH_READ_PAGE_SIZE)
+        put(
+            "subtitles",
+            page.map { caption ->
+                mapOf(
+                    "caption_id" to caption.captionId,
+                    "track_index" to tracks.indexOfFirst { track -> track.captions.any { it.captionId == caption.captionId } },
+                    "japanese" to caption.japanese,
+                    "chinese" to (polishedByCaptionId[caption.captionId] ?: caption.chinese)
+                )
+            }
+        )
+        put("completed", offset + page.size >= allCaptions.size)
+    }
+    return DeepSeekChatMessage(
+        role = "tool",
+        content = gson.toJson(result),
+        toolCallId = toolCallId
+    )
+}
+
+internal fun buildPolishWriteToolResultMessage(
+    gson: Gson,
+    toolCallId: String,
+    results: List<PolishCaptionResult>,
+    allCaptions: List<PolishCaptionInput>,
+    polishedByCaptionId: Map<Long, String>
+): DeepSeekChatMessage {
+    require(toolCallId.isNotBlank())
+    val remaining = allCaptions.count { it.captionId !in polishedByCaptionId }
+    val result = buildMap<String, Any> {
+        put("status", "written")
+        put("written_count", results.size)
+        put("remaining_unpolished_count", remaining)
+        put("completed", remaining == 0)
+    }
+    return DeepSeekChatMessage(
+        role = "tool",
+        content = gson.toJson(result),
+        toolCallId = toolCallId
+    )
+}
+
+/** 解析润色 write 工具参数：只接受 caption_id + chinese，不允许改结构。 */
+internal fun parsePolishWriteToolArguments(
+    arguments: String,
+    expectedCaptions: List<PolishCaptionInput>
+): List<PolishCaptionResult> {
+    require(expectedCaptions.isNotEmpty()) { "没有可润色的字幕" }
+    val expectedById = expectedCaptions.associateBy(PolishCaptionInput::captionId)
+    val root = runCatching {
+        JsonParser.parseString(arguments.trim()).asJsonObject
+    }.getOrElse { error ->
+        throw IllegalArgumentException("润色工具调用参数不是有效 JSON 对象", error)
+    }
+    val captions = runCatching { root.getAsJsonArray("captions") }
+        .getOrElse { throw IllegalArgumentException("captions 不是数组", it) }
+        ?: throw IllegalArgumentException("缺少 captions 数组")
+    val parsed = captions.map { element ->
+        val item = element.takeIf { it.isJsonObject }?.asJsonObject
+            ?: throw IllegalArgumentException("润色条目不是对象")
+        val captionId = runCatching { item.get("caption_id").asLong }
+            .getOrElse { throw IllegalArgumentException("润色条目缺少 caption_id", it) }
+        require(captionId in expectedById) { "润色条目引用了未知 caption_id：$captionId" }
+        val chinese = runCatching { item.get("chinese").asString.trim() }
+            .getOrElse { throw IllegalArgumentException("润色条目缺少 chinese", it) }
+        require(chinese.isNotEmpty()) { "润色 chinese 不能为空" }
+        PolishCaptionResult(captionId = captionId, chinese = chinese)
+    }
+    require(parsed.map(PolishCaptionResult::captionId).distinct().size == parsed.size) {
+        "润色条目 caption_id 不能重复"
+    }
+    return parsed
+}
+
+private fun subtitlePolishTools(): List<DeepSeekToolDefinition> = listOf(
+    DeepSeekToolDefinition(
+        function = DeepSeekFunctionDefinition(
+            name = POLISH_READ_TOOL_NAME,
+            description = TranslationPrompts.subtitlePolishToolReadDescription(),
+            parameters = mapOf(
+                "type" to "object",
+                "properties" to emptyMap<String, Any>(),
+                "additionalProperties" to false
+            )
+        )
+    ),
+    DeepSeekToolDefinition(
+        function = DeepSeekFunctionDefinition(
+            name = POLISH_WRITE_TOOL_NAME,
+            description = TranslationPrompts.subtitlePolishToolWriteDescription(),
+            parameters = mapOf(
+                "type" to "object",
+                "properties" to mapOf(
+                    "captions" to mapOf(
+                        "type" to "array",
+                        "minItems" to 1,
+                        "items" to mapOf(
+                            "type" to "object",
+                            "properties" to mapOf(
+                                "caption_id" to mapOf("type" to "integer"),
+                                "chinese" to mapOf("type" to "string", "minLength" to 1)
+                            ),
+                            "required" to listOf("caption_id", "chinese"),
+                            "additionalProperties" to false
+                        )
+                    )
+                ),
+                "required" to listOf("captions"),
+                "additionalProperties" to false
+            )
+        )
+    )
+)
 
 internal fun buildSubtitleReadToolResultMessage(
     gson: Gson,
@@ -860,7 +1249,8 @@ private fun parseTranslationContentJsonObject(content: String) = content.trim()
 
 internal fun subtitleToolTranslationSystemPrompt(
     targetIndices: List<Int>,
-    allowMerging: Boolean
+    allowMerging: Boolean,
+    workContext: SubtitleWorkContext? = null
 ): String {
     require(targetIndices.isNotEmpty())
     require(targetIndices.distinct().size == targetIndices.size)
@@ -871,10 +1261,11 @@ internal fun subtitleToolTranslationSystemPrompt(
     }
     return TranslationPrompts.subtitleAgentSystemPromptTemplate()
         .replace("{{SOURCE_COUNT}}", targetIndices.size.toString())
+        .replace("{{WORK_CONTEXT}}", buildSubtitleWorkContextSection(workContext))
         .replace("{{READ_TOOL_NAME}}", SUBTITLE_READ_TOOL_NAME)
         .replace("{{WRITE_TOOL_NAME}}", SUBTITLE_WRITE_TOOL_NAME)
         .replace("{{STYLE_GUIDE}}", TranslationPrompts.subtitleStyleGuide())
-        .replace("{{ADULT_REFERENCE_TABLE}}", TranslationPrompts.subtitleAdultReferenceTable())
+        .replace("{{REFERENCE_TABLE}}", TranslationPrompts.subtitleReferenceTable())
         .replace("{{SEGMENTATION_RULES}}", segmentationRules)
         .trim()
 }
