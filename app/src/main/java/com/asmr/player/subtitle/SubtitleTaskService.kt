@@ -643,8 +643,11 @@ internal class SubtitleTaskService : Service() {
                 messageManager.showWarning("该作品暂无可润色的字幕")
                 return
             }
-            if (database.subtitleTaskDao().getItemsForTracks(trackIds).any { it.state !in POLISH_BLOCKED_ITEM_STATES }) {
-                messageManager.showWarning("该作品下仍有进行中的转录或翻译，请等待完成后再润色")
+            if (
+                database.subtitleTaskDao().getItemsForTracks(trackIds)
+                    .any { SubtitleItemState.blocksAlbumPolish(it.state) }
+            ) {
+                messageManager.showWarning(SubtitleTaskRepository.ACTIVE_TASKS_BLOCK_POLISH_MESSAGE)
                 return
             }
             started = true
@@ -1138,15 +1141,6 @@ internal class SubtitleTaskService : Service() {
         private const val TITLE_TRANSLATION_RETRY_BACKOFF_MS = 60_000L
         private const val TITLE_TRANSLATION_DISABLED_RETRY_AT = Long.MAX_VALUE
         private const val TAG = "SubtitleTaskService"
-
-        /** 视为“进行中的转录或翻译”之外的任务状态；存在这些状态的任务会阻塞作品润色。 */
-        private val POLISH_BLOCKED_ITEM_STATES = setOf(
-            SubtitleItemState.PAUSED,
-            SubtitleItemState.INTERRUPTED,
-            SubtitleItemState.FAILED,
-            SubtitleItemState.SUCCEEDED,
-            SubtitleItemState.CANCELED
-        )
 
         fun wake(context: Context) {
             ContextCompat.startForegroundService(

@@ -605,12 +605,7 @@ class DownloadsViewModel @Inject constructor(
                     if (handle.reusedExisting) "该音频已有可继续的字幕任务" else "已加入全局翻译队列"
                 )
             }.onFailure { error ->
-                val message = error.message?.takeIf { it.isNotBlank() } ?: "无法重新翻译字幕"
-                if (SubtitleFailureMessages.isUserActionWarning(message)) {
-                    messageManager.showWarning(message)
-                } else {
-                    messageManager.showError(message)
-                }
+                showSubtitleActionFailure(error, fallback = "无法重新翻译字幕")
             }
         }
     }
@@ -641,13 +636,27 @@ class DownloadsViewModel @Inject constructor(
 
     fun cancelSubtitleItem(itemId: String) = viewModelScope.launch { subtitleTaskRepository.cancelItem(itemId) }
 
-    fun retrySubtitleItem(itemId: String) = viewModelScope.launch { subtitleTaskRepository.retryItem(itemId) }
+    fun retrySubtitleItem(itemId: String) = viewModelScope.launch {
+        runCatching { subtitleTaskRepository.retryItem(itemId) }
+            .onFailure { error ->
+                showSubtitleActionFailure(error, fallback = "无法重试字幕任务")
+            }
+    }
 
     fun pauseSubtitleTask(taskId: String) = viewModelScope.launch { subtitleTaskRepository.pauseTask(taskId) }
 
     fun resumeSubtitleTask(taskId: String) = viewModelScope.launch { subtitleTaskRepository.resumeTask(taskId) }
 
     fun cancelSubtitleTask(taskId: String) = viewModelScope.launch { subtitleTaskRepository.cancelTask(taskId) }
+
+    private fun showSubtitleActionFailure(error: Throwable, fallback: String) {
+        val message = error.message?.takeIf { it.isNotBlank() } ?: fallback
+        if (SubtitleFailureMessages.isUserActionWarning(message)) {
+            messageManager.showWarning(message)
+        } else {
+            messageManager.showError(message)
+        }
+    }
 
     private suspend fun syncLibraryAfterDownloadedFileDeleted(filePath: String, rootDir: String) {
         if (filePath.isBlank()) return

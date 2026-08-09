@@ -20,6 +20,16 @@ class SubtitleFailureMessagesTest {
         assertTrue(
             SubtitleFailureMessages.isUserActionWarning("DeepSeek 账户余额不足，请充值后重试。")
         )
+        assertTrue(
+            SubtitleFailureMessages.isUserActionWarning(
+                SubtitleTaskRepository.ACTIVE_TASKS_BLOCK_POLISH_MESSAGE
+            )
+        )
+        assertTrue(
+            SubtitleFailureMessages.isUserActionWarning(
+                SubtitleTaskRepository.POLISHING_BLOCKS_RETRY_MESSAGE
+            )
+        )
         assertFalse(
             SubtitleFailureMessages.isUserActionWarning("DeepSeek 网络请求超时，请检查网络后重试。")
         )
