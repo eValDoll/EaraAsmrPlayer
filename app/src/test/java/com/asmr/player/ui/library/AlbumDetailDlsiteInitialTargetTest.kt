@@ -7,44 +7,59 @@ import org.junit.Test
 class AlbumDetailDlsiteInitialTargetTest {
 
     @Test
-    fun resolveInitialDlsiteLoadTarget_prefersHansWhenAvailable() {
+    fun resolveInitialDlsiteLoadTarget_keepsJapaneseEntryWhenChineseEditionsExist() {
         val result = resolveInitialDlsiteLoadTarget(
-            baseRj = "RJ000001",
+            entryRjCode = "RJ000001",
             editions = listOf(
                 DlsiteLanguageEdition(workno = "RJ000001", lang = "JPN", label = "jp", displayOrder = 3),
                 DlsiteLanguageEdition(workno = "RJ000010", lang = "CHI_HANS", label = "zh-cn", displayOrder = 1),
                 DlsiteLanguageEdition(workno = "RJ000011", lang = "CHI_HANT", label = "zh-tw", displayOrder = 2)
-            ),
-            chinesePreference = DlsiteChinesePreference.None
+            )
         )
 
-        assertEquals("CHI_HANS", result.selectedLang)
-        assertEquals("RJ000010", result.workno)
+        assertEquals("JPN", result.selectedLang)
+        assertEquals("RJ000001", result.workno)
     }
 
     @Test
-    fun resolveInitialDlsiteLoadTarget_fallsBackToHantWhenHansMissing() {
+    fun resolveInitialDlsiteLoadTarget_keepsChineseEntryWhenJapaneseEditionExists() {
         val result = resolveInitialDlsiteLoadTarget(
-            baseRj = "RJ000002",
+            entryRjCode = "RJ01189945",
             editions = listOf(
-                DlsiteLanguageEdition(workno = "RJ000002", lang = "JPN", label = "jp", displayOrder = 2),
-                DlsiteLanguageEdition(workno = "RJ000020", lang = "CHI_HANT", label = "zh-tw", displayOrder = 1)
-            ),
-            chinesePreference = DlsiteChinesePreference.None
+                DlsiteLanguageEdition(workno = "RJ365382", lang = "JPN", label = "jp", displayOrder = 1),
+                DlsiteLanguageEdition(workno = "RJ01189945", lang = "CHI_HANS", label = "zh-cn", displayOrder = 5)
+            )
         )
 
-        assertEquals("CHI_HANT", result.selectedLang)
-        assertEquals("RJ000020", result.workno)
+        assertEquals("CHI_HANS", result.selectedLang)
+        assertEquals("RJ01189945", result.workno)
+    }
+
+    @Test
+    fun resolveInitialDlsiteLoadTarget_doesNotInventJapaneseForChineseOnlyEntry() {
+        val result = resolveInitialDlsiteLoadTarget(
+            entryRjCode = "RJ01189945",
+            editions = listOf(
+                DlsiteLanguageEdition(
+                    workno = "RJ01189945",
+                    lang = "CHI_HANS",
+                    label = "zh-cn",
+                    displayOrder = 5
+                )
+            )
+        )
+
+        assertEquals("CHI_HANS", result.selectedLang)
+        assertEquals(listOf("CHI_HANS"), result.editions.map { it.lang })
     }
 
     @Test
     fun resolveInitialDlsiteLoadTarget_keepsJpnWhenNoChineseEditionExists() {
         val result = resolveInitialDlsiteLoadTarget(
-            baseRj = "RJ000003",
+            entryRjCode = "RJ000003",
             editions = listOf(
                 DlsiteLanguageEdition(workno = "RJ000003", lang = "JPN", label = "jp", displayOrder = 1)
-            ),
-            chinesePreference = DlsiteChinesePreference.None
+            )
         )
 
         assertEquals("JPN", result.selectedLang)
@@ -52,20 +67,17 @@ class AlbumDetailDlsiteInitialTargetTest {
     }
 
     @Test
-    fun resolveInitialDlsiteLoadTarget_preservesUserSelectionWhenRequested() {
+    fun resolveInitialDlsiteLoadTarget_neverSubstitutesAnotherEdition() {
         val result = resolveInitialDlsiteLoadTarget(
-            baseRj = "RJ000004",
+            entryRjCode = "RJ000099",
             editions = listOf(
                 DlsiteLanguageEdition(workno = "RJ000004", lang = "JPN", label = "jp", displayOrder = 3),
                 DlsiteLanguageEdition(workno = "RJ000040", lang = "CHI_HANS", label = "zh-cn", displayOrder = 1),
                 DlsiteLanguageEdition(workno = "RJ000041", lang = "CHI_HANT", label = "zh-tw", displayOrder = 2)
-            ),
-            currentSelectedLang = "CHI_HANT",
-            preserveCurrentSelection = true,
-            chinesePreference = DlsiteChinesePreference.Hans
+            )
         )
 
-        assertEquals("CHI_HANT", result.selectedLang)
-        assertEquals("RJ000041", result.workno)
+        assertEquals("JPN", result.selectedLang)
+        assertEquals("RJ000099", result.workno)
     }
 }

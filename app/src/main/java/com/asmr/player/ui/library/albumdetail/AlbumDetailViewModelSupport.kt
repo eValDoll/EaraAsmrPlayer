@@ -178,6 +178,19 @@ data class AlbumDetailModel(
     val isLoadingDlsitePlay: Boolean
 )
 
+internal fun AlbumDetailModel.listenTogetherSummaryRj(): String {
+    return baseRjCode.trim().uppercase().ifBlank { rjCode.trim().uppercase() }
+}
+
+internal fun AlbumDetailModel.withPreservedListenTogetherListenerCount(
+    previous: AlbumDetailModel?
+): AlbumDetailModel {
+    if (previous == null || listenTogetherSummaryRj() != previous.listenTogetherSummaryRj()) {
+        return this
+    }
+    return copy(listenTogetherRjListenerCount = previous.listenTogetherRjListenerCount)
+}
+
 internal fun AlbumDetailModel.withUpdatedLocalCover(
     albumId: Long,
     coverPath: String,
@@ -281,12 +294,6 @@ internal fun shouldPreserveHeaderAlbumMetadata(hint: AlbumCoverHint?): Boolean {
     return hint?.hasResolvedDlsiteInfo == true
 }
 
-internal enum class DlsiteChinesePreference {
-    None,
-    Hans,
-    Hant
-}
-
 internal data class ResolvedDlsiteLoadTarget(
     val editions: List<DlsiteLanguageEdition>,
     val selectedLang: String,
@@ -314,20 +321,20 @@ internal fun mergeDlsiteEditions(
     if (clean.isBlank()) return emptyList()
     return buildList {
         val hasJpn = editions.any { it.lang.equals("JPN", ignoreCase = true) }
-        if (!hasJpn) addAll(defaultDlsiteEditions(clean))
+        val hasEntryEdition = editions.any {
+            it.workno.trim().equals(clean, ignoreCase = true)
+        }
+        if (!hasJpn && !hasEntryEdition) addAll(defaultDlsiteEditions(clean))
         addAll(editions)
     }.distinctBy { it.lang.trim().uppercase() }
         .sortedWith(compareBy({ it.displayOrder }, { it.lang }))
 }
 
 internal fun resolveInitialDlsiteLoadTarget(
-    baseRj: String,
-    editions: List<DlsiteLanguageEdition>,
-    currentSelectedLang: String = "JPN",
-    preserveCurrentSelection: Boolean = false,
-    chinesePreference: DlsiteChinesePreference = DlsiteChinesePreference.None
+    entryRjCode: String,
+    editions: List<DlsiteLanguageEdition>
 ): ResolvedDlsiteLoadTarget {
-    val clean = baseRj.trim().uppercase()
+    val clean = entryRjCode.trim().uppercase()
     if (clean.isBlank()) {
         return ResolvedDlsiteLoadTarget(
             editions = emptyList(),
@@ -336,32 +343,14 @@ internal fun resolveInitialDlsiteLoadTarget(
         )
     }
     val merged = mergeDlsiteEditions(clean, editions)
-    val normalizedCurrentLang = currentSelectedLang.trim().uppercase().ifBlank { "JPN" }
-    val hasHans = merged.any { it.lang.equals("CHI_HANS", ignoreCase = true) }
-    val hasHant = merged.any { it.lang.equals("CHI_HANT", ignoreCase = true) }
-    val preservedTarget = if (preserveCurrentSelection) {
-        merged.firstOrNull { it.lang.equals(normalizedCurrentLang, ignoreCase = true) }
-    } else {
-        null
+    val entryEdition = merged.firstOrNull {
+        it.workno.trim().equals(clean, ignoreCase = true)
     }
-    val preferredLang = when {
-        preservedTarget != null -> preservedTarget.lang
-        chinesePreference == DlsiteChinesePreference.Hans && hasHans -> "CHI_HANS"
-        chinesePreference == DlsiteChinesePreference.Hant && hasHant -> "CHI_HANT"
-        hasHans -> "CHI_HANS"
-        hasHant -> "CHI_HANT"
-        else -> "JPN"
-    }
-    val selected = preservedTarget
-        ?: merged.firstOrNull { it.lang.equals(preferredLang, ignoreCase = true) }
-        ?: merged.firstOrNull { it.lang.equals("JPN", ignoreCase = true) }
-        ?: merged.firstOrNull()
-    val selectedLang = selected?.lang?.trim().orEmpty().ifBlank { preferredLang }
-    val selectedWorkno = selected?.workno?.trim()?.uppercase().orEmpty().ifBlank { clean }
+    val selectedLang = entryEdition?.lang?.trim().orEmpty().ifBlank { "JPN" }
     return ResolvedDlsiteLoadTarget(
         editions = merged,
         selectedLang = selectedLang,
-        workno = selectedWorkno
+        workno = clean
     )
 }
 
@@ -414,18 +403,6 @@ internal fun resolveAsmrOneTrackWorkId(
         asmrOneEditionMatchesLanguage(edition.lang.orEmpty(), normalizedLang)
     }
     return languageEdition?.id?.takeIf { it > 0 }?.toString()
-}
-
-internal fun shouldFallbackToJapaneseDirectory(
-    selectedLang: String,
-    isLanguageUserSelected: Boolean,
-    hasSelectedDirectoryResources: Boolean,
-    hasJapaneseDirectoryResources: Boolean
-): Boolean {
-    return !isLanguageUserSelected &&
-        !selectedLang.trim().equals("JPN", ignoreCase = true) &&
-        !hasSelectedDirectoryResources &&
-        hasJapaneseDirectoryResources
 }
 
 private fun asmrOneEditionMatchesLanguage(languageLabel: String, selectedLang: String): Boolean {

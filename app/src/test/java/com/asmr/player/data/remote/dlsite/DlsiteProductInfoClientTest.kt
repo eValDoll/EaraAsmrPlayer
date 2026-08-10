@@ -79,5 +79,74 @@ class DlsiteProductInfoClientTest {
 
         assertEquals(emptyList<DlsiteLanguageEdition>(), editions)
     }
+
+    @Test
+    fun parseLanguageEditions_usesCurrentTranslatedChildInsteadOfParentEdition() {
+        val json = """
+            {
+              "RJ01189945": {
+                "translation_info": {
+                  "is_original": false,
+                  "original_workno": "RJ365382",
+                  "parent_workno": "RJ01189944",
+                  "lang": "CHI_HANS"
+                },
+                "dl_count_items": [
+                  {
+                    "workno": "RJ365382",
+                    "edition_type": "language",
+                    "display_order": 1,
+                    "label": "日本語",
+                    "lang": "JPN",
+                    "display_label": "日本語"
+                  },
+                  {
+                    "workno": "RJ01189944",
+                    "edition_type": "language",
+                    "display_order": 5,
+                    "label": "簡体中文",
+                    "lang": "CHI_HANS",
+                    "display_label": "簡体中文"
+                  }
+                ]
+              }
+            }
+        """.trimIndent()
+
+        val client = DlsiteProductInfoClient(OkHttpClient())
+        val editions = client.parseLanguageEditions("RJ01189945", json)
+
+        assertEquals("RJ365382", editions.single { it.lang == "JPN" }.workno)
+        assertEquals("RJ01189945", editions.single { it.lang == "CHI_HANS" }.workno)
+        assertTrue(editions.none { it.workno == "RJ01189944" })
+    }
+
+    @Test
+    fun parseLanguageEditions_keepsCurrentTranslationWithoutEditionItems() {
+        val json = """
+            {
+              "RJ01189945": {
+                "translation_info": {
+                  "lang": "CHI_HANS"
+                }
+              }
+            }
+        """.trimIndent()
+
+        val client = DlsiteProductInfoClient(OkHttpClient())
+        val editions = client.parseLanguageEditions("RJ01189945", json)
+
+        assertEquals(
+            listOf(
+                DlsiteLanguageEdition(
+                    workno = "RJ01189945",
+                    lang = "CHI_HANS",
+                    label = "简体中文",
+                    displayOrder = 5
+                )
+            ),
+            editions
+        )
+    }
 }
 

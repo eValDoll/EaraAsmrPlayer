@@ -185,4 +185,87 @@ class AlbumDetailViewModelSupportTest {
 
         assertEquals("/albums/RJ123456/new-cover.jpg", current)
     }
+
+    @Test
+    fun listenTogetherSummaryRj_staysOnBaseWorkWhenLanguageEditionChanges() {
+        val model = albumDetailModel(
+            baseRjCode = "RJ01588205",
+            rjCode = "VJ01001234",
+            listenerCount = 9
+        )
+
+        assertEquals("RJ01588205", model.listenTogetherSummaryRj())
+    }
+
+    @Test
+    fun listenerCount_isPreservedWhenSameWorkModelIsRebuilt() {
+        val previous = albumDetailModel(
+            baseRjCode = "RJ01588205",
+            rjCode = "RJ01588205",
+            listenerCount = 9
+        )
+        val rebuilt = albumDetailModel(
+            baseRjCode = "RJ01588205",
+            rjCode = "VJ01001234",
+            listenerCount = null
+        )
+
+        val result = rebuilt.withPreservedListenTogetherListenerCount(previous)
+
+        assertEquals(9, result.listenTogetherRjListenerCount)
+    }
+
+    @Test
+    fun listenerCount_isNotPreservedAcrossDifferentWorks() {
+        val previous = albumDetailModel(
+            baseRjCode = "RJ01588205",
+            rjCode = "RJ01588205",
+            listenerCount = 9
+        )
+        val rebuilt = albumDetailModel(
+            baseRjCode = "RJ09999999",
+            rjCode = "RJ09999999",
+            listenerCount = null
+        )
+
+        val result = rebuilt.withPreservedListenTogetherListenerCount(previous)
+
+        assertEquals(null, result.listenTogetherRjListenerCount)
+    }
+}
+
+private fun albumDetailModel(
+    baseRjCode: String,
+    rjCode: String,
+    listenerCount: Int?
+): AlbumDetailModel {
+    return AlbumDetailModel(
+        baseRjCode = baseRjCode,
+        rjCode = rjCode,
+        listenTogetherRjListenerCount = listenerCount,
+        displayAlbum = Album(title = "作品", path = "", rjCode = rjCode),
+        localAlbum = null,
+        dlsiteInfo = null,
+        dlsiteGalleryUrls = emptyList(),
+        dlsiteTrialTracks = emptyList(),
+        dlsiteRecommendations = com.asmr.player.data.remote.scraper.DlsiteRecommendations(),
+        dlsiteWorkno = rjCode,
+        dlsitePlayWorkno = "",
+        dlsiteEditions = emptyList(),
+        dlsiteSelectedLang = "",
+        hasResolvedInitialDlsiteTarget = false,
+        hasLoadedInitialDlsiteContent = false,
+        hasResolvedAsmrOneContent = false,
+        hasResolvedDlsitePlayContent = false,
+        preserveHeaderAlbumMetadata = false,
+        isDlsiteLanguageUserSelected = false,
+        asmrOneWorkId = null,
+        asmrOneSite = null,
+        asmrOneTree = emptyList(),
+        dlsitePlayTree = emptyList(),
+        isLoadingDlsite = false,
+        isLoadingDlsiteTrial = false,
+        isLoadingAsmrOne = false,
+        isLoadingDlsitePlay = false
+    )
 }
