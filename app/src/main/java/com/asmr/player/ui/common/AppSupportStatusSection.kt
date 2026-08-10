@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.common
+package com.asmr.player.ui.common
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
@@ -33,7 +33,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -68,9 +68,9 @@ fun SiteStatusSection(
     modifier: Modifier = Modifier
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val dlsite by viewModel.dlsite.collectAsState()
-    val asmr by viewModel.asmr.collectAsState()
-    val site by viewModel.asmrOneSite.collectAsState()
+    val dlsite by viewModel.dlsite.collectAsStateWithLifecycle()
+    val asmr by viewModel.asmr.collectAsStateWithLifecycle()
+    val site by viewModel.asmrOneSite.collectAsStateWithLifecycle()
     var expanded by remember { mutableStateOf(false) }
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {

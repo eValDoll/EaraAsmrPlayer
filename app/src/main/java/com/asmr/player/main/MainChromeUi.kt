@@ -1,4 +1,4 @@
-﻿package com.asmr.player
+package com.asmr.player
 
 import android.os.Bundle
 import android.view.KeyEvent
@@ -178,6 +178,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 import androidx.media3.common.MediaItem
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.ui.common.AppVolumeVerticalSlider
@@ -351,9 +352,9 @@ internal fun DrawerSiteStatusFooter(
     modifier: Modifier = Modifier
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val dlsite by viewModel.dlsite.collectAsState()
-    val asmr by viewModel.asmr.collectAsState()
-    val site by viewModel.asmrOneSite.collectAsState()
+    val dlsite by viewModel.dlsite.collectAsStateWithLifecycle()
+    val asmr by viewModel.asmr.collectAsStateWithLifecycle()
+    val site by viewModel.asmrOneSite.collectAsStateWithLifecycle()
     var expanded by remember { mutableStateOf(false) }
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         DrawerSiteRow(

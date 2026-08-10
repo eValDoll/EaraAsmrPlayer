@@ -107,6 +107,21 @@ class SettingsRepositoryTest {
     }
 
     @Test
+    fun clearSleepTimer_skipsDataStoreWriteWhenAlreadyCleared() = runBlocking {
+        val inMemoryDataStore = dataStore as InMemoryPreferencesDataStore
+
+        repository.clearSleepTimer()
+
+        assertEquals(0, inMemoryDataStore.updateCount)
+
+        repository.setSleepTimerEndAtMs(1_000L)
+        repository.clearSleepTimer()
+
+        assertEquals(0L, repository.sleepTimerEndAtMs.first())
+        assertEquals(2, inMemoryDataStore.updateCount)
+    }
+
+    @Test
     fun deepSeekTranslationSettings_defaultToThinkingDisabled() = runBlocking {
         val defaults = repository.loadDeepSeekTranslationSettings()
         assertFalse(defaults.thinkingEnabled)
@@ -196,12 +211,15 @@ class SettingsRepositoryTest {
     private class InMemoryPreferencesDataStore : DataStore<Preferences> {
         private val state = MutableStateFlow(emptyPreferences())
         private val updateMutex = Mutex()
+        var updateCount: Int = 0
+            private set
 
         override val data: StateFlow<Preferences> = state
 
         override suspend fun updateData(
             transform: suspend (t: Preferences) -> Preferences
         ): Preferences = updateMutex.withLock {
+            updateCount += 1
             transform(state.value).also { state.value = it }
         }
     }

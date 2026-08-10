@@ -108,7 +108,7 @@ class DownloadsViewModel @Inject constructor(
     private val albumDao: AlbumDao,
     private val messageManager: MessageManager
 ) : ViewModel() {
-    private val workManager = WorkManager.getInstance(context)
+    private val workManager by lazy { WorkManager.getInstance(context) }
     private val subtitleTaskRepository = SubtitleTaskRepository.get(context)
 
     val tasks: StateFlow<List<DownloadTaskUi>> =

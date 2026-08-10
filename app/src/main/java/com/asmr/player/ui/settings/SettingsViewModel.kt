@@ -174,9 +174,11 @@ class SettingsViewModel @Inject constructor(
     val updateState = _updateState.asStateFlow()
     private var updateJob: Job? = null
     private var automaticCheckStarted = false
+    private var settingsDataPrepared = false
 
-    init {
-        appCacheManager.start()
+    fun prepareSettingsData() {
+        if (settingsDataPrepared) return
+        settingsDataPrepared = true
         viewModelScope.launch(Dispatchers.IO) {
             val apiKey = deepSeekApiKeyStore.read()
             val configured = apiKey.isNotBlank()

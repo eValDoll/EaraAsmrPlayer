@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.dlsite
+package com.asmr.player.ui.dlsite
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -30,7 +31,7 @@ fun DlsiteLoginScreen(
     onDone: () -> Unit,
     viewModel: DlsiteLoginViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     var loginId by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showDlsiteCookie by remember { mutableStateOf(false) }

@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.sidepanel
+package com.asmr.player.ui.sidepanel
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -24,7 +24,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateListOf
@@ -92,7 +92,7 @@ fun RecentAlbumsPanel(
     } else {
         hiltViewModel()
     }
-    val baseItems by resolvedViewModel.items.collectAsState()
+    val baseItems by resolvedViewModel.items.collectAsStateWithLifecycle()
     val optimisticOrderIds = remember { mutableStateListOf<Long>() }
     LaunchedEffect(baseItems) {
         val ids = baseItems.map { it.album.id }.toSet()

@@ -45,7 +45,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -126,12 +126,12 @@ fun MiniPlayer(
         viewModel.playback
             .map { it.currentMediaItem }
             .distinctUntilChanged(::sameMiniPlayerMediaItem)
-    }.collectAsState(initial = null)
+    }.collectAsStateWithLifecycle(initialValue = null)
     val isPlaying by remember(viewModel) {
         viewModel.playback
             .map { it.isPlaying }
             .distinctUntilChanged()
-    }.collectAsState(initial = false)
+    }.collectAsStateWithLifecycle(initialValue = false)
     val progressState = remember(viewModel, displayMode) {
         if (displayMode == MiniPlayerDisplayMode.Expanded) {
             viewModel.playback
@@ -140,8 +140,8 @@ fun MiniPlayer(
         } else {
             flowOf(MiniPlayerProgress())
         }
-    }.collectAsState(initial = MiniPlayerProgress())
-    val isFavorite by viewModel.isFavorite.collectAsState()
+    }.collectAsStateWithLifecycle(initialValue = MiniPlayerProgress())
+    val isFavorite by viewModel.isFavorite.collectAsStateWithLifecycle()
     val item = currentItemState ?: return
     val metadata = item.mediaMetadata
     val colorScheme = AsmrTheme.colorScheme

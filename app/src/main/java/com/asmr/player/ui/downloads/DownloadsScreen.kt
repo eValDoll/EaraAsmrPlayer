@@ -74,7 +74,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -151,10 +151,10 @@ fun DownloadsScreen(
     scrollToTopSignal: Long = 0L,
     viewModel: DownloadsViewModel = hiltViewModel()
 ) {
-    val tasks by viewModel.tasks.collectAsState()
-    val translationSubtitleGroups by viewModel.translationSubtitleGroups.collectAsState()
-    val subtitleTasks by viewModel.subtitleTasks.collectAsState()
-    val polishingRjCodes by viewModel.polishingRjCodes.collectAsState()
+    val tasks by viewModel.tasks.collectAsStateWithLifecycle()
+    val translationSubtitleGroups by viewModel.translationSubtitleGroups.collectAsStateWithLifecycle()
+    val subtitleTasks by viewModel.subtitleTasks.collectAsStateWithLifecycle()
+    val polishingRjCodes by viewModel.polishingRjCodes.collectAsStateWithLifecycle()
     val activeDownloadFileCount = remember(tasks) { countActiveDownloadFiles(tasks) }
     val activeTranslationTaskCount = remember(subtitleTasks) { countActiveSubtitleTaskItems(subtitleTasks) }
     val expandedTasks = remember { mutableStateListOf<Long>() }

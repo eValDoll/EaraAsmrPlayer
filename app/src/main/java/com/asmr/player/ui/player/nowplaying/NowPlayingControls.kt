@@ -31,6 +31,7 @@ import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -199,7 +200,7 @@ internal fun PlaybackControls(
                     )
                 }
 
-                val floatingEnabled by viewModel.floatingLyricsEnabled.collectAsState()
+                val floatingEnabled by viewModel.floatingLyricsEnabled.collectAsStateWithLifecycle()
                 IconButton(
                     onClick = { viewModel.toggleFloatingLyrics() },
                     modifier = Modifier.size(actionButtonSize)
@@ -588,7 +589,7 @@ internal fun VolumeControl(
     onExpandedChange: (Boolean) -> Unit,
     compactLayout: Boolean = false
 ) {
-    val volume by viewModel.appVolumePercent.collectAsState()
+    val volume by viewModel.appVolumePercent.collectAsStateWithLifecycle()
     var lastNonZeroVolume by remember { mutableIntStateOf(AppVolume.DefaultPercent) }
     var lastInteractionAt by remember { mutableLongStateOf(0L) }
     var hasObservedInitialHardwareVolumeEventTick by remember { mutableStateOf(false) }

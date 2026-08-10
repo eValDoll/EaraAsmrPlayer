@@ -29,7 +29,7 @@ import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,7 +56,7 @@ fun PlaylistPickerScreen(
     embeddedInDialog: Boolean = false,
     viewModel: PlaylistsViewModel = hiltViewModel()
 ) {
-    val playlists by viewModel.playlists.collectAsState()
+    val playlists by viewModel.playlists.collectAsStateWithLifecycle()
     val userPlaylists = remember(playlists) { playlists.filter { it.category == "user" } }
     val colorScheme = AsmrTheme.colorScheme
     val listState = rememberLazyListState()

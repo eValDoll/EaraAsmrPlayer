@@ -79,6 +79,7 @@ class SearchViewModel @Inject constructor(
     private val asmrOneAvailabilityCache =
         BoundedLruCache<String, CachedAsmrOneAvailability>(maxEntries = 1_000)
     private val bootstrapped = AtomicBoolean(false)
+    private val hotKeywordsRequested = AtomicBoolean(false)
     private var searchResultRevision: Long = 0L
 
     private val _uiState = MutableStateFlow<SearchUiState>(SearchUiState.Idle)
@@ -94,11 +95,8 @@ class SearchViewModel @Inject constructor(
     private var currentLocale: String? = "ja_JP"
     private var lastRequestedKeyword: String = ""
 
-    init {
-        refreshHotKeywordTerms()
-    }
-
-    private fun refreshHotKeywordTerms() {
+    fun ensureHotKeywordTermsLoaded() {
+        if (!hotKeywordsRequested.compareAndSet(false, true)) return
         if (!hotListeningApi.isBackendConfigured) {
             _showHotKeywordFallback.value = true
             return

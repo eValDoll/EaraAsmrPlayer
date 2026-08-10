@@ -15,7 +15,7 @@ import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSiz
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -178,7 +178,7 @@ private fun BenchmarkScenarioScreen(
         BenchmarkScenario.FavoritesDetail -> {
             val items by playlistRepository
                 .observePlaylistItemsWithSubtitles(seedSummary.favoritesPlaylistId)
-                .collectAsState(initial = emptyList())
+                .collectAsStateWithLifecycle(initialValue = emptyList())
             PlaylistDetailContent(
                 windowSizeClass = windowSizeClass,
                 title = PlaylistRepository.PLAYLIST_FAVORITES,
@@ -201,7 +201,7 @@ private fun BenchmarkScenarioScreen(
         BenchmarkScenario.PlaylistDetail -> {
             val items by playlistRepository
                 .observePlaylistItemsWithSubtitles(seedSummary.detailPlaylistId)
-                .collectAsState(initial = emptyList())
+                .collectAsStateWithLifecycle(initialValue = emptyList())
             PlaylistDetailContent(
                 windowSizeClass = windowSizeClass,
                 title = seedSummary.detailPlaylistName,
@@ -247,7 +247,7 @@ private fun BenchmarkScenarioScreen(
         BenchmarkScenario.GroupDetail -> {
             val tracks by albumGroupRepository
                 .observeGroupTracks(seedSummary.detailGroupId)
-                .collectAsState(initial = emptyList())
+                .collectAsStateWithLifecycle(initialValue = emptyList())
             AlbumGroupDetailContent(
                 windowSizeClass = windowSizeClass,
                 title = seedSummary.detailGroupName,
