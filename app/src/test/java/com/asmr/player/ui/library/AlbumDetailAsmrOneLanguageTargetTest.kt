@@ -18,7 +18,7 @@ class AlbumDetailAsmrOneLanguageTargetTest {
             dlsiteWorkno = "RJ01598807",
             originalRj = "RJ01579177",
             selectedLang = "CHI_HANT",
-            preferInitialCollectedRj = true
+            preferInitialRj = true
         )
 
         assertEquals(listOf("RJ01612762", "RJ01598807"), candidates)
@@ -32,7 +32,7 @@ class AlbumDetailAsmrOneLanguageTargetTest {
             dlsiteWorkno = "RJ01593950",
             originalRj = "RJ01583802",
             selectedLang = "CHI_HANS",
-            preferInitialCollectedRj = false
+            preferInitialRj = false
         )
 
         assertEquals(listOf("RJ01593950"), candidates)

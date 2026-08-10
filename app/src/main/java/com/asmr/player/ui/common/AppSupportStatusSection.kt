@@ -1,54 +1,16 @@
 package com.asmr.player.ui.common
 
-import androidx.compose.foundation.background
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.RowScope
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.ArrowDropDown
-import androidx.compose.material.icons.rounded.Check
-import androidx.compose.material.icons.rounded.Close
-import androidx.compose.material.icons.rounded.Refresh
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
-import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.asmr.player.ui.drawer.DrawerStatusViewModel
-import com.asmr.player.ui.drawer.SiteStatus
-import com.asmr.player.ui.drawer.SiteStatusType
 import com.asmr.player.ui.theme.AsmrTheme
 
 @Composable
@@ -71,7 +33,6 @@ fun SiteStatusSection(
     val dlsite by viewModel.dlsite.collectAsStateWithLifecycle()
     val asmr by viewModel.asmr.collectAsStateWithLifecycle()
     val site by viewModel.asmrOneSite.collectAsStateWithLifecycle()
-    var expanded by remember { mutableStateOf(false) }
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
@@ -79,174 +40,20 @@ fun SiteStatusSection(
             style = MaterialTheme.typography.labelSmall,
             color = colorScheme.textSecondary
         )
-        SiteStatusRow(
+        SiteStatusTestRow(
             name = "dlsite.com",
             status = dlsite,
             onTest = viewModel::testDlsite
         )
-        SiteStatusRow(
+        SiteStatusTestRow(
             status = asmr,
             onTest = viewModel::testAsmrOne,
             nameContent = {
-                Box {
-                    Row(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .clickable { expanded = true }
-                            .padding(horizontal = 4.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = "asmr-$site",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = colorScheme.textPrimary,
-                            maxLines = 1
-                        )
-                        Icon(
-                            imageVector = Icons.Rounded.ArrowDropDown,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = colorScheme.textSecondary
-                        )
-                    }
-
-                    DropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false }
-                    ) {
-                        listOf(100, 200, 300).forEach { option ->
-                            val selected = option == site
-                            DropdownMenuItem(
-                                text = { Text(option.toString()) },
-                                onClick = {
-                                    viewModel.setAsmrOneSite(option)
-                                    expanded = false
-                                },
-                                leadingIcon = {
-                                    if (selected) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Check,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(18.dp),
-                                            tint = colorScheme.primary
-                                        )
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
+                AsmrOneSiteSelector(
+                    selectedSite = site,
+                    onSiteSelected = viewModel::setAsmrOneSite
+                )
             }
         )
-    }
-}
-
-@Composable
-private fun SiteStatusRow(
-    status: SiteStatus,
-    onTest: () -> Unit,
-    name: String? = null,
-    nameContent: (@Composable RowScope.() -> Unit)? = null
-) {
-    val colorScheme = AsmrTheme.colorScheme
-    val isDark = colorScheme.isDark
-    val dotColor = when (status.type) {
-        SiteStatusType.Ok -> Color(0xFF2E7D32)
-        SiteStatusType.Fail -> Color(0xFFC62828)
-        SiteStatusType.Testing -> Color(0xFFF9A825)
-        SiteStatusType.Unknown -> colorScheme.onSurface.copy(alpha = 0.35f)
-    }
-    val statusIcon = when (status.type) {
-        SiteStatusType.Ok -> Icons.Rounded.Check
-        SiteStatusType.Fail -> Icons.Rounded.Close
-        SiteStatusType.Testing -> Icons.Rounded.Refresh
-        SiteStatusType.Unknown -> null
-    }
-
-    var rotationAngle by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(status.type) {
-        if (status.type == SiteStatusType.Testing) {
-            while (true) {
-                rotationAngle = (rotationAngle + 10f) % 360f
-                kotlinx.coroutines.delay(50)
-            }
-        } else {
-            rotationAngle = 0f
-        }
-    }
-
-    val shape = RoundedCornerShape(16.dp)
-    val elevation = if (isDark) 0.dp else 1.dp
-    val containerColor = if (isDark) Color(0xFF1E1E1E) else Color(0xFFF3F4F6)
-
-    ElevatedCard(
-        modifier = Modifier
-            .fillMaxWidth()
-            .then(
-                if (isDark) {
-                    Modifier.border(
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)),
-                        shape = shape
-                    )
-                } else {
-                    Modifier
-                }
-            ),
-        shape = shape,
-        colors = CardDefaults.elevatedCardColors(containerColor = containerColor),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = elevation)
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .clip(CircleShape)
-                    .background(dotColor)
-            )
-
-            if (name != null) {
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = colorScheme.textPrimary,
-                    maxLines = 1
-                )
-            } else if (nameContent != null) {
-                nameContent()
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            if (statusIcon != null) {
-                Icon(
-                    imageVector = statusIcon,
-                    contentDescription = null,
-                    modifier = Modifier
-                        .size(20.dp)
-                        .graphicsLayer { rotationZ = rotationAngle },
-                    tint = dotColor
-                )
-            }
-
-            FilledTonalButton(
-                onClick = onTest,
-                modifier = Modifier
-                    .height(30.dp)
-                    .widthIn(min = 48.dp),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp),
-                colors = androidx.compose.material3.ButtonDefaults.filledTonalButtonColors(
-                    containerColor = colorScheme.primarySoft,
-                    contentColor = colorScheme.onPrimaryContainer
-                ),
-                shape = RoundedCornerShape(10.dp)
-            ) {
-                Text(text = "测试", style = MaterialTheme.typography.labelSmall, maxLines = 1)
-            }
-        }
     }
 }

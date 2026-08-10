@@ -34,11 +34,13 @@ import com.asmr.player.data.lyrics.deriveLyricsRelativePathNoExt
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.ONLINE_DIRECTORY_REQUEST_TIMEOUT_MS
 import com.asmr.player.data.remote.api.AsmrOneAvailabilityApi
+import com.asmr.player.data.remote.api.AsmrOneEndpoint
 import com.asmr.player.data.remote.api.AsmrOneOtherLanguageEditionInDb
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.remote.auth.buildDlsiteCookieHeader
 import com.asmr.player.data.remote.crawler.AsmrOneCrawler
+import com.asmr.player.data.remote.crawler.AsmrOneTracksResult
 import com.asmr.player.data.remote.crawler.asmrOneWorkMatchesRj
 import com.asmr.player.data.remote.dlsite.DLSITE_PLAY_PREVIEW_CACHE_VERSION
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
@@ -83,6 +85,7 @@ import javax.inject.Named
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Deferred
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
@@ -204,8 +207,9 @@ class AlbumDetailViewModel @Inject constructor(
     private val asmrOneAttemptedRj = linkedSetOf<String>()
     private val dlsitePlayAttemptedRj = linkedSetOf<String>()
     private val asmrOneCollectedCache = linkedMapOf<String, Pair<Long, Boolean?>>()
-    private val asmrOneResolvedCache = linkedMapOf<String, Pair<Long, Pair<String, Int?>>>()
-    private val asmrOneTracksCache = linkedMapOf<String, Pair<Long, List<AsmrOneTrackNodeResponse>>>()
+    private val asmrOneResolvedCache = linkedMapOf<String, Pair<Long, Pair<String, Int?>?>>()
+    private val asmrOneResolutionInFlight = mutableMapOf<String, Deferred<Pair<String, Int?>?>>()
+    private val asmrOneTracksCache = linkedMapOf<String, Pair<Long, AsmrOneTracksResult>>()
     private val autoFallbackToJpnOnceByKey = linkedSetOf<String>()
 
     private val treeExpandedByKey = linkedMapOf<String, List<String>>()
@@ -281,7 +285,7 @@ class AlbumDetailViewModel @Inject constructor(
         val now = SystemClock.elapsedRealtime()
         val cached = asmrOneCollectedCache[key]
         if (cached != null && (now - cached.first) <= 60_000L) return cached.second
-        val result = runCatching { asmrOneCrawler.hasWorkFast(key, timeoutMs = timeoutMs) }.getOrNull()
+        val result = resolveAsmrOneWork(key, timeoutMs = timeoutMs) != null
         asmrOneCollectedCache[key] = now to result
         if (asmrOneCollectedCache.size > 300) {
             val firstKey = asmrOneCollectedCache.entries.firstOrNull()?.key
@@ -290,56 +294,70 @@ class AlbumDetailViewModel @Inject constructor(
         return result
     }
 
-    private fun asmrOneTracksCacheKey(site: Int?, workId: String): String {
-        return "${site ?: 0}|${workId.trim()}"
+    private fun asmrOneTracksCacheKey(workId: String): String {
+        return workId.trim()
     }
 
     private suspend fun resolveAsmrOneWork(
         workNo: String,
-        timeoutMs: Long = 1_800L
+        timeoutMs: Long = 12_000L
     ): Pair<String, Int?>? {
         val key = workNo.trim().uppercase()
         if (key.isBlank()) return null
+        if (asmrOneCrawler.selectedEndpoint() == AsmrOneEndpoint.BACKUP) return null
         val now = SystemClock.elapsedRealtime()
         val cached = asmrOneResolvedCache[key]
-        if (cached != null && (now - cached.first) <= 10 * 60_000L) return cached.second
-
-        val result = runCatching { withTimeoutOrNull(timeoutMs) { asmrOneCrawler.searchWithTrace(key) } }.getOrNull()
-        val found = result
-            ?.response
-            ?.works
-            ?.firstOrNull { w -> asmrOneWorkMatchesRj(w, key) }
-        val workId = found?.id?.toString()?.trim().orEmpty()
-        if (workId.isBlank()) return null
-        val site = result?.trace?.takeIf { it.fallbackUsed }?.fallbackSite
-        val resolved = workId to site
-        asmrOneResolvedCache[key] = now to resolved
-        if (asmrOneResolvedCache.size > 500) {
-            val firstKey = asmrOneResolvedCache.entries.firstOrNull()?.key
-            if (firstKey != null) asmrOneResolvedCache.remove(firstKey)
+        if (cached != null) {
+            val ttlMs = if (cached.second == null) 5_000L else 10 * 60_000L
+            if ((now - cached.first) <= ttlMs) return cached.second
         }
-        return resolved
+
+        val request = asmrOneResolutionInFlight[key] ?: viewModelScope.async {
+            val result = runCatching { asmrOneCrawler.searchWithTrace(key) }.getOrNull()
+            val found = result
+                ?.response
+                ?.works
+                ?.firstOrNull { work -> asmrOneWorkMatchesRj(work, key) }
+            val workId = found?.id?.toString()?.trim().orEmpty()
+            val resolved = workId
+                .takeIf { it.isNotBlank() }
+                ?.let { it to result?.trace?.site }
+            asmrOneResolvedCache[key] = SystemClock.elapsedRealtime() to resolved
+            if (asmrOneResolvedCache.size > 500) {
+                val firstKey = asmrOneResolvedCache.entries.firstOrNull()?.key
+                if (firstKey != null) asmrOneResolvedCache.remove(firstKey)
+            }
+            resolved
+        }.also { deferred ->
+            asmrOneResolutionInFlight[key] = deferred
+            deferred.invokeOnCompletion {
+                asmrOneResolutionInFlight.remove(key, deferred)
+            }
+        }
+        return withTimeoutOrNull(timeoutMs) { request.await() }
     }
 
-    private suspend fun getAsmrOneTracksCached(site: Int?, workId: String): List<AsmrOneTrackNodeResponse> {
+    private suspend fun getAsmrOneTracksCached(workId: String): AsmrOneTracksResult {
         val normalizedId = workId.trim()
-        if (normalizedId.isBlank()) return emptyList()
-        val cacheKey = asmrOneTracksCacheKey(site, normalizedId)
+        if (normalizedId.isBlank()) return AsmrOneTracksResult(emptyList(), null)
+        val cacheKey = asmrOneTracksCacheKey(normalizedId)
         val now = SystemClock.elapsedRealtime()
         val cached = asmrOneTracksCache[cacheKey]
         if (cached != null && (now - cached.first) <= 10 * 60_000L) return cached.second
-        val tree = runCatching {
-            if (site != null) asmrOneCrawler.getTracksFromSite(site, normalizedId) else asmrOneCrawler.getTracks(normalizedId)
-        }.getOrDefault(emptyList())
-        asmrOneTracksCache[cacheKey] = now to tree
-        if (asmrOneTracksCache.size > 200) {
-            val firstKey = asmrOneTracksCache.entries.firstOrNull()?.key
-            if (firstKey != null) asmrOneTracksCache.remove(firstKey)
+        val result = runCatching {
+            asmrOneCrawler.getTracksWithTrace(normalizedId)
+        }.getOrDefault(AsmrOneTracksResult(emptyList(), null))
+        if (result.tree.isNotEmpty()) {
+            asmrOneTracksCache[cacheKey] = now to result
+            if (asmrOneTracksCache.size > 200) {
+                val firstKey = asmrOneTracksCache.entries.firstOrNull()?.key
+                if (firstKey != null) asmrOneTracksCache.remove(firstKey)
+            }
         }
-        return tree
+        return result
     }
 
-    private suspend fun fetchBackendAsmrOneTracksByRj(rj: String): Pair<String, List<AsmrOneTrackNodeResponse>>? {
+    private suspend fun fetchBackupAsmrOneTracksByRj(rj: String): Pair<String, List<AsmrOneTrackNodeResponse>>? {
         val normalizedRj = rj.trim().uppercase()
         if (!RJ_CODE_REGEX.matches(normalizedRj)) return null
         val result = runCatching { asmrOneAvailabilityApi.getTrackTreeByRj(normalizedRj) }.getOrNull()
@@ -429,6 +447,8 @@ class AlbumDetailViewModel @Inject constructor(
         dlsiteTrialLoadJob = null
         asmrOneLoadJob?.cancel()
         asmrOneLoadJob = null
+        asmrOneResolutionInFlight.values.forEach { it.cancel() }
+        asmrOneResolutionInFlight.clear()
         dlsitePlayLoadJob?.cancel()
         dlsitePlayLoadJob = null
 
@@ -1011,9 +1031,9 @@ class AlbumDetailViewModel @Inject constructor(
 
                 val resolved = resolveAsmrOneWork(jpnWorkno, timeoutMs = 1_200L) ?: resolveAsmrOneWork(clean, timeoutMs = 1_200L)
                 val picked = if (resolved != null) {
-                    val (workId, site) = resolved
+                    val workId = resolved.first
                     val details = withTimeoutOrNull(1_500L) {
-                        if (site != null) asmrOneCrawler.getDetailsFromSite(site, workId) else asmrOneCrawler.getDetails(workId)
+                        asmrOneCrawler.getDetails(workId)
                     }
                     val other = details?.other_language_editions_in_db.orEmpty()
                     val hasHans = other.any { it.lang.orEmpty().contains("简体") || it.lang.orEmpty().contains("簡体") }
@@ -1090,13 +1110,9 @@ class AlbumDetailViewModel @Inject constructor(
         val resolved = resolveAsmrOneWork(jpnWorkno, timeoutMs = 1_200L)
             ?: resolveAsmrOneWork(clean, timeoutMs = 1_200L)
             ?: return DlsiteChinesePreference.None
-        val (workId, site) = resolved
+        val workId = resolved.first
         val details = withTimeoutOrNull(1_500L) {
-            if (site != null) {
-                asmrOneCrawler.getDetailsFromSite(site, workId)
-            } else {
-                asmrOneCrawler.getDetails(workId)
-            }
+            asmrOneCrawler.getDetails(workId)
         } ?: return DlsiteChinesePreference.None
         val otherEditions = details.other_language_editions_in_db.orEmpty()
         val hansWorkno = editions.firstOrNull { it.lang.equals("CHI_HANS", ignoreCase = true) }
@@ -1486,10 +1502,11 @@ class AlbumDetailViewModel @Inject constructor(
         asmrOneAttemptedRj.remove(keyRj)
         asmrOneCollectedCache.remove(keyRj)
         asmrOneResolvedCache.remove(keyRj)
+        asmrOneResolutionInFlight.remove(keyRj)?.cancel()
 
         val oldWorkId = current.model.asmrOneWorkId?.trim().orEmpty()
         if (oldWorkId.isNotBlank()) {
-            val cacheKey = asmrOneTracksCacheKey(current.model.asmrOneSite, oldWorkId)
+            val cacheKey = asmrOneTracksCacheKey(oldWorkId)
             asmrOneTracksCache.remove(cacheKey)
         }
 
@@ -1597,16 +1614,15 @@ class AlbumDetailViewModel @Inject constructor(
                     ?.uppercase()
                     .orEmpty()
                 val originalRj = jpnWorkno.ifBlank { latestBase.ifBlank { keyRj } }
-                val preferInitialCollectedRj = latest.displayAlbum.hasAsmrOne &&
-                    !latest.isDlsiteLanguageUserSelected &&
+                val preferInitialRj = !latest.isDlsiteLanguageUserSelected &&
                     RJ_CODE_REGEX.matches(latestBase)
-                val backendRjs = asmrOneTrackRjCandidates(
+                val directoryRjs = asmrOneTrackRjCandidates(
                     baseRj = latestBase,
                     currentRj = keyRj,
                     dlsiteWorkno = latest.dlsiteWorkno,
                     originalRj = originalRj,
                     selectedLang = selectedLang,
-                    preferInitialCollectedRj = preferInitialCollectedRj
+                    preferInitialRj = preferInitialRj
                 )
                 fun finishWithResolvedAsmrOneTree(
                     workId: String?,
@@ -1641,22 +1657,29 @@ class AlbumDetailViewModel @Inject constructor(
                     return true
                 }
 
-                suspend fun loadBackendFallbackAndFinishIfFound(): Boolean {
-                    val backendFallback = fetchAsmrOneTracksFromBackend(
-                        backendRjs = backendRjs,
-                        fetchBackend = { fetchBackendAsmrOneTracksByRj(it) }
+                suspend fun loadBackupEndpointAndFinishIfFound(): Boolean {
+                    val backupResult = fetchAsmrOneTracksFromBackup(
+                        candidateRjs = directoryRjs,
+                        fetchBackup = { fetchBackupAsmrOneTracksByRj(it) }
                     )
-                    if (backendFallback.third.isEmpty()) return false
+                    if (backupResult.second.isEmpty()) return false
                     return finishWithResolvedAsmrOneTree(
-                        workId = backendFallback.first,
-                        site = null,
-                        tree = backendFallback.third
+                        workId = backupResult.first,
+                        site = AsmrOneEndpoint.BACKUP,
+                        tree = backupResult.second
                     )
                 }
 
+                if (asmrOneCrawler.selectedEndpoint() == AsmrOneEndpoint.BACKUP) {
+                    if (!loadBackupEndpointAndFinishIfFound()) {
+                        asmrOneAttemptedRj.remove(keyRj)
+                        finishAsmrOneLoad(keyRj, resolved = true)
+                    }
+                    return@launch
+                }
+
                 suspend fun fallbackToJapaneseDirectoryIfAvailable(
-                    originalWorkId: String,
-                    site: Int?
+                    originalWorkId: String
                 ): Boolean {
                     if (
                         latest.isDlsiteLanguageUserSelected ||
@@ -1664,18 +1687,13 @@ class AlbumDetailViewModel @Inject constructor(
                     ) {
                         return false
                     }
-                    val crawlerTree = getAsmrOneTracksCached(site, originalWorkId)
-                    val backendTree = if (crawlerTree.isEmpty()) {
-                        fetchBackendAsmrOneTracksByRj(originalRj)?.second.orEmpty()
-                    } else {
-                        emptyList()
-                    }
+                    val crawlerResult = getAsmrOneTracksCached(originalWorkId)
                     if (
                         !shouldFallbackToJapaneseDirectory(
                             selectedLang = selectedLang,
                             isLanguageUserSelected = latest.isDlsiteLanguageUserSelected,
                             hasSelectedDirectoryResources = false,
-                            hasJapaneseDirectoryResources = crawlerTree.isNotEmpty() || backendTree.isNotEmpty()
+                            hasJapaneseDirectoryResources = crawlerResult.tree.isNotEmpty()
                         )
                     ) {
                         return false
@@ -1694,16 +1712,18 @@ class AlbumDetailViewModel @Inject constructor(
                     return true
                 }
 
-                if (preferInitialCollectedRj) {
+                var preferredInitialResolution: Pair<String, Int?>? = null
+                if (preferInitialRj) {
                     val preferredInitial = resolveAsmrOneWork(latestBase)
                     if (preferredInitial != null) {
-                        val (preferredWorkId, preferredSite) = preferredInitial
-                        val preferredTree = getAsmrOneTracksCached(preferredSite, preferredWorkId)
-                        if (preferredTree.isNotEmpty()) {
+                        preferredInitialResolution = preferredInitial
+                        val preferredWorkId = preferredInitial.first
+                        val preferredResult = getAsmrOneTracksCached(preferredWorkId)
+                        if (preferredResult.tree.isNotEmpty()) {
                             finishWithResolvedAsmrOneTree(
                                 workId = preferredWorkId,
-                                site = preferredSite,
-                                tree = preferredTree
+                                site = preferredResult.site,
+                                tree = preferredResult.tree
                             )
                             return@launch
                         }
@@ -1749,54 +1769,66 @@ class AlbumDetailViewModel @Inject constructor(
                         selectDlsiteLanguageInternal(fallbackLang, isUserSelection = false)
                         return@launch
                     }
-                    if (loadBackendFallbackAndFinishIfFound()) return@launch
-                    asmrOneAttemptedRj.remove(keyRj)
-                    finishAsmrOneLoad(keyRj, resolved = true)
-                    return@launch
                 }
 
-                val resolvedOriginal = resolveAsmrOneWork(originalRj)
-                    ?: resolveAsmrOneWork(keyRj)
-                    ?: run {
-                        if (loadBackendFallbackAndFinishIfFound()) return@launch
-                        asmrOneAttemptedRj.remove(keyRj)
-                        if (token != asmrOneLoadToken) {
-                            finishAsmrOneLoad(keyRj, resolved = false)
-                        } else {
-                            finishAsmrOneLoad(keyRj, resolved = true)
-                        }
-                        return@launch
+                var resolvedOriginal = preferredInitialResolution.takeIf {
+                    latestBase.equals(originalRj, ignoreCase = true) ||
+                        latestBase.equals(keyRj, ignoreCase = true)
+                }
+                if (resolvedOriginal == null) {
+                    val directRjs = listOf(originalRj, keyRj)
+                        .map { it.trim().uppercase() }
+                        .filter { RJ_CODE_REGEX.matches(it) }
+                        .distinct()
+                    for (candidateRj in directRjs) {
+                        val resolved = resolveAsmrOneWork(candidateRj) ?: continue
+                        resolvedOriginal = resolved
+                        break
                     }
-                val (originalWorkId, site) = resolvedOriginal
+                }
+                if (resolvedOriginal == null) {
+                    asmrOneAttemptedRj.remove(keyRj)
+                    if (token != asmrOneLoadToken) {
+                        finishAsmrOneLoad(keyRj, resolved = false)
+                    } else {
+                        finishAsmrOneLoad(keyRj, resolved = true)
+                    }
+                    return@launch
+                }
+                val originalWorkId = resolvedOriginal.first
 
                 val originalDetails = runCatching {
-                    if (site != null) asmrOneCrawler.getDetailsFromSite(site, originalWorkId) else asmrOneCrawler.getDetails(originalWorkId)
+                    asmrOneCrawler.getDetails(originalWorkId)
                 }.getOrNull()
 
                 val workId = resolveAsmrOneTrackWorkId(
                     resolvedWorkId = originalWorkId,
                     resolvedDetails = originalDetails,
                     selectedLang = selectedLang,
-                    selectedRjs = backendRjs
+                    selectedRjs = directoryRjs
                 )
-                val tree = workId
-                    ?.let { getAsmrOneTracksCached(site, it) }
-                    .orEmpty()
+                val trackResult = workId
+                    ?.let { getAsmrOneTracksCached(it) }
+                    ?: AsmrOneTracksResult(emptyList(), null)
                 if (token != asmrOneLoadToken) {
                     asmrOneAttemptedRj.remove(keyRj)
                     finishAsmrOneLoad(keyRj, resolved = false)
                     return@launch
                 }
                 if (workId.isNullOrBlank()) {
-                    if (loadBackendFallbackAndFinishIfFound()) return@launch
-                    if (fallbackToJapaneseDirectoryIfAvailable(originalWorkId, site)) return@launch
+                    if (fallbackToJapaneseDirectoryIfAvailable(originalWorkId)) return@launch
                     asmrOneAttemptedRj.remove(keyRj)
                     finishAsmrOneLoad(keyRj, resolved = true)
                     return@launch
                 }
-                if (tree.isEmpty() && loadBackendFallbackAndFinishIfFound()) return@launch
-                if (tree.isEmpty() && fallbackToJapaneseDirectoryIfAvailable(originalWorkId, site)) return@launch
-                finishWithResolvedAsmrOneTree(workId = workId, site = site, tree = tree)
+                if (trackResult.tree.isEmpty() && fallbackToJapaneseDirectoryIfAvailable(originalWorkId)) {
+                    return@launch
+                }
+                finishWithResolvedAsmrOneTree(
+                    workId = workId,
+                    site = trackResult.site,
+                    tree = trackResult.tree
+                )
             } catch (e: CancellationException) {
                 asmrOneAttemptedRj.remove(keyRj)
                 finishAsmrOneLoad(keyRj, resolved = false)

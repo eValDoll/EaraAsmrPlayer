@@ -371,11 +371,11 @@ internal fun asmrOneTrackRjCandidates(
     dlsiteWorkno: String,
     originalRj: String,
     selectedLang: String,
-    preferInitialCollectedRj: Boolean
+    preferInitialRj: Boolean
 ): List<String> {
     val normalizedLang = selectedLang.trim().uppercase().ifBlank { "JPN" }
     return buildList {
-        if (preferInitialCollectedRj) add(baseRj)
+        if (preferInitialRj) add(baseRj)
         add(currentRj)
         add(dlsiteWorkno)
         if (normalizedLang == "JPN") {
@@ -511,23 +511,23 @@ internal fun buildDlsiteTrialDownloadTree(trialTracks: List<Track>): List<AsmrOn
     }
 }
 
-internal suspend fun fetchAsmrOneTracksFromBackend(
-    backendRjs: List<String>,
-    fetchBackend: suspend (String) -> Pair<String, List<AsmrOneTrackNodeResponse>>?
-): Triple<String?, Int?, List<AsmrOneTrackNodeResponse>> {
-    backendRjs
+internal suspend fun fetchAsmrOneTracksFromBackup(
+    candidateRjs: List<String>,
+    fetchBackup: suspend (String) -> Pair<String, List<AsmrOneTrackNodeResponse>>?
+): Pair<String?, List<AsmrOneTrackNodeResponse>> {
+    candidateRjs
         .asSequence()
         .map { it.trim().uppercase() }
         .filter { it.isNotBlank() }
         .distinct()
         .forEach { rj ->
-            val backendResult = runCatching { fetchBackend(rj) }.getOrNull()
-            val tree = backendResult?.second.orEmpty()
-            if (backendResult != null && tree.isNotEmpty()) {
-                return Triple(backendResult.first.takeIf { it.isNotBlank() }, null, tree)
+            val backupResult = runCatching { fetchBackup(rj) }.getOrNull()
+            val tree = backupResult?.second.orEmpty()
+            if (backupResult != null && tree.isNotEmpty()) {
+                return backupResult.first.takeIf { it.isNotBlank() } to tree
             }
         }
-    return Triple(null, null, emptyList())
+    return null to emptyList()
 }
 
 private fun inferDlsiteTrialMediaType(title: String, url: String): TreeFileType? {
