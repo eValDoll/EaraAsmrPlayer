@@ -269,7 +269,9 @@ class SettingsRepository private constructor(
     }
 
     suspend fun clearSleepTimer() {
-        setSleepTimerEndAtMs(0L)
+        if (sleepTimerEndAtMs.first() != 0L) {
+            setSleepTimerEndAtMs(0L)
+        }
     }
 
     suspend fun setSleepTimerLastDurationMin(minutes: Int) {

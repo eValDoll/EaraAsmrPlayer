@@ -121,6 +121,9 @@ fun SettingsScreen(
     scrollToTopSignal: Long = 0L,
     onHorizontalControlInteractionChanged: (Boolean) -> Unit = {},
 ) {
+    LaunchedEffect(isDataActive, viewModel) {
+        if (isDataActive) viewModel.prepareSettingsData()
+    }
     val floatingLyricsEnabled by viewModel.floatingLyricsEnabled.collectAsStateWhileActive(isDataActive)
     val floatingSettings by viewModel.floatingLyricsSettings.collectAsStateWhileActive(isDataActive)
     val lyricsPageSettings by viewModel.lyricsPageSettings.collectAsStateWhileActive(isDataActive)

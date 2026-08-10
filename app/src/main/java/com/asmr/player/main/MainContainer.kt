@@ -238,6 +238,8 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 import androidx.media3.common.MediaItem
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -476,7 +478,7 @@ private fun AlbumDetailRouteTopBar(
     onEditRj: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val detailState by viewModel.uiState.collectAsState()
+    val detailState by viewModel.uiState.collectAsStateWithLifecycle()
     val detailModel = (detailState as? AlbumDetailUiState.Success)?.model
     val showManualBind = detailModel?.localAlbum?.id?.let { it > 0L } == true
 
@@ -765,6 +767,7 @@ fun MainContainer(
     forceImmersive: Boolean,
     volumeKeyEventTick: Long
 ) {
+    val activityViewModelStoreOwner = checkNotNull(LocalViewModelStoreOwner.current)
     val navController = rememberNavController()
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
@@ -835,8 +838,8 @@ fun MainContainer(
         )
     }
     val bottomNavItems = remember { bottomChromeNavItems() }
-    val storedMiniPlayerDisplayMode by settingsDataStore.miniPlayerDisplayMode.collectAsState(
-        initial = MiniPlayerDisplayMode.CoverOnly.name
+    val storedMiniPlayerDisplayMode by settingsDataStore.miniPlayerDisplayMode.collectAsStateWithLifecycle(
+        initialValue = MiniPlayerDisplayMode.CoverOnly.name
     )
     var miniPlayerDisplayMode by rememberSaveable { mutableStateOf(MiniPlayerDisplayMode.CoverOnly) }
     val primaryPagerRoutes = remember(bottomNavItems) { bottomNavItems.map { it.route } }
@@ -905,19 +908,13 @@ fun MainContainer(
     var albumDetailExitInProgress by remember { mutableStateOf(false) }
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
-    val searchViewModel: SearchViewModel = hiltViewModel()
-    val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
-    val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
-    val downloadsViewModel: DownloadsViewModel = hiltViewModel()
-    val settingsViewModel: SettingsViewModel = hiltViewModel()
-    val dlsiteLoginViewModel: DlsiteLoginViewModel = hiltViewModel()
-    val listeningCalendarViewModel: com.asmr.player.ui.calendar.ListeningCalendarViewModel = hiltViewModel()
-    val hotListeningViewModel: HotListeningViewModel = hiltViewModel()
+    val downloadsViewModel: DownloadsViewModel = hiltViewModel(activityViewModelStoreOwner)
+    val settingsViewModel: SettingsViewModel = hiltViewModel(activityViewModelStoreOwner)
     val hasCurrentMediaItem by remember(playerViewModel) {
         playerViewModel.playback
             .map { it.currentMediaItem != null }
             .distinctUntilChanged()
-    }.collectAsState(initial = false)
+    }.collectAsStateWithLifecycle(initialValue = false)
     val sharedPlayerItem by remember(playerViewModel) {
         playerViewModel.playback
             .map { it.currentMediaItem }
@@ -926,11 +923,11 @@ fun MainContainer(
                     old?.localConfiguration?.uri == new?.localConfiguration?.uri &&
                     old?.mediaMetadata?.artworkUri == new?.mediaMetadata?.artworkUri
             }
-    }.collectAsState(initial = null)
-    val drawerStatusViewModel: DrawerStatusViewModel = hiltViewModel()
-    val bulkProgress by libraryViewModel.bulkProgress.collectAsState()
-    val cloudSyncSelectionDialogState by libraryViewModel.cloudSyncSelectionDialogState.collectAsState()
-    val appVolumePercent by playerViewModel.appVolumePercent.collectAsState()
+    }.collectAsStateWithLifecycle(initialValue = null)
+    val drawerStatusViewModel: DrawerStatusViewModel = hiltViewModel(activityViewModelStoreOwner)
+    val bulkProgress by libraryViewModel.bulkProgress.collectAsStateWithLifecycle()
+    val cloudSyncSelectionDialogState by libraryViewModel.cloudSyncSelectionDialogState.collectAsStateWithLifecycle()
+    val appVolumePercent by playerViewModel.appVolumePercent.collectAsStateWithLifecycle()
     var showManualRjDialog by remember { mutableStateOf(false) }
     var manualRjInput by remember { mutableStateOf("") }
     var showHardwareVolumeOverlay by remember { mutableStateOf(false) }
@@ -972,7 +969,7 @@ fun MainContainer(
     val isPhone = configuration.smallestScreenWidthDp < 600
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
-    val updateState by settingsViewModel.updateState.collectAsState()
+    val updateState by settingsViewModel.updateState.collectAsStateWithLifecycle()
     var automaticUpdateDialogDismissed by rememberSaveable { mutableStateOf(false) }
     var automaticUpdateInstallRequested by rememberSaveable { mutableStateOf(false) }
     var pendingAutomaticInstallPath by rememberSaveable { mutableStateOf<String?>(null) }
@@ -1624,7 +1621,8 @@ fun MainContainer(
             hasCurrentMediaItem &&
             !nowPlayingVisible
         val bottomChromeVisible = !nowPlayingVisible
-        val rightPanelExpandedFromStore by settingsDataStore.recentAlbumsPanelExpanded.collectAsState(initial = recentAlbumsPanelExpandedInitial)
+        val rightPanelExpandedFromStore by settingsDataStore.recentAlbumsPanelExpanded
+            .collectAsStateWithLifecycle(initialValue = recentAlbumsPanelExpandedInitial)
         val rightPanelExpandedState = remember(settingsDataStore, scope, recentAlbumsPanelExpandedInitial) {
             PersistedBooleanState(initial = recentAlbumsPanelExpandedInitial) { expanded ->
                 scope.launch { settingsDataStore.setRecentAlbumsPanelExpanded(expanded) }
@@ -1811,8 +1809,8 @@ fun MainContainer(
                                                     if (headerActionRoute != null &&
                                                         (isPrimaryRoute(headerActionRoute) || headerActionRoute == "playlist_system/{type}")
                                                     ) {
-                                                        val downloadTasks by downloadsViewModel.tasks.collectAsState()
-                                                        val activeSubtitleTaskCount by downloadsViewModel.activeSubtitleTaskCount.collectAsState()
+                                                        val downloadTasks by downloadsViewModel.tasks.collectAsStateWithLifecycle()
+                                                        val activeSubtitleTaskCount by downloadsViewModel.activeSubtitleTaskCount.collectAsStateWithLifecycle()
                                                         val activeDownloadCount = remember(downloadTasks) {
                                                             downloadTasks.sumOf { task ->
                                                                 task.items.count {
@@ -1839,7 +1837,7 @@ fun MainContainer(
                                                         }
                                                     }
                                                     if (headerActionRoute == "library") {
-                                                        val viewMode by libraryViewModel.libraryViewMode.collectAsState()
+                                                        val viewMode by libraryViewModel.libraryViewMode.collectAsStateWithLifecycle()
                                                         if (viewMode != null) {
                                                             var viewMenuExpanded by remember { mutableStateOf(false) }
                                                             Box {
@@ -1911,7 +1909,8 @@ fun MainContainer(
                                                             }
                                                         }
                                                     } else if (headerActionRoute == "search") {
-                                                        val viewMode by searchViewModel.viewMode.collectAsState()
+                                                        val searchViewModel: SearchViewModel = hiltViewModel(activityViewModelStoreOwner)
+                                                        val viewMode by searchViewModel.viewMode.collectAsStateWithLifecycle()
                                                         EaraTopBarIconButton(
                                                             onClick = { searchViewModel.setViewMode(if (viewMode == 1) 0 else 1) },
                                                             modifier = Modifier.padding(end = 4.dp)
@@ -1922,7 +1921,8 @@ fun MainContainer(
                                                             )
                                                         }
                                                     } else if (headerActionRoute == Routes.HotListening) {
-                                                        val viewMode by hotListeningViewModel.viewMode.collectAsState()
+                                                        val hotListeningViewModel: HotListeningViewModel = hiltViewModel(activityViewModelStoreOwner)
+                                                        val viewMode by hotListeningViewModel.viewMode.collectAsStateWithLifecycle()
                                                         EaraTopBarIconButton(
                                                             onClick = { hotListeningViewModel.setViewMode(if (viewMode == 1) 0 else 1) },
                                                             modifier = Modifier.padding(end = 4.dp)
@@ -1933,7 +1933,7 @@ fun MainContainer(
                                                             )
                                                         }
                                                     } else if (headerActionRoute == "downloads") {
-                                                        val tasks by downloadsViewModel.tasks.collectAsState()
+                                                        val tasks by downloadsViewModel.tasks.collectAsStateWithLifecycle()
                                                         val hasActiveDownloads = remember(tasks) {
                                                             tasks.any { task ->
                                                                 task.items.any { it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED }
@@ -2059,6 +2059,7 @@ fun MainContainer(
                                         }
 
                                         Routes.Search -> {
+                                            val searchViewModel: SearchViewModel = hiltViewModel(activityViewModelStoreOwner)
                                             SearchScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
@@ -2109,6 +2110,7 @@ fun MainContainer(
                                         }
 
                                         Routes.HotListening -> {
+                                            val hotListeningViewModel: HotListeningViewModel = hiltViewModel(activityViewModelStoreOwner)
                                             HotListeningScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
@@ -2140,6 +2142,7 @@ fun MainContainer(
                                         }
 
                                         "playlist_system/favorites" -> {
+                                            val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
                                             SystemPlaylistScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
@@ -2154,6 +2157,7 @@ fun MainContainer(
                                         }
 
                                         "playlists" -> {
+                                            val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
                                             PlaylistsScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
@@ -2168,6 +2172,7 @@ fun MainContainer(
                                         }
 
                                         "groups" -> {
+                                            val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel(activityViewModelStoreOwner)
                                             com.asmr.player.ui.groups.AlbumGroupsScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
@@ -2196,6 +2201,8 @@ fun MainContainer(
                                         }
 
                                         "listening_calendar" -> {
+                                            val listeningCalendarViewModel: com.asmr.player.ui.calendar.ListeningCalendarViewModel =
+                                                hiltViewModel(activityViewModelStoreOwner)
                                             com.asmr.player.ui.calendar.ListeningCalendarScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
@@ -2270,37 +2277,37 @@ fun MainContainer(
                 composable("search") { backStackEntry ->
                     val submittedKeyword by backStackEntry.savedStateHandle
                         .getStateFlow(SEARCH_ASSIST_RESULT_KEY, "")
-                        .collectAsState()
+                        .collectAsStateWithLifecycle()
                     val submittedOrderName by backStackEntry.savedStateHandle
                         .getStateFlow(SEARCH_ASSIST_RESULT_ORDER_KEY, SearchAssistSearchRequest().orderName)
-                        .collectAsState()
+                        .collectAsStateWithLifecycle()
                     val submittedPurchasedOnly by backStackEntry.savedStateHandle
                         .getStateFlow(SEARCH_ASSIST_RESULT_PURCHASED_ONLY_KEY, SearchAssistSearchRequest().purchasedOnly)
-                        .collectAsState()
+                        .collectAsStateWithLifecycle()
                     val submittedPresaleOnly by backStackEntry.savedStateHandle
                         .getStateFlow(SEARCH_ASSIST_RESULT_PRESALE_ONLY_KEY, SearchAssistSearchRequest().presaleOnly)
-                        .collectAsState()
+                        .collectAsStateWithLifecycle()
                     val submittedChineseTranslatedOnly by backStackEntry.savedStateHandle
                         .getStateFlow(
                             SEARCH_ASSIST_RESULT_CHINESE_TRANSLATED_ONLY_KEY,
                             SearchAssistSearchRequest().chineseTranslatedOnly
                         )
-                        .collectAsState()
+                        .collectAsStateWithLifecycle()
                     val submittedCollectedOnly by backStackEntry.savedStateHandle
                         .getStateFlow(SEARCH_ASSIST_RESULT_COLLECTED_ONLY_KEY, SearchAssistSearchRequest().collectedOnly)
-                        .collectAsState()
+                        .collectAsStateWithLifecycle()
                     val submittedCollectedSortName by backStackEntry.savedStateHandle
                         .getStateFlow(
                             SEARCH_ASSIST_RESULT_COLLECTED_SORT_KEY,
                             SearchAssistSearchRequest().collectedSortName
                         )
-                        .collectAsState()
+                        .collectAsStateWithLifecycle()
                     val submittedLocale by backStackEntry.savedStateHandle
                         .getStateFlow(SEARCH_ASSIST_RESULT_LOCALE_KEY, SearchAssistSearchRequest().locale)
-                        .collectAsState()
+                        .collectAsStateWithLifecycle()
                     val submittedSignal by backStackEntry.savedStateHandle
                         .getStateFlow(SEARCH_ASSIST_RESULT_SIGNAL_KEY, 0L)
-                        .collectAsState()
+                        .collectAsStateWithLifecycle()
 
                     LaunchedEffect(
                         submittedSignal,
@@ -2388,6 +2395,8 @@ fun MainContainer(
                         navArgument("initialTab") { type = NavType.StringType; nullable = true; defaultValue = null }
                     )
                 ) { backStackEntry ->
+                    val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
+                    val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel(activityViewModelStoreOwner)
                     val rj = backStackEntry.arguments?.getString("rj").orEmpty()
                     AlbumDetailRouteFrame(
                         backStackEntry = backStackEntry,
@@ -2457,6 +2466,8 @@ fun MainContainer(
                         navArgument("initialTab") { type = NavType.StringType; nullable = true; defaultValue = null }
                     )
                 ) { backStackEntry ->
+                    val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
+                    val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel(activityViewModelStoreOwner)
                     val albumId = backStackEntry.arguments?.getLong("albumId") ?: 0L
                     val rjCode = backStackEntry.arguments?.getString("rjCode")
                     AlbumDetailRouteFrame(
@@ -2524,6 +2535,8 @@ fun MainContainer(
                     route = "album_detail_online/{rj}",
                     arguments = listOf(navArgument("rj") { defaultValue = "" })
                 ) { backStackEntry ->
+                    val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
+                    val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel(activityViewModelStoreOwner)
                     val rj = backStackEntry.arguments?.getString("rj").orEmpty()
                     AlbumDetailRouteFrame(
                         backStackEntry = backStackEntry,
@@ -2629,6 +2642,7 @@ fun MainContainer(
                     )
                 ) { backStackEntry ->
                     val albumId = backStackEntry.arguments?.getLong("albumId") ?: 0L
+                    val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel(activityViewModelStoreOwner)
                     SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                         com.asmr.player.ui.groups.AlbumGroupPickerScreen(
                             windowSizeClass = windowSizeClass,
@@ -2664,6 +2678,7 @@ fun MainContainer(
                     if (type == "favorites") {
                         Box(modifier = Modifier.fillMaxSize())
                     } else {
+                        val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
                         SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                             SystemPlaylistScreen(
                                 windowSizeClass = windowSizeClass,
@@ -2689,6 +2704,7 @@ fun MainContainer(
                     }
                 }
                 composable("dlsite_login") {
+                    val dlsiteLoginViewModel: DlsiteLoginViewModel = hiltViewModel(activityViewModelStoreOwner)
                     SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                         DlsiteLoginScreen(
                             windowSizeClass = windowSizeClass,
@@ -2904,6 +2920,7 @@ fun MainContainer(
                     sharedCoverDragPreviewState = sharedCoverDragPreviewState
                 )
                 nowPlayingPlaylistPickerRequest?.let { request ->
+                    val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
                     Dialog(
                         onDismissRequest = { nowPlayingPlaylistPickerRequest = null },
                         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -2931,6 +2948,7 @@ fun MainContainer(
                     }
                 }
                 albumBatchPlaylistPickerRequest?.let { request ->
+                    val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
                     Dialog(
                         onDismissRequest = { albumBatchPlaylistPickerRequest = null },
                         properties = DialogProperties(usePlatformDefaultWidth = false)
@@ -2962,6 +2980,7 @@ fun MainContainer(
 
         if (!nowPlayingVisible) {
             albumBatchPlaylistPickerRequest?.let { request ->
+                val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
                 Dialog(
                     onDismissRequest = { albumBatchPlaylistPickerRequest = null },
                     properties = DialogProperties(usePlatformDefaultWidth = false)

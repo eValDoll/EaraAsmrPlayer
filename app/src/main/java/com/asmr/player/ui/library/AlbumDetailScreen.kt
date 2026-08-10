@@ -94,6 +94,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
@@ -336,8 +337,8 @@ fun AlbumDetailScreen(
     heroBlurLayerCache: AlbumHeroBlurLayerCache,
     viewModel: AlbumDetailViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val cloudSyncSelectionDialogState by viewModel.cloudSyncSelectionDialogState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val cloudSyncSelectionDialogState by viewModel.cloudSyncSelectionDialogState.collectAsStateWithLifecycle()
     val colorScheme = AsmrTheme.colorScheme
     val screenKey = remember(albumId, rjCode) {
         val idPart = albumId?.takeIf { it > 0 }?.toString().orEmpty()
@@ -1083,7 +1084,7 @@ fun AlbumDetailScreen(
                 }
 
                 metaActionKeyword?.let { keyword ->
-                    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsState()
+                    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsStateWithLifecycle()
                     AlbumMetaActionDialog(
                         keyword = keyword,
                         onDismissRequest = { metaActionKeyword = null },
@@ -1109,8 +1110,8 @@ fun AlbumDetailScreen(
 
                 val track = tagManageTrack
                 if ((track != null && track.id > 0L) || showTagManager) {
-                    val availableTags by viewModel.availableTags.collectAsState()
-                    val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsState()
+                    val availableTags by viewModel.availableTags.collectAsStateWithLifecycle()
+                    val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsStateWithLifecycle()
                     if (track != null && track.id > 0L) {
                         TagAssignDialog(
                             title = track.title,

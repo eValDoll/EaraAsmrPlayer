@@ -100,7 +100,6 @@ class AppCacheManager @Inject constructor(
             trimDirectoryToSize(previewDirectory, AppCacheLimits.previewMaxSizeBytes(sizeMb))
         }
         runCacheOperation("clear legacy Coil cache") { clearDirectoryContents(legacyCoilDirectory) }
-        refreshSizeNow()
     }
 
     private fun refreshSizeNow() {

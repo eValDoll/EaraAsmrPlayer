@@ -47,6 +47,9 @@ interface SubtitleTaskDao {
     @Query("SELECT * FROM subtitle_task_items ORDER BY queueSequence")
     suspend fun getAllItems(): List<SubtitleTaskItemEntity>
 
+    @Query("SELECT COUNT(*) FROM subtitle_task_items")
+    suspend fun countAllItems(): Int
+
     @Query(
         "SELECT * FROM subtitle_task_items WHERE state = 'QUEUED_TRANSCRIPTION' " +
             "ORDER BY queueSequence LIMIT 1"

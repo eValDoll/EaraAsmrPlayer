@@ -202,6 +202,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
 import androidx.media3.common.MediaItem
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.ui.common.AppVolumeVerticalSlider
@@ -260,25 +261,19 @@ class MainActivity : ComponentActivity() {
             val context = LocalContext.current
             val playerViewModel: PlayerViewModel = hiltViewModel()
             val libraryViewModel: LibraryViewModel = hiltViewModel()
-            val volumeKeyTick by volumeKeyEventTick.asStateFlow().collectAsState()
-            var themeBootstrap by remember {
-                mutableStateOf(initialThemeBootstrapPreferences)
-            }
-            LaunchedEffect(settingsDataStore) {
-                settingsDataStore.themeBootstrapPreferences.collect { value ->
-                    themeBootstrap = value
-                }
-            }
+            val volumeKeyTick by volumeKeyEventTick.asStateFlow().collectAsStateWithLifecycle()
+            val themeBootstrap by settingsDataStore.themeBootstrapPreferences
+                .collectAsStateWithLifecycle(initialValue = initialThemeBootstrapPreferences)
             val themeMediaSource by remember(playerViewModel) {
                 playerViewModel.playback
                     .map { it.currentMediaItem.toThemeMediaSource() }
                     .distinctUntilChanged()
-            }.collectAsState(initial = ThemeMediaSource())
+            }.collectAsStateWithLifecycle(initialValue = ThemeMediaSource())
             val playbackRestoreResolved by remember(playerViewModel) {
                 playerViewModel.playback
                     .map { it.startupRestoreResolved }
                     .distinctUntilChanged()
-            }.collectAsState(initial = false)
+            }.collectAsStateWithLifecycle(initialValue = false)
             val systemDark = isSystemInDarkTheme()
             val themePref = themeBootstrap.theme
             val mode = resolveThemeMode(themePref = themePref, systemDark = systemDark)
@@ -299,17 +294,17 @@ class MainActivity : ComponentActivity() {
                 staticHueArgbLight = themeBootstrap.staticHueArgbLight,
                 staticHueArgbDark = themeBootstrap.staticHueArgbDark
             )
-            val coverBackgroundEnabled by settingsDataStore.coverBackgroundEnabled.collectAsState(initial = true)
-            val coverBackgroundClarity by settingsDataStore.coverBackgroundClarity.collectAsState(initial = 0.35f)
-            val coverPreviewMode by settingsDataStore.coverPreviewMode.collectAsState(initial = CoverPreviewMode.Disabled)
-            val nowPlayingHomeLayoutMode by settingsDataStore.nowPlayingHomeLayoutMode.collectAsState(
-                initial = NowPlayingHomeLayoutMode.Classic
+            val coverBackgroundEnabled by settingsDataStore.coverBackgroundEnabled.collectAsStateWithLifecycle(initialValue = true)
+            val coverBackgroundClarity by settingsDataStore.coverBackgroundClarity.collectAsStateWithLifecycle(initialValue = 0.35f)
+            val coverPreviewMode by settingsDataStore.coverPreviewMode.collectAsStateWithLifecycle(initialValue = CoverPreviewMode.Disabled)
+            val nowPlayingHomeLayoutMode by settingsDataStore.nowPlayingHomeLayoutMode.collectAsStateWithLifecycle(
+                initialValue = NowPlayingHomeLayoutMode.Classic
             )
             val nowPlayingHomeLayoutHintDismissed by produceState(initialValue = false, settingsDataStore) {
                 value = settingsDataStore.nowPlayingHomeLayoutHintDismissed.first()
             }
-            val lyricsPageSettings by settingsDataStore.lyricsPageSettings.collectAsState(initial = LyricsPageSettings())
-            val showMiniPlayerBar by settingsRepository.showMiniPlayerBar.collectAsState(initial = true)
+            val lyricsPageSettings by settingsDataStore.lyricsPageSettings.collectAsStateWithLifecycle(initialValue = LyricsPageSettings())
+            val showMiniPlayerBar by settingsRepository.showMiniPlayerBar.collectAsStateWithLifecycle(initialValue = true)
             val neutral = remember(mode) { neutralPaletteForMode(mode) }
             val cacheManager = remember(context.applicationContext) {
                 dagger.hilt.android.EntryPointAccessors.fromApplication(

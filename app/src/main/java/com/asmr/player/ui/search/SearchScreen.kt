@@ -342,10 +342,6 @@ fun SearchScreen(
     val gridState = rememberSaveable(resultScrollKey, saver = LazyStaggeredGridState.Saver) { LazyStaggeredGridState() }
     val colorScheme = AsmrTheme.colorScheme
     val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
-    val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
-    val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
-    val settingsViewModel: SettingsViewModel = hiltViewModel()
-    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsStateWhileActive(isDataActive)
     val scope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
@@ -363,18 +359,6 @@ fun SearchScreen(
         if (normalized.isNotBlank()) metaActionKeyword = normalized
     }
 
-    fun addMetaBlockedKeyword(value: String) {
-        val normalized = value.trim()
-        if (normalized.isBlank()) return
-        val exists = searchBlockedKeywords.any { it.equals(normalized, ignoreCase = true) }
-        settingsViewModel.addSearchBlockedKeyword(normalized)
-        if (exists) {
-            viewModel.messageManager.showInfo("屏蔽词已存在：$normalized")
-        } else {
-            viewModel.messageManager.showSuccess("已添加屏蔽词：$normalized")
-        }
-    }
-
     LaunchedEffect(Unit) {
         viewModel.bootstrap(
             initialKeyword = keyword,
@@ -383,6 +367,10 @@ fun SearchScreen(
             initialCollectedOnly = collectedOnly,
             initialCollectedSort = selectedCollectedSort
         )
+    }
+
+    LaunchedEffect(isDataActive, viewModel) {
+        if (isDataActive) viewModel.ensureHotKeywordTermsLoaded()
     }
 
     LaunchedEffect(success?.keyword) {
@@ -1333,13 +1321,28 @@ fun SearchScreen(
     }
 
     metaActionKeyword?.let { targetKeyword ->
+        val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
+        val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
+        val settingsViewModel: SettingsViewModel = hiltViewModel()
+        val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsStateWhileActive(isDataActive)
         AlbumMetaActionDialog(
             keyword = targetKeyword,
             onDismissRequest = { metaActionKeyword = null },
             onSearch = ::searchMetaKeyword,
             onCreatePlaylist = playlistsViewModel::createPlaylist,
             onCreateGroup = albumGroupsViewModel::createGroup,
-            onAddBlockedKeyword = ::addMetaBlockedKeyword,
+            onAddBlockedKeyword = { value ->
+                val normalized = value.trim()
+                if (normalized.isNotBlank()) {
+                    val exists = searchBlockedKeywords.any { it.equals(normalized, ignoreCase = true) }
+                    settingsViewModel.addSearchBlockedKeyword(normalized)
+                    if (exists) {
+                        viewModel.messageManager.showInfo("屏蔽词已存在：$normalized")
+                    } else {
+                        viewModel.messageManager.showSuccess("已添加屏蔽词：$normalized")
+                    }
+                }
+            },
         )
     }
 }

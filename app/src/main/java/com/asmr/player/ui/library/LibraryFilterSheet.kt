@@ -42,7 +42,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -70,11 +70,11 @@ fun LibraryFilterScreen(
     onClose: () -> Unit,
     viewModel: LibraryViewModel
 ) {
-    val querySpec by viewModel.querySpec.collectAsState()
-    val tags by viewModel.availableTags.collectAsState()
-    val circles by viewModel.availableCircles.collectAsState()
-    val cvs by viewModel.availableCvs.collectAsState()
-    val presets by viewModel.filterPresets.collectAsState()
+    val querySpec by viewModel.querySpec.collectAsStateWithLifecycle()
+    val tags by viewModel.availableTags.collectAsStateWithLifecycle()
+    val circles by viewModel.availableCircles.collectAsStateWithLifecycle()
+    val cvs by viewModel.availableCvs.collectAsStateWithLifecycle()
+    val presets by viewModel.filterPresets.collectAsStateWithLifecycle()
     val appliedSpec = remember(querySpec) { querySpec.filterOnly() }
     var draftSpec by remember(appliedSpec) { mutableStateOf(appliedSpec) }
     var showTagManager by remember { mutableStateOf(false) }

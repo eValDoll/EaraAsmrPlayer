@@ -409,29 +409,30 @@ object DownloadQueueCoordinator {
 
     suspend fun recoverDownloadsOnAppLaunch(context: Context) {
         val appContext = context.applicationContext
+        val dao = AppDatabaseProvider.get(appContext).downloadDao()
+        val recoverableItems = dao.getAllActiveOrPausedItems()
+        if (recoverableItems.isEmpty()) return
         val wm = WorkManager.getInstance(appContext)
         runCatching { wm.cancelAllWorkByTag("download") }
-        val dao = AppDatabaseProvider.get(appContext).downloadDao()
         val now = System.currentTimeMillis()
-        dao.getAllActiveOrPausedItems()
-            .forEach { item ->
-                val resolvedBytes = resolveExistingBytes(item)
-                val resolvedState = when (item.state) {
-                    WorkInfo.State.SUCCEEDED.name -> WorkInfo.State.SUCCEEDED.name
-                    "PAUSED" -> "PAUSED"
-                    else -> "PAUSED"
-                }
-                runCatching {
-                    dao.updateItemProgress(
-                        workId = item.workId,
-                        state = resolvedState,
-                        downloaded = resolvedBytes,
-                        total = item.total,
-                        speed = 0L,
-                        updatedAt = now
-                    )
-                }
+        recoverableItems.forEach { item ->
+            val resolvedBytes = resolveExistingBytes(item)
+            val resolvedState = when (item.state) {
+                WorkInfo.State.SUCCEEDED.name -> WorkInfo.State.SUCCEEDED.name
+                "PAUSED" -> "PAUSED"
+                else -> "PAUSED"
             }
+            runCatching {
+                dao.updateItemProgress(
+                    workId = item.workId,
+                    state = resolvedState,
+                    downloaded = resolvedBytes,
+                    total = item.total,
+                    speed = 0L,
+                    updatedAt = now
+                )
+            }
+        }
     }
 
     fun onTrimMemory(context: Context, level: Int) {

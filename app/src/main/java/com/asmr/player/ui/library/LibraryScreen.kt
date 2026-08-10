@@ -95,7 +95,7 @@ import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
@@ -324,7 +324,8 @@ fun LibraryScreen(
     val pagedAlbumSnapshot = pagedAlbums.itemSnapshotList
     val pagedAlbumIndices = remember(pagedAlbumSnapshot.items.size) { List(pagedAlbumSnapshot.items.size) { it } }
     val loadedTrackAlbumHeaders = pagedTrackAlbumHeaders.itemSnapshotList.items
-    val expandedAlbumTracks by (if (isTrackList) viewModel.expandedTrackAlbumTracks else flowOf(emptyMap())).collectAsState(initial = emptyMap())
+    val expandedAlbumTracks by (if (isTrackList) viewModel.expandedTrackAlbumTracks else flowOf(emptyMap()))
+        .collectAsStateWithLifecycle(initialValue = emptyMap())
     val expandedAlbumIds by viewModel.expandedTrackAlbumIds.collectAsStateWhileActive(isDataActive)
     var actionAlbum by remember { mutableStateOf<Album?>(null) }
     var showAlbumActions by remember { mutableStateOf(false) }

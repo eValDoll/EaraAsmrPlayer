@@ -41,6 +41,7 @@ import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -174,7 +175,7 @@ internal fun AlbumLocalBreadcrumbTabV2(
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val subtitleModelRepository = remember(context) { SubtitleModelRepository.get(context) }
-    val subtitleModelState by subtitleModelRepository.state.collectAsState()
+    val subtitleModelState by subtitleModelRepository.state.collectAsStateWithLifecycle()
     val subtitleDeviceCapability = remember(context) { SubtitleDeviceCapability.evaluate(context) }
     val subtitleFeatureSupported = subtitleDeviceCapability.supported
     val subtitleModelAvailable = subtitleFeatureSupported &&
