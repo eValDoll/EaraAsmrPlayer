@@ -935,15 +935,19 @@ internal fun BoxScope.FinalPolishBottomProgress(
     trackColor: Color,
     progressColor: Color
 ) {
-    LinearProgressIndicator(
+    Box(
         modifier = Modifier
             .align(Alignment.BottomStart)
             .fillMaxWidth()
             .height(1.dp)
-            .testTag(FINAL_POLISH_PROGRESS_TAG),
-        color = progressColor,
-        trackColor = trackColor
-    )
+            .testTag(FINAL_POLISH_PROGRESS_TAG)
+    ) {
+        LinearProgressIndicator(
+            modifier = Modifier.fillMaxSize(),
+            color = progressColor,
+            trackColor = trackColor
+        )
+    }
 }
 
 @Composable

@@ -5,6 +5,14 @@
 
 -keepattributes Signature,*Annotation*,InnerClasses,EnclosingMethod
 
+# Retrofit 2.9's bundled rules predate the R8 full-mode handling required by
+# Kotlin suspend services. Retrofit reflects on Continuation's type argument;
+# if R8 strips it, every suspend API call fails before OkHttp sees a request.
+-keep,allowoptimization,allowshrinking,allowobfuscation class kotlin.coroutines.Continuation
+-if interface * { @retrofit2.http.* public *** *(...); }
+-keep,allowoptimization,allowshrinking,allowobfuscation class <3>
+-keep,allowoptimization,allowshrinking,allowobfuscation class retrofit2.Response
+
 # Gson reads the generic superclass of anonymous TypeToken implementations at
 # runtime. Keeping the base and its subclasses prevents R8 full-mode class
 # merging from erasing that relationship while leaving the rest of the app

@@ -3,16 +3,17 @@ package com.asmr.player.ui.drawer
 import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.asmr.player.data.remote.api.Asmr100Api
-import com.asmr.player.data.remote.api.Asmr200Api
-import com.asmr.player.data.remote.api.Asmr300Api
+import com.asmr.player.BuildConfig
+import com.asmr.player.data.remote.api.AsmrOneEndpoint
 import com.asmr.player.data.settings.SettingsRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -39,6 +40,7 @@ class DrawerStatusViewModel @Inject constructor(
 
     private val _asmr = MutableStateFlow(SiteStatus())
     val asmr: StateFlow<SiteStatus> = _asmr
+    private var asmrTestJob: Job? = null
 
     fun testDlsite() {
         viewModelScope.launch(Dispatchers.IO) {
@@ -50,20 +52,27 @@ class DrawerStatusViewModel @Inject constructor(
 
     fun testAsmrOne() {
         val site = asmrOneSite.value
-        // 使用 search 接口测试连通性，比直接访问 ID 更可靠，且能验证 API 是否正常
-        val url = when (site) {
-            100 -> "${Asmr100Api.BASE_URL}search/RJ01000000"
-            300 -> "${Asmr300Api.BASE_URL}search/RJ01000000"
-            else -> "${Asmr200Api.BASE_URL}search/RJ01000000"
-        }
-        viewModelScope.launch(Dispatchers.IO) {
+        // 直连站点使用搜索接口，备用站点使用其 tracks 接口，确保测试的是当前选择的目标。
+        val url = AsmrOneEndpoint.directBaseUrl(site)
+            ?.let { baseUrl -> "${baseUrl}search/RJ01000000" }
+            ?: BuildConfig.LISTEN_TOGETHER_BASE_URL
+                .trim()
+                .trimEnd('/')
+                .takeIf { it.isNotBlank() }
+                ?.let { baseUrl -> "$baseUrl/api/asmr-one/tracks?rj=RJ01000000" }
+        asmrTestJob?.cancel()
+        asmrTestJob = viewModelScope.launch(Dispatchers.IO) {
             _asmr.value = SiteStatus(type = SiteStatusType.Testing)
-            val latency = measure(url)
+            val latency = url?.let(::measure)
+            coroutineContext.ensureActive()
             _asmr.value = latency.toStatus()
         }
     }
 
     fun setAsmrOneSite(site: Int) {
+        if (site == asmrOneSite.value) return
+        asmrTestJob?.cancel()
+        _asmr.value = SiteStatus()
         viewModelScope.launch {
             settingsRepository.setAsmrOneSite(site)
         }
