@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -129,6 +130,7 @@ fun AlbumItem(
     onlineCvLoading: Boolean = onlineDetailLoading,
     animateOnlineDetails: Boolean = true,
     coverFadeIn: Boolean = true,
+    coverFadeInState: State<Boolean>? = null,
     coverReloadKey: Any? = null,
     coverRetainPainterDuringReload: Boolean = false,
     containerColor: Color? = null,
@@ -215,6 +217,7 @@ fun AlbumItem(
                         contentScale = ContentScale.Crop,
                         placeholderCornerRadius = 0,
                         fadeIn = coverFadeIn,
+                        fadeInState = coverFadeInState,
                         reloadKey = coverReloadKey,
                         retainPainterDuringReload = coverRetainPainterDuringReload,
                         peekAnySizeForInitial = true,
@@ -434,6 +437,7 @@ fun AlbumGridItem(
     onlineCvLoading: Boolean = onlineDetailLoading,
     animateOnlineDetails: Boolean = true,
     coverFadeIn: Boolean = true,
+    coverFadeInState: State<Boolean>? = null,
     coverReloadKey: Any? = null,
     coverRetainPainterDuringReload: Boolean = false,
     containerColor: Color? = null,
@@ -467,6 +471,7 @@ fun AlbumGridItem(
                 contentScale = ContentScale.Crop,
                 placeholderCornerRadius = 0,
                 fadeIn = coverFadeIn,
+                fadeInState = coverFadeInState,
                 reloadKey = coverReloadKey,
                 retainPainterDuringReload = coverRetainPainterDuringReload,
                 peekAnySizeForInitial = true,

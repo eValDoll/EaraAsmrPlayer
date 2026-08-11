@@ -1035,7 +1035,11 @@ fun SearchScreen(
                                     val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
                                     val coverPx = remember(listItemHeight, density) { with(density) { listItemHeight.roundToPx() } }
                                     val preloadSize = remember(coverPx) { IntSize(coverPx, coverPx) }
-                                    val coverFadeIn = shouldFadeInCover(listState.isScrollInProgress)
+                                    val coverFadeInState = remember(listState) {
+                                        derivedStateOf {
+                                            shouldFadeInCover(listState.isScrollInProgress)
+                                        }
+                                    }
                                     LazyListPreloader(
                                         state = listState,
                                         itemCount = state.results.size,
@@ -1075,7 +1079,7 @@ fun SearchScreen(
                                                 ),
                                                 onlineDetailLoading = onlineDetailLoading,
                                                 onlineCvLoading = onlineDetailLoading,
-                                                coverFadeIn = coverFadeIn,
+                                                coverFadeInState = coverFadeInState,
                                                 coverReloadKey = state.resultRevision,
                                                 onRjClick = { copyMeta("RJ", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
@@ -1097,7 +1101,11 @@ fun SearchScreen(
                                     val gridCellSize = if (isCompact) 150.dp else 200.dp
                                     val gridCoverPx = remember(gridCellSize, density) { with(density) { gridCellSize.roundToPx() } }
                                     val gridPreloadSize = remember(gridCoverPx) { IntSize(gridCoverPx, gridCoverPx) }
-                                    val coverFadeIn = shouldFadeInCover(gridState.isScrollInProgress)
+                                    val coverFadeInState = remember(gridState) {
+                                        derivedStateOf {
+                                            shouldFadeInCover(gridState.isScrollInProgress)
+                                        }
+                                    }
                                     LazyStaggeredGridPreloader(
                                         state = gridState,
                                         itemCount = state.results.size,
@@ -1145,7 +1153,7 @@ fun SearchScreen(
                                                 ),
                                                 onlineDetailLoading = onlineDetailLoading,
                                                 onlineCvLoading = onlineDetailLoading,
-                                                coverFadeIn = coverFadeIn,
+                                                coverFadeInState = coverFadeInState,
                                                 coverReloadKey = state.resultRevision,
                                                 onRjClick = { copyMeta("RJ", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
