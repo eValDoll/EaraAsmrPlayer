@@ -95,6 +95,7 @@ import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.State
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -804,7 +805,11 @@ fun LibraryScreen(
                                     val gridCellSize = if (isCompact) 150.dp else 200.dp
                                     val gridCoverPx = remember(gridCellSize, density) { with(density) { gridCellSize.roundToPx() } }
                                     val gridPreloadSize = remember(gridCoverPx) { IntSize(gridCoverPx, gridCoverPx) }
-                                    val coverFadeIn = shouldFadeInCover(gridState.isScrollInProgress)
+                                    val coverFadeInState = remember(gridState) {
+                                        derivedStateOf {
+                                            shouldFadeInCover(gridState.isScrollInProgress)
+                                        }
+                                    }
                                     LazyStaggeredGridPreloader(
                                         state = gridState,
                                         itemCount = pagedAlbums.itemCount,
@@ -859,7 +864,7 @@ fun LibraryScreen(
                                                 onCvLongClick = ::openMetaActions,
                                                 onTagClick = { copyMeta("标签", it) },
                                                 onTagLongClick = ::openMetaActions,
-                                                coverFadeIn = coverFadeIn,
+                                                coverFadeInState = coverFadeInState,
                                             )
                                         }
                                     }
@@ -874,7 +879,11 @@ fun LibraryScreen(
                                     val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
                                     val coverPx = remember(listItemHeight, density) { with(density) { listItemHeight.roundToPx() } }
                                     val preloadSize = remember(coverPx) { IntSize(coverPx, coverPx) }
-                                    val coverFadeIn = shouldFadeInCover(listState.isScrollInProgress)
+                                    val coverFadeInState = remember(listState) {
+                                        derivedStateOf {
+                                            shouldFadeInCover(listState.isScrollInProgress)
+                                        }
+                                    }
                                     LazyListPreloader(
                                         state = listState,
                                         itemCount = pagedAlbums.itemCount,
@@ -926,7 +935,7 @@ fun LibraryScreen(
                                                 onCvLongClick = ::openMetaActions,
                                                 onTagClick = { copyMeta("标签", it) },
                                                 onTagLongClick = ::openMetaActions,
-                                                coverFadeIn = coverFadeIn,
+                                                coverFadeInState = coverFadeInState,
                                             )
                                         }
                                     }
@@ -1507,7 +1516,7 @@ private fun AlbumGridItem(
     onCvLongClick: ((String) -> Unit)? = null,
     onTagClick: ((String) -> Unit)? = null,
     onTagLongClick: ((String) -> Unit)? = null,
-    coverFadeIn: Boolean = true,
+    coverFadeInState: State<Boolean>? = null,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val coverShape = remember {
@@ -1541,7 +1550,7 @@ private fun AlbumGridItem(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 placeholderCornerRadius = 0,
-                fadeIn = coverFadeIn,
+                fadeInState = coverFadeInState,
                 peekAnySizeForInitial = true,
                 loading = NoImageLoadingIndicator,
                 modifier = Modifier.fillMaxSize().clip(coverShape),
@@ -1692,7 +1701,7 @@ private fun AlbumItem(
     onCvLongClick: ((String) -> Unit)? = null,
     onTagClick: ((String) -> Unit)? = null,
     onTagLongClick: ((String) -> Unit)? = null,
-    coverFadeIn: Boolean = true,
+    coverFadeInState: State<Boolean>? = null,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val coverShape = remember {
@@ -1743,7 +1752,7 @@ private fun AlbumItem(
                         contentDescription = null,
                         contentScale = ContentScale.Crop,
                         placeholderCornerRadius = 0,
-                        fadeIn = coverFadeIn,
+                        fadeInState = coverFadeInState,
                         peekAnySizeForInitial = true,
                         loading = NoImageLoadingIndicator,
                         modifier = Modifier.fillMaxSize().clip(coverShape),
