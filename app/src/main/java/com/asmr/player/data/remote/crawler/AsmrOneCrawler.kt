@@ -46,7 +46,7 @@ class AsmrOneCrawler @Inject constructor(
 ) {
     suspend fun searchWithTrace(keyword: String, page: Int = 1): AsmrOneSearchResult {
         val normalized = keyword.trim()
-        val selected = selectedApi()
+        val selected = selectedMetadataApi()
         if (normalized.isBlank()) {
             return emptySearchResult(normalized, page, selected.site)
         }
@@ -72,7 +72,7 @@ class AsmrOneCrawler @Inject constructor(
     suspend fun getDetails(workId: String): WorkDetailsResponse {
         val normalized = workId.trim()
         require(normalized.isNotBlank()) { "asmr.one work id is blank" }
-        val selected = selectedApi()
+        val selected = selectedMetadataApi()
         return withTimeout(ONLINE_DIRECTORY_REQUEST_TIMEOUT_MS) {
             selected.api.getWorkDetails(
                 workId = normalized,
@@ -102,9 +102,9 @@ class AsmrOneCrawler @Inject constructor(
         return AsmrOneEndpoint.normalize(configured)
     }
 
-    private suspend fun selectedApi(): AsmrSelectedApiEntry {
+    private suspend fun selectedMetadataApi(): AsmrSelectedApiEntry {
         return selectedApi(
-            preferredSite = currentSite(),
+            preferredSite = resolveAsmrOneMetadataEndpoint(currentSite()),
             asmrOneApi = asmrOneApi,
             asmr100Api = asmr100Api,
             asmr200Api = asmr200Api,
@@ -123,6 +123,15 @@ class AsmrOneCrawler @Inject constructor(
 }
 
 private val RJ_CODE_REGEX = Regex("""RJ\d{6,}""")
+
+internal fun resolveAsmrOneMetadataEndpoint(preferredSite: Int): Int {
+    val normalized = AsmrOneEndpoint.normalize(preferredSite)
+    return if (normalized == AsmrOneEndpoint.BACKUP) {
+        AsmrOneEndpoint.MIRROR_200
+    } else {
+        normalized
+    }
+}
 
 private fun emptySearchResult(keyword: String, page: Int, site: Int): AsmrOneSearchResult {
     return AsmrOneSearchResult(

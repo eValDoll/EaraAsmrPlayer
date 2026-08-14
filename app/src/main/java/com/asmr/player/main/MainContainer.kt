@@ -3126,6 +3126,16 @@ fun MainContainer(
 
         val automaticUpdateAvailable = (updateState as? AppUpdateState.UpdateAvailable)
             ?.takeIf { it.source == UpdateCheckSource.Automatic && !automaticUpdateDialogDismissed }
+
+        ClipboardRjNavigationPrompt(
+            enabled = !forceImmersive && automaticUpdateAvailable == null,
+            settingsDataStore = settingsDataStore,
+            onNavigate = { rjCode ->
+                closeNowPlaying()
+                navigator.openAlbumDetailByRjStacked(rjCode)
+            }
+        )
+
         automaticUpdateAvailable?.let { available ->
             val release = available.release
             FlatActionDialog(

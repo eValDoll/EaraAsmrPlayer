@@ -1815,11 +1815,28 @@ private fun AlbumOnlineListenerInfo(
     }
 }
 
-private data class StableAlbumHeroIdentity(
+internal data class StableAlbumHeroIdentity(
     val title: String,
     val rj: String,
     val circle: String
 )
+
+internal fun resolveStableAlbumHeroIdentity(
+    stable: StableAlbumHeroIdentity,
+    current: StableAlbumHeroIdentity
+): StableAlbumHeroIdentity {
+    val stableTitleIsPlaceholder = stable.title.isBlank() ||
+        stable.title == "专辑" ||
+        stable.title.equals(stable.rj, ignoreCase = true)
+    val currentTitleIsResolved = current.title.isNotBlank() &&
+        current.title != "专辑" &&
+        !current.title.equals(current.rj, ignoreCase = true)
+    return StableAlbumHeroIdentity(
+        title = if (stableTitleIsPlaceholder && currentTitleIsResolved) current.title else stable.title,
+        rj = stable.rj.ifBlank { current.rj },
+        circle = stable.circle.ifBlank { current.circle }
+    )
+}
 
 @Composable
 private fun rememberStableAlbumHeroIdentity(album: Album, identitySessionKey: String): StableAlbumHeroIdentity {
@@ -1828,7 +1845,11 @@ private fun rememberStableAlbumHeroIdentity(album: Album, identitySessionKey: St
         rj = album.rjCode.ifBlank { album.workId }.trim(),
         circle = album.circle.trim()
     )
-    return remember(identitySessionKey) { current }
+    var stable by remember(identitySessionKey) { mutableStateOf(current) }
+    LaunchedEffect(current) {
+        stable = resolveStableAlbumHeroIdentity(stable, current)
+    }
+    return stable
 }
 
 @Composable
