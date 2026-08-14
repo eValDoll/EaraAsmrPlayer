@@ -7,6 +7,15 @@ import org.junit.Test
 
 class DlsiteRecommendHtmlParserTest {
     @Test
+    fun dlsiteOriginalCoverUrlForRj_buildsFullResolutionUrl() {
+        assertEquals(
+            "https://img.dlsite.jp/modpub/images2/work/doujin/RJ01500000/RJ01499589_img_main.jpg",
+            dlsiteOriginalCoverUrlForRj("rj01499589")
+        )
+        assertEquals("", dlsiteOriginalCoverUrlForRj("invalid"))
+    }
+
+    @Test
     fun parse_imgWithFallbackCandidates_picksJpgAndNormalizesScheme() {
         val html = """
             <div class="recommend_work_item">

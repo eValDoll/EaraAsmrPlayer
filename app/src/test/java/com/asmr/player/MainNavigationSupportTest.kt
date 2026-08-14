@@ -211,16 +211,22 @@ class MainNavigationSupportTest {
     }
 
     @Test
-    fun resolveAlbumDetailTransitionKey_isolatesEachDetailBackStackEntry() {
+    fun isAlbumDetailStackTransition_onlyMatchesDetailToDetailNavigation() {
         assertEquals(
-            "online-detail-entry",
-            resolveAlbumDetailTransitionKey("album_detail_online/{rj}", "online-detail-entry")
+            true,
+            isAlbumDetailStackTransition(
+                "album_detail_rj/{rj}?initialTab={initialTab}",
+                "album_detail_rj/{rj}?initialTab={initialTab}"
+            )
         )
         assertEquals(
-            "local-detail-entry",
-            resolveAlbumDetailTransitionKey("album_detail/{albumId}", "local-detail-entry")
+            false,
+            isAlbumDetailStackTransition("library", "album_detail_rj/{rj}?initialTab={initialTab}")
         )
-        assertEquals(null, resolveAlbumDetailTransitionKey("library", "library-entry"))
+        assertEquals(
+            false,
+            isAlbumDetailStackTransition("album_detail_online/{rj}", "library")
+        )
     }
 
     @Test

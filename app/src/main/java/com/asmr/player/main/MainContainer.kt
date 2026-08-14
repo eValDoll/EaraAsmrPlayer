@@ -84,6 +84,7 @@ import com.asmr.player.ui.library.LibraryFilterScreen
 import com.asmr.player.ui.library.LibraryScreen
 import com.asmr.player.ui.library.LibraryViewModel
 import com.asmr.player.ui.library.BulkPhase
+import com.asmr.player.data.remote.scraper.dlsiteOriginalCoverUrlForRj
 import com.asmr.player.performance.UiFrameWorkCoordinator
 import com.asmr.player.ui.player.MiniPlayer
 import com.asmr.player.ui.player.NowPlayingMotionLayout
@@ -175,7 +176,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.animation.*
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -288,12 +288,8 @@ private class HorizontalRectClipShape(
     }
 }
 
-private fun String?.startsWithAlbumDetailRoute(): Boolean {
-    return this?.startsWith("album_detail") == true
-}
-
 private fun NavBackStackEntry.usesSecondaryPageSlideTransition(): Boolean {
-    if (destination.route.startsWithAlbumDetailRoute()) return false
+    if (isAlbumDetailRoute(destination.route)) return false
     return resolveCurrentPrimaryDestinationRoute(
         currentRoute = destination.route,
         playlistSystemType = arguments?.getString("type")
@@ -374,15 +370,33 @@ private class InsetsAnimationDispatchSuppressor(
 @Composable
 private fun AlbumDetailRouteFrame(
     backStackEntry: NavBackStackEntry,
-    pageOffsetX: Animatable<Float, AnimationVector1D>,
-    onPopBackStack: () -> Unit,
+    previousBackStackEntry: NavBackStackEntry?,
+    stackPopTargetEntryId: String?,
+    onPopBackStack: (String?) -> Unit,
+    onPageOffsetReader: (() -> Float) -> Unit,
     onExitStateChanged: (Boolean) -> Unit,
     onEditRj: (String) -> Unit,
-    content: @Composable (AlbumDetailViewModel) -> Unit
+    content: @Composable (AlbumDetailViewModel, AlbumHeroBlurLayerCache) -> Unit
 ) {
     val viewModel = hiltViewModel<AlbumDetailViewModel>(backStackEntry)
+    val previousAlbumDetailEntryId = previousBackStackEntry
+        ?.takeIf { isAlbumDetailRoute(it.destination.route) }
+        ?.id
+    val usesStackTransition = previousAlbumDetailEntryId != null
+    val skipEnterAnimation = usesStackTransition || stackPopTargetEntryId == backStackEntry.id
+    val heroBlurGraphicsLayer = rememberGraphicsLayer()
+    val heroBlurLayerCache = remember(heroBlurGraphicsLayer) {
+        AlbumHeroBlurLayerCache(heroBlurGraphicsLayer)
+    }
     val rootView = LocalView.current
     val pageWidthPx = rootView.width.toFloat().coerceAtLeast(1f)
+    val pageOffsetX = remember(pageWidthPx, backStackEntry.id) {
+        Animatable(if (skipEnterAnimation) 0f else pageWidthPx)
+    }
+    val pageOffsetReader = remember(pageOffsetX) { { pageOffsetX.value } }
+    SideEffect {
+        onPageOffsetReader(pageOffsetReader)
+    }
     var exitRequested by remember(backStackEntry.id) { mutableStateOf(false) }
     val currentPopBackStack by rememberUpdatedState(onPopBackStack)
     val currentExitStateChanged by rememberUpdatedState(onExitStateChanged)
@@ -393,7 +407,9 @@ private fun AlbumDetailRouteFrame(
             )
             // 返回输入本来就在帧与帧之间处理。在同一个 snapshot 中提交
             // 退出标记和底层页 active 状态，避免下一帧再追加一次整树重组。
-            currentExitStateChanged(true)
+            if (!usesStackTransition) {
+                currentExitStateChanged(true)
+            }
             viewModel.cancelOnlineLoadsForExit()
             exitRequested = true
         }
@@ -401,21 +417,30 @@ private fun AlbumDetailRouteFrame(
     BackHandler(enabled = !exitRequested, onBack = closeAlbumDetail)
 
     LaunchedEffect(backStackEntry.id, pageWidthPx) {
-        pageOffsetX.snapTo(pageWidthPx)
-        // 详情页先在屏幕外完成一次组合与绘制，再启动可见位移。导航提前使用原本的第二个
-        // 准备帧，因此不会改变用户看到的动画起点、时长或缓动。
-        withFrameNanos { }
-        UiFrameWorkCoordinator.markFrameCritical(
-            SecondaryPageEnterDurationMs.toLong()
-        )
-        pageOffsetX.animateTo(
-            targetValue = 0f,
-            animationSpec = tween(
-                durationMillis = SecondaryPageEnterDurationMs,
-                easing = SecondaryPageSlideEasing
+        if (skipEnterAnimation) {
+            pageOffsetX.snapTo(0f)
+        } else {
+            pageOffsetX.snapTo(pageWidthPx)
+            // 详情页先在屏幕外完成一次组合与绘制，再启动可见位移。导航提前使用原本的第二个
+            // 准备帧，因此不会改变用户看到的动画起点、时长或缓动。
+            withFrameNanos { }
+            UiFrameWorkCoordinator.markFrameCritical(
+                SecondaryPageEnterDurationMs.toLong()
             )
-        )
+            pageOffsetX.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(
+                    durationMillis = SecondaryPageEnterDurationMs,
+                    easing = SecondaryPageSlideEasing
+                )
+            )
+        }
         snapshotFlow { exitRequested }.filter { it }.first()
+
+        if (usesStackTransition) {
+            rootView.post { currentPopBackStack(previousAlbumDetailEntryId) }
+            return@LaunchedEffect
+        }
 
         // 退出前先让底层主页面恢复 active；此时详情页仍完全覆盖屏幕，不产生视觉变化。
         withFrameNanos { }
@@ -432,7 +457,7 @@ private fun AlbumDetailRouteFrame(
         // animateTo 在 Choreographer 的 animation 阶段恢复协程。如果在这里直接
         // pop，导航销毁会被计入最后一帧动画回调。页面已完全在屏外，
         // 立即投递到当前帧结束后的主线程队列空隙，避免二者叠在同一帧。
-        rootView.post { currentPopBackStack() }
+        rootView.post { currentPopBackStack(null) }
     }
     DisposableEffect(backStackEntry.id) {
         onDispose {
@@ -458,7 +483,7 @@ private fun AlbumDetailRouteFrame(
                 clip = true
             }
     ) {
-        content(viewModel)
+        content(viewModel, heroBlurLayerCache)
         AlbumDetailRouteTopBar(
             viewModel = viewModel,
             onBack = closeAlbumDetail,
@@ -772,18 +797,8 @@ fun MainContainer(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
     val mainRootView = LocalView.current
-    val albumDetailPageWidthPx = mainRootView.width.toFloat().coerceAtLeast(1f)
-    val albumDetailTransitionKey = resolveAlbumDetailTransitionKey(
-        currentRoute = currentRoute,
-        backStackEntryId = navBackStackEntry?.id
-    )
-    val albumDetailPageOffsetX = remember(albumDetailPageWidthPx, albumDetailTransitionKey) {
-        Animatable(albumDetailPageWidthPx)
-    }
-    val albumDetailHeroBlurGraphicsLayer = rememberGraphicsLayer()
-    val albumDetailHeroBlurLayerCache = remember(albumDetailHeroBlurGraphicsLayer) {
-        AlbumHeroBlurLayerCache(albumDetailHeroBlurGraphicsLayer)
-    }
+    var albumDetailStackPopTargetEntryId by remember { mutableStateOf<String?>(null) }
+    var albumDetailPageOffsetReader by remember { mutableStateOf<(() -> Float)?>(null) }
     var albumDetailEnterPreparing by remember { mutableStateOf(false) }
     var albumDetailEnterRequestId by remember { mutableLongStateOf(0L) }
     val albumDetailInsetsDispatchSuppressor = remember(mainRootView) {
@@ -836,6 +851,10 @@ fun MainContainer(
         UiFrameWorkCoordinator.markFrameCritical(
             maxOf(SecondaryPageEnterDurationMs, SecondaryPageExitDurationMs) + 120L
         )
+        if (!isAlbumDetailRoute(currentRoute)) {
+            albumDetailStackPopTargetEntryId = null
+            albumDetailPageOffsetReader = null
+        }
     }
     val bottomNavItems = remember { bottomChromeNavItems() }
     val storedMiniPlayerDisplayMode by settingsDataStore.miniPlayerDisplayMode.collectAsStateWithLifecycle(
@@ -1675,7 +1694,7 @@ fun MainContainer(
                         .graphicsLayer {
                             val width = size.width.toFloat().coerceAtLeast(1f)
                             val visibleRight = if (albumDetailTransitionActive) {
-                                albumDetailPageOffsetX.value.coerceIn(0f, width)
+                                albumDetailPageOffsetReader?.invoke()?.coerceIn(0f, width) ?: width
                             } else {
                                 width
                             }
@@ -2244,7 +2263,11 @@ fun MainContainer(
                                 navController = navController,
                                 startDestination = initialDestination,
                                 enterTransition = {
-                                    if (targetState.usesSecondaryPageSlideTransition()) {
+                                    if (isAlbumDetailStackTransition(
+                                            initialRoute = initialState.destination.route,
+                                            targetRoute = targetState.destination.route
+                                        ) || targetState.usesSecondaryPageSlideTransition()
+                                    ) {
                                         secondaryPageEnterTransition()
                                     } else {
                                         EnterTransition.None
@@ -2253,7 +2276,11 @@ fun MainContainer(
                                 exitTransition = { ExitTransition.None },
                                 popEnterTransition = { EnterTransition.None },
                                 popExitTransition = {
-                                    if (initialState.usesSecondaryPageSlideTransition()) {
+                                    if (isAlbumDetailStackTransition(
+                                            initialRoute = initialState.destination.route,
+                                            targetRoute = targetState.destination.route
+                                        ) || initialState.usesSecondaryPageSlideTransition()
+                                    ) {
                                         secondaryPagePopExitTransition()
                                     } else {
                                         ExitTransition.None
@@ -2400,14 +2427,23 @@ fun MainContainer(
                     val rj = backStackEntry.arguments?.getString("rj").orEmpty()
                     AlbumDetailRouteFrame(
                         backStackEntry = backStackEntry,
-                        pageOffsetX = albumDetailPageOffsetX,
-                        onPopBackStack = { navController.popBackStack() },
+                        previousBackStackEntry = navController.previousBackStackEntry,
+                        stackPopTargetEntryId = albumDetailStackPopTargetEntryId,
+                        onPopBackStack = { targetEntryId ->
+                            albumDetailStackPopTargetEntryId = targetEntryId
+                            navController.popBackStack()
+                        },
+                        onPageOffsetReader = { reader ->
+                            if (navController.currentBackStackEntry?.id == backStackEntry.id) {
+                                albumDetailPageOffsetReader = reader
+                            }
+                        },
                         onExitStateChanged = { albumDetailExitInProgress = it },
                         onEditRj = { currentRj ->
                             manualRjInput = currentRj
                             showManualRjDialog = true
                         }
-                    ) { albumDetailViewModel ->
+                    ) { albumDetailViewModel, heroBlurLayerCache ->
                         AlbumDetailScreen(
                             windowSizeClass = windowSizeClass,
                             rjCode = rj,
@@ -2444,7 +2480,8 @@ fun MainContainer(
                                     rjCode = targetRj,
                                     title = work?.title,
                                     circle = null,
-                                    coverUrl = work?.coverUrl
+                                    coverUrl = dlsiteOriginalCoverUrlForRj(targetRj)
+                                        .ifBlank { work?.coverUrl.orEmpty() }
                                 )
                                 navigator.openAlbumDetailByRjStacked(targetRj)
                             },
@@ -2453,7 +2490,7 @@ fun MainContainer(
                             albumGroupsViewModel = albumGroupsViewModel,
                             settingsViewModel = settingsViewModel,
                             libraryViewModel = libraryViewModel,
-                            heroBlurLayerCache = albumDetailHeroBlurLayerCache,
+                            heroBlurLayerCache = heroBlurLayerCache,
                             viewModel = albumDetailViewModel
                         )
                     }
@@ -2472,14 +2509,23 @@ fun MainContainer(
                     val rjCode = backStackEntry.arguments?.getString("rjCode")
                     AlbumDetailRouteFrame(
                         backStackEntry = backStackEntry,
-                        pageOffsetX = albumDetailPageOffsetX,
-                        onPopBackStack = { navController.popBackStack() },
+                        previousBackStackEntry = navController.previousBackStackEntry,
+                        stackPopTargetEntryId = albumDetailStackPopTargetEntryId,
+                        onPopBackStack = { targetEntryId ->
+                            albumDetailStackPopTargetEntryId = targetEntryId
+                            navController.popBackStack()
+                        },
+                        onPageOffsetReader = { reader ->
+                            if (navController.currentBackStackEntry?.id == backStackEntry.id) {
+                                albumDetailPageOffsetReader = reader
+                            }
+                        },
                         onExitStateChanged = { albumDetailExitInProgress = it },
                         onEditRj = { currentRj ->
                             manualRjInput = currentRj
                             showManualRjDialog = true
                         }
-                    ) { albumDetailViewModel ->
+                    ) { albumDetailViewModel, heroBlurLayerCache ->
                         AlbumDetailScreen(
                             windowSizeClass = windowSizeClass,
                             albumId = albumId,
@@ -2517,7 +2563,8 @@ fun MainContainer(
                                     rjCode = targetRj,
                                     title = work?.title,
                                     circle = null,
-                                    coverUrl = work?.coverUrl
+                                    coverUrl = dlsiteOriginalCoverUrlForRj(targetRj)
+                                        .ifBlank { work?.coverUrl.orEmpty() }
                                 )
                                 navigator.openAlbumDetailByRjStacked(targetRj)
                             },
@@ -2526,7 +2573,7 @@ fun MainContainer(
                             albumGroupsViewModel = albumGroupsViewModel,
                             settingsViewModel = settingsViewModel,
                             libraryViewModel = libraryViewModel,
-                            heroBlurLayerCache = albumDetailHeroBlurLayerCache,
+                            heroBlurLayerCache = heroBlurLayerCache,
                             viewModel = albumDetailViewModel
                         )
                     }
@@ -2540,14 +2587,23 @@ fun MainContainer(
                     val rj = backStackEntry.arguments?.getString("rj").orEmpty()
                     AlbumDetailRouteFrame(
                         backStackEntry = backStackEntry,
-                        pageOffsetX = albumDetailPageOffsetX,
-                        onPopBackStack = { navController.popBackStack() },
+                        previousBackStackEntry = navController.previousBackStackEntry,
+                        stackPopTargetEntryId = albumDetailStackPopTargetEntryId,
+                        onPopBackStack = { targetEntryId ->
+                            albumDetailStackPopTargetEntryId = targetEntryId
+                            navController.popBackStack()
+                        },
+                        onPageOffsetReader = { reader ->
+                            if (navController.currentBackStackEntry?.id == backStackEntry.id) {
+                                albumDetailPageOffsetReader = reader
+                            }
+                        },
                         onExitStateChanged = { albumDetailExitInProgress = it },
                         onEditRj = { currentRj ->
                             manualRjInput = currentRj
                             showManualRjDialog = true
                         }
-                    ) { albumDetailViewModel ->
+                    ) { albumDetailViewModel, heroBlurLayerCache ->
                         AlbumDetailScreen(
                             windowSizeClass = windowSizeClass,
                             rjCode = rj,
@@ -2575,7 +2631,8 @@ fun MainContainer(
                                     rjCode = targetRj,
                                     title = work?.title,
                                     circle = null,
-                                    coverUrl = work?.coverUrl
+                                    coverUrl = dlsiteOriginalCoverUrlForRj(targetRj)
+                                        .ifBlank { work?.coverUrl.orEmpty() }
                                 )
                                 navigator.openAlbumDetailByRjStacked(targetRj)
                             },
@@ -2584,7 +2641,7 @@ fun MainContainer(
                             albumGroupsViewModel = albumGroupsViewModel,
                             settingsViewModel = settingsViewModel,
                             libraryViewModel = libraryViewModel,
-                            heroBlurLayerCache = albumDetailHeroBlurLayerCache,
+                            heroBlurLayerCache = heroBlurLayerCache,
                             viewModel = albumDetailViewModel
                         )
                     }
