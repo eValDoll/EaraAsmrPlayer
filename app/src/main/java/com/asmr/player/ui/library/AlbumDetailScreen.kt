@@ -95,6 +95,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
@@ -130,6 +131,7 @@ import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -179,6 +181,30 @@ private enum class OnlineDownloadSource {
     AsmrOne,
     DlsitePlay,
     DlsiteTrial
+}
+
+private enum class IncrementalAlbumAction {
+    Download,
+    Save
+}
+
+private data class PendingOnlineSaveSelection(
+    val paths: Set<String>,
+    val useDlsitePlayTree: Boolean
+)
+
+private data class DlsitePlayAuthSnapshot(
+    val canAuthenticate: Boolean,
+    val fingerprint: Int
+)
+
+private fun readDlsitePlayAuthSnapshot(authStore: DlsiteAuthStore): DlsitePlayAuthSnapshot {
+    val cookie = authStore.getPlayCookie().trim()
+    val expiresAt = authStore.getPlayCookieExpiresAtMs()
+    return DlsitePlayAuthSnapshot(
+        canAuthenticate = cookie.isNotBlank() && (expiresAt == null || expiresAt > System.currentTimeMillis()),
+        fingerprint = 31 * cookie.hashCode() + (expiresAt?.hashCode() ?: 0)
+    )
 }
 
 internal data class PreparedTrackPlayback(
@@ -281,10 +307,21 @@ internal data class AlbumDetailOnlineLoadPlan(
 internal fun albumDetailOnlineLoadPlan(
     selectedTab: Int,
     hasResolvedInitialDlsiteTarget: Boolean,
-    isInitialRouteReady: Boolean
+    isInitialRouteReady: Boolean,
+    hasValidLocalRj: Boolean = false,
+    hasResolvedAsmrOneContent: Boolean = false,
+    hasAsmrOneTree: Boolean = false,
+    hasDlsitePlayCredentials: Boolean = false
 ): AlbumDetailOnlineLoadPlan {
     if (!isInitialRouteReady) return AlbumDetailOnlineLoadPlan()
     return when (selectedTab) {
+        0 -> AlbumDetailOnlineLoadPlan(
+            loadAsmrOne = hasValidLocalRj,
+            loadDlsitePlay = hasValidLocalRj &&
+                hasResolvedAsmrOneContent &&
+                !hasAsmrOneTree &&
+                hasDlsitePlayCredentials
+        )
         1 -> AlbumDetailOnlineLoadPlan(loadDlsite = true, loadAsmrOne = true)
         2 -> AlbumDetailOnlineLoadPlan(
             loadDlsite = true,
@@ -305,9 +342,12 @@ internal fun albumHeaderDownloadEnabled(
     selectedTab: Int,
     hasAsmrOneTree: Boolean,
     hasDlsitePlayTree: Boolean,
-    hasResolvedInitialDlsiteTarget: Boolean
+    hasResolvedInitialDlsiteTarget: Boolean,
+    hasValidLocalRj: Boolean = false,
+    hasDlsitePlayCredentials: Boolean = true
 ): Boolean {
     return when (selectedTab) {
+        0 -> hasValidLocalRj && (hasAsmrOneTree || (hasDlsitePlayCredentials && hasDlsitePlayTree))
         1 -> canUseAsmrOneOnlineTreeActions(selectedTab, hasAsmrOneTree)
         2 -> hasResolvedInitialDlsiteTarget && hasDlsitePlayTree
         else -> false
@@ -340,6 +380,14 @@ fun AlbumDetailScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val cloudSyncSelectionDialogState by viewModel.cloudSyncSelectionDialogState.collectAsStateWithLifecycle()
     val colorScheme = AsmrTheme.colorScheme
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val authStore = remember(context) { DlsiteAuthStore(context) }
+    var dlsitePlayAuthSnapshot by remember(authStore) {
+        mutableStateOf(readDlsitePlayAuthSnapshot(authStore))
+    }
+    val hasDlsitePlayCredentials = dlsitePlayAuthSnapshot.canAuthenticate
+    val actionScope = rememberCoroutineScope()
     val screenKey = remember(albumId, rjCode) {
         val idPart = albumId?.takeIf { it > 0 }?.toString().orEmpty()
         val rjPart = rjCode?.trim().orEmpty().uppercase()
@@ -355,15 +403,49 @@ fun AlbumDetailScreen(
     val initialIntroState = remember(screenKey) { AlbumDetailIntroState(settled = false) }
     var showAsmrDownloadDialog by remember { mutableStateOf(false) }
     var showOnlineSaveDialog by remember { mutableStateOf(false) }
-    var pendingOnlineSaveSelection by remember { mutableStateOf<Set<String>?>(null) }
+    var pendingOnlineSaveSelection by remember { mutableStateOf<PendingOnlineSaveSelection?>(null) }
     var batchPlaylistItems by remember { mutableStateOf<List<MediaItem>?>(null) }
     var groupPickerAlbumId by remember { mutableStateOf<Long?>(null) }
     var downloadSource by remember { mutableStateOf(OnlineDownloadSource.AsmrOne) }
+    var onlineSaveSource by remember { mutableStateOf(OnlineDownloadSource.AsmrOne) }
+    var downloadDisabledPaths by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var saveDisabledPaths by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var incrementalPreparationJob by remember { mutableStateOf<Job?>(null) }
     var metaActionKeyword by rememberSaveable { mutableStateOf<String?>(null) }
 
     fun openMetaActions(value: String) {
         val keyword = value.trim()
         if (keyword.isNotBlank()) metaActionKeyword = keyword
+    }
+
+    DisposableEffect(lifecycleOwner, authStore, selectedTab, viewModel) {
+        fun refreshAuthSnapshot() {
+            val updated = readDlsitePlayAuthSnapshot(authStore)
+            actionScope.launch {
+                val didAuthStateChange = updated != dlsitePlayAuthSnapshot
+                dlsitePlayAuthSnapshot = updated
+                if (didAuthStateChange && selectedTab == 0) {
+                    incrementalPreparationJob?.cancel()
+                    showAsmrDownloadDialog = false
+                    showOnlineSaveDialog = false
+                    viewModel.invalidateDlsitePlayAccess()
+                }
+            }
+        }
+        val preferenceListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+            refreshAuthSnapshot()
+        }
+        val lifecycleObserver = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                refreshAuthSnapshot()
+            }
+        }
+        authStore.registerListener(preferenceListener)
+        lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
+        onDispose {
+            authStore.unregisterListener(preferenceListener)
+            lifecycleOwner.lifecycle.removeObserver(lifecycleObserver)
+        }
     }
 
     LaunchedEffect(viewModel) {
@@ -379,12 +461,16 @@ fun AlbumDetailScreen(
         onDispose {
             viewModel.setListenTogetherRjSummaryPollingEnabled(false)
             viewModel.cancelActiveLoads()
+            incrementalPreparationJob?.cancel()
         }
     }
     LaunchedEffect(pendingOnlineSaveSelection) {
         val selected = pendingOnlineSaveSelection ?: return@LaunchedEffect
         pendingOnlineSaveSelection = null
-        viewModel.saveOnlineSelectedToLibrary(selected)
+        viewModel.saveOnlineSelectedToLibrary(
+            selectedLeafPaths = selected.paths,
+            useDlsitePlayTree = selected.useDlsitePlayTree
+        )
     }
 
     Box(
@@ -423,6 +509,52 @@ fun AlbumDetailScreen(
                     val model = state.model
                     val album = model.displayAlbum
                     val asmrOneTree = model.asmrOneTree
+                    val localActionRj = remember(
+                        model.baseRjCode,
+                        model.localAlbum?.rjCode,
+                        model.localAlbum?.workId,
+                        model.localAlbum?.title,
+                        model.localAlbum?.path
+                    ) {
+                        resolveAlbumDetailRj(model.baseRjCode, model.localAlbum)
+                    }
+                    val hasValidLocalRj = localActionRj.isNotBlank()
+                    val localOnlineSource = when {
+                        asmrOneTree.isNotEmpty() -> OnlineDownloadSource.AsmrOne
+                        hasDlsitePlayCredentials && model.dlsitePlayTree.isNotEmpty() -> OnlineDownloadSource.DlsitePlay
+                        else -> null
+                    }
+                    fun prepareIncrementalAlbumAction(
+                        action: IncrementalAlbumAction,
+                        source: OnlineDownloadSource,
+                        tree: List<AsmrOneTrackNodeResponse>
+                    ) {
+                        if (tree.isEmpty()) return
+
+                        incrementalPreparationJob?.cancel()
+                        incrementalPreparationJob = actionScope.launch {
+                            val existing = try {
+                                viewModel.resolveLocalIncrementalSelectionPaths(tree)
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (_: Exception) {
+                                viewModel.messageManager.showError("读取本地文件状态失败，请稍后重试")
+                                return@launch
+                            }
+                            when (action) {
+                                IncrementalAlbumAction.Download -> {
+                                    downloadSource = source
+                                    downloadDisabledPaths = existing.downloadedPaths
+                                    showAsmrDownloadDialog = true
+                                }
+                                IncrementalAlbumAction.Save -> {
+                                    onlineSaveSource = source
+                                    saveDisabledPaths = existing.savedPaths
+                                    showOnlineSaveDialog = true
+                                }
+                            }
+                        }
+                    }
                     val trialDownloadTree = remember(model.dlsiteTrialTracks) {
                         buildDlsiteTrialDownloadTree(model.dlsiteTrialTracks)
                     }
@@ -659,7 +791,26 @@ fun AlbumDetailScreen(
                                 selectedTab = tab,
                                 hasAsmrOneTree = asmrOneTree.isNotEmpty()
                             )
+                            val headerDownloadEnabled = albumHeaderDownloadEnabled(
+                                selectedTab = tab,
+                                hasAsmrOneTree = asmrOneTree.isNotEmpty(),
+                                hasDlsitePlayTree = model.dlsitePlayTree.isNotEmpty(),
+                                hasResolvedInitialDlsiteTarget = resolvedInitialTarget,
+                                hasValidLocalRj = hasValidLocalRj,
+                                hasDlsitePlayCredentials = hasDlsitePlayCredentials
+                            )
                             val headerAlbum = headerAlbumForTab(tab)
+                            val incrementalSource = when (tab) {
+                                0 -> localOnlineSource
+                                1 -> OnlineDownloadSource.AsmrOne
+                                2 -> OnlineDownloadSource.DlsitePlay
+                                else -> null
+                            }
+                            val incrementalTree = when (incrementalSource) {
+                                OnlineDownloadSource.AsmrOne -> asmrOneTree
+                                OnlineDownloadSource.DlsitePlay -> model.dlsitePlayTree
+                                else -> emptyList()
+                            }
                             val headerDlsiteEditions = if (isLocalTab) {
                                 emptyList()
                             } else {
@@ -681,30 +832,32 @@ fun AlbumDetailScreen(
                                 dlsiteEditions = headerDlsiteEditions,
                                 dlsiteSelectedLang = model.dlsiteSelectedLang,
                                 onDlsiteLangSelected = { viewModel.selectDlsiteLanguage(it) },
-                                showSaveAction = tab == 1,
+                                showSaveAction = tab != 2,
                                 onDownloadClick = {
-                                    downloadSource = if (tab == 2) {
-                                        OnlineDownloadSource.DlsitePlay
-                                    } else {
-                                        OnlineDownloadSource.AsmrOne
+                                    incrementalSource?.let { source ->
+                                        prepareIncrementalAlbumAction(
+                                            action = IncrementalAlbumAction.Download,
+                                            source = source,
+                                            tree = incrementalTree
+                                        )
                                     }
-                                    showAsmrDownloadDialog = true
                                 },
                                 showDlsitePlayLossless = tab == 2,
                                 onLosslessDownloadClick = {
                                     viewModel.downloadDlsitePlayLosslessArchive()
                                 },
                                 onSaveClick = {
-                                    showOnlineSaveDialog = true
+                                    incrementalSource?.let { source ->
+                                        prepareIncrementalAlbumAction(
+                                            action = IncrementalAlbumAction.Save,
+                                            source = source,
+                                            tree = incrementalTree
+                                        )
+                                    }
                                 },
-                                downloadEnabled = albumHeaderDownloadEnabled(
-                                    selectedTab = tab,
-                                    hasAsmrOneTree = asmrOneTree.isNotEmpty(),
-                                    hasDlsitePlayTree = model.dlsitePlayTree.isNotEmpty(),
-                                    hasResolvedInitialDlsiteTarget = resolvedInitialTarget
-                                ),
+                                downloadEnabled = headerDownloadEnabled,
                                 losslessDownloadEnabled = tab == 2 && resolvedInitialTarget && model.dlsitePlayTree.isNotEmpty(),
-                                saveEnabled = canUseAsmrOneTreeActions,
+                                saveEnabled = if (isLocalTab) headerDownloadEnabled else canUseAsmrOneTreeActions,
                                 showGroupButton = isLocalTab && model.localAlbum != null,
                                 onOpenGroupPicker = { id -> groupPickerAlbumId = id },
                                 introSessionKey = introSessionKey,
@@ -753,12 +906,21 @@ fun AlbumDetailScreen(
                                 model.rjCode,
                                 model.dlsiteWorkno,
                                 model.hasResolvedInitialDlsiteTarget,
+                                model.hasResolvedAsmrOneContent,
+                                asmrOneTree.isNotEmpty(),
+                                hasDlsitePlayCredentials,
+                                dlsitePlayAuthSnapshot.fingerprint,
+                                localActionRj,
                                 isInitialRouteReady
                             ) {
                                 val loadPlan = albumDetailOnlineLoadPlan(
                                     selectedTab = selectedTab,
                                     hasResolvedInitialDlsiteTarget = model.hasResolvedInitialDlsiteTarget,
-                                    isInitialRouteReady = isInitialRouteReady
+                                    isInitialRouteReady = isInitialRouteReady,
+                                    hasValidLocalRj = hasValidLocalRj,
+                                    hasResolvedAsmrOneContent = model.hasResolvedAsmrOneContent,
+                                    hasAsmrOneTree = asmrOneTree.isNotEmpty(),
+                                    hasDlsitePlayCredentials = hasDlsitePlayCredentials
                                 )
                                 if (loadPlan.loadDlsite) {
                                     viewModel.ensureDlsiteLoaded()
@@ -767,7 +929,7 @@ fun AlbumDetailScreen(
                                     viewModel.ensureAsmrOneLoaded()
                                 }
                                 if (loadPlan.loadDlsitePlay) {
-                                    viewModel.ensureDlsitePlayLoaded()
+                                    viewModel.ensureDlsitePlayLoaded(showFailureMessage = selectedTab != 0)
                                 }
                             }
 
@@ -841,6 +1003,9 @@ fun AlbumDetailScreen(
                                                     val target = PlaylistAddTarget.fromTrack(local, track)
                                                     onOpenPlaylistPicker(target.toMediaItem())
                                                 },
+                                                onDownloadOnlineTrack = { track, relativePath ->
+                                                    viewModel.downloadSavedOnlineTrack(track, relativePath)
+                                                },
                                                 onManageTrackTags = { track ->
                                                     tagManageTrack = track
                                                 },
@@ -888,6 +1053,7 @@ fun AlbumDetailScreen(
                                         onRefreshAsmrOne = { viewModel.refreshAsmrOneSection() },
                                         onRefreshTrial = { viewModel.refreshDlsiteTrialSection() },
                                         onDownloadTrial = {
+                                            downloadDisabledPaths = emptySet()
                                             downloadSource = OnlineDownloadSource.DlsiteTrial
                                             showAsmrDownloadDialog = true
                                         },
@@ -970,10 +1136,14 @@ fun AlbumDetailScreen(
                     }
                 }
 
-                val canSaveOnline = canUseAsmrOneOnlineTreeActions(
-                    selectedTab = selectedTab,
-                    hasAsmrOneTree = asmrOneTree.isNotEmpty()
-                )
+                val canSaveOnline = if (selectedTab == 0) {
+                    hasValidLocalRj && localOnlineSource != null
+                } else {
+                    canUseAsmrOneOnlineTreeActions(
+                        selectedTab = selectedTab,
+                        hasAsmrOneTree = asmrOneTree.isNotEmpty()
+                    )
+                }
                 if (showAsmrDownloadDialog) {
                     val downloadTree = when (downloadSource) {
                         OnlineDownloadSource.AsmrOne -> asmrOneTree
@@ -983,6 +1153,7 @@ fun AlbumDetailScreen(
                     AsmrOneDownloadDialog(
                         albumTitle = album.title,
                         trackTree = downloadTree,
+                        disabledPaths = downloadDisabledPaths,
                         onDismiss = { showAsmrDownloadDialog = false },
                         onConfirm = { selected ->
                             when (downloadSource) {
@@ -996,13 +1167,20 @@ fun AlbumDetailScreen(
                 }
 
                 if (showOnlineSaveDialog && canSaveOnline) {
-                    val saveTree = if (model.dlsitePlayTree.isNotEmpty()) model.dlsitePlayTree else asmrOneTree
+                    val saveTree = when (onlineSaveSource) {
+                        OnlineDownloadSource.DlsitePlay -> model.dlsitePlayTree
+                        else -> asmrOneTree
+                    }
                     OnlineSaveDialog(
                         albumTitle = album.title,
                         trackTree = saveTree,
+                        disabledPaths = saveDisabledPaths,
                         onDismiss = { showOnlineSaveDialog = false },
                         onConfirm = { selected ->
-                            pendingOnlineSaveSelection = selected
+                            pendingOnlineSaveSelection = PendingOnlineSaveSelection(
+                                paths = selected,
+                                useDlsitePlayTree = onlineSaveSource == OnlineDownloadSource.DlsitePlay
+                            )
                             showOnlineSaveDialog = false
                         }
                     )

@@ -159,6 +159,7 @@ internal fun AlbumLocalBreadcrumbTabV2(
     preferredCurrentPath: String,
     onTogglePreferredCurrentPath: (String, Boolean) -> Unit,
     onAddToPlaylist: (Track) -> Unit,
+    onDownloadOnlineTrack: (Track, String) -> Unit,
     onManageTrackTags: (Track) -> Unit,
     onRemoveTrack: (Track) -> Unit,
     onSetCoverFromImage: (String) -> Unit,
@@ -363,6 +364,7 @@ internal fun AlbumLocalBreadcrumbTabV2(
                     fileKeyPrefix = "file",
                     fileContent = { file, selectionMode, selected, enterSelectionMode, onSelectedChange ->
                         val track = file.track
+                        val downloadableTrack = downloadableOnlineAudioTrack(file)
                         DirectoryFileRow(
                             file = file,
                             loadRemoteFileSize = { null },
@@ -471,7 +473,9 @@ internal fun AlbumLocalBreadcrumbTabV2(
                             } else {
                                 null
                             },
-                            onDownload = null,
+                            onDownload = downloadableTrack?.let {
+                                { onDownloadOnlineTrack(it, file.path) }
+                            },
                             onAddToQueue = track?.let { { onAddToQueue(it); Unit } },
                             onAddToPlaylist = track?.let { { onAddToPlaylist(it) } },
                             onGenerateSubtitles = if (subtitleFeatureSupported) {

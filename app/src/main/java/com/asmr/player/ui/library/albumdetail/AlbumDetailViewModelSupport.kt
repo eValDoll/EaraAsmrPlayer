@@ -178,6 +178,19 @@ data class AlbumDetailModel(
     val isLoadingDlsitePlay: Boolean
 )
 
+internal fun resolveAlbumDetailRj(routeRj: String?, localAlbum: Album?): String {
+    return sequenceOf(
+        routeRj.orEmpty(),
+        localAlbum?.rjCode.orEmpty(),
+        localAlbum?.workId.orEmpty(),
+        localAlbum?.title.orEmpty(),
+        localAlbum?.path.orEmpty()
+    )
+        .map(DlsiteWorkNo::extractRjCode)
+        .firstOrNull { it.isNotBlank() }
+        .orEmpty()
+}
+
 internal fun AlbumDetailModel.listenTogetherSummaryRj(): String {
     return baseRjCode.trim().uppercase().ifBlank { rjCode.trim().uppercase() }
 }
