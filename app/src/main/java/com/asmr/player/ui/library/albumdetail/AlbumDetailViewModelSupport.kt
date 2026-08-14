@@ -287,10 +287,31 @@ internal fun mergeDetailHeaderAlbum(
         )
     }
     return if (fetchedDlsiteInfo != null) {
+        val mergedOnlineInfo = fetchedDlsiteInfo.copy(
+            title = fetchedDlsiteInfo.title
+                .takeUnless { title ->
+                    title.isBlank() ||
+                        title == "专辑" ||
+                        title.equals(fetchedDlsiteInfo.rjCode, ignoreCase = true)
+                }
+                ?: currentDisplayAlbum.title,
+            circle = fetchedDlsiteInfo.circle.ifBlank { currentDisplayAlbum.circle },
+            cv = fetchedDlsiteInfo.cv.ifBlank { currentDisplayAlbum.cv },
+            tags = fetchedDlsiteInfo.tags.ifEmpty { currentDisplayAlbum.tags },
+            coverUrl = fetchedDlsiteInfo.coverUrl.ifBlank { currentDisplayAlbum.coverUrl },
+            ratingValue = fetchedDlsiteInfo.ratingValue ?: currentDisplayAlbum.ratingValue,
+            ratingCount = fetchedDlsiteInfo.ratingCount.takeIf { it > 0 }
+                ?: currentDisplayAlbum.ratingCount,
+            releaseDate = fetchedDlsiteInfo.releaseDate.ifBlank { currentDisplayAlbum.releaseDate },
+            dlCount = fetchedDlsiteInfo.dlCount.takeIf { it > 0 } ?: currentDisplayAlbum.dlCount,
+            priceJpy = fetchedDlsiteInfo.priceJpy.takeIf { it > 0 } ?: currentDisplayAlbum.priceJpy,
+            hasAsmrOne = fetchedDlsiteInfo.hasAsmrOne || currentDisplayAlbum.hasAsmrOne,
+            description = fetchedDlsiteInfo.description.ifBlank { currentDisplayAlbum.description }
+        )
         buildDisplayAlbum(
             rjCode = rjCode,
             localAlbum = localAlbum,
-            dlsiteInfo = fetchedDlsiteInfo,
+            dlsiteInfo = mergedOnlineInfo,
             asmrOneWorkId = asmrOneWorkId,
             fallbackCv = currentDisplayAlbum.cv,
             fallbackCoverUrl = currentDisplayAlbum.coverUrl
@@ -301,6 +322,69 @@ internal fun mergeDetailHeaderAlbum(
             asmrOneWorkId = asmrOneWorkId
         )
     }
+}
+
+internal fun mergeAsmrOneHeaderAlbum(
+    currentDisplayAlbum: Album,
+    localAlbum: Album?,
+    fetchedDlsiteInfo: Album?,
+    resolvedAsmrOneDetails: WorkDetailsResponse?,
+    rjCode: String,
+    asmrOneWorkId: String?,
+    preserveHeaderAlbumMetadata: Boolean
+): Album {
+    val asmrOneInfo = resolvedAsmrOneDetails?.let { details ->
+        Album(
+            title = details.title.trim().ifBlank { currentDisplayAlbum.title },
+            path = "",
+            workId = asmrOneWorkId.orEmpty(),
+            rjCode = rjCode,
+            circle = details.circle?.name.orEmpty().trim(),
+            cv = details.vas.orEmpty()
+                .map { it.name.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .joinToString(", "),
+            tags = details.tags.orEmpty()
+                .map { it.name.trim() }
+                .filter { it.isNotBlank() }
+                .distinct(),
+            coverUrl = details.mainCoverUrl.trim(),
+            dlCount = details.dl_count.coerceAtLeast(0),
+            priceJpy = details.price.coerceAtLeast(0),
+            hasAsmrOne = true
+        )
+    }
+    val mergedOnlineInfo = when {
+        fetchedDlsiteInfo == null -> asmrOneInfo
+        asmrOneInfo == null -> fetchedDlsiteInfo
+        else -> fetchedDlsiteInfo.copy(
+            title = fetchedDlsiteInfo.title
+                .takeUnless { title ->
+                    title.isBlank() ||
+                        title == "专辑" ||
+                        title.equals(fetchedDlsiteInfo.rjCode, ignoreCase = true)
+                }
+                ?: asmrOneInfo.title,
+            circle = fetchedDlsiteInfo.circle.ifBlank { asmrOneInfo.circle },
+            cv = fetchedDlsiteInfo.cv.ifBlank { asmrOneInfo.cv },
+            tags = fetchedDlsiteInfo.tags.ifEmpty { asmrOneInfo.tags },
+            coverUrl = fetchedDlsiteInfo.coverUrl.ifBlank { asmrOneInfo.coverUrl },
+            workId = fetchedDlsiteInfo.workId.ifBlank { asmrOneInfo.workId },
+            rjCode = fetchedDlsiteInfo.rjCode.ifBlank { asmrOneInfo.rjCode },
+            dlCount = fetchedDlsiteInfo.dlCount.takeIf { it > 0 } ?: asmrOneInfo.dlCount,
+            priceJpy = fetchedDlsiteInfo.priceJpy.takeIf { it > 0 } ?: asmrOneInfo.priceJpy,
+            hasAsmrOne = fetchedDlsiteInfo.hasAsmrOne || asmrOneInfo.hasAsmrOne
+        )
+    }
+    return mergeDetailHeaderAlbum(
+        currentDisplayAlbum = currentDisplayAlbum,
+        localAlbum = localAlbum,
+        fetchedDlsiteInfo = mergedOnlineInfo,
+        rjCode = rjCode,
+        asmrOneWorkId = asmrOneWorkId,
+        preserveHeaderAlbumMetadata = preserveHeaderAlbumMetadata
+    )
 }
 
 internal fun shouldPreserveHeaderAlbumMetadata(hint: AlbumCoverHint?): Boolean {

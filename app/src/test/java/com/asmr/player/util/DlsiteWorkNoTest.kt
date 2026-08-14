@@ -28,6 +28,12 @@ class DlsiteWorkNoTest {
     }
 
     @Test
+    fun extractRjCode_ignoresEmbeddedLettersAndNumbers() {
+        assertEquals("", DlsiteWorkNo.extractRjCode("MRJ123456"))
+        assertEquals("", DlsiteWorkNo.extractRjCode("RJ123456ABC"))
+    }
+
+    @Test
     fun normalizeCandidates_dedupAndUppercase() {
         val out = DlsiteWorkNo.normalizeCandidates(listOf(" rj1 ", "RJ1", "", "rj2"))
         assertEquals(listOf("RJ1", "RJ2"), out)

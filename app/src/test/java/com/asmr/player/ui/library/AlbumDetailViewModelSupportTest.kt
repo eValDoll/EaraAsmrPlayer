@@ -1,5 +1,9 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.data.remote.api.Artist
+import com.asmr.player.data.remote.api.Circle
+import com.asmr.player.data.remote.api.Tag
+import com.asmr.player.data.remote.api.WorkDetailsResponse
 import com.asmr.player.domain.model.Album
 import com.asmr.player.ui.nav.AlbumCoverHint
 import org.junit.Assert.assertEquals
@@ -122,6 +126,147 @@ class AlbumDetailViewModelSupportTest {
         assertEquals("抓取标题", result.title)
         assertEquals("抓取CV", result.cv)
         assertEquals(listOf("抓取标签"), result.tags)
+    }
+
+    @Test
+    fun mergeDetailHeaderAlbum_keepsResolvedMetadataWhenLateDlsiteDataIsPartial() {
+        val resolved = Album(
+            title = "ASMR 标题",
+            path = "",
+            rjCode = "RJ01491538",
+            circle = "猫麦",
+            cv = "大山チロル, 陽向葵ゅか, 柚木つばめ",
+            tags = listOf("纯爱/甜蜜", "后宫", "环绕音"),
+            hasAsmrOne = true
+        )
+        val partialDlsite = Album(
+            title = "DLsite 标题",
+            path = "",
+            rjCode = "RJ01491538",
+            coverUrl = "https://example.com/dlsite-cover.jpg"
+        )
+
+        val result = mergeDetailHeaderAlbum(
+            currentDisplayAlbum = resolved,
+            localAlbum = null,
+            fetchedDlsiteInfo = partialDlsite,
+            rjCode = "RJ01491538",
+            asmrOneWorkId = "1491538",
+            preserveHeaderAlbumMetadata = false
+        )
+
+        assertEquals("DLsite 标题", result.title)
+        assertEquals("猫麦", result.circle)
+        assertEquals("大山チロル, 陽向葵ゅか, 柚木つばめ", result.cv)
+        assertEquals(listOf("纯爱/甜蜜", "后宫", "环绕音"), result.tags)
+        assertTrue(result.hasAsmrOne)
+    }
+
+    @Test
+    fun mergeAsmrOneHeaderAlbum_replacesPlaceholderWithResolvedMetadata() {
+        val result = mergeAsmrOneHeaderAlbum(
+            currentDisplayAlbum = Album(
+                title = "专辑",
+                path = "",
+                rjCode = "RJ01522140"
+            ),
+            localAlbum = null,
+            fetchedDlsiteInfo = null,
+            resolvedAsmrOneDetails = WorkDetailsResponse(
+                id = 1522140,
+                source_id = "RJ01522140",
+                title = "真实作品标题",
+                circle = Circle("真实社团"),
+                vas = listOf(Artist("声优A"), Artist("声优B")),
+                tags = listOf(Tag("治愈"), Tag("耳语")),
+                duration = 0,
+                mainCoverUrl = "https://example.com/cover.jpg",
+                dl_count = 123,
+                price = 770
+            ),
+            rjCode = "RJ01522140",
+            asmrOneWorkId = "1522140",
+            preserveHeaderAlbumMetadata = false
+        )
+
+        assertEquals("真实作品标题", result.title)
+        assertEquals("真实社团", result.circle)
+        assertEquals("声优A, 声优B", result.cv)
+        assertEquals(listOf("治愈", "耳语"), result.tags)
+        assertEquals("https://example.com/cover.jpg", result.coverUrl)
+        assertEquals("1522140", result.workId)
+        assertTrue(result.hasAsmrOne)
+    }
+
+    @Test
+    fun mergeAsmrOneHeaderAlbum_fillsMissingDlsiteMetadata() {
+        val result = mergeAsmrOneHeaderAlbum(
+            currentDisplayAlbum = Album(
+                title = "专辑",
+                path = "",
+                rjCode = "RJ01491538"
+            ),
+            localAlbum = null,
+            fetchedDlsiteInfo = Album(
+                title = "专辑",
+                path = "",
+                rjCode = "RJ01491538",
+                coverUrl = "https://example.com/dlsite-cover.jpg"
+            ),
+            resolvedAsmrOneDetails = WorkDetailsResponse(
+                id = 1491538,
+                source_id = "RJ01491538",
+                title = "真实作品标题",
+                circle = Circle("猫麦"),
+                vas = listOf(Artist("大山チロル"), Artist("陽向葵ゅか"), Artist("柚木つばめ")),
+                tags = listOf(Tag("纯爱/甜蜜"), Tag("后宫"), Tag("环绕音")),
+                duration = 0,
+                mainCoverUrl = "https://example.com/asmr-cover.jpg",
+                dl_count = 456,
+                price = 990
+            ),
+            rjCode = "RJ01491538",
+            asmrOneWorkId = "1491538",
+            preserveHeaderAlbumMetadata = false
+        )
+
+        assertEquals("真实作品标题", result.title)
+        assertEquals("猫麦", result.circle)
+        assertEquals("大山チロル, 陽向葵ゅか, 柚木つばめ", result.cv)
+        assertEquals(listOf("纯爱/甜蜜", "后宫", "环绕音"), result.tags)
+        assertEquals("https://example.com/dlsite-cover.jpg", result.coverUrl)
+        assertTrue(result.hasAsmrOne)
+    }
+
+    @Test
+    fun resolveStableAlbumHeroIdentity_upgradesPlaceholderWithoutReplacingRealTitle() {
+        val placeholder = StableAlbumHeroIdentity(
+            title = "专辑",
+            rj = "RJ01522140",
+            circle = ""
+        )
+        val resolved = StableAlbumHeroIdentity(
+            title = "真实作品标题",
+            rj = "RJ01522140",
+            circle = "真实社团"
+        )
+
+        assertEquals(resolved, resolveStableAlbumHeroIdentity(placeholder, resolved))
+        assertEquals(
+            StableAlbumHeroIdentity(
+                title = "列表已有标题",
+                rj = "RJ01522140",
+                circle = "列表社团"
+            ),
+            resolveStableAlbumHeroIdentity(
+                stable = StableAlbumHeroIdentity(
+                    title = "列表已有标题",
+                    rj = "RJ01522140",
+                    circle = "列表社团"
+                ),
+                current = resolved
+            )
+        )
     }
 
     @Test

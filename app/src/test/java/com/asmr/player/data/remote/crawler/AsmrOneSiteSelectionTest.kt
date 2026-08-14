@@ -29,6 +29,18 @@ class AsmrOneSiteSelectionTest {
     }
 
     @Test
+    fun metadataEndpoint_usesMirror200WhenTracksUseBackup() {
+        assertEquals(
+            AsmrOneEndpoint.MIRROR_200,
+            resolveAsmrOneMetadataEndpoint(AsmrOneEndpoint.BACKUP)
+        )
+        assertEquals(
+            AsmrOneEndpoint.MIRROR_100,
+            resolveAsmrOneMetadataEndpoint(AsmrOneEndpoint.MIRROR_100)
+        )
+    }
+
+    @Test
     fun fetchTracks_requestsOnlySelectedEndpoint() = runBlocking {
         val calls = mutableListOf<Int>()
         val tree = listOf(track("selected.wav"))
