@@ -237,14 +237,15 @@ internal fun AsmrOneDownloadDialog(
                             itemsIndexed(items = entries, key = { _, it -> it.path }) { index, entry ->
                                 when (entry) {
                                     is AsmrTreeUiEntry.Folder -> {
-                                        val folderLeafPaths = leafPathsByFolder[entry.path]
-                                            .orEmpty()
-                                            .filterNot(disabledPaths::contains)
-                                        val checkedCount = folderLeafPaths.count { selected.contains(it) }
+                                        val allFolderLeafPaths = leafPathsByFolder[entry.path].orEmpty()
+                                        val selectableFolderLeafPaths = allFolderLeafPaths.filterNot(disabledPaths::contains)
+                                        val checkedCount = allFolderLeafPaths.count { path ->
+                                            disabledPaths.contains(path) || selected.contains(path)
+                                        }
                                         val state = when {
-                                            folderLeafPaths.isEmpty() -> ToggleableState.Off
+                                            allFolderLeafPaths.isEmpty() -> ToggleableState.Off
                                             checkedCount == 0 -> ToggleableState.Off
-                                            checkedCount == folderLeafPaths.size -> ToggleableState.On
+                                            checkedCount == allFolderLeafPaths.size -> ToggleableState.On
                                             else -> ToggleableState.Indeterminate
                                         }
                                         AsmrTreeFolderCheckboxRow(
@@ -252,17 +253,17 @@ internal fun AsmrOneDownloadDialog(
                                             depth = entry.depth,
                                             expanded = expanded.contains(entry.path),
                                             toggleState = state,
-                                            checkboxEnabled = folderLeafPaths.isNotEmpty(),
+                                            checkboxEnabled = selectableFolderLeafPaths.isNotEmpty(),
                                             onToggleExpand = {
                                                 if (expanded.contains(entry.path)) expanded.remove(entry.path) else expanded.add(entry.path)
                                             },
                                             onToggleCheck = {
-                                                if (folderLeafPaths.isEmpty()) return@AsmrTreeFolderCheckboxRow
+                                                if (selectableFolderLeafPaths.isEmpty()) return@AsmrTreeFolderCheckboxRow
                                                 val shouldSelectAll = state != ToggleableState.On
                                                 if (shouldSelectAll) {
-                                                    folderLeafPaths.forEach { if (!selected.contains(it)) selected.add(it) }
+                                                    selectableFolderLeafPaths.forEach { if (!selected.contains(it)) selected.add(it) }
                                                 } else {
-                                                    selected.removeAll(folderLeafPaths.toSet())
+                                                    selected.removeAll(selectableFolderLeafPaths.toSet())
                                                 }
                                             }
                                         )
@@ -501,14 +502,15 @@ internal fun OnlineSaveDialog(
                             itemsIndexed(items = entries, key = { _, it -> it.path }) { index, entry ->
                                 when (entry) {
                                     is AsmrTreeUiEntry.Folder -> {
-                                        val folderLeafPaths = leafPathsByFolder[entry.path]
-                                            .orEmpty()
-                                            .filterNot(disabledPaths::contains)
-                                        val checkedCount = folderLeafPaths.count { selected.contains(it) }
+                                        val allFolderLeafPaths = leafPathsByFolder[entry.path].orEmpty()
+                                        val selectableFolderLeafPaths = allFolderLeafPaths.filterNot(disabledPaths::contains)
+                                        val checkedCount = allFolderLeafPaths.count { path ->
+                                            disabledPaths.contains(path) || selected.contains(path)
+                                        }
                                         val state = when {
-                                            folderLeafPaths.isEmpty() -> ToggleableState.Off
+                                            allFolderLeafPaths.isEmpty() -> ToggleableState.Off
                                             checkedCount == 0 -> ToggleableState.Off
-                                            checkedCount == folderLeafPaths.size -> ToggleableState.On
+                                            checkedCount == allFolderLeafPaths.size -> ToggleableState.On
                                             else -> ToggleableState.Indeterminate
                                         }
                                         AsmrTreeFolderCheckboxRow(
@@ -516,17 +518,17 @@ internal fun OnlineSaveDialog(
                                             depth = entry.depth,
                                             expanded = expanded.contains(entry.path),
                                             toggleState = state,
-                                            checkboxEnabled = folderLeafPaths.isNotEmpty(),
+                                            checkboxEnabled = selectableFolderLeafPaths.isNotEmpty(),
                                             onToggleExpand = {
                                                 if (expanded.contains(entry.path)) expanded.remove(entry.path) else expanded.add(entry.path)
                                             },
                                             onToggleCheck = {
-                                                if (folderLeafPaths.isEmpty()) return@AsmrTreeFolderCheckboxRow
+                                                if (selectableFolderLeafPaths.isEmpty()) return@AsmrTreeFolderCheckboxRow
                                                 val shouldSelectAll = state != ToggleableState.On
                                                 if (shouldSelectAll) {
-                                                    folderLeafPaths.forEach { if (!selected.contains(it)) selected.add(it) }
+                                                    selectableFolderLeafPaths.forEach { if (!selected.contains(it)) selected.add(it) }
                                                 } else {
-                                                    selected.removeAll(folderLeafPaths.toSet())
+                                                    selected.removeAll(selectableFolderLeafPaths.toSet())
                                                 }
                                             }
                                         )
