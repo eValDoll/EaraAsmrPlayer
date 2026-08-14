@@ -9,6 +9,38 @@ import org.junit.Test
 
 class AlbumDetailViewModelSupportTest {
     @Test
+    fun resolveAlbumDetailRj_fallsBackToImportedAlbumMetadataAndTitle() {
+        assertEquals(
+            "RJ123456",
+            resolveAlbumDetailRj(
+                routeRj = null,
+                localAlbum = Album(
+                    title = "外部导入 RJ123456",
+                    path = "/storage/emulated/0/ASMR/作品"
+                )
+            )
+        )
+        assertEquals(
+            "RJ654321",
+            resolveAlbumDetailRj(
+                routeRj = null,
+                localAlbum = Album(
+                    title = "作品",
+                    path = "/storage/emulated/0/ASMR/作品",
+                    workId = "RJ654321"
+                )
+            )
+        )
+        assertEquals(
+            "",
+            resolveAlbumDetailRj(
+                routeRj = null,
+                localAlbum = Album(title = "未绑定作品", path = "/storage/emulated/0/ASMR/作品")
+            )
+        )
+    }
+
+    @Test
     fun buildDisplayAlbum_keepsFallbackCvWhenDlsiteInfoHasNoCv() {
         val localAlbum = Album(
             title = "作品",

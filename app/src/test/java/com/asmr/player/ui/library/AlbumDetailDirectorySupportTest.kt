@@ -346,6 +346,82 @@ class AlbumDetailDirectorySupportTest {
     }
 
     @Test
+    fun resolveExistingRemoteSelectionPaths_distinguishesDownloadedAndSavedFiles() {
+        val remoteFiles = listOf(
+            RemoteSelectionFileRef("disc/online.mp3", "https://example.com/online.mp3?token=new"),
+            RemoteSelectionFileRef("disc/local.mp3", "https://example.com/local.mp3")
+        )
+        val localFiles = listOf(
+            LocalSelectionFileRef(
+                relativePath = "disc/online.mp3",
+                absolutePath = "https://example.com/online.mp3?token=old",
+                track = Track(
+                    albumId = 9L,
+                    title = "online",
+                    path = "https://example.com/online.mp3?token=old",
+                    group = "disc"
+                )
+            ),
+            LocalSelectionFileRef(
+                relativePath = "disc/local.mp3",
+                absolutePath = "/album/disc/local.mp3",
+                track = Track(
+                    albumId = 9L,
+                    title = "local",
+                    path = "/album/disc/local.mp3",
+                    group = "disc"
+                )
+            )
+        )
+
+        assertEquals(
+            setOf("disc/local.mp3"),
+            resolveExistingRemoteSelectionPaths(
+                remoteFiles = remoteFiles,
+                localFiles = localFiles,
+                includeOnlineFiles = false
+            )
+        )
+        assertEquals(
+            setOf("disc/online.mp3", "disc/local.mp3"),
+            resolveExistingRemoteSelectionPaths(
+                remoteFiles = remoteFiles,
+                localFiles = localFiles,
+                includeOnlineFiles = true
+            )
+        )
+    }
+
+    @Test
+    fun resolveExistingRemoteSelectionPaths_consumesImportedFallbackMatchesOnce() {
+        val remoteFiles = listOf(
+            RemoteSelectionFileRef("disc1/same.mp3", "https://example.com/disc1/same.mp3"),
+            RemoteSelectionFileRef("disc2/same.mp3", "https://example.com/disc2/same.mp3")
+        )
+        val localFiles = listOf(
+            LocalSelectionFileRef(
+                relativePath = "external/same.mp3",
+                absolutePath = "/import/external/same.mp3",
+                track = Track(
+                    albumId = 9L,
+                    title = "same",
+                    path = "/import/external/same.mp3",
+                    group = "external"
+                )
+            )
+        )
+
+        assertEquals(
+            setOf("disc1/same.mp3"),
+            resolveExistingRemoteSelectionPaths(
+                remoteFiles = remoteFiles,
+                localFiles = localFiles,
+                includeOnlineFiles = false
+            )
+        )
+    }
+
+    @Test
     fun buildLocalDirectoryBrowser_marksLogicalSavedAudioAsOnline() {
         val onlineTrack = Track(
             albumId = 9L,

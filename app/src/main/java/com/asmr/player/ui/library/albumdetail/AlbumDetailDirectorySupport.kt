@@ -152,7 +152,9 @@ import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.util.Formatting
 import com.asmr.player.util.MessageManager
 import com.asmr.player.util.RemoteSubtitleSource
+import com.asmr.player.util.TrackKeyNormalizer
 import com.asmr.player.util.isOnlineTrackPath
+import java.util.ArrayDeque
 
 private const val LOCAL_TREE_CACHE_PARSER_VERSION = 2L
 
@@ -573,6 +575,150 @@ internal data class LocalTreeIndex(
     val root: LocalTreeNode,
     val folderStats: Map<String, LocalFolderStats>
 )
+
+internal data class RemoteSelectionFileRef(
+    val relativePath: String,
+    val url: String
+)
+
+internal data class LocalSelectionFileRef(
+    val relativePath: String,
+    val absolutePath: String,
+    val track: Track?
+)
+
+internal data class LocalIncrementalSelectionPaths(
+    val downloadedPaths: Set<String> = emptySet(),
+    val savedPaths: Set<String> = emptySet()
+)
+
+internal fun collectLocalSelectionFiles(index: LocalTreeIndex): List<LocalSelectionFileRef> {
+    val files = mutableListOf<LocalSelectionFileRef>()
+
+    fun collect(node: LocalTreeNode) {
+        if (node.children.isEmpty()) {
+            val absolutePath = node.absolutePath?.trim().orEmpty()
+            if (node.path.isNotBlank() && absolutePath.isNotBlank()) {
+                files += LocalSelectionFileRef(
+                    relativePath = node.path,
+                    absolutePath = absolutePath,
+                    track = node.track
+                )
+            }
+            return
+        }
+        node.children.values.forEach(::collect)
+    }
+
+    collect(index.root)
+    return files
+}
+
+internal fun resolveExistingRemoteSelectionPaths(
+    remoteFiles: List<RemoteSelectionFileRef>,
+    localFiles: List<LocalSelectionFileRef>,
+    includeOnlineFiles: Boolean
+): Set<String> {
+    data class MatchCandidate(
+        val normalizedRelativePath: String,
+        val canonicalUrl: String,
+        val fileName: String,
+        val trackKey: String,
+        val trackKeyWithoutGroup: String
+    )
+
+    fun normalizeRelativePath(path: String): String {
+        return path.replace('\\', '/').trim().trim('/').lowercase()
+    }
+
+    fun canonicalUrl(value: String): String {
+        val trimmed = value.trim()
+        if (!isOnlineTrackPath(trimmed)) return ""
+        return trimmed.substringBefore('#').substringBefore('?')
+    }
+
+    fun fileName(path: String): String {
+        return normalizeRelativePath(path).substringAfterLast('/')
+    }
+
+    fun remoteTrackKey(path: String, includeGroup: Boolean): String {
+        val normalized = path.replace('\\', '/').trim().trim('/')
+        val title = normalized.substringAfterLast('/').substringBeforeLast('.')
+        val group = if (includeGroup) normalized.substringBeforeLast('/', "") else ""
+        return TrackKeyNormalizer.buildKey(title, group, null)
+    }
+
+    val candidates = localFiles.asSequence()
+        .filter { local ->
+            includeOnlineFiles || !isOnlineTrackPath(local.track?.path.orEmpty().ifBlank { local.absolutePath })
+        }
+        .map { local ->
+            val track = local.track
+            val fallbackGroup = local.relativePath.replace('\\', '/').substringBeforeLast('/', "")
+            MatchCandidate(
+                normalizedRelativePath = normalizeRelativePath(local.relativePath),
+                canonicalUrl = canonicalUrl(track?.path.orEmpty().ifBlank { local.absolutePath }),
+                fileName = fileName(local.relativePath),
+                trackKey = track?.let {
+                    TrackKeyNormalizer.buildKey(it.title, it.group.ifBlank { fallbackGroup }, null)
+                }.orEmpty(),
+                trackKeyWithoutGroup = track?.let {
+                    TrackKeyNormalizer.buildKey(it.title, "", null)
+                }.orEmpty()
+            )
+        }
+        .toMutableList()
+
+    fun buildCandidateIndex(key: (MatchCandidate) -> String): Map<String, ArrayDeque<Int>> {
+        val index = linkedMapOf<String, ArrayDeque<Int>>()
+        candidates.forEachIndexed { candidateIndex, candidate ->
+            val value = key(candidate)
+            if (value.isNotBlank()) {
+                index.getOrPut(value) { ArrayDeque() }.addLast(candidateIndex)
+            }
+        }
+        return index
+    }
+
+    val relativePathIndex = buildCandidateIndex(MatchCandidate::normalizedRelativePath)
+    val canonicalUrlIndex = buildCandidateIndex(MatchCandidate::canonicalUrl)
+    val trackKeyIndex = buildCandidateIndex(MatchCandidate::trackKey)
+    val fileNameIndex = buildCandidateIndex(MatchCandidate::fileName)
+    val trackKeyWithoutGroupIndex = buildCandidateIndex(MatchCandidate::trackKeyWithoutGroup)
+    val available = BooleanArray(candidates.size) { true }
+
+    fun consume(index: Map<String, ArrayDeque<Int>>, key: String): Boolean {
+        if (key.isBlank()) return false
+        val candidateIndexes = index[key] ?: return false
+        while (candidateIndexes.isNotEmpty()) {
+            val candidateIndex = candidateIndexes.removeFirst()
+            if (available[candidateIndex]) {
+                available[candidateIndex] = false
+                return true
+            }
+        }
+        return false
+    }
+
+    val matched = linkedSetOf<String>()
+    remoteFiles.forEach { remote ->
+        val normalizedPath = normalizeRelativePath(remote.relativePath)
+        val remoteUrl = canonicalUrl(remote.url)
+        val remoteFileName = fileName(remote.relativePath)
+        val remoteKey = remoteTrackKey(remote.relativePath, includeGroup = true)
+        val remoteKeyWithoutGroup = remoteTrackKey(remote.relativePath, includeGroup = false)
+
+        val hasMatch = consume(relativePathIndex, normalizedPath) ||
+            consume(canonicalUrlIndex, remoteUrl) ||
+            consume(trackKeyIndex, remoteKey) ||
+            consume(fileNameIndex, remoteFileName) ||
+            consume(trackKeyWithoutGroupIndex, remoteKeyWithoutGroup)
+        if (hasMatch) {
+            matched += remote.relativePath
+        }
+    }
+    return matched
+}
 
 internal fun findLocalTreeNode(root: LocalTreeNode, folderPath: String): LocalTreeNode? {
     val normalized = folderPath.trim().trimStart('/').trimEnd('/')

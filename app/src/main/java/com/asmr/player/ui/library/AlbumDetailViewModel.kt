@@ -466,6 +466,26 @@ class AlbumDetailViewModel @Inject constructor(
         )
     }
 
+    internal fun invalidateDlsitePlayAccess() {
+        dlsitePlayLoadJob?.cancel()
+        dlsitePlayLoadJob = null
+        dlsitePlayAttemptedRj.clear()
+        val current = _uiState.value as? AlbumDetailUiState.Success ?: return
+        if (
+            current.model.dlsitePlayTree.isEmpty() &&
+            !current.model.hasResolvedDlsitePlayContent &&
+            !current.model.isLoadingDlsitePlay
+        ) return
+        _uiState.value = AlbumDetailUiState.Success(
+            model = current.model.copy(
+                dlsitePlayWorkno = "",
+                dlsitePlayTree = emptyList(),
+                hasResolvedDlsitePlayContent = false,
+                isLoadingDlsitePlay = false
+            )
+        )
+    }
+
     suspend fun prepareDlsitePlayImagePreview(
         url: String,
         optimizedName: String?,
@@ -701,9 +721,7 @@ class AlbumDetailViewModel @Inject constructor(
                     null
                 }
 
-                val rj = rjCode?.trim().orEmpty().ifBlank {
-                    localAlbum?.rjCode?.trim().orEmpty().ifBlank { localAlbum?.workId?.trim().orEmpty() }
-                }.uppercase()
+                val rj = resolveAlbumDetailRj(rjCode, localAlbum)
 
                 val hint = AlbumCoverHintStore.peekHint(albumId, rj) ?: initialHint
                 val hintAlbum = albumFromInitialHint(rj, hint)
@@ -1598,7 +1616,7 @@ class AlbumDetailViewModel @Inject constructor(
         }
     }
 
-    fun ensureDlsitePlayLoaded() {
+    fun ensureDlsitePlayLoaded(showFailureMessage: Boolean = true) {
         val current = _uiState.value as? AlbumDetailUiState.Success ?: return
         val baseRj = current.model.baseRjCode.trim().uppercase()
         val candidates0 = DlsiteWorkNo.normalizeCandidates(
@@ -1685,7 +1703,9 @@ class AlbumDetailViewModel @Inject constructor(
                 val updated = (_uiState.value as? AlbumDetailUiState.Success)?.model ?: return@launch
                 if (pickedResult == null && lastError != null && !sawNotAvailable) {
                     dlsitePlayAttemptedRj.remove(attemptKey)
-                    messageManager.showError("DLsite Play 加载失败，请稍后重试")
+                    if (showFailureMessage) {
+                        messageManager.showError("DLsite Play 加载失败，请稍后重试")
+                    }
                 }
                 _uiState.value = AlbumDetailUiState.Success(
                     model = updated.copy(
@@ -1882,7 +1902,7 @@ class AlbumDetailViewModel @Inject constructor(
     fun downloadAsmrOneSelected(selectedLeafPaths: Set<String>) {
         val current = _uiState.value as? AlbumDetailUiState.Success ?: return
         enqueueRemoteTreeSelectionDownload(
-            album = current.model.displayAlbum,
+            model = current.model,
             tree = current.model.asmrOneTree,
             selectedLeafPaths = selectedLeafPaths,
             relativeBaseDir = ""
@@ -1892,7 +1912,7 @@ class AlbumDetailViewModel @Inject constructor(
     fun downloadDlsitePlaySelected(selectedLeafPaths: Set<String>) {
         val current = _uiState.value as? AlbumDetailUiState.Success ?: return
         enqueueRemoteTreeSelectionDownload(
-            album = current.model.displayAlbum,
+            model = current.model,
             tree = current.model.dlsitePlayTree,
             selectedLeafPaths = selectedLeafPaths,
             relativeBaseDir = ""
@@ -1984,11 +2004,61 @@ class AlbumDetailViewModel @Inject constructor(
         )
     }
 
-    fun saveOnlineSelectedToLibrary(selectedLeafPaths: Set<String>) {
+    internal suspend fun resolveLocalIncrementalSelectionPaths(
+        tree: List<AsmrOneTrackNodeResponse>
+    ): LocalIncrementalSelectionPaths {
+        val current = _uiState.value as? AlbumDetailUiState.Success
+            ?: return LocalIncrementalSelectionPaths()
+        val localAlbum = current.model.localAlbum ?: return LocalIncrementalSelectionPaths()
+        if (localAlbum.id <= 0L || tree.isEmpty()) return LocalIncrementalSelectionPaths()
+
+        return withContext(Dispatchers.IO) {
+            val savedResources = database.onlineSavedResourceDao().getForAlbumOnce(localAlbum.id)
+            val localIndex = loadOrBuildLocalTreeIndex(
+                context = context,
+                albumId = localAlbum.id,
+                albumPaths = localAlbum.getAllLocalPaths(),
+                tracks = localAlbum.tracks,
+                onlineSavedResources = savedResources
+            )
+            val localFiles = collectLocalSelectionFiles(localIndex)
+            val remoteFiles = flattenAsmrOneLeafDownloads(tree)
+                .filter { leaf ->
+                    isLibraryResourceSavableTreeFileType(
+                        treeFileTypeForNode(leaf.relativePath, leaf.url)
+                    )
+                }
+                .map { leaf ->
+                    RemoteSelectionFileRef(
+                        relativePath = leaf.relativePath,
+                        url = leaf.url
+                    )
+                }
+
+            LocalIncrementalSelectionPaths(
+                downloadedPaths = resolveExistingRemoteSelectionPaths(
+                    remoteFiles = remoteFiles,
+                    localFiles = localFiles,
+                    includeOnlineFiles = false
+                ),
+                savedPaths = resolveExistingRemoteSelectionPaths(
+                    remoteFiles = remoteFiles,
+                    localFiles = localFiles,
+                    includeOnlineFiles = true
+                )
+            )
+        }
+    }
+
+    fun saveOnlineSelectedToLibrary(
+        selectedLeafPaths: Set<String>,
+        useDlsitePlayTree: Boolean = false
+    ) {
         val current = _uiState.value as? AlbumDetailUiState.Success ?: return
         val model = current.model
-        val displayAlbum = model.displayAlbum
-        val tree = if (model.dlsitePlayTree.isNotEmpty()) model.dlsitePlayTree else model.asmrOneTree
+        val displayAlbum = resolvedOnlineActionAlbum(model)
+        val targetLocalAlbumId = model.localAlbum?.id?.takeIf { it > 0L }
+        val tree = if (useDlsitePlayTree) model.dlsitePlayTree else model.asmrOneTree
         if (tree.isEmpty()) return
 
         viewModelScope.launch {
@@ -2021,11 +2091,13 @@ class AlbumDetailViewModel @Inject constructor(
                 var resourceSavedCount = 0
                 var albumIdResult = 0L
                 database.withTransaction {
-                    val existing = if (workKey.isNotBlank()) {
-                        runCatching { albumDao.getAlbumByWorkIdOnce(workKey) }.getOrNull()
-                    } else {
-                        null
-                    }
+                    val existing = targetLocalAlbumId
+                        ?.let { albumDao.getAlbumById(it) }
+                        ?: if (workKey.isNotBlank()) {
+                            albumDao.getAlbumByWorkIdOnce(workKey)
+                        } else {
+                            null
+                        }
 
                     val tagsCsv = displayAlbum.tags.joinToString(",")
                     val entity = AlbumEntity(
@@ -2603,6 +2675,53 @@ class AlbumDetailViewModel @Inject constructor(
 
     private fun safeFileName(input: String): String {
         return input.trim().ifEmpty { "track" }.replace(Regex("""[\\/:*?"<>|]"""), "_")
+    }
+
+    private fun resolvedOnlineActionAlbum(model: AlbumDetailModel): Album {
+        val resolvedRj = resolveAlbumDetailRj(
+            routeRj = model.rjCode.ifBlank { model.baseRjCode },
+            localAlbum = model.localAlbum
+        )
+        return model.displayAlbum.withResolvedWorkIdentity(
+            rjCode = resolvedRj,
+            asmrOneWorkId = model.asmrOneWorkId
+        )
+    }
+
+    private fun enqueueRemoteTreeSelectionDownload(
+        model: AlbumDetailModel,
+        tree: List<AsmrOneTrackNodeResponse>,
+        selectedLeafPaths: Set<String>,
+        relativeBaseDir: String
+    ) {
+        val album = resolvedOnlineActionAlbum(model)
+        val localAlbum = model.localAlbum
+        val localAlbumId = localAlbum?.id ?: 0L
+        val shouldBindLocalIdentity = localAlbumId > 0L &&
+            album.rjCode.isNotBlank() &&
+            (localAlbum?.rjCode.isNullOrBlank() || localAlbum?.workId.isNullOrBlank())
+        if (!shouldBindLocalIdentity) {
+            enqueueRemoteTreeSelectionDownload(album, tree, selectedLeafPaths, relativeBaseDir)
+            return
+        }
+
+        viewModelScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    val entity = albumDao.getAlbumById(localAlbumId) ?: return@withContext
+                    val updated = entity.copy(
+                        workId = entity.workId.ifBlank { album.workId.ifBlank { album.rjCode } },
+                        rjCode = entity.rjCode.ifBlank { album.rjCode }
+                    )
+                    if (updated != entity) albumDao.updateAlbum(updated)
+                }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                // 下载任务仍可通过自身的作品元信息在完成后合并进本地库。
+            }
+            enqueueRemoteTreeSelectionDownload(album, tree, selectedLeafPaths, relativeBaseDir)
+        }
     }
 
     private fun enqueueRemoteTreeSelectionDownload(
