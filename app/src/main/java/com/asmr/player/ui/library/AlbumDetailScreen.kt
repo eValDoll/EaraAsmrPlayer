@@ -183,7 +183,7 @@ private enum class OnlineDownloadSource {
     DlsiteTrial
 }
 
-private enum class LocalIncrementalAction {
+private enum class IncrementalAlbumAction {
     Download,
     Save
 }
@@ -524,16 +524,12 @@ fun AlbumDetailScreen(
                         hasDlsitePlayCredentials && model.dlsitePlayTree.isNotEmpty() -> OnlineDownloadSource.DlsitePlay
                         else -> null
                     }
-                    val localOnlineTree = when (localOnlineSource) {
-                        OnlineDownloadSource.AsmrOne -> asmrOneTree
-                        OnlineDownloadSource.DlsitePlay -> model.dlsitePlayTree
-                        else -> emptyList()
-                    }
-
-                    fun prepareLocalIncrementalAction(action: LocalIncrementalAction) {
-                        val source = localOnlineSource ?: return
-                        val tree = localOnlineTree
-                        if (!hasValidLocalRj || tree.isEmpty()) return
+                    fun prepareIncrementalAlbumAction(
+                        action: IncrementalAlbumAction,
+                        source: OnlineDownloadSource,
+                        tree: List<AsmrOneTrackNodeResponse>
+                    ) {
+                        if (tree.isEmpty()) return
 
                         incrementalPreparationJob?.cancel()
                         incrementalPreparationJob = actionScope.launch {
@@ -546,12 +542,12 @@ fun AlbumDetailScreen(
                                 return@launch
                             }
                             when (action) {
-                                LocalIncrementalAction.Download -> {
+                                IncrementalAlbumAction.Download -> {
                                     downloadSource = source
                                     downloadDisabledPaths = existing.downloadedPaths
                                     showAsmrDownloadDialog = true
                                 }
-                                LocalIncrementalAction.Save -> {
+                                IncrementalAlbumAction.Save -> {
                                     onlineSaveSource = source
                                     saveDisabledPaths = existing.savedPaths
                                     showOnlineSaveDialog = true
@@ -804,6 +800,17 @@ fun AlbumDetailScreen(
                                 hasDlsitePlayCredentials = hasDlsitePlayCredentials
                             )
                             val headerAlbum = headerAlbumForTab(tab)
+                            val incrementalSource = when (tab) {
+                                0 -> localOnlineSource
+                                1 -> OnlineDownloadSource.AsmrOne
+                                2 -> OnlineDownloadSource.DlsitePlay
+                                else -> null
+                            }
+                            val incrementalTree = when (incrementalSource) {
+                                OnlineDownloadSource.AsmrOne -> asmrOneTree
+                                OnlineDownloadSource.DlsitePlay -> model.dlsitePlayTree
+                                else -> emptyList()
+                            }
                             val headerDlsiteEditions = if (isLocalTab) {
                                 emptyList()
                             } else {
@@ -827,16 +834,12 @@ fun AlbumDetailScreen(
                                 onDlsiteLangSelected = { viewModel.selectDlsiteLanguage(it) },
                                 showSaveAction = tab != 2,
                                 onDownloadClick = {
-                                    if (isLocalTab) {
-                                        prepareLocalIncrementalAction(LocalIncrementalAction.Download)
-                                    } else {
-                                        downloadDisabledPaths = emptySet()
-                                        downloadSource = if (tab == 2) {
-                                            OnlineDownloadSource.DlsitePlay
-                                        } else {
-                                            OnlineDownloadSource.AsmrOne
-                                        }
-                                        showAsmrDownloadDialog = true
+                                    incrementalSource?.let { source ->
+                                        prepareIncrementalAlbumAction(
+                                            action = IncrementalAlbumAction.Download,
+                                            source = source,
+                                            tree = incrementalTree
+                                        )
                                     }
                                 },
                                 showDlsitePlayLossless = tab == 2,
@@ -844,12 +847,12 @@ fun AlbumDetailScreen(
                                     viewModel.downloadDlsitePlayLosslessArchive()
                                 },
                                 onSaveClick = {
-                                    if (isLocalTab) {
-                                        prepareLocalIncrementalAction(LocalIncrementalAction.Save)
-                                    } else {
-                                        onlineSaveSource = OnlineDownloadSource.AsmrOne
-                                        saveDisabledPaths = emptySet()
-                                        showOnlineSaveDialog = true
+                                    incrementalSource?.let { source ->
+                                        prepareIncrementalAlbumAction(
+                                            action = IncrementalAlbumAction.Save,
+                                            source = source,
+                                            tree = incrementalTree
+                                        )
                                     }
                                 },
                                 downloadEnabled = headerDownloadEnabled,
@@ -1150,7 +1153,7 @@ fun AlbumDetailScreen(
                     AsmrOneDownloadDialog(
                         albumTitle = album.title,
                         trackTree = downloadTree,
-                        disabledPaths = if (selectedTab == 0) downloadDisabledPaths else emptySet(),
+                        disabledPaths = downloadDisabledPaths,
                         onDismiss = { showAsmrDownloadDialog = false },
                         onConfirm = { selected ->
                             when (downloadSource) {
@@ -1171,7 +1174,7 @@ fun AlbumDetailScreen(
                     OnlineSaveDialog(
                         albumTitle = album.title,
                         trackTree = saveTree,
-                        disabledPaths = if (selectedTab == 0) saveDisabledPaths else emptySet(),
+                        disabledPaths = saveDisabledPaths,
                         onDismiss = { showOnlineSaveDialog = false },
                         onConfirm = { selected ->
                             pendingOnlineSaveSelection = PendingOnlineSaveSelection(
