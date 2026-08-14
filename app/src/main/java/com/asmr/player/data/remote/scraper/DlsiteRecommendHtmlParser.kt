@@ -4,6 +4,19 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
 
+internal fun dlsiteOriginalCoverUrlForRj(rawRj: String): String {
+    val rj = Regex("""RJ\d+""", RegexOption.IGNORE_CASE)
+        .find(rawRj)
+        ?.value
+        ?.uppercase()
+        .orEmpty()
+    val digits = rj.removePrefix("RJ")
+    val number = digits.toLongOrNull() ?: return ""
+    val group = ((number + 999L) / 1000L) * 1000L
+    val folder = "RJ${group.toString().padStart(digits.length, '0')}"
+    return "https://img.dlsite.jp/modpub/images2/work/doujin/$folder/${rj}_img_main.jpg"
+}
+
 internal object DlsiteRecommendHtmlParser {
     private fun normalizeUrl(src: String, baseUrl: String): String {
         val trimmed = src.trim()

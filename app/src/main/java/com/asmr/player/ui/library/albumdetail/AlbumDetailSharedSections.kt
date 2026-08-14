@@ -79,6 +79,7 @@ import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
 import com.asmr.player.data.remote.scraper.DlsiteRecommendations
+import com.asmr.player.data.remote.scraper.dlsiteOriginalCoverUrlForRj
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.playback.MediaItemFactory
@@ -345,7 +346,7 @@ private fun DlsiteRecommendedWorkCard(
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val coverModel = remember(work.coverUrl, displayRj) {
-        work.coverUrl.takeIf { it.isNotBlank() } ?: dlsiteCoverUrlForRj(displayRj)
+        work.coverUrl.takeIf { it.isNotBlank() } ?: dlsiteOriginalCoverUrlForRj(displayRj)
     }
     val imageModel = remember(coverModel) {
         val s = coverModel.toString()
@@ -433,16 +434,6 @@ private fun DlsiteRecommendedWorkCard(
 
 private fun sanitizeRj(raw: String): String {
     return Regex("""RJ\d+""", RegexOption.IGNORE_CASE).find(raw)?.value?.uppercase().orEmpty()
-}
-
-private fun dlsiteCoverUrlForRj(rj: String): String {
-    val clean = sanitizeRj(rj)
-    val digits = clean.removePrefix("RJ")
-    val num = digits.toLongOrNull() ?: return ""
-    val group = ((num + 999L) / 1000L) * 1000L
-    val padded = group.toString().padStart(digits.length, '0')
-    val folder = "RJ$padded"
-    return "https://img.dlsite.jp/modpub/images2/work/doujin/$folder/${clean}_img_main.jpg"
 }
 
 @Composable
