@@ -841,6 +841,9 @@ fun AlbumDetailScreen(
                                                     val target = PlaylistAddTarget.fromTrack(local, track)
                                                     onOpenPlaylistPicker(target.toMediaItem())
                                                 },
+                                                onDownloadOnlineTrack = { track, relativePath ->
+                                                    viewModel.downloadSavedOnlineTrack(track, relativePath)
+                                                },
                                                 onManageTrackTags = { track ->
                                                     tagManageTrack = track
                                                 },

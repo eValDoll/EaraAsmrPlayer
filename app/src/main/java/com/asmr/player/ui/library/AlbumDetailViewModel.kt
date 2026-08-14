@@ -73,6 +73,7 @@ import com.asmr.player.util.SubtitleMatchSupport
 import com.asmr.player.util.SyncCoordinator
 import com.asmr.player.util.TagNormalizer
 import com.asmr.player.util.TrackKeyNormalizer
+import com.asmr.player.util.isOnlineTrackPath
 import com.asmr.player.work.AlbumCoverThumbWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -1956,6 +1957,33 @@ class AlbumDetailViewModel @Inject constructor(
             relativeBaseDir = DlsiteTrialDownloadDirectoryName
         )
     }
+
+    fun downloadSavedOnlineTrack(track: Track, relativePath: String) {
+        val current = _uiState.value as? AlbumDetailUiState.Success ?: return
+        val url = track.path.trim()
+        if (!isOnlineTrackPath(url)) return
+
+        val normalizedRelativePath = relativePath
+            .replace('\\', '/')
+            .trim()
+            .trimStart('/')
+            .ifBlank { safeFileName(track.title) }
+        if (treeFileTypeForNode(normalizedRelativePath, url) != TreeFileType.Audio) return
+
+        enqueueRemoteLeafDownloads(
+            album = current.model.displayAlbum,
+            selected = listOf(
+                AsmrOneLeafDownload(
+                    url = url,
+                    relativePath = normalizedRelativePath,
+                    duration = track.duration
+                )
+            ),
+            relativeBaseDir = "",
+            includeCover = false
+        )
+    }
+
     fun saveOnlineSelectedToLibrary(selectedLeafPaths: Set<String>) {
         val current = _uiState.value as? AlbumDetailUiState.Success ?: return
         val model = current.model
@@ -2620,6 +2648,20 @@ class AlbumDetailViewModel @Inject constructor(
             }
         }
 
+        enqueueRemoteLeafDownloads(
+            album = album,
+            selected = selected,
+            relativeBaseDir = relativeBaseDir,
+            includeCover = true
+        )
+    }
+
+    private fun enqueueRemoteLeafDownloads(
+        album: Album,
+        selected: Collection<AsmrOneLeafDownload>,
+        relativeBaseDir: String,
+        includeCover: Boolean
+    ) {
         if (selected.isEmpty()) return
 
         val rjOrWorkId = album.rjCode.ifBlank { album.workId }
@@ -2633,12 +2675,14 @@ class AlbumDetailViewModel @Inject constructor(
         val taskKey = buildRemoteDownloadTaskKey(folderName, normalizedBaseDir)
         val taskSubtitle = album.title
 
-        enqueueRemoteDownloadCover(
-            album = album,
-            targetRootDir = targetRootDir,
-            taskKey = taskKey,
-            taskSubtitle = taskSubtitle
-        )
+        if (includeCover) {
+            enqueueRemoteDownloadCover(
+                album = album,
+                targetRootDir = targetRootDir,
+                taskKey = taskKey,
+                taskSubtitle = taskSubtitle
+            )
+        }
 
         var skipped = 0
         var enqueued = 0

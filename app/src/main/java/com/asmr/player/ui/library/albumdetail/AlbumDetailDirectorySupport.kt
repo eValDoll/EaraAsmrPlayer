@@ -744,6 +744,11 @@ internal fun canSetDirectoryImageAsLocalCover(file: DirectoryFileItem): Boolean 
         !file.absolutePath.startsWith("http", ignoreCase = true)
 }
 
+internal fun downloadableOnlineAudioTrack(file: DirectoryFileItem): Track? {
+    if (file.fileType != TreeFileType.Audio || !file.isOnline) return null
+    return file.track?.takeIf { isOnlineTrackPath(it.path) }
+}
+
 internal class RemoteTreeNode(
     val name: String,
     val path: String,

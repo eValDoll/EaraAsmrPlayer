@@ -319,6 +319,33 @@ class AlbumDetailDirectorySupportTest {
     }
 
     @Test
+    fun downloadableOnlineAudioTrack_onlyReturnsSavedOnlineAudio() {
+        val onlineTrack = Track(
+            albumId = 9L,
+            title = "online",
+            path = "https://example.com/online.mp3"
+        )
+        val baseFile = DirectoryFileItem(
+            path = "disc/online.mp3",
+            title = "online",
+            fileType = TreeFileType.Audio,
+            isPlayable = true,
+            isOnline = true,
+            track = onlineTrack
+        )
+
+        assertEquals(onlineTrack, downloadableOnlineAudioTrack(baseFile))
+        assertEquals(null, downloadableOnlineAudioTrack(baseFile.copy(isOnline = false)))
+        assertEquals(
+            null,
+            downloadableOnlineAudioTrack(
+                baseFile.copy(track = onlineTrack.copy(path = "/album/online.mp3"))
+            )
+        )
+        assertEquals(null, downloadableOnlineAudioTrack(baseFile.copy(fileType = TreeFileType.Video)))
+    }
+
+    @Test
     fun buildLocalDirectoryBrowser_marksLogicalSavedAudioAsOnline() {
         val onlineTrack = Track(
             albumId = 9L,
