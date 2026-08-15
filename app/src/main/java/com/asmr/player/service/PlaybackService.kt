@@ -28,10 +28,10 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.datasource.DefaultDataSource
-import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.datasource.FileDataSource
 import androidx.media3.datasource.HttpDataSource
 import androidx.media3.datasource.ResolvingDataSource
+import androidx.media3.datasource.okhttp.OkHttpDataSource
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommands
@@ -91,7 +91,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
+import okhttp3.OkHttpClient
 
 @AndroidEntryPoint
 @UnstableApi
@@ -214,6 +216,9 @@ class PlaybackService : MediaSessionService() {
     @Inject
     lateinit var listeningRecordRepository: ListeningRecordRepository
 
+    @Inject
+    lateinit var okHttpClient: OkHttpClient
+
     private var lastMarkedMediaId: String? = null
     private var lastMarkedElapsedMs: Long = 0L
 
@@ -254,11 +259,12 @@ class PlaybackService : MediaSessionService() {
             spectrumAnalyzer.setVisualDelayMs(delayMs)
         }
         val authStore = DlsiteAuthStore(applicationContext)
-        val httpFactory = DefaultHttpDataSource.Factory()
+        val playbackHttpClient = okHttpClient.newBuilder()
+            .connectTimeout(NETWORK_CONNECT_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
+            .readTimeout(NETWORK_READ_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
+            .build()
+        val httpFactory = OkHttpDataSource.Factory(playbackHttpClient)
             .setUserAgent(DLSITE_UA)
-            .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(NETWORK_CONNECT_TIMEOUT_MS)
-            .setReadTimeoutMs(NETWORK_READ_TIMEOUT_MS)
         
         val transferListener = object : TransferListener {
             override fun onTransferInitializing(source: DataSource, dataSpec: DataSpec, isNetwork: Boolean) {}

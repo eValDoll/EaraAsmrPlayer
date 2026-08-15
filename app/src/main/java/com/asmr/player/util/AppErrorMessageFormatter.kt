@@ -1,5 +1,10 @@
 package com.asmr.player.util
 
+const val ASMR_ONE_SITE_FAILURE_MESSAGE =
+    "ASMR One 请求失败，请前往“设置 → 服务状态与代理”尝试切换镜像站点后重试"
+const val ASMR_ONE_SITE_TEST_FAILURE_MESSAGE =
+    "当前站点连接失败，请尝试切换其他站点"
+
 object AppErrorMessageFormatter {
     private val whitespaceRegex = Regex("""\s+""")
     private val workNoSampleRegex = Regex("""[（(]\s*如\s*(?:RJ|BJ|VJ)\d{6,}\s*[)）]""", RegexOption.IGNORE_CASE)
@@ -48,6 +53,8 @@ object AppErrorMessageFormatter {
 
     private fun explicitMessage(message: String): String? {
         return when {
+            message == ASMR_ONE_SITE_FAILURE_MESSAGE ||
+                message == ASMR_ONE_SITE_TEST_FAILURE_MESSAGE -> message
             userFacingSubtitleErrorPrefixes.any(message::startsWith) -> message
             message.startsWith("请输入有效 RJ 号") || message.startsWith("请输入有效的作品编号") ->
                 "请输入有效的作品编号"

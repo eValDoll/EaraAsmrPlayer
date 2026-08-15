@@ -17,6 +17,18 @@ class MessageManagerTest {
     }
 
     @Test
+    fun errorFormatter_preservesAsmrOneMirrorSuggestion() {
+        assertEquals(
+            ASMR_ONE_SITE_FAILURE_MESSAGE,
+            AppErrorMessageFormatter.sanitize(ASMR_ONE_SITE_FAILURE_MESSAGE)
+        )
+        assertEquals(
+            ASMR_ONE_SITE_TEST_FAILURE_MESSAGE,
+            AppErrorMessageFormatter.sanitize(ASMR_ONE_SITE_TEST_FAILURE_MESSAGE)
+        )
+    }
+
+    @Test
     fun tryConsume_allowsEachMessageOnlyOnce() {
         val manager = MessageManager()
 

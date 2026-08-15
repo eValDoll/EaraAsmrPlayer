@@ -40,6 +40,7 @@ import com.asmr.player.data.remote.api.WorkDetailsResponse
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.remote.auth.buildDlsiteCookieHeader
 import com.asmr.player.data.remote.crawler.AsmrOneCrawler
+import com.asmr.player.data.remote.crawler.AsmrOneSearchResult
 import com.asmr.player.data.remote.crawler.AsmrOneTracksResult
 import com.asmr.player.data.remote.crawler.asmrOneWorkMatchesRj
 import com.asmr.player.data.remote.dlsite.DLSITE_PLAY_PREVIEW_CACHE_VERSION
@@ -67,6 +68,7 @@ import com.asmr.player.ui.nav.AlbumCoverHint
 import com.asmr.player.ui.nav.AlbumCoverHintStore
 import com.asmr.player.ui.nav.albumFromCoverHint
 import com.asmr.player.util.DlsiteWorkNo
+import com.asmr.player.util.ASMR_ONE_SITE_FAILURE_MESSAGE
 import com.asmr.player.util.MessageManager
 import com.asmr.player.util.OnlineLyricsStore
 import com.asmr.player.util.RemoteSubtitleSource
@@ -114,6 +116,10 @@ import okhttp3.Response
 
 private const val LISTEN_TOGETHER_RJ_SUMMARY_POLL_INTERVAL_MS = 60_000L
 
+internal fun albumDetailAsmrOneFailureMessage(isLocalLibraryDetail: Boolean): String? {
+    return if (isLocalLibraryDetail) null else ASMR_ONE_SITE_FAILURE_MESSAGE
+}
+
 @HiltViewModel
 class AlbumDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -134,6 +140,8 @@ class AlbumDetailViewModel @Inject constructor(
     val messageManager: MessageManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
+
+    private val isLocalLibraryDetail = savedStateHandle.get<Long>("albumId")?.let { it > 0L } == true
 
     private data class AlbumAudioAggregate(
         val trackCount: Int,
@@ -299,9 +307,35 @@ class AlbumDetailViewModel @Inject constructor(
         return workId.trim()
     }
 
+    private fun cacheAsmrOneResolution(
+        key: String,
+        result: AsmrOneSearchResult
+    ): Pair<String, Int?>? {
+        val found = result.response.works.firstOrNull { work -> asmrOneWorkMatchesRj(work, key) }
+        val workId = found?.id?.toString()?.trim().orEmpty()
+        if (found == null) {
+            asmrOneResolvedDetailsCache.remove(key)
+        } else {
+            asmrOneResolvedDetailsCache[key] = found
+        }
+        val resolved = workId
+            .takeIf { it.isNotBlank() }
+            ?.let { it to result.trace.site }
+        asmrOneResolvedCache[key] = SystemClock.elapsedRealtime() to resolved
+        if (asmrOneResolvedCache.size > 500) {
+            val firstKey = asmrOneResolvedCache.entries.firstOrNull()?.key
+            if (firstKey != null) {
+                asmrOneResolvedCache.remove(firstKey)
+                asmrOneResolvedDetailsCache.remove(firstKey)
+            }
+        }
+        return resolved
+    }
+
     private suspend fun resolveAsmrOneWork(
         workNo: String,
-        timeoutMs: Long = 12_000L
+        timeoutMs: Long = 12_000L,
+        throwOnRequestFailure: Boolean = false
     ): Pair<String, Int?>? {
         val key = workNo.trim().uppercase()
         if (key.isBlank()) return null
@@ -309,33 +343,24 @@ class AlbumDetailViewModel @Inject constructor(
         val cached = asmrOneResolvedCache[key]
         if (cached != null) {
             val ttlMs = if (cached.second == null) 5_000L else 10 * 60_000L
-            if ((now - cached.first) <= ttlMs) return cached.second
+            if ((now - cached.first) <= ttlMs && (!throwOnRequestFailure || cached.second != null)) {
+                return cached.second
+            }
+        }
+
+        if (throwOnRequestFailure) {
+            return withTimeout(timeoutMs) {
+                cacheAsmrOneResolution(
+                    key = key,
+                    result = asmrOneCrawler.searchWithTrace(key, throwOnFailure = true)
+                )
+            }
         }
 
         val request = asmrOneResolutionInFlight[key] ?: viewModelScope.async {
             val result = runCatching { asmrOneCrawler.searchWithTrace(key) }.getOrNull()
-            val found = result
-                ?.response
-                ?.works
-                ?.firstOrNull { work -> asmrOneWorkMatchesRj(work, key) }
-            val workId = found?.id?.toString()?.trim().orEmpty()
-            if (found == null) {
-                asmrOneResolvedDetailsCache.remove(key)
-            } else {
-                asmrOneResolvedDetailsCache[key] = found
-            }
-            val resolved = workId
-                .takeIf { it.isNotBlank() }
-                ?.let { it to result?.trace?.site }
-            asmrOneResolvedCache[key] = SystemClock.elapsedRealtime() to resolved
-            if (asmrOneResolvedCache.size > 500) {
-                val firstKey = asmrOneResolvedCache.entries.firstOrNull()?.key
-                if (firstKey != null) {
-                    asmrOneResolvedCache.remove(firstKey)
-                    asmrOneResolvedDetailsCache.remove(firstKey)
-                }
-            }
-            resolved
+                ?: return@async null
+            cacheAsmrOneResolution(key, result)
         }.also { deferred ->
             asmrOneResolutionInFlight[key] = deferred
             deferred.invokeOnCompletion {
@@ -345,16 +370,23 @@ class AlbumDetailViewModel @Inject constructor(
         return withTimeoutOrNull(timeoutMs) { request.await() }
     }
 
-    private suspend fun getAsmrOneTracksCached(workId: String): AsmrOneTracksResult {
+    private suspend fun getAsmrOneTracksCached(
+        workId: String,
+        throwOnRequestFailure: Boolean = false
+    ): AsmrOneTracksResult {
         val normalizedId = workId.trim()
         if (normalizedId.isBlank()) return AsmrOneTracksResult(emptyList(), null)
         val cacheKey = asmrOneTracksCacheKey(normalizedId)
         val now = SystemClock.elapsedRealtime()
         val cached = asmrOneTracksCache[cacheKey]
         if (cached != null && (now - cached.first) <= 10 * 60_000L) return cached.second
-        val result = runCatching {
+        val result = if (throwOnRequestFailure) {
             asmrOneCrawler.getTracksWithTrace(normalizedId)
-        }.getOrDefault(AsmrOneTracksResult(emptyList(), null))
+        } else {
+            runCatching {
+                asmrOneCrawler.getTracksWithTrace(normalizedId)
+            }.getOrDefault(AsmrOneTracksResult(emptyList(), null))
+        }
         if (result.tree.isNotEmpty()) {
             asmrOneTracksCache[cacheKey] = now to result
             if (asmrOneTracksCache.size > 200) {
@@ -365,11 +397,18 @@ class AlbumDetailViewModel @Inject constructor(
         return result
     }
 
-    private suspend fun fetchBackupAsmrOneTracksByRj(rj: String): Pair<String, List<AsmrOneTrackNodeResponse>>? {
+    private suspend fun fetchBackupAsmrOneTracksByRj(
+        rj: String,
+        throwOnRequestFailure: Boolean = false
+    ): Pair<String, List<AsmrOneTrackNodeResponse>>? {
         val normalizedRj = DlsiteWorkNo.normalizeWorkNo(rj, minimumDigits = 6)
         if (normalizedRj.isBlank()) return null
-        val result = runCatching { asmrOneAvailabilityApi.getTrackTreeByRj(normalizedRj) }.getOrNull()
-            ?: return null
+        val result = if (throwOnRequestFailure) {
+            asmrOneAvailabilityApi.getTrackTreeByRj(normalizedRj)
+        } else {
+            runCatching { asmrOneAvailabilityApi.getTrackTreeByRj(normalizedRj) }.getOrNull()
+                ?: return null
+        }
         val tree = result.trackTree.orEmpty()
         if (tree.isEmpty()) return null
         val workId = result.workId.takeIf { it > 0 }?.toString().orEmpty()
@@ -1396,7 +1435,8 @@ class AlbumDetailViewModel @Inject constructor(
         val updatedKey = updated.rjCode.trim().uppercase()
         if (updatedKey.equals(keyRj, ignoreCase = true)) {
             if (showFailureMessage && updated.asmrOneTree.isEmpty()) {
-                messageManager.showError("在线资源加载失败，请稍后重试")
+                albumDetailAsmrOneFailureMessage(isLocalLibraryDetail)
+                    ?.let(messageManager::showError)
             }
             _uiState.value = AlbumDetailUiState.Success(
                 model = updated.copy(
@@ -1533,7 +1573,8 @@ class AlbumDetailViewModel @Inject constructor(
                         val backupDeferred = async {
                             fetchAsmrOneTracksFromBackup(
                                 candidateRjs = directoryRjs,
-                                fetchBackup = { fetchBackupAsmrOneTracksByRj(it) }
+                                throwWhenAllRequestsFail = true,
+                                fetchBackup = { fetchBackupAsmrOneTracksByRj(it, throwOnRequestFailure = true) }
                             )
                         }
                         val metadataDeferred = async {
@@ -1563,13 +1604,15 @@ class AlbumDetailViewModel @Inject constructor(
                 var preferredInitialResolution: Pair<String, Int?>? = null
                 var preferredInitialDetails: WorkDetailsResponse? = null
                 if (preferInitialRj) {
-                    val preferredInitial = resolveAsmrOneWork(latestBase)
+                    val preferredInitial = resolveAsmrOneWork(latestBase, throwOnRequestFailure = true)
                     if (preferredInitial != null) {
                         preferredInitialResolution = preferredInitial
                         val preferredWorkId = preferredInitial.first
                         val searchDetails = asmrOneResolvedDetailsCache[latestBase]
                         val (preferredResult, preferredDetails) = coroutineScope {
-                            val tracksDeferred = async { getAsmrOneTracksCached(preferredWorkId) }
+                            val tracksDeferred = async {
+                                getAsmrOneTracksCached(preferredWorkId, throwOnRequestFailure = true)
+                            }
                             val detailsDeferred = async {
                                 searchDetails
                                     ?: runCatching { asmrOneCrawler.getDetails(preferredWorkId) }.getOrNull()
@@ -1599,7 +1642,10 @@ class AlbumDetailViewModel @Inject constructor(
                         .filter { it.isNotBlank() }
                         .distinct()
                     for (candidateRj in directRjs) {
-                        val resolved = resolveAsmrOneWork(candidateRj) ?: continue
+                        val resolved = resolveAsmrOneWork(
+                            candidateRj,
+                            throwOnRequestFailure = true
+                        ) ?: continue
                         resolvedOriginal = resolved
                         preferredInitialDetails = asmrOneResolvedDetailsCache[candidateRj]
                         break
@@ -1650,7 +1696,7 @@ class AlbumDetailViewModel @Inject constructor(
                     selectedRjs = directoryRjs
                 )
                 val trackResult = workId
-                    ?.let { getAsmrOneTracksCached(it) }
+                    ?.let { getAsmrOneTracksCached(it, throwOnRequestFailure = true) }
                     ?: AsmrOneTracksResult(emptyList(), null)
                 if (token != asmrOneLoadToken) {
                     asmrOneAttemptedRj.remove(keyRj)
@@ -1668,6 +1714,9 @@ class AlbumDetailViewModel @Inject constructor(
                     tree = trackResult.tree,
                     resolvedDetails = originalDetails
                 )
+            } catch (e: TimeoutCancellationException) {
+                asmrOneAttemptedRj.remove(keyRj)
+                finishAsmrOneLoad(keyRj, resolved = true, showFailureMessage = true)
             } catch (e: CancellationException) {
                 asmrOneAttemptedRj.remove(keyRj)
                 finishAsmrOneLoad(keyRj, resolved = false)

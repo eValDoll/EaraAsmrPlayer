@@ -48,6 +48,7 @@ import com.asmr.player.data.remote.crawler.asmrOneWorkMatchesRj
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -585,20 +586,33 @@ internal fun buildDlsiteTrialDownloadTree(trialTracks: List<Track>): List<AsmrOn
 
 internal suspend fun fetchAsmrOneTracksFromBackup(
     candidateRjs: List<String>,
+    throwWhenAllRequestsFail: Boolean = false,
     fetchBackup: suspend (String) -> Pair<String, List<AsmrOneTrackNodeResponse>>?
 ): Pair<String?, List<AsmrOneTrackNodeResponse>> {
+    var successfulRequestCount = 0
+    var lastFailure: Exception? = null
     candidateRjs
         .asSequence()
         .map { it.trim().uppercase() }
         .filter { it.isNotBlank() }
         .distinct()
         .forEach { rj ->
-            val backupResult = runCatching { fetchBackup(rj) }.getOrNull()
+            val backupResult = try {
+                fetchBackup(rj).also { successfulRequestCount += 1 }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                lastFailure = error
+                null
+            }
             val tree = backupResult?.second.orEmpty()
             if (backupResult != null && tree.isNotEmpty()) {
                 return backupResult.first.takeIf { it.isNotBlank() } to tree
             }
         }
+    if (throwWhenAllRequestsFail && successfulRequestCount == 0) {
+        lastFailure?.let { throw it }
+    }
     return null to emptyList()
 }
 

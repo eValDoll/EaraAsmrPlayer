@@ -84,6 +84,7 @@ internal fun siteLatencyDisplay(status: SiteStatus): SiteLatencyDisplay {
 internal fun AsmrOneSiteSelector(
     selectedSite: Int,
     onSiteSelected: (Int) -> Unit,
+    lightweight: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val colorScheme = AsmrTheme.colorScheme
@@ -110,16 +111,23 @@ internal fun AsmrOneSiteSelector(
             modifier = Modifier
                 .heightIn(min = 30.dp)
                 .clip(triggerShape)
-                .background(triggerContainer)
-                .border(
-                    border = BorderStroke(1.dp, colorScheme.primaryStrong.copy(alpha = 0.22f)),
-                    shape = triggerShape
+                .then(
+                    if (lightweight) {
+                        Modifier
+                    } else {
+                        Modifier
+                            .background(triggerContainer)
+                            .border(
+                                border = BorderStroke(1.dp, colorScheme.primaryStrong.copy(alpha = 0.22f)),
+                                shape = triggerShape
+                            )
+                    }
                 )
                 .clickable(
                     role = Role.Button,
                     onClick = { expanded = true }
                 )
-                .padding(horizontal = 8.dp, vertical = 4.dp),
+                .padding(horizontal = if (lightweight) 2.dp else 8.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
@@ -135,7 +143,7 @@ internal fun AsmrOneSiteSelector(
                 imageVector = Icons.Rounded.ArrowDropDown,
                 contentDescription = "选择站点",
                 modifier = Modifier.size(18.dp),
-                tint = colorScheme.primaryStrong
+                tint = if (lightweight) colorScheme.textSecondary else colorScheme.primaryStrong
             )
         }
 

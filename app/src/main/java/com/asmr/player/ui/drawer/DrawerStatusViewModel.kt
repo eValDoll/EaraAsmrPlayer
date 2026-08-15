@@ -4,8 +4,11 @@ import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.asmr.player.BuildConfig
+import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.api.AsmrOneEndpoint
 import com.asmr.player.data.settings.SettingsRepository
+import com.asmr.player.util.ASMR_ONE_SITE_TEST_FAILURE_MESSAGE
+import com.asmr.player.util.MessageManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -30,7 +33,8 @@ data class SiteStatus(
 @HiltViewModel
 class DrawerStatusViewModel @Inject constructor(
     private val okHttpClient: OkHttpClient,
-    private val settingsRepository: SettingsRepository
+    private val settingsRepository: SettingsRepository,
+    private val messageManager: MessageManager
 ) : ViewModel() {
     val asmrOneSite: StateFlow<Int> = settingsRepository.asmrOneSite
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 200)
@@ -63,9 +67,12 @@ class DrawerStatusViewModel @Inject constructor(
         asmrTestJob?.cancel()
         asmrTestJob = viewModelScope.launch(Dispatchers.IO) {
             _asmr.value = SiteStatus(type = SiteStatusType.Testing)
-            val latency = url?.let(::measure)
+            val latency = url?.let { measure(it, suppressAutomaticError = true) }
             coroutineContext.ensureActive()
             _asmr.value = latency.toStatus()
+            if (latency == null) {
+                messageManager.showError(ASMR_ONE_SITE_TEST_FAILURE_MESSAGE)
+            }
         }
     }
 
@@ -78,19 +85,25 @@ class DrawerStatusViewModel @Inject constructor(
         }
     }
 
-    private fun measure(url: String): Long? {
+    private fun measure(url: String, suppressAutomaticError: Boolean = false): Long? {
         val client = okHttpClient.newBuilder()
             .callTimeout(10, TimeUnit.SECONDS)
             .connectTimeout(5, TimeUnit.SECONDS)
             .readTimeout(5, TimeUnit.SECONDS)
             .build()
-        val request = Request.Builder()
+        val requestBuilder = Request.Builder()
             .url(url)
             .get()
             .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
             .header("Cache-Control", "no-cache")
             .header("Accept", "application/json, text/plain, */*")
-            .build()
+        if (suppressAutomaticError) {
+            requestBuilder.header(
+                NetworkHeaders.HEADER_SILENT_IO_ERROR,
+                NetworkHeaders.SILENT_IO_ERROR_ON
+            )
+        }
+        val request = requestBuilder.build()
         val start = SystemClock.elapsedRealtime()
         return runCatching {
             client.newCall(request).execute().use { resp ->

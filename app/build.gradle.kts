@@ -210,6 +210,7 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("androidx.media3:media3-datasource-okhttp:$media3_version")
     implementation("com.google.code.gson:gson:2.10.1")
 
     // Jsoup

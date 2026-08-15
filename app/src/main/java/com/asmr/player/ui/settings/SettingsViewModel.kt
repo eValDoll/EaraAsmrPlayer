@@ -15,8 +15,10 @@ import com.asmr.player.data.remote.update.UpdateRelease
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.DeepSeekReasoningEffort
 import com.asmr.player.data.settings.DeepSeekTranslationSettings
+import com.asmr.player.data.settings.AppProxyMode
 import com.asmr.player.data.settings.FloatingLyricsSettings
 import com.asmr.player.data.settings.LyricsPageSettings
+import com.asmr.player.data.settings.NetworkRouteSettings
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.subtitle.SubtitleModelDownloadSource
 import com.asmr.player.subtitle.SubtitleModelRepository
@@ -156,6 +158,9 @@ class SettingsViewModel @Inject constructor(
     val searchBlockedKeywords: StateFlow<List<String>> = settingsRepository.searchBlockedKeywords
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
+    val networkRouteSettings: StateFlow<NetworkRouteSettings> = settingsRepository.networkRouteSettings
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), NetworkRouteSettings())
+
     internal val deepSeekTranslationSettings: StateFlow<DeepSeekTranslationSettings> =
         settingsRepository.deepSeekTranslationSettings.stateIn(
             viewModelScope,
@@ -260,6 +265,38 @@ class SettingsViewModel @Inject constructor(
 
     fun removeSearchBlockedKeyword(keyword: String) {
         viewModelScope.launch { settingsRepository.removeSearchBlockedKeyword(keyword) }
+    }
+
+    fun useSystemProxy() {
+        viewModelScope.launch { settingsRepository.useSystemProxy() }
+    }
+
+    fun setAdvancedProxy(
+        mode: AppProxyMode,
+        host: String,
+        port: Int,
+        authenticationEnabled: Boolean,
+        username: String,
+        password: String
+    ) {
+        viewModelScope.launch {
+            settingsRepository.setAdvancedProxy(
+                mode = mode,
+                host = host,
+                port = port,
+                authenticationEnabled = authenticationEnabled,
+                username = username,
+                password = password
+            )
+        }
+    }
+
+    fun useSystemDns() {
+        viewModelScope.launch { settingsRepository.useSystemDns() }
+    }
+
+    fun setCustomDnsServer(address: String) {
+        viewModelScope.launch { settingsRepository.setCustomDnsServer(address) }
     }
 
     fun setAppCacheMaxSizeMb(sizeMb: Int) {

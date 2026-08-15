@@ -45,7 +45,11 @@ class AsmrOneCrawler @Inject constructor(
     private val asmr300Api: Asmr300Api,
     private val settingsRepository: SettingsRepository
 ) {
-    suspend fun searchWithTrace(keyword: String, page: Int = 1): AsmrOneSearchResult {
+    suspend fun searchWithTrace(
+        keyword: String,
+        page: Int = 1,
+        throwOnFailure: Boolean = false
+    ): AsmrOneSearchResult {
         val normalized = keyword.trim()
         val selected = selectedMetadataApi()
         if (normalized.isBlank()) {
@@ -61,7 +65,7 @@ class AsmrOneCrawler @Inject constructor(
                 )
             }
         }.getOrElse { error ->
-            if (error is CancellationException) throw error
+            if (error is CancellationException || throwOnFailure) throw error
             null
         }
         return AsmrOneSearchResult(
