@@ -1,7 +1,7 @@
 package com.asmr.player.util
 
 const val ASMR_ONE_SITE_FAILURE_MESSAGE =
-    "ASMR One 请求失败，请前往“设置 → 支持与状态”尝试切换镜像站点后重试"
+    "ASMR One 请求失败，请前往“设置 → 服务状态与代理”尝试切换镜像站点后重试"
 const val ASMR_ONE_SITE_TEST_FAILURE_MESSAGE =
     "当前站点连接失败，请尝试切换其他站点"
 

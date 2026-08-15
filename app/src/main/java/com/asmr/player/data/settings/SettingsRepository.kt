@@ -45,7 +45,8 @@ data class DeepSeekTranslationSettings(
 )
 
 private class SettingsStoreOwner(
-    val settingsDataStore: DataStore<Preferences>
+    val settingsDataStore: DataStore<Preferences>,
+    val proxyPasswordStorage: ProxyPasswordStorage
 )
 
 @Singleton
@@ -54,11 +55,17 @@ class SettingsRepository private constructor(
 ) {
     @Inject
     constructor(@ApplicationContext context: Context) : this(
-        SettingsStoreOwner(context.settingsDataStore)
+        SettingsStoreOwner(
+            settingsDataStore = context.settingsDataStore,
+            proxyPasswordStorage = ProxyPasswordStore.get(context)
+        )
     )
 
-    internal constructor(dataStore: DataStore<Preferences>) : this(
-        SettingsStoreOwner(dataStore)
+    internal constructor(
+        dataStore: DataStore<Preferences>,
+        proxyPasswordStorage: ProxyPasswordStorage = InMemoryProxyPasswordStorage()
+    ) : this(
+        SettingsStoreOwner(dataStore, proxyPasswordStorage)
     )
 
     private val systemVolumeSyncLock = Any()
@@ -100,6 +107,19 @@ class SettingsRepository private constructor(
 
     val asmrOneSite: Flow<Int> = context.settingsDataStore.data.map { prefs ->
         prefs[SettingsKeys.ASMR_ONE_SITE] ?: 200
+    }
+
+    val networkRouteSettings: Flow<NetworkRouteSettings> = context.settingsDataStore.data.map { prefs ->
+        NetworkRouteSettings(
+            proxyMode = AppProxyMode.fromStorageValue(prefs[SettingsKeys.NETWORK_PROXY_MODE]),
+            proxyHost = prefs[SettingsKeys.NETWORK_PROXY_HOST].orEmpty(),
+            proxyPort = prefs[SettingsKeys.NETWORK_PROXY_PORT] ?: 0,
+            proxyAuthenticationEnabled = prefs[SettingsKeys.NETWORK_PROXY_AUTHENTICATION_ENABLED] ?: false,
+            proxyUsername = prefs[SettingsKeys.NETWORK_PROXY_USERNAME].orEmpty(),
+            proxyPasswordConfigured = prefs[SettingsKeys.NETWORK_PROXY_PASSWORD_CONFIGURED] ?: false,
+            proxyCredentialVersion = prefs[SettingsKeys.NETWORK_PROXY_CREDENTIAL_VERSION] ?: 0L,
+            customDnsServer = prefs[SettingsKeys.CUSTOM_DNS_SERVER].orEmpty()
+        )
     }
 
     val floatingLyricsEnabled: Flow<Boolean> = context.settingsDataStore.data.map { prefs ->
@@ -556,6 +576,75 @@ class SettingsRepository private constructor(
         withContext(Dispatchers.IO) {
             context.settingsDataStore.edit { it[SettingsKeys.ASMR_ONE_SITE] = site }
         }
+    }
+
+    suspend fun useSystemProxy() {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { prefs ->
+                prefs[SettingsKeys.NETWORK_PROXY_MODE] = AppProxyMode.SYSTEM.storageValue
+            }
+        }
+    }
+
+    suspend fun setAdvancedProxy(
+        mode: AppProxyMode,
+        host: String,
+        port: Int,
+        authenticationEnabled: Boolean,
+        username: String,
+        password: String
+    ): Boolean {
+        val normalizedHost = normalizeProxyHost(host) ?: return false
+        if (!isValidManualProxy(mode, normalizedHost, port)) return false
+        val normalizedUsername = username.trim()
+        if (authenticationEnabled && normalizedUsername.isBlank()) return false
+
+        return withContext(Dispatchers.IO) {
+            val existingPasswordConfigured = context.proxyPasswordStorage.isConfigured()
+            if (authenticationEnabled && password.isEmpty() && !existingPasswordConfigured) {
+                return@withContext false
+            }
+
+            runCatching {
+                when {
+                    !authenticationEnabled -> context.proxyPasswordStorage.clear()
+                    password.isNotEmpty() -> context.proxyPasswordStorage.save(password)
+                }
+                context.settingsDataStore.edit { prefs ->
+                    prefs[SettingsKeys.NETWORK_PROXY_MODE] = mode.storageValue
+                    prefs[SettingsKeys.NETWORK_PROXY_HOST] = normalizedHost
+                    prefs[SettingsKeys.NETWORK_PROXY_PORT] = port
+                    prefs[SettingsKeys.NETWORK_PROXY_AUTHENTICATION_ENABLED] = authenticationEnabled
+                    prefs[SettingsKeys.NETWORK_PROXY_USERNAME] = if (authenticationEnabled) {
+                        normalizedUsername
+                    } else {
+                        ""
+                    }
+                    prefs[SettingsKeys.NETWORK_PROXY_PASSWORD_CONFIGURED] =
+                        authenticationEnabled && context.proxyPasswordStorage.isConfigured()
+                    prefs[SettingsKeys.NETWORK_PROXY_CREDENTIAL_VERSION] =
+                        (prefs[SettingsKeys.NETWORK_PROXY_CREDENTIAL_VERSION] ?: 0L) + 1L
+                }
+            }.isSuccess
+        }
+    }
+
+    suspend fun useSystemDns() {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { prefs ->
+                prefs.remove(SettingsKeys.CUSTOM_DNS_SERVER)
+            }
+        }
+    }
+
+    suspend fun setCustomDnsServer(address: String): Boolean {
+        val normalizedAddress = normalizeDnsServerAddress(address) ?: return false
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { prefs ->
+                prefs[SettingsKeys.CUSTOM_DNS_SERVER] = normalizedAddress
+            }
+        }
+        return true
     }
 
     private fun markPendingSystemVolumeSync(percent: Int) {

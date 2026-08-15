@@ -22,6 +22,7 @@ import javax.inject.Named
 
 import com.asmr.player.data.remote.TrafficStatsInterceptor
 import com.asmr.player.data.remote.NetworkHeaders
+import com.asmr.player.data.remote.NetworkRouteManager
 import com.asmr.player.subtitle.DEEPSEEK_TRANSLATION_CONCURRENCY
 import com.asmr.player.util.MessageManager
 import com.asmr.player.util.ASMR_ONE_SITE_FAILURE_MESSAGE
@@ -57,10 +58,12 @@ object NetworkModule {
     fun provideOkHttpClient(
         messageManager: MessageManager,
         trafficStatsInterceptor: TrafficStatsInterceptor,
-        deviceIdentityStore: DeviceIdentityStore
+        deviceIdentityStore: DeviceIdentityStore,
+        networkRouteManager: NetworkRouteManager
     ): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
             redactHeader("Authorization")
+            redactHeader("Proxy-Authorization")
             level = HttpLoggingInterceptor.Level.BASIC
         }
         val asmrHeaders = Interceptor { chain ->
@@ -128,11 +131,15 @@ object NetworkModule {
                 throw e
             }
         }
-        return OkHttpClient.Builder()
+        val client = OkHttpClient.Builder()
+            .proxySelector(networkRouteManager.proxySelector)
+            .proxyAuthenticator(networkRouteManager.proxyAuthenticator)
+            .dns(networkRouteManager.dns)
             .addInterceptor(asmrHeaders)
             .addInterceptor(trafficStatsInterceptor)
             .addInterceptor(logging)
             .build()
+        return networkRouteManager.register(client)
     }
 
     @Provides
@@ -148,10 +155,12 @@ object NetworkModule {
     @Named("image")
     fun provideImageOkHttpClient(
         trafficStatsInterceptor: TrafficStatsInterceptor,
-        deviceIdentityStore: DeviceIdentityStore
+        deviceIdentityStore: DeviceIdentityStore,
+        networkRouteManager: NetworkRouteManager
     ): OkHttpClient {
         val logging = HttpLoggingInterceptor().apply {
             redactHeader("Authorization")
+            redactHeader("Proxy-Authorization")
             level = HttpLoggingInterceptor.Level.BASIC
         }
         val headers = Interceptor { chain ->
@@ -186,12 +195,16 @@ object NetworkModule {
             maxRequestsPerHost = 2
         }
 
-        return OkHttpClient.Builder()
+        val client = OkHttpClient.Builder()
             .dispatcher(dispatcher)
+            .proxySelector(networkRouteManager.proxySelector)
+            .proxyAuthenticator(networkRouteManager.proxyAuthenticator)
+            .dns(networkRouteManager.dns)
             .addInterceptor(headers)
             .addInterceptor(trafficStatsInterceptor)
             .addInterceptor(logging)
             .build()
+        return networkRouteManager.register(client)
     }
 
     @Provides

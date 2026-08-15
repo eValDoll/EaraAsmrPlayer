@@ -38,7 +38,6 @@ import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.FormatAlignCenter
@@ -49,6 +48,7 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Router
 import androidx.compose.material.icons.rounded.Storage
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.VisibilityOff
@@ -139,7 +139,7 @@ private enum class SettingsSection(
     Playback("播放设置", "管理迷你播放栏、音频输出与淡入淡出", Icons.Rounded.Headphones),
     Lyrics("歌词", "配置歌词页与悬浮歌词的显示效果", Icons.Rounded.Lyrics),
     Translation("翻译配置", "管理本地字幕模型与 DeepSeek 翻译", Icons.Rounded.Translate),
-    SupportStatus("支持与状态", "查看项目支持方式与相关服务状态", Icons.Rounded.Favorite),
+    SupportStatus("服务状态与代理", "测试服务连通性并配置代理与 DNS", Icons.Rounded.Router),
     AppCache("APP 缓存", "设置缓存容量上限并清理缓存", Icons.Rounded.Storage),
     About("关于", "查看版本信息并检查应用更新", Icons.Rounded.Info),
 }
@@ -181,6 +181,7 @@ fun SettingsScreen(
     val playbackDataActive = isDataActive && selectedSection == SettingsSection.Playback
     val lyricsDataActive = isDataActive && selectedSection == SettingsSection.Lyrics
     val translationDataActive = isDataActive && selectedSection == SettingsSection.Translation
+    val supportStatusDataActive = isDataActive && selectedSection == SettingsSection.SupportStatus
     val aboutDataActive = isDataActive && selectedSection == SettingsSection.About
     val appCacheDataActive = isDataActive && selectedSection == SettingsSection.AppCache
 
@@ -211,6 +212,7 @@ fun SettingsScreen(
     val sfwHideSystemControls by viewModel.sfwHideSystemControls.collectAsStateWhileActive(playbackDataActive)
     val showMiniPlayerBar by viewModel.showMiniPlayerBar.collectAsStateWhileActive(playbackDataActive)
     val searchBlockedKeywords by viewModel.searchBlockedKeywords.collectAsStateWhileActive(blockedKeywordsDataActive)
+    val networkRouteSettings by viewModel.networkRouteSettings.collectAsStateWhileActive(supportStatusDataActive)
     val appCacheState by viewModel.appCacheState.collectAsStateWhileActive(appCacheDataActive)
     val subtitleModelState by viewModel.subtitleModelState.collectAsStateWhileActive(translationDataActive)
     val deepSeekApiKeyState by viewModel.deepSeekApiKeyState.collectAsStateWhileActive(translationDataActive)
@@ -1038,7 +1040,13 @@ fun SettingsScreen(
                 if (currentSection == SettingsSection.SupportStatus) {
                     item(key = "group:support_status") {
                         SettingsDetailCard {
-                        AppSupportStatusSection()
+                        AppSupportStatusSection(
+                            networkSettings = networkRouteSettings,
+                            onUseSystemProxy = viewModel::useSystemProxy,
+                            onAdvancedProxyApplied = viewModel::setAdvancedProxy,
+                            onUseSystemDns = viewModel::useSystemDns,
+                            onCustomDnsServerApplied = viewModel::setCustomDnsServer,
+                        )
                     }
                 }
                 }
