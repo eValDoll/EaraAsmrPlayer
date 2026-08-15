@@ -215,6 +215,9 @@ dependencies {
     // Jsoup
     implementation("org.jsoup:jsoup:1.17.2")
 
+    // PDFBox (Android port) — extract text from 台本 PDF files
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
+
     // DataStore
     implementation("androidx.datastore:datastore-preferences:1.0.0")
 
