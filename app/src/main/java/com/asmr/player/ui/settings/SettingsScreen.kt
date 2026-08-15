@@ -6,8 +6,14 @@ import android.content.pm.PackageManager
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.Settings
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
@@ -24,19 +30,27 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.FormatAlignLeft
 import androidx.compose.material.icons.automirrored.rounded.FormatAlignRight
+import androidx.compose.material.icons.rounded.Block
+import androidx.compose.material.icons.rounded.ChevronRight
 import androidx.compose.material.icons.rounded.CloudSync
 import androidx.compose.material.icons.rounded.CheckCircle
 import androidx.compose.material.icons.rounded.Delete
-import androidx.compose.material.icons.rounded.ExpandLess
-import androidx.compose.material.icons.rounded.ExpandMore
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.Folder
 import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.FormatAlignCenter
 import androidx.compose.material.icons.rounded.FormatAlignLeft
 import androidx.compose.material.icons.rounded.FormatAlignRight
+import androidx.compose.material.icons.rounded.Headphones
 import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Lyrics
+import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Storage
+import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material.icons.rounded.Sync
 import androidx.compose.material3.*
@@ -49,6 +63,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.SubcomposeLayout
 import androidx.compose.ui.platform.LocalConfiguration
@@ -109,6 +124,41 @@ import kotlin.math.roundToInt
 
 private val SettingsPageHorizontalPadding = 8.dp
 private const val MONOCHROME_THEME_SENTINEL = 0x01000000
+private const val SettingsDetailEnterDurationMs = 440
+private const val SettingsDetailExitDurationMs = 420
+private val SettingsDetailSlideEasing = CubicBezierEasing(0.215f, 0.61f, 0.355f, 1f)
+
+private enum class SettingsSection(
+    val title: String,
+    val description: String,
+    val icon: ImageVector,
+) {
+    LocalLibrary("本地库", "管理扫描目录、刷新本地内容与同步元数据", Icons.Rounded.Folder),
+    BlockedKeywords("屏蔽词", "过滤搜索结果中不想看到的关键词", Icons.Rounded.Block),
+    Appearance("外观", "调整主题、主题色与播放页背景", Icons.Rounded.Palette),
+    Playback("播放设置", "管理迷你播放栏、音频输出与淡入淡出", Icons.Rounded.Headphones),
+    Lyrics("歌词", "配置歌词页与悬浮歌词的显示效果", Icons.Rounded.Lyrics),
+    Translation("翻译配置", "管理本地字幕模型与 DeepSeek 翻译", Icons.Rounded.Translate),
+    SupportStatus("支持与状态", "查看项目支持方式与相关服务状态", Icons.Rounded.Favorite),
+    AppCache("APP 缓存", "设置缓存容量上限并清理缓存", Icons.Rounded.Storage),
+    About("关于", "查看版本信息并检查应用更新", Icons.Rounded.Info),
+}
+
+private fun settingsDetailEnterTransition() = slideInHorizontally(
+    animationSpec = tween(
+        durationMillis = SettingsDetailEnterDurationMs,
+        easing = SettingsDetailSlideEasing,
+    ),
+    initialOffsetX = { fullWidth -> fullWidth },
+)
+
+private fun settingsDetailExitTransition() = slideOutHorizontally(
+    animationSpec = tween(
+        durationMillis = SettingsDetailExitDurationMs,
+        easing = SettingsDetailSlideEasing,
+    ),
+    targetOffsetX = { fullWidth -> fullWidth },
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -120,41 +170,62 @@ fun SettingsScreen(
     libraryViewModel: LibraryViewModel = hiltViewModel(),
     scrollToTopSignal: Long = 0L,
     onHorizontalControlInteractionChanged: (Boolean) -> Unit = {},
+    onDetailPageChanged: (Boolean) -> Unit = {},
 ) {
-    LaunchedEffect(isDataActive, viewModel) {
-        if (isDataActive) viewModel.prepareSettingsData()
+    var selectedSection by rememberSaveable { mutableStateOf<SettingsSection?>(null) }
+    var retainedSection by remember { mutableStateOf(selectedSection) }
+    val currentOnDetailPageChanged by rememberUpdatedState(onDetailPageChanged)
+    val localLibraryDataActive = isDataActive && selectedSection == SettingsSection.LocalLibrary
+    val blockedKeywordsDataActive = isDataActive && selectedSection == SettingsSection.BlockedKeywords
+    val appearanceDataActive = isDataActive && selectedSection == SettingsSection.Appearance
+    val playbackDataActive = isDataActive && selectedSection == SettingsSection.Playback
+    val lyricsDataActive = isDataActive && selectedSection == SettingsSection.Lyrics
+    val translationDataActive = isDataActive && selectedSection == SettingsSection.Translation
+    val aboutDataActive = isDataActive && selectedSection == SettingsSection.About
+    val appCacheDataActive = isDataActive && selectedSection == SettingsSection.AppCache
+
+    LaunchedEffect(selectedSection) {
+        currentOnDetailPageChanged(selectedSection != null)
     }
-    val floatingLyricsEnabled by viewModel.floatingLyricsEnabled.collectAsStateWhileActive(isDataActive)
-    val floatingSettings by viewModel.floatingLyricsSettings.collectAsStateWhileActive(isDataActive)
-    val lyricsPageSettings by viewModel.lyricsPageSettings.collectAsStateWhileActive(isDataActive)
-    val dynamicPlayerHueEnabled by viewModel.dynamicPlayerHueEnabled.collectAsStateWhileActive(isDataActive)
-    val themeMode by viewModel.themeMode.collectAsStateWhileActive(isDataActive)
-    val staticHueArgbLight by viewModel.staticHueArgbLight.collectAsStateWhileActive(isDataActive)
-    val staticHueArgbDark by viewModel.staticHueArgbDark.collectAsStateWhileActive(isDataActive)
-    val coverBackgroundEnabled by viewModel.coverBackgroundEnabled.collectAsStateWhileActive(isDataActive)
-    val coverBackgroundClarity by viewModel.coverBackgroundClarity.collectAsStateWhileActive(isDataActive)
-    val coverPreviewMode by viewModel.coverPreviewMode.collectAsStateWhileActive(isDataActive)
-    val pauseOnOutputDisconnect by viewModel.pauseOnOutputDisconnect.collectAsStateWhileActive(isDataActive)
-    val resumeOnOutputConnect by viewModel.resumeOnOutputConnect.collectAsStateWhileActive(isDataActive)
-    val pauseOnOtherAudio by viewModel.pauseOnOtherAudio.collectAsStateWhileActive(isDataActive)
-    val playFadeInMs by viewModel.playFadeInMs.collectAsStateWhileActive(isDataActive)
-    val pauseFadeOutMs by viewModel.pauseFadeOutMs.collectAsStateWhileActive(isDataActive)
-    val sfwHideSystemControls by viewModel.sfwHideSystemControls.collectAsStateWhileActive(isDataActive)
-    val showMiniPlayerBar by viewModel.showMiniPlayerBar.collectAsStateWhileActive(isDataActive)
-    val searchBlockedKeywords by viewModel.searchBlockedKeywords.collectAsStateWhileActive(isDataActive)
-    val appCacheState by viewModel.appCacheState.collectAsStateWhileActive(isDataActive)
-    val subtitleModelState by viewModel.subtitleModelState.collectAsStateWhileActive(isDataActive)
-    val deepSeekApiKeyState by viewModel.deepSeekApiKeyState.collectAsStateWhileActive(isDataActive)
-    val deepSeekAccountState by viewModel.deepSeekAccountState.collectAsStateWhileActive(isDataActive)
-    val deepSeekTranslationSettings by viewModel.deepSeekTranslationSettings.collectAsStateWhileActive(isDataActive)
-    val updateState by viewModel.updateState.collectAsStateWhileActive(isDataActive)
-    val autoUpdateCheckEnabled by viewModel.autoUpdateCheckEnabled.collectAsStateWhileActive(isDataActive)
-    val scanRoots by libraryViewModel.scanRoots.collectAsStateWhileActive(isDataActive)
-    val bulkProgress by libraryViewModel.bulkProgress.collectAsStateWhileActive(isDataActive)
-    val isGlobalSyncRunning by libraryViewModel.isGlobalSyncRunning.collectAsStateWhileActive(isDataActive)
+    DisposableEffect(Unit) {
+        onDispose { currentOnDetailPageChanged(false) }
+    }
+    LaunchedEffect(translationDataActive, viewModel) {
+        if (translationDataActive) viewModel.prepareSettingsData()
+    }
+    val floatingLyricsEnabled by viewModel.floatingLyricsEnabled.collectAsStateWhileActive(lyricsDataActive)
+    val floatingSettings by viewModel.floatingLyricsSettings.collectAsStateWhileActive(lyricsDataActive)
+    val lyricsPageSettings by viewModel.lyricsPageSettings.collectAsStateWhileActive(lyricsDataActive)
+    val dynamicPlayerHueEnabled by viewModel.dynamicPlayerHueEnabled.collectAsStateWhileActive(appearanceDataActive)
+    val themeMode by viewModel.themeMode.collectAsStateWhileActive(appearanceDataActive)
+    val staticHueArgbLight by viewModel.staticHueArgbLight.collectAsStateWhileActive(appearanceDataActive)
+    val staticHueArgbDark by viewModel.staticHueArgbDark.collectAsStateWhileActive(appearanceDataActive)
+    val coverBackgroundEnabled by viewModel.coverBackgroundEnabled.collectAsStateWhileActive(appearanceDataActive)
+    val coverBackgroundClarity by viewModel.coverBackgroundClarity.collectAsStateWhileActive(appearanceDataActive)
+    val coverPreviewMode by viewModel.coverPreviewMode.collectAsStateWhileActive(appearanceDataActive)
+    val pauseOnOutputDisconnect by viewModel.pauseOnOutputDisconnect.collectAsStateWhileActive(playbackDataActive)
+    val resumeOnOutputConnect by viewModel.resumeOnOutputConnect.collectAsStateWhileActive(playbackDataActive)
+    val pauseOnOtherAudio by viewModel.pauseOnOtherAudio.collectAsStateWhileActive(playbackDataActive)
+    val playFadeInMs by viewModel.playFadeInMs.collectAsStateWhileActive(playbackDataActive)
+    val pauseFadeOutMs by viewModel.pauseFadeOutMs.collectAsStateWhileActive(playbackDataActive)
+    val sfwHideSystemControls by viewModel.sfwHideSystemControls.collectAsStateWhileActive(playbackDataActive)
+    val showMiniPlayerBar by viewModel.showMiniPlayerBar.collectAsStateWhileActive(playbackDataActive)
+    val searchBlockedKeywords by viewModel.searchBlockedKeywords.collectAsStateWhileActive(blockedKeywordsDataActive)
+    val appCacheState by viewModel.appCacheState.collectAsStateWhileActive(appCacheDataActive)
+    val subtitleModelState by viewModel.subtitleModelState.collectAsStateWhileActive(translationDataActive)
+    val deepSeekApiKeyState by viewModel.deepSeekApiKeyState.collectAsStateWhileActive(translationDataActive)
+    val deepSeekAccountState by viewModel.deepSeekAccountState.collectAsStateWhileActive(translationDataActive)
+    val deepSeekTranslationSettings by viewModel.deepSeekTranslationSettings.collectAsStateWhileActive(translationDataActive)
+    val updateState by viewModel.updateState.collectAsStateWhileActive(aboutDataActive)
+    val autoUpdateCheckEnabled by viewModel.autoUpdateCheckEnabled.collectAsStateWhileActive(aboutDataActive)
+    val scanRoots by libraryViewModel.scanRoots.collectAsStateWhileActive(localLibraryDataActive)
+    val bulkProgress by libraryViewModel.bulkProgress.collectAsStateWhileActive(localLibraryDataActive)
+    val isGlobalSyncRunning by libraryViewModel.isGlobalSyncRunning.collectAsStateWhileActive(localLibraryDataActive)
     val context = LocalContext.current
     val colorScheme = AsmrTheme.colorScheme
-    val listState = rememberLazyListState()
+    val rootListState = rememberLazyListState()
+    val detailListState = rememberLazyListState()
+    val listState = if (selectedSection == null) rootListState else detailListState
     val segmentedButtonColors = SegmentedButtonDefaults.colors(
         activeContainerColor = colorScheme.primarySoft,
         activeContentColor = if (colorScheme.isDark) colorScheme.onPrimaryContainer else colorScheme.primaryStrong,
@@ -216,6 +287,9 @@ fun SettingsScreen(
 
     // 屏幕尺寸判断
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
+    BackHandler(enabled = isActive && selectedSection != null) {
+        selectedSection = null
+    }
     Scaffold(
         contentWindowInsets = StableWindowInsets.navigationBars,
         containerColor = Color.Transparent,
@@ -224,10 +298,14 @@ fun SettingsScreen(
         LaunchedEffect(isActive) {
             if (isActive) return@LaunchedEffect
             deepSeekApiKeyInput = ""
-            listState.stopScroll(MutatePriority.PreventUserInput)
+            rootListState.stopScroll(MutatePriority.PreventUserInput)
+            detailListState.stopScroll(MutatePriority.PreventUserInput)
         }
-        LaunchedEffect(isDataActive) {
-            if (isDataActive) viewModel.refreshAppCacheSize()
+        LaunchedEffect(appCacheDataActive) {
+            if (appCacheDataActive) viewModel.refreshAppCacheSize()
+        }
+        LaunchedEffect(selectedSection) {
+            if (selectedSection != null) detailListState.scrollToItem(0)
         }
         LaunchedEffect(scrollToTopSignal) {
             if (scrollToTopSignal == 0L) return@LaunchedEffect
@@ -247,17 +325,56 @@ fun SettingsScreen(
                     .widthIn(max = 760.dp)
                     .fillMaxWidth()
             }
-
             LazyColumn(
-                state = listState,
-                modifier = contentModifier.thinScrollbar(listState),
+                state = rootListState,
+                modifier = contentModifier.thinScrollbar(rootListState),
                 flingBehavior = rememberCalmScrollableFlingBehavior(),
                 contentPadding = PaddingValues(horizontal = SettingsPageHorizontalPadding, vertical = 10.dp)
                     .withAddedBottomPadding(LocalBottomOverlayPadding.current),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                item(key = "group:local") {
-                    SettingsGroup(title = "本地库") {
+                item(key = "settings_sections") {
+                    SettingsSectionsPanel(
+                        onSectionClick = { section ->
+                            retainedSection = section
+                            selectedSection = section
+                        },
+                    )
+                }
+                item(key = "root_bottom_spacer") {
+                    Spacer(modifier = Modifier.height(40.dp))
+                }
+            }
+
+            AnimatedVisibility(
+                visible = selectedSection != null,
+                modifier = contentModifier,
+                enter = settingsDetailEnterTransition(),
+                exit = settingsDetailExitTransition(),
+                label = "settingsDetailTransition",
+            ) {
+                val currentSection = retainedSection ?: return@AnimatedVisibility
+                LazyColumn(
+                    state = detailListState,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(colorScheme.background)
+                        .thinScrollbar(detailListState),
+                    flingBehavior = rememberCalmScrollableFlingBehavior(),
+                    contentPadding = PaddingValues(horizontal = SettingsPageHorizontalPadding, vertical = 10.dp)
+                        .withAddedBottomPadding(LocalBottomOverlayPadding.current),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    item(key = "detail_header:${currentSection.name}") {
+                        SettingsDetailHeader(
+                            section = currentSection,
+                            onBack = { selectedSection = null },
+                        )
+                    }
+
+                if (currentSection == SettingsSection.LocalLibrary) {
+                    item(key = "group:local") {
+                        SettingsDetailCard {
                 val isDark = AsmrTheme.colorScheme.isDark
                 val buttonColors = ButtonDefaults.filledTonalButtonColors(
                     containerColor = colorScheme.primarySoft,
@@ -386,9 +503,11 @@ fun SettingsScreen(
                 }
             }
         }
+                }
 
-                item(key = "group:block_words") {
-                    SettingsGroup(title = "屏蔽词") {
+                if (currentSection == SettingsSection.BlockedKeywords) {
+                    item(key = "group:block_words") {
+                        SettingsDetailCard {
                         SearchBlockedKeywordsSection(
                             input = searchBlockedKeywordInput,
                             keywords = searchBlockedKeywords,
@@ -404,13 +523,11 @@ fun SettingsScreen(
                         )
                     }
                 }
+                }
 
-                item(key = "group:appearance") {
-                    SettingsGroup(
-                        title = "外观",
-                        collapsible = true,
-                        initiallyExpanded = false,
-                        collapsedContent = {
+                if (currentSection == SettingsSection.Appearance) {
+                    item(key = "group:appearance") {
+                        SettingsDetailCard {
                             Text("主题模式", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                                 ThemeModeChip(
@@ -479,8 +596,7 @@ fun SettingsScreen(
                                     )
                                 }
                             }
-                        }
-                    ) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
                         SettingsToggleRow(
                             text = "封面动态主题（全局）",
                             checked = dynamicPlayerHueEnabled,
@@ -547,13 +663,11 @@ fun SettingsScreen(
                         }
                     }
                 }
+                }
 
-                item(key = "group:playback") {
-                    SettingsGroup(
-                        title = "播放设置",
-                        collapsible = true,
-                        initiallyExpanded = false,
-                        collapsedContent = {
+                if (currentSection == SettingsSection.Playback) {
+                    item(key = "group:playback") {
+                        SettingsDetailCard {
                             SettingsToggleRow(
                                 text = "迷你播放栏开关",
                                 checked = showMiniPlayerBar,
@@ -574,8 +688,7 @@ fun SettingsScreen(
                                 activeTipKey = activeTipKey,
                                 onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
                             )
-                        }
-                    ) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
                         SettingsToggleRow(
                             text = "断开扬声器、有线/蓝牙耳机或蓝牙关闭时立刻暂停播放",
                             checked = pauseOnOutputDisconnect,
@@ -634,21 +747,18 @@ fun SettingsScreen(
                         )
                     }
                 }
+                }
 
                 // 悬浮歌词
-                item(key = "group:lyrics") {
-                    SettingsGroup(
-                        title = "歌词",
-                        collapsible = true,
-                        initiallyExpanded = false,
-                        collapsedContent = {
+                if (currentSection == SettingsSection.Lyrics) {
+                    item(key = "group:lyrics") {
+                        SettingsDetailCard {
                             SettingsToggleRow(
                                 text = "开启悬浮歌词",
                                 checked = floatingLyricsEnabled,
                                 onCheckedChange = { viewModel.setFloatingLyricsEnabled(it) }
                             )
-                        }
-                    ) {
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
                         LyricsPageSettingsSection(
                             settings = lyricsPageSettings,
                             segmentedButtonColors = segmentedButtonColors,
@@ -772,8 +882,10 @@ fun SettingsScreen(
                         }
                     }
                 }
-                item(key = "group:translation_config") {
-                    SettingsGroup(title = "翻译配置") {
+                }
+                if (currentSection == SettingsSection.Translation) {
+                    item(key = "group:translation_config") {
+                        SettingsDetailCard {
                         SubtitleModelSettingsSection(
                             state = subtitleModelState,
                             selectedSourceIds = subtitleModelSourceIds,
@@ -808,8 +920,10 @@ fun SettingsScreen(
                         )
                     }
                 }
-                item(key = "group:about_update") {
-                    SettingsGroup(title = "关于") {
+                }
+                if (currentSection == SettingsSection.About) {
+                    item(key = "group:about_update") {
+                        SettingsDetailCard {
                         val isDark = AsmrTheme.colorScheme.isDark
                         val buttonColors = ButtonDefaults.filledTonalButtonColors(
                             containerColor = colorScheme.primarySoft,
@@ -919,15 +1033,19 @@ fun SettingsScreen(
                         }
                     }
                 }
+                }
 
-                item(key = "group:support_status") {
-                    SettingsGroup(title = "支持与状态") {
+                if (currentSection == SettingsSection.SupportStatus) {
+                    item(key = "group:support_status") {
+                        SettingsDetailCard {
                         AppSupportStatusSection()
                     }
                 }
+                }
 
-                item(key = "group:app_cache") {
-                    SettingsGroup(title = "APP 缓存") {
+                if (currentSection == SettingsSection.AppCache) {
+                    item(key = "group:app_cache") {
+                        SettingsDetailCard {
                         AppCacheSettingsSection(
                             state = appCacheState,
                             onMaxSizeChanged = viewModel::setAppCacheMaxSizeMb,
@@ -936,10 +1054,12 @@ fun SettingsScreen(
                         )
                     }
                 }
+                }
 
                 item(key = "bottom_spacer") {
                     Spacer(modifier = Modifier.height(40.dp))
                 }
+            }
             }
         }
     }
@@ -1926,75 +2046,142 @@ private fun SearchBlockedKeywordChip(
 }
 
 @Composable
-private fun SettingsGroup(
-    title: String,
-    collapsible: Boolean = false,
-    initiallyExpanded: Boolean = true,
-    collapsedContent: (@Composable ColumnScope.() -> Unit)? = null,
-    content: @Composable ColumnScope.() -> Unit
+private fun SettingsSectionsPanel(
+    onSectionClick: (SettingsSection) -> Unit,
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    var expanded by rememberSaveable(title) { mutableStateOf(initiallyExpanded) }
-    Column(modifier = Modifier.fillMaxWidth()) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(
-                    if (collapsible) {
-                        Modifier
-                            .clip(RoundedCornerShape(10.dp))
-                            .clickable { expanded = !expanded }
-                            .padding(start = 2.dp, end = 4.dp, bottom = 6.dp)
-                    } else {
-                        Modifier.padding(bottom = 6.dp)
-                    }
-                ),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = colorScheme.primary,
-                modifier = Modifier.weight(1f)
-            )
-            if (collapsible) {
-                Text(
-                    text = if (expanded) "收起" else "展开",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = colorScheme.textSecondary
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = colorScheme.surface.copy(alpha = 0.32f),
+        contentColor = colorScheme.onSurface,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column {
+            SettingsSection.entries.forEachIndexed { index, section ->
+                SettingsSectionOption(
+                    section = section,
+                    onClick = { onSectionClick(section) },
                 )
-                Spacer(modifier = Modifier.width(2.dp))
-                Icon(
-                    imageVector = if (expanded) Icons.Rounded.ExpandLess else Icons.Rounded.ExpandMore,
-                    contentDescription = if (expanded) "收起$title" else "展开$title",
-                    tint = colorScheme.textSecondary
-                )
-            }
-        }
-        Surface(
-            shape = RoundedCornerShape(16.dp),
-            color = colorScheme.surface.copy(alpha = 0.5f),
-            contentColor = colorScheme.onSurface,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                if (collapsible) {
-                    collapsedContent?.invoke(this)
-                    if (expanded) {
-                        if (collapsedContent != null) {
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
-                        }
-                        content()
-                    }
-                } else {
-                    content()
+                if (index < SettingsSection.entries.lastIndex) {
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 58.dp, end = 14.dp),
+                        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f),
+                    )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun SettingsSectionOption(
+    section: SettingsSection,
+    onClick: () -> Unit,
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .testTag("settingsSection:${section.name}"),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(
+            imageVector = section.icon,
+            contentDescription = null,
+            tint = colorScheme.primary,
+            modifier = Modifier.size(24.dp),
+        )
+        Spacer(modifier = Modifier.width(14.dp))
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(1.dp),
+        ) {
+            Text(
+                text = section.title,
+                style = MaterialTheme.typography.bodyLarge,
+                fontWeight = FontWeight.SemiBold,
+                color = colorScheme.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = section.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = colorScheme.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Spacer(modifier = Modifier.width(10.dp))
+        Icon(
+            imageVector = Icons.Rounded.ChevronRight,
+            contentDescription = "进入${section.title}",
+            tint = colorScheme.textSecondary,
+            modifier = Modifier.size(22.dp),
+        )
+    }
+}
+
+@Composable
+private fun SettingsDetailHeader(
+    section: SettingsSection,
+    onBack: () -> Unit,
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 2.dp, vertical = 2.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        IconButton(
+            onClick = onBack,
+            modifier = Modifier.testTag("settingsDetailBack"),
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.ArrowBack,
+                contentDescription = "返回设置",
+                tint = colorScheme.primary,
+            )
+        }
+        Spacer(modifier = Modifier.width(6.dp))
+        Column(
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            Text(
+                text = section.title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.Bold,
+                color = colorScheme.textPrimary,
+            )
+            Text(
+                text = section.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = colorScheme.textSecondary,
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingsDetailCard(
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = colorScheme.surface.copy(alpha = 0.5f),
+        contentColor = colorScheme.onSurface,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            content = content,
+        )
     }
 }
 

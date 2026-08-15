@@ -978,6 +978,7 @@ fun MainContainer(
     var groupsScrollToTopSignal by remember { mutableLongStateOf(0L) }
     var downloadsScrollToTopSignal by remember { mutableLongStateOf(0L) }
     var settingsScrollToTopSignal by remember { mutableLongStateOf(0L) }
+    var settingsDetailPageVisible by rememberSaveable { mutableStateOf(false) }
     var hotListeningScrollToTopSignal by remember { mutableLongStateOf(0L) }
     val appVolumeWarningSessionState = rememberAppVolumeWarningSessionState()
     val audioOutputRouteKind = rememberCurrentAudioOutputRouteKind()
@@ -1826,7 +1827,8 @@ fun MainContainer(
                                                 }
                                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                                     if (headerActionRoute != null &&
-                                                        (isPrimaryRoute(headerActionRoute) || headerActionRoute == "playlist_system/{type}")
+                                                        (isPrimaryRoute(headerActionRoute) || headerActionRoute == "playlist_system/{type}") &&
+                                                        !(headerActionRoute == "settings" && settingsDetailPageVisible)
                                                     ) {
                                                         val downloadTasks by downloadsViewModel.tasks.collectAsStateWithLifecycle()
                                                         val activeSubtitleTaskCount by downloadsViewModel.activeSubtitleTaskCount.collectAsStateWithLifecycle()
@@ -2217,7 +2219,10 @@ fun MainContainer(
                                                 scrollToTopSignal = settingsScrollToTopSignal,
                                                 onHorizontalControlInteractionChanged = { active ->
                                                     primaryPagerScrollLocked = active
-                                                }
+                                                },
+                                                onDetailPageChanged = { visible ->
+                                                    settingsDetailPageVisible = visible
+                                                },
                                             )
                                         }
 
