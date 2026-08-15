@@ -1198,6 +1198,8 @@ private suspend fun upsertDownloadedAlbumToLibrary(
     }
 
     val cover = pickCoverFileFromAlbumDir(dir)
+    val existingCoverPath = existing?.coverPath
+        ?.takeIf { it.isNotBlank() && it != "null" }
     val entity = AlbumEntity(
         id = existing?.id ?: 0L,
         title = subtitleTrimmed
@@ -1210,8 +1212,11 @@ private suspend fun upsertDownloadedAlbumToLibrary(
         cv = existing?.cv?.takeIf { it.isNotBlank() } ?: albumCv.trim(),
         tags = existing?.tags?.takeIf { it.isNotBlank() } ?: albumTagsCsv.trim(),
         coverUrl = existing?.coverUrl?.takeIf { it.isNotBlank() } ?: albumCoverUrl.trim(),
-        coverPath = cover?.absolutePath ?: existing?.coverPath.orEmpty(),
-        coverThumbPath = existing?.coverThumbPath.orEmpty(),
+        coverPath = resolveDownloadedAlbumCoverPath(
+            existingCoverPath = existingCoverPath,
+            downloadedCoverPath = cover?.absolutePath
+        ),
+        coverThumbPath = if (existingCoverPath != null) existing.coverThumbPath else "",
         workId = existing?.workId?.takeIf { it.isNotBlank() }
             ?: albumWorkId.trim().ifBlank { rj },
         rjCode = existing?.rjCode?.takeIf { it.isNotBlank() }
@@ -1220,7 +1225,12 @@ private suspend fun upsertDownloadedAlbumToLibrary(
     )
 
     val albumId = try {
-        albumDao.insertAlbum(entity)
+        if (existing == null) {
+            albumDao.insertAlbum(entity)
+        } else {
+            albumDao.updateAlbum(entity)
+            entity.id
+        }
     } catch (_: Exception) {
         0L
     }
@@ -1336,71 +1346,104 @@ internal suspend fun replaceMatchedOnlineTracksWithLocalTracks(
     val remoteSubtitleSourceDao = db.remoteSubtitleSourceDao()
     val allTracks = runCatching { trackDao.getTracksForAlbumOnce(albumId) }.getOrDefault(emptyList())
     val localTracks = allTracks.filter { !it.path.trim().startsWith("http", ignoreCase = true) }
-    val localKeyToTrack = LinkedHashMap<String, TrackEntity>()
-    val localKeyToTrackNoGroup = LinkedHashMap<String, TrackEntity>()
-    localTracks
+    val orderedLocalTracks = localTracks
         .sortedWith(compareByDescending<TrackEntity> { it.path.startsWith(preferredLocalPrefix) }.thenBy { it.id })
-        .forEach { track ->
-            localKeyToTrack.putIfAbsent(TrackKeyNormalizer.buildKey(track.title, track.group, null), track)
-            localKeyToTrackNoGroup.putIfAbsent(TrackKeyNormalizer.buildKey(track.title, "", null), track)
+    val localTracksByKey = orderedLocalTracks.groupBy { track ->
+        TrackKeyNormalizer.buildKey(track.title, track.group, null)
+    }
+    val localTracksByKeyWithoutGroup = orderedLocalTracks.groupBy { track ->
+        TrackKeyNormalizer.buildKey(track.title, "", null)
+    }
+    val onlineTracks = allTracks.filter { it.path.trim().startsWith("http", ignoreCase = true) }
+    val consumedLocalTrackIds = linkedSetOf<Long>()
+    val matchedOnlineTrackIds = linkedSetOf<Long>()
+    val matchedPairs = mutableListOf<Pair<TrackEntity, TrackEntity>>()
+
+    onlineTracks.forEach { online ->
+        val key = TrackKeyNormalizer.buildKey(online.title, online.group, null)
+        val target = localTracksByKey[key]
+            ?.firstOrNull { local -> local.id !in consumedLocalTrackIds }
+            ?: return@forEach
+        consumedLocalTrackIds += target.id
+        matchedOnlineTrackIds += online.id
+        matchedPairs += online to target
+    }
+
+    onlineTracks
+        .filter { online -> online.id !in matchedOnlineTrackIds }
+        .groupBy { online -> TrackKeyNormalizer.buildKey(online.title, "", null) }
+        .forEach { (keyWithoutGroup, unmatchedOnlineTracks) ->
+            val remainingLocalTracks = localTracksByKeyWithoutGroup[keyWithoutGroup]
+                .orEmpty()
+                .filter { local -> local.id !in consumedLocalTrackIds }
+            if (unmatchedOnlineTracks.size == 1 && remainingLocalTracks.size == 1) {
+                val target = remainingLocalTracks.single()
+                consumedLocalTrackIds += target.id
+                val online = unmatchedOnlineTracks.single()
+                matchedOnlineTrackIds += online.id
+                matchedPairs += online to target
+            }
         }
 
     val onlineIdsToDelete = ArrayList<Long>()
-    allTracks
-        .filter { it.path.trim().startsWith("http", ignoreCase = true) }
-        .forEach { online ->
-            val key = TrackKeyNormalizer.buildKey(online.title, online.group, null)
-            val keyNoGroup = TrackKeyNormalizer.buildKey(online.title, "", null)
-            val target = localKeyToTrack[key] ?: localKeyToTrackNoGroup[keyNoGroup] ?: return@forEach
-
-            val sourceSubs = runCatching { trackDao.getSubtitlesForTrack(online.id) }.getOrDefault(emptyList())
-            if (sourceSubs.isNotEmpty()) {
-                val targetHasSubs = runCatching { trackDao.getSubtitlesForTrack(target.id) }.getOrDefault(emptyList()).isNotEmpty()
-                if (!targetHasSubs) {
-                    runCatching {
-                        trackDao.insertSubtitles(
-                            sourceSubs.map { subtitle ->
-                                SubtitleEntity(
-                                    trackId = target.id,
-                                    startMs = subtitle.startMs,
-                                    endMs = subtitle.endMs,
-                                    text = subtitle.text
-                                )
-                            }
-                        )
-                    }
+    matchedPairs.forEach { (online, target) ->
+        val sourceSubs = runCatching { trackDao.getSubtitlesForTrack(online.id) }.getOrDefault(emptyList())
+        if (sourceSubs.isNotEmpty()) {
+            val targetHasSubs = runCatching { trackDao.getSubtitlesForTrack(target.id) }.getOrDefault(emptyList()).isNotEmpty()
+            if (!targetHasSubs) {
+                runCatching {
+                    trackDao.insertSubtitles(
+                        sourceSubs.map { subtitle ->
+                            SubtitleEntity(
+                                trackId = target.id,
+                                startMs = subtitle.startMs,
+                                endMs = subtitle.endMs,
+                                text = subtitle.text
+                            )
+                        }
+                    )
                 }
             }
-
-            val remoteSources = runCatching { remoteSubtitleSourceDao.getSourcesForTrackOnce(online.id) }.getOrDefault(emptyList())
-            if (remoteSources.isNotEmpty()) {
-                val targetHasRemoteSources = runCatching {
-                    remoteSubtitleSourceDao.getSourcesForTrackOnce(target.id)
-                }.getOrDefault(emptyList()).isNotEmpty()
-                if (!targetHasRemoteSources) {
-                    runCatching {
-                        remoteSubtitleSourceDao.insertAll(
-                            remoteSources.map { source ->
-                                RemoteSubtitleSourceEntity(
-                                    trackId = target.id,
-                                    url = source.url,
-                                    language = source.language,
-                                    ext = source.ext
-                                )
-                            }
-                        )
-                    }
-                }
-            }
-
-            onlineIdsToDelete += online.id
         }
+
+        val remoteSources = runCatching { remoteSubtitleSourceDao.getSourcesForTrackOnce(online.id) }.getOrDefault(emptyList())
+        if (remoteSources.isNotEmpty()) {
+            val targetHasRemoteSources = runCatching {
+                remoteSubtitleSourceDao.getSourcesForTrackOnce(target.id)
+            }.getOrDefault(emptyList()).isNotEmpty()
+            if (!targetHasRemoteSources) {
+                runCatching {
+                    remoteSubtitleSourceDao.insertAll(
+                        remoteSources.map { source ->
+                            RemoteSubtitleSourceEntity(
+                                trackId = target.id,
+                                url = source.url,
+                                language = source.language,
+                                ext = source.ext
+                            )
+                        }
+                    )
+                }
+            }
+        }
+
+        onlineIdsToDelete += online.id
+    }
 
     if (onlineIdsToDelete.isNotEmpty()) {
         runCatching { trackDao.deleteSubtitlesForTracks(onlineIdsToDelete) }
         runCatching { remoteSubtitleSourceDao.deleteByTrackIds(onlineIdsToDelete) }
         runCatching { trackDao.deleteTracksByIds(onlineIdsToDelete) }
     }
+}
+
+internal fun resolveDownloadedAlbumCoverPath(
+    existingCoverPath: String?,
+    downloadedCoverPath: String?
+): String {
+    return existingCoverPath
+        ?.takeIf { it.isNotBlank() && it != "null" }
+        ?: downloadedCoverPath.orEmpty()
 }
 
 private fun pickCoverFileFromAlbumDir(dir: File): File? {
