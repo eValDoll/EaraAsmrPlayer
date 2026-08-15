@@ -126,6 +126,10 @@ class SettingsRepositoryTest {
         val defaults = repository.loadDeepSeekTranslationSettings()
         assertFalse(defaults.thinkingEnabled)
         assertEquals(DeepSeekTranslationSettings(), defaults)
+        assertEquals(
+            listOf("low", "high", "max"),
+            DeepSeekReasoningEffort.entries.map { it.wireValue }
+        )
     }
 
     @Test
@@ -139,6 +143,16 @@ class SettingsRepositoryTest {
                 reasoningEffort = DeepSeekReasoningEffort.MAX
             ),
             repository.deepSeekTranslationSettings.first()
+        )
+    }
+
+    @Test
+    fun deepSeekTranslationSettings_persistLowEffort() = runBlocking {
+        repository.setDeepSeekReasoningEffort(DeepSeekReasoningEffort.LOW)
+
+        assertEquals(
+            DeepSeekReasoningEffort.LOW,
+            repository.loadDeepSeekTranslationSettings().reasoningEffort
         )
     }
 

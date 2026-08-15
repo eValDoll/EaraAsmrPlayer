@@ -1279,6 +1279,7 @@ internal fun DeepSeekTranslationSettingsSection(
                     label = {
                         Text(
                             when (effort) {
+                                DeepSeekReasoningEffort.LOW -> "Low"
                                 DeepSeekReasoningEffort.HIGH -> "High"
                                 DeepSeekReasoningEffort.MAX -> "Max"
                             }

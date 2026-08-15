@@ -24,15 +24,24 @@ import com.asmr.player.data.remote.TrafficStatsInterceptor
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.subtitle.DEEPSEEK_TRANSLATION_CONCURRENCY
 import com.asmr.player.util.MessageManager
+import com.asmr.player.util.ASMR_ONE_SITE_FAILURE_MESSAGE
 import com.asmr.player.util.DlsiteAntiHotlink
 import com.google.gson.Gson
 import java.io.IOException
 
 internal const val DEEPSEEK_HTTP_CLIENT = "deepseek"
+private val ASMR_ONE_SITE_DOMAINS = setOf("asmr.one", "asmr-100.com", "asmr-200.com", "asmr-300.com")
 
 internal fun createDeepSeekDispatcher(): Dispatcher = Dispatcher().apply {
     maxRequests = DEEPSEEK_TRANSLATION_CONCURRENCY
     maxRequestsPerHost = DEEPSEEK_TRANSLATION_CONCURRENCY
+}
+
+internal fun isAsmrOneSiteRequest(host: String, encodedPath: String): Boolean {
+    val normalizedHost = host.trim().lowercase()
+    return ASMR_ONE_SITE_DOMAINS.any { domain ->
+        normalizedHost == domain || normalizedHost.endsWith(".$domain")
+    } || encodedPath.startsWith("/api/asmr-one/")
 }
 
 @Module
@@ -57,6 +66,7 @@ object NetworkModule {
         val asmrHeaders = Interceptor { chain ->
             val request = chain.request()
             val host = request.url.host.lowercase()
+            val isAsmrOneRequest = isAsmrOneSiteRequest(host, request.url.encodedPath)
             val suppressAutoErrorMessage =
                 request.header(NetworkHeaders.HEADER_SILENT_IO_ERROR) == NetworkHeaders.SILENT_IO_ERROR_ON
             
@@ -90,12 +100,16 @@ object NetworkModule {
             try {
                 val response = chain.proceed(builder.build())
                 if (!response.isSuccessful && !suppressAutoErrorMessage) {
-                    when (response.code) {
-                        401 -> messageManager.showError("认证已过期，请重新登录")
-                        403 -> messageManager.showError("访问被拒绝")
-                        404 -> {} // 忽略 404
-                        500, 502, 503, 504 -> messageManager.showError("服务器开小差了，请稍后重试")
-                        else -> {}
+                    if (isAsmrOneRequest && response.code != 404) {
+                        messageManager.showError(ASMR_ONE_SITE_FAILURE_MESSAGE)
+                    } else {
+                        when (response.code) {
+                            401 -> messageManager.showError("认证已过期，请重新登录")
+                            403 -> messageManager.showError("访问被拒绝")
+                            404 -> {} // 忽略 404
+                            500, 502, 503, 504 -> messageManager.showError("服务器开小差了，请稍后重试")
+                            else -> {}
+                        }
                     }
                 }
                 response
@@ -103,7 +117,13 @@ object NetworkModule {
                 val canceled = runCatching { chain.call().isCanceled() }.getOrDefault(false)
                 val canceledByMessage = e.message?.contains("canceled", ignoreCase = true) == true
                 if (!suppressAutoErrorMessage && !canceled && !canceledByMessage) {
-                    messageManager.showError("网络连接失败，请检查网络")
+                    messageManager.showError(
+                        if (isAsmrOneRequest) {
+                            ASMR_ONE_SITE_FAILURE_MESSAGE
+                        } else {
+                            "网络连接失败，请检查网络"
+                        }
+                    )
                 }
                 throw e
             }

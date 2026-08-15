@@ -28,6 +28,7 @@ data class PlaybackRuntimeSettings(
 )
 
 enum class DeepSeekReasoningEffort(val wireValue: String) {
+    LOW("low"),
     HIGH("high"),
     MAX("max");
 

@@ -51,7 +51,8 @@ fun SiteStatusSection(
             nameContent = {
                 AsmrOneSiteSelector(
                     selectedSite = site,
-                    onSiteSelected = viewModel::setAsmrOneSite
+                    onSiteSelected = viewModel::setAsmrOneSite,
+                    lightweight = true
                 )
             }
         )

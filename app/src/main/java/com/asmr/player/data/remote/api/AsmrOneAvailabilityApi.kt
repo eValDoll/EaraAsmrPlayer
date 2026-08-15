@@ -296,7 +296,7 @@ class AsmrOneAvailabilityApi @Inject constructor(
             trackTreeClient.newCall(request).awaitResponse().use { response ->
                 val raw = response.body?.string().orEmpty()
                 if (response.code == 404 && raw.contains("\"tracks_not_found\"", ignoreCase = true)) {
-                    throw IOException("asmr.one tracks backend not found")
+                    return@withContext AsmrOneBackendTrackTreeResponse(rj = normalizedRj)
                 }
                 if (!response.isSuccessful) {
                     throw IOException("asmr.one tracks backend failed: HTTP ${response.code}")

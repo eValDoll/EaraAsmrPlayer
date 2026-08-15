@@ -2,10 +2,20 @@ package com.asmr.player.ui.library
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AlbumDetailOneStateTest {
+    @Test
+    fun asmrOneFailureMessage_isSilentForLocalLibraryDetail() {
+        assertNull(albumDetailAsmrOneFailureMessage(isLocalLibraryDetail = true))
+        assertEquals(
+            com.asmr.player.util.ASMR_ONE_SITE_FAILURE_MESSAGE,
+            albumDetailAsmrOneFailureMessage(isLocalLibraryDetail = false)
+        )
+    }
+
     @Test
     fun shouldShowAsmrOneDirectoryLoading_dependsOnOneStateOnly() {
         assertTrue(
@@ -221,6 +231,15 @@ class AlbumDetailOneStateTest {
 
     @Test
     fun albumHeaderDownloadEnabled_localRequiresRjAndAccessibleTree() {
+        assertFalse(
+            albumHeaderDownloadEnabled(
+                selectedTab = 0,
+                hasAsmrOneTree = false,
+                hasDlsitePlayTree = false,
+                hasResolvedInitialDlsiteTarget = true,
+                hasValidLocalRj = true
+            )
+        )
         assertFalse(
             albumHeaderDownloadEnabled(
                 selectedTab = 0,

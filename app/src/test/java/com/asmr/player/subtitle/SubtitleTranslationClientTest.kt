@@ -382,8 +382,19 @@ class SubtitleTranslationClientTest {
     }
 
     @Test
-    fun request_supportsThinkingMaxAndDisabledModes() {
+    fun request_supportsThinkingLowMaxAndDisabledModes() {
         val source = sources(1)
+        val lowRequest = JsonParser.parseString(
+            buildDeepSeekSubtitleTranslationRequest(
+                gson = Gson(),
+                sources = source,
+                allowMerging = false,
+                settings = DeepSeekTranslationSettings(
+                    thinkingEnabled = true,
+                    reasoningEffort = DeepSeekReasoningEffort.LOW
+                )
+            )
+        ).asJsonObject
         val maxRequest = JsonParser.parseString(
             buildDeepSeekSubtitleTranslationRequest(
                 gson = Gson(),
@@ -407,6 +418,7 @@ class SubtitleTranslationClientTest {
             )
         ).asJsonObject
 
+        assertEquals("low", lowRequest.get("reasoning_effort").asString)
         assertEquals("max", maxRequest.get("reasoning_effort").asString)
         assertEquals("disabled", disabledRequest.getAsJsonObject("thinking").get("type").asString)
         assertEquals(false, disabledRequest.has("reasoning_effort"))
