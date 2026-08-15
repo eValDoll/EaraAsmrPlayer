@@ -219,7 +219,7 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
                     id = taskId,
                     origin = origin,
                     title = taskTitle,
-                    rjCode = rjCodes.singleOrNull() ?: if (rjCodes.isEmpty()) "未知RJ" else "批量任务",
+                    rjCode = rjCodes.singleOrNull() ?: if (rjCodes.isEmpty()) "未知作品编号" else "批量任务",
                     state = SubtitleTaskState.ACTIVE,
                     warning = "",
                     createdAt = now,

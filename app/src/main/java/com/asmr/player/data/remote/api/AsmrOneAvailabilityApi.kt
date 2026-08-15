@@ -7,7 +7,9 @@ import com.asmr.player.data.remote.awaitResponse
 import com.asmr.player.data.remote.withOnlineDirectoryRequestTimeouts
 import com.asmr.player.data.remote.withSearchTimeouts
 import com.asmr.player.listentogether.XxHash64
+import com.asmr.player.util.DlsiteWorkNo
 import com.google.gson.Gson
+import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
@@ -53,11 +55,15 @@ data class AsmrOneCollectedSearchResponse(
 data class AsmrOneCollectedSearchItem(
     val workId: Int = 0,
     val rj: String = "",
+    @SerializedName(value = "sourceId", alternate = ["source_id"])
+    val sourceId: String = "",
     val title: String = "",
     val circle: String = "",
     val cvs: List<String>? = emptyList(),
     val tags: List<String>? = emptyList(),
+    @SerializedName(value = "matchedRjs", alternate = ["matched_rjs"])
     val matchedRjs: List<String>? = emptyList(),
+    @SerializedName(value = "originalWorkno", alternate = ["original_workno"])
     val originalWorkno: String = "",
     val releaseDate: String = "",
     val createDate: String = "",
@@ -135,8 +141,8 @@ class AsmrOneAvailabilityApi @Inject constructor(
     suspend fun check(rjs: List<String>): Map<String, Boolean> {
         val normalized = rjs
             .asSequence()
-            .map { it.trim().uppercase() }
-            .filter { RJ_CODE_REGEX.matches(it) }
+            .map { DlsiteWorkNo.normalizeWorkNo(it, minimumDigits = 6) }
+            .filter { it.isNotBlank() }
             .distinct()
             .take(MAX_RJS)
             .toList()
@@ -269,8 +275,8 @@ class AsmrOneAvailabilityApi @Inject constructor(
 
     suspend fun getTrackTreeByRj(rj: String): AsmrOneBackendTrackTreeResponse {
         if (backendBaseUrl.isBlank()) throw IOException("asmr.one backend is not configured")
-        val normalizedRj = rj.trim().uppercase()
-        if (!RJ_CODE_REGEX.matches(normalizedRj)) throw IOException("asmr.one tracks RJ is invalid")
+        val normalizedRj = DlsiteWorkNo.normalizeWorkNo(rj, minimumDigits = 6)
+        if (normalizedRj.isBlank()) throw IOException("asmr.one tracks work number is invalid")
         return withContext(Dispatchers.IO) {
             val url = resolveUrl("api/asmr-one/tracks")
                 .toHttpUrlOrNull()
@@ -337,7 +343,6 @@ class AsmrOneAvailabilityApi @Inject constructor(
 
     private companion object {
         private val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
-        private val RJ_CODE_REGEX = Regex("""RJ\d{6,}""")
         private const val MAX_RJS = 100
         private const val MAX_RECOMMENDATION_SEEDS = 20
         private const val MAX_RECOMMENDATION_EXCLUDES = 200
@@ -347,13 +352,11 @@ class AsmrOneAvailabilityApi @Inject constructor(
 
 internal fun normalizeRecommendationRjs(values: List<String>, limit: Int): List<String> =
     values.asSequence()
-        .map { it.trim().uppercase() }
-        .filter { RECOMMENDATION_RJ_CODE_REGEX.matches(it) }
+        .map { DlsiteWorkNo.normalizeWorkNo(it, minimumDigits = 6) }
+        .filter { it.isNotBlank() }
         .distinct()
         .take(limit.coerceAtLeast(0))
         .toList()
-
-private val RECOMMENDATION_RJ_CODE_REGEX = Regex("""RJ\d{6,}""")
 
 private fun AsmrOneAvailabilityItem.matchedRequestRjs(requested: Set<String>): List<String> {
     if (requested.isEmpty()) return emptyList()

@@ -11,17 +11,19 @@ class AlbumDetailAsmrOneBackupEndpointTest {
     fun fetchAsmrOneTracksFromBackup_returnsFirstAvailableTree() = runBlocking {
         val backupTree = listOf(
             AsmrOneTrackNodeResponse(
-                title = "backup.wav",
-                mediaDownloadUrl = "https://example.com/backup.wav"
+                title = "1.mp3",
+                mediaDownloadUrl = "https://example.com/1.mp3"
             )
         )
 
         val result = fetchAsmrOneTracksFromBackup(
-            candidateRjs = listOf("rj01271410"),
-            fetchBackup = { rj -> "1271410" to backupTree.also { assertEquals("RJ01271410", rj) } }
+            candidateRjs = listOf("bj02370869"),
+            fetchBackup = { workNo ->
+                "100000062" to backupTree.also { assertEquals("BJ02370869", workNo) }
+            }
         )
 
-        assertEquals("1271410", result.first)
+        assertEquals("100000062", result.first)
         assertEquals(backupTree, result.second)
     }
 

@@ -43,6 +43,19 @@ class AlbumCoverHelpersTest {
     }
 
     @Test
+    fun albumStableKey_keepsAsmrOneIdentityWhileWorkNumberIsBeingResolved() {
+        val unresolved = Album(
+            title = "作品",
+            path = "",
+            asmrOneWorkId = 100000062
+        )
+        val resolved = unresolved.copy(workId = "BJ02370869", rjCode = "BJ02370869")
+
+        assertEquals("asmr-one:100000062", albumStableKey(unresolved))
+        assertEquals(albumStableKey(unresolved), albumStableKey(resolved))
+    }
+
+    @Test
     fun shouldFadeInCover_disablesWhileScrolling() {
         assertTrue(shouldFadeInCover(false))
         assertFalse(shouldFadeInCover(true))

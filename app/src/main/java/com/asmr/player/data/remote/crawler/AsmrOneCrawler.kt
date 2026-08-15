@@ -15,6 +15,7 @@ import com.asmr.player.data.remote.api.Pagination
 import com.asmr.player.data.remote.api.SearchResponse
 import com.asmr.player.data.remote.api.WorkDetailsResponse
 import com.asmr.player.data.settings.SettingsRepository
+import com.asmr.player.util.DlsiteWorkNo
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
@@ -81,6 +82,17 @@ class AsmrOneCrawler @Inject constructor(
         }
     }
 
+    suspend fun getDetailsFromMain(workId: String): WorkDetailsResponse {
+        val normalized = workId.trim()
+        require(normalized.isNotBlank()) { "asmr.one work id is blank" }
+        return withTimeout(ONLINE_DIRECTORY_REQUEST_TIMEOUT_MS) {
+            asmrOneApi.getWorkDetails(
+                workId = normalized,
+                silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON
+            )
+        }
+    }
+
     suspend fun getTracksWithTrace(workId: String): AsmrOneTracksResult {
         val normalized = workId.trim()
         if (normalized.isBlank()) return AsmrOneTracksResult(emptyList(), null)
@@ -121,8 +133,6 @@ class AsmrOneCrawler @Inject constructor(
             .getTracks(workId, silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON)
     }
 }
-
-private val RJ_CODE_REGEX = Regex("""RJ\d{6,}""")
 
 internal fun resolveAsmrOneMetadataEndpoint(preferredSite: Int): Int {
     val normalized = AsmrOneEndpoint.normalize(preferredSite)
@@ -261,7 +271,7 @@ private fun mapMirrorSearchResponse(
     keyword: String,
     page: Int
 ): SearchResponse {
-    val normalizedRj = RJ_CODE_REGEX.find(keyword.trim().uppercase())?.value.orEmpty()
+    val normalizedRj = DlsiteWorkNo.extractWorkNo(keyword, minimumDigits = 6)
     val works = mapBackupWorks(response.works, normalizedRj)
     return SearchResponse(
         works = works,

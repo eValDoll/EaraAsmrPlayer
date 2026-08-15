@@ -1610,7 +1610,7 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
                         modifier = Modifier.fillMaxWidth().height(220.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text("缺少 RJ 编号，无法加载")
+                        Text("缺少作品编号，无法加载")
                     }
                     DirectoryTreePanelState.Empty -> Box(
                         modifier = Modifier.fillMaxWidth().height(220.dp),

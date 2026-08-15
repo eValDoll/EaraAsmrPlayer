@@ -7,6 +7,7 @@ import com.asmr.player.data.remote.auth.adultCheckedCookie
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
+import com.asmr.player.util.DlsiteWorkNo
 import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -344,7 +345,8 @@ class DLSiteScraper @Inject constructor(
                 val titleTag = item.selectFirst(".work_name a") ?: continue
                 val title = titleTag.text().trim()
                 val link = titleTag.attr("href")
-                val rjCode = "RJ\\d+".toRegex().find(link)?.value?.uppercase() ?: ""
+                val workNo = DlsiteWorkNo.extractWorkNo(link)
+                if (workNo.isBlank()) continue
 
                 val circle = item.selectFirst(".maker_name a")?.text()?.trim() ?: ""
                 val tags = item.select(".search_tag a").map { it.text().trim() }
@@ -413,8 +415,8 @@ class DLSiteScraper @Inject constructor(
                     Album(
                         title = title,
                         path = "",
-                        workId = rjCode,
-                        rjCode = rjCode,
+                        workId = workNo,
+                        rjCode = workNo,
                         circle = circle,
                         cv = cv,
                         tags = tags,
@@ -725,8 +727,7 @@ class DLSiteScraper @Inject constructor(
             if (allowFallback0) {
                 val jpLink = doc0.select("a.work_edition_linklist_item").firstOrNull { it.text().contains("日本語") }
                 val href = jpLink?.attr("href").orEmpty()
-                val m = Regex("""product_id/(RJ\d+)""", RegexOption.IGNORE_CASE).find(href)
-                val jpId = m?.groupValues?.getOrNull(1).orEmpty().uppercase()
+                val jpId = DlsiteWorkNo.extractWorkNo(href)
                 if (jpId.isNotBlank() && jpId != workId0.uppercase()) {
                     val jpDoc = fetchWorkDocument(jpId, locale = locale)
                     val fallback = if (jpDoc != null) internal(jpId, jpDoc, allowFallback0 = false) else emptyList()
@@ -785,19 +786,19 @@ class DLSiteScraper @Inject constructor(
         fun parseWorks(container: Element?): List<DlsiteRecommendedWork> {
             if (container == null) return emptyList()
             val out = ArrayList<DlsiteRecommendedWork>()
-            val anchors = container.select("a.work_thumb, a[id^=_link_RJ], a[href*=/product_id/RJ]")
+            val anchors = container.select("a.work_thumb, a[id^=_link_], a[href*=/product_id/]")
             anchors.forEach { a ->
                 val href = a.attr("href").ifBlank { a.absUrl("href") }
-                val rj = Regex("""RJ\d+""", RegexOption.IGNORE_CASE).find(href)?.value?.uppercase().orEmpty()
-                if (rj.isBlank()) return@forEach
+                val workNo = DlsiteWorkNo.extractWorkNo(href)
+                if (workNo.isBlank()) return@forEach
                 val img = a.selectFirst("img")
                 val title = sanitizeTitle(img?.attr("alt").orEmpty().ifBlank { a.attr("title") }.ifBlank { a.text() })
                 val cover = DlsiteRecommendHtmlParser.extractCoverUrl(a, baseUrl)
                 val ribbon = a.selectFirst(".recommend_ribbon .ribbon, .recommend_ribbon span, .ribbon")?.text()?.trim()?.ifBlank { null }
                 out.add(
                     DlsiteRecommendedWork(
-                        rjCode = normalizeWorkId(rj),
-                        title = if (title.isBlank()) normalizeWorkId(rj) else title,
+                        rjCode = normalizeWorkId(workNo),
+                        title = if (title.isBlank()) normalizeWorkId(workNo) else title,
                         coverUrl = cover,
                         ribbon = ribbon
                     )
@@ -816,7 +817,7 @@ class DLSiteScraper @Inject constructor(
                 var p: Element? = hit
                 repeat(7) {
                     if (p == null) return@repeat
-                    val has = p!!.select("a.work_thumb, a[id^=_link_RJ], a[href*=/product_id/RJ]").isNotEmpty()
+                    val has = p!!.select("a.work_thumb, a[id^=_link_], a[href*=/product_id/]").isNotEmpty()
                     if (has) return p
                     p = p!!.parent()
                 }

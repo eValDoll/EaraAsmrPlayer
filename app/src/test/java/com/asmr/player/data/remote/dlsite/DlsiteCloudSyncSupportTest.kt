@@ -281,6 +281,13 @@ class DlsiteCloudSyncSupportTest {
         )
     }
 
+    @Test
+    fun resolveCloudSyncWorkId_replacesAnySupportedDlsiteWorkNumber() {
+        assertEquals("BJ02370869", resolveCloudSyncWorkId("VJ01005620", "bj02370869"))
+        assertEquals("BJ02370869", resolveCloudSyncWorkId("RJ123456", "BJ02370869"))
+        assertEquals("custom-id", resolveCloudSyncWorkId("custom-id", "BJ02370869"))
+    }
+
     private fun albumOf(
         rjCode: String,
         title: String = rjCode,

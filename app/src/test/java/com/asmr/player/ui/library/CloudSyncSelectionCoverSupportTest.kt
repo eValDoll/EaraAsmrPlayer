@@ -23,6 +23,21 @@ class CloudSyncSelectionCoverSupportTest {
     }
 
     @Test
+    fun resolveCoverSources_usesBooksCanonicalPathForBjWork() {
+        val result = resolveCloudSyncCandidateCoverSources(candidate(workno = "BJ02370869", coverUrl = ""))
+
+        assertEquals(
+            listOf(
+                CloudSyncCandidateCoverSource(
+                    label = "canonical",
+                    url = "https://img.dlsite.jp/modpub/images2/work/books/BJ02371000/BJ02370869_img_main.jpg"
+                )
+            ),
+            result
+        )
+    }
+
+    @Test
     fun resolveCoverSources_normalizesProtocolRelativeAndKeepsCanonicalFirst() {
         val candidate = candidate(
             workno = "RJ123456",

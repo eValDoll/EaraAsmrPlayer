@@ -18,6 +18,7 @@ import com.asmr.player.data.local.db.entities.SubtitleEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.data.local.db.AppDatabaseProvider
 import com.asmr.player.util.SubtitleEntry
+import com.asmr.player.util.DlsiteWorkNo
 import com.asmr.player.util.SubtitleMatchSupport
 import com.asmr.player.util.SubtitleParser
 import com.asmr.player.util.TrackKeyNormalizer
@@ -1172,7 +1173,7 @@ private suspend fun upsertDownloadedAlbumToLibrary(
     val titleTrimmed = taskTitle.trim()
     val subtitleTrimmed = taskSubtitle.trim()
     val normalizedWorkId = albumRjCode.trim().ifBlank { albumWorkId.trim() }
-    val rj = extractRjCode(normalizedWorkId.ifBlank { titleTrimmed.ifBlank { dir.name } })
+    val rj = DlsiteWorkNo.extractWorkNo(normalizedWorkId.ifBlank { titleTrimmed.ifBlank { dir.name } })
 
     val albumDao = db.albumDao()
     val trackDao = db.trackDao()
@@ -1400,12 +1401,6 @@ internal suspend fun replaceMatchedOnlineTracksWithLocalTracks(
         runCatching { remoteSubtitleSourceDao.deleteByTrackIds(onlineIdsToDelete) }
         runCatching { trackDao.deleteTracksByIds(onlineIdsToDelete) }
     }
-}
-
-private fun extractRjCode(text: String): String {
-    val raw = text.trim()
-    val m = Regex("""RJ\s*([0-9]{3,})""", RegexOption.IGNORE_CASE).find(raw) ?: return raw.takeIf { it.startsWith("RJ", true) } ?: ""
-    return "RJ" + m.groupValues[1]
 }
 
 private fun pickCoverFileFromAlbumDir(dir: File): File? {

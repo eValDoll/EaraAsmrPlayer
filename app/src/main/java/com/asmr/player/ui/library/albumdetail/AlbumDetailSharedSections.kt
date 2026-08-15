@@ -79,9 +79,10 @@ import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
 import com.asmr.player.data.remote.scraper.DlsiteRecommendations
-import com.asmr.player.data.remote.scraper.dlsiteOriginalCoverUrlForRj
+import com.asmr.player.data.remote.scraper.dlsiteOriginalCoverUrlForWorkNo
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
+import com.asmr.player.util.DlsiteWorkNo
 import com.asmr.player.playback.MediaItemFactory
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.cache.CacheImageModel
@@ -327,11 +328,11 @@ private fun DlsiteRecommendationsBlock(
             itemsIndexed(
                 items = items.take(30),
                 key = { index, work ->
-                    val rj = sanitizeRj(work.rjCode).ifBlank { work.rjCode }
+                    val rj = sanitizeWorkNo(work.rjCode).ifBlank { work.rjCode }
                     "recommendation:$rj:$index"
                 }
             ) { _, w ->
-                val rj = sanitizeRj(w.rjCode).ifBlank { w.rjCode }
+                val rj = sanitizeWorkNo(w.rjCode).ifBlank { w.rjCode }
                 DlsiteRecommendedWorkCard(work = w, displayRj = rj, onClick = { onOpenAlbumByRj(rj, w) })
             }
         }
@@ -346,7 +347,7 @@ private fun DlsiteRecommendedWorkCard(
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val coverModel = remember(work.coverUrl, displayRj) {
-        work.coverUrl.takeIf { it.isNotBlank() } ?: dlsiteOriginalCoverUrlForRj(displayRj)
+        work.coverUrl.takeIf { it.isNotBlank() } ?: dlsiteOriginalCoverUrlForWorkNo(displayRj)
     }
     val imageModel = remember(coverModel) {
         val s = coverModel.toString()
@@ -432,8 +433,8 @@ private fun DlsiteRecommendedWorkCard(
     }
 }
 
-private fun sanitizeRj(raw: String): String {
-    return Regex("""RJ\d+""", RegexOption.IGNORE_CASE).find(raw)?.value?.uppercase().orEmpty()
+private fun sanitizeWorkNo(raw: String): String {
+    return DlsiteWorkNo.extractWorkNo(raw)
 }
 
 @Composable

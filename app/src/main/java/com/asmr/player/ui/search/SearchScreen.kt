@@ -224,7 +224,11 @@ internal fun searchResultScrollKey(success: SearchUiState.Success?): String {
 }
 
 private fun onlineDetailLoadingFor(album: Album, state: SearchUiState.Success): Boolean {
-    if (!state.isEnriching || state.purchasedOnly || state.collectedOnly) return false
+    if (state.collectedOnly && !state.purchasedOnly) {
+        val workId = album.asmrOneWorkId ?: return false
+        return workId in state.resolvingCollectedWorkIds
+    }
+    if (!state.isEnriching || state.purchasedOnly) return false
     val rj = album.rjCode.ifBlank { album.workId }.trim().uppercase()
     return rj.isNotBlank() && rj in state.enrichingRjCodes
 }
@@ -1081,7 +1085,7 @@ fun SearchScreen(
                                                 onlineCvLoading = onlineDetailLoading,
                                                 coverFadeInState = coverFadeInState,
                                                 coverReloadKey = state.resultRevision,
-                                                onRjClick = { copyMeta("RJ", it) },
+                                                onRjClick = { copyMeta("作品编号", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
                                                 onCircleLongClick = ::openMetaActions,
                                                 onCvClick = { copyMeta("声优", it) },
@@ -1155,7 +1159,7 @@ fun SearchScreen(
                                                 onlineCvLoading = onlineDetailLoading,
                                                 coverFadeInState = coverFadeInState,
                                                 coverReloadKey = state.resultRevision,
-                                                onRjClick = { copyMeta("RJ", it) },
+                                                onRjClick = { copyMeta("作品编号", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
                                                 onCircleLongClick = ::openMetaActions,
                                                 onCvClick = { copyMeta("声优", it) },

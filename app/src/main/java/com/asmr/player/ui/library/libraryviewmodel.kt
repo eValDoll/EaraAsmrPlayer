@@ -51,6 +51,7 @@ import com.asmr.player.domain.model.Track
 import com.asmr.player.playback.PlayerConnection
 import com.asmr.player.ui.common.queryTrackFileSize
 import com.asmr.player.util.GlobalSyncState
+import com.asmr.player.util.DlsiteWorkNo
 import com.asmr.player.util.ScanRootsStore
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.SubtitleMatchSupport
@@ -1732,13 +1733,12 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    private fun extractRjCode(input: String): String {
-        val regex = Regex("""RJ\d+""", RegexOption.IGNORE_CASE)
-        return regex.find(input)?.value?.uppercase() ?: ""
+    private fun extractWorkNo(input: String): String {
+        return DlsiteWorkNo.extractWorkNo(input)
     }
 
     private fun buildOnlineAlbumPath(entity: AlbumEntity): String? {
-        val rj = extractRjCode(entity.rjCode.ifBlank { entity.workId }.ifBlank { entity.title })
+        val rj = extractWorkNo(entity.rjCode.ifBlank { entity.workId }.ifBlank { entity.title })
         val workKey = rj.ifBlank { entity.workId.trim() }.ifBlank { entity.title.trim() }.trim()
         if (workKey.isBlank()) return null
         return "web://rj/${workKey.uppercase()}"
@@ -1884,7 +1884,7 @@ class LibraryViewModel @Inject constructor(
             foundDownloadPaths.add(albumDir.absolutePath)
             val coverFile = pickCoverFileFromAlbumDir(albumDir)
             val title = albumDir.name
-            val rj = extractRjCode(title)
+            val rj = extractWorkNo(title)
 
             onAlbumScanned?.invoke(title)
             val existing = resolveAndMergeAlbumForRj(
@@ -2153,7 +2153,7 @@ class LibraryViewModel @Inject constructor(
             val albumPath = albumUri.toString()
             foundAlbumPaths.add(albumPath)
             val title = albumDir.displayName.ifBlank { "album" }
-            val rj = extractRjCode(title)
+            val rj = extractWorkNo(title)
             val albumChildren = queryChildren(uri, albumDir.documentId)
             val coverPath = pickCoverNode(albumChildren, uri, albumDir.documentId)
 

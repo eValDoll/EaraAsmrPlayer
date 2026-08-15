@@ -84,7 +84,7 @@ import com.asmr.player.ui.library.LibraryFilterScreen
 import com.asmr.player.ui.library.LibraryScreen
 import com.asmr.player.ui.library.LibraryViewModel
 import com.asmr.player.ui.library.BulkPhase
-import com.asmr.player.data.remote.scraper.dlsiteOriginalCoverUrlForRj
+import com.asmr.player.data.remote.scraper.dlsiteOriginalCoverUrlForWorkNo
 import com.asmr.player.performance.UiFrameWorkCoordinator
 import com.asmr.player.ui.player.MiniPlayer
 import com.asmr.player.ui.player.NowPlayingMotionLayout
@@ -548,7 +548,7 @@ private fun AlbumDetailRouteTopBar(
                     ) {
                         Icon(
                             imageVector = Icons.Rounded.Edit,
-                            contentDescription = "手动输入RJ号",
+                            contentDescription = "手动输入作品编号",
                             tint = Color.White
                         )
                     }
@@ -2100,10 +2100,12 @@ fun MainContainer(
                                                     searchAssistInitialRequest = request
                                                     navController.navigateSingleTop(Routes.searchAssist(request.keyword))
                                                 },
-                                                onAlbumClick = { album, fromPurchasedOnly, hasResolvedDetail ->
+                                                onAlbumClick = searchAlbumClick@ { album, fromPurchasedOnly, hasResolvedDetail ->
+                                                    val workNo = album.rjCode.ifBlank { album.workId }
+                                                    if (workNo.isBlank()) return@searchAlbumClick
                                                     AlbumCoverHintStore.record(
                                                         albumId = album.id,
-                                                        rjCode = album.rjCode.ifBlank { album.workId },
+                                                        rjCode = workNo,
                                                         title = album.title,
                                                         circle = album.circle,
                                                         cv = album.cv,
@@ -2120,7 +2122,7 @@ fun MainContainer(
                                                     )
                                                     openAlbumDetailFromSearch(
                                                         albumId = album.id,
-                                                        rj = album.rjCode.ifBlank { album.workId },
+                                                        rj = workNo,
                                                         preferDlsitePlay = fromPurchasedOnly
                                                     )
                                                 },
@@ -2480,7 +2482,7 @@ fun MainContainer(
                                     rjCode = targetRj,
                                     title = work?.title,
                                     circle = null,
-                                    coverUrl = dlsiteOriginalCoverUrlForRj(targetRj)
+                                    coverUrl = dlsiteOriginalCoverUrlForWorkNo(targetRj)
                                         .ifBlank { work?.coverUrl.orEmpty() }
                                 )
                                 navigator.openAlbumDetailByRjStacked(targetRj)
@@ -2563,7 +2565,7 @@ fun MainContainer(
                                     rjCode = targetRj,
                                     title = work?.title,
                                     circle = null,
-                                    coverUrl = dlsiteOriginalCoverUrlForRj(targetRj)
+                                    coverUrl = dlsiteOriginalCoverUrlForWorkNo(targetRj)
                                         .ifBlank { work?.coverUrl.orEmpty() }
                                 )
                                 navigator.openAlbumDetailByRjStacked(targetRj)
@@ -2631,7 +2633,7 @@ fun MainContainer(
                                     rjCode = targetRj,
                                     title = work?.title,
                                     circle = null,
-                                    coverUrl = dlsiteOriginalCoverUrlForRj(targetRj)
+                                    coverUrl = dlsiteOriginalCoverUrlForWorkNo(targetRj)
                                         .ifBlank { work?.coverUrl.orEmpty() }
                                 )
                                 navigator.openAlbumDetailByRjStacked(targetRj)
@@ -2807,10 +2809,10 @@ fun MainContainer(
                 val albumDetailViewModel: AlbumDetailViewModel = hiltViewModel(navBackStackEntry!!)
                 FlatTextFieldDialog(
                     onDismissRequest = { showManualRjDialog = false },
-                    message = "请输入 RJ 号，保存后将自动执行云同步。",
+                    message = "请输入 DLsite 作品编号，支持 RJ、BJ、VJ；保存后将自动执行云同步。",
                     value = manualRjInput,
                     onValueChange = { manualRjInput = it },
-                    placeholder = "RJ号（如 RJ123456）",
+                    placeholder = "作品编号（如 BJ02370869）",
                     confirmText = "同步",
                     confirmEnabled = manualRjInput.trim().isNotBlank(),
                     onConfirm = {

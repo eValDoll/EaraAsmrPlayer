@@ -23,6 +23,12 @@ class ClipboardRjNavigationTest {
     }
 
     @Test
+    fun extractClipboardRjCode_supportsBooksAndProfessionalWorkNumbers() {
+        assertEquals("BJ02370869", extractClipboardRjCode("复制 bj02370869 后打开"))
+        assertEquals("VJ01005620", extractClipboardRjCode("https://www.dlsite.com/pro/work/=/product_id/VJ01005620.html"))
+    }
+
+    @Test
     fun extractClipboardRjCode_returnsBlankWithoutCode() {
         assertEquals("", extractClipboardRjCode("普通剪贴板内容"))
     }

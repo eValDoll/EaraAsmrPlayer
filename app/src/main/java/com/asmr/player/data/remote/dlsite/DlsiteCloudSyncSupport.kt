@@ -1,6 +1,7 @@
 package com.asmr.player.data.remote.dlsite
 
 import com.asmr.player.domain.model.Album
+import com.asmr.player.util.DlsiteWorkNo
 
 internal const val CLOUD_SYNC_LOCALE_ZH_CN = "zh_CN"
 internal const val CLOUD_SYNC_LOCALE_ZH_TW = "zh_TW"
@@ -235,7 +236,7 @@ internal fun resolveCloudSyncWorkId(existingWorkId: String, resolvedWorkno: Stri
     val trimmedExisting = existingWorkId.trim()
     return when {
         trimmedExisting.isBlank() -> normalizedResolved
-        Regex("""RJ\d+""", RegexOption.IGNORE_CASE).matches(trimmedExisting) -> normalizedResolved
+        DlsiteWorkNo.normalizeWorkNo(trimmedExisting).isNotBlank() -> normalizedResolved
         else -> existingWorkId
     }
 }

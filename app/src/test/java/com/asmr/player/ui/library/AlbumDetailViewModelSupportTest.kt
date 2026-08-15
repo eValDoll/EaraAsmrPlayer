@@ -45,6 +45,33 @@ class AlbumDetailViewModelSupportTest {
     }
 
     @Test
+    fun resolveAlbumDetailRj_supportsBooksAndProfessionalWorkNumbers() {
+        assertEquals("BJ02370869", resolveAlbumDetailRj("bj02370869", null))
+        assertEquals(
+            "VJ01005620",
+            resolveAlbumDetailRj(
+                routeRj = null,
+                localAlbum = Album(title = "导入作品 VJ01005620", path = "/storage/emulated/0/作品")
+            )
+        )
+    }
+
+    @Test
+    fun asmrOneTrackRjCandidates_supportsAllKnownDlsitePrefixes() {
+        assertEquals(
+            listOf("BJ02370869", "VJ01005620", "RJ123456"),
+            asmrOneTrackRjCandidates(
+                baseRj = "BJ02370869",
+                currentRj = "VJ01005620",
+                dlsiteWorkno = "invalid",
+                originalRj = "RJ123456",
+                selectedLang = "JPN",
+                preferInitialRj = true
+            )
+        )
+    }
+
+    @Test
     fun buildDisplayAlbum_keepsFallbackCvWhenDlsiteInfoHasNoCv() {
         val localAlbum = Album(
             title = "作品",
