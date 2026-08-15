@@ -34,10 +34,10 @@ import com.asmr.player.R
 import com.asmr.player.ui.theme.AsmrTheme
 
 /**
- * 轻量级专辑信息行 - RJ 和社团
+ * 轻量级专辑信息行 - 作品编号和社团
  *
  * 设计特点：
- * - RJ 使用轻量级边框样式
+ * - 作品编号使用轻量级边框样式
  * - 社团名称直接显示，前置小图标
  * - 横向排列，可滚动
  */
@@ -65,7 +65,7 @@ internal fun AlbumHeaderPrimaryMetaLightweight(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // RJ 号 - 保留轻量级边框
+        // 作品编号 - 保留轻量级边框
         if (normalizedRj.isNotBlank()) {
             Text(
                 text = normalizedRj,
@@ -263,7 +263,7 @@ internal fun AlbumHeaderTagsLightweight(
 /**
  * 整合的轻量级信息区域
  *
- * 包含 RJ、社团、声优、标签的完整布局
+ * 包含作品编号、社团、声优、标签的完整布局
  */
 @Composable
 internal fun AlbumHeaderMetaLightweight(
@@ -284,7 +284,7 @@ internal fun AlbumHeaderMetaLightweight(
         modifier = modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        // RJ 和社团
+        // 作品编号和社团
         AlbumHeaderPrimaryMetaLightweight(
             rjCode = rjCode,
             circle = circle,

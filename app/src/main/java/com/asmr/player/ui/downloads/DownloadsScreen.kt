@@ -129,6 +129,7 @@ import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.theme.AsmrTheme
+import com.asmr.player.util.DlsiteWorkNo
 import com.asmr.player.util.Formatting
 import java.io.File
 import kotlin.math.roundToInt
@@ -143,6 +144,13 @@ private val SwipeRevealSpringSpec = spring<Float>(
     dampingRatio = Spring.DampingRatioNoBouncy,
     stiffness = Spring.StiffnessMediumLow
 )
+
+internal fun normalizeDownloadWorkNoQuery(input: String): String {
+    val raw = input.trim()
+    if (raw.isBlank()) return ""
+    return DlsiteWorkNo.extractWorkNo(raw)
+        .ifBlank { if (raw.all(Char::isDigit)) "RJ$raw" else raw }
+}
 
 @Composable
 fun DownloadsScreen(
@@ -250,19 +258,13 @@ fun DownloadsScreen(
             OutlinedTextField(
                 value = rjQuery,
                 onValueChange = { rjQuery = it },
-                label = { Text("RJ号精准搜索") },
+                label = { Text("作品编号精准搜索") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
 
             val normalizedQuery = remember(rjQuery) {
-                val raw = rjQuery.trim()
-                when {
-                    raw.isBlank() -> ""
-                    raw.startsWith("RJ", ignoreCase = true) -> "RJ" + raw.substring(2).trim()
-                    raw.all { it.isDigit() } -> "RJ$raw"
-                    else -> raw
-                }
+                normalizeDownloadWorkNoQuery(rjQuery)
             }
 
             when (managementMode) {
@@ -661,7 +663,7 @@ private fun TranslationManagementContent(
             .filter { rjCode ->
                 normalizedQuery.isBlank() || rjCode.equals(normalizedQuery, ignoreCase = true)
             }
-            .sortedWith(compareBy<String> { it == "未知RJ" }.thenBy { it.lowercase() })
+            .sortedWith(compareBy<String> { it == "未知作品编号" }.thenBy { it.lowercase() })
             .map { rjCode ->
                 val subtitleGroup = subtitleGroupsByRj[rjCode]
                 val tasks = tasksByRj[rjCode].orEmpty()
@@ -2070,7 +2072,7 @@ internal class SwipeRevealCloseController {
 }
 
 /**
- * Swipe-left-to-reveal container for task-level (RJ number) cards. The trailing
+ * Swipe-left-to-reveal container for task-level (work number) cards. The trailing
  * [actions] are hidden behind the card by default; the card translates left while
  * dragging, exposing the action buttons. The [revealed] flag is the single source
  * of truth owned by the caller (so only one card is open at a time), and settles

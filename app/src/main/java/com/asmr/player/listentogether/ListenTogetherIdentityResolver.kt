@@ -32,7 +32,7 @@ class ListenTogetherIdentityResolver @Inject constructor(
             val rawSourcePath = mediaItem.localConfiguration?.uri?.toString().orEmpty().trim().ifBlank { mediaId }
             if (rawSourcePath.isBlank()) return@withContext null
 
-            val rjCode = DlsiteWorkNo.extractRjCode(
+            val rjCode = DlsiteWorkNo.extractWorkNo(
                 listOfNotNull(
                     extras?.getString("rj_code"),
                     fallbackRjCode,

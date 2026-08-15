@@ -25,10 +25,10 @@ class SearchAssistRecommendationSupportTest {
     fun recommendationFallsBackToMatchedRj() {
         val recommendation = AsmrOneRecommendationItem(
             rj = "",
-            matchedRjs = listOf("invalid", "RJ765432")
+            matchedRjs = listOf("invalid", "BJ02370869")
         ).toSearchAssistRecommendation()
 
-        assertEquals("RJ765432", recommendation.album.rjCode)
+        assertEquals("BJ02370869", recommendation.album.rjCode)
     }
 
     @Test

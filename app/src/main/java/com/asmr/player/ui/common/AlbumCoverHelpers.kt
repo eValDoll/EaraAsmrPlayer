@@ -15,6 +15,7 @@ private val albumCoverModelCache = object : LinkedHashMap<String, Any>(128, 0.75
 }
 
 fun albumStableKey(album: Album): String {
+    album.asmrOneWorkId?.takeIf { it > 0 }?.let { return "asmr-one:$it" }
     val id = album.rjCode.ifBlank { album.workId }.trim()
     if (id.isNotEmpty()) return id
     val seed = "${album.coverUrl}|${album.title}|${album.circle}|${album.cv}"

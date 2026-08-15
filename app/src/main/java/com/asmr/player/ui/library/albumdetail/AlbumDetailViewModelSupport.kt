@@ -186,7 +186,7 @@ internal fun resolveAlbumDetailRj(routeRj: String?, localAlbum: Album?): String 
         localAlbum?.title.orEmpty(),
         localAlbum?.path.orEmpty()
     )
-        .map(DlsiteWorkNo::extractRjCode)
+        .map(DlsiteWorkNo::extractWorkNo)
         .firstOrNull { it.isNotBlank() }
         .orEmpty()
 }
@@ -469,8 +469,8 @@ internal fun asmrOneTrackRjCandidates(
             add(baseRj)
         }
     }
-        .map { it.trim().uppercase() }
-        .filter { ALBUM_DETAIL_RJ_CODE_REGEX.matches(it) }
+        .map { DlsiteWorkNo.normalizeWorkNo(it, minimumDigits = 6) }
+        .filter { it.isNotBlank() }
         .distinct()
 }
 
@@ -485,8 +485,8 @@ internal fun resolveAsmrOneTrackWorkId(
     if (normalizedLang == "JPN") return normalizedWorkId
 
     val exactRjs = selectedRjs
-        .map { it.trim().uppercase() }
-        .filter { ALBUM_DETAIL_RJ_CODE_REGEX.matches(it) }
+        .map { DlsiteWorkNo.normalizeWorkNo(it, minimumDigits = 6) }
+        .filter { it.isNotBlank() }
         .toSet()
     val details = resolvedDetails ?: return null
     val resolvedSourceRj = details.source_id.trim().uppercase()
@@ -527,8 +527,6 @@ private fun asmrOneEditionMatchesLanguage(languageLabel: String, selectedLang: S
         else -> normalizedLabel == selectedLang
     }
 }
-
-private val ALBUM_DETAIL_RJ_CODE_REGEX = Regex("""RJ\d{6,}""")
 
 internal data class AsmrOneLeafDownload(
     val url: String,

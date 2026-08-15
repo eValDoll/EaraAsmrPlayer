@@ -215,7 +215,7 @@ class DownloadsViewModel @Inject constructor(
                 rows.groupBy { row ->
                     row.rjCode.trim()
                         .ifBlank { row.workId.trim() }
-                        .ifBlank { "未知RJ" }
+                        .ifBlank { "未知作品编号" }
                 }.map { (rjCode, groupRows) ->
                     TranslationSubtitleGroupUi(
                         rjCode = rjCode,

@@ -366,8 +366,8 @@ class AlbumDetailViewModel @Inject constructor(
     }
 
     private suspend fun fetchBackupAsmrOneTracksByRj(rj: String): Pair<String, List<AsmrOneTrackNodeResponse>>? {
-        val normalizedRj = rj.trim().uppercase()
-        if (!RJ_CODE_REGEX.matches(normalizedRj)) return null
+        val normalizedRj = DlsiteWorkNo.normalizeWorkNo(rj, minimumDigits = 6)
+        if (normalizedRj.isBlank()) return null
         val result = runCatching { asmrOneAvailabilityApi.getTrackTreeByRj(normalizedRj) }.getOrNull()
             ?: return null
         val tree = result.trackTree.orEmpty()
@@ -826,7 +826,7 @@ class AlbumDetailViewModel @Inject constructor(
     }
 
     fun manualSetRjAndSync(input: String) {
-        val normalized = Regex("""RJ\d+""", RegexOption.IGNORE_CASE).find(input.trim())?.value?.uppercase().orEmpty()
+        val normalized = DlsiteWorkNo.extractWorkNo(input)
         if (normalized.isBlank()) {
             messageManager.showError("请输入有效的作品编号")
             return
@@ -1056,7 +1056,7 @@ class AlbumDetailViewModel @Inject constructor(
     private suspend fun enrichRecommendationsWithAsmrOne(recommendations: DlsiteRecommendations): DlsiteRecommendations {
         val candidates = (recommendations.circleWorks + recommendations.sameVoiceWorks + recommendations.alsoBoughtWorks)
             .asSequence()
-            .map { it.rjCode.trim().uppercase() }
+            .map { DlsiteWorkNo.normalizeWorkNo(it.rjCode, minimumDigits = 6) }
             .filter { it.isNotBlank() }
             .distinct()
             .take(MAX_RECOMMENDATION_ASMR_ONE_ENRICH)
@@ -1484,7 +1484,7 @@ class AlbumDetailViewModel @Inject constructor(
                     .orEmpty()
                 val originalRj = jpnWorkno.ifBlank { latestBase.ifBlank { keyRj } }
                 val preferInitialRj = !latest.isDlsiteLanguageUserSelected &&
-                    RJ_CODE_REGEX.matches(latestBase)
+                    DlsiteWorkNo.normalizeWorkNo(latestBase, minimumDigits = 6).isNotBlank()
                 val directoryRjs = asmrOneTrackRjCandidates(
                     baseRj = latestBase,
                     currentRj = keyRj,
@@ -1595,8 +1595,8 @@ class AlbumDetailViewModel @Inject constructor(
                 }
                 if (resolvedOriginal == null) {
                     val directRjs = listOf(originalRj, keyRj)
-                        .map { it.trim().uppercase() }
-                        .filter { RJ_CODE_REGEX.matches(it) }
+                        .map { DlsiteWorkNo.normalizeWorkNo(it, minimumDigits = 6) }
+                        .filter { it.isNotBlank() }
                         .distinct()
                     for (candidateRj in directRjs) {
                         val resolved = resolveAsmrOneWork(candidateRj) ?: continue
@@ -1987,7 +1987,7 @@ class AlbumDetailViewModel @Inject constructor(
         if (model.dlsitePlayTree.isEmpty()) return
 
         val album = model.displayAlbum
-        val workno = normalizeRj(
+        val workno = normalizeWorkNo(
             model.dlsitePlayWorkno
                 .ifBlank { model.dlsiteWorkno }
                 .ifBlank { model.rjCode }
@@ -2135,7 +2135,7 @@ class AlbumDetailViewModel @Inject constructor(
                     )
                 }
 
-                val rj = normalizeRj(displayAlbum.rjCode.ifBlank { displayAlbum.workId }.ifBlank { model.rjCode })
+                val rj = normalizeWorkNo(displayAlbum.rjCode.ifBlank { displayAlbum.workId }.ifBlank { model.rjCode })
                 val workKey = rj.ifBlank { displayAlbum.workId.trim().ifBlank { displayAlbum.title.trim() } }
                 val onlinePath = "web://rj/${workKey.uppercase()}"
                 val albumDir = onlineSaveAlbumDir(displayAlbum, workKey).apply {
@@ -2624,8 +2624,8 @@ class AlbumDetailViewModel @Inject constructor(
         }
     }
 
-    private fun normalizeRj(raw: String): String {
-        return Regex("""RJ\d+""", RegexOption.IGNORE_CASE).find(raw)?.value?.uppercase().orEmpty()
+    private fun normalizeWorkNo(raw: String): String {
+        return DlsiteWorkNo.extractWorkNo(raw)
     }
 
     private suspend fun loadLocalTracks(albumEntity: AlbumEntity): List<Track> {
@@ -2987,7 +2987,6 @@ class AlbumDetailViewModel @Inject constructor(
     }
 
     private companion object {
-        val RJ_CODE_REGEX = Regex("""RJ\d{6,}""")
         const val MAX_RECOMMENDATION_ASMR_ONE_ENRICH = 12
         const val RECOMMENDATION_ASMR_ONE_ENRICH_CONCURRENCY = 4
     }

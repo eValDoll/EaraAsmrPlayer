@@ -27,7 +27,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 internal fun extractClipboardRjCode(text: CharSequence?): String {
-    return DlsiteWorkNo.extractRjCode(text?.toString().orEmpty())
+    return DlsiteWorkNo.extractWorkNo(text?.toString().orEmpty())
 }
 
 private data class ClipboardSnapshot(

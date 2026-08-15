@@ -1745,7 +1745,7 @@ private fun AlbumHeroIdentityOverlay(
                     rjCode = rj,
                     circle = circle,
                     modifier = Modifier.weight(1f),
-                    rjOnClick = { copyMeta("RJ", rj) },
+                    rjOnClick = { copyMeta("作品编号", rj) },
                     circleOnClick = { copyMeta("社团", circle) },
                     circleOnLongClick = { onMetaLongClick(circle) },
                     appearance = AlbumMetaAppearance.OnImage,
@@ -1994,7 +1994,7 @@ private fun AlbumHeader(
             Box(modifier = Modifier.padding(bottom = 8.dp)) {
                 val labelCv = "声优"
                 val labelTag = "标签"
-                // 只显示声优和标签，RJ和社团已经在Hero封面底部显示
+                // 只显示声优和标签，作品编号和社团已经在 Hero 封面底部显示
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)

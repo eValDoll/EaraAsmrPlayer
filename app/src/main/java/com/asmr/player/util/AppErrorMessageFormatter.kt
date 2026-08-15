@@ -2,7 +2,7 @@ package com.asmr.player.util
 
 object AppErrorMessageFormatter {
     private val whitespaceRegex = Regex("""\s+""")
-    private val rjSampleRegex = Regex("""[（(]\s*如\s*RJ\d{6,}\s*[)）]""", RegexOption.IGNORE_CASE)
+    private val workNoSampleRegex = Regex("""[（(]\s*如\s*(?:RJ|BJ|VJ)\d{6,}\s*[)）]""", RegexOption.IGNORE_CASE)
     private val userFacingSubtitleErrorPrefixes = listOf(
         "本地转录失败：",
         "本地转录未识别到",
@@ -20,13 +20,13 @@ object AppErrorMessageFormatter {
         Regex("""\b[A-Z]{2,}(?:_[A-Z0-9]+)+\b"""),
         Regex("""\b(error\s*code|errorCode|status\s*code|code)\b""", RegexOption.IGNORE_CASE),
         Regex("""\b(sockettimeout|timeout|timed out|ioexception|illegalstate|unknownhost|ssl|eof|cancelled|canceled|failed)\b""", RegexOption.IGNORE_CASE),
-        Regex("""\bRJ\d{6,}\b""", RegexOption.IGNORE_CASE)
+        Regex("""\b(?:RJ|BJ|VJ)\d{6,}\b""", RegexOption.IGNORE_CASE)
     )
 
     fun sanitize(rawMessage: String, fallback: String = "操作失败，请稍后重试"): String {
         val normalized = rawMessage
             .replace(whitespaceRegex, " ")
-            .replace(rjSampleRegex, "")
+            .replace(workNoSampleRegex, "")
             .trim()
             .trimEnd('：', ':')
 
@@ -49,8 +49,11 @@ object AppErrorMessageFormatter {
     private fun explicitMessage(message: String): String? {
         return when {
             userFacingSubtitleErrorPrefixes.any(message::startsWith) -> message
-            message.startsWith("请输入有效 RJ 号") -> "请输入有效的作品编号"
-            message.startsWith("仅支持本地库专辑手动绑定 RJ") -> "仅支持本地库专辑手动绑定作品编号"
+            message.startsWith("请输入有效 RJ 号") || message.startsWith("请输入有效的作品编号") ->
+                "请输入有效的作品编号"
+            message.startsWith("仅支持本地库专辑手动绑定 RJ") ||
+                message.startsWith("仅支持本地库专辑手动绑定作品编号") ->
+                "仅支持本地库专辑手动绑定作品编号"
             else -> null
         }
     }

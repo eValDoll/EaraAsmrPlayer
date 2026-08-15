@@ -857,7 +857,7 @@ fun LibraryScreen(
                                                     actionAlbum = mergedAlbum
                                                     showAlbumActions = true
                                                 },
-                                                onRjClick = { copyMeta("RJ", it) },
+                                                onRjClick = { copyMeta("作品编号", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
                                                 onCircleLongClick = ::openMetaActions,
                                                 onCvClick = { copyMeta("声优", it) },
@@ -928,7 +928,7 @@ fun LibraryScreen(
                                                     actionAlbum = mergedAlbum
                                                     showAlbumActions = true
                                                 },
-                                                onRjClick = { copyMeta("RJ", it) },
+                                                onRjClick = { copyMeta("作品编号", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
                                                 onCircleLongClick = ::openMetaActions,
                                                 onCvClick = { copyMeta("声优", it) },

@@ -5,6 +5,7 @@ import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.withSearchTimeouts
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.domain.model.Album
+import com.asmr.player.util.DlsiteWorkNo
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -216,8 +217,10 @@ class DlsitePlayLibraryClient @Inject constructor(
     private fun filterByKeyword(all: List<Album>, keyword: String): List<Album> {
         val kw = keyword.trim()
         if (kw.isBlank()) return all
-        val rj = Regex("""\bRJ\d{6,10}\b""", RegexOption.IGNORE_CASE).find(kw)?.value?.uppercase()
-        if (!rj.isNullOrBlank()) return all.filter { it.rjCode.uppercase() == rj || it.workId.uppercase() == rj }
+        val workNo = DlsiteWorkNo.normalizeWorkNo(kw, minimumDigits = 6)
+        if (workNo.isNotBlank()) {
+            return all.filter { it.rjCode.equals(workNo, ignoreCase = true) || it.workId.equals(workNo, ignoreCase = true) }
+        }
 
         val tokens = kw.split(Regex("""\s+""")).filter { it.isNotBlank() }.map { it.lowercase() }
         if (tokens.isEmpty()) return all

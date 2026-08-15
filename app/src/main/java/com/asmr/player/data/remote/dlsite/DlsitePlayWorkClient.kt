@@ -29,7 +29,7 @@ class DlsitePlayWorkClient @Inject constructor(
     private val gson = Gson()
 
     suspend fun fetchPlayableTree(workno: String): DlsitePlayTreeResult = withContext(Dispatchers.IO) {
-        val clean = DlsiteWorkNo.extractRjCode(workno)
+        val clean = DlsiteWorkNo.extractWorkNo(workno)
         if (clean.isBlank()) return@withContext DlsitePlayTreeResult(
             tree = emptyList(),
             subtitlesByUrl = emptyMap(),
