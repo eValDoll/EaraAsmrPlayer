@@ -67,6 +67,12 @@ internal object TranslationPrompts {
 
     internal fun subtitleToolChineseFieldDescription(): String = raw(KEY_SUBTITLE_TOOL_CHINESE_FIELD_DESCRIPTION)
 
+    internal fun subtitleScriptToolsSection(): String = raw(KEY_SUBTITLE_SCRIPT_TOOLS_SECTION)
+
+    internal fun subtitleScriptListToolDescription(): String = raw(KEY_SUBTITLE_SCRIPT_LIST_TOOL_DESCRIPTION)
+
+    internal fun subtitleScriptReadToolDescription(): String = raw(KEY_SUBTITLE_SCRIPT_READ_TOOL_DESCRIPTION)
+
     internal const val KEY_DISPLAY_NAME_SYSTEM_PROMPT = "display_name_system_prompt"
     internal const val KEY_SUBTITLE_AGENT_SYSTEM_PROMPT_TEMPLATE = "subtitle_agent_system_prompt_template"
     internal const val KEY_SUBTITLE_POLISH_SYSTEM_PROMPT = "subtitle_polish_system_prompt"
@@ -87,6 +93,9 @@ internal object TranslationPrompts {
     internal const val KEY_SUBTITLE_TOOL_READ_DESCRIPTION = "subtitle_tool_read_description"
     internal const val KEY_SUBTITLE_TOOL_WRITE_DESCRIPTION = "subtitle_tool_write_description"
     internal const val KEY_SUBTITLE_TOOL_CHINESE_FIELD_DESCRIPTION = "subtitle_tool_chinese_field_description"
+    internal const val KEY_SUBTITLE_SCRIPT_TOOLS_SECTION = "subtitle_script_tools_section"
+    internal const val KEY_SUBTITLE_SCRIPT_LIST_TOOL_DESCRIPTION = "subtitle_script_list_tool_description"
+    internal const val KEY_SUBTITLE_SCRIPT_READ_TOOL_DESCRIPTION = "subtitle_script_read_tool_description"
 }
 
 /**

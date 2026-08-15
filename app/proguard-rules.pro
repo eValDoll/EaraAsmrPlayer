@@ -22,3 +22,7 @@
 
 # sherpa-onnx 通过 JNI 解析 Kotlin 配置和推理结果。
 -keep class com.k2fsa.sherpa.onnx.** { *; }
+
+# pdfbox-android：R8 收缩会破坏其反射调用与 CMap/字体资源加载（尤其日文 CID 字体）。
+-keep class com.tom_roush.** { *; }
+-dontwarn com.tom_roush.**

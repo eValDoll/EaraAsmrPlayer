@@ -12,6 +12,7 @@ import com.asmr.player.data.remote.download.DownloadQueueCoordinator
 import com.asmr.player.data.remote.download.DownloadRuntimeConfig
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.subtitle.SubtitleTaskRepository
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,6 +39,7 @@ class AsmrApp : Application(), ImageLoaderFactory, Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         appCacheManager.start()
+        runCatching { PDFBoxResourceLoader.init(applicationContext) }
         applicationScope.launch {
             runCatching { settingsRepository.clearSleepTimer() }
             val database = runCatching { AppDatabaseProvider.get(applicationContext) }.getOrNull()

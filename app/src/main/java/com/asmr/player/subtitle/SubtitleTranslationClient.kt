@@ -139,6 +139,7 @@ internal class SubtitleTranslationClient(
         allowMerging: Boolean,
         confirmedCaptions: List<GeneratedSubtitleCaption> = emptyList(),
         workContext: SubtitleWorkContext? = null,
+        scriptContext: SubtitleScriptContext? = null,
         onCaptionsConfirmed: suspend (List<GeneratedSubtitleCaption>) -> Unit
     ): List<GeneratedSubtitleCaption> {
         require(sources.isNotEmpty()) { "完整字幕不能为空" }
@@ -160,17 +161,19 @@ internal class SubtitleTranslationClient(
             sources = sources,
             allowMerging = allowMerging,
             confirmedCaptions = confirmed,
-            workContext = workContext
+            workContext = workContext,
+            scriptContext = scriptContext
         ).toMutableList()
         var stalledTurnCount = 0
         while (confirmedSourceCount < sources.size) {
             val response = requestSubtitleAgentResponse(
                 messages = messages,
-                targetIndices = sources.drop(confirmedSourceCount).map(GeneratedSubtitleSource::index)
+                targetIndices = sources.drop(confirmedSourceCount).map(GeneratedSubtitleSource::index),
+                scriptContext = scriptContext
             )
             messages += response.assistantMessage
             val toolCalls = response.assistantMessage.toolCalls.orEmpty()
-            var wroteCaptions = false
+            var madeProgress = false
             if (toolCalls.isEmpty()) {
                 stalledTurnCount += 1
                 messages += DeepSeekChatMessage(
@@ -209,7 +212,7 @@ internal class SubtitleTranslationClient(
                                     confirmed += captions
                                     val writtenSourceCount = captions.sumOf { it.sourceIndices.size }
                                     confirmedSourceCount += writtenSourceCount
-                                    wroteCaptions = true
+                                    madeProgress = true
                                     buildSubtitleWriteToolResultMessage(
                                         gson = gson,
                                         toolCallId = toolCallId,
@@ -229,6 +232,48 @@ internal class SubtitleTranslationClient(
                             )
                         }
 
+                        SCRIPT_LIST_TOOL_NAME -> scriptContext?.let { context ->
+                            madeProgress = true
+                            buildScriptListToolResultMessage(gson, toolCallId, context)
+                        } ?: buildSubtitleToolErrorMessage(
+                            gson = gson,
+                            toolCallId = toolCallId,
+                            message = "台本检索不可用"
+                        )
+
+                        SCRIPT_READ_TOOL_NAME -> scriptContext?.let { context ->
+                            val parsed = runCatching {
+                                parseScriptReadToolArguments(
+                                    arguments = toolCall.function.arguments.orEmpty(),
+                                    fileCount = context.files.size
+                                )
+                            }
+                            parsed.fold(
+                                onSuccess = { args ->
+                                    madeProgress = true
+                                    buildScriptReadToolResultMessage(
+                                        gson = gson,
+                                        toolCallId = toolCallId,
+                                        context = context,
+                                        fileIndex = args.fileIndex,
+                                        offset = args.offset,
+                                        limit = args.limit
+                                    )
+                                },
+                                onFailure = { error ->
+                                    buildSubtitleToolErrorMessage(
+                                        gson = gson,
+                                        toolCallId = toolCallId,
+                                        message = error.message.orEmpty().ifBlank { "台本读取参数无效" }
+                                    )
+                                }
+                            )
+                        } ?: buildSubtitleToolErrorMessage(
+                            gson = gson,
+                            toolCallId = toolCallId,
+                            message = "台本检索不可用"
+                        )
+
                         else -> buildSubtitleToolErrorMessage(
                             gson = gson,
                             toolCallId = toolCallId,
@@ -237,7 +282,7 @@ internal class SubtitleTranslationClient(
                     }
                     messages += toolResult
                 }
-                stalledTurnCount = if (wroteCaptions) 0 else stalledTurnCount + 1
+                stalledTurnCount = if (madeProgress) 0 else stalledTurnCount + 1
             }
             if (stalledTurnCount >= MAX_SUBTITLE_AGENT_STALLED_TURNS) {
                 throw SubtitleTranslationException(
@@ -413,7 +458,8 @@ internal class SubtitleTranslationClient(
     private suspend fun requestSubtitleAgentResponse(
         messages: List<DeepSeekChatMessage>,
         targetIndices: List<Int>,
-        polishMode: Boolean = false
+        polishMode: Boolean = false,
+        scriptContext: SubtitleScriptContext? = null
     ): SubtitleAgentResponse {
         val requestBody = if (polishMode) {
             buildPolishAgentRequest(
@@ -425,7 +471,8 @@ internal class SubtitleTranslationClient(
             buildDeepSeekSubtitleAgentRequest(
                 gson = gson,
                 messages = messages,
-                settings = settings
+                settings = settings,
+                scriptContext = scriptContext
             )
         }
         return executeTranslationRequest(
@@ -609,10 +656,14 @@ internal const val SUBTITLE_READ_TOOL_NAME = "read_subtitle_translation_state"
 internal const val SUBTITLE_WRITE_TOOL_NAME = "write_timed_chinese_subtitles"
 internal const val POLISH_READ_TOOL_NAME = "read_subtitle_polish_state"
 internal const val POLISH_WRITE_TOOL_NAME = "write_polished_chinese_subtitles"
+internal const val SCRIPT_LIST_TOOL_NAME = "list_work_script_files"
+internal const val SCRIPT_READ_TOOL_NAME = "read_work_script_file"
 private const val DEEPSEEK_CHAT_COMPLETIONS_URL = "https://api.deepseek.com/chat/completions"
 private const val MAX_SUBTITLE_AGENT_STALLED_TURNS = 4
 private const val MAX_POLISH_AGENT_STALLED_TURNS = 4
 private const val POLISH_READ_PAGE_SIZE = 40
+private const val SCRIPT_READ_DEFAULT_LIMIT = 4_000
+private const val SCRIPT_READ_MAX_LIMIT = 8_000
 
 /**
  * 字幕翻译 agent 可用的作品级静态元数据。
@@ -740,6 +791,7 @@ internal fun buildDeepSeekSubtitleTranslationRequest(
     allowMerging: Boolean,
     confirmedCaptions: List<GeneratedSubtitleCaption> = emptyList(),
     workContext: SubtitleWorkContext? = null,
+    scriptContext: SubtitleScriptContext? = null,
     settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings()
 ): String {
     val messages = buildSubtitleAgentInitialMessages(
@@ -747,9 +799,10 @@ internal fun buildDeepSeekSubtitleTranslationRequest(
         sources = sources,
         allowMerging = allowMerging,
         confirmedCaptions = confirmedCaptions,
-        workContext = workContext
+        workContext = workContext,
+        scriptContext = scriptContext
     )
-    return buildDeepSeekSubtitleAgentRequest(gson, messages, settings)
+    return buildDeepSeekSubtitleAgentRequest(gson, messages, settings, scriptContext)
 }
 
 internal fun buildSubtitleAgentInitialMessages(
@@ -757,7 +810,8 @@ internal fun buildSubtitleAgentInitialMessages(
     sources: List<GeneratedSubtitleSource>,
     allowMerging: Boolean,
     confirmedCaptions: List<GeneratedSubtitleCaption> = emptyList(),
-    workContext: SubtitleWorkContext? = null
+    workContext: SubtitleWorkContext? = null,
+    scriptContext: SubtitleScriptContext? = null
 ): List<DeepSeekChatMessage> {
     require(sources.isNotEmpty())
     val confirmedSourceCount = confirmedCaptions.sumOf { it.sourceIndices.size }
@@ -772,7 +826,7 @@ internal fun buildSubtitleAgentInitialMessages(
     return listOf(
         DeepSeekChatMessage(
             role = "system",
-            content = subtitleToolTranslationSystemPrompt(targetIndices, allowMerging, workContext)
+            content = subtitleToolTranslationSystemPrompt(targetIndices, allowMerging, workContext, scriptContext)
         ),
         DeepSeekChatMessage(
             role = "user",
@@ -784,7 +838,8 @@ internal fun buildSubtitleAgentInitialMessages(
 internal fun buildDeepSeekSubtitleAgentRequest(
     gson: Gson,
     messages: List<DeepSeekChatMessage>,
-    settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings()
+    settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings(),
+    scriptContext: SubtitleScriptContext? = null
 ): String {
     require(messages.isNotEmpty())
     return gson.toJson(
@@ -797,7 +852,7 @@ internal fun buildDeepSeekSubtitleAgentRequest(
                 settings.thinkingEnabled
             },
             responseFormat = null,
-            tools = subtitleTranslationTools()
+            tools = subtitleTranslationTools(scriptContext)
         )
     )
 }
@@ -1084,11 +1139,158 @@ internal fun buildSubtitleToolErrorMessage(
     toolCallId = toolCallId
 )
 
-private fun subtitleTranslationTools(): List<DeepSeekToolDefinition> = listOf(
+internal data class ScriptReadToolArgs(
+    val fileIndex: Int,
+    val offset: Int,
+    val limit: Int
+)
+
+internal fun parseScriptReadToolArguments(arguments: String, fileCount: Int): ScriptReadToolArgs {
+    require(fileCount > 0) { "作品目录没有台本文件" }
+    val root = runCatching {
+        JsonParser.parseString(arguments.trim()).asJsonObject
+    }.getOrElse { error ->
+        throw IllegalArgumentException("台本读取工具参数不是有效 JSON 对象", error)
+    }
+    val fileIndex = runCatching { root.get("file_index").asInt }
+        .getOrElse { error -> throw IllegalArgumentException("台本读取工具缺少 file_index", error) }
+    require(fileIndex in 0 until fileCount) { "file_index 超出范围：$fileIndex" }
+    val offset = runCatching { root.get("offset").asInt }.getOrDefault(0).coerceAtLeast(0)
+    val limit = runCatching { root.get("limit").asInt }
+        .getOrDefault(SCRIPT_READ_DEFAULT_LIMIT)
+        .coerceIn(1, SCRIPT_READ_MAX_LIMIT)
+    return ScriptReadToolArgs(fileIndex = fileIndex, offset = offset, limit = limit)
+}
+
+internal fun buildScriptListToolResultMessage(
+    gson: Gson,
+    toolCallId: String,
+    context: SubtitleScriptContext
+): DeepSeekChatMessage {
+    require(toolCallId.isNotBlank())
+    val result = mapOf(
+        "files" to context.files.map { file ->
+            mapOf("index" to file.index, "name" to file.name)
+        },
+        "total_files" to context.files.size
+    )
+    return DeepSeekChatMessage(
+        role = "tool",
+        content = gson.toJson(result),
+        toolCallId = toolCallId
+    )
+}
+
+internal suspend fun buildScriptReadToolResultMessage(
+    gson: Gson,
+    toolCallId: String,
+    context: SubtitleScriptContext,
+    fileIndex: Int,
+    offset: Int,
+    limit: Int
+): DeepSeekChatMessage {
+    require(toolCallId.isNotBlank())
+    val file = context.files.getOrNull(fileIndex)
+    if (file == null) {
+        return buildSubtitleToolErrorMessage(gson, toolCallId, "未知台本文件索引：$fileIndex")
+    }
+    val read = context.reader.read(fileIndex, offset, limit)
+    if (read == null) {
+        return buildSubtitleToolErrorMessage(gson, toolCallId, "无法读取台本文件：${file.name}")
+    }
+    val result = mapOf(
+        "file_index" to read.fileIndex,
+        "name" to read.name,
+        "offset" to read.offset,
+        "total_chars" to read.totalChars,
+        "content" to read.content,
+        "truncated" to read.truncated,
+        "completed" to (read.offset + read.content.length >= read.totalChars)
+    )
+    return DeepSeekChatMessage(
+        role = "tool",
+        content = gson.toJson(result),
+        toolCallId = toolCallId
+    )
+}
+
+private fun subtitleTranslationTools(scriptContext: SubtitleScriptContext?): List<DeepSeekToolDefinition> {
+    val tools = mutableListOf(
+        DeepSeekToolDefinition(
+            function = DeepSeekFunctionDefinition(
+                name = SUBTITLE_READ_TOOL_NAME,
+                description = TranslationPrompts.subtitleToolReadDescription(),
+                parameters = mapOf(
+                    "type" to "object",
+                    "properties" to emptyMap<String, Any>(),
+                    "additionalProperties" to false
+                )
+            )
+        ),
+        DeepSeekToolDefinition(
+            function = DeepSeekFunctionDefinition(
+                name = SUBTITLE_WRITE_TOOL_NAME,
+                description = TranslationPrompts.subtitleToolWriteDescription(),
+                parameters = mapOf(
+                    "type" to "object",
+                    "properties" to mapOf(
+                        "captions" to mapOf(
+                            "type" to "array",
+                            "minItems" to 1,
+                            "items" to mapOf(
+                                "type" to "object",
+                                "properties" to mapOf(
+                                    "source_indices" to mapOf(
+                                        "type" to "array",
+                                        "minItems" to 1,
+                                        "items" to mapOf("type" to "integer")
+                                    ),
+                                    "start_ms" to mapOf(
+                                        "type" to "integer",
+                                        "minimum" to 0
+                                    ),
+                                    "end_ms" to mapOf(
+                                        "type" to "integer",
+                                        "minimum" to 0
+                                    ),
+                                    "japanese" to mapOf(
+                                        "type" to "string",
+                                        "minLength" to 1
+                                    ),
+                                    "chinese" to mapOf(
+                                        "type" to "string",
+                                        "minLength" to 1,
+                                        "description" to TranslationPrompts.subtitleToolChineseFieldDescription()
+                                    )
+                                ),
+                                "required" to listOf(
+                                    "source_indices",
+                                    "start_ms",
+                                    "end_ms",
+                                    "japanese",
+                                    "chinese"
+                                ),
+                                "additionalProperties" to false
+                            )
+                        )
+                    ),
+                    "required" to listOf("captions"),
+                    "additionalProperties" to false
+                )
+            )
+        )
+    )
+    if (scriptContext != null && scriptContext.files.isNotEmpty()) {
+        tools += scriptTranslationTools()
+    }
+    return tools
+}
+
+private fun scriptTranslationTools(): List<DeepSeekToolDefinition> = listOf(
     DeepSeekToolDefinition(
         function = DeepSeekFunctionDefinition(
-            name = SUBTITLE_READ_TOOL_NAME,
-            description = TranslationPrompts.subtitleToolReadDescription(),
+            name = SCRIPT_LIST_TOOL_NAME,
+            description = TranslationPrompts.subtitleScriptListToolDescription(),
             parameters = mapOf(
                 "type" to "object",
                 "properties" to emptyMap<String, Any>(),
@@ -1098,52 +1300,16 @@ private fun subtitleTranslationTools(): List<DeepSeekToolDefinition> = listOf(
     ),
     DeepSeekToolDefinition(
         function = DeepSeekFunctionDefinition(
-            name = SUBTITLE_WRITE_TOOL_NAME,
-            description = TranslationPrompts.subtitleToolWriteDescription(),
+            name = SCRIPT_READ_TOOL_NAME,
+            description = TranslationPrompts.subtitleScriptReadToolDescription(),
             parameters = mapOf(
                 "type" to "object",
                 "properties" to mapOf(
-                    "captions" to mapOf(
-                        "type" to "array",
-                        "minItems" to 1,
-                        "items" to mapOf(
-                            "type" to "object",
-                            "properties" to mapOf(
-                                "source_indices" to mapOf(
-                                    "type" to "array",
-                                    "minItems" to 1,
-                                    "items" to mapOf("type" to "integer")
-                                ),
-                                "start_ms" to mapOf(
-                                    "type" to "integer",
-                                    "minimum" to 0
-                                ),
-                                "end_ms" to mapOf(
-                                    "type" to "integer",
-                                    "minimum" to 0
-                                ),
-                                "japanese" to mapOf(
-                                    "type" to "string",
-                                    "minLength" to 1
-                                ),
-                                "chinese" to mapOf(
-                                    "type" to "string",
-                                    "minLength" to 1,
-                                    "description" to TranslationPrompts.subtitleToolChineseFieldDescription()
-                                )
-                            ),
-                            "required" to listOf(
-                                "source_indices",
-                                "start_ms",
-                                "end_ms",
-                                "japanese",
-                                "chinese"
-                            ),
-                            "additionalProperties" to false
-                        )
-                    )
+                    "file_index" to mapOf("type" to "integer", "minimum" to 0),
+                    "offset" to mapOf("type" to "integer", "minimum" to 0),
+                    "limit" to mapOf("type" to "integer", "minimum" to 1)
                 ),
-                "required" to listOf("captions"),
+                "required" to listOf("file_index"),
                 "additionalProperties" to false
             )
         )
@@ -1250,7 +1416,8 @@ private fun parseTranslationContentJsonObject(content: String) = content.trim()
 internal fun subtitleToolTranslationSystemPrompt(
     targetIndices: List<Int>,
     allowMerging: Boolean,
-    workContext: SubtitleWorkContext? = null
+    workContext: SubtitleWorkContext? = null,
+    scriptContext: SubtitleScriptContext? = null
 ): String {
     require(targetIndices.isNotEmpty())
     require(targetIndices.distinct().size == targetIndices.size)
@@ -1259,15 +1426,26 @@ internal fun subtitleToolTranslationSystemPrompt(
     } else {
         TranslationPrompts.subtitleSegmentationRulesNoMerge()
     }
+    val scriptToolsSection = if (scriptContext != null && scriptContext.files.isNotEmpty()) {
+        subtitleScriptToolsSection()
+    } else {
+        ""
+    }
     return TranslationPrompts.subtitleAgentSystemPromptTemplate()
         .replace("{{SOURCE_COUNT}}", targetIndices.size.toString())
         .replace("{{WORK_CONTEXT}}", buildSubtitleWorkContextSection(workContext))
         .replace("{{READ_TOOL_NAME}}", SUBTITLE_READ_TOOL_NAME)
         .replace("{{WRITE_TOOL_NAME}}", SUBTITLE_WRITE_TOOL_NAME)
+        .replace("{{SCRIPT_TOOLS}}", scriptToolsSection)
         .replace("{{STYLE_GUIDE}}", TranslationPrompts.subtitleStyleGuide())
         .replace("{{REFERENCE_TABLE}}", TranslationPrompts.subtitleReferenceTable())
         .replace("{{SEGMENTATION_RULES}}", segmentationRules)
         .trim()
 }
+
+internal fun subtitleScriptToolsSection(): String =
+    TranslationPrompts.subtitleScriptToolsSection()
+        .replace("{{SCRIPT_LIST_TOOL_NAME}}", SCRIPT_LIST_TOOL_NAME)
+        .replace("{{SCRIPT_READ_TOOL_NAME}}", SCRIPT_READ_TOOL_NAME)
 
 private const val BASE_RETRY_DELAY_MS = 1_000L
