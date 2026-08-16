@@ -15,6 +15,55 @@ import java.io.File
 @Config(application = Application::class, sdk = [34])
 class AppDatabaseMigrationsTest {
     @Test
+    fun migration29To30_preservesDownloadAndAddsEmptyDlsiteImageMetadata() {
+        val context = RuntimeEnvironment.getApplication()
+        val dbName = "migration-test-${System.nanoTime()}.db"
+        val dbFile = context.getDatabasePath(dbName)
+        dbFile.parentFile?.mkdirs()
+        if (dbFile.exists()) dbFile.delete()
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(context)
+                .name(dbName)
+                .callback(object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(29) {
+                    override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                        db.execSQL(
+                            "CREATE TABLE download_items (" +
+                                "`id` INTEGER NOT NULL PRIMARY KEY, `fileName` TEXT NOT NULL)"
+                        )
+                        db.execSQL("INSERT INTO download_items VALUES(1,'晚安.jpg')")
+                    }
+
+                    override fun onUpgrade(
+                        db: androidx.sqlite.db.SupportSQLiteDatabase,
+                        oldVersion: Int,
+                        newVersion: Int
+                    ) = Unit
+                })
+                .build()
+        )
+        val db = helper.writableDatabase
+
+        AppDatabaseMigrations.MIGRATION_29_30.migrate(db)
+
+        db.query(
+            "SELECT fileName, dlsitePlayImageSeed, dlsitePlayImageWidth, dlsitePlayImageHeight " +
+                "FROM download_items WHERE id = 1"
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("晚安.jpg", cursor.getString(0))
+            assertTrue(cursor.isNull(1))
+            assertTrue(cursor.isNull(2))
+            assertTrue(cursor.isNull(3))
+        }
+
+        db.close()
+        helper.close()
+        File(dbFile.absolutePath).delete()
+        File(dbFile.absolutePath + "-wal").delete()
+        File(dbFile.absolutePath + "-shm").delete()
+    }
+
+    @Test
     fun migration28To29_preservesTaskItemAndAddsEmptyModelSnapshot() {
         val context = RuntimeEnvironment.getApplication()
         val dbName = "migration-test-${System.nanoTime()}.db"

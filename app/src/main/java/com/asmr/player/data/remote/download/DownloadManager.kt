@@ -8,6 +8,7 @@ import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.remote.auth.buildDlsiteCookieHeader
 import com.asmr.player.data.remote.auth.mergeDlsiteCookieHeaders
 import com.asmr.player.data.remote.NetworkHeaders
+import com.asmr.player.data.remote.dlsite.descrambleDlsitePlayImageFile
 import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.AlbumFtsEntity
 import com.asmr.player.data.local.db.dao.DownloadDao
@@ -46,6 +47,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
 import java.io.FileOutputStream
+import java.io.IOException
 import java.io.InputStream
 import java.text.SimpleDateFormat
 import java.nio.charset.Charset
@@ -58,6 +60,18 @@ import kotlin.math.max
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val DLSITE_PLAY_SCRAMBLED_PART_SUFFIX = ".dlsite-scrambled.part"
+
+internal fun dlsitePlayImagePartFile(outputFile: File): File {
+    return File(outputFile.parentFile, outputFile.name + DLSITE_PLAY_SCRAMBLED_PART_SUFFIX)
+}
+
+private fun DownloadItemEntity.hasDlsitePlayImageTransform(): Boolean {
+    return dlsitePlayImageSeed != null &&
+        (dlsitePlayImageWidth ?: 0) > 0 &&
+        (dlsitePlayImageHeight ?: 0) > 0
+}
 
 private class SessionCookieJar : CookieJar {
     private val store = LinkedHashMap<String, MutableList<Cookie>>()
@@ -136,7 +150,10 @@ class DownloadManager @Inject constructor(
         albumCoverUrl: String = "",
         albumDescription: String = "",
         albumWorkId: String = "",
-        albumRjCode: String = ""
+        albumRjCode: String = "",
+        dlsitePlayImageSeed: Int? = null,
+        dlsitePlayImageWidth: Int? = null,
+        dlsitePlayImageHeight: Int? = null
     ) {
         scope.launch {
             val now = System.currentTimeMillis()
@@ -154,6 +171,12 @@ class DownloadManager @Inject constructor(
             val safeAlbumDescription = albumDescription.trim().take(0)
             val safeAlbumWorkId = albumWorkId.trim().take(40)
             val safeAlbumRjCode = albumRjCode.trim().take(40)
+            val hasDlsitePlayImageTransform = dlsitePlayImageSeed != null &&
+                (dlsitePlayImageWidth ?: 0) > 0 &&
+                (dlsitePlayImageHeight ?: 0) > 0
+            val safeDlsitePlayImageSeed = dlsitePlayImageSeed.takeIf { hasDlsitePlayImageTransform }
+            val safeDlsitePlayImageWidth = dlsitePlayImageWidth.takeIf { hasDlsitePlayImageTransform }
+            val safeDlsitePlayImageHeight = dlsitePlayImageHeight.takeIf { hasDlsitePlayImageTransform }
             val taskId = ensureTask(
                 taskKey = taskKey,
                 title = taskTitle,
@@ -238,7 +261,10 @@ class DownloadManager @Inject constructor(
             }
 
             val existingItem = downloadDao.getItemByFilePath(filePath)
-            val existingBytes = runCatching { File(filePath).length() }.getOrDefault(0L).coerceAtLeast(0L)
+            val partialFile = dlsitePlayImagePartFile(File(filePath))
+            val existingBytes = runCatching {
+                if (hasDlsitePlayImageTransform && partialFile.exists()) partialFile.length() else File(filePath).length()
+            }.getOrDefault(0L).coerceAtLeast(0L)
             if (existingItem != null) {
                 val file = File(existingItem.filePath.ifBlank { filePath })
                 if (existingItem.state == WorkInfo.State.SUCCEEDED.name && file.exists() && file.isFile) {
@@ -252,13 +278,16 @@ class DownloadManager @Inject constructor(
                 ) {
                     return@launch
                 }
-                downloadDao.updateItemProgress(
-                    workId = existingItem.workId,
-                    state = DOWNLOAD_STATE_QUEUED,
-                    downloaded = existingBytes,
-                    total = existingItem.total,
-                    speed = 0L,
-                    updatedAt = now
+                downloadDao.upsertItem(
+                    existingItem.copy(
+                        state = DOWNLOAD_STATE_QUEUED,
+                        downloaded = existingBytes,
+                        speed = 0L,
+                        updatedAt = now,
+                        dlsitePlayImageSeed = safeDlsitePlayImageSeed,
+                        dlsitePlayImageWidth = safeDlsitePlayImageWidth,
+                        dlsitePlayImageHeight = safeDlsitePlayImageHeight
+                    )
                 )
             } else {
                 downloadDao.upsertItem(
@@ -275,7 +304,10 @@ class DownloadManager @Inject constructor(
                         total = -1L,
                         speed = 0L,
                         createdAt = now,
-                        updatedAt = now
+                        updatedAt = now,
+                        dlsitePlayImageSeed = safeDlsitePlayImageSeed,
+                        dlsitePlayImageWidth = safeDlsitePlayImageWidth,
+                        dlsitePlayImageHeight = safeDlsitePlayImageHeight
                     )
                 )
             }
@@ -493,7 +525,10 @@ object DownloadQueueCoordinator {
                             "albumCoverUrl" to task.albumCoverUrl,
                             "albumDescription" to task.albumDescription,
                             "albumWorkId" to task.albumWorkId,
-                            "albumRjCode" to task.albumRjCode
+                            "albumRjCode" to task.albumRjCode,
+                            "dlsitePlayImageSeed" to (item.dlsitePlayImageSeed ?: -1),
+                            "dlsitePlayImageWidth" to (item.dlsitePlayImageWidth ?: -1),
+                            "dlsitePlayImageHeight" to (item.dlsitePlayImageHeight ?: -1)
                         )
                     )
                     .addTag("download")
@@ -508,7 +543,9 @@ object DownloadQueueCoordinator {
                 wm.enqueue(request)
 
                 val existingBytes = runCatching {
-                    File(item.filePath.ifBlank { File(item.targetDir, item.fileName).absolutePath }).length()
+                    val outputFile = File(item.filePath.ifBlank { File(item.targetDir, item.fileName).absolutePath })
+                    val partialFile = dlsitePlayImagePartFile(outputFile)
+                    if (item.hasDlsitePlayImageTransform() && partialFile.exists()) partialFile.length() else outputFile.length()
                 }.getOrDefault(item.downloaded).coerceAtLeast(0L)
 
                 dao.replaceWorkIdForResume(
@@ -588,7 +625,9 @@ object DownloadQueueCoordinator {
 
     private fun resolveExistingBytes(item: DownloadItemEntity): Long {
         return runCatching {
-            File(item.filePath.ifBlank { File(item.targetDir, item.fileName).absolutePath }).length()
+            val outputFile = File(item.filePath.ifBlank { File(item.targetDir, item.fileName).absolutePath })
+            val partialFile = dlsitePlayImagePartFile(outputFile)
+            if (item.hasDlsitePlayImageTransform() && partialFile.exists()) partialFile.length() else outputFile.length()
         }.getOrDefault(item.downloaded).coerceAtLeast(0L)
     }
 }
@@ -621,6 +660,12 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
         val albumDescription = inputData.getString("albumDescription").orEmpty()
         val albumWorkId = inputData.getString("albumWorkId").orEmpty()
         val albumRjCode = inputData.getString("albumRjCode").orEmpty()
+        val dlsitePlayImageSeed = inputData.getInt("dlsitePlayImageSeed", -1).takeIf { it >= 0 }
+        val dlsitePlayImageWidth = inputData.getInt("dlsitePlayImageWidth", -1).takeIf { it > 0 }
+        val dlsitePlayImageHeight = inputData.getInt("dlsitePlayImageHeight", -1).takeIf { it > 0 }
+        val hasDlsitePlayImageTransform = dlsitePlayImageSeed != null &&
+            dlsitePlayImageWidth != null &&
+            dlsitePlayImageHeight != null
 
         return try {
             val workId = id.toString()
@@ -697,6 +742,8 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
 
             val targetFolder = File(targetDir)
             val file = File(targetFolder, fileName)
+            val partialFile = dlsitePlayImagePartFile(file)
+            val transferFile = if (hasDlsitePlayImageTransform) partialFile else file
             if (!targetFolder.exists()) targetFolder.mkdirs()
             runCatching {
                 val albumsRoot = File(applicationContext.getExternalFilesDir(null), "albums")
@@ -713,7 +760,8 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                 .url(url)
                 .header("User-Agent", NetworkHeaders.USER_AGENT)
             
-            var existingBytes = if (file.exists()) file.length().coerceAtLeast(0L) else 0L
+            val transformAlreadyApplied = hasDlsitePlayImageTransform && file.exists() && !partialFile.exists()
+            var existingBytes = if (transferFile.exists()) transferFile.length().coerceAtLeast(0L) else 0L
             val lowerUrl = url.lowercase()
             val sessionCookieJar = SessionCookieJar()
             if (lowerUrl.contains("play.dlsite.com")) {
@@ -750,8 +798,9 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                 requestBuilder.addHeader("Range", "bytes=$existingBytes-")
             }
 
-            var total: Long
-            var downloaded = existingBytes
+            val knownTotal = dao.getItemByWorkId(workId)?.total?.takeIf { it > 0L } ?: -1L
+            var total = knownTotal
+            var downloaded = if (transformAlreadyApplied) knownTotal.coerceAtLeast(file.length()) else existingBytes
             val today = SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date(now0))
             var pendingTrafficBytes = 0L
 
@@ -786,7 +835,9 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                 )
             }
 
-            client.newCall(requestBuilder.build()).execute().use { response ->
+            val transferAlreadyComplete = transformAlreadyApplied ||
+                (hasDlsitePlayImageTransform && knownTotal > 0L && existingBytes >= knownTotal)
+            if (!transferAlreadyComplete) client.newCall(requestBuilder.build()).execute().use { response ->
                 if (!response.isSuccessful) {
                     Log.w(TAG, "download failed code=${response.code} url=${response.request.url}")
                     return failCurrentDownload(totalBytes = existingBytes.coerceAtLeast(0L))
@@ -821,12 +872,15 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                         total = total,
                         speed = 0L,
                         createdAt = now0,
-                        updatedAt = now0
+                        updatedAt = now0,
+                        dlsitePlayImageSeed = dlsitePlayImageSeed,
+                        dlsitePlayImageWidth = dlsitePlayImageWidth,
+                        dlsitePlayImageHeight = dlsitePlayImageHeight
                     )
                 )
 
                 body.byteStream().use { input ->
-                    FileOutputStream(file, existingBytes > 0L).use { output ->
+                    FileOutputStream(transferFile, existingBytes > 0L).use { output ->
                         while (true) {
                             if (isStopped) {
                                 val now = System.currentTimeMillis()
@@ -868,6 +922,18 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                             }
                         }
                     }
+                }
+            }
+            if (hasDlsitePlayImageTransform && !transformAlreadyApplied) {
+                descrambleDlsitePlayImageFile(
+                    scrambledFile = partialFile,
+                    outputFile = file,
+                    seed = checkNotNull(dlsitePlayImageSeed),
+                    width = checkNotNull(dlsitePlayImageWidth),
+                    height = checkNotNull(dlsitePlayImageHeight)
+                )
+                if (partialFile.exists() && !partialFile.delete()) {
+                    throw IOException("Unable to remove scrambled DLsite Play image")
                 }
             }
             val now = System.currentTimeMillis()

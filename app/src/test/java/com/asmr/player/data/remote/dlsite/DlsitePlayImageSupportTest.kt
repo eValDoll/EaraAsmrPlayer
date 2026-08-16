@@ -1,6 +1,9 @@
 package com.asmr.player.data.remote.dlsite
 
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import java.io.File
+import java.io.FileOutputStream
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -56,5 +59,39 @@ class DlsitePlayImageSupportTest {
 
         descrambled.recycle()
         scrambled.recycle()
+    }
+
+    @Test
+    fun descrambleDlsitePlayImageFile_writesCroppedReadableImage() {
+        val directory = File(System.getProperty("java.io.tmpdir"), "dlsite-image-${System.nanoTime()}").apply {
+            mkdirs()
+        }
+        val scrambledFile = File(directory, "scrambled.png")
+        val outputFile = File(directory, "restored.png")
+        val scrambled = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888).apply {
+            eraseColor(0xFF000000.toInt())
+            setPixels(IntArray(128 * 128) { 0xFFFF0000.toInt() }, 0, 128, 0, 128, 128, 128)
+            setPixels(IntArray(128 * 128) { 0xFF00FF00.toInt() }, 0, 128, 128, 0, 128, 128)
+            setPixels(IntArray(128 * 128) { 0xFF0000FF.toInt() }, 0, 128, 128, 128, 128, 128)
+        }
+        FileOutputStream(scrambledFile).use { output ->
+            assertTrue(scrambled.compress(Bitmap.CompressFormat.PNG, 100, output))
+        }
+        scrambled.recycle()
+
+        descrambleDlsitePlayImageFile(
+            scrambledFile = scrambledFile,
+            outputFile = outputFile,
+            seed = 0,
+            width = 200,
+            height = 160
+        )
+
+        val restored = BitmapFactory.decodeFile(outputFile.absolutePath)
+        assertEquals(200, restored.width)
+        assertEquals(160, restored.height)
+        assertEquals(0xFF0000FF.toInt(), restored.getPixel(0, 129))
+        restored.recycle()
+        directory.deleteRecursively()
     }
 }

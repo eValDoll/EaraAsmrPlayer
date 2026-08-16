@@ -555,6 +555,14 @@ object AppDatabaseMigrations {
         }
     }
 
+    val MIGRATION_29_30: Migration = object : Migration(29, 30) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE download_items ADD COLUMN `dlsitePlayImageSeed` INTEGER")
+            db.execSQL("ALTER TABLE download_items ADD COLUMN `dlsitePlayImageWidth` INTEGER")
+            db.execSQL("ALTER TABLE download_items ADD COLUMN `dlsitePlayImageHeight` INTEGER")
+        }
+    }
+
     private fun createItemChildTable(
         db: SupportSQLiteDatabase,
         table: String,

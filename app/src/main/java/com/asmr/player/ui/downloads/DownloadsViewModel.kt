@@ -15,6 +15,7 @@ import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.remote.download.DOWNLOAD_STATE_QUEUED
 import com.asmr.player.data.remote.download.DownloadQueueCoordinator
 import com.asmr.player.data.remote.download.FinalizeDownloadTaskWorker
+import com.asmr.player.data.remote.download.dlsitePlayImagePartFile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -500,7 +501,9 @@ class DownloadsViewModel @Inject constructor(
             if (!deleted) {
                 val items = downloadDao.getItemsForTask(taskId)
                 items.forEach { it ->
-                    deletePathSafely(it.filePath.ifBlank { File(it.targetDir, it.fileName).absolutePath })
+                    val outputFile = File(it.filePath.ifBlank { File(it.targetDir, it.fileName).absolutePath })
+                    deletePathSafely(outputFile.absolutePath)
+                    deletePathSafely(dlsitePlayImagePartFile(outputFile).absolutePath)
                 }
                 deletePathSafely(task.rootDir)
             }
@@ -519,6 +522,7 @@ class DownloadsViewModel @Inject constructor(
             runCatching { workManager.cancelWorkById(java.util.UUID.fromString(workId)) }
             val primary = item.filePath.ifBlank { File(item.targetDir, item.fileName).absolutePath }
             val deleted = deletePathSafely(primary)
+            deletePathSafely(dlsitePlayImagePartFile(File(primary)).absolutePath)
             if (!deleted && item.targetDir.isNotBlank() && item.fileName.isNotBlank()) {
                 deletePathSafely(File(item.targetDir, item.fileName).absolutePath)
             }
