@@ -61,9 +61,6 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.Placeable
-import androidx.compose.ui.layout.findRootCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -88,7 +85,8 @@ internal val AlbumListItemCornerRadius = 12.dp
 internal val AlbumGridItemCornerRadius = 12.dp
 internal val AlbumGridItemSpacing = 12.dp
 private val AlbumItemHorizontalPadding = 12.dp
-private val AlbumItemVerticalPadding = 4.dp
+private val AlbumItemTopPadding = 4.dp
+private val AlbumItemBottomPadding = 8.dp
 private val AlbumItemCoverContentSpacing = 10.dp
 private val AlbumListCoverShadowBlurRadius = 10.dp
 private val AlbumGridCoverShadowBlurRadius = 13.dp
@@ -197,7 +195,7 @@ fun AlbumItem(
     coverFadeInState: State<Boolean>? = null,
     coverReloadKey: Any? = null,
     coverRetainPainterDuringReload: Boolean = false,
-    cacheDrawLayer: Boolean = false,
+    cacheRenderLayer: Boolean = false,
     coverOverlay: @Composable BoxScope.() -> Unit = {},
     showCollectedIndicator: Boolean = true,
     showStatsPlaceholders: Boolean = false,
@@ -215,7 +213,6 @@ fun AlbumItem(
         val sizePx = with(density) { coverSize.roundToPx() }
         IntSize(sizePx, sizePx)
     }
-    var isNearWindow by remember { mutableStateOf(true) }
     var coverPainterAlphaState by remember(imageModel, coverReloadKey) {
         mutableStateOf<State<Float>?>(null)
     }
@@ -234,7 +231,12 @@ fun AlbumItem(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = AlbumItemHorizontalPadding, vertical = AlbumItemVerticalPadding)
+            .padding(
+                start = AlbumItemHorizontalPadding,
+                top = AlbumItemTopPadding,
+                end = AlbumItemHorizontalPadding,
+                bottom = AlbumItemBottomPadding,
+            )
             .drawBehind {
                 val strokeWidth = 0.75.dp.toPx()
                 val y = size.height - strokeWidth / 2f
@@ -249,28 +251,11 @@ fun AlbumItem(
                 )
             }
             .testTag(ALBUM_ITEM_CARD_TAG)
-            .onGloballyPositioned { coordinates ->
-                val position = coordinates.positionInWindow()
-                val itemHeight = coordinates.size.height.toFloat().coerceAtLeast(1f)
-                val rootHeight = coordinates.findRootCoordinates().size.height.toFloat()
-                // Lazy 的复用槽会保留已经离开窗口的 Modifier.Node。提前在卡片越过
-                // 一个自身高度后撤销离屏合成，让复用槽只保存显示列表，不继续占用
-                // 大块 GPU 纹理；上下各留一张卡片作为滚入前的预热区。
-                val nearWindow =
-                    position.y + itemHeight >= -itemHeight &&
-                        position.y <= rootHeight + itemHeight
-                if (isNearWindow != nearWindow) {
-                    isNearWindow = nearWindow
-                }
-            }
             .then(
-                if (cacheDrawLayer) {
+                if (cacheRenderLayer) {
                     Modifier.graphicsLayer {
-                        compositingStrategy = if (isNearWindow) {
-                            CompositingStrategy.Offscreen
-                        } else {
-                            CompositingStrategy.Auto
-                        }
+                        clip = false
+                        compositingStrategy = CompositingStrategy.Auto
                     }
                 } else {
                     Modifier
@@ -297,7 +282,6 @@ fun AlbumItem(
                         progress = coverDepthProgress,
                         isDark = colorScheme.isDark,
                         shape = coverShape,
-                        glowColor = colorScheme.primary,
                         blurRadius = AlbumListCoverShadowBlurRadius,
                         modifier = Modifier.fillMaxSize(),
                     )
@@ -560,7 +544,6 @@ fun AlbumGridItem(
                 progress = coverDepthProgress,
                 isDark = colorScheme.isDark,
                 shape = coverShape,
-                glowColor = colorScheme.primary,
                 blurRadius = AlbumGridCoverShadowBlurRadius,
                 modifier = Modifier.fillMaxSize(),
             )
@@ -916,26 +899,28 @@ private fun AlbumCoverDepthShadow(
     progress: Float,
     isDark: Boolean,
     shape: Shape,
-    glowColor: Color,
     blurRadius: Dp,
     modifier: Modifier = Modifier,
 ) {
     if (progress <= 0f) return
-    val layerColor = if (isDark) glowColor else Color.Black
+    val layerColor = if (isDark) Color.White else Color.Black
     val resolvedBlurRadius = if (isDark) blurRadius * 1.35f else blurRadius
     Box(
         modifier = modifier
-            .graphicsLayer {
-                alpha = progress * if (isDark) 0.82f else 0.72f
-                scaleX = 0.93f
-                scaleY = 0.93f
-                translationY = if (isDark) 1.dp.toPx() else 4.dp.toPx()
-                compositingStrategy = CompositingStrategy.ModulateAlpha
-            }
+            // 模糊必须位于偏移图层外侧，否则图层会先按封面边界截断模糊结果，
+            // 再把已经截平的底边整体下移，形成明显的裁剪直线。
             .blur(
                 radius = resolvedBlurRadius,
                 edgeTreatment = BlurredEdgeTreatment.Unbounded,
             )
+            .graphicsLayer {
+                alpha = progress * if (isDark) 0.38f else 0.54f
+                scaleX = 0.93f
+                scaleY = 0.93f
+                translationX = if (isDark) 4.dp.toPx() else 5.dp.toPx()
+                translationY = if (isDark) 5.dp.toPx() else 6.dp.toPx()
+                compositingStrategy = CompositingStrategy.ModulateAlpha
+            }
             .background(layerColor, shape)
     )
 }

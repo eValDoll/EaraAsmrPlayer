@@ -540,7 +540,7 @@ private fun HotListeningListItem(
         coverBadge = coverBadge,
         animateOnlineDetails = false,
         coverFadeInState = coverFadeInState,
-        cacheDrawLayer = true,
+        cacheRenderLayer = true,
         onRjClick = { copyMeta("作品编号", it) },
         onCircleClick = { copyMeta("社团", it) },
         onCircleLongClick = onMetaLongClick,

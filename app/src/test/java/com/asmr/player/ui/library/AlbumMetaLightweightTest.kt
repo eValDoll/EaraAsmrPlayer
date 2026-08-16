@@ -80,6 +80,29 @@ class AlbumMetaLightweightTest {
     }
 
     @Test
+    fun detailHeaderMeta_keepsEveryScrollableValueAvailable() {
+        composeRule.setContent {
+            AsmrPlayerTheme {
+                Column(modifier = Modifier.width(140.dp)) {
+                    AlbumHeaderCvLightweight(
+                        cvText = "详情声优甲 / 详情声优乙 / 详情声优丙",
+                    )
+                    AlbumHeaderTagsLightweight(
+                        tags = listOf("详情标签甲", "详情标签乙", "详情标签丙"),
+                    )
+                }
+            }
+        }
+
+        composeRule.onNodeWithText("详情声优甲").assertExists()
+        composeRule.onNodeWithText("详情声优乙").assertExists()
+        composeRule.onNodeWithText("详情声优丙").assertExists()
+        composeRule.onNodeWithText("#详情标签甲").assertExists()
+        composeRule.onNodeWithText("#详情标签乙").assertExists()
+        composeRule.onNodeWithText("#详情标签丙").assertExists()
+    }
+
+    @Test
     fun primaryMeta_pinsRjToTheRightWithoutDotSeparator() {
         composeRule.setContent {
             AsmrPlayerTheme {

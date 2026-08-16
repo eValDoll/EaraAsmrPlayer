@@ -337,6 +337,7 @@ internal fun AlbumHeaderCvLightweight(
     if (cvs.isEmpty()) return
 
     val colorScheme = AsmrTheme.colorScheme
+    val scrollState = rememberScrollState()
 
     Row(
         modifier = modifier
@@ -357,7 +358,8 @@ internal fun AlbumHeaderCvLightweight(
         Row(
             modifier = Modifier
                 .weight(1f)
-                .horizontalScroll(rememberScrollState()),
+                .horizontalScrollEdgeFade(scrollState)
+                .horizontalScroll(scrollState),
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -408,6 +410,7 @@ internal fun AlbumHeaderTagsLightweight(
     if (normalizedTags.isEmpty()) return
 
     val colorScheme = AsmrTheme.colorScheme
+    val scrollState = rememberScrollState()
 
     Row(
         modifier = modifier
@@ -428,7 +431,8 @@ internal fun AlbumHeaderTagsLightweight(
         Row(
             modifier = Modifier
                 .weight(1f)
-                .horizontalScroll(rememberScrollState()),
+                .horizontalScrollEdgeFade(scrollState)
+                .horizontalScroll(scrollState),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
