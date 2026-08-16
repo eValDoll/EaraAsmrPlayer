@@ -1,5 +1,12 @@
 package com.asmr.player.ui.theme
 
+import android.graphics.Bitmap
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
+import android.view.PixelCopy
+import android.view.Window
+import androidx.annotation.RequiresApi
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -13,6 +20,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -20,14 +28,18 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.layout.onSizeChanged
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.math.sqrt
+import kotlin.coroutines.resume
 
 data class ThemeTransitionRequest(
     val origin: Offset,
     val oldContentBitmap: ImageBitmap?,
     val oldBackgroundColor: Color,
+    val targetIsDark: Boolean,
     val token: Long
 )
 
@@ -41,13 +53,18 @@ val LocalThemeTransitionTrigger = staticCompositionLocalOf<((ThemeTransitionTrig
 @Composable
 fun ThemeCircularRevealOverlay(
     request: ThemeTransitionRequest,
+    targetReady: Boolean,
     onAnimationEnd: () -> Unit
 ) {
     val animationProgress = remember { Animatable(0f) }
     var overlaySize by remember { mutableStateOf(Size.Zero) }
 
-    LaunchedEffect(request) {
+    LaunchedEffect(request, targetReady) {
         animationProgress.snapTo(0f)
+        if (!targetReady) return@LaunchedEffect
+        // 等新主题完成一次组合与绘制后再揭开旧画面，避免底层主题尚未切换时
+        // 动画先跑出一小段，随后整块 GPU 图层突然换色。
+        withFrameNanos { }
         animationProgress.animateTo(
             targetValue = 1f,
             animationSpec = tween(durationMillis = 700, easing = FastOutSlowInEasing)
@@ -102,5 +119,49 @@ fun ThemeCircularRevealOverlay(
                 }
             }
         }
+    }
+}
+
+/**
+ * 捕获窗口最终合成后的画面，确保 Compose graphicsLayer、离屏混合和阴影也进入主题过渡快照。
+ * Android 8 以下或 PixelCopy 失败时退回 View.draw，主题切换仍可继续完成。
+ */
+internal suspend fun captureThemeTransitionBitmap(window: Window): ImageBitmap? {
+    val decorView = window.decorView
+    val width = decorView.width
+    val height = decorView.height
+    if (width <= 0 || height <= 0) return null
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val result = try {
+            requestWindowPixelCopy(window, bitmap)
+        } catch (_: Exception) {
+            PixelCopy.ERROR_UNKNOWN
+        }
+        if (result == PixelCopy.SUCCESS) {
+            return bitmap.asImageBitmap()
+        }
+        bitmap.recycle()
+    }
+
+    return runCatching {
+        Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
+            decorView.draw(android.graphics.Canvas(bitmap))
+        }.asImageBitmap()
+    }.getOrNull()
+}
+
+@RequiresApi(Build.VERSION_CODES.O)
+private suspend fun requestWindowPixelCopy(window: Window, bitmap: Bitmap): Int {
+    return suspendCancellableCoroutine { continuation ->
+        PixelCopy.request(
+            window,
+            bitmap,
+            { result ->
+                if (continuation.isActive) continuation.resume(result)
+            },
+            Handler(Looper.getMainLooper())
+        )
     }
 }

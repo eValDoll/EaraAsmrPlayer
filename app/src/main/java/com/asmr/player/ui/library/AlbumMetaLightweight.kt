@@ -2,6 +2,7 @@ package com.asmr.player.ui.library
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
+import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -10,8 +11,10 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
@@ -30,6 +33,7 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -38,6 +42,106 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.asmr.player.R
 import com.asmr.player.ui.theme.AsmrTheme
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+internal fun AlbumHeroPrimaryMetaLightweight(
+    rjCode: String,
+    circle: String,
+    modifier: Modifier = Modifier,
+    rjOnClick: (() -> Unit)? = null,
+    circleOnClick: (() -> Unit)? = null,
+    circleOnLongClick: (() -> Unit)? = null,
+) {
+    val normalizedRj = remember(rjCode) { rjCode.trim() }
+    val normalizedCircle = remember(circle) { circle.trim() }
+    if (normalizedRj.isBlank() && normalizedCircle.isBlank()) return
+
+    val colorScheme = AsmrTheme.colorScheme
+    val contentColor = if (colorScheme.isDark) {
+        Color.White.copy(alpha = 0.94f)
+    } else {
+        Color.Black.copy(alpha = 0.84f)
+    }
+    val rjColor = colorScheme.primary
+    val secondaryContentColor = contentColor.copy(alpha = 0.76f)
+    val textShadow = Shadow(
+        color = if (colorScheme.isDark) {
+            Color.Black.copy(alpha = 0.42f)
+        } else {
+            Color.White.copy(alpha = 0.62f)
+        },
+        offset = Offset(0f, 1f),
+        blurRadius = 5f,
+    )
+
+    Row(
+        modifier = modifier
+            .fillMaxWidth()
+            .clipToBounds(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (normalizedRj.isNotBlank()) {
+            Text(
+                text = normalizedRj,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(5.dp))
+                    .combinedClickable(onClick = { rjOnClick?.invoke() })
+                    .padding(horizontal = 2.dp, vertical = 2.dp),
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 0.35.sp,
+                    shadow = textShadow,
+                ),
+                color = rjColor,
+                maxLines = 1,
+            )
+        }
+
+        if (normalizedRj.isNotBlank() && normalizedCircle.isNotBlank()) {
+            Spacer(
+                modifier = Modifier
+                    .width(0.5.dp)
+                    .height(12.dp)
+                    .background(secondaryContentColor.copy(alpha = 0.46f))
+            )
+        }
+
+        if (normalizedCircle.isNotBlank()) {
+            Row(
+                modifier = Modifier
+                    .then(if (normalizedRj.isNotBlank()) Modifier.weight(1f) else Modifier.fillMaxWidth())
+                    .clip(RoundedCornerShape(5.dp))
+                    .combinedClickable(
+                        onClick = { circleOnClick?.invoke() },
+                        onLongClick = circleOnLongClick,
+                    )
+                    .padding(horizontal = 2.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_album_meta_club),
+                    contentDescription = null,
+                    tint = secondaryContentColor,
+                    modifier = Modifier.size(13.dp),
+                )
+                Text(
+                    text = normalizedCircle,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontSize = 13.sp,
+                        shadow = textShadow,
+                    ),
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -54,6 +158,7 @@ internal fun AlbumItemPrimaryMetaLightweight(
     if (normalizedRj.isBlank() && normalizedCircle.isBlank()) return
 
     val colorScheme = AsmrTheme.colorScheme
+    val identityContentColor = if (colorScheme.isDark) Color.White else Color.Black
 
     Row(
         modifier = modifier
@@ -76,7 +181,7 @@ internal fun AlbumItemPrimaryMetaLightweight(
                 Icon(
                     painter = painterResource(id = R.drawable.ic_album_meta_club),
                     contentDescription = null,
-                    tint = colorScheme.textTertiary,
+                    tint = identityContentColor,
                     modifier = Modifier
                         .padding(end = 6.dp)
                         .size(13.dp)
@@ -86,7 +191,7 @@ internal fun AlbumItemPrimaryMetaLightweight(
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontSize = 13.sp,
                     ),
-                    color = colorScheme.textSecondary,
+                    color = identityContentColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
@@ -146,6 +251,7 @@ internal fun AlbumItemCvLightweight(
         values = cvs,
         iconRes = R.drawable.ic_album_meta_cv,
         layout = layout,
+        prominent = true,
         modifier = modifier,
         onValueClick = onCvClick,
         onValueLongClick = onCvLongClick,
@@ -185,12 +291,19 @@ private fun AlbumItemInlineValuesLightweight(
     layout: AlbumInlineValuesLayout,
     modifier: Modifier = Modifier,
     valuePrefix: String = "",
+    prominent: Boolean = false,
     onValueClick: ((String) -> Unit)? = null,
     onValueLongClick: ((String) -> Unit)? = null,
 ) {
     if (values.isEmpty()) return
 
     val colorScheme = AsmrTheme.colorScheme
+    val valueColor = if (prominent) {
+        if (colorScheme.isDark) Color.White else Color.Black
+    } else {
+        colorScheme.textSecondary
+    }
+    val iconColor = if (prominent) valueColor else colorScheme.textTertiary
 
     Row(
         modifier = modifier
@@ -201,7 +314,7 @@ private fun AlbumItemInlineValuesLightweight(
         Icon(
             painter = painterResource(id = iconRes),
             contentDescription = null,
-            tint = colorScheme.textTertiary,
+            tint = iconColor,
             modifier = Modifier
                 .padding(top = 3.dp, end = 6.dp)
                 .size(13.dp)
@@ -221,6 +334,7 @@ private fun AlbumItemInlineValuesLightweight(
                     AlbumItemInlineValueItems(
                         values = values,
                         valuePrefix = valuePrefix,
+                        valueColor = valueColor,
                         onValueClick = onValueClick,
                         onValueLongClick = onValueLongClick,
                     )
@@ -236,6 +350,7 @@ private fun AlbumItemInlineValuesLightweight(
                 AlbumItemInlineValueItems(
                     values = values,
                     valuePrefix = valuePrefix,
+                    valueColor = valueColor,
                     onValueClick = onValueClick,
                     onValueLongClick = onValueLongClick,
                 )
@@ -249,16 +364,16 @@ private fun AlbumItemInlineValuesLightweight(
 private fun AlbumItemInlineValueItems(
     values: List<String>,
     valuePrefix: String,
+    valueColor: Color,
     onValueClick: ((String) -> Unit)?,
     onValueLongClick: ((String) -> Unit)?,
 ) {
-    val colorScheme = AsmrTheme.colorScheme
     values.forEach { value ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = valuePrefix + value.removePrefix(valuePrefix),
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
-                color = colorScheme.textSecondary,
+                color = valueColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
@@ -363,14 +478,7 @@ internal fun AlbumHeaderCvLightweight(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            cvs.forEachIndexed { index, cv ->
-                if (index > 0) {
-                    Text(
-                        text = "·",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = colorScheme.textTertiary.copy(alpha = 0.6f),
-                    )
-                }
+            cvs.forEach { cv ->
                 Text(
                     text = cv,
                     style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp),

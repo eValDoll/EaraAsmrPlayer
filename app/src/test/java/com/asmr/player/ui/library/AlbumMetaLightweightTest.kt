@@ -97,6 +97,7 @@ class AlbumMetaLightweightTest {
         composeRule.onNodeWithText("详情声优甲").assertExists()
         composeRule.onNodeWithText("详情声优乙").assertExists()
         composeRule.onNodeWithText("详情声优丙").assertExists()
+        composeRule.onNodeWithText("·").assertDoesNotExist()
         composeRule.onNodeWithText("#详情标签甲").assertExists()
         composeRule.onNodeWithText("#详情标签乙").assertExists()
         composeRule.onNodeWithText("#详情标签丙").assertExists()

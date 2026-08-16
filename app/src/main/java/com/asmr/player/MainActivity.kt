@@ -179,9 +179,7 @@ import com.asmr.player.ui.theme.ThemeTransitionRequest
 import com.asmr.player.ui.theme.ThemeTransitionTriggerRequest
 import com.asmr.player.ui.theme.LocalThemeTransitionTrigger
 import com.asmr.player.ui.theme.ThemeCircularRevealOverlay
-import androidx.compose.ui.graphics.ImageBitmap
-import android.graphics.Bitmap
-import androidx.compose.ui.graphics.asImageBitmap
+import com.asmr.player.ui.theme.captureThemeTransitionBitmap
 import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
 import com.asmr.player.ui.common.AppVolumeWarningSessionState
 import com.asmr.player.ui.common.rememberAppVolumeWarningSessionState
@@ -544,29 +542,28 @@ class MainActivity : ComponentActivity() {
             val transitionScope = rememberCoroutineScope()
             var themeTransitionSeq by remember { mutableLongStateOf(0L) }
             var themeTransition by remember { mutableStateOf<ThemeTransitionRequest?>(null) }
+            var themeTransitionCapturePending by remember { mutableStateOf(false) }
             val currentMode by rememberUpdatedState(mode)
             val themeTransitionTrigger: (ThemeTransitionTriggerRequest) -> Unit = remember {
                 { triggerReq ->
-                    if (themeTransition == null) {
-                        val bitmap = runCatching {
-                            val w = this@MainActivity.window.decorView.width
-                            val h = this@MainActivity.window.decorView.height
-                            if (w > 0 && h > 0) {
-                                val bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888)
-                                val canvas = android.graphics.Canvas(bmp)
-                                this@MainActivity.window.decorView.draw(canvas)
-                                bmp.asImageBitmap()
-                            } else null
-                        }.getOrNull()
-                        val bgColor = neutralPaletteForMode(currentMode).background
-                        themeTransition = ThemeTransitionRequest(
-                            origin = triggerReq.origin,
-                            oldContentBitmap = bitmap,
-                            oldBackgroundColor = bgColor,
-                            token = ++themeTransitionSeq
-                        )
+                    if (themeTransition == null && !themeTransitionCapturePending) {
+                        themeTransitionCapturePending = true
                         transitionScope.launch {
-                            settingsDataStore.setTheme(triggerReq.targetPref)
+                            try {
+                                val oldMode = currentMode
+                                val bitmap = captureThemeTransitionBitmap(this@MainActivity.window)
+                                if (themeTransition != null) return@launch
+                                themeTransition = ThemeTransitionRequest(
+                                    origin = triggerReq.origin,
+                                    oldContentBitmap = bitmap,
+                                    oldBackgroundColor = neutralPaletteForMode(oldMode).background,
+                                    targetIsDark = triggerReq.targetPref == "dark",
+                                    token = ++themeTransitionSeq
+                                )
+                                settingsDataStore.setTheme(triggerReq.targetPref)
+                            } finally {
+                                themeTransitionCapturePending = false
+                            }
                         }
                     }
                 }
@@ -660,6 +657,7 @@ class MainActivity : ComponentActivity() {
                         val currentToken = request.token
                         ThemeCircularRevealOverlay(
                             request = request,
+                            targetReady = mode.isDark == request.targetIsDark,
                             onAnimationEnd = {
                                 if (themeTransition?.token == currentToken) {
                                     themeTransition = null
