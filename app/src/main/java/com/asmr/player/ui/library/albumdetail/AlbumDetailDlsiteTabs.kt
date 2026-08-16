@@ -1150,7 +1150,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                                     animateIntro = false,
                                     folderKeyPrefix = "asmr-folder",
                                     fileKeyPrefix = "asmr-file",
-                                    fileContent = { file, selectionMode, selected, enterSelectionMode, onSelectedChange ->
+                                    fileContent = { file, selectionMode, selected, selectedPosition, enterSelectionMode, onSelectedChange ->
                                         val leaf = asmrLeafByRelPath[file.path]
                                         DirectoryFileRow(
                                             file = file.copy(showSubtitleStamp = file.subtitleSources.isNotEmpty()),
@@ -1236,6 +1236,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                                             },
                                             selectionMode = selectionMode,
                                             selected = selected,
+                                            selectedPosition = selectedPosition,
                                             onEnterSelectionMode = enterSelectionMode,
                                             onSelectedChange = onSelectedChange,
                                             onDownload = if (isDownloadableTreeFileType(file.fileType)) ({ onDownloadOne(file.path) }) else null,
@@ -1648,7 +1649,7 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
                                 animateIntro = animateIntro,
                                 folderKeyPrefix = "dlplay-folder",
                                 fileKeyPrefix = "dlplay-file",
-                                fileContent = { file, selectionMode, selected, enterSelectionMode, onSelectedChange ->
+                                fileContent = { file, selectionMode, selected, selectedPosition, enterSelectionMode, onSelectedChange ->
                                     val leaf = leafByRelPath[file.path]
                                     DirectoryFileRow(
                                         file = file.copy(showSubtitleStamp = file.subtitleSources.isNotEmpty()),
@@ -1747,6 +1748,7 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
                                         },
                                         selectionMode = selectionMode,
                                         selected = selected,
+                                        selectedPosition = selectedPosition,
                                         onEnterSelectionMode = enterSelectionMode,
                                         onSelectedChange = onSelectedChange,
                                         onDownload = if (isDownloadableTreeFileType(file.fileType)) ({ onDownloadOne(file.path) }) else null,

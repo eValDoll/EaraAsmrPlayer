@@ -45,6 +45,54 @@ class AlbumDetailDirectorySupportTest {
     }
 
     @Test
+    fun directorySelectedItemPosition_joinsAdjacentSelectedRows() {
+        assertEquals(
+            DirectoryFolderPosition.First,
+            directorySelectedItemPosition(
+                selected = true,
+                previousSelected = false,
+                nextSelected = true,
+            )
+        )
+        assertEquals(
+            DirectoryFolderPosition.Middle,
+            directorySelectedItemPosition(
+                selected = true,
+                previousSelected = true,
+                nextSelected = true,
+            )
+        )
+        assertEquals(
+            DirectoryFolderPosition.Last,
+            directorySelectedItemPosition(
+                selected = true,
+                previousSelected = true,
+                nextSelected = false,
+            )
+        )
+    }
+
+    @Test
+    fun localTreeDeletionPaths_rejectTraversalAndMatchDirectoryDescendants() {
+        assertEquals("disc1/booklet/cover.jpg", normalizeLocalTreeRelativePath("/disc1\\booklet/cover.jpg"))
+        assertEquals(null, normalizeLocalTreeRelativePath("disc1/../cover.jpg"))
+        assertTrue(
+            localTreePathMatchesTarget(
+                candidatePath = "disc1/booklet/cover.jpg",
+                targetPath = "disc1/booklet",
+                targetIsDirectory = true,
+            )
+        )
+        assertFalse(
+            localTreePathMatchesTarget(
+                candidatePath = "disc1/booklet-old/cover.jpg",
+                targetPath = "disc1/booklet",
+                targetIsDirectory = true,
+            )
+        )
+    }
+
+    @Test
     fun buildLocalDirectoryBrowser_preservesCachedLocalSizeBytes() {
         val track = Track(
             albumId = 7L,
@@ -81,6 +129,41 @@ class AlbumDetailDirectorySupportTest {
             FileSizeSource.Local(path = track.path, sizeBytes = 2_048L),
             browser.files.single().sizeSource
         )
+    }
+
+    @Test
+    fun buildLocalDirectoryBrowser_exposesFolderDeletionMetadata() {
+        val localTrack = Track(
+            id = 11L,
+            albumId = 7L,
+            title = "Track 1",
+            path = "/album/disc1/track1.mp3",
+        )
+        val index = buildLocalTreeIndexFromLeaves(
+            leaves = listOf(
+                LocalTreeLeafCacheEntry(
+                    relativePath = "disc1/track1.mp3",
+                    absolutePath = localTrack.path,
+                    fileType = TreeFileType.Audio,
+                ),
+                LocalTreeLeafCacheEntry(
+                    relativePath = "disc1/cover.jpg",
+                    absolutePath = "/album/disc1/cover.jpg",
+                    fileType = TreeFileType.Image,
+                ),
+            ),
+            tracks = listOf(localTrack),
+        )
+
+        val folder = buildLocalDirectoryBrowser(
+            index = index,
+            currentPath = "",
+            album = Album(id = 7L, title = "Album", path = "/album"),
+            shouldShowSubtitleStamp = { false },
+        ).folders.single()
+
+        assertEquals(listOf(11L), folder.descendantTrackIds)
+        assertTrue(folder.hasLocalContent)
     }
 
     @Test

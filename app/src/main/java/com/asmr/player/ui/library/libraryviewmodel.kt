@@ -1673,6 +1673,81 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
+    internal fun deleteAlbumTreeEntry(
+        album: Album,
+        target: LocalTreeDeletionTarget,
+        onComplete: (Boolean) -> Unit = {},
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val relativePath = normalizeLocalTreeRelativePath(target.relativePath)
+            if (album.id <= 0L || relativePath == null) {
+                messageManager.showError("删除失败：目录项路径无效")
+                withContext(Dispatchers.Main.immediate) { onComplete(false) }
+                return@launch
+            }
+
+            try {
+                val albumRoots = album.getAllLocalPaths()
+                val physicalDeletionSucceeded = when {
+                    !target.hasLocalContent -> true
+                    target.isDirectory -> deleteLocalTreeDirectories(albumRoots, relativePath)
+                    else -> deleteLocalTreeFile(albumRoots, target.absolutePath.orEmpty())
+                }
+                check(physicalDeletionSucceeded) {
+                    if (target.isDirectory) "无法删除目录，请检查存储权限" else "无法删除文件，请检查存储权限"
+                }
+
+                val verifiedTrackIds = target.trackIds
+                    .asSequence()
+                    .filter { it > 0L }
+                    .distinct()
+                    .toList()
+                    .takeIf { it.isNotEmpty() }
+                    ?.let { ids ->
+                        trackDao.getTracksByIdsOnce(ids)
+                            .filter { it.albumId == album.id }
+                            .map { it.id }
+                    }
+                    .orEmpty()
+                val resourceIds = database.onlineSavedResourceDao()
+                    .getForAlbumOnce(album.id)
+                    .filter { resource ->
+                        localTreePathMatchesTarget(
+                            candidatePath = resource.relativePath,
+                            targetPath = relativePath,
+                            targetIsDirectory = target.isDirectory,
+                        )
+                    }
+                    .map { it.id }
+
+                database.withTransaction {
+                    if (verifiedTrackIds.isNotEmpty()) {
+                        database.remoteSubtitleSourceDao().deleteByTrackIds(verifiedTrackIds)
+                        trackDao.deleteSubtitlesForTracks(verifiedTrackIds)
+                        database.trackTagDao().deleteTrackTagsByTrackIds(verifiedTrackIds)
+                        trackDao.deleteTracksByIds(verifiedTrackIds)
+                    }
+                    if (resourceIds.isNotEmpty()) {
+                        database.onlineSavedResourceDao().deleteByIds(resourceIds)
+                    }
+                    database.localTreeCacheDao().deleteByAlbum(album.id)
+                }
+                if (verifiedTrackIds.isNotEmpty()) {
+                    refreshAlbumAudioAggregate(album.id)
+                }
+
+                messageManager.showSuccess(if (target.isDirectory) "已删除目录" else "已删除文件")
+                withContext(Dispatchers.Main.immediate) { onComplete(true) }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.e(TAG, "deleteAlbumTreeEntry failed: ${target.relativePath}", error)
+                messageManager.showError("删除失败：${error.message ?: "未知错误"}")
+                withContext(Dispatchers.Main.immediate) { onComplete(false) }
+            }
+        }
+    }
+
     fun removeTrackFromAlbum(trackId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             val track = trackDao.getTrackByIdOnce(trackId) ?: return@launch
@@ -1689,7 +1764,7 @@ class LibraryViewModel @Inject constructor(
                 )
                     .mapNotNull { runCatching { it.canonicalFile }.getOrNull() ?: it.absoluteFile }
                 val target = runCatching { File(path).canonicalFile }.getOrNull() ?: File(path).absoluteFile
-                val isInAllowed = allowedRoots.any { root -> target.path.startsWith(root.path) }
+                val isInAllowed = allowedRoots.any { root -> isCanonicalDescendant(target, root) }
                 if (isInAllowed) deletePathSafely(target.absolutePath) else false
             }
 
@@ -1722,7 +1797,7 @@ class LibraryViewModel @Inject constructor(
             .mapNotNull { runCatching { it.canonicalFile }.getOrNull() ?: it.absoluteFile }
 
         val target = runCatching { File(path).canonicalFile }.getOrNull() ?: File(path).absoluteFile
-        val isAllowed = allowedRoots.any { root -> target.path.startsWith(root.path) }
+        val isAllowed = allowedRoots.any { root -> isCanonicalDescendant(target, root) }
         if (!isAllowed) return false
         if (!target.exists()) return false
 
@@ -1731,6 +1806,135 @@ class LibraryViewModel @Inject constructor(
         } else {
             runCatching { target.delete() }.getOrDefault(false)
         }
+    }
+
+    private fun deleteLocalTreeFile(albumRoots: List<String>, absolutePath: String): Boolean {
+        val normalizedPath = absolutePath.trim()
+        if (normalizedPath.isBlank()) return false
+        if (normalizedPath.startsWith("content://", ignoreCase = true)) {
+            val targetUri = runCatching { Uri.parse(normalizedPath) }.getOrNull() ?: return false
+            val allowedAuthority = albumRoots.asSequence()
+                .filter { it.startsWith("content://", ignoreCase = true) }
+                .mapNotNull { runCatching { Uri.parse(it).authority }.getOrNull() }
+                .any { it == targetUri.authority }
+            if (!allowedAuthority) return false
+            return runCatching {
+                DocumentsContract.deleteDocument(context.contentResolver, targetUri)
+            }.getOrDefault(false)
+        }
+        if (normalizedPath.startsWith("http", ignoreCase = true) || normalizedPath.startsWith("web://", ignoreCase = true)) {
+            return false
+        }
+
+        val targetFile = runCatching { File(normalizedPath).canonicalFile }.getOrNull() ?: return false
+        val allowed = albumRoots.asSequence()
+            .filterNot { it.startsWith("content://", ignoreCase = true) }
+            .filterNot { it.startsWith("http", ignoreCase = true) || it.startsWith("web://", ignoreCase = true) }
+            .mapNotNull { root -> runCatching { File(root).canonicalFile }.getOrNull() }
+            .any { root -> isCanonicalDescendant(targetFile, root) }
+        if (!allowed) return false
+        if (!targetFile.exists()) return true
+        if (!targetFile.isFile) return false
+        return runCatching { targetFile.delete() }.getOrDefault(false)
+    }
+
+    private fun deleteLocalTreeDirectories(albumRoots: List<String>, relativePath: String): Boolean {
+        var hasUsableRoot = false
+        var allDeleted = true
+        val fileTargets = linkedSetOf<File>()
+
+        albumRoots.distinct().forEach { rawRoot ->
+            when {
+                rawRoot.startsWith("content://", ignoreCase = true) -> {
+                    hasUsableRoot = true
+                    val resolved = resolveTreeDocumentUri(rawRoot, relativePath)
+                    if (resolved.isFailure) {
+                        allDeleted = false
+                    } else {
+                        resolved.getOrNull()?.let { targetUri ->
+                            val deleted = runCatching {
+                                DocumentsContract.deleteDocument(context.contentResolver, targetUri)
+                            }.getOrDefault(false)
+                            if (!deleted) allDeleted = false
+                        }
+                    }
+                }
+                rawRoot.startsWith("http", ignoreCase = true) || rawRoot.startsWith("web://", ignoreCase = true) -> Unit
+                rawRoot.isNotBlank() -> {
+                    val root = runCatching { File(rawRoot).canonicalFile }.getOrNull() ?: return@forEach
+                    val target = runCatching {
+                        File(root, relativePath.replace('/', File.separatorChar)).canonicalFile
+                    }.getOrNull() ?: return@forEach
+                    if (isCanonicalDescendant(target, root)) {
+                        hasUsableRoot = true
+                        if (target.exists()) fileTargets += target
+                    }
+                }
+            }
+        }
+
+        fileTargets
+            .sortedByDescending { it.path.length }
+            .forEach { target ->
+                if (!target.isDirectory || !runCatching { target.deleteRecursively() }.getOrDefault(false)) {
+                    allDeleted = false
+                }
+            }
+        return hasUsableRoot && allDeleted
+    }
+
+    private fun resolveTreeDocumentUri(rootUriString: String, relativePath: String): Result<Uri?> = runCatching {
+        val rootUri = Uri.parse(rootUriString)
+        val authority = requireNotNull(rootUri.authority) { "目录授权地址无效" }
+        val treeId = runCatching { DocumentsContract.getTreeDocumentId(rootUri) }.getOrDefault("")
+        var documentId = runCatching { DocumentsContract.getDocumentId(rootUri) }
+            .getOrDefault(treeId)
+            .ifBlank { treeId }
+        check(documentId.isNotBlank()) { "无法读取目录授权" }
+        val treeUri = if (treeId.isNotBlank()) {
+            DocumentsContract.buildTreeDocumentUri(authority, treeId)
+        } else {
+            rootUri
+        }
+
+        for (segment in relativePath.split('/')) {
+            val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, documentId)
+            val cursor = context.contentResolver.query(
+                childrenUri,
+                arrayOf(
+                    DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+                    DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+                    DocumentsContract.Document.COLUMN_MIME_TYPE,
+                ),
+                null,
+                null,
+                null,
+            ) ?: throw IllegalStateException("无法访问目录，请重新授权存储权限")
+            val childId = cursor.use {
+                val idIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+                val nameIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+                val mimeIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
+                var match: String? = null
+                while (cursor.moveToNext()) {
+                    val name = cursor.getString(nameIndex)
+                    val mime = cursor.getString(mimeIndex)
+                    if (name == segment && mime == DocumentsContract.Document.MIME_TYPE_DIR) {
+                        match = cursor.getString(idIndex)
+                        break
+                    }
+                }
+                match
+            }
+            if (childId == null) return@runCatching null
+            documentId = childId
+        }
+        DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId)
+    }
+
+    private fun isCanonicalDescendant(target: File, root: File): Boolean {
+        if (target == root) return false
+        val rootPrefix = root.path.trimEnd(File.separatorChar) + File.separator
+        return target.path.startsWith(rootPrefix)
     }
 
     private fun extractWorkNo(input: String): String {

@@ -21,6 +21,9 @@ interface OnlineSavedResourceDao {
     @Query("DELETE FROM online_saved_resources WHERE albumId = :albumId")
     suspend fun deleteByAlbumId(albumId: Long)
 
+    @Query("DELETE FROM online_saved_resources WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<Long>)
+
     @Query("UPDATE online_saved_resources SET albumId = :toAlbumId WHERE albumId = :fromAlbumId")
     suspend fun moveToAlbum(fromAlbumId: Long, toAlbumId: Long)
 }
