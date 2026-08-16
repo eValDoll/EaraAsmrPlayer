@@ -158,6 +158,7 @@ internal fun AlbumItemPrimaryMetaLightweight(
     if (normalizedRj.isBlank() && normalizedCircle.isBlank()) return
 
     val colorScheme = AsmrTheme.colorScheme
+    val identityContentColor = if (colorScheme.isDark) Color.White else Color.Black
 
     Row(
         modifier = modifier
@@ -180,7 +181,7 @@ internal fun AlbumItemPrimaryMetaLightweight(
                 Icon(
                     painter = painterResource(id = R.drawable.ic_album_meta_club),
                     contentDescription = null,
-                    tint = colorScheme.textTertiary,
+                    tint = identityContentColor,
                     modifier = Modifier
                         .padding(end = 6.dp)
                         .size(13.dp)
@@ -190,7 +191,7 @@ internal fun AlbumItemPrimaryMetaLightweight(
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontSize = 13.sp,
                     ),
-                    color = colorScheme.textSecondary,
+                    color = identityContentColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
@@ -250,6 +251,7 @@ internal fun AlbumItemCvLightweight(
         values = cvs,
         iconRes = R.drawable.ic_album_meta_cv,
         layout = layout,
+        prominent = true,
         modifier = modifier,
         onValueClick = onCvClick,
         onValueLongClick = onCvLongClick,
@@ -289,12 +291,19 @@ private fun AlbumItemInlineValuesLightweight(
     layout: AlbumInlineValuesLayout,
     modifier: Modifier = Modifier,
     valuePrefix: String = "",
+    prominent: Boolean = false,
     onValueClick: ((String) -> Unit)? = null,
     onValueLongClick: ((String) -> Unit)? = null,
 ) {
     if (values.isEmpty()) return
 
     val colorScheme = AsmrTheme.colorScheme
+    val valueColor = if (prominent) {
+        if (colorScheme.isDark) Color.White else Color.Black
+    } else {
+        colorScheme.textSecondary
+    }
+    val iconColor = if (prominent) valueColor else colorScheme.textTertiary
 
     Row(
         modifier = modifier
@@ -305,7 +314,7 @@ private fun AlbumItemInlineValuesLightweight(
         Icon(
             painter = painterResource(id = iconRes),
             contentDescription = null,
-            tint = colorScheme.textTertiary,
+            tint = iconColor,
             modifier = Modifier
                 .padding(top = 3.dp, end = 6.dp)
                 .size(13.dp)
@@ -325,6 +334,7 @@ private fun AlbumItemInlineValuesLightweight(
                     AlbumItemInlineValueItems(
                         values = values,
                         valuePrefix = valuePrefix,
+                        valueColor = valueColor,
                         onValueClick = onValueClick,
                         onValueLongClick = onValueLongClick,
                     )
@@ -340,6 +350,7 @@ private fun AlbumItemInlineValuesLightweight(
                 AlbumItemInlineValueItems(
                     values = values,
                     valuePrefix = valuePrefix,
+                    valueColor = valueColor,
                     onValueClick = onValueClick,
                     onValueLongClick = onValueLongClick,
                 )
@@ -353,16 +364,16 @@ private fun AlbumItemInlineValuesLightweight(
 private fun AlbumItemInlineValueItems(
     values: List<String>,
     valuePrefix: String,
+    valueColor: Color,
     onValueClick: ((String) -> Unit)?,
     onValueLongClick: ((String) -> Unit)?,
 ) {
-    val colorScheme = AsmrTheme.colorScheme
     values.forEach { value ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = valuePrefix + value.removePrefix(valuePrefix),
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
-                color = colorScheme.textSecondary,
+                color = valueColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier

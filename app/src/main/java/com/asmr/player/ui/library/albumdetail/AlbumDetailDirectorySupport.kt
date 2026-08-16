@@ -179,12 +179,12 @@ internal sealed class AsmrTreeUiEntry {
     ) : AsmrTreeUiEntry()
 }
 
-private val DirectoryBrowserPanelCornerRadius = 10.dp
-private val DirectoryFolderRowCornerRadius = 10.dp
-private val DirectoryBrowserPanelVerticalPadding = 4.dp
+private val DirectoryBrowserPanelCornerRadius = 22.dp
+private val DirectoryFolderRowCornerRadius = 14.dp
+private val DirectoryBrowserPanelVerticalPadding = 8.dp
 
 internal fun directoryBrowserHeaderBackground(colorScheme: AsmrColorScheme): Color {
-    return colorScheme.primarySoft.copy(alpha = if (colorScheme.isDark) 0.28f else 0.88f)
+    return colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.72f else 0.9f)
 }
 
 internal enum class DirectoryFolderPosition {
@@ -2022,11 +2022,17 @@ internal fun CompactBreadcrumbNode(
     onClick: () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val containerColor = if (selected) {
+        colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.2f else 0.11f)
+    } else {
+        Color.Transparent
+    }
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(9.dp))
+            .background(containerColor)
             .clickable(onClick = onClick)
-            .padding(horizontal = 2.dp, vertical = 2.dp),
+            .padding(horizontal = if (selected) 8.dp else 3.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
@@ -2417,19 +2423,20 @@ internal fun DirectoryActionGroupButton(
     modifier: Modifier = Modifier,
     onDisabledClick: (() -> Unit)? = null
 ) {
-    TextButton(
+    val colorScheme = AsmrTheme.colorScheme
+    FilledTonalButton(
         onClick = {
             if (enabled) onClick() else onDisabledClick?.invoke()
         },
         enabled = enabled || onDisabledClick != null,
-        modifier = modifier.height(34.dp),
-        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
-        colors = ButtonDefaults.textButtonColors(
-            contentColor = if (enabled) {
-                MaterialTheme.colorScheme.primary
-            } else {
-                AsmrTheme.colorScheme.textTertiary
-            }
+        modifier = modifier.height(32.dp),
+        shape = RoundedCornerShape(10.dp),
+        contentPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp),
+        colors = ButtonDefaults.filledTonalButtonColors(
+            containerColor = colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.18f else 0.1f),
+            contentColor = colorScheme.primary,
+            disabledContainerColor = colorScheme.surfaceVariant.copy(alpha = 0.48f),
+            disabledContentColor = colorScheme.textTertiary
         )
     ) {
         Icon(icon, contentDescription = null, modifier = Modifier.size(14.dp))
@@ -2478,7 +2485,10 @@ internal fun DirectoryBatchBarEmbeddedV3(
             )
         }
         if (showActions) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 DirectoryActionGroupButton(
                     text = "收藏",
                     icon = Icons.Rounded.FavoriteBorder,
@@ -2729,7 +2739,7 @@ internal fun CompactDirectoryBreadcrumbContentV3(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 8.dp),
+            .padding(horizontal = 12.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
@@ -2740,10 +2750,11 @@ internal fun CompactDirectoryBreadcrumbContentV3(
             onClick = { onNavigate("") }
         )
         displayedCrumbs.forEach { crumb ->
-            Text(
-                text = "/",
-                style = MaterialTheme.typography.labelLarge,
-                color = colorScheme.textTertiary
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = null,
+                tint = colorScheme.textTertiary.copy(alpha = 0.72f),
+                modifier = Modifier.size(14.dp)
             )
             if (crumb.label == "..." && crumb.path.isBlank()) {
                 Text(
@@ -2770,37 +2781,62 @@ internal fun DirectoryFolderRowV3(
     position: DirectoryFolderPosition = DirectoryFolderPosition.Single,
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    Row(
+    val rowContainerColor = colorScheme.surfaceVariant.copy(
+        alpha = if (colorScheme.isDark) 0.42f else 0.58f
+    )
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .defaultMinSize(minHeight = 42.dp)
             .clip(directoryFolderShape(position))
-            .background(colorScheme.primary.copy(alpha = 0.08f))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 12.dp, vertical = 5.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .background(rowContainerColor)
     ) {
-        Icon(
-            imageVector = Icons.Rounded.Folder,
-            contentDescription = null,
-            tint = colorScheme.primary,
-            modifier = Modifier.size(18.dp)
-        )
-        Spacer(modifier = Modifier.width(10.dp))
-        Text(
-            text = title,
-            modifier = Modifier.weight(1f),
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            style = MaterialTheme.typography.bodyLarge,
-            color = colorScheme.textPrimary
-        )
-        Icon(
-            imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-            contentDescription = null,
-            tint = colorScheme.textSecondary,
-            modifier = Modifier.size(18.dp)
-        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .defaultMinSize(minHeight = 52.dp)
+                .clickable(onClick = onClick)
+                .padding(horizontal = 12.dp, vertical = 7.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(32.dp)
+                    .clip(RoundedCornerShape(9.dp))
+                    .background(
+                        colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.2f else 0.12f)
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.Folder,
+                    contentDescription = null,
+                    tint = colorScheme.primary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
+            Spacer(modifier = Modifier.width(11.dp))
+            Text(
+                text = title,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                color = colorScheme.textPrimary
+            )
+            Icon(
+                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = null,
+                tint = colorScheme.textTertiary,
+                modifier = Modifier.size(17.dp)
+            )
+        }
+        if (position != DirectoryFolderPosition.Single && position != DirectoryFolderPosition.Last) {
+            HorizontalDivider(
+                modifier = Modifier.padding(start = 55.dp, end = 12.dp),
+                thickness = 0.5.dp,
+                color = colorScheme.textTertiary.copy(alpha = if (colorScheme.isDark) 0.2f else 0.13f)
+            )
+        }
     }
 }
 
@@ -2843,21 +2879,22 @@ internal fun DirectoryBatchBarEmbeddedV4(
             )
         }
         if (showActions) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 DirectoryActionGroupButton(
                     text = "收藏",
                     icon = Icons.Rounded.FavoriteBorder,
                     enabled = hasMediaItems,
                     onClick = { onAddToFavorites(mediaItems) }
                 )
-                Text("|", color = AsmrTheme.colorScheme.textTertiary, style = MaterialTheme.typography.labelMedium)
                 DirectoryActionGroupButton(
                     text = "列表",
                     icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
                     enabled = hasMediaItems,
                     onClick = { onOpenBatchPlaylistPicker(mediaItems) }
                 )
-                Text("|", color = AsmrTheme.colorScheme.textTertiary, style = MaterialTheme.typography.labelMedium)
                 DirectoryActionGroupButton(
                     text = "队列",
                     icon = Icons.AutoMirrored.Rounded.PlaylistPlay,
@@ -2916,14 +2953,16 @@ internal fun DirectoryBatchBarEmbeddedV5(
             )
         }
         if (showActions) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
                 DirectoryActionGroupButton(
                     text = "收藏",
                     icon = Icons.Rounded.FavoriteBorder,
                     enabled = hasMediaItems,
                     onClick = { onAddToFavorites(mediaItems) }
                 )
-                Text("|", color = AsmrTheme.colorScheme.textTertiary, style = MaterialTheme.typography.labelMedium)
                 DirectoryActionGroupButton(
                     text = "列表",
                     icon = Icons.AutoMirrored.Rounded.PlaylistAdd,
@@ -2934,7 +2973,6 @@ internal fun DirectoryBatchBarEmbeddedV5(
                         }
                     }
                 )
-                Text("|", color = AsmrTheme.colorScheme.textTertiary, style = MaterialTheme.typography.labelMedium)
                 DirectoryActionGroupButton(
                     text = "队列",
                     icon = Icons.AutoMirrored.Rounded.PlaylistPlay,
@@ -2942,7 +2980,6 @@ internal fun DirectoryBatchBarEmbeddedV5(
                     onClick = { onAddMediaItemsToQueue(mediaItems) }
                 )
                 if (showTranslateAction) {
-                    Text("|", color = AsmrTheme.colorScheme.textTertiary, style = MaterialTheme.typography.labelMedium)
                     DirectoryActionGroupButton(
                         text = subtitleGenerationText,
                         icon = Icons.Rounded.Translate,
@@ -3077,10 +3114,16 @@ internal fun DirectoryBrowserPanelV4(
         (screenHeight * 0.48f).coerceIn(240.dp, 460.dp)
     }
     val colorScheme = AsmrTheme.colorScheme
+    val containerColor = dynamicPageContainerColor(colorScheme)
     val headerSectionColor = directoryBrowserHeaderBackground(colorScheme)
-    val actionSectionColor = colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.24f else 0.42f)
-    val listSectionColor = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.28f else 0.62f)
-    val sectionDividerColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f)
+    val actionSectionColor = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.56f else 0.78f)
+    val listSectionColor = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.42f else 0.66f)
+    val sectionDividerColor = colorScheme.textTertiary.copy(alpha = if (colorScheme.isDark) 0.18f else 0.11f)
+    val panelBorderColor = if (colorScheme.isDark) {
+        Color.White.copy(alpha = 0.1f)
+    } else {
+        colorScheme.textPrimary.copy(alpha = 0.08f)
+    }
 
     LaunchedEffect(panelKey, currentPath) {
         browserListState.scrollToItem(0)
@@ -3088,11 +3131,12 @@ internal fun DirectoryBrowserPanelV4(
 
     Surface(
         shape = RoundedCornerShape(DirectoryBrowserPanelCornerRadius),
-        tonalElevation = 1.dp,
-        color = colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.28f else 0.46f),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        color = containerColor,
         border = BorderStroke(
             width = 0.5.dp,
-            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.12f)
+            color = panelBorderColor
         ),
         modifier = Modifier
             .fillMaxWidth()
@@ -3120,7 +3164,7 @@ internal fun DirectoryBrowserPanelV4(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(actionSectionColor)
-                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
                     enabled = animateIntro
                 ),
                 verticalAlignment = Alignment.CenterVertically,
@@ -3147,35 +3191,24 @@ internal fun DirectoryBrowserPanelV4(
                     val preferredIcon = if (isPreferredPath) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder
                     val preferredTextColor = if (isPreferredPath) colorScheme.primary else colorScheme.textSecondary
                     val preferredContainerColor = colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.22f else 0.12f)
-                    val preferredButton: @Composable (@Composable () -> Unit) -> Unit = { content ->
-                        if (isPreferredPath) {
-                            FilledTonalButton(
-                                onClick = {
-                                    preferredPathState = ""
-                                    onTogglePreferredPath(false)
-                                },
-                                colors = ButtonDefaults.filledTonalButtonColors(
-                                    containerColor = preferredContainerColor,
-                                    contentColor = preferredTextColor
-                                ),
-                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                                modifier = Modifier.height(30.dp)
-                            ) { content() }
-                        } else {
-                            TextButton(
-                                onClick = {
-                                    preferredPathState = normalizedCurrentPath
-                                    onTogglePreferredPath(true)
-                                },
-                                colors = ButtonDefaults.textButtonColors(
-                                    contentColor = preferredTextColor
-                                ),
-                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
-                                modifier = Modifier.height(30.dp)
-                            ) { content() }
-                        }
-                    }
-                    preferredButton {
+                    FilledTonalButton(
+                        onClick = {
+                            val enable = !isPreferredPath
+                            preferredPathState = if (enable) normalizedCurrentPath else ""
+                            onTogglePreferredPath(enable)
+                        },
+                        colors = ButtonDefaults.filledTonalButtonColors(
+                            containerColor = if (isPreferredPath) {
+                                preferredContainerColor
+                            } else {
+                                colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.5f else 0.72f)
+                            },
+                            contentColor = preferredTextColor
+                        ),
+                        shape = RoundedCornerShape(10.dp),
+                        contentPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp),
+                        modifier = Modifier.height(32.dp)
+                    ) {
                         Icon(
                             imageVector = preferredIcon,
                             contentDescription = null,
@@ -3203,7 +3236,7 @@ internal fun DirectoryBrowserPanelV4(
                     .nestedScroll(listNestedScrollConnection)
                     .thinScrollbar(browserListState),
                 flingBehavior = rememberCalmScrollableFlingBehavior(),
-                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 5.dp)
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 9.dp)
             ) {
                     if (folders.isEmpty() && files.isEmpty()) {
                         item(key = "empty") {
@@ -3213,10 +3246,34 @@ internal fun DirectoryBrowserPanelV4(
                                     .height(fixedHeight - 24.dp),
                                 contentAlignment = Alignment.Center
                             ) {
-                                Text(
-                                    text = emptyText,
-                                    color = colorScheme.textSecondary
-                                )
+                                Column(
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(44.dp)
+                                            .clip(RoundedCornerShape(14.dp))
+                                            .background(
+                                                colorScheme.primary.copy(
+                                                    alpha = if (colorScheme.isDark) 0.17f else 0.09f
+                                                )
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Rounded.FolderOpen,
+                                            contentDescription = null,
+                                            tint = colorScheme.primary,
+                                            modifier = Modifier.size(22.dp)
+                                        )
+                                    }
+                                    Text(
+                                        text = emptyText,
+                                        color = colorScheme.textSecondary,
+                                        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium)
+                                    )
+                                }
                             }
                         }
                     } else {
@@ -3317,9 +3374,15 @@ internal fun DirectoryFileRow(
     val showPrimaryAction = file.isPlayable
     val showMenu = showPrimaryAction || onDownload != null || onAddToQueue != null || onAddToPlaylist != null || onGenerateSubtitles != null || onManageTags != null || onRemoveFromAlbum != null
     val showTrailing = selectionMode || onSetAsCover != null || file.showSubtitleStamp || showMenu
+    val rowContainerColor = if (selected) {
+        colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.18f else 0.09f)
+    } else {
+        Color.Transparent
+    }
 
     Surface(
-        color = Color.Transparent,
+        shape = RoundedCornerShape(12.dp),
+        color = rowContainerColor,
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
@@ -3346,7 +3409,9 @@ internal fun DirectoryFileRow(
             verticalAlignment = Alignment.CenterVertically
         ) {
             Box(
-                modifier = Modifier.width(if (file.fileType == TreeFileType.Image && file.thumbnailModel != null) 42.dp else 24.dp),
+                modifier = Modifier.size(
+                    if (file.fileType == TreeFileType.Image && file.thumbnailModel != null) 42.dp else 32.dp
+                ),
                 contentAlignment = Alignment.Center
             ) {
                 if (file.fileType == TreeFileType.Image && file.thumbnailModel != null) {
@@ -3360,15 +3425,25 @@ internal fun DirectoryFileRow(
                         placeholderCornerRadius = 8
                     )
                 } else {
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = iconTint,
-                        modifier = Modifier.size(21.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .clip(RoundedCornerShape(9.dp))
+                            .background(
+                                iconTint.copy(alpha = if (colorScheme.isDark) 0.17f else 0.09f)
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = icon,
+                            contentDescription = null,
+                            tint = iconTint,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
-            Spacer(modifier = Modifier.width(8.dp))
+            Spacer(modifier = Modifier.width(10.dp))
             Column(
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp)

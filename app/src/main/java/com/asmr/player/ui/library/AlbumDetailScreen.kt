@@ -2073,6 +2073,18 @@ private fun AlbumHeaderActionBar(
         AlbumHeaderButtonGroupState.Lossless -> Triple("无损下载", Icons.Rounded.LibraryMusic, losslessDownloadEnabled)
         AlbumHeaderButtonGroupState.DownloadOnly -> null
     }
+    val hasSecondaryAction = secondaryAction != null
+    val downloadShape = if (hasSecondaryAction) {
+        RoundedCornerShape(topStart = 11.dp, topEnd = 0.dp, bottomEnd = 0.dp, bottomStart = 11.dp)
+    } else {
+        RoundedCornerShape(11.dp)
+    }
+    val secondaryShape = RoundedCornerShape(
+        topStart = 0.dp,
+        topEnd = 11.dp,
+        bottomEnd = 11.dp,
+        bottomStart = 0.dp,
+    )
 
     Surface(
         modifier = Modifier
@@ -2092,33 +2104,43 @@ private fun AlbumHeaderActionBar(
             horizontalArrangement = Arrangement.spacedBy(2.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            AlbumHeaderBarAction(
-                label = "下载",
-                icon = Icons.Rounded.Download,
-                showLabel = true,
-                enabled = downloadEnabled,
-                prominent = true,
-                onClick = onDownloadClick,
+            Row(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
-            )
-
-            secondaryAction?.let { (label, icon, enabled) ->
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 AlbumHeaderBarAction(
-                    label = label,
-                    icon = icon,
+                    label = "下载",
+                    icon = Icons.Rounded.Download,
                     showLabel = true,
-                    enabled = enabled,
-                    onClick = when (groupState) {
-                        AlbumHeaderButtonGroupState.Save -> onSaveClick
-                        AlbumHeaderButtonGroupState.Lossless -> onLosslessDownloadClick
-                        AlbumHeaderButtonGroupState.DownloadOnly -> ({})
-                    },
+                    enabled = downloadEnabled,
+                    style = AlbumHeaderActionStyle.Primary,
+                    shape = downloadShape,
+                    onClick = onDownloadClick,
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight(),
                 )
+
+                secondaryAction?.let { (label, icon, enabled) ->
+                    AlbumHeaderBarAction(
+                        label = label,
+                        icon = icon,
+                        showLabel = true,
+                        enabled = enabled,
+                        style = AlbumHeaderActionStyle.Secondary,
+                        shape = secondaryShape,
+                        onClick = when (groupState) {
+                            AlbumHeaderButtonGroupState.Save -> onSaveClick
+                            AlbumHeaderButtonGroupState.Lossless -> onLosslessDownloadClick
+                            AlbumHeaderButtonGroupState.DownloadOnly -> ({})
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                    )
+                }
             }
 
             VerticalDivider(
@@ -2195,6 +2217,12 @@ private fun AlbumHeaderActionBar(
     }
 }
 
+private enum class AlbumHeaderActionStyle {
+    Standard,
+    Primary,
+    Secondary,
+}
+
 @Composable
 private fun AlbumHeaderBarAction(
     label: String,
@@ -2203,19 +2231,22 @@ private fun AlbumHeaderBarAction(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
-    prominent: Boolean = false,
+    style: AlbumHeaderActionStyle = AlbumHeaderActionStyle.Standard,
+    shape: RoundedCornerShape = RoundedCornerShape(11.dp),
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val shape = RoundedCornerShape(11.dp)
     val contentColor = when {
         !enabled -> colorScheme.textTertiary.copy(alpha = 0.72f)
-        prominent -> colorScheme.primaryStrong
-        else -> colorScheme.primary
+        style == AlbumHeaderActionStyle.Primary -> colorScheme.onPrimary
+        else -> colorScheme.primaryStrong
     }
-    val containerColor = if (prominent && enabled) {
-        colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.18f else 0.10f)
-    } else {
-        Color.Transparent
+    val containerColor = when {
+        !enabled -> Color.Transparent
+        style == AlbumHeaderActionStyle.Primary -> colorScheme.primaryStrong
+        style == AlbumHeaderActionStyle.Secondary -> colorScheme.primary.copy(
+            alpha = if (colorScheme.isDark) 0.28f else 0.15f
+        )
+        else -> Color.Transparent
     }
 
     CompositionLocalProvider(LocalContentColor provides contentColor) {
@@ -2245,7 +2276,11 @@ private fun AlbumHeaderBarAction(
                 Text(
                     text = label,
                     style = MaterialTheme.typography.labelMedium.copy(
-                        fontWeight = if (prominent) FontWeight.SemiBold else FontWeight.Medium,
+                        fontWeight = if (style == AlbumHeaderActionStyle.Standard) {
+                            FontWeight.Medium
+                        } else {
+                            FontWeight.SemiBold
+                        },
                     ),
                     color = contentColor,
                     maxLines = 1,
