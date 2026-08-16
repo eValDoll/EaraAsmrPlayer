@@ -158,7 +158,8 @@ internal fun AlbumItemPrimaryMetaLightweight(
     if (normalizedRj.isBlank() && normalizedCircle.isBlank()) return
 
     val colorScheme = AsmrTheme.colorScheme
-    val identityContentColor = if (colorScheme.isDark) Color.White else Color.Black
+    val creatorTextColor = MaterialTheme.colorScheme.secondary
+    val creatorIconColor = if (colorScheme.isDark) Color.White else Color.Black
 
     Row(
         modifier = modifier
@@ -181,7 +182,7 @@ internal fun AlbumItemPrimaryMetaLightweight(
                 Icon(
                     painter = painterResource(id = R.drawable.ic_album_meta_club),
                     contentDescription = null,
-                    tint = identityContentColor,
+                    tint = creatorIconColor,
                     modifier = Modifier
                         .padding(end = 6.dp)
                         .size(13.dp)
@@ -191,7 +192,7 @@ internal fun AlbumItemPrimaryMetaLightweight(
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontSize = 13.sp,
                     ),
-                    color = identityContentColor,
+                    color = creatorTextColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
@@ -299,11 +300,15 @@ private fun AlbumItemInlineValuesLightweight(
 
     val colorScheme = AsmrTheme.colorScheme
     val valueColor = if (prominent) {
-        if (colorScheme.isDark) Color.White else Color.Black
+        MaterialTheme.colorScheme.secondary
     } else {
         colorScheme.textSecondary
     }
-    val iconColor = if (prominent) valueColor else colorScheme.textTertiary
+    val iconColor = if (prominent) {
+        if (colorScheme.isDark) Color.White else Color.Black
+    } else {
+        colorScheme.textTertiary
+    }
 
     Row(
         modifier = modifier
