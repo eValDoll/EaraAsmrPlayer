@@ -55,7 +55,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -533,11 +532,7 @@ private fun HotListeningListItem(
     coverFadeInState: State<Boolean>? = null,
 ) {
     val album = entry.album
-    val colorScheme = AsmrTheme.colorScheme
     val coverBadge = remember(entry) { entry.toCoverBadge() }
-    val containerColor = remember(colorScheme.surface, colorScheme.background) {
-        colorScheme.surface.copy(alpha = 0.5f).compositeOver(colorScheme.background)
-    }
     AlbumItem(
         album = album,
         onClick = { onAlbumClick(album) },
@@ -545,8 +540,7 @@ private fun HotListeningListItem(
         coverBadge = coverBadge,
         animateOnlineDetails = false,
         coverFadeInState = coverFadeInState,
-        cacheDrawLayer = true,
-        containerColor = containerColor,
+        cacheRenderLayer = true,
         onRjClick = { copyMeta("作品编号", it) },
         onCircleClick = { copyMeta("社团", it) },
         onCircleLongClick = onMetaLongClick,
@@ -566,11 +560,7 @@ private fun HotListeningGridItem(
     coverFadeInState: State<Boolean>? = null,
 ) {
     val album = entry.album
-    val colorScheme = AsmrTheme.colorScheme
     val coverBadge = remember(entry) { entry.toCoverBadge() }
-    val containerColor = remember(colorScheme.surface, colorScheme.background) {
-        colorScheme.surface.copy(alpha = 0.3f).compositeOver(colorScheme.background)
-    }
     AlbumGridItem(
         album = album,
         onClick = { onAlbumClick(album) },
@@ -578,7 +568,6 @@ private fun HotListeningGridItem(
         coverBadge = coverBadge,
         animateOnlineDetails = false,
         coverFadeInState = coverFadeInState,
-        containerColor = containerColor,
         onRjClick = { copyMeta("作品编号", it) },
         onCircleClick = { copyMeta("社团", it) },
         onCircleLongClick = onMetaLongClick,
