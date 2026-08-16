@@ -54,7 +54,6 @@ import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
-import com.asmr.player.ui.common.CoverContentRow
 import com.asmr.player.ui.common.AudioItemMenuAction
 import com.asmr.player.ui.common.AudioItemRow
 import com.asmr.player.ui.common.EaraBrandedEmptyState
@@ -112,9 +111,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
@@ -124,7 +123,6 @@ import com.asmr.player.ui.library.LibraryUiState
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.size
@@ -143,9 +141,7 @@ import com.asmr.player.ui.playlists.PlaylistsViewModel
 import com.asmr.player.ui.settings.SettingsViewModel
 import dagger.hilt.android.EntryPointAccessors
 
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.staggeredgrid.rememberLazyStaggeredGridState
 import androidx.compose.material.icons.automirrored.rounded.Label
@@ -199,9 +195,6 @@ private val LibraryChromeCollapseOvershoot = 12.dp
 private val LibraryPageHorizontalPadding = 8.dp
 private val LibraryTrackListHeaderCornerRadius = 10.dp
 private val LibraryTrackListItemCornerRadius = 10.dp
-private val LibraryAlbumItemVerticalPadding = 2.dp
-private val LibraryAlbumGridInfoHorizontalPadding = 6.dp
-private val LibraryAlbumGridInfoVerticalPadding = 8.dp
 private const val LibraryTrackPagingHintDistance = 10
 
 private fun Album.withUserTags(userTags: List<String>): Album {
@@ -851,7 +844,6 @@ fun LibraryScreen(
                                             }
                                             AlbumGridItem(
                                                 album = mergedAlbum,
-                                                syncStatus = state.syncingAlbums[album.id] ?: SyncStatus.Idle,
                                                 onClick = { onAlbumClick(mergedAlbum) },
                                                 onLongClick = {
                                                     actionAlbum = mergedAlbum
@@ -865,6 +857,14 @@ fun LibraryScreen(
                                                 onTagClick = { copyMeta("标签", it) },
                                                 onTagLongClick = ::openMetaActions,
                                                 coverFadeInState = coverFadeInState,
+                                                showCollectedIndicator = false,
+                                                coverOverlay = {
+                                                    AlbumSyncStatusOverlay(
+                                                        syncStatus = state.syncingAlbums[album.id] ?: SyncStatus.Idle,
+                                                        indicatorSize = 24.dp,
+                                                        blurRadius = 4.dp,
+                                                    )
+                                                },
                                             )
                                         }
                                     }
@@ -922,7 +922,6 @@ fun LibraryScreen(
                                             }
                                             AlbumItem(
                                                 album = mergedAlbum,
-                                                syncStatus = state.syncingAlbums[album.id] ?: SyncStatus.Idle,
                                                 onClick = { onAlbumClick(mergedAlbum) },
                                                 onLongClick = {
                                                     actionAlbum = mergedAlbum
@@ -936,6 +935,14 @@ fun LibraryScreen(
                                                 onTagClick = { copyMeta("标签", it) },
                                                 onTagLongClick = ::openMetaActions,
                                                 coverFadeInState = coverFadeInState,
+                                                showCollectedIndicator = false,
+                                                coverOverlay = {
+                                                    AlbumSyncStatusOverlay(
+                                                        syncStatus = state.syncingAlbums[album.id] ?: SyncStatus.Idle,
+                                                        indicatorSize = 16.dp,
+                                                        blurRadius = 2.dp,
+                                                    )
+                                                },
                                             )
                                         }
                                     }
@@ -1502,381 +1509,40 @@ private fun TrackListRow(
     )
 }
 
-@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
 @Composable
-private fun AlbumGridItem(
-    album: Album,
+private fun AlbumSyncStatusOverlay(
     syncStatus: SyncStatus,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-    onRjClick: ((String) -> Unit)? = null,
-    onCircleClick: ((String) -> Unit)? = null,
-    onCircleLongClick: ((String) -> Unit)? = null,
-    onCvClick: ((String) -> Unit)? = null,
-    onCvLongClick: ((String) -> Unit)? = null,
-    onTagClick: ((String) -> Unit)? = null,
-    onTagLongClick: ((String) -> Unit)? = null,
-    coverFadeInState: State<Boolean>? = null,
+    indicatorSize: Dp,
+    blurRadius: Dp,
 ) {
-    val colorScheme = AsmrTheme.colorScheme
-    val coverShape = remember {
-        RoundedCornerShape(
-            topStart = AlbumGridItemCornerRadius,
-            topEnd = AlbumGridItemCornerRadius,
-            bottomStart = 0.dp,
-            bottomEnd = 0.dp
-        )
-    }
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(AlbumGridItemCornerRadius))
-            .background(colorScheme.surface.copy(alpha = 0.3f))
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
-            )
-    ) {
-        Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
-            val coverModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
-                albumCoverImageModel(
-                    coverThumbPath = album.coverThumbPath,
-                    coverPath = album.coverPath,
-                    coverUrl = album.coverUrl
-                )
-            }
-            AsmrAsyncImage(
-                model = coverModel,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                placeholderCornerRadius = 0,
-                fadeInState = coverFadeInState,
-                peekAnySizeForInitial = true,
-                loading = NoImageLoadingIndicator,
-                modifier = Modifier.fillMaxSize().clip(coverShape),
-            )
-            
-            if (syncStatus is SyncStatus.Syncing) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.4f))
-                        .blur(4.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    EaraLogoLoadingIndicator(
-                        size = 24.dp,
-                        tint = Color.White,
-                        glowColor = Color.White,
-                        showGlow = false
-                    )
-                }
-            } else if (syncStatus is SyncStatus.Error) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Red.copy(alpha = 0.3f)),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.ErrorOutline,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-            }
-
-            if (album.releaseDate.isNotBlank()) {
-                Text(
-                    text = album.releaseDate,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(8.dp)
-                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 4.dp, vertical = 2.dp)
-                )
-            }
-
-            val rj = album.rjCode.ifBlank { album.workId }
-            if (rj.isNotBlank()) {
-                Text(
-                    text = rj,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(8.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .let { base ->
-                            if (onRjClick != null) {
-                                base.clickable { onRjClick(rj) }
-                            } else {
-                                base
-                            }
-                        }
-                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 4.dp, vertical = 2.dp)
-                )
-            }
-        }
-        
-        Column(
-            modifier = Modifier.padding(horizontal = LibraryAlbumGridInfoHorizontalPadding, vertical = LibraryAlbumGridInfoVerticalPadding),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                text = album.title,
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                color = colorScheme.textPrimary,
-                overflow = TextOverflow.Clip
-            )
-            
-            AlbumPrimaryMetaRow(
-                rjCode = "",
-                circle = album.circle,
-                modifier = Modifier.fillMaxWidth(),
-                circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
-                circleOnLongClick = onCircleLongClick?.let { longClick -> { longClick(album.circle) } },
-                leadingVisual = AlbumMetaLeadingVisual.Icon,
-            )
-
-            AlbumCvChipsFlow(
-                cvText = album.cv,
-                onCvClick = onCvClick,
-                onCvLongClick = onCvLongClick,
-                leadingVisual = AlbumMetaLeadingVisual.Icon,
-            )
-
-            val statsText = remember(album.ratingValue, album.ratingCount, album.priceJpy) {
-                buildString {
-                    val rv = album.ratingValue
-                    if (rv != null && rv > 0.0) {
-                        append("★")
-                        append(String.format("%.1f", rv))
-                        if (album.ratingCount > 0) append("(${album.ratingCount})")
-                    }
-                    if (album.priceJpy > 0) {
-                        if (isNotEmpty()) append(" · ")
-                        append("¥${album.priceJpy}")
-                    }
-                }
-            }
-            if (statsText.isNotBlank()) {
-                Text(
-                    text = statsText,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colorScheme.textTertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            if (album.tags.isNotEmpty()) {
-                AlbumTagsFlow(
-                    tags = album.tags,
-                    modifier = Modifier.padding(top = 2.dp),
-                    onTagClick = onTagClick,
-                    onTagLongClick = onTagLongClick,
-                    leadingVisual = AlbumMetaLeadingVisual.Icon,
-                )
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun AlbumItem(
-    album: Album,
-    syncStatus: SyncStatus,
-    onClick: () -> Unit,
-    onLongClick: () -> Unit,
-    onRjClick: ((String) -> Unit)? = null,
-    onCircleClick: ((String) -> Unit)? = null,
-    onCircleLongClick: ((String) -> Unit)? = null,
-    onCvClick: ((String) -> Unit)? = null,
-    onCvLongClick: ((String) -> Unit)? = null,
-    onTagClick: ((String) -> Unit)? = null,
-    onTagLongClick: ((String) -> Unit)? = null,
-    coverFadeInState: State<Boolean>? = null,
-) {
-    val colorScheme = AsmrTheme.colorScheme
-    val coverShape = remember {
-        RoundedCornerShape(
-            topStart = AlbumListItemCornerRadius,
-            bottomStart = AlbumListItemCornerRadius,
-            topEnd = 0.dp,
-            bottomEnd = 0.dp
-        )
-    }
-    val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
-    val coverSize = listItemHeight
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = LibraryPageHorizontalPadding, vertical = LibraryAlbumItemVerticalPadding)
-            .clip(RoundedCornerShape(AlbumListItemCornerRadius))
-            .background(colorScheme.surface.copy(alpha = 0.5f))
-            .combinedClickable(
-                onClick = onClick,
-                onLongClick = onLongClick
-            )
-    ) {
-        CoverContentRow(
-            coverWidth = coverSize,
-            minHeight = coverSize,
-            spacing = 8.dp,
-            fillContentHeight = true,
+    when (syncStatus) {
+        SyncStatus.Idle -> Unit
+        SyncStatus.Syncing -> Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = listItemHeight),
-            cover = {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                ) {
-                    val coverModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
-                        albumCoverImageModel(
-                            coverThumbPath = album.coverThumbPath,
-                            coverPath = album.coverPath,
-                            coverUrl = album.coverUrl
-                        )
-                    }
-                    AsmrAsyncImage(
-                        model = coverModel,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        placeholderCornerRadius = 0,
-                        fadeInState = coverFadeInState,
-                        peekAnySizeForInitial = true,
-                        loading = NoImageLoadingIndicator,
-                        modifier = Modifier.fillMaxSize().clip(coverShape),
-                    )
-                    
-                    if (syncStatus is SyncStatus.Syncing) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.4f))
-                                .blur(2.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            EaraLogoLoadingIndicator(
-                                size = 16.dp,
-                                tint = Color.White,
-                                glowColor = Color.White,
-                                showGlow = false
-                            )
-                        }
-                    } else if (syncStatus is SyncStatus.Error) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color.Red.copy(alpha = 0.3f)),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = Icons.Rounded.ErrorOutline,
-                                contentDescription = null,
-                                tint = Color.White,
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    }
-                }
-            },
-            content = {
-                val statsText = remember(
-                    album.ratingValue,
-                    album.ratingCount,
-                    album.dlCount,
-                    album.priceJpy,
-                    album.releaseDate
-                ) {
-                    buildString {
-                        val rv = album.ratingValue
-                        if (rv != null && rv > 0.0) {
-                            append("★")
-                            append(String.format("%.1f", rv))
-                            if (album.ratingCount > 0) append("(${album.ratingCount})")
-                        }
-                        if (album.dlCount > 0) {
-                            if (isNotEmpty()) append(" · ")
-                            append("DL ${album.dlCount}")
-                        }
-                        if (album.priceJpy > 0) {
-                            if (isNotEmpty()) append(" · ")
-                            append("¥${album.priceJpy}")
-                        }
-                        if (album.releaseDate.isNotBlank()) {
-                            if (isNotEmpty()) append(" · ")
-                            append(album.releaseDate)
-                        }
-                    }
-                }
-
-                BalancedColumn(
-                    modifier = Modifier
-                        .padding(top = 4.dp, bottom = 4.dp, end = 12.dp),
-                    minGap = 4.dp,
-                    maxGap = 12.dp,
-                ) {
-                    Text(
-                        text = album.title,
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                        color = colorScheme.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    val rj = album.rjCode.ifBlank { album.workId }
-                    AlbumPrimaryMetaRow(
-                        rjCode = rj,
-                        circle = album.circle,
-                        modifier = Modifier.fillMaxWidth(),
-                        rjOnClick = onRjClick?.let { click -> { click(rj) } },
-                        circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
-                        circleOnLongClick = onCircleLongClick?.let { longClick -> { longClick(album.circle) } },
-                        leadingVisual = AlbumMetaLeadingVisual.Icon,
-                        order = AlbumPrimaryMetaOrder.CircleThenRj,
-                    )
-
-                    if (album.cv.isNotBlank()) {
-                        AlbumCvChipsSingleLine(
-                            cvText = album.cv,
-                            modifier = Modifier.fillMaxWidth(),
-                            onCvClick = onCvClick,
-                            onCvLongClick = onCvLongClick,
-                            leadingVisual = AlbumMetaLeadingVisual.Icon,
-                        )
-                    }
-
-                    if (statsText.isNotBlank()) {
-                        Text(
-                            text = statsText,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = colorScheme.textTertiary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-
-                    if (album.tags.isNotEmpty()) {
-                        AlbumTagsSingleLine(
-                            tags = album.tags,
-                            modifier = Modifier.fillMaxWidth(),
-                            onTagClick = onTagClick,
-                            onTagLongClick = onTagLongClick,
-                            leadingVisual = AlbumMetaLeadingVisual.Icon,
-                        )
-                    }
-                }
-            },
-        )
+                .fillMaxSize()
+                .background(Color.Black.copy(alpha = 0.4f))
+                .blur(blurRadius),
+            contentAlignment = Alignment.Center,
+        ) {
+            EaraLogoLoadingIndicator(
+                size = indicatorSize,
+                tint = Color.White,
+                glowColor = Color.White,
+                showGlow = false,
+            )
+        }
+        is SyncStatus.Error -> Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Red.copy(alpha = 0.3f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.ErrorOutline,
+                contentDescription = "同步失败",
+                tint = Color.White,
+                modifier = Modifier.size(indicatorSize),
+            )
+        }
     }
 }
