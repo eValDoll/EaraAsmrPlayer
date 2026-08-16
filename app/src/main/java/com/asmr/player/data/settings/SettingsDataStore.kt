@@ -26,6 +26,14 @@ object SettingsKeys {
     val PLAY_MODE = intPreferencesKey("play_mode")
 
     val ASMR_ONE_SITE = intPreferencesKey("asmr_one_site")
+    val NETWORK_PROXY_MODE = stringPreferencesKey("network_proxy_mode")
+    val NETWORK_PROXY_HOST = stringPreferencesKey("network_proxy_host")
+    val NETWORK_PROXY_PORT = intPreferencesKey("network_proxy_port")
+    val NETWORK_PROXY_AUTHENTICATION_ENABLED = booleanPreferencesKey("network_proxy_authentication_enabled")
+    val NETWORK_PROXY_USERNAME = stringPreferencesKey("network_proxy_username")
+    val NETWORK_PROXY_PASSWORD_CONFIGURED = booleanPreferencesKey("network_proxy_password_configured")
+    val NETWORK_PROXY_CREDENTIAL_VERSION = longPreferencesKey("network_proxy_credential_version")
+    val CUSTOM_DNS_SERVER = stringPreferencesKey("custom_dns_server")
 
     val FLOATING_LYRICS_ENABLED = booleanPreferencesKey("floating_lyrics_enabled")
     val FLOATING_LYRICS_COLOR = intPreferencesKey("floating_lyrics_color")

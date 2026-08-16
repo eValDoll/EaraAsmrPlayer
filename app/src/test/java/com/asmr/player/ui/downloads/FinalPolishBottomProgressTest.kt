@@ -44,7 +44,7 @@ class FinalPolishBottomProgressTest {
         val progressBounds = composeRule.onNodeWithTag(FINAL_POLISH_PROGRESS_TAG)
             .getUnclippedBoundsInRoot()
 
-        assertEquals(1.dp, progressBounds.height)
+        assertEquals(1.dp, progressBounds.bottom - progressBounds.top)
         assertEquals(itemBounds.bottom, progressBounds.bottom)
         assertEquals(itemBounds.left, progressBounds.left)
         assertEquals(itemBounds.right, progressBounds.right)

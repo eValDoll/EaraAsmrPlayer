@@ -50,6 +50,7 @@ class SettingsDataStore @Inject constructor(
     private val miniPlayerDisplayModeKey = stringPreferencesKey("mini_player_display_mode")
     private val bottomChromePinnedRouteKey = stringPreferencesKey("bottom_chrome_pinned_route")
     private val autoUpdateCheckEnabledKey = booleanPreferencesKey("auto_update_check_enabled")
+    private val lastHandledClipboardEventKey = stringPreferencesKey("last_handled_clipboard_event")
 
     val theme: Flow<String> = context.settingsDataStore.data.map { it[themeKey] ?: "system" }
     val sfwMode: Flow<Boolean> = context.settingsDataStore.data.map { it[sfwModeKey] ?: false }
@@ -112,6 +113,9 @@ class SettingsDataStore @Inject constructor(
     }
     val autoUpdateCheckEnabled: Flow<Boolean> = context.settingsDataStore.data.map { prefs ->
         prefs[autoUpdateCheckEnabledKey] ?: true
+    }
+    val lastHandledClipboardEvent: Flow<String?> = context.settingsDataStore.data.map { prefs ->
+        prefs[lastHandledClipboardEventKey]
     }
 
     suspend fun setTheme(theme: String) {
@@ -216,6 +220,14 @@ class SettingsDataStore @Inject constructor(
     suspend fun setAutoUpdateCheckEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { prefs ->
             prefs[autoUpdateCheckEnabledKey] = enabled
+        }
+    }
+
+    suspend fun setLastHandledClipboardEvent(eventKey: String) {
+        val normalized = eventKey.trim()
+        if (normalized.isBlank()) return
+        context.settingsDataStore.edit { prefs ->
+            prefs[lastHandledClipboardEventKey] = normalized
         }
     }
 

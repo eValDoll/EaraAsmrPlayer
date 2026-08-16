@@ -171,6 +171,7 @@ dependencies {
     implementation("androidx.core:core-ktx:1.12.0")
     implementation("androidx.lifecycle:lifecycle-runtime:2.7.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.7.0")
     implementation("androidx.savedstate:savedstate:1.2.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
     implementation("androidx.activity:activity-compose:1.8.2")
@@ -209,10 +210,14 @@ dependencies {
     implementation("com.squareup.retrofit2:converter-gson:2.9.0")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("androidx.media3:media3-datasource-okhttp:$media3_version")
     implementation("com.google.code.gson:gson:2.10.1")
 
     // Jsoup
     implementation("org.jsoup:jsoup:1.17.2")
+
+    // PDFBox (Android port) — extract text from 台本 PDF files
+    implementation("com.tom-roush:pdfbox-android:2.0.27.0")
 
     // DataStore
     implementation("androidx.datastore:datastore-preferences:1.0.0")

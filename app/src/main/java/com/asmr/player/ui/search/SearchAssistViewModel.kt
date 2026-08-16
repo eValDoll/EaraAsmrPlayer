@@ -10,6 +10,7 @@ import com.asmr.player.data.remote.api.AsmrOneRecommendationResponse
 import com.asmr.player.data.remote.api.normalizeRecommendationRjs
 import com.asmr.player.data.repository.ListeningRecordRepository
 import com.asmr.player.domain.model.Album
+import com.asmr.player.util.DlsiteWorkNo
 import com.asmr.player.hotlistening.HotListeningApi
 import com.asmr.player.hotlistening.SearchSuggestionTerm
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -280,8 +281,8 @@ internal fun AsmrOneRecommendationItem.toSearchAssistRecommendation(): SearchAss
         addAll(matchedRjs.orEmpty())
     }
         .asSequence()
-        .map { it.trim().uppercase() }
-        .firstOrNull { RECOMMENDATION_RJ_REGEX.matches(it) }
+        .map { DlsiteWorkNo.normalizeWorkNo(it, minimumDigits = 6) }
+        .firstOrNull { it.isNotBlank() }
         .orEmpty()
     return SearchAssistRecommendation(
         album = Album(
@@ -300,5 +301,3 @@ internal fun AsmrOneRecommendationItem.toSearchAssistRecommendation(): SearchAss
 
 internal fun AsmrOneRecommendationResponse.recommendationContinuationCursor(): String =
     nextCursor.trim().takeIf { hasMore }.orEmpty()
-
-private val RECOMMENDATION_RJ_REGEX = Regex("""RJ\d{6,}""")

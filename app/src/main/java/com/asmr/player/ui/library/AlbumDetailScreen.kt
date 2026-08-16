@@ -13,7 +13,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
@@ -63,7 +62,6 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.graphics.graphicsLayer
@@ -80,6 +78,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
@@ -94,6 +93,8 @@ import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
@@ -129,6 +130,7 @@ import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import java.io.File
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -178,6 +180,30 @@ private enum class OnlineDownloadSource {
     AsmrOne,
     DlsitePlay,
     DlsiteTrial
+}
+
+private enum class IncrementalAlbumAction {
+    Download,
+    Save
+}
+
+private data class PendingOnlineSaveSelection(
+    val paths: Set<String>,
+    val useDlsitePlayTree: Boolean
+)
+
+private data class DlsitePlayAuthSnapshot(
+    val canAuthenticate: Boolean,
+    val fingerprint: Int
+)
+
+private fun readDlsitePlayAuthSnapshot(authStore: DlsiteAuthStore): DlsitePlayAuthSnapshot {
+    val cookie = authStore.getPlayCookie().trim()
+    val expiresAt = authStore.getPlayCookieExpiresAtMs()
+    return DlsitePlayAuthSnapshot(
+        canAuthenticate = cookie.isNotBlank() && (expiresAt == null || expiresAt > System.currentTimeMillis()),
+        fingerprint = 31 * cookie.hashCode() + (expiresAt?.hashCode() ?: 0)
+    )
 }
 
 internal data class PreparedTrackPlayback(
@@ -233,11 +259,6 @@ private val AlbumHeaderExpandTweenSpec = tween<IntSize>(
     easing = FastOutLinearInEasing
 )
 
-private val AlbumHeaderActionColorTweenSpec = tween<Float>(
-    durationMillis = 280,
-    easing = FastOutSlowInEasing
-)
-
 private val DlsiteSectionResizeTweenSpec = tween<IntSize>(
     durationMillis = 280,
     easing = FastOutSlowInEasing
@@ -280,10 +301,21 @@ internal data class AlbumDetailOnlineLoadPlan(
 internal fun albumDetailOnlineLoadPlan(
     selectedTab: Int,
     hasResolvedInitialDlsiteTarget: Boolean,
-    isInitialRouteReady: Boolean
+    isInitialRouteReady: Boolean,
+    hasValidLocalRj: Boolean = false,
+    hasResolvedAsmrOneContent: Boolean = false,
+    hasAsmrOneTree: Boolean = false,
+    hasDlsitePlayCredentials: Boolean = false
 ): AlbumDetailOnlineLoadPlan {
     if (!isInitialRouteReady) return AlbumDetailOnlineLoadPlan()
     return when (selectedTab) {
+        0 -> AlbumDetailOnlineLoadPlan(
+            loadAsmrOne = hasValidLocalRj,
+            loadDlsitePlay = hasValidLocalRj &&
+                hasResolvedAsmrOneContent &&
+                !hasAsmrOneTree &&
+                hasDlsitePlayCredentials
+        )
         1 -> AlbumDetailOnlineLoadPlan(loadDlsite = true, loadAsmrOne = true)
         2 -> AlbumDetailOnlineLoadPlan(
             loadDlsite = true,
@@ -304,9 +336,12 @@ internal fun albumHeaderDownloadEnabled(
     selectedTab: Int,
     hasAsmrOneTree: Boolean,
     hasDlsitePlayTree: Boolean,
-    hasResolvedInitialDlsiteTarget: Boolean
+    hasResolvedInitialDlsiteTarget: Boolean,
+    hasValidLocalRj: Boolean = false,
+    hasDlsitePlayCredentials: Boolean = true
 ): Boolean {
     return when (selectedTab) {
+        0 -> hasValidLocalRj && (hasAsmrOneTree || (hasDlsitePlayCredentials && hasDlsitePlayTree))
         1 -> canUseAsmrOneOnlineTreeActions(selectedTab, hasAsmrOneTree)
         2 -> hasResolvedInitialDlsiteTarget && hasDlsitePlayTree
         else -> false
@@ -336,9 +371,17 @@ fun AlbumDetailScreen(
     heroBlurLayerCache: AlbumHeroBlurLayerCache,
     viewModel: AlbumDetailViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val cloudSyncSelectionDialogState by viewModel.cloudSyncSelectionDialogState.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val cloudSyncSelectionDialogState by viewModel.cloudSyncSelectionDialogState.collectAsStateWithLifecycle()
     val colorScheme = AsmrTheme.colorScheme
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    val authStore = remember(context) { DlsiteAuthStore(context) }
+    var dlsitePlayAuthSnapshot by remember(authStore) {
+        mutableStateOf(readDlsitePlayAuthSnapshot(authStore))
+    }
+    val hasDlsitePlayCredentials = dlsitePlayAuthSnapshot.canAuthenticate
+    val actionScope = rememberCoroutineScope()
     val screenKey = remember(albumId, rjCode) {
         val idPart = albumId?.takeIf { it > 0 }?.toString().orEmpty()
         val rjPart = rjCode?.trim().orEmpty().uppercase()
@@ -354,15 +397,49 @@ fun AlbumDetailScreen(
     val initialIntroState = remember(screenKey) { AlbumDetailIntroState(settled = false) }
     var showAsmrDownloadDialog by remember { mutableStateOf(false) }
     var showOnlineSaveDialog by remember { mutableStateOf(false) }
-    var pendingOnlineSaveSelection by remember { mutableStateOf<Set<String>?>(null) }
+    var pendingOnlineSaveSelection by remember { mutableStateOf<PendingOnlineSaveSelection?>(null) }
     var batchPlaylistItems by remember { mutableStateOf<List<MediaItem>?>(null) }
     var groupPickerAlbumId by remember { mutableStateOf<Long?>(null) }
     var downloadSource by remember { mutableStateOf(OnlineDownloadSource.AsmrOne) }
+    var onlineSaveSource by remember { mutableStateOf(OnlineDownloadSource.AsmrOne) }
+    var downloadDisabledPaths by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var saveDisabledPaths by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var incrementalPreparationJob by remember { mutableStateOf<Job?>(null) }
     var metaActionKeyword by rememberSaveable { mutableStateOf<String?>(null) }
 
     fun openMetaActions(value: String) {
         val keyword = value.trim()
         if (keyword.isNotBlank()) metaActionKeyword = keyword
+    }
+
+    DisposableEffect(lifecycleOwner, authStore, selectedTab, viewModel) {
+        fun refreshAuthSnapshot() {
+            val updated = readDlsitePlayAuthSnapshot(authStore)
+            actionScope.launch {
+                val didAuthStateChange = updated != dlsitePlayAuthSnapshot
+                dlsitePlayAuthSnapshot = updated
+                if (didAuthStateChange && selectedTab == 0) {
+                    incrementalPreparationJob?.cancel()
+                    showAsmrDownloadDialog = false
+                    showOnlineSaveDialog = false
+                    viewModel.invalidateDlsitePlayAccess()
+                }
+            }
+        }
+        val preferenceListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+            refreshAuthSnapshot()
+        }
+        val lifecycleObserver = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                refreshAuthSnapshot()
+            }
+        }
+        authStore.registerListener(preferenceListener)
+        lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
+        onDispose {
+            authStore.unregisterListener(preferenceListener)
+            lifecycleOwner.lifecycle.removeObserver(lifecycleObserver)
+        }
     }
 
     LaunchedEffect(viewModel) {
@@ -378,12 +455,16 @@ fun AlbumDetailScreen(
         onDispose {
             viewModel.setListenTogetherRjSummaryPollingEnabled(false)
             viewModel.cancelActiveLoads()
+            incrementalPreparationJob?.cancel()
         }
     }
     LaunchedEffect(pendingOnlineSaveSelection) {
         val selected = pendingOnlineSaveSelection ?: return@LaunchedEffect
         pendingOnlineSaveSelection = null
-        viewModel.saveOnlineSelectedToLibrary(selected)
+        viewModel.saveOnlineSelectedToLibrary(
+            selectedLeafPaths = selected.paths,
+            useDlsitePlayTree = selected.useDlsitePlayTree
+        )
     }
 
     Box(
@@ -422,6 +503,52 @@ fun AlbumDetailScreen(
                     val model = state.model
                     val album = model.displayAlbum
                     val asmrOneTree = model.asmrOneTree
+                    val localActionRj = remember(
+                        model.baseRjCode,
+                        model.localAlbum?.rjCode,
+                        model.localAlbum?.workId,
+                        model.localAlbum?.title,
+                        model.localAlbum?.path
+                    ) {
+                        resolveAlbumDetailRj(model.baseRjCode, model.localAlbum)
+                    }
+                    val hasValidLocalRj = localActionRj.isNotBlank()
+                    val localOnlineSource = when {
+                        asmrOneTree.isNotEmpty() -> OnlineDownloadSource.AsmrOne
+                        hasDlsitePlayCredentials && model.dlsitePlayTree.isNotEmpty() -> OnlineDownloadSource.DlsitePlay
+                        else -> null
+                    }
+                    fun prepareIncrementalAlbumAction(
+                        action: IncrementalAlbumAction,
+                        source: OnlineDownloadSource,
+                        tree: List<AsmrOneTrackNodeResponse>
+                    ) {
+                        if (tree.isEmpty()) return
+
+                        incrementalPreparationJob?.cancel()
+                        incrementalPreparationJob = actionScope.launch {
+                            val existing = try {
+                                viewModel.resolveLocalIncrementalSelectionPaths(tree)
+                            } catch (error: CancellationException) {
+                                throw error
+                            } catch (_: Exception) {
+                                viewModel.messageManager.showError("读取本地文件状态失败，请稍后重试")
+                                return@launch
+                            }
+                            when (action) {
+                                IncrementalAlbumAction.Download -> {
+                                    downloadSource = source
+                                    downloadDisabledPaths = existing.downloadedPaths
+                                    showAsmrDownloadDialog = true
+                                }
+                                IncrementalAlbumAction.Save -> {
+                                    onlineSaveSource = source
+                                    saveDisabledPaths = existing.savedPaths
+                                    showOnlineSaveDialog = true
+                                }
+                            }
+                        }
+                    }
                     val trialDownloadTree = remember(model.dlsiteTrialTracks) {
                         buildDlsiteTrialDownloadTree(model.dlsiteTrialTracks)
                     }
@@ -658,7 +785,26 @@ fun AlbumDetailScreen(
                                 selectedTab = tab,
                                 hasAsmrOneTree = asmrOneTree.isNotEmpty()
                             )
+                            val headerDownloadEnabled = albumHeaderDownloadEnabled(
+                                selectedTab = tab,
+                                hasAsmrOneTree = asmrOneTree.isNotEmpty(),
+                                hasDlsitePlayTree = model.dlsitePlayTree.isNotEmpty(),
+                                hasResolvedInitialDlsiteTarget = resolvedInitialTarget,
+                                hasValidLocalRj = hasValidLocalRj,
+                                hasDlsitePlayCredentials = hasDlsitePlayCredentials
+                            )
                             val headerAlbum = headerAlbumForTab(tab)
+                            val incrementalSource = when (tab) {
+                                0 -> localOnlineSource
+                                1 -> OnlineDownloadSource.AsmrOne
+                                2 -> OnlineDownloadSource.DlsitePlay
+                                else -> null
+                            }
+                            val incrementalTree = when (incrementalSource) {
+                                OnlineDownloadSource.AsmrOne -> asmrOneTree
+                                OnlineDownloadSource.DlsitePlay -> model.dlsitePlayTree
+                                else -> emptyList()
+                            }
                             val headerDlsiteEditions = if (isLocalTab) {
                                 emptyList()
                             } else {
@@ -680,30 +826,32 @@ fun AlbumDetailScreen(
                                 dlsiteEditions = headerDlsiteEditions,
                                 dlsiteSelectedLang = model.dlsiteSelectedLang,
                                 onDlsiteLangSelected = { viewModel.selectDlsiteLanguage(it) },
-                                showSaveAction = tab == 1,
+                                showSaveAction = tab != 2,
                                 onDownloadClick = {
-                                    downloadSource = if (tab == 2) {
-                                        OnlineDownloadSource.DlsitePlay
-                                    } else {
-                                        OnlineDownloadSource.AsmrOne
+                                    incrementalSource?.let { source ->
+                                        prepareIncrementalAlbumAction(
+                                            action = IncrementalAlbumAction.Download,
+                                            source = source,
+                                            tree = incrementalTree
+                                        )
                                     }
-                                    showAsmrDownloadDialog = true
                                 },
                                 showDlsitePlayLossless = tab == 2,
                                 onLosslessDownloadClick = {
                                     viewModel.downloadDlsitePlayLosslessArchive()
                                 },
                                 onSaveClick = {
-                                    showOnlineSaveDialog = true
+                                    incrementalSource?.let { source ->
+                                        prepareIncrementalAlbumAction(
+                                            action = IncrementalAlbumAction.Save,
+                                            source = source,
+                                            tree = incrementalTree
+                                        )
+                                    }
                                 },
-                                downloadEnabled = albumHeaderDownloadEnabled(
-                                    selectedTab = tab,
-                                    hasAsmrOneTree = asmrOneTree.isNotEmpty(),
-                                    hasDlsitePlayTree = model.dlsitePlayTree.isNotEmpty(),
-                                    hasResolvedInitialDlsiteTarget = resolvedInitialTarget
-                                ),
+                                downloadEnabled = headerDownloadEnabled,
                                 losslessDownloadEnabled = tab == 2 && resolvedInitialTarget && model.dlsitePlayTree.isNotEmpty(),
-                                saveEnabled = canUseAsmrOneTreeActions,
+                                saveEnabled = if (isLocalTab) headerDownloadEnabled else canUseAsmrOneTreeActions,
                                 showGroupButton = isLocalTab && model.localAlbum != null,
                                 onOpenGroupPicker = { id -> groupPickerAlbumId = id },
                                 introSessionKey = introSessionKey,
@@ -752,12 +900,21 @@ fun AlbumDetailScreen(
                                 model.rjCode,
                                 model.dlsiteWorkno,
                                 model.hasResolvedInitialDlsiteTarget,
+                                model.hasResolvedAsmrOneContent,
+                                asmrOneTree.isNotEmpty(),
+                                hasDlsitePlayCredentials,
+                                dlsitePlayAuthSnapshot.fingerprint,
+                                localActionRj,
                                 isInitialRouteReady
                             ) {
                                 val loadPlan = albumDetailOnlineLoadPlan(
                                     selectedTab = selectedTab,
                                     hasResolvedInitialDlsiteTarget = model.hasResolvedInitialDlsiteTarget,
-                                    isInitialRouteReady = isInitialRouteReady
+                                    isInitialRouteReady = isInitialRouteReady,
+                                    hasValidLocalRj = hasValidLocalRj,
+                                    hasResolvedAsmrOneContent = model.hasResolvedAsmrOneContent,
+                                    hasAsmrOneTree = asmrOneTree.isNotEmpty(),
+                                    hasDlsitePlayCredentials = hasDlsitePlayCredentials
                                 )
                                 if (loadPlan.loadDlsite) {
                                     viewModel.ensureDlsiteLoaded()
@@ -766,7 +923,7 @@ fun AlbumDetailScreen(
                                     viewModel.ensureAsmrOneLoaded()
                                 }
                                 if (loadPlan.loadDlsitePlay) {
-                                    viewModel.ensureDlsitePlayLoaded()
+                                    viewModel.ensureDlsitePlayLoaded(showFailureMessage = selectedTab != 0)
                                 }
                             }
 
@@ -840,11 +997,21 @@ fun AlbumDetailScreen(
                                                     val target = PlaylistAddTarget.fromTrack(local, track)
                                                     onOpenPlaylistPicker(target.toMediaItem())
                                                 },
+                                                onDownloadOnlineTrack = { track, relativePath ->
+                                                    viewModel.downloadSavedOnlineTrack(track, relativePath)
+                                                },
                                                 onManageTrackTags = { track ->
                                                     tagManageTrack = track
                                                 },
                                                 onRemoveTrack = { track ->
                                                     if (track.id > 0L) libraryViewModel.removeTrackFromAlbum(track.id)
+                                                },
+                                                onDeleteTreeEntry = { target, onComplete ->
+                                                    libraryViewModel.deleteAlbumTreeEntry(
+                                                        album = local,
+                                                        target = target,
+                                                        onComplete = onComplete,
+                                                    )
                                                 },
                                                 onSetCoverFromImage = { pathOrUri ->
                                                     viewModel.setLocalCoverPath(pathOrUri)
@@ -887,6 +1054,7 @@ fun AlbumDetailScreen(
                                         onRefreshAsmrOne = { viewModel.refreshAsmrOneSection() },
                                         onRefreshTrial = { viewModel.refreshDlsiteTrialSection() },
                                         onDownloadTrial = {
+                                            downloadDisabledPaths = emptySet()
                                             downloadSource = OnlineDownloadSource.DlsiteTrial
                                             showAsmrDownloadDialog = true
                                         },
@@ -969,10 +1137,14 @@ fun AlbumDetailScreen(
                     }
                 }
 
-                val canSaveOnline = canUseAsmrOneOnlineTreeActions(
-                    selectedTab = selectedTab,
-                    hasAsmrOneTree = asmrOneTree.isNotEmpty()
-                )
+                val canSaveOnline = if (selectedTab == 0) {
+                    hasValidLocalRj && localOnlineSource != null
+                } else {
+                    canUseAsmrOneOnlineTreeActions(
+                        selectedTab = selectedTab,
+                        hasAsmrOneTree = asmrOneTree.isNotEmpty()
+                    )
+                }
                 if (showAsmrDownloadDialog) {
                     val downloadTree = when (downloadSource) {
                         OnlineDownloadSource.AsmrOne -> asmrOneTree
@@ -982,6 +1154,7 @@ fun AlbumDetailScreen(
                     AsmrOneDownloadDialog(
                         albumTitle = album.title,
                         trackTree = downloadTree,
+                        disabledPaths = downloadDisabledPaths,
                         onDismiss = { showAsmrDownloadDialog = false },
                         onConfirm = { selected ->
                             when (downloadSource) {
@@ -995,13 +1168,20 @@ fun AlbumDetailScreen(
                 }
 
                 if (showOnlineSaveDialog && canSaveOnline) {
-                    val saveTree = if (model.dlsitePlayTree.isNotEmpty()) model.dlsitePlayTree else asmrOneTree
+                    val saveTree = when (onlineSaveSource) {
+                        OnlineDownloadSource.DlsitePlay -> model.dlsitePlayTree
+                        else -> asmrOneTree
+                    }
                     OnlineSaveDialog(
                         albumTitle = album.title,
                         trackTree = saveTree,
+                        disabledPaths = saveDisabledPaths,
                         onDismiss = { showOnlineSaveDialog = false },
                         onConfirm = { selected ->
-                            pendingOnlineSaveSelection = selected
+                            pendingOnlineSaveSelection = PendingOnlineSaveSelection(
+                                paths = selected,
+                                useDlsitePlayTree = onlineSaveSource == OnlineDownloadSource.DlsitePlay
+                            )
                             showOnlineSaveDialog = false
                         }
                     )
@@ -1083,7 +1263,7 @@ fun AlbumDetailScreen(
                 }
 
                 metaActionKeyword?.let { keyword ->
-                    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsState()
+                    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsStateWithLifecycle()
                     AlbumMetaActionDialog(
                         keyword = keyword,
                         onDismissRequest = { metaActionKeyword = null },
@@ -1109,8 +1289,8 @@ fun AlbumDetailScreen(
 
                 val track = tagManageTrack
                 if ((track != null && track.id > 0L) || showTagManager) {
-                    val availableTags by viewModel.availableTags.collectAsState()
-                    val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsState()
+                    val availableTags by viewModel.availableTags.collectAsStateWithLifecycle()
+                    val userTagsByTrackId by viewModel.userTagsByTrackId.collectAsStateWithLifecycle()
                     if (track != null && track.id > 0L) {
                         TagAssignDialog(
                             title = track.title,
@@ -1562,15 +1742,13 @@ private fun AlbumHeroIdentityOverlay(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                AlbumPrimaryMetaRow(
+                AlbumHeroPrimaryMetaLightweight(
                     rjCode = rj,
                     circle = circle,
                     modifier = Modifier.weight(1f),
-                    rjOnClick = { copyMeta("RJ", rj) },
+                    rjOnClick = { copyMeta("作品编号", rj) },
                     circleOnClick = { copyMeta("社团", circle) },
                     circleOnLongClick = { onMetaLongClick(circle) },
-                    appearance = AlbumMetaAppearance.OnImage,
-                    leadingVisual = AlbumMetaLeadingVisual.Icon,
                 )
                 AlbumOnlineListenerInfo(
                     listenerCount = listenTogetherRjListenerCount,
@@ -1636,11 +1814,28 @@ private fun AlbumOnlineListenerInfo(
     }
 }
 
-private data class StableAlbumHeroIdentity(
+internal data class StableAlbumHeroIdentity(
     val title: String,
     val rj: String,
     val circle: String
 )
+
+internal fun resolveStableAlbumHeroIdentity(
+    stable: StableAlbumHeroIdentity,
+    current: StableAlbumHeroIdentity
+): StableAlbumHeroIdentity {
+    val stableTitleIsPlaceholder = stable.title.isBlank() ||
+        stable.title == "专辑" ||
+        stable.title.equals(stable.rj, ignoreCase = true)
+    val currentTitleIsResolved = current.title.isNotBlank() &&
+        current.title != "专辑" &&
+        !current.title.equals(current.rj, ignoreCase = true)
+    return StableAlbumHeroIdentity(
+        title = if (stableTitleIsPlaceholder && currentTitleIsResolved) current.title else stable.title,
+        rj = stable.rj.ifBlank { current.rj },
+        circle = stable.circle.ifBlank { current.circle }
+    )
+}
 
 @Composable
 private fun rememberStableAlbumHeroIdentity(album: Album, identitySessionKey: String): StableAlbumHeroIdentity {
@@ -1649,7 +1844,11 @@ private fun rememberStableAlbumHeroIdentity(album: Album, identitySessionKey: St
         rj = album.rjCode.ifBlank { album.workId }.trim(),
         circle = album.circle.trim()
     )
-    return remember(identitySessionKey) { current }
+    var stable by remember(identitySessionKey) { mutableStateOf(current) }
+    LaunchedEffect(current) {
+        stable = resolveStableAlbumHeroIdentity(stable, current)
+    }
+    return stable
 }
 
 @Composable
@@ -1747,8 +1946,6 @@ private fun AlbumHeader(
     messageManager: MessageManager,
     onMetaLongClick: (String) -> Unit
 ) {
-    val context = LocalContext.current
-    val colorScheme = AsmrTheme.colorScheme
     val copyMeta = rememberAlbumMetaCopyAction(messageManager)
 
     val headerAnimationScopeKey = remember(introSessionKey) { "albumHeader:$introSessionKey" }
@@ -1762,19 +1959,6 @@ private fun AlbumHeader(
     val headerContainerModifier = Modifier
         .fillMaxWidth()
         .padding(horizontal = AlbumDetailHorizontalPadding)
-    val langCandidates = remember(dlsiteEditions) {
-        dlsiteEditions
-            .filter { it.lang in setOf("JPN", "CHI_HANS", "CHI_HANT") }
-            .distinctBy { it.lang }
-            .sortedWith(compareBy({ it.displayOrder }, { it.lang }))
-    }
-    val selectedLangLabel = remember(dlsiteSelectedLang, langCandidates) {
-        langCandidates.firstOrNull { it.lang.equals(dlsiteSelectedLang, ignoreCase = true) }
-            ?.let { dlsiteLanguageButtonLabel(it.lang) }
-            ?: dlsiteLanguageButtonLabel(dlsiteSelectedLang)
-    }
-    var languageMenuExpanded by rememberSaveable { mutableStateOf(false) }
-
     Column(
         modifier = headerContainerModifier.padding(top = 4.dp, bottom = 12.dp)
         // 不用 spacedBy 控制信息行之间的间距：cv/tags 行在网络数据到达后会以 0 高度组合、再通过
@@ -1794,7 +1978,7 @@ private fun AlbumHeader(
             Box(modifier = Modifier.padding(bottom = 8.dp)) {
                 val labelCv = "声优"
                 val labelTag = "标签"
-                // 只显示声优和标签，RJ和社团已经在Hero封面底部显示
+                // 只显示声优和标签，作品编号和社团已经在 Hero 封面底部显示
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
@@ -1820,198 +2004,300 @@ private fun AlbumHeader(
             }
         }
 
-        Box(
+        AlbumHeaderActionBar(
+            groupState = when {
+                showDlsitePlayLossless -> AlbumHeaderButtonGroupState.Lossless
+                showSaveAction -> AlbumHeaderButtonGroupState.Save
+                else -> AlbumHeaderButtonGroupState.DownloadOnly
+            },
+            onDownloadClick = onDownloadClick,
+            onSaveClick = onSaveClick,
+            onLosslessDownloadClick = onLosslessDownloadClick,
+            downloadEnabled = downloadEnabled,
+            saveEnabled = saveEnabled,
+            losslessDownloadEnabled = losslessDownloadEnabled,
+            showGroupAction = showGroupButton,
+            groupEnabled = album.id > 0L,
+            onGroupClick = {
+                val id = album.id
+                if (id > 0L) onOpenGroupPicker(id)
+            },
+            dlsiteEditions = dlsiteEditions,
+            dlsiteSelectedLang = dlsiteSelectedLang,
+            onDlsiteLangSelected = onDlsiteLangSelected,
+            dlsiteUrl = dlsiteUrl,
+            asmrOneUrl = asmrOneUrl,
+            availableWidth = availableWidth,
+        )
+    }
+}
+
+@Composable
+private fun AlbumHeaderActionBar(
+    groupState: AlbumHeaderButtonGroupState,
+    onDownloadClick: () -> Unit,
+    onSaveClick: () -> Unit,
+    onLosslessDownloadClick: () -> Unit,
+    downloadEnabled: Boolean,
+    saveEnabled: Boolean,
+    losslessDownloadEnabled: Boolean,
+    showGroupAction: Boolean,
+    groupEnabled: Boolean,
+    onGroupClick: () -> Unit,
+    dlsiteEditions: List<DlsiteLanguageEdition>,
+    dlsiteSelectedLang: String,
+    onDlsiteLangSelected: (String) -> Unit,
+    dlsiteUrl: String,
+    asmrOneUrl: String,
+    availableWidth: Dp,
+) {
+    val context = LocalContext.current
+    val colorScheme = AsmrTheme.colorScheme
+    val compact = availableWidth < 400.dp
+    val shape = RoundedCornerShape(15.dp)
+    val containerColor = if (colorScheme.isDark) {
+        colorScheme.surfaceVariant.copy(alpha = 0.58f)
+    } else {
+        colorScheme.surface.copy(alpha = 0.88f)
+    }
+    val borderColor = colorScheme.onSurfaceVariant.copy(
+        alpha = if (colorScheme.isDark) 0.18f else 0.12f
+    )
+    val langCandidates = remember(dlsiteEditions) {
+        dlsiteEditions
+            .filter { it.lang in setOf("JPN", "CHI_HANS", "CHI_HANT") }
+            .distinctBy { it.lang }
+            .sortedWith(compareBy({ it.displayOrder }, { it.lang }))
+    }
+    val selectedLangLabel = remember(dlsiteSelectedLang, langCandidates) {
+        langCandidates.firstOrNull { it.lang.equals(dlsiteSelectedLang, ignoreCase = true) }
+            ?.let { dlsiteLanguageButtonLabel(it.lang) }
+            ?: dlsiteLanguageButtonLabel(dlsiteSelectedLang)
+    }
+    var languageMenuExpanded by rememberSaveable { mutableStateOf(false) }
+    val secondaryAction = when (groupState) {
+        AlbumHeaderButtonGroupState.Save -> Triple("保存", Icons.Rounded.Bookmark, saveEnabled)
+        AlbumHeaderButtonGroupState.Lossless -> Triple("无损下载", Icons.Rounded.LibraryMusic, losslessDownloadEnabled)
+        AlbumHeaderButtonGroupState.DownloadOnly -> null
+    }
+    val hasSecondaryAction = secondaryAction != null
+    val downloadShape = if (hasSecondaryAction) {
+        RoundedCornerShape(topStart = 11.dp, topEnd = 0.dp, bottomEnd = 0.dp, bottomStart = 11.dp)
+    } else {
+        RoundedCornerShape(11.dp)
+    }
+    val secondaryShape = RoundedCornerShape(
+        topStart = 0.dp,
+        topEnd = 11.dp,
+        bottomEnd = 11.dp,
+        bottomStart = 0.dp,
+    )
+
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(46.dp),
+        shape = shape,
+        color = containerColor,
+        contentColor = colorScheme.textPrimary,
+        border = androidx.compose.foundation.BorderStroke(0.5.dp, borderColor),
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Row(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                AlbumHeaderBarAction(
+                    label = "下载",
+                    icon = Icons.Rounded.Download,
+                    showLabel = true,
+                    enabled = downloadEnabled,
+                    style = AlbumHeaderActionStyle.Primary,
+                    shape = downloadShape,
+                    onClick = onDownloadClick,
                     modifier = Modifier
-                        .fillMaxWidth()
-                ) {
-                        val compact = availableWidth < 400.dp
-                        val ultraCompact = availableWidth < 340.dp
-                        val actionGap = if (compact) 8.dp else 10.dp
-                        val primaryButtonPadding = when {
-                            ultraCompact -> 6.dp
-                            compact -> 8.dp
-                            else -> 12.dp
-                        }
-                        val smallButtonPadding = when {
-                            ultraCompact -> 6.dp
-                            compact -> 8.dp
-                            else -> 12.dp
-                        }
-                        val primaryIconSize = if (compact) 16.dp else 18.dp
-                        val primaryIconGap = if (compact) 4.dp else 6.dp
-                        val selectorMinWidth = when {
-                            ultraCompact -> 68.dp
-                            compact -> 76.dp
-                            else -> 96.dp
-                        }
-                        val selectorMaxWidth = when {
-                            ultraCompact -> 92.dp
-                            compact -> 104.dp
-                            else -> 140.dp
-                        }
-                        val externalMinWidth = when {
-                            ultraCompact -> 46.dp
-                            compact -> 50.dp
-                            else -> 56.dp
-                        }
-                        val externalMaxWidth = when {
-                            ultraCompact -> 58.dp
-                            compact -> 64.dp
-                            else -> 76.dp
-                        }
+                        .weight(1f)
+                        .fillMaxHeight(),
+                )
 
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(actionGap),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .height(36.dp)
-                                    .weight(1f)
-                            ) {
-                                val groupState = when {
-                                    showDlsitePlayLossless -> AlbumHeaderButtonGroupState.Lossless
-                                    showSaveAction -> AlbumHeaderButtonGroupState.Save
-                                    else -> AlbumHeaderButtonGroupState.DownloadOnly
-                                }
-                                AlbumHeaderDownloadAction(
-                                    groupState = groupState,
-                                    onDownloadClick = onDownloadClick,
-                                    onSaveClick = onSaveClick,
-                                    onLosslessDownloadClick = onLosslessDownloadClick,
-                                    downloadEnabled = downloadEnabled,
-                                    saveEnabled = saveEnabled,
-                                    losslessDownloadEnabled = losslessDownloadEnabled,
-                                    horizontalPadding = primaryButtonPadding,
-                                    iconSize = primaryIconSize,
-                                    iconGap = primaryIconGap,
-                                    modifier = Modifier.fillMaxSize()
-                                )
-                            }
-
-                            if (showGroupButton) {
-                                OutlinedButton(
-                                    onClick = {
-                                        val id = album.id
-                                        if (id > 0L) onOpenGroupPicker(id)
-                                    },
-                                    enabled = album.id > 0L,
-                                    modifier = Modifier
-                                        .height(36.dp)
-                                        .widthIn(min = selectorMinWidth, max = selectorMaxWidth),
-                                    shape = RoundedCornerShape(10.dp),
-                                    contentPadding = PaddingValues(horizontal = smallButtonPadding, vertical = 0.dp),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, colorScheme.primary.copy(alpha = 0.3f))
-                                ) {
-                                    Icon(
-                                        Icons.Rounded.CreateNewFolder,
-                                        contentDescription = null,
-                                        tint = colorScheme.primary,
-                                        modifier = Modifier.size(primaryIconSize)
-                                    )
-                                    Spacer(modifier = Modifier.width(primaryIconGap))
-                                    Text("分组", style = MaterialTheme.typography.labelMedium, color = colorScheme.primary, maxLines = 1)
-                                }
-                            }
-
-                            if (langCandidates.isNotEmpty()) {
-                                val languageSelectable = langCandidates.size > 1
-                                val languageContainerColor = colorScheme.primary.copy(
-                                    alpha = if (languageSelectable) {
-                                        if (colorScheme.isDark) 0.18f else 0.10f
-                                    } else {
-                                        if (colorScheme.isDark) 0.08f else 0.06f
-                                    }
-                                )
-                                val languageContentColor = if (languageSelectable) {
-                                    colorScheme.primary
-                                } else {
-                                    colorScheme.textSecondary
-                                }
-                                Box {
-                                    OutlinedButton(
-                                        onClick = {
-                                            if (languageSelectable) languageMenuExpanded = true
-                                        },
-                                        enabled = languageSelectable,
-                                        modifier = Modifier
-                                            .height(36.dp)
-                                            .widthIn(min = selectorMinWidth, max = selectorMaxWidth),
-                                        shape = RoundedCornerShape(10.dp),
-                                        contentPadding = PaddingValues(horizontal = smallButtonPadding, vertical = 0.dp),
-                                        border = androidx.compose.foundation.BorderStroke(
-                                            1.dp,
-                                            colorScheme.primary.copy(alpha = if (languageSelectable) 0.34f else 0.16f)
-                                        ),
-                                        colors = ButtonDefaults.outlinedButtonColors(
-                                            containerColor = languageContainerColor,
-                                            contentColor = languageContentColor,
-                                            disabledContainerColor = languageContainerColor,
-                                            disabledContentColor = languageContentColor
-                                        )
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Rounded.Translate,
-                                            contentDescription = null,
-                                            tint = languageContentColor,
-                                            modifier = Modifier.size(primaryIconSize)
-                                        )
-                                        Spacer(modifier = Modifier.width(primaryIconGap))
-                                        Text(
-                                            text = selectedLangLabel,
-                                            style = MaterialTheme.typography.labelMedium,
-                                            color = languageContentColor,
-                                            maxLines = 1
-                                        )
-                                        Spacer(modifier = Modifier.width(if (compact) 2.dp else 4.dp))
-                                        Icon(
-                                            imageVector = Icons.Rounded.ArrowDropDown,
-                                            contentDescription = null,
-                                            tint = if (languageSelectable) colorScheme.primary else colorScheme.textTertiary,
-                                            modifier = Modifier.size(primaryIconSize)
-                                        )
-                                    }
-                                    AlbumHeaderLanguageDropdownMenu(
-                                        expanded = languageMenuExpanded,
-                                        candidates = langCandidates,
-                                        selectedLang = dlsiteSelectedLang,
-                                        onDismiss = { languageMenuExpanded = false },
-                                        onSelect = { lang ->
-                                            languageMenuExpanded = false
-                                            onDlsiteLangSelected(lang)
-                                        }
-                                    )
-                                }
-                            }
-
-                            listOf(
-                                "DLsite" to dlsiteUrl,
-                                "ONE" to asmrOneUrl
-                            ).forEach { (label, url) ->
-                                OutlinedButton(
-                                    onClick = {
-                                        if (url.isNotBlank()) {
-                                            context.startActivity(
-                                                Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                            )
-                                        }
-                                    },
-                                    enabled = url.isNotBlank(),
-                                    modifier = Modifier
-                                        .height(36.dp)
-                                        .widthIn(min = externalMinWidth, max = externalMaxWidth),
-                                    shape = RoundedCornerShape(10.dp),
-                                    contentPadding = PaddingValues(horizontal = smallButtonPadding, vertical = 0.dp),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, colorScheme.primary.copy(alpha = 0.3f))
-                                ) {
-                                    Text(label, style = MaterialTheme.typography.labelMedium, color = colorScheme.primary, maxLines = 1)
-                                }
-                            }
-                        }
+                secondaryAction?.let { (label, icon, enabled) ->
+                    AlbumHeaderBarAction(
+                        label = label,
+                        icon = icon,
+                        showLabel = true,
+                        enabled = enabled,
+                        style = AlbumHeaderActionStyle.Secondary,
+                        shape = secondaryShape,
+                        onClick = when (groupState) {
+                            AlbumHeaderButtonGroupState.Save -> onSaveClick
+                            AlbumHeaderButtonGroupState.Lossless -> onLosslessDownloadClick
+                            AlbumHeaderButtonGroupState.DownloadOnly -> ({})
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                    )
                 }
             }
+
+            VerticalDivider(
+                modifier = Modifier
+                    .padding(horizontal = 2.dp)
+                    .height(20.dp),
+                thickness = 0.5.dp,
+                color = borderColor,
+            )
+
+            if (showGroupAction) {
+                AlbumHeaderBarAction(
+                    label = "分组",
+                    icon = Icons.Rounded.CreateNewFolder,
+                    showLabel = true,
+                    enabled = groupEnabled,
+                    onClick = onGroupClick,
+                    modifier = Modifier
+                        .width(70.dp)
+                        .fillMaxHeight(),
+                )
+            }
+
+            if (langCandidates.isNotEmpty()) {
+                val languageSelectable = langCandidates.size > 1
+                Box(
+                    modifier = Modifier
+                        .width(if (compact) 60.dp else 88.dp)
+                        .fillMaxHeight()
+                ) {
+                    AlbumHeaderBarAction(
+                        label = selectedLangLabel,
+                        icon = Icons.Rounded.Translate,
+                        showLabel = true,
+                        enabled = languageSelectable,
+                        onClick = { languageMenuExpanded = true },
+                        modifier = Modifier.fillMaxSize(),
+                    )
+                    AlbumHeaderLanguageDropdownMenu(
+                        expanded = languageMenuExpanded,
+                        candidates = langCandidates,
+                        selectedLang = dlsiteSelectedLang,
+                        onDismiss = { languageMenuExpanded = false },
+                        onSelect = { lang ->
+                            languageMenuExpanded = false
+                            onDlsiteLangSelected(lang)
+                        }
+                    )
+                }
+            }
+
+            listOf(
+                Triple("DLsite", dlsiteUrl, 64.dp),
+                Triple("ONE", asmrOneUrl, if (compact) 44.dp else 56.dp),
+            ).forEach { (label, url, width) ->
+                AlbumHeaderBarAction(
+                    label = label,
+                    showLabel = true,
+                    enabled = url.isNotBlank(),
+                    onClick = {
+                        if (url.isNotBlank()) {
+                            context.startActivity(
+                                Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                            )
+                        }
+                    },
+                    modifier = Modifier
+                        .width(width)
+                        .fillMaxHeight(),
+                )
+            }
         }
+    }
+}
+
+private enum class AlbumHeaderActionStyle {
+    Standard,
+    Primary,
+    Secondary,
+}
+
+@Composable
+private fun AlbumHeaderBarAction(
+    label: String,
+    showLabel: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    style: AlbumHeaderActionStyle = AlbumHeaderActionStyle.Standard,
+    shape: RoundedCornerShape = RoundedCornerShape(11.dp),
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val contentColor = when {
+        !enabled -> colorScheme.textTertiary.copy(alpha = 0.72f)
+        style == AlbumHeaderActionStyle.Primary -> colorScheme.onPrimary
+        else -> colorScheme.primaryStrong
+    }
+    val containerColor = when {
+        !enabled -> Color.Transparent
+        style == AlbumHeaderActionStyle.Primary -> colorScheme.primaryStrong
+        style == AlbumHeaderActionStyle.Secondary -> colorScheme.primary.copy(
+            alpha = if (colorScheme.isDark) 0.28f else 0.15f
+        )
+        else -> Color.Transparent
+    }
+
+    CompositionLocalProvider(LocalContentColor provides contentColor) {
+        Row(
+            modifier = modifier
+                .clip(shape)
+                .background(containerColor, shape)
+                .clickable(
+                    enabled = enabled,
+                    role = Role.Button,
+                    onClick = onClick,
+                )
+                .padding(horizontal = if (showLabel && icon != null) 7.dp else 5.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (icon != null) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = if (showLabel) null else label,
+                    tint = contentColor,
+                    modifier = Modifier.size(17.dp),
+                )
+            }
+            if (showLabel) {
+                if (icon != null) Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = if (style == AlbumHeaderActionStyle.Standard) {
+                            FontWeight.Medium
+                        } else {
+                            FontWeight.SemiBold
+                        },
+                    ),
+                    color = contentColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+        }
+    }
+}
+
 private fun dlsiteLanguageButtonLabel(lang: String): String {
     return when (lang.trim().uppercase()) {
         "CHI_HANS" -> "简中"
@@ -2101,142 +2387,6 @@ private fun AlbumHeaderLanguageDropdownMenu(
                         disabledTrailingIconColor = colorScheme.textTertiary
                     )
                 )
-            }
-        }
-    }
-}
-
-@Composable
-private fun AlbumHeaderDownloadAction(
-    groupState: AlbumHeaderButtonGroupState,
-    onDownloadClick: () -> Unit,
-    onSaveClick: () -> Unit,
-    onLosslessDownloadClick: () -> Unit,
-    downloadEnabled: Boolean,
-    saveEnabled: Boolean,
-    losslessDownloadEnabled: Boolean,
-    horizontalPadding: Dp,
-    iconSize: Dp,
-    iconGap: Dp,
-    modifier: Modifier = Modifier
-) {
-    val colorScheme = AsmrTheme.colorScheme
-    val hasSecondaryAction = groupState != AlbumHeaderButtonGroupState.DownloadOnly
-    val secondaryActionEnabled = when (groupState) {
-        AlbumHeaderButtonGroupState.Save -> saveEnabled
-        AlbumHeaderButtonGroupState.Lossless -> losslessDownloadEnabled
-        AlbumHeaderButtonGroupState.DownloadOnly -> false
-    }
-    val downloadColorProgress by animateFloatAsState(
-        targetValue = if (downloadEnabled) 1f else 0f,
-        animationSpec = AlbumHeaderActionColorTweenSpec,
-        label = "albumHeaderDownloadColor"
-    )
-    val secondaryColorProgress by animateFloatAsState(
-        targetValue = if (secondaryActionEnabled) 1f else 0f,
-        animationSpec = AlbumHeaderActionColorTweenSpec,
-        label = "albumHeaderSecondaryActionColor"
-    )
-    val radius = 10.dp
-    val mainShape = RoundedCornerShape(
-        topStart = radius,
-        bottomStart = radius,
-        topEnd = if (hasSecondaryAction) 0.dp else radius,
-        bottomEnd = if (hasSecondaryAction) 0.dp else radius
-    )
-    val secondaryShape = RoundedCornerShape(
-        topStart = 0.dp,
-        bottomStart = 0.dp,
-        topEnd = radius,
-        bottomEnd = radius
-    )
-    val disabledContainer = colorScheme.surfaceVariant.copy(
-        alpha = if (colorScheme.isDark) 0.54f else 0.74f
-    )
-    val disabledContent = colorScheme.textTertiary.copy(alpha = if (colorScheme.isDark) 0.72f else 0.86f)
-    val primaryContainer = lerp(disabledContainer, colorScheme.primary, downloadColorProgress)
-    val primaryContent = lerp(disabledContent, colorScheme.onPrimary, downloadColorProgress)
-    val secondaryDisabledContainer = colorScheme.surfaceVariant.copy(
-        alpha = if (colorScheme.isDark) 0.42f else 0.62f
-    )
-    val secondaryActiveContainer = colorScheme.primary.copy(
-        alpha = if (colorScheme.isDark) 0.22f else 0.14f
-    )
-    val secondaryContainer = lerp(
-        secondaryDisabledContainer,
-        secondaryActiveContainer,
-        secondaryColorProgress
-    )
-    val secondaryContent = lerp(disabledContent, colorScheme.primary, secondaryColorProgress)
-
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Button(
-            onClick = onDownloadClick,
-            enabled = downloadEnabled,
-            modifier = Modifier
-                .fillMaxHeight()
-                .weight(1f),
-            shape = mainShape,
-            contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = 0.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = primaryContainer,
-                contentColor = primaryContent,
-                disabledContainerColor = primaryContainer,
-                disabledContentColor = primaryContent
-            )
-        ) {
-            Icon(Icons.Rounded.Download, contentDescription = null, modifier = Modifier.size(iconSize))
-            Spacer(modifier = Modifier.width(iconGap))
-            Text("下载", style = MaterialTheme.typography.labelMedium, maxLines = 1)
-        }
-        if (hasSecondaryAction) {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .weight(1f)
-            ) {
-                when (groupState) {
-                    AlbumHeaderButtonGroupState.Save -> Button(
-                        onClick = onSaveClick,
-                        enabled = saveEnabled,
-                        modifier = Modifier.fillMaxSize(),
-                        shape = secondaryShape,
-                        contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = 0.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = secondaryContainer,
-                            contentColor = secondaryContent,
-                            disabledContainerColor = secondaryContainer,
-                            disabledContentColor = secondaryContent
-                        )
-                    ) {
-                        Icon(Icons.Rounded.Bookmark, contentDescription = null, modifier = Modifier.size(iconSize))
-                        Spacer(modifier = Modifier.width(iconGap))
-                        Text("保存", style = MaterialTheme.typography.labelMedium, maxLines = 1)
-                    }
-
-                    AlbumHeaderButtonGroupState.Lossless -> Button(
-                        onClick = onLosslessDownloadClick,
-                        enabled = losslessDownloadEnabled,
-                        modifier = Modifier.fillMaxSize(),
-                        shape = secondaryShape,
-                        contentPadding = PaddingValues(horizontal = horizontalPadding, vertical = 0.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = secondaryContainer,
-                            contentColor = secondaryContent,
-                            disabledContainerColor = secondaryContainer,
-                            disabledContentColor = secondaryContent
-                        )
-                    ) {
-                        Icon(Icons.Rounded.LibraryMusic, contentDescription = null, modifier = Modifier.size(iconSize))
-                        Spacer(modifier = Modifier.width(iconGap))
-                        Text("无损下载", style = MaterialTheme.typography.labelMedium, maxLines = 1)
-                    }
-
-                    AlbumHeaderButtonGroupState.DownloadOnly -> Unit
-                }
             }
         }
     }

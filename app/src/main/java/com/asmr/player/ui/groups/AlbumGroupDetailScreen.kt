@@ -41,7 +41,7 @@ import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -146,7 +146,7 @@ fun AlbumGroupDetailScreen(
     LaunchedEffect(groupId) {
         viewModel.setGroupId(groupId)
     }
-    val tracks by viewModel.tracks.collectAsState()
+    val tracks by viewModel.tracks.collectAsStateWithLifecycle()
     AlbumGroupDetailContent(
         windowSizeClass = windowSizeClass,
         title = title,

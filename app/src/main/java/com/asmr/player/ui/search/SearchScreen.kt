@@ -224,7 +224,11 @@ internal fun searchResultScrollKey(success: SearchUiState.Success?): String {
 }
 
 private fun onlineDetailLoadingFor(album: Album, state: SearchUiState.Success): Boolean {
-    if (!state.isEnriching || state.purchasedOnly || state.collectedOnly) return false
+    if (state.collectedOnly && !state.purchasedOnly) {
+        val workId = album.asmrOneWorkId ?: return false
+        return workId in state.resolvingCollectedWorkIds
+    }
+    if (!state.isEnriching || state.purchasedOnly) return false
     val rj = album.rjCode.ifBlank { album.workId }.trim().uppercase()
     return rj.isNotBlank() && rj in state.enrichingRjCodes
 }
@@ -342,10 +346,6 @@ fun SearchScreen(
     val gridState = rememberSaveable(resultScrollKey, saver = LazyStaggeredGridState.Saver) { LazyStaggeredGridState() }
     val colorScheme = AsmrTheme.colorScheme
     val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
-    val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
-    val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
-    val settingsViewModel: SettingsViewModel = hiltViewModel()
-    val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsStateWhileActive(isDataActive)
     val scope = rememberCoroutineScope()
     val keyboardController = LocalSoftwareKeyboardController.current
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
@@ -363,18 +363,6 @@ fun SearchScreen(
         if (normalized.isNotBlank()) metaActionKeyword = normalized
     }
 
-    fun addMetaBlockedKeyword(value: String) {
-        val normalized = value.trim()
-        if (normalized.isBlank()) return
-        val exists = searchBlockedKeywords.any { it.equals(normalized, ignoreCase = true) }
-        settingsViewModel.addSearchBlockedKeyword(normalized)
-        if (exists) {
-            viewModel.messageManager.showInfo("屏蔽词已存在：$normalized")
-        } else {
-            viewModel.messageManager.showSuccess("已添加屏蔽词：$normalized")
-        }
-    }
-
     LaunchedEffect(Unit) {
         viewModel.bootstrap(
             initialKeyword = keyword,
@@ -383,6 +371,10 @@ fun SearchScreen(
             initialCollectedOnly = collectedOnly,
             initialCollectedSort = selectedCollectedSort
         )
+    }
+
+    LaunchedEffect(isDataActive, viewModel) {
+        if (isDataActive) viewModel.ensureHotKeywordTermsLoaded()
     }
 
     LaunchedEffect(success?.keyword) {
@@ -1047,7 +1039,11 @@ fun SearchScreen(
                                     val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
                                     val coverPx = remember(listItemHeight, density) { with(density) { listItemHeight.roundToPx() } }
                                     val preloadSize = remember(coverPx) { IntSize(coverPx, coverPx) }
-                                    val coverFadeIn = shouldFadeInCover(listState.isScrollInProgress)
+                                    val coverFadeInState = remember(listState) {
+                                        derivedStateOf {
+                                            shouldFadeInCover(listState.isScrollInProgress)
+                                        }
+                                    }
                                     LazyListPreloader(
                                         state = listState,
                                         itemCount = state.results.size,
@@ -1087,9 +1083,11 @@ fun SearchScreen(
                                                 ),
                                                 onlineDetailLoading = onlineDetailLoading,
                                                 onlineCvLoading = onlineDetailLoading,
-                                                coverFadeIn = coverFadeIn,
+                                                showCollectedIndicator = !state.collectedOnly,
+                                                showStatsPlaceholders = true,
+                                                coverFadeInState = coverFadeInState,
                                                 coverReloadKey = state.resultRevision,
-                                                onRjClick = { copyMeta("RJ", it) },
+                                                onRjClick = { copyMeta("作品编号", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
                                                 onCircleLongClick = ::openMetaActions,
                                                 onCvClick = { copyMeta("声优", it) },
@@ -1109,7 +1107,11 @@ fun SearchScreen(
                                     val gridCellSize = if (isCompact) 150.dp else 200.dp
                                     val gridCoverPx = remember(gridCellSize, density) { with(density) { gridCellSize.roundToPx() } }
                                     val gridPreloadSize = remember(gridCoverPx) { IntSize(gridCoverPx, gridCoverPx) }
-                                    val coverFadeIn = shouldFadeInCover(gridState.isScrollInProgress)
+                                    val coverFadeInState = remember(gridState) {
+                                        derivedStateOf {
+                                            shouldFadeInCover(gridState.isScrollInProgress)
+                                        }
+                                    }
                                     LazyStaggeredGridPreloader(
                                         state = gridState,
                                         itemCount = state.results.size,
@@ -1157,9 +1159,11 @@ fun SearchScreen(
                                                 ),
                                                 onlineDetailLoading = onlineDetailLoading,
                                                 onlineCvLoading = onlineDetailLoading,
-                                                coverFadeIn = coverFadeIn,
+                                                showCollectedIndicator = !state.collectedOnly,
+                                                showStatsPlaceholders = true,
+                                                coverFadeInState = coverFadeInState,
                                                 coverReloadKey = state.resultRevision,
-                                                onRjClick = { copyMeta("RJ", it) },
+                                                onRjClick = { copyMeta("作品编号", it) },
                                                 onCircleClick = { copyMeta("社团", it) },
                                                 onCircleLongClick = ::openMetaActions,
                                                 onCvClick = { copyMeta("声优", it) },
@@ -1333,13 +1337,28 @@ fun SearchScreen(
     }
 
     metaActionKeyword?.let { targetKeyword ->
+        val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
+        val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
+        val settingsViewModel: SettingsViewModel = hiltViewModel()
+        val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsStateWhileActive(isDataActive)
         AlbumMetaActionDialog(
             keyword = targetKeyword,
             onDismissRequest = { metaActionKeyword = null },
             onSearch = ::searchMetaKeyword,
             onCreatePlaylist = playlistsViewModel::createPlaylist,
             onCreateGroup = albumGroupsViewModel::createGroup,
-            onAddBlockedKeyword = ::addMetaBlockedKeyword,
+            onAddBlockedKeyword = { value ->
+                val normalized = value.trim()
+                if (normalized.isNotBlank()) {
+                    val exists = searchBlockedKeywords.any { it.equals(normalized, ignoreCase = true) }
+                    settingsViewModel.addSearchBlockedKeyword(normalized)
+                    if (exists) {
+                        viewModel.messageManager.showInfo("屏蔽词已存在：$normalized")
+                    } else {
+                        viewModel.messageManager.showSuccess("已添加屏蔽词：$normalized")
+                    }
+                }
+            },
         )
     }
 }

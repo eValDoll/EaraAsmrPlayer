@@ -30,6 +30,7 @@ import com.asmr.player.data.remote.dlsite.DlsiteProductInfoClient
 import com.asmr.player.data.remote.dlsite.resolveCloudSyncWorkId
 import com.asmr.player.data.remote.dlsite.resolveDlsiteCloudSync
 import com.asmr.player.data.remote.dlsite.resolveSelectedDlsiteCloudSync
+import com.asmr.player.data.remote.dlsite.parseDlsitePlayImageSeed
 import com.asmr.player.data.remote.download.DownloadManager
 import com.asmr.player.data.remote.scraper.DLSiteScraper
 import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
@@ -48,6 +49,7 @@ import com.asmr.player.data.remote.crawler.asmrOneWorkMatchesRj
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -178,6 +180,32 @@ data class AlbumDetailModel(
     val isLoadingDlsitePlay: Boolean
 )
 
+internal fun resolveAlbumDetailRj(routeRj: String?, localAlbum: Album?): String {
+    return sequenceOf(
+        routeRj.orEmpty(),
+        localAlbum?.rjCode.orEmpty(),
+        localAlbum?.workId.orEmpty(),
+        localAlbum?.title.orEmpty(),
+        localAlbum?.path.orEmpty()
+    )
+        .map(DlsiteWorkNo::extractWorkNo)
+        .firstOrNull { it.isNotBlank() }
+        .orEmpty()
+}
+
+internal fun AlbumDetailModel.listenTogetherSummaryRj(): String {
+    return baseRjCode.trim().uppercase().ifBlank { rjCode.trim().uppercase() }
+}
+
+internal fun AlbumDetailModel.withPreservedListenTogetherListenerCount(
+    previous: AlbumDetailModel?
+): AlbumDetailModel {
+    if (previous == null || listenTogetherSummaryRj() != previous.listenTogetherSummaryRj()) {
+        return this
+    }
+    return copy(listenTogetherRjListenerCount = previous.listenTogetherRjListenerCount)
+}
+
 internal fun AlbumDetailModel.withUpdatedLocalCover(
     albumId: Long,
     coverPath: String,
@@ -261,10 +289,31 @@ internal fun mergeDetailHeaderAlbum(
         )
     }
     return if (fetchedDlsiteInfo != null) {
+        val mergedOnlineInfo = fetchedDlsiteInfo.copy(
+            title = fetchedDlsiteInfo.title
+                .takeUnless { title ->
+                    title.isBlank() ||
+                        title == "专辑" ||
+                        title.equals(fetchedDlsiteInfo.rjCode, ignoreCase = true)
+                }
+                ?: currentDisplayAlbum.title,
+            circle = fetchedDlsiteInfo.circle.ifBlank { currentDisplayAlbum.circle },
+            cv = fetchedDlsiteInfo.cv.ifBlank { currentDisplayAlbum.cv },
+            tags = fetchedDlsiteInfo.tags.ifEmpty { currentDisplayAlbum.tags },
+            coverUrl = fetchedDlsiteInfo.coverUrl.ifBlank { currentDisplayAlbum.coverUrl },
+            ratingValue = fetchedDlsiteInfo.ratingValue ?: currentDisplayAlbum.ratingValue,
+            ratingCount = fetchedDlsiteInfo.ratingCount.takeIf { it > 0 }
+                ?: currentDisplayAlbum.ratingCount,
+            releaseDate = fetchedDlsiteInfo.releaseDate.ifBlank { currentDisplayAlbum.releaseDate },
+            dlCount = fetchedDlsiteInfo.dlCount.takeIf { it > 0 } ?: currentDisplayAlbum.dlCount,
+            priceJpy = fetchedDlsiteInfo.priceJpy.takeIf { it > 0 } ?: currentDisplayAlbum.priceJpy,
+            hasAsmrOne = fetchedDlsiteInfo.hasAsmrOne || currentDisplayAlbum.hasAsmrOne,
+            description = fetchedDlsiteInfo.description.ifBlank { currentDisplayAlbum.description }
+        )
         buildDisplayAlbum(
             rjCode = rjCode,
             localAlbum = localAlbum,
-            dlsiteInfo = fetchedDlsiteInfo,
+            dlsiteInfo = mergedOnlineInfo,
             asmrOneWorkId = asmrOneWorkId,
             fallbackCv = currentDisplayAlbum.cv,
             fallbackCoverUrl = currentDisplayAlbum.coverUrl
@@ -277,14 +326,71 @@ internal fun mergeDetailHeaderAlbum(
     }
 }
 
-internal fun shouldPreserveHeaderAlbumMetadata(hint: AlbumCoverHint?): Boolean {
-    return hint?.hasResolvedDlsiteInfo == true
+internal fun mergeAsmrOneHeaderAlbum(
+    currentDisplayAlbum: Album,
+    localAlbum: Album?,
+    fetchedDlsiteInfo: Album?,
+    resolvedAsmrOneDetails: WorkDetailsResponse?,
+    rjCode: String,
+    asmrOneWorkId: String?,
+    preserveHeaderAlbumMetadata: Boolean
+): Album {
+    val asmrOneInfo = resolvedAsmrOneDetails?.let { details ->
+        Album(
+            title = details.title.trim().ifBlank { currentDisplayAlbum.title },
+            path = "",
+            workId = asmrOneWorkId.orEmpty(),
+            rjCode = rjCode,
+            circle = details.circle?.name.orEmpty().trim(),
+            cv = details.vas.orEmpty()
+                .map { it.name.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .joinToString(", "),
+            tags = details.tags.orEmpty()
+                .map { it.name.trim() }
+                .filter { it.isNotBlank() }
+                .distinct(),
+            coverUrl = details.mainCoverUrl.trim(),
+            dlCount = details.dl_count.coerceAtLeast(0),
+            priceJpy = details.price.coerceAtLeast(0),
+            hasAsmrOne = true
+        )
+    }
+    val mergedOnlineInfo = when {
+        fetchedDlsiteInfo == null -> asmrOneInfo
+        asmrOneInfo == null -> fetchedDlsiteInfo
+        else -> fetchedDlsiteInfo.copy(
+            title = fetchedDlsiteInfo.title
+                .takeUnless { title ->
+                    title.isBlank() ||
+                        title == "专辑" ||
+                        title.equals(fetchedDlsiteInfo.rjCode, ignoreCase = true)
+                }
+                ?: asmrOneInfo.title,
+            circle = fetchedDlsiteInfo.circle.ifBlank { asmrOneInfo.circle },
+            cv = fetchedDlsiteInfo.cv.ifBlank { asmrOneInfo.cv },
+            tags = fetchedDlsiteInfo.tags.ifEmpty { asmrOneInfo.tags },
+            coverUrl = fetchedDlsiteInfo.coverUrl.ifBlank { asmrOneInfo.coverUrl },
+            workId = fetchedDlsiteInfo.workId.ifBlank { asmrOneInfo.workId },
+            rjCode = fetchedDlsiteInfo.rjCode.ifBlank { asmrOneInfo.rjCode },
+            dlCount = fetchedDlsiteInfo.dlCount.takeIf { it > 0 } ?: asmrOneInfo.dlCount,
+            priceJpy = fetchedDlsiteInfo.priceJpy.takeIf { it > 0 } ?: asmrOneInfo.priceJpy,
+            hasAsmrOne = fetchedDlsiteInfo.hasAsmrOne || asmrOneInfo.hasAsmrOne
+        )
+    }
+    return mergeDetailHeaderAlbum(
+        currentDisplayAlbum = currentDisplayAlbum,
+        localAlbum = localAlbum,
+        fetchedDlsiteInfo = mergedOnlineInfo,
+        rjCode = rjCode,
+        asmrOneWorkId = asmrOneWorkId,
+        preserveHeaderAlbumMetadata = preserveHeaderAlbumMetadata
+    )
 }
 
-internal enum class DlsiteChinesePreference {
-    None,
-    Hans,
-    Hant
+internal fun shouldPreserveHeaderAlbumMetadata(hint: AlbumCoverHint?): Boolean {
+    return hint?.hasResolvedDlsiteInfo == true
 }
 
 internal data class ResolvedDlsiteLoadTarget(
@@ -314,20 +420,20 @@ internal fun mergeDlsiteEditions(
     if (clean.isBlank()) return emptyList()
     return buildList {
         val hasJpn = editions.any { it.lang.equals("JPN", ignoreCase = true) }
-        if (!hasJpn) addAll(defaultDlsiteEditions(clean))
+        val hasEntryEdition = editions.any {
+            it.workno.trim().equals(clean, ignoreCase = true)
+        }
+        if (!hasJpn && !hasEntryEdition) addAll(defaultDlsiteEditions(clean))
         addAll(editions)
     }.distinctBy { it.lang.trim().uppercase() }
         .sortedWith(compareBy({ it.displayOrder }, { it.lang }))
 }
 
 internal fun resolveInitialDlsiteLoadTarget(
-    baseRj: String,
-    editions: List<DlsiteLanguageEdition>,
-    currentSelectedLang: String = "JPN",
-    preserveCurrentSelection: Boolean = false,
-    chinesePreference: DlsiteChinesePreference = DlsiteChinesePreference.None
+    entryRjCode: String,
+    editions: List<DlsiteLanguageEdition>
 ): ResolvedDlsiteLoadTarget {
-    val clean = baseRj.trim().uppercase()
+    val clean = entryRjCode.trim().uppercase()
     if (clean.isBlank()) {
         return ResolvedDlsiteLoadTarget(
             editions = emptyList(),
@@ -336,32 +442,14 @@ internal fun resolveInitialDlsiteLoadTarget(
         )
     }
     val merged = mergeDlsiteEditions(clean, editions)
-    val normalizedCurrentLang = currentSelectedLang.trim().uppercase().ifBlank { "JPN" }
-    val hasHans = merged.any { it.lang.equals("CHI_HANS", ignoreCase = true) }
-    val hasHant = merged.any { it.lang.equals("CHI_HANT", ignoreCase = true) }
-    val preservedTarget = if (preserveCurrentSelection) {
-        merged.firstOrNull { it.lang.equals(normalizedCurrentLang, ignoreCase = true) }
-    } else {
-        null
+    val entryEdition = merged.firstOrNull {
+        it.workno.trim().equals(clean, ignoreCase = true)
     }
-    val preferredLang = when {
-        preservedTarget != null -> preservedTarget.lang
-        chinesePreference == DlsiteChinesePreference.Hans && hasHans -> "CHI_HANS"
-        chinesePreference == DlsiteChinesePreference.Hant && hasHant -> "CHI_HANT"
-        hasHans -> "CHI_HANS"
-        hasHant -> "CHI_HANT"
-        else -> "JPN"
-    }
-    val selected = preservedTarget
-        ?: merged.firstOrNull { it.lang.equals(preferredLang, ignoreCase = true) }
-        ?: merged.firstOrNull { it.lang.equals("JPN", ignoreCase = true) }
-        ?: merged.firstOrNull()
-    val selectedLang = selected?.lang?.trim().orEmpty().ifBlank { preferredLang }
-    val selectedWorkno = selected?.workno?.trim()?.uppercase().orEmpty().ifBlank { clean }
+    val selectedLang = entryEdition?.lang?.trim().orEmpty().ifBlank { "JPN" }
     return ResolvedDlsiteLoadTarget(
         editions = merged,
         selectedLang = selectedLang,
-        workno = selectedWorkno
+        workno = clean
     )
 }
 
@@ -371,11 +459,11 @@ internal fun asmrOneTrackRjCandidates(
     dlsiteWorkno: String,
     originalRj: String,
     selectedLang: String,
-    preferInitialCollectedRj: Boolean
+    preferInitialRj: Boolean
 ): List<String> {
     val normalizedLang = selectedLang.trim().uppercase().ifBlank { "JPN" }
     return buildList {
-        if (preferInitialCollectedRj) add(baseRj)
+        if (preferInitialRj) add(baseRj)
         add(currentRj)
         add(dlsiteWorkno)
         if (normalizedLang == "JPN") {
@@ -383,8 +471,8 @@ internal fun asmrOneTrackRjCandidates(
             add(baseRj)
         }
     }
-        .map { it.trim().uppercase() }
-        .filter { ALBUM_DETAIL_RJ_CODE_REGEX.matches(it) }
+        .map { DlsiteWorkNo.normalizeWorkNo(it, minimumDigits = 6) }
+        .filter { it.isNotBlank() }
         .distinct()
 }
 
@@ -399,8 +487,8 @@ internal fun resolveAsmrOneTrackWorkId(
     if (normalizedLang == "JPN") return normalizedWorkId
 
     val exactRjs = selectedRjs
-        .map { it.trim().uppercase() }
-        .filter { ALBUM_DETAIL_RJ_CODE_REGEX.matches(it) }
+        .map { DlsiteWorkNo.normalizeWorkNo(it, minimumDigits = 6) }
+        .filter { it.isNotBlank() }
         .toSet()
     val details = resolvedDetails ?: return null
     val resolvedSourceRj = details.source_id.trim().uppercase()
@@ -414,18 +502,6 @@ internal fun resolveAsmrOneTrackWorkId(
         asmrOneEditionMatchesLanguage(edition.lang.orEmpty(), normalizedLang)
     }
     return languageEdition?.id?.takeIf { it > 0 }?.toString()
-}
-
-internal fun shouldFallbackToJapaneseDirectory(
-    selectedLang: String,
-    isLanguageUserSelected: Boolean,
-    hasSelectedDirectoryResources: Boolean,
-    hasJapaneseDirectoryResources: Boolean
-): Boolean {
-    return !isLanguageUserSelected &&
-        !selectedLang.trim().equals("JPN", ignoreCase = true) &&
-        !hasSelectedDirectoryResources &&
-        hasJapaneseDirectoryResources
 }
 
 private fun asmrOneEditionMatchesLanguage(languageLabel: String, selectedLang: String): Boolean {
@@ -454,12 +530,13 @@ private fun asmrOneEditionMatchesLanguage(languageLabel: String, selectedLang: S
     }
 }
 
-private val ALBUM_DETAIL_RJ_CODE_REGEX = Regex("""RJ\d{6,}""")
-
 internal data class AsmrOneLeafDownload(
     val url: String,
     val relativePath: String,
-    val duration: Double?
+    val duration: Double?,
+    val dlsitePlayImageSeed: Int? = null,
+    val dlsitePlayImageWidth: Int? = null,
+    val dlsitePlayImageHeight: Int? = null
 )
 
 internal const val DlsiteTrialDownloadDirectoryName = "体验版"
@@ -511,23 +588,36 @@ internal fun buildDlsiteTrialDownloadTree(trialTracks: List<Track>): List<AsmrOn
     }
 }
 
-internal suspend fun fetchAsmrOneTracksFromBackend(
-    backendRjs: List<String>,
-    fetchBackend: suspend (String) -> Pair<String, List<AsmrOneTrackNodeResponse>>?
-): Triple<String?, Int?, List<AsmrOneTrackNodeResponse>> {
-    backendRjs
+internal suspend fun fetchAsmrOneTracksFromBackup(
+    candidateRjs: List<String>,
+    throwWhenAllRequestsFail: Boolean = false,
+    fetchBackup: suspend (String) -> Pair<String, List<AsmrOneTrackNodeResponse>>?
+): Pair<String?, List<AsmrOneTrackNodeResponse>> {
+    var successfulRequestCount = 0
+    var lastFailure: Exception? = null
+    candidateRjs
         .asSequence()
         .map { it.trim().uppercase() }
         .filter { it.isNotBlank() }
         .distinct()
         .forEach { rj ->
-            val backendResult = runCatching { fetchBackend(rj) }.getOrNull()
-            val tree = backendResult?.second.orEmpty()
-            if (backendResult != null && tree.isNotEmpty()) {
-                return Triple(backendResult.first.takeIf { it.isNotBlank() }, null, tree)
+            val backupResult = try {
+                fetchBackup(rj).also { successfulRequestCount += 1 }
+            } catch (error: CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                lastFailure = error
+                null
+            }
+            val tree = backupResult?.second.orEmpty()
+            if (backupResult != null && tree.isNotEmpty()) {
+                return backupResult.first.takeIf { it.isNotBlank() } to tree
             }
         }
-    return Triple(null, null, emptyList())
+    if (throwWhenAllRequestsFail && successfulRequestCount == 0) {
+        lastFailure?.let { throw it }
+    }
+    return null to emptyList()
 }
 
 private fun inferDlsiteTrialMediaType(title: String, url: String): TreeFileType? {
@@ -587,7 +677,23 @@ internal fun flattenAsmrOneLeafDownloads(tree: List<AsmrOneTrackNodeResponse>): 
             val children = node.children.orEmpty()
             val url = node.mediaDownloadUrl ?: node.streamUrl
             if (!url.isNullOrBlank() && children.isEmpty()) {
-                out.add(AsmrOneLeafDownload(url = url, relativePath = path, duration = node.duration))
+                val imageWidth = node.dlsitePlayImageWidth?.takeIf { it > 0 }
+                val imageHeight = node.dlsitePlayImageHeight?.takeIf { it > 0 }
+                val imageSeed = if (node.dlsitePlayImageCrypt && imageWidth != null && imageHeight != null) {
+                    parseDlsitePlayImageSeed(node.dlsitePlayOptimizedName)
+                } else {
+                    null
+                }
+                out.add(
+                    AsmrOneLeafDownload(
+                        url = url,
+                        relativePath = path,
+                        duration = node.duration,
+                        dlsitePlayImageSeed = imageSeed,
+                        dlsitePlayImageWidth = imageWidth.takeIf { imageSeed != null },
+                        dlsitePlayImageHeight = imageHeight.takeIf { imageSeed != null }
+                    )
+                )
             } else if (children.isNotEmpty()) {
                 walk(children, path)
             }

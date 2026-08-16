@@ -2,6 +2,7 @@ package com.asmr.player.ui.library
 
 import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
+import com.asmr.player.util.DlsiteWorkNo
 import com.asmr.player.util.isOnlineTrackPath
 import com.asmr.player.util.isVirtualAlbumPath
 import java.io.File
@@ -26,16 +27,12 @@ internal fun legacyOnlineSavedAlbumFolderName(entity: AlbumEntity): String {
 }
 
 private fun legacyOnlineSavedAlbumWorkKey(entity: AlbumEntity): String {
-    return extractLegacyRjCode(entity.rjCode)
-        .ifBlank { extractLegacyRjCode(entity.workId) }
-        .ifBlank { extractLegacyRjCode(entity.path) }
-        .ifBlank { extractLegacyRjCode(entity.title) }
+    return DlsiteWorkNo.extractWorkNo(entity.rjCode)
+        .ifBlank { DlsiteWorkNo.extractWorkNo(entity.workId) }
+        .ifBlank { DlsiteWorkNo.extractWorkNo(entity.path) }
+        .ifBlank { DlsiteWorkNo.extractWorkNo(entity.title) }
         .ifBlank { entity.workId.trim() }
         .ifBlank { entity.title.trim() }
-}
-
-private fun extractLegacyRjCode(input: String): String {
-    return Regex("""RJ\d+""", RegexOption.IGNORE_CASE).find(input)?.value?.uppercase().orEmpty()
 }
 
 internal fun safeLegacyOnlineSavedAlbumFolderName(input: String): String {

@@ -5,31 +5,53 @@ import org.junit.Test
 
 class DlsiteWorkNoTest {
     @Test
-    fun extractRjCode_plain() {
-        assertEquals("RJ01522140", DlsiteWorkNo.extractRjCode("RJ01522140"))
+    fun extractWorkNo_supportsKnownPrefixes() {
+        assertEquals("RJ01522140", DlsiteWorkNo.extractWorkNo("RJ01522140"))
+        assertEquals("BJ02370869", DlsiteWorkNo.extractWorkNo("BJ02370869"))
+        assertEquals("VJ01005620", DlsiteWorkNo.extractWorkNo("VJ01005620"))
     }
 
     @Test
-    fun extractRjCode_fromUrl() {
+    fun extractWorkNo_fromUrl() {
         assertEquals(
-            "RJ01522140",
-            DlsiteWorkNo.extractRjCode("https://play.dlsite.com/work/RJ01522140/tree")
+            "BJ02370869",
+            DlsiteWorkNo.extractWorkNo("https://www.dlsite.com/books/work/=/product_id/BJ02370869.html")
         )
     }
 
     @Test
-    fun extractRjCode_caseInsensitive() {
-        assertEquals("RJ123", DlsiteWorkNo.extractRjCode("rj123"))
+    fun extractWorkNo_normalizesCaseAndOptionalSpace() {
+        assertEquals("RJ123", DlsiteWorkNo.extractWorkNo("rj123"))
+        assertEquals("BJ02370869", DlsiteWorkNo.extractWorkNo("bj 02370869"))
     }
 
     @Test
-    fun extractRjCode_blank() {
-        assertEquals("", DlsiteWorkNo.extractRjCode(""))
+    fun extractWorkNo_blank() {
+        assertEquals("", DlsiteWorkNo.extractWorkNo(""))
+    }
+
+    @Test
+    fun extractWorkNo_ignoresUnknownOrEmbeddedCodes() {
+        assertEquals("", DlsiteWorkNo.extractWorkNo("MRJ123456"))
+        assertEquals("", DlsiteWorkNo.extractWorkNo("RJ123456ABC"))
+        assertEquals("", DlsiteWorkNo.extractWorkNo("AJ123456"))
+    }
+
+    @Test
+    fun normalizeWorkNo_requiresEntireInputAndMinimumDigitCount() {
+        assertEquals("VJ01005620", DlsiteWorkNo.normalizeWorkNo(" vj01005620 ", minimumDigits = 6))
+        assertEquals("", DlsiteWorkNo.normalizeWorkNo("作品 BJ02370869", minimumDigits = 6))
+        assertEquals("", DlsiteWorkNo.normalizeWorkNo("BJ123", minimumDigits = 6))
+        assertEquals("", DlsiteWorkNo.extractWorkNo("BJ123", minimumDigits = 6))
+        assertEquals(
+            "RJ123456",
+            DlsiteWorkNo.extractWorkNo("忽略 BJ123，使用 RJ123456", minimumDigits = 6)
+        )
     }
 
     @Test
     fun normalizeCandidates_dedupAndUppercase() {
-        val out = DlsiteWorkNo.normalizeCandidates(listOf(" rj1 ", "RJ1", "", "rj2"))
-        assertEquals(listOf("RJ1", "RJ2"), out)
+        val out = DlsiteWorkNo.normalizeCandidates(listOf(" rj1 ", "RJ1", "", "bj2", "invalid"))
+        assertEquals(listOf("RJ1", "BJ2"), out)
     }
 }

@@ -7,6 +7,23 @@ import org.junit.Test
 
 class DlsiteRecommendHtmlParserTest {
     @Test
+    fun dlsiteOriginalCoverUrlForWorkNo_buildsPrefixSpecificFullResolutionUrl() {
+        assertEquals(
+            "https://img.dlsite.jp/modpub/images2/work/doujin/RJ01500000/RJ01499589_img_main.jpg",
+            dlsiteOriginalCoverUrlForWorkNo("rj01499589")
+        )
+        assertEquals(
+            "https://img.dlsite.jp/modpub/images2/work/books/BJ02371000/BJ02370869_img_main.jpg",
+            dlsiteOriginalCoverUrlForWorkNo("BJ02370869")
+        )
+        assertEquals(
+            "https://img.dlsite.jp/modpub/images2/work/professional/VJ01006000/VJ01005620_img_main.jpg",
+            dlsiteOriginalCoverUrlForWorkNo("vj01005620")
+        )
+        assertEquals("", dlsiteOriginalCoverUrlForWorkNo("invalid"))
+    }
+
+    @Test
     fun parse_imgWithFallbackCandidates_picksJpgAndNormalizesScheme() {
         val html = """
             <div class="recommend_work_item">
@@ -23,6 +40,20 @@ class DlsiteRecommendHtmlParserTest {
         assertEquals("RJ01499589", works.first().rjCode)
         assertTrue(works.first().coverUrl.startsWith("https://"))
         assertTrue(works.first().coverUrl.endsWith(".jpg"))
+    }
+
+    @Test
+    fun parse_supportsBooksAndProfessionalWorkNumbers() {
+        val html = """
+            <div>
+              <a href="https://www.dlsite.com/books/work/=/product_id/BJ02370869.html" title="Books work"></a>
+              <a href="https://www.dlsite.com/pro/work/=/product_id/VJ01005620.html" title="Professional work"></a>
+            </div>
+        """.trimIndent()
+
+        val works = DlsiteRecommendHtmlParser.parse(Jsoup.parse(html, "https://www.dlsite.com/"))
+
+        assertEquals(listOf("BJ02370869", "VJ01005620"), works.map { it.rjCode })
     }
 
     @Test

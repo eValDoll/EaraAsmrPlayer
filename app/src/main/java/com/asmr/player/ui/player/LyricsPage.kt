@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.player
+package com.asmr.player.ui.player
 
 import androidx.compose.foundation.layout.size
 import androidx.compose.ui.text.style.TextOverflow
@@ -19,7 +19,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -50,8 +50,8 @@ internal fun LyricsPage(
     sharedCoverDragPreviewState: CoverDragPreviewState? = null,
     viewModel: LyricsViewModel = hiltViewModel()
 ) {
-    val uiState by viewModel.uiState.collectAsState()
-    val playback by playerViewModel.playback.collectAsState()
+    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val playback by playerViewModel.playback.collectAsStateWithLifecycle()
     val position = playback.positionMs
     val colorScheme = AsmrTheme.colorScheme
     val artwork = playback.currentMediaItem?.mediaMetadata?.artworkUri

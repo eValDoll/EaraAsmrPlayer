@@ -45,6 +45,54 @@ class AlbumDetailDirectorySupportTest {
     }
 
     @Test
+    fun directorySelectedItemPosition_joinsAdjacentSelectedRows() {
+        assertEquals(
+            DirectoryFolderPosition.First,
+            directorySelectedItemPosition(
+                selected = true,
+                previousSelected = false,
+                nextSelected = true,
+            )
+        )
+        assertEquals(
+            DirectoryFolderPosition.Middle,
+            directorySelectedItemPosition(
+                selected = true,
+                previousSelected = true,
+                nextSelected = true,
+            )
+        )
+        assertEquals(
+            DirectoryFolderPosition.Last,
+            directorySelectedItemPosition(
+                selected = true,
+                previousSelected = true,
+                nextSelected = false,
+            )
+        )
+    }
+
+    @Test
+    fun localTreeDeletionPaths_rejectTraversalAndMatchDirectoryDescendants() {
+        assertEquals("disc1/booklet/cover.jpg", normalizeLocalTreeRelativePath("/disc1\\booklet/cover.jpg"))
+        assertEquals(null, normalizeLocalTreeRelativePath("disc1/../cover.jpg"))
+        assertTrue(
+            localTreePathMatchesTarget(
+                candidatePath = "disc1/booklet/cover.jpg",
+                targetPath = "disc1/booklet",
+                targetIsDirectory = true,
+            )
+        )
+        assertFalse(
+            localTreePathMatchesTarget(
+                candidatePath = "disc1/booklet-old/cover.jpg",
+                targetPath = "disc1/booklet",
+                targetIsDirectory = true,
+            )
+        )
+    }
+
+    @Test
     fun buildLocalDirectoryBrowser_preservesCachedLocalSizeBytes() {
         val track = Track(
             albumId = 7L,
@@ -81,6 +129,41 @@ class AlbumDetailDirectorySupportTest {
             FileSizeSource.Local(path = track.path, sizeBytes = 2_048L),
             browser.files.single().sizeSource
         )
+    }
+
+    @Test
+    fun buildLocalDirectoryBrowser_exposesFolderDeletionMetadata() {
+        val localTrack = Track(
+            id = 11L,
+            albumId = 7L,
+            title = "Track 1",
+            path = "/album/disc1/track1.mp3",
+        )
+        val index = buildLocalTreeIndexFromLeaves(
+            leaves = listOf(
+                LocalTreeLeafCacheEntry(
+                    relativePath = "disc1/track1.mp3",
+                    absolutePath = localTrack.path,
+                    fileType = TreeFileType.Audio,
+                ),
+                LocalTreeLeafCacheEntry(
+                    relativePath = "disc1/cover.jpg",
+                    absolutePath = "/album/disc1/cover.jpg",
+                    fileType = TreeFileType.Image,
+                ),
+            ),
+            tracks = listOf(localTrack),
+        )
+
+        val folder = buildLocalDirectoryBrowser(
+            index = index,
+            currentPath = "",
+            album = Album(id = 7L, title = "Album", path = "/album"),
+            shouldShowSubtitleStamp = { false },
+        ).folders.single()
+
+        assertEquals(listOf(11L), folder.descendantTrackIds)
+        assertTrue(folder.hasLocalContent)
     }
 
     @Test
@@ -278,6 +361,26 @@ class AlbumDetailDirectorySupportTest {
     }
 
     @Test
+    fun flattenAsmrOneLeafDownloads_preservesDlsitePlayImageDescrambleMetadata() {
+        val leaf = flattenAsmrOneLeafDownloads(
+            listOf(
+                AsmrOneTrackNodeResponse(
+                    title = "01.パッケージ.jpg",
+                    mediaDownloadUrl = "https://play.dlsite.com/optimized/00000abc1234.jpg",
+                    dlsitePlayImageCrypt = true,
+                    dlsitePlayImageWidth = 1200,
+                    dlsitePlayImageHeight = 900,
+                    dlsitePlayOptimizedName = "00000abc1234.jpg"
+                )
+            )
+        ).single()
+
+        assertEquals(0xabc1234, leaf.dlsitePlayImageSeed)
+        assertEquals(1200, leaf.dlsitePlayImageWidth)
+        assertEquals(900, leaf.dlsitePlayImageHeight)
+    }
+
+    @Test
     fun flattenOnlineSaveLeaves_includesResourceFilesButSkipsSubtitles() {
         val leaves = flattenOnlineSaveLeaves(
             listOf(
@@ -314,6 +417,109 @@ class AlbumDetailDirectorySupportTest {
             "图片",
             directoryFileTypeLabel(
                 local.copy(fileType = TreeFileType.Image, isOnline = true)
+            )
+        )
+    }
+
+    @Test
+    fun downloadableOnlineAudioTrack_onlyReturnsSavedOnlineAudio() {
+        val onlineTrack = Track(
+            albumId = 9L,
+            title = "online",
+            path = "https://example.com/online.mp3"
+        )
+        val baseFile = DirectoryFileItem(
+            path = "disc/online.mp3",
+            title = "online",
+            fileType = TreeFileType.Audio,
+            isPlayable = true,
+            isOnline = true,
+            track = onlineTrack
+        )
+
+        assertEquals(onlineTrack, downloadableOnlineAudioTrack(baseFile))
+        assertEquals(null, downloadableOnlineAudioTrack(baseFile.copy(isOnline = false)))
+        assertEquals(
+            null,
+            downloadableOnlineAudioTrack(
+                baseFile.copy(track = onlineTrack.copy(path = "/album/online.mp3"))
+            )
+        )
+        assertEquals(null, downloadableOnlineAudioTrack(baseFile.copy(fileType = TreeFileType.Video)))
+    }
+
+    @Test
+    fun resolveExistingRemoteSelectionPaths_distinguishesDownloadedAndSavedFiles() {
+        val remoteFiles = listOf(
+            RemoteSelectionFileRef("disc/online.mp3", "https://example.com/online.mp3?token=new"),
+            RemoteSelectionFileRef("disc/local.mp3", "https://example.com/local.mp3")
+        )
+        val localFiles = listOf(
+            LocalSelectionFileRef(
+                relativePath = "disc/online.mp3",
+                absolutePath = "https://example.com/online.mp3?token=old",
+                track = Track(
+                    albumId = 9L,
+                    title = "online",
+                    path = "https://example.com/online.mp3?token=old",
+                    group = "disc"
+                )
+            ),
+            LocalSelectionFileRef(
+                relativePath = "disc/local.mp3",
+                absolutePath = "/album/disc/local.mp3",
+                track = Track(
+                    albumId = 9L,
+                    title = "local",
+                    path = "/album/disc/local.mp3",
+                    group = "disc"
+                )
+            )
+        )
+
+        assertEquals(
+            setOf("disc/local.mp3"),
+            resolveExistingRemoteSelectionPaths(
+                remoteFiles = remoteFiles,
+                localFiles = localFiles,
+                includeOnlineFiles = false
+            )
+        )
+        assertEquals(
+            setOf("disc/online.mp3", "disc/local.mp3"),
+            resolveExistingRemoteSelectionPaths(
+                remoteFiles = remoteFiles,
+                localFiles = localFiles,
+                includeOnlineFiles = true
+            )
+        )
+    }
+
+    @Test
+    fun resolveExistingRemoteSelectionPaths_consumesImportedFallbackMatchesOnce() {
+        val remoteFiles = listOf(
+            RemoteSelectionFileRef("disc1/same.mp3", "https://example.com/disc1/same.mp3"),
+            RemoteSelectionFileRef("disc2/same.mp3", "https://example.com/disc2/same.mp3")
+        )
+        val localFiles = listOf(
+            LocalSelectionFileRef(
+                relativePath = "external/same.mp3",
+                absolutePath = "/import/external/same.mp3",
+                track = Track(
+                    albumId = 9L,
+                    title = "same",
+                    path = "/import/external/same.mp3",
+                    group = "external"
+                )
+            )
+        )
+
+        assertEquals(
+            setOf("disc1/same.mp3"),
+            resolveExistingRemoteSelectionPaths(
+                remoteFiles = remoteFiles,
+                localFiles = localFiles,
+                includeOnlineFiles = false
             )
         )
     }

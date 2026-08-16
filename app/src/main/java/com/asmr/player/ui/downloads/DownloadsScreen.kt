@@ -74,7 +74,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -129,6 +129,7 @@ import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.theme.AsmrTheme
+import com.asmr.player.util.DlsiteWorkNo
 import com.asmr.player.util.Formatting
 import java.io.File
 import kotlin.math.roundToInt
@@ -144,6 +145,13 @@ private val SwipeRevealSpringSpec = spring<Float>(
     stiffness = Spring.StiffnessMediumLow
 )
 
+internal fun normalizeDownloadWorkNoQuery(input: String): String {
+    val raw = input.trim()
+    if (raw.isBlank()) return ""
+    return DlsiteWorkNo.extractWorkNo(raw)
+        .ifBlank { if (raw.all(Char::isDigit)) "RJ$raw" else raw }
+}
+
 @Composable
 fun DownloadsScreen(
     windowSizeClass: WindowSizeClass,
@@ -151,10 +159,10 @@ fun DownloadsScreen(
     scrollToTopSignal: Long = 0L,
     viewModel: DownloadsViewModel = hiltViewModel()
 ) {
-    val tasks by viewModel.tasks.collectAsState()
-    val translationSubtitleGroups by viewModel.translationSubtitleGroups.collectAsState()
-    val subtitleTasks by viewModel.subtitleTasks.collectAsState()
-    val polishingRjCodes by viewModel.polishingRjCodes.collectAsState()
+    val tasks by viewModel.tasks.collectAsStateWithLifecycle()
+    val translationSubtitleGroups by viewModel.translationSubtitleGroups.collectAsStateWithLifecycle()
+    val subtitleTasks by viewModel.subtitleTasks.collectAsStateWithLifecycle()
+    val polishingRjCodes by viewModel.polishingRjCodes.collectAsStateWithLifecycle()
     val activeDownloadFileCount = remember(tasks) { countActiveDownloadFiles(tasks) }
     val activeTranslationTaskCount = remember(subtitleTasks) { countActiveSubtitleTaskItems(subtitleTasks) }
     val expandedTasks = remember { mutableStateListOf<Long>() }
@@ -250,19 +258,13 @@ fun DownloadsScreen(
             OutlinedTextField(
                 value = rjQuery,
                 onValueChange = { rjQuery = it },
-                label = { Text("RJ号精准搜索") },
+                label = { Text("作品编号精准搜索") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth()
             )
 
             val normalizedQuery = remember(rjQuery) {
-                val raw = rjQuery.trim()
-                when {
-                    raw.isBlank() -> ""
-                    raw.startsWith("RJ", ignoreCase = true) -> "RJ" + raw.substring(2).trim()
-                    raw.all { it.isDigit() } -> "RJ$raw"
-                    else -> raw
-                }
+                normalizeDownloadWorkNoQuery(rjQuery)
             }
 
             when (managementMode) {
@@ -661,7 +663,7 @@ private fun TranslationManagementContent(
             .filter { rjCode ->
                 normalizedQuery.isBlank() || rjCode.equals(normalizedQuery, ignoreCase = true)
             }
-            .sortedWith(compareBy<String> { it == "未知RJ" }.thenBy { it.lowercase() })
+            .sortedWith(compareBy<String> { it == "未知作品编号" }.thenBy { it.lowercase() })
             .map { rjCode ->
                 val subtitleGroup = subtitleGroupsByRj[rjCode]
                 val tasks = tasksByRj[rjCode].orEmpty()
@@ -935,15 +937,19 @@ internal fun BoxScope.FinalPolishBottomProgress(
     trackColor: Color,
     progressColor: Color
 ) {
-    LinearProgressIndicator(
+    Box(
         modifier = Modifier
             .align(Alignment.BottomStart)
             .fillMaxWidth()
             .height(1.dp)
-            .testTag(FINAL_POLISH_PROGRESS_TAG),
-        color = progressColor,
-        trackColor = trackColor
-    )
+            .testTag(FINAL_POLISH_PROGRESS_TAG)
+    ) {
+        LinearProgressIndicator(
+            modifier = Modifier.fillMaxSize(),
+            color = progressColor,
+            trackColor = trackColor
+        )
+    }
 }
 
 @Composable
@@ -2066,7 +2072,7 @@ internal class SwipeRevealCloseController {
 }
 
 /**
- * Swipe-left-to-reveal container for task-level (RJ number) cards. The trailing
+ * Swipe-left-to-reveal container for task-level (work number) cards. The trailing
  * [actions] are hidden behind the card by default; the card translates left while
  * dragging, exposing the action buttons. The [revealed] flag is the single source
  * of truth owned by the caller (so only one card is open at a time), and settles

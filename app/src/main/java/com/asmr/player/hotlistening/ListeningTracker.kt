@@ -157,7 +157,7 @@ class ListeningTracker @Inject constructor(
         val mediaId = item.mediaId.trim()
         val uri = item.localConfiguration?.uri?.toString().orEmpty().trim()
 
-        return DlsiteWorkNo.extractRjCode(
+        return DlsiteWorkNo.extractWorkNo(
             listOfNotNull(
                 extras?.getString("rj_code"),
                 mediaId,

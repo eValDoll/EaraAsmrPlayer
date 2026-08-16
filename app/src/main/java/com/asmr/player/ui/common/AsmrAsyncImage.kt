@@ -55,6 +55,7 @@ fun AsmrAsyncImage(
     reloadKey: Any? = null,
     loadWhenSizeStableForMillis: Long = 0L,
     fadeIn: Boolean = true,
+    fadeInState: State<Boolean>? = null,
     fadeInMillis: Int = 500,
     peekAnySizeForInitial: Boolean = false,
     requestSize: IntSize? = null,
@@ -88,7 +89,8 @@ fun AsmrAsyncImage(
     val loadedSize: MutableState<IntSize?> = remember(normalizedModel, reloadKey) { mutableStateOf(null) }
     val crossfade = remember(normalizedModel, reloadKey) { Animatable(if (seededPainter != null) 1f else 0f) }
     val crossfadeRunning = remember(normalizedModel, reloadKey) { mutableStateOf(false) }
-    val latestFadeIn by rememberUpdatedState(fadeIn)
+    val resolvedFadeIn = fadeInState?.value ?: fadeIn
+    val latestFadeIn by rememberUpdatedState(resolvedFadeIn)
     val containerModifier = if (requestSize == null) {
         modifier.onSizeChanged { sz ->
             if (sz.width > 0 && sz.height > 0) measuredSize.value = IntSize(sz.width, sz.height)
@@ -183,8 +185,8 @@ fun AsmrAsyncImage(
     LaunchedEffect(p, bitmapPainterAlpha) {
         latestBitmapPainterObserver?.invoke(p as? BitmapPainter, bitmapPainterAlpha)
     }
-    LaunchedEffect(fadeIn, p) {
-        if (!fadeIn && p != null) {
+    LaunchedEffect(resolvedFadeIn, p) {
+        if (!resolvedFadeIn && p != null) {
             crossfadeRunning.value = false
             crossfade.snapTo(1f)
         }
@@ -209,7 +211,7 @@ fun AsmrAsyncImage(
                     loading(loadingModifier)
                 }
                 if (p != null) {
-                    val imageModifier = if (fadeIn && !hasSeededPainter && crossfadeRunning.value) {
+                    val imageModifier = if (resolvedFadeIn && !hasSeededPainter && crossfadeRunning.value) {
                         contentModifier.graphicsLayer {
                             this.alpha = crossfade.value.coerceIn(0f, 1f)
                             compositingStrategy = CompositingStrategy.ModulateAlpha

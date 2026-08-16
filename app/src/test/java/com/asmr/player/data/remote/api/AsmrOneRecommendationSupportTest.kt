@@ -11,14 +11,15 @@ class AsmrOneRecommendationSupportTest {
                 " rj123456 ",
                 "RJ123456",
                 "not-an-rj",
-                "RJ654321",
+                "BJ02370869",
+                "vj01005620",
                 "RJ12345",
                 "rj7777777"
             ),
-            limit = 2
+            limit = 3
         )
 
-        assertEquals(listOf("RJ123456", "RJ654321"), result)
+        assertEquals(listOf("RJ123456", "BJ02370869", "VJ01005620"), result)
     }
 
     @Test

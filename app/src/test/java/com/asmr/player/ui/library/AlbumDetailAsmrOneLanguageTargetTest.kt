@@ -3,9 +3,7 @@ package com.asmr.player.ui.library
 import com.asmr.player.data.remote.api.AsmrOneOtherLanguageEditionInDb
 import com.asmr.player.data.remote.api.WorkDetailsResponse
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AlbumDetailAsmrOneLanguageTargetTest {
@@ -18,7 +16,7 @@ class AlbumDetailAsmrOneLanguageTargetTest {
             dlsiteWorkno = "RJ01598807",
             originalRj = "RJ01579177",
             selectedLang = "CHI_HANT",
-            preferInitialCollectedRj = true
+            preferInitialRj = true
         )
 
         assertEquals(listOf("RJ01612762", "RJ01598807"), candidates)
@@ -32,7 +30,7 @@ class AlbumDetailAsmrOneLanguageTargetTest {
             dlsiteWorkno = "RJ01593950",
             originalRj = "RJ01583802",
             selectedLang = "CHI_HANS",
-            preferInitialCollectedRj = false
+            preferInitialRj = false
         )
 
         assertEquals(listOf("RJ01593950"), candidates)
@@ -84,42 +82,6 @@ class AlbumDetailAsmrOneLanguageTargetTest {
         )
 
         assertEquals("1583802", workId)
-    }
-
-    @Test
-    fun emptyAutoSelectedChineseDirectory_fallsBackWhenJapaneseResourcesExist() {
-        assertTrue(
-            shouldFallbackToJapaneseDirectory(
-                selectedLang = "CHI_HANS",
-                isLanguageUserSelected = false,
-                hasSelectedDirectoryResources = false,
-                hasJapaneseDirectoryResources = true
-            )
-        )
-    }
-
-    @Test
-    fun emptyUserSelectedChineseDirectory_preservesUserSelection() {
-        assertFalse(
-            shouldFallbackToJapaneseDirectory(
-                selectedLang = "CHI_HANT",
-                isLanguageUserSelected = true,
-                hasSelectedDirectoryResources = false,
-                hasJapaneseDirectoryResources = true
-            )
-        )
-    }
-
-    @Test
-    fun emptyChineseDirectory_doesNotFallbackToAnotherEmptyDirectory() {
-        assertFalse(
-            shouldFallbackToJapaneseDirectory(
-                selectedLang = "CHI_HANS",
-                isLanguageUserSelected = false,
-                hasSelectedDirectoryResources = false,
-                hasJapaneseDirectoryResources = false
-            )
-        )
     }
 
     private fun workDetails(

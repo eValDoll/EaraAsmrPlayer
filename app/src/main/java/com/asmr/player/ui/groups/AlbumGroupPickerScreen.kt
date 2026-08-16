@@ -32,7 +32,7 @@ import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.collectAsState
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -58,7 +58,7 @@ fun AlbumGroupPickerScreen(
     embeddedInDialog: Boolean = false,
     viewModel: AlbumGroupsViewModel = hiltViewModel()
 ) {
-    val groups by viewModel.groups.collectAsState()
+    val groups by viewModel.groups.collectAsStateWithLifecycle()
     val colorScheme = AsmrTheme.colorScheme
     val listState = rememberLazyListState()
     val screenActive = remember { mutableStateOf(true) }

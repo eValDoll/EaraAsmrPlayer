@@ -34,6 +34,7 @@ import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.runtime.*
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -358,7 +359,7 @@ private fun PlaybackProgressContent(
                 NowPlayingProgressState(positionMs, snapshot.durationMs)
             }
             .distinctUntilChanged()
-    }.collectAsState(initial = initialProgressState)
+    }.collectAsStateWithLifecycle(initialValue = initialProgressState)
 
     content(progressState)
 }
@@ -1092,13 +1093,13 @@ internal fun NowPlayingScreen(
         viewModel.playback
             .map { it.toStaticPlayback() }
             .distinctUntilChanged()
-    }.collectAsState(initial = PlaybackSnapshot().toStaticPlayback())
+    }.collectAsStateWithLifecycle(initialValue = PlaybackSnapshot().toStaticPlayback())
     val playback = staticPlayback.toSnapshot(positionMs = 0L)
-    val resolvedDurationMs by viewModel.resolvedDurationMs.collectAsState()
-    val sliceUiState by viewModel.sliceUiState.collectAsState()
-    val isFavorite by viewModel.isFavorite.collectAsState()
-    val listenTogetherUiState by viewModel.listenTogetherUiState.collectAsState()
-    val lyricsState by lyricsViewModel.uiState.collectAsState()
+    val resolvedDurationMs by viewModel.resolvedDurationMs.collectAsStateWithLifecycle()
+    val sliceUiState by viewModel.sliceUiState.collectAsStateWithLifecycle()
+    val isFavorite by viewModel.isFavorite.collectAsStateWithLifecycle()
+    val listenTogetherUiState by viewModel.listenTogetherUiState.collectAsStateWithLifecycle()
+    val lyricsState by lyricsViewModel.uiState.collectAsStateWithLifecycle()
     val item = playback.currentMediaItem
     val metadata = item?.mediaMetadata
     val canBindManualLyrics = lyricsTargetContextFromMediaItem(item) != null
@@ -1116,8 +1117,8 @@ internal fun NowPlayingScreen(
     
     var showEqualizer by remember { mutableStateOf(false) }
     val tagViewModel: NowPlayingTagViewModel = hiltViewModel()
-    val tagDialog by tagViewModel.dialogState.collectAsState()
-    val availableTags by tagViewModel.availableTags.collectAsState()
+    val tagDialog by tagViewModel.dialogState.collectAsStateWithLifecycle()
+    val availableTags by tagViewModel.availableTags.collectAsStateWithLifecycle()
     val playerArtworkBackdropEnabled = coverBackgroundEnabled && !isVideo
     val playerThemeColors = rememberPlayerThemeColors(
         mediaItem = item,
@@ -2511,9 +2512,9 @@ internal fun NowPlayingScreen(
         }
 
         if (showEqualizer) {
-            val eqSettings by viewModel.sessionEqualizer.collectAsState()
-            val customPresets by viewModel.customPresets.collectAsState()
-            val appVolumePercent by viewModel.appVolumePercent.collectAsState()
+            val eqSettings by viewModel.sessionEqualizer.collectAsStateWithLifecycle()
+            val customPresets by viewModel.customPresets.collectAsStateWithLifecycle()
+            val appVolumePercent by viewModel.appVolumePercent.collectAsStateWithLifecycle()
             val equalizerFocusRequester = remember { FocusRequester() }
             var showEqualizerVolumeOverlay by remember { mutableStateOf(false) }
             var equalizerVolumeOverlayInteracting by remember { mutableStateOf(false) }

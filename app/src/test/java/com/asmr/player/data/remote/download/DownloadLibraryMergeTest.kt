@@ -97,4 +97,112 @@ class DownloadLibraryMergeTest {
         assertTrue(db.trackDao().getSubtitlesForTrack(onlineId).isEmpty())
         assertTrue(db.remoteSubtitleSourceDao().getSourcesForTrackOnce(onlineId).isEmpty())
     }
+
+    @Test
+    fun replaceMatchedOnlineTracksWithLocalTracks_preservesSameNamedTrackInOtherFormatFolder() = runBlocking {
+        val albumId = db.albumDao().insertAlbum(
+            AlbumEntity(
+                title = "Album",
+                path = "web://rj/RJ123456",
+                localPath = "/albums/RJ123456",
+                downloadPath = "/downloads/RJ123456",
+                workId = "RJ123456",
+                rjCode = "RJ123456"
+            )
+        )
+        val onlineMp3Id = db.trackDao().insertTrack(
+            TrackEntity(
+                albumId = albumId,
+                title = "Track A",
+                path = "https://example.com/mp3/Track%20A.mp3",
+                group = "mp3"
+            )
+        )
+        val onlineWavId = db.trackDao().insertTrack(
+            TrackEntity(
+                albumId = albumId,
+                title = "Track A",
+                path = "https://example.com/wav/Track%20A.wav",
+                group = "wav"
+            )
+        )
+        val localMp3Id = db.trackDao().insertTrack(
+            TrackEntity(
+                albumId = albumId,
+                title = "Track A",
+                path = "/downloads/RJ123456/mp3/Track A.mp3",
+                group = "mp3"
+            )
+        )
+
+        replaceMatchedOnlineTracksWithLocalTracks(
+            db = db,
+            albumId = albumId,
+            preferredLocalPrefix = "/downloads/RJ123456/"
+        )
+
+        val tracks = db.trackDao().getTracksForAlbumOnce(albumId)
+        assertEquals(setOf(onlineWavId, localMp3Id), tracks.map { it.id }.toSet())
+        assertFalse(tracks.any { it.id == onlineMp3Id })
+        assertTrue(tracks.any { it.group == "wav" && it.path.startsWith("https://") })
+    }
+
+    @Test
+    fun replaceMatchedOnlineTracksWithLocalTracks_usesGroupFallbackOnlyWhenUnambiguous() = runBlocking {
+        val albumId = db.albumDao().insertAlbum(
+            AlbumEntity(
+                title = "Album",
+                path = "web://rj/RJ123456",
+                workId = "RJ123456",
+                rjCode = "RJ123456"
+            )
+        )
+        val onlineId = db.trackDao().insertTrack(
+            TrackEntity(
+                albumId = albumId,
+                title = "Track A",
+                path = "https://example.com/disc1/Track%20A.mp3",
+                group = "disc1"
+            )
+        )
+        val localId = db.trackDao().insertTrack(
+            TrackEntity(
+                albumId = albumId,
+                title = "Track A",
+                path = "/downloads/RJ123456/Track A.mp3"
+            )
+        )
+
+        replaceMatchedOnlineTracksWithLocalTracks(
+            db = db,
+            albumId = albumId,
+            preferredLocalPrefix = "/downloads/RJ123456/"
+        )
+
+        val tracks = db.trackDao().getTracksForAlbumOnce(albumId)
+        assertEquals(listOf(localId), tracks.map { it.id })
+        assertFalse(tracks.any { it.id == onlineId })
+    }
+
+    @Test
+    fun resolveDownloadedAlbumCoverPath_preservesExistingUserCover() {
+        assertEquals(
+            "content://library/custom-cover.jpg",
+            resolveDownloadedAlbumCoverPath(
+                existingCoverPath = "content://library/custom-cover.jpg",
+                downloadedCoverPath = "/downloads/RJ123456/cover.jpg"
+            )
+        )
+    }
+
+    @Test
+    fun resolveDownloadedAlbumCoverPath_usesDownloadedCoverWhenExistingCoverIsBlank() {
+        assertEquals(
+            "/downloads/RJ123456/cover.jpg",
+            resolveDownloadedAlbumCoverPath(
+                existingCoverPath = "",
+                downloadedCoverPath = "/downloads/RJ123456/cover.jpg"
+            )
+        )
+    }
 }

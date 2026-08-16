@@ -13,17 +13,20 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 
 class SettingsRepositoryTest {
     private lateinit var dataStore: DataStore<Preferences>
     private lateinit var repository: SettingsRepository
+    private lateinit var proxyPasswordStorage: InMemoryProxyPasswordStorage
 
     @Before
     fun setUp() {
         dataStore = InMemoryPreferencesDataStore()
-        repository = SettingsRepository(dataStore)
+        proxyPasswordStorage = InMemoryProxyPasswordStorage()
+        repository = SettingsRepository(dataStore, proxyPasswordStorage)
     }
 
     @Test
@@ -107,10 +110,29 @@ class SettingsRepositoryTest {
     }
 
     @Test
+    fun clearSleepTimer_skipsDataStoreWriteWhenAlreadyCleared() = runBlocking {
+        val inMemoryDataStore = dataStore as InMemoryPreferencesDataStore
+
+        repository.clearSleepTimer()
+
+        assertEquals(0, inMemoryDataStore.updateCount)
+
+        repository.setSleepTimerEndAtMs(1_000L)
+        repository.clearSleepTimer()
+
+        assertEquals(0L, repository.sleepTimerEndAtMs.first())
+        assertEquals(2, inMemoryDataStore.updateCount)
+    }
+
+    @Test
     fun deepSeekTranslationSettings_defaultToThinkingDisabled() = runBlocking {
         val defaults = repository.loadDeepSeekTranslationSettings()
         assertFalse(defaults.thinkingEnabled)
         assertEquals(DeepSeekTranslationSettings(), defaults)
+        assertEquals(
+            listOf("low", "high", "max"),
+            DeepSeekReasoningEffort.entries.map { it.wireValue }
+        )
     }
 
     @Test
@@ -124,6 +146,16 @@ class SettingsRepositoryTest {
                 reasoningEffort = DeepSeekReasoningEffort.MAX
             ),
             repository.deepSeekTranslationSettings.first()
+        )
+    }
+
+    @Test
+    fun deepSeekTranslationSettings_persistLowEffort() = runBlocking {
+        repository.setDeepSeekReasoningEffort(DeepSeekReasoningEffort.LOW)
+
+        assertEquals(
+            DeepSeekReasoningEffort.LOW,
+            repository.loadDeepSeekTranslationSettings().reasoningEffort
         )
     }
 
@@ -189,6 +221,99 @@ class SettingsRepositoryTest {
         assertEquals(listOf("言语侵犯"), repository.searchBlockedKeywords.first())
     }
 
+    @Test
+    fun networkRouteSettings_defaultToSystemNetwork() = runBlocking {
+        assertEquals(NetworkRouteSettings(), repository.networkRouteSettings.first())
+    }
+
+    @Test
+    fun advancedProxy_persistsNormalizedManualRoute() = runBlocking {
+        assertEquals(
+            true,
+            repository.setAdvancedProxy(
+                mode = AppProxyMode.SOCKS5,
+                host = " [::1] ",
+                port = 1080,
+                authenticationEnabled = false,
+                username = "",
+                password = ""
+            )
+        )
+
+        val settings = repository.networkRouteSettings.first()
+        assertEquals(AppProxyMode.SOCKS5, settings.proxyMode)
+        assertEquals("::1", settings.proxyHost)
+        assertEquals(1080, settings.proxyPort)
+    }
+
+    @Test
+    fun advancedProxy_encryptsCredentialsAndRetainsSavedPasswordWhenBlank() = runBlocking {
+        assertEquals(
+            true,
+            repository.setAdvancedProxy(
+                mode = AppProxyMode.HTTP,
+                host = "proxy.example.com",
+                port = 8080,
+                authenticationEnabled = true,
+                username = " user ",
+                password = "secret password"
+            )
+        )
+
+        val first = repository.networkRouteSettings.first()
+        assertTrue(first.proxyAuthenticationEnabled)
+        assertEquals("user", first.proxyUsername)
+        assertTrue(first.proxyPasswordConfigured)
+        assertEquals("secret password", proxyPasswordStorage.read())
+
+        assertEquals(
+            true,
+            repository.setAdvancedProxy(
+                mode = AppProxyMode.HTTP,
+                host = "proxy.example.com",
+                port = 8080,
+                authenticationEnabled = true,
+                username = "user",
+                password = ""
+            )
+        )
+        assertEquals("secret password", proxyPasswordStorage.read())
+        assertEquals(2L, repository.networkRouteSettings.first().proxyCredentialVersion)
+    }
+
+    @Test
+    fun advancedProxy_disablingAuthenticationClearsSavedPassword() = runBlocking {
+        repository.setAdvancedProxy(
+            AppProxyMode.HTTP,
+            "proxy.example.com",
+            8080,
+            true,
+            "user",
+            "secret"
+        )
+
+        repository.setAdvancedProxy(
+            AppProxyMode.HTTP,
+            "proxy.example.com",
+            8080,
+            false,
+            "",
+            ""
+        )
+
+        assertFalse(repository.networkRouteSettings.first().proxyAuthenticationEnabled)
+        assertEquals("", proxyPasswordStorage.read())
+    }
+
+    @Test
+    fun dnsServer_persistsNormalizedAddressAndCanReturnToSystem() = runBlocking {
+        assertEquals(true, repository.setCustomDnsServer(" 223.005.5.5 "))
+        assertEquals("223.5.5.5", repository.networkRouteSettings.first().customDnsServer)
+
+        repository.useSystemDns()
+        assertEquals("", repository.networkRouteSettings.first().customDnsServer)
+    }
+
     private suspend fun SettingsRepository.appVolumePercentValue(): Int {
         return appVolumePercent.first()
     }
@@ -196,12 +321,15 @@ class SettingsRepositoryTest {
     private class InMemoryPreferencesDataStore : DataStore<Preferences> {
         private val state = MutableStateFlow(emptyPreferences())
         private val updateMutex = Mutex()
+        var updateCount: Int = 0
+            private set
 
         override val data: StateFlow<Preferences> = state
 
         override suspend fun updateData(
             transform: suspend (t: Preferences) -> Preferences
         ): Preferences = updateMutex.withLock {
+            updateCount += 1
             transform(state.value).also { state.value = it }
         }
     }

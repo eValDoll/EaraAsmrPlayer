@@ -12,6 +12,7 @@ import com.asmr.player.data.remote.download.DownloadQueueCoordinator
 import com.asmr.player.data.remote.download.DownloadRuntimeConfig
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.subtitle.SubtitleTaskRepository
+import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,16 +39,17 @@ class AsmrApp : Application(), ImageLoaderFactory, Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         appCacheManager.start()
-        applicationScope.launch {
-            runCatching {
-                getSharedPreferences("album_detail_tree_prefs", MODE_PRIVATE).all
-            }
-        }
+        runCatching { PDFBoxResourceLoader.init(applicationContext) }
         applicationScope.launch {
             runCatching { settingsRepository.clearSleepTimer() }
-            runCatching { AppDatabaseProvider.get(applicationContext) }
-            runCatching { SubtitleTaskRepository.get(applicationContext).reconcileOnAppLaunch() }
-            runCatching { DownloadQueueCoordinator.recoverDownloadsOnAppLaunch(applicationContext) }
+            val database = runCatching { AppDatabaseProvider.get(applicationContext) }.getOrNull()
+                ?: return@launch
+            if (runCatching { database.subtitleTaskDao().countAllItems() > 0 }.getOrDefault(false)) {
+                runCatching { SubtitleTaskRepository.get(applicationContext).reconcileOnAppLaunch() }
+            }
+            if (runCatching { database.downloadDao().countRecoverableItems() > 0 }.getOrDefault(false)) {
+                runCatching { DownloadQueueCoordinator.recoverDownloadsOnAppLaunch(applicationContext) }
+            }
         }
     }
 

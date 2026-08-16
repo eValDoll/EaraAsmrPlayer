@@ -382,8 +382,19 @@ class SubtitleTranslationClientTest {
     }
 
     @Test
-    fun request_supportsThinkingMaxAndDisabledModes() {
+    fun request_supportsThinkingLowMaxAndDisabledModes() {
         val source = sources(1)
+        val lowRequest = JsonParser.parseString(
+            buildDeepSeekSubtitleTranslationRequest(
+                gson = Gson(),
+                sources = source,
+                allowMerging = false,
+                settings = DeepSeekTranslationSettings(
+                    thinkingEnabled = true,
+                    reasoningEffort = DeepSeekReasoningEffort.LOW
+                )
+            )
+        ).asJsonObject
         val maxRequest = JsonParser.parseString(
             buildDeepSeekSubtitleTranslationRequest(
                 gson = Gson(),
@@ -407,6 +418,7 @@ class SubtitleTranslationClientTest {
             )
         ).asJsonObject
 
+        assertEquals("low", lowRequest.get("reasoning_effort").asString)
         assertEquals("max", maxRequest.get("reasoning_effort").asString)
         assertEquals("disabled", disabledRequest.getAsJsonObject("thinking").get("type").asString)
         assertEquals(false, disabledRequest.has("reasoning_effort"))
@@ -540,6 +552,10 @@ class SubtitleTranslationClientTest {
         assert(TranslationPrompts.subtitleToolReadDescription().isNotBlank())
         assert(TranslationPrompts.subtitleToolWriteDescription().isNotBlank())
         assert(TranslationPrompts.subtitleToolChineseFieldDescription().isNotBlank())
+        assert(TranslationPrompts.subtitleScriptToolsSection().isNotBlank())
+        assert(TranslationPrompts.subtitleScriptListToolDescription().isNotBlank())
+        assert(TranslationPrompts.subtitleScriptReadToolDescription().isNotBlank())
+        assert(TranslationPrompts.subtitleAgentSystemPromptTemplate().contains("{{SCRIPT_TOOLS}}"))
         assert(TranslationPrompts.subtitleAgentSystemPromptTemplate().contains("{{SOURCE_COUNT}}"))
         assert(TranslationPrompts.subtitleAgentSystemPromptTemplate().contains("{{REFERENCE_TABLE}}"))
         // 翻译提示词包含结构级翻译腔归化约束
@@ -685,6 +701,116 @@ class SubtitleTranslationClientTest {
         assertEquals("Hello", String(TranslationPromptsCodec.decodeBase64("SGVsbG8="), Charsets.UTF_8))
         assertEquals("a", String(TranslationPromptsCodec.decodeBase64("YQ=="), Charsets.UTF_8))
         assertEquals("", String(TranslationPromptsCodec.decodeBase64(""), Charsets.UTF_8))
+    }
+
+    @Test
+    fun scriptTools_exposedOnlyWhenContextHasFiles() {
+        val gson = Gson()
+        val source = sources(1)
+        val base = JsonParser.parseString(
+            buildDeepSeekSubtitleTranslationRequest(gson, source, allowMerging = false)
+        ).asJsonObject
+        assertEquals(
+            listOf(SUBTITLE_READ_TOOL_NAME, SUBTITLE_WRITE_TOOL_NAME),
+            base.getAsJsonArray("tools").map { it.asJsonObject.getAsJsonObject("function").get("name").asString }
+        )
+
+        val context = SubtitleScriptContext(
+            files = listOf(SubtitleScriptFile(index = 0, name = "台本.txt")),
+            reader = SubtitleScriptReader { _, _, _ -> null }
+        )
+        val withScript = JsonParser.parseString(
+            buildDeepSeekSubtitleTranslationRequest(
+                gson,
+                source,
+                allowMerging = false,
+                scriptContext = context
+            )
+        ).asJsonObject
+        assertEquals(
+            listOf(SUBTITLE_READ_TOOL_NAME, SUBTITLE_WRITE_TOOL_NAME, SCRIPT_LIST_TOOL_NAME, SCRIPT_READ_TOOL_NAME),
+            withScript.getAsJsonArray("tools").map { it.asJsonObject.getAsJsonObject("function").get("name").asString }
+        )
+    }
+
+    @Test
+    fun prompt_injectsScriptToolsSectionWhenContextPresent() {
+        val context = SubtitleScriptContext(
+            files = listOf(SubtitleScriptFile(index = 0, name = "台本.txt")),
+            reader = SubtitleScriptReader { _, _, _ -> null }
+        )
+        val withScript = subtitleToolTranslationSystemPrompt(
+            listOf(0),
+            allowMerging = true,
+            scriptContext = context
+        )
+        val withoutScript = subtitleToolTranslationSystemPrompt(listOf(0), allowMerging = true)
+
+        assert(withScript.contains(SCRIPT_LIST_TOOL_NAME))
+        assert(withScript.contains(SCRIPT_READ_TOOL_NAME))
+        assert(withScript.contains("台本"))
+        assert(!withScript.contains("{{"))
+        assert(!withoutScript.contains(SCRIPT_LIST_TOOL_NAME))
+        assert(!withoutScript.contains("{{"))
+    }
+
+    @Test
+    fun scriptListTool_listsFiles() {
+        val gson = Gson()
+        val context = SubtitleScriptContext(
+            files = listOf(
+                SubtitleScriptFile(index = 0, name = "台本.txt"),
+                SubtitleScriptFile(index = 1, name = "plot.md")
+            ),
+            reader = SubtitleScriptReader { _, _, _ -> null }
+        )
+        val msg = buildScriptListToolResultMessage(gson, "c1", context)
+        val json = JsonParser.parseString(msg.content).asJsonObject
+        assertEquals(2, json.get("total_files").asInt)
+        assertEquals("台本.txt", json.getAsJsonArray("files")[0].asJsonObject.get("name").asString)
+    }
+
+    @Test
+    fun scriptReadTool_pagesAndMarksCompletion() = runBlocking {
+        val gson = Gson()
+        val full = "abcdefghij"
+        val context = SubtitleScriptContext(
+            files = listOf(SubtitleScriptFile(index = 0, name = "台本.txt")),
+            reader = SubtitleScriptReader { index, offset, limit ->
+                val end = (offset + limit).coerceAtMost(full.length)
+                SubtitleScriptReadResult(
+                    fileIndex = index,
+                    name = "台本.txt",
+                    offset = offset,
+                    totalChars = full.length,
+                    content = full.substring(offset, end),
+                    truncated = end < full.length
+                )
+            }
+        )
+
+        val first = buildScriptReadToolResultMessage(gson, "c1", context, 0, 0, 4)
+        val firstJson = JsonParser.parseString(first.content).asJsonObject
+        assertEquals("abcd", firstJson.get("content").asString)
+        assertEquals(10, firstJson.get("total_chars").asInt)
+        assertEquals(false, firstJson.get("completed").asBoolean)
+
+        val last = buildScriptReadToolResultMessage(gson, "c2", context, 0, 8, 4)
+        val lastJson = JsonParser.parseString(last.content).asJsonObject
+        assertEquals("ij", lastJson.get("content").asString)
+        assertEquals(true, lastJson.get("completed").asBoolean)
+    }
+
+    @Test
+    fun scriptReadTool_parsesArgumentsAndRejectsOutOfRangeIndex() {
+        val args = parseScriptReadToolArguments("""{"file_index":1}""", fileCount = 3)
+        assertEquals(1, args.fileIndex)
+        assertEquals(0, args.offset)
+        assert(args.limit > 0)
+
+        assertThrows(IllegalArgumentException::class.java) {
+            parseScriptReadToolArguments("""{"file_index":5}""", fileCount = 3)
+        }
     }
 
     private fun sources(count: Int): List<GeneratedSubtitleSource> = List(count) { index ->

@@ -1,8 +1,25 @@
 package com.asmr.player.data.remote.scraper
 
+import com.asmr.player.util.DlsiteWorkNo
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
+
+internal fun dlsiteOriginalCoverUrlForWorkNo(rawWorkNo: String): String {
+    val workNo = DlsiteWorkNo.extractWorkNo(rawWorkNo)
+    val prefix = workNo.take(2)
+    val digits = workNo.drop(2)
+    val number = digits.toLongOrNull() ?: return ""
+    val category = when (prefix) {
+        "RJ" -> "doujin"
+        "BJ" -> "books"
+        "VJ" -> "professional"
+        else -> return ""
+    }
+    val group = ((number + 999L) / 1000L) * 1000L
+    val folder = "$prefix${group.toString().padStart(digits.length, '0')}"
+    return "https://img.dlsite.jp/modpub/images2/work/$category/$folder/${workNo}_img_main.jpg"
+}
 
 internal object DlsiteRecommendHtmlParser {
     private fun normalizeUrl(src: String, baseUrl: String): String {
@@ -54,11 +71,11 @@ internal object DlsiteRecommendHtmlParser {
         fun sanitizeTitle(s: String): String = s.trim().replace(Regex("\\s+"), " ")
 
         val out = ArrayList<DlsiteRecommendedWork>()
-        val anchors = doc.select("a[href*=/product_id/RJ], a[href*=product_id/RJ], a.work_thumb, a[id^=_link_RJ]")
+        val anchors = doc.select("a[href*=/product_id/], a[href*=product_id/], a.work_thumb, a[id^=_link_]")
         anchors.forEach { a ->
             val href = a.absUrl("href").ifBlank { a.attr("href") }
-            val rj = Regex("""RJ\d+""", RegexOption.IGNORE_CASE).find(href)?.value?.uppercase().orEmpty()
-            if (rj.isBlank()) return@forEach
+            val workNo = DlsiteWorkNo.extractWorkNo(href)
+            if (workNo.isBlank()) return@forEach
 
             val container = a.closest("li, .work, .n_worklist_item, .recommend, .recommend_item") ?: a.parent()
             val cover = extractCoverUrl(container ?: a, doc.baseUri())
@@ -67,13 +84,13 @@ internal object DlsiteRecommendHtmlParser {
                     .ifBlank { a.selectFirst("img")?.attr("alt").orEmpty() }
                     .ifBlank { a.attr("title") }
                     .ifBlank { a.text() }
-            ).ifBlank { rj }
+            ).ifBlank { workNo }
             val ribbon = container?.selectFirst(".recommend_ribbon .ribbon, .recommend_ribbon span, .work_discount, .ribbon")
                 ?.text()
                 ?.trim()
                 ?.ifBlank { null }
 
-            out.add(DlsiteRecommendedWork(rjCode = rj, title = title, coverUrl = cover, ribbon = ribbon))
+            out.add(DlsiteRecommendedWork(rjCode = workNo, title = title, coverUrl = cover, ribbon = ribbon))
         }
         return out.distinctBy { it.rjCode }
     }

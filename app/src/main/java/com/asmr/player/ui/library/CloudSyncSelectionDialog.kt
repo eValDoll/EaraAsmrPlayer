@@ -57,6 +57,7 @@ import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
+import com.asmr.player.data.remote.scraper.dlsiteOriginalCoverUrlForWorkNo
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
 import com.asmr.player.ui.common.CvChipsSingleLine
 import com.asmr.player.ui.common.DiscPlaceholder
@@ -420,7 +421,7 @@ private fun CloudSyncSelectionCandidateCover(
 }
 
 internal fun resolveCloudSyncCandidateCoverSources(candidate: DlsiteCloudSyncCandidate): List<CloudSyncCandidateCoverSource> {
-    val canonical = dlsiteCoverUrlForWorkno(candidate.workno)
+    val canonical = dlsiteOriginalCoverUrlForWorkNo(candidate.workno)
         .trim()
         .takeIf { it.isNotBlank() }
         ?.let { CloudSyncCandidateCoverSource(label = "canonical", url = it) }
@@ -477,13 +478,4 @@ private fun summarizeCloudSyncCandidateCoverSource(label: String, url: String): 
         url.take(160)
     }
     return "$label:$summary"
-}
-
-private fun dlsiteCoverUrlForWorkno(raw: String): String {
-    val clean = Regex("""RJ\d+""", RegexOption.IGNORE_CASE).find(raw)?.value?.uppercase().orEmpty()
-    val digits = clean.removePrefix("RJ")
-    val num = digits.toLongOrNull() ?: return ""
-    val group = ((num + 999L) / 1000L) * 1000L
-    val folder = "RJ${group.toString().padStart(digits.length, '0')}"
-    return "https://img.dlsite.jp/modpub/images2/work/doujin/$folder/${clean}_img_main.jpg"
 }

@@ -3,7 +3,9 @@ package com.asmr.player.ui.library
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -12,25 +14,30 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.material3.Icon as MaterialIcon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -38,24 +45,27 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.Placeable
-import androidx.compose.ui.layout.findRootCoordinates
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
@@ -68,18 +78,21 @@ import com.asmr.player.ui.common.CoverContentRow
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.NoImageLoadingIndicator
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
-import com.asmr.player.ui.library.AlbumMetaLeadingVisual.Icon
 import com.asmr.player.ui.theme.AsmrTheme
 import kotlinx.coroutines.delay
 
-internal val AlbumListItemCornerRadius = 6.dp
-internal val AlbumGridItemCornerRadius = 6.dp
-internal val AlbumGridItemSpacing = 6.dp
-private val AlbumItemHorizontalPadding = 8.dp
-private val AlbumItemVerticalPadding = 2.dp
-private val AlbumItemCoverContentSpacing = 8.dp
-private val AlbumGridInfoHorizontalPadding = 6.dp
+internal val AlbumListItemCornerRadius = 12.dp
+internal val AlbumGridItemCornerRadius = 12.dp
+internal val AlbumGridItemSpacing = 12.dp
+private val AlbumItemHorizontalPadding = 12.dp
+private val AlbumItemTopPadding = 4.dp
+private val AlbumItemBottomPadding = 8.dp
+private val AlbumItemCoverContentSpacing = 10.dp
+private val AlbumListCoverShadowBlurRadius = 10.dp
+private val AlbumGridCoverShadowBlurRadius = 13.dp
+private val AlbumGridInfoHorizontalPadding = 2.dp
 private val AlbumGridInfoVerticalPadding = 8.dp
+private val AlbumGridInfoMinHeight = 128.dp
 private val AlbumDetailSkeletonHeight = 18.dp
 private val AlbumListBadgeScrim = Brush.verticalGradient(
     colors = listOf(
@@ -102,12 +115,62 @@ private val AlbumOnlineDetailResizeSpring = spring<IntSize>(
     stiffness = Spring.StiffnessMediumLow
 )
 private const val AlbumOnlineDetailExitSettleMillis = 320L
+private const val AlbumCoverDepthFadeMillis = 320
+private const val AlbumCollectedRibbonFadeMillis = 240
+private const val AlbumStatsSeparator = "  "
 internal const val ALBUM_ITEM_CARD_TAG = "album_item_card"
 internal const val ALBUM_ITEM_STATS_TAG = "album_item_stats"
 internal const val ALBUM_ITEM_TAGS_TAG = "album_item_tags"
 
 private fun Album.hasRatingInfo(): Boolean {
     return (ratingValue?.let { it > 0.0 } == true) || ratingCount > 0
+}
+
+@Immutable
+internal data class AlbumStatsText(
+    val leading: String,
+    val date: String,
+) {
+    val animationKey: String
+        get() = "$leading\n$date"
+}
+
+internal fun Album.formatAlbumStats(
+    includeDownloadCount: Boolean,
+    usePlaceholders: Boolean,
+): AlbumStatsText {
+    val ratingText = ratingValue
+        ?.takeIf { it > 0.0 }
+        ?.let { value ->
+            buildString {
+                append("★")
+                append(String.format("%.1f", value))
+                if (ratingCount > 0) append("($ratingCount)")
+            }
+        }
+
+    if (usePlaceholders) {
+        return AlbumStatsText(
+            leading = listOf(
+                ratingText ?: "★—",
+                priceJpy.takeIf { it > 0 }?.let { "¥$it" } ?: "¥—",
+            ).joinToString(separator = AlbumStatsSeparator),
+            date = releaseDate.takeIf { it.isNotBlank() } ?: "—",
+        )
+    }
+
+    val leading = buildString {
+        ratingText?.let { append(it) }
+        if (includeDownloadCount && dlCount > 0) {
+            if (isNotEmpty()) append(AlbumStatsSeparator)
+            append("DL $dlCount")
+        }
+        if (priceJpy > 0) {
+            if (isNotEmpty()) append(AlbumStatsSeparator)
+            append("¥$priceJpy")
+        }
+    }
+    return AlbumStatsText(leading = leading, date = releaseDate)
 }
 
 @Composable
@@ -129,68 +192,75 @@ fun AlbumItem(
     onlineCvLoading: Boolean = onlineDetailLoading,
     animateOnlineDetails: Boolean = true,
     coverFadeIn: Boolean = true,
+    coverFadeInState: State<Boolean>? = null,
     coverReloadKey: Any? = null,
     coverRetainPainterDuringReload: Boolean = false,
-    containerColor: Color? = null,
-    cacheDrawLayer: Boolean = false,
+    cacheRenderLayer: Boolean = false,
+    coverOverlay: @Composable BoxScope.() -> Unit = {},
+    showCollectedIndicator: Boolean = true,
+    showStatsPlaceholders: Boolean = false,
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val shape = remember { RoundedCornerShape(AlbumListItemCornerRadius) }
-    val coverShape = remember {
-        RoundedCornerShape(
-            topStart = AlbumListItemCornerRadius,
-            bottomStart = AlbumListItemCornerRadius,
-            topEnd = 0.dp,
-            bottomEnd = 0.dp
-        )
-    }
+    val coverShape = remember { RoundedCornerShape(AlbumListItemCornerRadius) }
     val imageModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
         albumCoverImageModel(album)
     }
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
+    val listItemHeight = (screenWidthDp.dp * 0.28f).coerceIn(124.dp, 152.dp)
     val coverSize = listItemHeight
     val density = LocalDensity.current
     val coverRequestSize = remember(coverSize, density) {
         val sizePx = with(density) { coverSize.roundToPx() }
         IntSize(sizePx, sizePx)
     }
-    var isNearWindow by remember { mutableStateOf(true) }
+    var coverPainterAlphaState by remember(imageModel, coverReloadKey) {
+        mutableStateOf<State<Float>?>(null)
+    }
+    val isCoverFadeComplete = (coverPainterAlphaState?.value ?: 0f) >= 1f
+    val coverDepthProgress by key(imageModel, coverReloadKey) {
+        animateFloatAsState(
+            targetValue = if (isCoverFadeComplete) 1f else 0f,
+            animationSpec = tween(durationMillis = AlbumCoverDepthFadeMillis),
+            label = "albumListCoverDepth",
+        )
+    }
+    val dividerColor = colorScheme.onSurfaceVariant.copy(
+        alpha = if (colorScheme.isDark) 0.28f else 0.18f
+    )
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = AlbumItemHorizontalPadding, vertical = AlbumItemVerticalPadding)
-            .testTag(ALBUM_ITEM_CARD_TAG)
-            .onGloballyPositioned { coordinates ->
-                val position = coordinates.positionInWindow()
-                val itemHeight = coordinates.size.height.toFloat().coerceAtLeast(1f)
-                val rootHeight = coordinates.findRootCoordinates().size.height.toFloat()
-                // Lazy 的复用槽会保留已经离开窗口的 Modifier.Node。提前在卡片越过
-                // 一个自身高度后撤销离屏合成，让复用槽只保存显示列表，不继续占用
-                // 大块 GPU 纹理；上下各留一张卡片作为滚入前的预热区。
-                val nearWindow =
-                    position.y + itemHeight >= -itemHeight &&
-                        position.y <= rootHeight + itemHeight
-                if (isNearWindow != nearWindow) {
-                    isNearWindow = nearWindow
-                }
+            .padding(
+                start = AlbumItemHorizontalPadding,
+                top = AlbumItemTopPadding,
+                end = AlbumItemHorizontalPadding,
+                bottom = AlbumItemBottomPadding,
+            )
+            .drawBehind {
+                val strokeWidth = 0.75.dp.toPx()
+                val y = size.height - strokeWidth / 2f
+                drawLine(
+                    color = dividerColor,
+                    start = Offset(
+                        x = (coverSize + AlbumItemCoverContentSpacing).toPx(),
+                        y = y,
+                    ),
+                    end = Offset(size.width, y),
+                    strokeWidth = strokeWidth,
+                )
             }
+            .testTag(ALBUM_ITEM_CARD_TAG)
             .then(
-                if (cacheDrawLayer) {
+                if (cacheRenderLayer) {
                     Modifier.graphicsLayer {
-                        compositingStrategy = if (isNearWindow) {
-                            CompositingStrategy.Offscreen
-                        } else {
-                            CompositingStrategy.Auto
-                        }
+                        clip = false
+                        compositingStrategy = CompositingStrategy.Auto
                     }
                 } else {
                     Modifier
                 }
             )
-            .clip(shape)
-            .background(containerColor ?: colorScheme.surface.copy(alpha = 0.5f))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -206,42 +276,62 @@ fun AlbumItem(
                 .heightIn(min = listItemHeight),
             cover = {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
+                    modifier = Modifier.fillMaxSize()
                 ) {
-                    AsmrAsyncImage(
-                        model = imageModel,
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        placeholderCornerRadius = 0,
-                        fadeIn = coverFadeIn,
-                        reloadKey = coverReloadKey,
-                        retainPainterDuringReload = coverRetainPainterDuringReload,
-                        peekAnySizeForInitial = true,
-                        requestSize = coverRequestSize,
-                        loading = NoImageLoadingIndicator,
-                        modifier = Modifier.fillMaxSize().clip(coverShape),
+                    AlbumCoverDepthShadow(
+                        progress = coverDepthProgress,
+                        isDark = colorScheme.isDark,
+                        shape = coverShape,
+                        blurRadius = AlbumListCoverShadowBlurRadius,
+                        modifier = Modifier.fillMaxSize(),
                     )
-                    if (coverBadge?.bottomScrim == true) {
-                        Box(
-                            modifier = Modifier
-                                .align(Alignment.BottomCenter)
-                                .fillMaxWidth()
-                                .fillMaxHeight(0.34f)
-                                .background(AlbumListBadgeScrim)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(coverShape)
+                    ) {
+                        AsmrAsyncImage(
+                            model = imageModel,
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            placeholderCornerRadius = 0,
+                            fadeIn = coverFadeIn,
+                            fadeInState = coverFadeInState,
+                            reloadKey = coverReloadKey,
+                            retainPainterDuringReload = coverRetainPainterDuringReload,
+                            peekAnySizeForInitial = true,
+                            requestSize = coverRequestSize,
+                            loading = NoImageLoadingIndicator,
+                            onBitmapPainterState = { painter, alphaState ->
+                                coverPainterAlphaState = if (painter != null) alphaState else null
+                            },
+                            modifier = Modifier.fillMaxSize(),
                         )
+                        coverOverlay()
+                        if (coverBadge?.bottomScrim == true) {
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.BottomCenter)
+                                    .fillMaxWidth()
+                                    .fillMaxHeight(0.34f)
+                                    .background(AlbumListBadgeScrim)
+                            )
+                        }
+                        coverBadge?.let { badge ->
+                            AlbumCoverMetricBadge(
+                                badge = badge,
+                                modifier = Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .padding(
+                                        end = if (badge.compactOffset) 4.dp else 6.dp,
+                                        bottom = if (badge.compactOffset) 4.dp else 6.dp
+                                    )
+                            )
+                        }
                     }
-                    coverBadge?.let { badge ->
-                        AlbumCoverMetricBadge(
-                            badge = badge,
-                            modifier = Modifier
-                                .align(Alignment.BottomEnd)
-                                .padding(
-                                    end = if (badge.compactOffset) 4.dp else 6.dp,
-                                    bottom = if (badge.compactOffset) 4.dp else 6.dp
-                                )
-                        )
-                    }
+                    AnimatedCollectedCoverRibbon(
+                        visible = isCoverFadeComplete && showCollectedIndicator && album.hasAsmrOne,
+                    )
                 }
             },
             content = {
@@ -250,28 +340,13 @@ fun AlbumItem(
                     album.ratingCount,
                     album.dlCount,
                     album.priceJpy,
-                    album.releaseDate
+                    album.releaseDate,
+                    showStatsPlaceholders,
                 ) {
-                    buildString {
-                        val rv = album.ratingValue
-                        if (rv != null && rv > 0.0) {
-                            append("★")
-                            append(String.format("%.1f", rv))
-                            if (album.ratingCount > 0) append("(${album.ratingCount})")
-                        }
-                        if (album.dlCount > 0) {
-                            if (isNotEmpty()) append(" · ")
-                            append("DL ${album.dlCount}")
-                        }
-                        if (album.priceJpy > 0) {
-                            if (isNotEmpty()) append(" · ")
-                            append("¥${album.priceJpy}")
-                        }
-                        if (album.releaseDate.isNotBlank()) {
-                            if (isNotEmpty()) append(" · ")
-                            append(album.releaseDate)
-                        }
-                    }
+                    album.formatAlbumStats(
+                        includeDownloadCount = true,
+                        usePlaceholders = showStatsPlaceholders,
+                    )
                 }
                 val tagsStateContent = remember(album.tags) {
                     album.tags.joinToString(separator = "\n")
@@ -279,28 +354,30 @@ fun AlbumItem(
 
                 BalancedColumn(
                     modifier = Modifier
-                        .padding(top = 4.dp, bottom = 4.dp),
+                        .padding(top = 5.dp, bottom = 5.dp),
                     minGap = 4.dp,
-                    maxGap = 12.dp,
+                    maxGap = 10.dp,
                 ) {
                     val rj = album.rjCode.ifBlank { album.workId }
                     Text(
                         text = album.title,
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontSize = 16.sp,
+                            lineHeight = 22.sp,
+                            fontWeight = FontWeight.SemiBold,
+                        ),
                         color = colorScheme.textPrimary,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
 
-                    AlbumPrimaryMetaRow(
+                    AlbumItemPrimaryMetaLightweight(
                         rjCode = rj,
                         circle = album.circle,
                         modifier = Modifier.fillMaxWidth(),
                         rjOnClick = onRjClick?.let { click -> { click(rj) } },
                         circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
                         circleOnLongClick = onCircleLongClick?.let { longClick -> { longClick(album.circle) } },
-                        leadingVisual = Icon,
-                        order = AlbumPrimaryMetaOrder.CircleThenRj,
                     )
 
                     AlbumOnlineDetailAnimatedLine(
@@ -308,12 +385,11 @@ fun AlbumItem(
                         loading = onlineCvLoading,
                         animated = animateOnlineDetails,
                     ) {
-                        AlbumCvChipsSingleLine(
+                        AlbumItemCvLightweight(
                             cvText = album.cv,
                             modifier = Modifier.fillMaxWidth(),
                             onCvClick = onCvClick,
                             onCvLongClick = onCvLongClick,
-                            leadingVisual = Icon,
                         )
                     }
                     AlbumOnlineDetailAnimatedLine(
@@ -324,43 +400,38 @@ fun AlbumItem(
                             AlbumDetailSkeletonLine(widthFraction = 0.86f)
                         }
                     ) {
-                        AlbumTagsSingleLine(
+                        AlbumItemTagsLightweight(
                             tags = album.tags,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag(ALBUM_ITEM_TAGS_TAG),
                             onTagClick = onTagClick,
                             onTagLongClick = onTagLongClick,
-                            leadingVisual = Icon,
                         )
                     }
 
                     AlbumOnlineDetailAnimatedLine(
-                        content = statsText,
-                        loading = onlineDetailLoading && !album.hasRatingInfo(),
+                        content = if (showStatsPlaceholders && onlineDetailLoading) {
+                            ""
+                        } else {
+                            statsText.animationKey
+                        },
+                        loading = if (showStatsPlaceholders) {
+                            onlineDetailLoading
+                        } else {
+                            onlineDetailLoading && !album.hasRatingInfo()
+                        },
                         animated = animateOnlineDetails,
                         modifier = Modifier.testTag(ALBUM_ITEM_STATS_TAG)
                     ) {
-                        Text(
-                            text = statsText,
-                            style = MaterialTheme.typography.labelSmall,
-                            color = colorScheme.textTertiary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.fillMaxWidth()
+                        AlbumStatsLine(
+                            stats = statsText,
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
                 }
             },
         )
-        
-        if (album.hasAsmrOne) {
-            CollectedStamp(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(8.dp)
-            )
-        }
     }
 }
 
@@ -416,7 +487,7 @@ internal fun BalancedColumn(
 }
 
 @Composable
-@OptIn(ExperimentalLayoutApi::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 fun AlbumGridItem(
     album: Album,
     onClick: () -> Unit,
@@ -434,133 +505,123 @@ fun AlbumGridItem(
     onlineCvLoading: Boolean = onlineDetailLoading,
     animateOnlineDetails: Boolean = true,
     coverFadeIn: Boolean = true,
+    coverFadeInState: State<Boolean>? = null,
     coverReloadKey: Any? = null,
     coverRetainPainterDuringReload: Boolean = false,
-    containerColor: Color? = null,
+    coverOverlay: @Composable BoxScope.() -> Unit = {},
+    showCollectedIndicator: Boolean = true,
+    showStatsPlaceholders: Boolean = false,
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val shape = remember { RoundedCornerShape(AlbumGridItemCornerRadius) }
-    val coverShape = remember {
-        RoundedCornerShape(
-            topStart = AlbumGridItemCornerRadius,
-            topEnd = AlbumGridItemCornerRadius,
-            bottomStart = 0.dp,
-            bottomEnd = 0.dp
-        )
-    }
+    val coverShape = remember { RoundedCornerShape(AlbumGridItemCornerRadius) }
     val imageModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
         albumCoverImageModel(album)
     }
+    var coverPainterAlphaState by remember(imageModel, coverReloadKey) {
+        mutableStateOf<State<Float>?>(null)
+    }
+    val isCoverFadeComplete = (coverPainterAlphaState?.value ?: 0f) >= 1f
+    val coverDepthProgress by key(imageModel, coverReloadKey) {
+        animateFloatAsState(
+            targetValue = if (isCoverFadeComplete) 1f else 0f,
+            animationSpec = tween(durationMillis = AlbumCoverDepthFadeMillis),
+            label = "albumGridCoverDepth",
+        )
+    }
     Column(
         modifier = modifier
-            .clip(shape)
-            .background(containerColor ?: colorScheme.surface.copy(alpha = 0.3f))
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
             )
     ) {
-        Box(modifier = Modifier.fillMaxWidth().aspectRatio(1f)) {
-            AsmrAsyncImage(
-                model = imageModel,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                placeholderCornerRadius = 0,
-                fadeIn = coverFadeIn,
-                reloadKey = coverReloadKey,
-                retainPainterDuringReload = coverRetainPainterDuringReload,
-                peekAnySizeForInitial = true,
-                loading = NoImageLoadingIndicator,
-                modifier = Modifier.fillMaxSize().clip(coverShape),
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(1f)
+        ) {
+            AlbumCoverDepthShadow(
+                progress = coverDepthProgress,
+                isDark = colorScheme.isDark,
+                shape = coverShape,
+                blurRadius = AlbumGridCoverShadowBlurRadius,
+                modifier = Modifier.fillMaxSize(),
             )
-            if (coverBadge?.bottomScrim == true) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .fillMaxHeight(0.36f)
-                        .background(AlbumGridBadgeScrim)
-                )
-            }
-            
-            val rj = album.rjCode.ifBlank { album.workId }
-            if (rj.isNotBlank()) {
-                Text(
-                    text = rj,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .padding(8.dp)
-                        .clip(RoundedCornerShape(4.dp))
-                        .let { base ->
-                            if (onRjClick != null) {
-                                base.clickable { onRjClick(rj) }
-                            } else {
-                                base
-                            }
-                        }
-                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 4.dp, vertical = 2.dp)
-                )
-            }
-
-            AlbumOnlineDetailAnimatedOverlay(
-                visible = album.releaseDate.isNotBlank(),
-                animated = animateOnlineDetails,
+            Box(
                 modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(8.dp)
+                    .fillMaxSize()
+                    .clip(coverShape)
             ) {
-                Text(
-                    text = album.releaseDate,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White,
-                    modifier = Modifier
-                        .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 4.dp, vertical = 2.dp)
+                AsmrAsyncImage(
+                    model = imageModel,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    placeholderCornerRadius = 0,
+                    fadeIn = coverFadeIn,
+                    fadeInState = coverFadeInState,
+                    reloadKey = coverReloadKey,
+                    retainPainterDuringReload = coverRetainPainterDuringReload,
+                    peekAnySizeForInitial = true,
+                    loading = NoImageLoadingIndicator,
+                    onBitmapPainterState = { painter, alphaState ->
+                        coverPainterAlphaState = if (painter != null) alphaState else null
+                    },
+                    modifier = Modifier.fillMaxSize(),
                 )
+                coverOverlay()
+                if (coverBadge?.bottomScrim == true) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .fillMaxHeight(0.36f)
+                            .background(AlbumGridBadgeScrim)
+                    )
+                }
+                coverBadge?.let { badge ->
+                    AlbumCoverMetricBadge(
+                        badge = badge,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(
+                                end = if (badge.compactOffset) 5.dp else 8.dp,
+                                bottom = if (badge.compactOffset) 5.dp else 8.dp
+                            )
+                    )
+                }
             }
-
-            coverBadge?.let { badge ->
-                AlbumCoverMetricBadge(
-                    badge = badge,
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(
-                            end = if (badge.compactOffset) 5.dp else 8.dp,
-                            bottom = if (badge.compactOffset) 5.dp else 8.dp
-                        )
-                )
-            }
-
-            if (album.hasAsmrOne) {
-                CollectedStamp(
-                    modifier = Modifier
-                        .align(Alignment.TopEnd)
-                        .padding(8.dp)
-                )
-            }
+            AnimatedCollectedCoverRibbon(
+                visible = isCoverFadeComplete && showCollectedIndicator && album.hasAsmrOne,
+            )
         }
         
         Column(
-            modifier = Modifier.padding(horizontal = AlbumGridInfoHorizontalPadding, vertical = AlbumGridInfoVerticalPadding),
-            verticalArrangement = Arrangement.spacedBy(4.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = AlbumGridInfoMinHeight)
+                .padding(horizontal = AlbumGridInfoHorizontalPadding, vertical = AlbumGridInfoVerticalPadding),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             Text(
                 text = album.title,
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontSize = 16.sp,
+                    lineHeight = 22.sp,
+                    fontWeight = FontWeight.SemiBold,
+                ),
                 color = colorScheme.textPrimary,
-                overflow = TextOverflow.Clip
+                maxLines = 3,
+                overflow = TextOverflow.Ellipsis,
             )
-            
-            AlbumPrimaryMetaRow(
-                rjCode = "",
+
+            val rj = album.rjCode.ifBlank { album.workId }
+            AlbumItemPrimaryMetaLightweight(
+                rjCode = rj,
                 circle = album.circle,
                 modifier = Modifier.fillMaxWidth(),
+                rjOnClick = onRjClick?.let { click -> { click(rj) } },
                 circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
                 circleOnLongClick = onCircleLongClick?.let { longClick -> { longClick(album.circle) } },
-                leadingVisual = Icon,
             )
 
             AlbumOnlineDetailAnimatedLine(
@@ -571,27 +632,26 @@ fun AlbumGridItem(
                     AlbumDetailSkeletonLine(widthFraction = 0.72f)
                 }
             ) {
-                AlbumCvChipsFlow(
+                AlbumItemCvLightweight(
                     cvText = album.cv,
+                    modifier = Modifier.fillMaxWidth(),
+                    layout = AlbumInlineValuesLayout.Flow,
                     onCvClick = onCvClick,
                     onCvLongClick = onCvLongClick,
-                    leadingVisual = Icon,
                 )
             }
 
-            val statsText = remember(album.ratingValue, album.ratingCount, album.priceJpy) {
-                buildString {
-                    val rv = album.ratingValue
-                    if (rv != null && rv > 0.0) {
-                        append("★")
-                        append(String.format("%.1f", rv))
-                        if (album.ratingCount > 0) append("(${album.ratingCount})")
-                    }
-                    if (album.priceJpy > 0) {
-                        if (isNotEmpty()) append(" · ")
-                        append("¥${album.priceJpy}")
-                    }
-                }
+            val statsText = remember(
+                album.ratingValue,
+                album.ratingCount,
+                album.priceJpy,
+                album.releaseDate,
+                showStatsPlaceholders,
+            ) {
+                album.formatAlbumStats(
+                    includeDownloadCount = false,
+                    usePlaceholders = showStatsPlaceholders,
+                )
             }
             val tagsStateContent = remember(album.tags) {
                 album.tags.joinToString(separator = "\n")
@@ -605,26 +665,31 @@ fun AlbumGridItem(
                     AlbumDetailSkeletonLine(widthFraction = 0.92f)
                 }
             ) {
-                AlbumTagsFlow(
+                AlbumItemTagsLightweight(
                     tags = album.tags,
-                    modifier = Modifier.padding(top = 2.dp),
+                    modifier = Modifier.fillMaxWidth(),
+                    layout = AlbumInlineValuesLayout.Flow,
                     onTagClick = onTagClick,
                     onTagLongClick = onTagLongClick,
-                    leadingVisual = Icon,
                 )
             }
 
             AlbumOnlineDetailAnimatedLine(
-                content = statsText,
-                loading = onlineDetailLoading && !album.hasRatingInfo(),
+                content = if (showStatsPlaceholders && onlineDetailLoading) {
+                    ""
+                } else {
+                    statsText.animationKey
+                },
+                loading = if (showStatsPlaceholders) {
+                    onlineDetailLoading
+                } else {
+                    onlineDetailLoading && !album.hasRatingInfo()
+                },
                 animated = animateOnlineDetails,
             ) {
-                Text(
-                    text = statsText,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = colorScheme.textTertiary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                AlbumStatsLine(
+                    stats = statsText,
+                    modifier = Modifier.fillMaxWidth(),
                 )
             }
         }
@@ -684,51 +749,6 @@ private fun onlineDetailLineStateKey(
         content.isNotBlank() -> "content:$content"
         loading -> "loading"
         else -> "empty"
-    }
-}
-
-@Composable
-private fun AlbumOnlineDetailAnimatedOverlay(
-    visible: Boolean,
-    animated: Boolean,
-    modifier: Modifier = Modifier,
-    content: @Composable () -> Unit,
-) {
-    if (!animated) {
-        if (visible) {
-            Box(modifier = modifier) {
-                content()
-            }
-        }
-        return
-    }
-    AnimatedContent(
-        targetState = visible,
-        modifier = modifier,
-        transitionSpec = {
-            (
-                fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
-                    slideInVertically(
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessMediumLow
-                        )
-                    ) { height -> height / 3 }
-                ) togetherWith (
-                fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium)) +
-                    slideOutVertically(
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessMedium
-                        )
-                    ) { height -> height / 4 }
-                ) using SizeTransform(clip = false)
-        },
-        label = "albumOnlineDetailOverlay"
-    ) { targetVisible ->
-        if (targetVisible) {
-            content()
-        }
     }
 }
 
@@ -839,20 +859,146 @@ private fun AlbumCoverMetricBadge(
 }
 
 @Composable
-private fun CollectedStamp(modifier: Modifier = Modifier) {
-    val dangerColor = AsmrTheme.colorScheme.danger
+private fun AlbumStatsLine(
+    stats: AlbumStatsText,
+    modifier: Modifier = Modifier,
+) {
+    if (stats.leading.isBlank() && stats.date.isBlank()) return
+    val colorScheme = AsmrTheme.colorScheme
+    val style = MaterialTheme.typography.labelSmall.copy(lineHeight = 19.sp)
+    Row(
+        modifier = modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        if (stats.leading.isNotBlank()) {
+            Text(
+                text = stats.leading,
+                style = style,
+                color = colorScheme.textTertiary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f),
+            )
+        } else {
+            Spacer(modifier = Modifier.weight(1f))
+        }
+        if (stats.date.isNotBlank()) {
+            Text(
+                text = stats.date,
+                style = style,
+                color = colorScheme.textTertiary,
+                maxLines = 1,
+                textAlign = TextAlign.End,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AlbumCoverDepthShadow(
+    progress: Float,
+    isDark: Boolean,
+    shape: Shape,
+    blurRadius: Dp,
+    modifier: Modifier = Modifier,
+) {
+    if (progress <= 0f) return
+    val layerColor = if (isDark) Color.White else Color.Black
+    val resolvedBlurRadius = if (isDark) blurRadius * 1.35f else blurRadius
     Box(
         modifier = modifier
-            .rotate(15f)
-            .background(dangerColor.copy(alpha = 0.85f), RoundedCornerShape(4.dp))
-            .padding(horizontal = 6.dp, vertical = 2.dp),
-        contentAlignment = Alignment.Center
+            // 模糊必须位于偏移图层外侧，否则图层会先按封面边界截断模糊结果，
+            // 再把已经截平的底边整体下移，形成明显的裁剪直线。
+            .blur(
+                radius = resolvedBlurRadius,
+                edgeTreatment = BlurredEdgeTreatment.Unbounded,
+            )
+            .graphicsLayer {
+                alpha = progress * if (isDark) 0.38f else 0.54f
+                scaleX = 0.93f
+                scaleY = 0.93f
+                translationX = if (isDark) 4.dp.toPx() else 5.dp.toPx()
+                translationY = if (isDark) 5.dp.toPx() else 6.dp.toPx()
+                compositingStrategy = CompositingStrategy.ModulateAlpha
+            }
+            .background(layerColor, shape)
+    )
+}
+
+@Composable
+private fun CollectedCoverRibbon(modifier: Modifier = Modifier) {
+    val colorScheme = AsmrTheme.colorScheme
+    Box(
+        modifier = modifier
+            .size(74.dp)
+            .drawBehind {
+                val innerEdge = 32.dp.toPx()
+                val outerEdge = 58.dp.toPx()
+                val foldSize = 8.dp.toPx()
+                val ribbonPath = Path().apply {
+                    moveTo(0f, innerEdge)
+                    lineTo(innerEdge, 0f)
+                    lineTo(outerEdge, 0f)
+                    lineTo(0f, outerEdge)
+                    close()
+                }
+                drawPath(
+                    path = ribbonPath,
+                    brush = Brush.linearGradient(
+                        colors = listOf(colorScheme.primaryStrong, colorScheme.primary),
+                        start = Offset.Zero,
+                        end = Offset(outerEdge, outerEdge),
+                    ),
+                )
+                val foldColor = colorScheme.primaryStrong.copy(alpha = 0.78f)
+                drawPath(
+                    path = Path().apply {
+                        moveTo(outerEdge, 0f)
+                        lineTo(outerEdge - foldSize, foldSize)
+                        lineTo(outerEdge, foldSize)
+                        close()
+                    },
+                    color = foldColor,
+                )
+                drawPath(
+                    path = Path().apply {
+                        moveTo(0f, outerEdge)
+                        lineTo(foldSize, outerEdge - foldSize)
+                        lineTo(foldSize, outerEdge)
+                        close()
+                    },
+                    color = foldColor,
+                )
+            },
     ) {
         Text(
             text = "收录",
-            style = MaterialTheme.typography.labelSmall,
-            fontWeight = FontWeight.Bold,
-            color = Color.White
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = 11.sp,
+                fontWeight = FontWeight.Bold,
+            ),
+            color = colorScheme.onPrimary,
+            maxLines = 1,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .offset(x = (-14).dp, y = (-14).dp)
+                .width(44.dp)
+                .rotate(-45f),
         )
+    }
+}
+
+@Composable
+private fun BoxScope.AnimatedCollectedCoverRibbon(visible: Boolean) {
+    androidx.compose.animation.AnimatedVisibility(
+        visible = visible,
+        modifier = Modifier
+            .align(Alignment.TopStart)
+            .offset(x = (-3).dp, y = (-3).dp),
+        enter = fadeIn(animationSpec = tween(AlbumCollectedRibbonFadeMillis)),
+        exit = fadeOut(animationSpec = tween(AlbumCollectedRibbonFadeMillis)),
+    ) {
+        CollectedCoverRibbon()
     }
 }

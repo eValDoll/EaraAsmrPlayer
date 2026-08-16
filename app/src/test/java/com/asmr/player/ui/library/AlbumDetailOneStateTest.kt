@@ -2,10 +2,20 @@ package com.asmr.player.ui.library
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AlbumDetailOneStateTest {
+    @Test
+    fun asmrOneFailureMessage_isSilentForLocalLibraryDetail() {
+        assertNull(albumDetailAsmrOneFailureMessage(isLocalLibraryDetail = true))
+        assertEquals(
+            com.asmr.player.util.ASMR_ONE_SITE_FAILURE_MESSAGE,
+            albumDetailAsmrOneFailureMessage(isLocalLibraryDetail = false)
+        )
+    }
+
     @Test
     fun shouldShowAsmrOneDirectoryLoading_dependsOnOneStateOnly() {
         assertTrue(
@@ -85,6 +95,67 @@ class AlbumDetailOneStateTest {
     }
 
     @Test
+    fun albumDetailOnlineLoadPlan_localUsesDlsiteOnlyAsAuthenticatedFallback() {
+        assertEquals(
+            AlbumDetailOnlineLoadPlan(),
+            albumDetailOnlineLoadPlan(
+                selectedTab = 0,
+                hasResolvedInitialDlsiteTarget = false,
+                isInitialRouteReady = true,
+                hasValidLocalRj = false
+            )
+        )
+        assertEquals(
+            AlbumDetailOnlineLoadPlan(loadAsmrOne = true),
+            albumDetailOnlineLoadPlan(
+                selectedTab = 0,
+                hasResolvedInitialDlsiteTarget = false,
+                isInitialRouteReady = true,
+                hasValidLocalRj = true,
+                hasResolvedAsmrOneContent = false,
+                hasAsmrOneTree = false,
+                hasDlsitePlayCredentials = true
+            )
+        )
+        assertEquals(
+            AlbumDetailOnlineLoadPlan(loadAsmrOne = true),
+            albumDetailOnlineLoadPlan(
+                selectedTab = 0,
+                hasResolvedInitialDlsiteTarget = false,
+                isInitialRouteReady = true,
+                hasValidLocalRj = true,
+                hasResolvedAsmrOneContent = true,
+                hasAsmrOneTree = false,
+                hasDlsitePlayCredentials = false
+            )
+        )
+        assertEquals(
+            AlbumDetailOnlineLoadPlan(loadAsmrOne = true, loadDlsitePlay = true),
+            albumDetailOnlineLoadPlan(
+                selectedTab = 0,
+                hasResolvedInitialDlsiteTarget = false,
+                isInitialRouteReady = true,
+                hasValidLocalRj = true,
+                hasResolvedAsmrOneContent = true,
+                hasAsmrOneTree = false,
+                hasDlsitePlayCredentials = true
+            )
+        )
+        assertEquals(
+            AlbumDetailOnlineLoadPlan(loadAsmrOne = true),
+            albumDetailOnlineLoadPlan(
+                selectedTab = 0,
+                hasResolvedInitialDlsiteTarget = false,
+                isInitialRouteReady = true,
+                hasValidLocalRj = true,
+                hasResolvedAsmrOneContent = true,
+                hasAsmrOneTree = true,
+                hasDlsitePlayCredentials = true
+            )
+        )
+    }
+
+    @Test
     fun albumDetailOnlineLoadPlan_keepsDlsitePlayBehindResolvedTarget() {
         assertEquals(
             AlbumDetailOnlineLoadPlan(loadDlsite = true, loadDlsitePlay = false),
@@ -154,6 +225,57 @@ class AlbumDetailOneStateTest {
                 hasAsmrOneTree = true,
                 hasDlsitePlayTree = false,
                 hasResolvedInitialDlsiteTarget = false
+            )
+        )
+    }
+
+    @Test
+    fun albumHeaderDownloadEnabled_localRequiresRjAndAccessibleTree() {
+        assertFalse(
+            albumHeaderDownloadEnabled(
+                selectedTab = 0,
+                hasAsmrOneTree = false,
+                hasDlsitePlayTree = false,
+                hasResolvedInitialDlsiteTarget = true,
+                hasValidLocalRj = true
+            )
+        )
+        assertFalse(
+            albumHeaderDownloadEnabled(
+                selectedTab = 0,
+                hasAsmrOneTree = true,
+                hasDlsitePlayTree = false,
+                hasResolvedInitialDlsiteTarget = false,
+                hasValidLocalRj = false
+            )
+        )
+        assertTrue(
+            albumHeaderDownloadEnabled(
+                selectedTab = 0,
+                hasAsmrOneTree = false,
+                hasDlsitePlayTree = true,
+                hasResolvedInitialDlsiteTarget = false,
+                hasValidLocalRj = true
+            )
+        )
+        assertFalse(
+            albumHeaderDownloadEnabled(
+                selectedTab = 0,
+                hasAsmrOneTree = false,
+                hasDlsitePlayTree = true,
+                hasResolvedInitialDlsiteTarget = false,
+                hasValidLocalRj = true,
+                hasDlsitePlayCredentials = false
+            )
+        )
+        assertTrue(
+            albumHeaderDownloadEnabled(
+                selectedTab = 0,
+                hasAsmrOneTree = true,
+                hasDlsitePlayTree = false,
+                hasResolvedInitialDlsiteTarget = false,
+                hasValidLocalRj = true,
+                hasDlsitePlayCredentials = false
             )
         )
     }

@@ -8,6 +8,24 @@ import org.junit.Test
 
 class AsmrOneWorkMatcherTest {
     @Test
+    fun matchesBjSourceId() {
+        val work = WorkDetailsResponse(
+            id = 100000062,
+            source_id = "BJ02370869",
+            title = "",
+            circle = null,
+            vas = null,
+            tags = null,
+            duration = 0,
+            mainCoverUrl = "",
+            dl_count = 0,
+            price = 0
+        )
+
+        assertTrue(asmrOneWorkMatchesRj(work, "bj02370869"))
+    }
+
+    @Test
     fun matchesByOriginalWorkNo() {
         val work = WorkDetailsResponse(
             id = 1,

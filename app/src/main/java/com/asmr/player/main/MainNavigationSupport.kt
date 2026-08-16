@@ -301,14 +301,18 @@ internal fun shouldHideStatusBarForImmersivePage(
     nowPlayingVisible: Boolean
 ): Boolean {
     if (nowPlayingVisible) return true
-    return currentRoute?.startsWith("album_detail") == true
+    return isAlbumDetailRoute(currentRoute)
 }
 
-internal fun resolveAlbumDetailTransitionKey(
-    currentRoute: String?,
-    backStackEntryId: String?
-): String? {
-    return backStackEntryId.takeIf { currentRoute?.startsWith("album_detail") == true }
+internal fun isAlbumDetailRoute(route: String?): Boolean {
+    return route?.startsWith("album_detail") == true
+}
+
+internal fun isAlbumDetailStackTransition(
+    initialRoute: String?,
+    targetRoute: String?
+): Boolean {
+    return isAlbumDetailRoute(initialRoute) && isAlbumDetailRoute(targetRoute)
 }
 
 internal fun NavHostController.navigateSingleTop(route: String, popUpToRoute: String? = null) {

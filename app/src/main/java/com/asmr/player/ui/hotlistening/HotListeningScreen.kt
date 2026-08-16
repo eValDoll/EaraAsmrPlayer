@@ -44,6 +44,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -54,7 +55,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
@@ -158,8 +158,6 @@ fun HotListeningScreen(
     val selectedPeriod by viewModel.selectedPeriod.collectAsStateWhileActive(isDataActive)
     val colorScheme = AsmrTheme.colorScheme
     val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
-    val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
-    val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
     val settingsViewModel: SettingsViewModel = hiltViewModel()
     val searchBlockedKeywords by settingsViewModel.searchBlockedKeywords.collectAsStateWhileActive(isDataActive)
     val scope = rememberCoroutineScope()
@@ -172,8 +170,8 @@ fun HotListeningScreen(
     }
     val listState = rememberSaveablePrefetchedLazyListState(
         stateKey = contentScrollKey,
-        forwardCompositionPrefetchCount = 2,
-        backwardCompositionPrefetchCount = 2,
+        forwardCompositionPrefetchCount = 4,
+        backwardCompositionPrefetchCount = 4,
     )
     val gridState = rememberSaveable(contentScrollKey, saver = LazyStaggeredGridState.Saver) {
         LazyStaggeredGridState()
@@ -328,15 +326,10 @@ fun HotListeningScreen(
                     val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
                     val coverPx = remember(listItemHeight, density) { with(density) { listItemHeight.roundToPx() } }
                     val preloadSize = remember(coverPx) { IntSize(coverPx, coverPx) }
-                    val listIsScrolling = listState.isScrollInProgress
-                    val listCoverFadeIn = shouldFadeInCover(listIsScrolling)
-                    // 滚动中不读 layoutInfo，避免可见索引每帧变化引起重组。
-                    // 停止后只保留当前真正可见的卡片纹理，让 Lazy 预取/复用槽
-                    // 中的屏外大图层及时释放。
-                    val idleVisibleListIndices = if (listIsScrolling) {
-                        emptySet()
-                    } else {
-                        listState.layoutInfo.visibleItemsInfo.mapTo(mutableSetOf()) { it.index }
+                    val listCoverFadeInState = remember(listState) {
+                        derivedStateOf {
+                            shouldFadeInCover(listState.isScrollInProgress)
+                        }
                     }
                     LazyListPreloader(
                         state = listState,
@@ -371,16 +364,13 @@ fun HotListeningScreen(
                                     items = state.entries,
                                     key = { _, entry -> hotListeningItemKey("visible", entry.album) },
                                     contentType = { _, _ -> "album" }
-                                ) { index, entry ->
+                                ) { _, entry ->
                                     HotListeningListItem(
                                         entry = entry,
                                         onAlbumClick = onAlbumClick,
                                         copyMeta = copyMeta,
                                         onMetaLongClick = ::openMetaActions,
-                                        coverFadeIn = listCoverFadeIn,
-                                        // 排行卡片在滚动期间内容静止，仅位置变化；缓存
-                                        // RenderNode 层可避免每帧重放整卡文字、圆角和图片。
-                                        cacheDrawLayer = listIsScrolling || index in idleVisibleListIndices,
+                                        coverFadeInState = listCoverFadeInState,
                                     )
                                 }
                                 if (state.blockedEntries.isNotEmpty()) {
@@ -401,15 +391,13 @@ fun HotListeningScreen(
                                                 hotListeningItemKey("blocked", entry.album)
                                             },
                                             contentType = { _, _ -> "album" }
-                                        ) { index, entry ->
+                                        ) { _, entry ->
                                             HotListeningListItem(
                                                 entry = entry,
                                                 onAlbumClick = onAlbumClick,
                                                 copyMeta = copyMeta,
                                                 onMetaLongClick = ::openMetaActions,
-                                                coverFadeIn = listCoverFadeIn,
-                                                cacheDrawLayer = listIsScrolling ||
-                                                    (state.entries.size + 1 + index) in idleVisibleListIndices,
+                                                coverFadeInState = listCoverFadeInState,
                                             )
                                         }
                                     }
@@ -427,8 +415,11 @@ fun HotListeningScreen(
                     val density = LocalDensity.current
                     val gridCoverPx = remember(adaptiveCellSize, density) { with(density) { adaptiveCellSize.roundToPx() } }
                     val gridPreloadSize = remember(gridCoverPx) { IntSize(gridCoverPx, gridCoverPx) }
-                    val gridIsScrolling = gridState.isScrollInProgress
-                    val gridCoverFadeIn = shouldFadeInCover(gridIsScrolling)
+                    val gridCoverFadeInState = remember(gridState) {
+                        derivedStateOf {
+                            shouldFadeInCover(gridState.isScrollInProgress)
+                        }
+                    }
                     LazyStaggeredGridPreloader(
                         state = gridState,
                         itemCount = state.entries.size,
@@ -474,7 +465,7 @@ fun HotListeningScreen(
                                         onAlbumClick = onAlbumClick,
                                         copyMeta = copyMeta,
                                         onMetaLongClick = ::openMetaActions,
-                                        coverFadeIn = gridCoverFadeIn
+                                        coverFadeInState = gridCoverFadeInState,
                                     )
                                 }
                                 if (state.blockedEntries.isNotEmpty()) {
@@ -505,7 +496,7 @@ fun HotListeningScreen(
                                                 onAlbumClick = onAlbumClick,
                                                 copyMeta = copyMeta,
                                                 onMetaLongClick = ::openMetaActions,
-                                                coverFadeIn = gridCoverFadeIn
+                                                coverFadeInState = gridCoverFadeInState,
                                             )
                                         }
                                     }
@@ -519,6 +510,8 @@ fun HotListeningScreen(
     }
 
     metaActionKeyword?.let { keyword ->
+        val playlistsViewModel: PlaylistsViewModel = hiltViewModel()
+        val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel()
         AlbumMetaActionDialog(
             keyword = keyword,
             onDismissRequest = { metaActionKeyword = null },
@@ -536,25 +529,19 @@ private fun HotListeningListItem(
     onAlbumClick: (Album) -> Unit,
     copyMeta: (String, String) -> Unit,
     onMetaLongClick: (String) -> Unit,
-    coverFadeIn: Boolean = true,
-    cacheDrawLayer: Boolean = false,
+    coverFadeInState: State<Boolean>? = null,
 ) {
     val album = entry.album
-    val colorScheme = AsmrTheme.colorScheme
     val coverBadge = remember(entry) { entry.toCoverBadge() }
-    val containerColor = remember(colorScheme.surface, colorScheme.background) {
-        colorScheme.surface.copy(alpha = 0.5f).compositeOver(colorScheme.background)
-    }
     AlbumItem(
         album = album,
         onClick = { onAlbumClick(album) },
         coverRetainPainterDuringReload = true,
         coverBadge = coverBadge,
         animateOnlineDetails = false,
-        coverFadeIn = coverFadeIn,
-        cacheDrawLayer = cacheDrawLayer,
-        containerColor = containerColor,
-        onRjClick = { copyMeta("RJ", it) },
+        coverFadeInState = coverFadeInState,
+        cacheRenderLayer = true,
+        onRjClick = { copyMeta("作品编号", it) },
         onCircleClick = { copyMeta("社团", it) },
         onCircleLongClick = onMetaLongClick,
         onCvClick = { copyMeta("声优", it) },
@@ -570,23 +557,18 @@ private fun HotListeningGridItem(
     onAlbumClick: (Album) -> Unit,
     copyMeta: (String, String) -> Unit,
     onMetaLongClick: (String) -> Unit,
-    coverFadeIn: Boolean = true
+    coverFadeInState: State<Boolean>? = null,
 ) {
     val album = entry.album
-    val colorScheme = AsmrTheme.colorScheme
     val coverBadge = remember(entry) { entry.toCoverBadge() }
-    val containerColor = remember(colorScheme.surface, colorScheme.background) {
-        colorScheme.surface.copy(alpha = 0.3f).compositeOver(colorScheme.background)
-    }
     AlbumGridItem(
         album = album,
         onClick = { onAlbumClick(album) },
         coverRetainPainterDuringReload = true,
         coverBadge = coverBadge,
         animateOnlineDetails = false,
-        coverFadeIn = coverFadeIn,
-        containerColor = containerColor,
-        onRjClick = { copyMeta("RJ", it) },
+        coverFadeInState = coverFadeInState,
+        onRjClick = { copyMeta("作品编号", it) },
         onCircleClick = { copyMeta("社团", it) },
         onCircleLongClick = onMetaLongClick,
         onCvClick = { copyMeta("声优", it) },

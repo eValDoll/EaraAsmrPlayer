@@ -36,9 +36,9 @@ class DlsiteProductInfoClient @Inject constructor(
                 (k as? String)?.trim()?.equals(clean, ignoreCase = true) == true
             }?.value as? Map<*, *>)
             ?: return emptyList()
-        val rawItems = workObj["dl_count_items"] as? List<*> ?: return emptyList()
+        val rawItems = workObj["dl_count_items"] as? List<*> ?: emptyList<Any?>()
 
-        return rawItems.mapNotNull { it as? Map<*, *> }
+        val listedEditions = rawItems.mapNotNull { it as? Map<*, *> }
             .mapNotNull { item ->
                 val editionType = (item["edition_type"] as? String).orEmpty().trim()
                 if (editionType != "language") return@mapNotNull null
@@ -49,10 +49,46 @@ class DlsiteProductInfoClient @Inject constructor(
                 }
                 val order = (item["display_order"] as? Number)?.toInt() ?: 0
                 if (lang.isBlank() || workno.isBlank()) return@mapNotNull null
-                if (lang !in setOf("JPN", "CHI_HANS", "CHI_HANT")) return@mapNotNull null
+                if (lang !in SUPPORTED_LANGUAGES) return@mapNotNull null
                 DlsiteLanguageEdition(workno = workno, lang = lang, label = label, displayOrder = order)
             }
+
+        val translationInfo = workObj["translation_info"] as? Map<*, *>
+        val currentLang = (translationInfo?.get("lang") as? String).orEmpty().trim()
+        val currentEdition = currentLang
+            .takeIf { it in SUPPORTED_LANGUAGES }
+            ?.let { lang ->
+                listedEditions.firstOrNull { it.lang == lang }
+                    ?.copy(workno = clean)
+                    ?: DlsiteLanguageEdition(
+                        workno = clean,
+                        lang = lang,
+                        label = defaultLanguageLabel(lang),
+                        displayOrder = defaultLanguageOrder(lang)
+                    )
+            }
+
+        return buildList {
+            if (currentEdition != null) add(currentEdition)
+            addAll(listedEditions.filterNot { it.lang == currentLang })
+        }
             .sortedWith(compareBy({ it.displayOrder }, { it.lang }))
+    }
+
+    private fun defaultLanguageLabel(lang: String): String {
+        return when (lang) {
+            "CHI_HANS" -> "简体中文"
+            "CHI_HANT" -> "繁体中文"
+            else -> "日本語"
+        }
+    }
+
+    private fun defaultLanguageOrder(lang: String): Int {
+        return when (lang) {
+            "CHI_HANS" -> 5
+            "CHI_HANT" -> 7
+            else -> 1
+        }
     }
 
     suspend fun fetchLanguageEditions(productId: String): List<DlsiteLanguageEdition> = withContext(Dispatchers.IO) {
@@ -79,5 +115,9 @@ class DlsiteProductInfoClient @Inject constructor(
             if (!resp.isSuccessful || body.isBlank()) return@withContext emptyList()
             parseLanguageEditions(clean, body)
         }
+    }
+
+    private companion object {
+        val SUPPORTED_LANGUAGES = setOf("JPN", "CHI_HANS", "CHI_HANT")
     }
 }
