@@ -34,6 +34,9 @@ data class DownloadItemEntity(
     val total: Long,
     val speed: Long,
     val createdAt: Long,
-    val updatedAt: Long
+    val updatedAt: Long,
+    val dlsitePlayImageSeed: Int? = null,
+    val dlsitePlayImageWidth: Int? = null,
+    val dlsitePlayImageHeight: Int? = null
 )
 

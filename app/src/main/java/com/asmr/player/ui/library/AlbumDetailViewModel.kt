@@ -2978,7 +2978,10 @@ class AlbumDetailViewModel @Inject constructor(
                 albumTagsCsv = album.tags.joinToString(","),
                 albumCoverUrl = album.coverUrl,
                 albumWorkId = album.workId,
-                albumRjCode = album.rjCode
+                albumRjCode = album.rjCode,
+                dlsitePlayImageSeed = item.dlsitePlayImageSeed,
+                dlsitePlayImageWidth = item.dlsitePlayImageWidth,
+                dlsitePlayImageHeight = item.dlsitePlayImageHeight
             )
             enqueued += 1
         }

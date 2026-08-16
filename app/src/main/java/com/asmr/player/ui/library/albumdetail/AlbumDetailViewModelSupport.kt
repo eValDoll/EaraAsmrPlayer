@@ -30,6 +30,7 @@ import com.asmr.player.data.remote.dlsite.DlsiteProductInfoClient
 import com.asmr.player.data.remote.dlsite.resolveCloudSyncWorkId
 import com.asmr.player.data.remote.dlsite.resolveDlsiteCloudSync
 import com.asmr.player.data.remote.dlsite.resolveSelectedDlsiteCloudSync
+import com.asmr.player.data.remote.dlsite.parseDlsitePlayImageSeed
 import com.asmr.player.data.remote.download.DownloadManager
 import com.asmr.player.data.remote.scraper.DLSiteScraper
 import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
@@ -532,7 +533,10 @@ private fun asmrOneEditionMatchesLanguage(languageLabel: String, selectedLang: S
 internal data class AsmrOneLeafDownload(
     val url: String,
     val relativePath: String,
-    val duration: Double?
+    val duration: Double?,
+    val dlsitePlayImageSeed: Int? = null,
+    val dlsitePlayImageWidth: Int? = null,
+    val dlsitePlayImageHeight: Int? = null
 )
 
 internal const val DlsiteTrialDownloadDirectoryName = "体验版"
@@ -673,7 +677,23 @@ internal fun flattenAsmrOneLeafDownloads(tree: List<AsmrOneTrackNodeResponse>): 
             val children = node.children.orEmpty()
             val url = node.mediaDownloadUrl ?: node.streamUrl
             if (!url.isNullOrBlank() && children.isEmpty()) {
-                out.add(AsmrOneLeafDownload(url = url, relativePath = path, duration = node.duration))
+                val imageWidth = node.dlsitePlayImageWidth?.takeIf { it > 0 }
+                val imageHeight = node.dlsitePlayImageHeight?.takeIf { it > 0 }
+                val imageSeed = if (node.dlsitePlayImageCrypt && imageWidth != null && imageHeight != null) {
+                    parseDlsitePlayImageSeed(node.dlsitePlayOptimizedName)
+                } else {
+                    null
+                }
+                out.add(
+                    AsmrOneLeafDownload(
+                        url = url,
+                        relativePath = path,
+                        duration = node.duration,
+                        dlsitePlayImageSeed = imageSeed,
+                        dlsitePlayImageWidth = imageWidth.takeIf { imageSeed != null },
+                        dlsitePlayImageHeight = imageHeight.takeIf { imageSeed != null }
+                    )
+                )
             } else if (children.isNotEmpty()) {
                 walk(children, path)
             }

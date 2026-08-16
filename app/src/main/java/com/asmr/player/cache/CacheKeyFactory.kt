@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.res.Configuration
 import androidx.compose.ui.unit.IntSize
 import coil.request.ImageRequest
+import java.io.File
 import java.security.MessageDigest
 import java.util.LinkedHashMap
 
@@ -56,6 +57,7 @@ object CacheKeyFactory {
         return when (data) {
             null -> "null"
             is String -> data.trim()
+            is File -> "file:${data.absolutePath}|${data.length()}|${data.lastModified()}"
             else -> data.toString()
         }
     }

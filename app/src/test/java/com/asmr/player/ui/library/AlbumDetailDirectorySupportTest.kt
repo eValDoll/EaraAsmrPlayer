@@ -278,6 +278,26 @@ class AlbumDetailDirectorySupportTest {
     }
 
     @Test
+    fun flattenAsmrOneLeafDownloads_preservesDlsitePlayImageDescrambleMetadata() {
+        val leaf = flattenAsmrOneLeafDownloads(
+            listOf(
+                AsmrOneTrackNodeResponse(
+                    title = "01.パッケージ.jpg",
+                    mediaDownloadUrl = "https://play.dlsite.com/optimized/00000abc1234.jpg",
+                    dlsitePlayImageCrypt = true,
+                    dlsitePlayImageWidth = 1200,
+                    dlsitePlayImageHeight = 900,
+                    dlsitePlayOptimizedName = "00000abc1234.jpg"
+                )
+            )
+        ).single()
+
+        assertEquals(0xabc1234, leaf.dlsitePlayImageSeed)
+        assertEquals(1200, leaf.dlsitePlayImageWidth)
+        assertEquals(900, leaf.dlsitePlayImageHeight)
+    }
+
+    @Test
     fun flattenOnlineSaveLeaves_includesResourceFilesButSkipsSubtitles() {
         val leaves = flattenOnlineSaveLeaves(
             listOf(
