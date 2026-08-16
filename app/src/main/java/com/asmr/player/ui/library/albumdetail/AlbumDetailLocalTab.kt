@@ -162,6 +162,7 @@ internal fun AlbumLocalBreadcrumbTabV2(
     onDownloadOnlineTrack: (Track, String) -> Unit,
     onManageTrackTags: (Track) -> Unit,
     onRemoveTrack: (Track) -> Unit,
+    onDeleteTreeEntry: (LocalTreeDeletionTarget, (Boolean) -> Unit) -> Unit,
     onSetCoverFromImage: (String) -> Unit,
     onPreviewImages: (ImagePreviewRequest) -> Unit,
     onPreviewFile: (LocalTreeUiEntry.File) -> Unit,
@@ -169,7 +170,14 @@ internal fun AlbumLocalBreadcrumbTabV2(
     onSubtitleGenerationUnavailable: (String) -> Unit,
     onSubtitleGenerationQueued: (String) -> Unit,
 ) {
-    val queueTracks = remember(album.id, album.tracks) { album.tracks.sortedBy { it.path } }
+    var locallyDeletedTrackIds by remember(stateKey) { mutableStateOf(emptySet<Long>()) }
+    var treeRevision by rememberSaveable(stateKey) { mutableIntStateOf(0) }
+    var pendingDeletion by remember { mutableStateOf<LocalTreeDeletionTarget?>(null) }
+    val queueTracks = remember(album.id, album.tracks, locallyDeletedTrackIds) {
+        album.tracks
+            .filterNot { it.id in locallyDeletedTrackIds }
+            .sortedBy { it.path }
+    }
     val queueTrackIds = remember(queueTracks) {
         queueTracks.asSequence().map { it.id }.filter { it > 0L }.distinct().toList()
     }
@@ -184,6 +192,11 @@ internal fun AlbumLocalBreadcrumbTabV2(
         SubtitleModelInstallationState.Available
     val allPaths = remember(album) { album.getAllLocalPaths() }
     var currentPath by rememberSaveable(stateKey) { mutableStateOf(initialCurrentPath.trim().trim('/')) }
+
+    LaunchedEffect(album.tracks) {
+        val currentTrackIds = album.tracks.asSequence().map { it.id }.toSet()
+        locallyDeletedTrackIds = locallyDeletedTrackIds.intersect(currentTrackIds)
+    }
 
     val listState = rememberSaveable("scroll:$stateKey", saver = LazyListState.Saver) {
         LazyListState(initialScroll.first, initialScroll.second)
@@ -221,10 +234,11 @@ internal fun AlbumLocalBreadcrumbTabV2(
             .collect { value = it }
     }
     val treeIndex by produceState<LocalTreeIndex?>(
-        initialValue = null,
-        key1 = allPaths,
-        key2 = queueTracks,
-        key3 = onlineSavedResources
+        null,
+        allPaths,
+        queueTracks,
+        onlineSavedResources,
+        treeRevision,
     ) {
         value = withContext(Dispatchers.IO) {
             loadOrBuildLocalTreeIndex(
@@ -321,6 +335,15 @@ internal fun AlbumLocalBreadcrumbTabV2(
                     folders = browserValue.folders,
                     files = browserValue.files,
                     onNavigate = { path -> currentPath = path },
+                    onDeleteFolder = { folder ->
+                        pendingDeletion = LocalTreeDeletionTarget(
+                            title = folder.title,
+                            relativePath = folder.path,
+                            isDirectory = true,
+                            trackIds = folder.descendantTrackIds,
+                            hasLocalContent = folder.hasLocalContent,
+                        )
+                    },
                     onAddToFavorites = onAddMediaItemsToFavorites,
                     onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
                     onAddMediaItemsToQueue = onAddMediaItemsToQueue,
@@ -362,7 +385,7 @@ internal fun AlbumLocalBreadcrumbTabV2(
                     },
                     folderKeyPrefix = "folder",
                     fileKeyPrefix = "file",
-                    fileContent = { file, selectionMode, selected, enterSelectionMode, onSelectedChange ->
+                    fileContent = { file, selectionMode, selected, selectedPosition, enterSelectionMode, onSelectedChange ->
                         val track = file.track
                         val downloadableTrack = downloadableOnlineAudioTrack(file)
                         DirectoryFileRow(
@@ -466,6 +489,7 @@ internal fun AlbumLocalBreadcrumbTabV2(
                             },
                             selectionMode = selectionMode,
                             selected = selected,
+                            selectedPosition = selectedPosition,
                             onEnterSelectionMode = enterSelectionMode,
                             onSelectedChange = onSelectedChange,
                             onSetAsCover = if (canSetDirectoryImageAsLocalCover(file)) {
@@ -494,12 +518,69 @@ internal fun AlbumLocalBreadcrumbTabV2(
                             } else null,
                             subtitleGenerationEnabled = subtitleModelAvailable,
                             onManageTags = track?.let { if (!isOnlineTrackPath(it.path)) { { onManageTrackTags(it) } } else null },
-                            onRemoveFromAlbum = track?.let { { onRemoveTrack(it) } }
+                            onRemoveFromAlbum = track?.let { { onRemoveTrack(it) } },
+                            onDelete = if (file.fileType != TreeFileType.Audio) {
+                                {
+                                    pendingDeletion = LocalTreeDeletionTarget(
+                                        title = file.title,
+                                        relativePath = file.path,
+                                        absolutePath = file.absolutePath,
+                                        isDirectory = false,
+                                        trackIds = file.track?.id?.takeIf { it > 0L }?.let(::listOf).orEmpty(),
+                                        hasLocalContent = !file.absolutePath.startsWith("http", ignoreCase = true),
+                                    )
+                                }
+                            } else {
+                                null
+                            }
                         )
                     }
                 )
             }
         }
+    }
+
+    pendingDeletion?.let { target ->
+        AlertDialog(
+            onDismissRequest = { pendingDeletion = null },
+            title = { Text(if (target.isDirectory) "删除目录？" else "删除文件？") },
+            text = {
+                val message = when {
+                    target.isDirectory && target.hasLocalContent ->
+                        "将永久删除目录“${target.title}”及其全部内容，同时移除关联的本地库记录。此操作不可恢复。"
+                    target.isDirectory ->
+                        "将从本地库目录树移除“${target.title}”及其包含的在线资源。"
+                    target.hasLocalContent ->
+                        "将永久删除文件“${target.title}”。此操作不可恢复。"
+                    else ->
+                        "将从本地库目录树移除资源“${target.title}”。"
+                }
+                Text(message)
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        pendingDeletion = null
+                        onDeleteTreeEntry(target) { deleted ->
+                            if (deleted) {
+                                locallyDeletedTrackIds = locallyDeletedTrackIds + target.trackIds
+                                treeRevision += 1
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("删除")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingDeletion = null }) {
+                    Text("取消")
+                }
+            }
+        )
     }
 
 }

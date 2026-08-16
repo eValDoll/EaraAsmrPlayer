@@ -1006,6 +1006,13 @@ fun AlbumDetailScreen(
                                                 onRemoveTrack = { track ->
                                                     if (track.id > 0L) libraryViewModel.removeTrackFromAlbum(track.id)
                                                 },
+                                                onDeleteTreeEntry = { target, onComplete ->
+                                                    libraryViewModel.deleteAlbumTreeEntry(
+                                                        album = local,
+                                                        target = target,
+                                                        onComplete = onComplete,
+                                                    )
+                                                },
                                                 onSetCoverFromImage = { pathOrUri ->
                                                     viewModel.setLocalCoverPath(pathOrUri)
                                                 },

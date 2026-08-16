@@ -181,6 +181,7 @@ internal sealed class AsmrTreeUiEntry {
 
 private val DirectoryBrowserPanelCornerRadius = 22.dp
 private val DirectoryFolderRowCornerRadius = 14.dp
+private val DirectoryFileRowCornerRadius = 12.dp
 private val DirectoryBrowserPanelVerticalPadding = 8.dp
 
 internal fun directoryBrowserHeaderBackground(colorScheme: AsmrColorScheme): Color {
@@ -218,6 +219,39 @@ private fun directoryFolderShape(position: DirectoryFolderPosition): RoundedCorn
             topEnd = 0.dp,
             bottomStart = DirectoryFolderRowCornerRadius,
             bottomEnd = DirectoryFolderRowCornerRadius,
+        )
+    }
+}
+
+internal fun directorySelectedItemPosition(
+    selected: Boolean,
+    previousSelected: Boolean,
+    nextSelected: Boolean,
+): DirectoryFolderPosition {
+    if (!selected) return DirectoryFolderPosition.Single
+    return when {
+        !previousSelected && !nextSelected -> DirectoryFolderPosition.Single
+        !previousSelected -> DirectoryFolderPosition.First
+        !nextSelected -> DirectoryFolderPosition.Last
+        else -> DirectoryFolderPosition.Middle
+    }
+}
+
+private fun directoryFileSelectionShape(position: DirectoryFolderPosition): RoundedCornerShape {
+    return when (position) {
+        DirectoryFolderPosition.Single -> RoundedCornerShape(DirectoryFileRowCornerRadius)
+        DirectoryFolderPosition.First -> RoundedCornerShape(
+            topStart = DirectoryFileRowCornerRadius,
+            topEnd = DirectoryFileRowCornerRadius,
+            bottomStart = 0.dp,
+            bottomEnd = 0.dp,
+        )
+        DirectoryFolderPosition.Middle -> RoundedCornerShape(0.dp)
+        DirectoryFolderPosition.Last -> RoundedCornerShape(
+            topStart = 0.dp,
+            topEnd = 0.dp,
+            bottomStart = DirectoryFileRowCornerRadius,
+            bottomEnd = DirectoryFileRowCornerRadius,
         )
     }
 }
@@ -436,7 +470,9 @@ internal data class DirectoryBreadcrumbSegment(
 
 internal data class DirectoryFolderItem(
     val path: String,
-    val title: String
+    val title: String,
+    val descendantTrackIds: List<Long> = emptyList(),
+    val hasLocalContent: Boolean = false,
 )
 
 internal data class DirectoryFileItem(
@@ -458,6 +494,15 @@ internal data class DirectoryFileItem(
     val dlsitePlayImageWidth: Int? = null,
     val dlsitePlayImageHeight: Int? = null,
     val dlsitePlayOptimizedName: String? = null
+)
+
+internal data class LocalTreeDeletionTarget(
+    val title: String,
+    val relativePath: String,
+    val absolutePath: String? = null,
+    val isDirectory: Boolean,
+    val trackIds: List<Long> = emptyList(),
+    val hasLocalContent: Boolean,
 )
 
 internal fun isOnlineDirectoryAudio(fileType: TreeFileType, absolutePath: String, track: Track?): Boolean {
@@ -518,6 +563,27 @@ internal fun buildBreadcrumbSegments(currentPath: String): List<DirectoryBreadcr
         out += DirectoryBreadcrumbSegment(label = segment, path = path)
     }
     return out
+}
+
+internal fun normalizeLocalTreeRelativePath(path: String): String? {
+    val segments = path
+        .replace('\\', '/')
+        .trim()
+        .trim('/')
+        .split('/')
+        .filter { it.isNotBlank() }
+    if (segments.isEmpty() || segments.any { it == "." || it == ".." }) return null
+    return segments.joinToString("/")
+}
+
+internal fun localTreePathMatchesTarget(
+    candidatePath: String,
+    targetPath: String,
+    targetIsDirectory: Boolean,
+): Boolean {
+    val candidate = normalizeLocalTreeRelativePath(candidatePath) ?: return false
+    val target = normalizeLocalTreeRelativePath(targetPath) ?: return false
+    return candidate == target || (targetIsDirectory && candidate.startsWith("$target/"))
 }
 
 internal fun albumArtistLabel(album: Album): String {
@@ -732,6 +798,21 @@ internal fun findLocalTreeNode(root: LocalTreeNode, folderPath: String): LocalTr
     return cur
 }
 
+private fun collectLocalTreeLeafNodes(root: LocalTreeNode): List<LocalTreeNode> {
+    val leaves = mutableListOf<LocalTreeNode>()
+    val pending = ArrayDeque<LocalTreeNode>()
+    pending.add(root)
+    while (pending.isNotEmpty()) {
+        val node = pending.removeLast()
+        if (node.children.isEmpty()) {
+            if (node.absolutePath != null) leaves += node
+        } else {
+            node.children.values.forEach(pending::addLast)
+        }
+    }
+    return leaves
+}
+
 internal fun siblingAudioTracksForEntry(index: LocalTreeIndex, entryPath: String): List<Track> {
     val folderPath = entryPath.substringBeforeLast('/', "")
     val node = findLocalTreeNode(index.root, folderPath) ?: index.root
@@ -836,9 +917,16 @@ internal fun buildLocalDirectoryBrowser(
         .filter { it.children.isNotEmpty() }
         .sortedBy { SmartSortKey.of(it.name) }
         .map { child ->
+            val descendantLeaves = collectLocalTreeLeafNodes(child)
             DirectoryFolderItem(
                 path = child.path,
-                title = child.name
+                title = child.name,
+                descendantTrackIds = descendantLeaves
+                    .mapNotNull { it.track?.id?.takeIf { id -> id > 0L } }
+                    .distinct(),
+                hasLocalContent = descendantLeaves.any { node ->
+                    node.absolutePath?.startsWith("http", ignoreCase = true) == false
+                },
             )
         }
         .toList()
@@ -2779,8 +2867,11 @@ internal fun DirectoryFolderRowV3(
     title: String,
     onClick: () -> Unit,
     position: DirectoryFolderPosition = DirectoryFolderPosition.Single,
+    onDelete: (() -> Unit)? = null,
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val materialColorScheme = MaterialTheme.colorScheme
+    val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
     val rowContainerColor = colorScheme.surfaceVariant.copy(
         alpha = if (colorScheme.isDark) 0.42f else 0.58f
     )
@@ -2829,6 +2920,49 @@ internal fun DirectoryFolderRowV3(
                 tint = colorScheme.textTertiary,
                 modifier = Modifier.size(17.dp)
             )
+            if (onDelete != null) {
+                var showMenuExpanded by rememberSaveable(title) { mutableStateOf(false) }
+                Box {
+                    IconButton(
+                        onClick = { showMenuExpanded = true },
+                        modifier = Modifier.size(AudioItemMenuButtonSize)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.MoreVert,
+                            contentDescription = "目录操作",
+                            tint = colorScheme.textSecondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    MaterialTheme(
+                        colorScheme = materialColorScheme.copy(
+                            surface = dynamicContainerColor,
+                            surfaceContainer = dynamicContainerColor
+                        )
+                    ) {
+                        DropdownMenu(
+                            expanded = showMenuExpanded,
+                            onDismissRequest = { showMenuExpanded = false },
+                            modifier = Modifier.background(dynamicContainerColor)
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("删除目录", color = materialColorScheme.error) },
+                                onClick = {
+                                    showMenuExpanded = false
+                                    onDelete()
+                                },
+                                leadingIcon = {
+                                    Icon(
+                                        Icons.Rounded.Delete,
+                                        contentDescription = null,
+                                        tint = materialColorScheme.error
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+            }
         }
         if (position != DirectoryFolderPosition.Single && position != DirectoryFolderPosition.Last) {
             HorizontalDivider(
@@ -3010,6 +3144,7 @@ internal fun DirectoryBrowserPanelV4(
     folders: List<DirectoryFolderItem>,
     files: List<DirectoryFileItem>,
     onNavigate: (String) -> Unit,
+    onDeleteFolder: ((DirectoryFolderItem) -> Unit)? = null,
     onAddToFavorites: (List<MediaItem>) -> Unit,
     onOpenBatchPlaylistPicker: (List<MediaItem>) -> Unit,
     onAddMediaItemsToQueue: (List<MediaItem>) -> Unit,
@@ -3030,6 +3165,7 @@ internal fun DirectoryBrowserPanelV4(
         file: DirectoryFileItem,
         selectionMode: Boolean,
         selected: Boolean,
+        selectedPosition: DirectoryFolderPosition,
         enterSelectionMode: () -> Unit,
         onSelectedChange: (Boolean) -> Unit
     ) -> Unit
@@ -3069,9 +3205,9 @@ internal fun DirectoryBrowserPanelV4(
     var selectionMode by remember(panelKey, currentPath) { mutableStateOf(false) }
     var preferredPathState by rememberSaveable(panelKey) { mutableStateOf(preferredPath.trim().trim('/')) }
     val selectedPaths = remember(panelKey, currentPath) { mutableStateListOf<String>() }
-    val selectedFiles = remember(files, selectedPaths.toList()) {
-        val selectedSet = selectedPaths.toSet()
-        files.filter { selectedSet.contains(it.path) }
+    val selectedPathSet = remember(selectedPaths.toList()) { selectedPaths.toSet() }
+    val selectedFiles = remember(files, selectedPathSet) {
+        files.filter { selectedPathSet.contains(it.path) }
     }
     val activeTargets = remember(selectionMode, batchTargets, selectedFiles) {
         if (selectionMode) selectedFiles.mapNotNull { it.playlistTarget } else batchTargets
@@ -3180,7 +3316,7 @@ internal fun DirectoryBrowserPanelV4(
                     onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
                     onAddMediaItemsToQueue = onAddMediaItemsToQueue,
                     showTranslateAction = showTranslateAction,
-                    subtitleGenerationText = if (selectionMode) "生成并翻译" else "批量生成并翻译",
+                    subtitleGenerationText = if (selectionMode) "翻译选中" else "批量翻译",
                     subtitleGenerationEnabled = subtitleGenerationEnabled,
                     onGenerateSubtitles = onGenerateSubtitles,
                     onSubtitleGenerationUnavailable = onSubtitleGenerationUnavailable.takeIf {
@@ -3277,31 +3413,40 @@ internal fun DirectoryBrowserPanelV4(
                             }
                         }
                     } else {
-                        items(
+                        itemsIndexed(
                             items = folders,
-                            key = { folder -> "$folderKeyPrefix:${folder.path}" },
-                            contentType = { "folder" }
-                        ) { folder ->
+                            key = { _, folder -> "$folderKeyPrefix:${folder.path}" },
+                            contentType = { _, _ -> "folder" }
+                        ) { index, folder ->
                             val position = directoryFolderPosition(
-                                index = folders.indexOf(folder),
+                                index = index,
                                 total = folders.size,
                             )
                             DirectoryFolderRowV3(
                                 title = folder.title,
                                 onClick = { onNavigate(folder.path) },
                                 position = position,
+                                onDelete = onDeleteFolder?.let { deleteFolder ->
+                                    { deleteFolder(folder) }
+                                },
                             )
                         }
-                        items(
+                        itemsIndexed(
                             items = files,
-                            key = { file -> "$fileKeyPrefix:${file.path}" },
-                            contentType = { "file" }
-                        ) { file ->
-                            val isSelected = selectedPaths.contains(file.path)
+                            key = { _, file -> "$fileKeyPrefix:${file.path}" },
+                            contentType = { _, _ -> "file" }
+                        ) { index, file ->
+                            val isSelected = selectedPathSet.contains(file.path)
+                            val selectedPosition = directorySelectedItemPosition(
+                                selected = isSelected,
+                                previousSelected = index > 0 && selectedPathSet.contains(files[index - 1].path),
+                                nextSelected = index < files.lastIndex && selectedPathSet.contains(files[index + 1].path),
+                            )
                             fileContent(
                                 file,
                                 selectionMode,
                                 isSelected,
+                                selectedPosition,
                                 {
                                     selectionMode = true
                                     if (!selectedPaths.contains(file.path)) {
@@ -3337,6 +3482,7 @@ internal fun DirectoryFileRow(
     onPrimary: () -> Unit,
     selectionMode: Boolean = false,
     selected: Boolean = false,
+    selectedPosition: DirectoryFolderPosition = DirectoryFolderPosition.Single,
     onEnterSelectionMode: (() -> Unit)? = null,
     onSelectedChange: ((Boolean) -> Unit)? = null,
     onSetAsCover: (() -> Unit)? = null,
@@ -3346,7 +3492,8 @@ internal fun DirectoryFileRow(
     onGenerateSubtitles: (() -> Unit)? = null,
     subtitleGenerationEnabled: Boolean = true,
     onManageTags: (() -> Unit)? = null,
-    onRemoveFromAlbum: (() -> Unit)? = null
+    onRemoveFromAlbum: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val materialColorScheme = MaterialTheme.colorScheme
@@ -3372,7 +3519,7 @@ internal fun DirectoryFileRow(
     }
 
     val showPrimaryAction = file.isPlayable
-    val showMenu = showPrimaryAction || onDownload != null || onAddToQueue != null || onAddToPlaylist != null || onGenerateSubtitles != null || onManageTags != null || onRemoveFromAlbum != null
+    val showMenu = showPrimaryAction || onDownload != null || onAddToQueue != null || onAddToPlaylist != null || onGenerateSubtitles != null || onManageTags != null || onRemoveFromAlbum != null || onDelete != null
     val showTrailing = selectionMode || onSetAsCover != null || file.showSubtitleStamp || showMenu
     val rowContainerColor = if (selected) {
         colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.18f else 0.09f)
@@ -3381,7 +3528,7 @@ internal fun DirectoryFileRow(
     }
 
     Surface(
-        shape = RoundedCornerShape(12.dp),
+        shape = if (selected) directoryFileSelectionShape(selectedPosition) else RoundedCornerShape(DirectoryFileRowCornerRadius),
         color = rowContainerColor,
         modifier = Modifier
             .fillMaxWidth()
@@ -3622,6 +3769,22 @@ internal fun DirectoryFileRow(
                                             },
                                             leadingIcon = {
                                                 Icon(Icons.Rounded.Delete, contentDescription = null, tint = colorScheme.textSecondary)
+                                            }
+                                        )
+                                    }
+                                    if (onDelete != null) {
+                                        DropdownMenuItem(
+                                            text = { Text("删除", color = materialColorScheme.error) },
+                                            onClick = {
+                                                onDelete()
+                                                showMenuExpanded = false
+                                            },
+                                            leadingIcon = {
+                                                Icon(
+                                                    Icons.Rounded.Delete,
+                                                    contentDescription = null,
+                                                    tint = materialColorScheme.error
+                                                )
                                             }
                                         )
                                     }
