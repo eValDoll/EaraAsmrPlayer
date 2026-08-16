@@ -90,8 +90,8 @@ internal val AlbumGridItemSpacing = 12.dp
 private val AlbumItemHorizontalPadding = 12.dp
 private val AlbumItemVerticalPadding = 4.dp
 private val AlbumItemCoverContentSpacing = 10.dp
-private val AlbumListCoverShadowBlurRadius = 7.dp
-private val AlbumGridCoverShadowBlurRadius = 9.dp
+private val AlbumListCoverShadowBlurRadius = 10.dp
+private val AlbumGridCoverShadowBlurRadius = 13.dp
 private val AlbumGridInfoHorizontalPadding = 2.dp
 private val AlbumGridInfoVerticalPadding = 8.dp
 private val AlbumGridInfoMinHeight = 128.dp
@@ -118,6 +118,7 @@ private val AlbumOnlineDetailResizeSpring = spring<IntSize>(
 )
 private const val AlbumOnlineDetailExitSettleMillis = 320L
 private const val AlbumCoverDepthFadeMillis = 320
+private const val AlbumCollectedRibbonFadeMillis = 240
 private const val AlbumStatsSeparator = "  "
 internal const val ALBUM_ITEM_CARD_TAG = "album_item_card"
 internal const val ALBUM_ITEM_STATS_TAG = "album_item_stats"
@@ -344,13 +345,9 @@ fun AlbumItem(
                             )
                         }
                     }
-                    if (isCoverFadeComplete && showCollectedIndicator && album.hasAsmrOne) {
-                        CollectedCoverRibbon(
-                            modifier = Modifier
-                                .align(Alignment.TopStart)
-                                .offset(x = (-3).dp, y = (-3).dp)
-                        )
-                    }
+                    AnimatedCollectedCoverRibbon(
+                        visible = isCoverFadeComplete && showCollectedIndicator && album.hasAsmrOne,
+                    )
                 }
             },
             content = {
@@ -610,13 +607,9 @@ fun AlbumGridItem(
                     )
                 }
             }
-            if (isCoverFadeComplete && showCollectedIndicator && album.hasAsmrOne) {
-                CollectedCoverRibbon(
-                    modifier = Modifier
-                        .align(Alignment.TopStart)
-                        .offset(x = (-3).dp, y = (-3).dp)
-                )
-            }
+            AnimatedCollectedCoverRibbon(
+                visible = isCoverFadeComplete && showCollectedIndicator && album.hasAsmrOne,
+            )
         }
         
         Column(
@@ -659,7 +652,7 @@ fun AlbumGridItem(
                 AlbumItemCvLightweight(
                     cvText = album.cv,
                     modifier = Modifier.fillMaxWidth(),
-                    maxVisibleItems = 2,
+                    layout = AlbumInlineValuesLayout.Flow,
                     onCvClick = onCvClick,
                     onCvLongClick = onCvLongClick,
                 )
@@ -692,7 +685,7 @@ fun AlbumGridItem(
                 AlbumItemTagsLightweight(
                     tags = album.tags,
                     modifier = Modifier.fillMaxWidth(),
-                    maxVisibleItems = 2,
+                    layout = AlbumInlineValuesLayout.Flow,
                     onTagClick = onTagClick,
                     onTagLongClick = onTagLongClick,
                 )
@@ -929,14 +922,14 @@ private fun AlbumCoverDepthShadow(
 ) {
     if (progress <= 0f) return
     val layerColor = if (isDark) glowColor else Color.Black
-    val resolvedBlurRadius = if (isDark) blurRadius * 1.25f else blurRadius
+    val resolvedBlurRadius = if (isDark) blurRadius * 1.35f else blurRadius
     Box(
         modifier = modifier
             .graphicsLayer {
-                alpha = progress * if (isDark) 0.68f else 0.58f
-                scaleX = 0.94f
-                scaleY = 0.94f
-                translationY = if (isDark) 0f else 3.dp.toPx()
+                alpha = progress * if (isDark) 0.82f else 0.72f
+                scaleX = 0.93f
+                scaleY = 0.93f
+                translationY = if (isDark) 1.dp.toPx() else 4.dp.toPx()
                 compositingStrategy = CompositingStrategy.ModulateAlpha
             }
             .blur(
@@ -1008,5 +1001,19 @@ private fun CollectedCoverRibbon(modifier: Modifier = Modifier) {
                 .width(44.dp)
                 .rotate(-45f),
         )
+    }
+}
+
+@Composable
+private fun BoxScope.AnimatedCollectedCoverRibbon(visible: Boolean) {
+    androidx.compose.animation.AnimatedVisibility(
+        visible = visible,
+        modifier = Modifier
+            .align(Alignment.TopStart)
+            .offset(x = (-3).dp, y = (-3).dp),
+        enter = fadeIn(animationSpec = tween(AlbumCollectedRibbonFadeMillis)),
+        exit = fadeOut(animationSpec = tween(AlbumCollectedRibbonFadeMillis)),
+    ) {
+        CollectedCoverRibbon()
     }
 }

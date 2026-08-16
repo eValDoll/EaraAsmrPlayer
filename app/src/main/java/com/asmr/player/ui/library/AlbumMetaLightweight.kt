@@ -1,9 +1,12 @@
 package com.asmr.player.ui.library
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,10 +23,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.asmr.player.R
@@ -127,7 +137,7 @@ internal fun AlbumItemPrimaryMetaLightweight(
 internal fun AlbumItemCvLightweight(
     cvText: String,
     modifier: Modifier = Modifier,
-    maxVisibleItems: Int = 2,
+    layout: AlbumInlineValuesLayout = AlbumInlineValuesLayout.Scrollable,
     onCvClick: ((String) -> Unit)? = null,
     onCvLongClick: ((String) -> Unit)? = null,
 ) {
@@ -135,9 +145,8 @@ internal fun AlbumItemCvLightweight(
     AlbumItemInlineValuesLightweight(
         values = cvs,
         iconRes = R.drawable.ic_album_meta_cv,
-        maxVisibleItems = maxVisibleItems,
+        layout = layout,
         modifier = modifier,
-        separatorText = "/",
         onValueClick = onCvClick,
         onValueLongClick = onCvLongClick,
     )
@@ -147,7 +156,7 @@ internal fun AlbumItemCvLightweight(
 internal fun AlbumItemTagsLightweight(
     tags: List<String>,
     modifier: Modifier = Modifier,
-    maxVisibleItems: Int = 3,
+    layout: AlbumInlineValuesLayout = AlbumInlineValuesLayout.Scrollable,
     onTagClick: ((String) -> Unit)? = null,
     onTagLongClick: ((String) -> Unit)? = null,
 ) {
@@ -155,7 +164,7 @@ internal fun AlbumItemTagsLightweight(
     AlbumItemInlineValuesLightweight(
         values = normalizedTags,
         iconRes = R.drawable.ic_album_meta_tags,
-        maxVisibleItems = maxVisibleItems,
+        layout = layout,
         modifier = modifier,
         valuePrefix = "#",
         onValueClick = onTagClick,
@@ -163,48 +172,89 @@ internal fun AlbumItemTagsLightweight(
     )
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+internal enum class AlbumInlineValuesLayout {
+    Scrollable,
+    Flow,
+}
+
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
 @Composable
 private fun AlbumItemInlineValuesLightweight(
     values: List<String>,
     iconRes: Int,
-    maxVisibleItems: Int,
+    layout: AlbumInlineValuesLayout,
     modifier: Modifier = Modifier,
     valuePrefix: String = "",
-    separatorText: String? = null,
-    itemSpacing: Dp = 8.dp,
     onValueClick: ((String) -> Unit)? = null,
     onValueLongClick: ((String) -> Unit)? = null,
 ) {
     if (values.isEmpty()) return
 
     val colorScheme = AsmrTheme.colorScheme
-    val visibleCount = maxVisibleItems.coerceAtLeast(1).coerceAtMost(values.size)
-    val visibleValues = values.take(visibleCount)
-    val hiddenCount = values.size - visibleCount
 
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clipToBounds(),
-        verticalAlignment = Alignment.CenterVertically,
+        verticalAlignment = Alignment.Top,
     ) {
         Icon(
             painter = painterResource(id = iconRes),
             contentDescription = null,
             tint = colorScheme.textTertiary,
             modifier = Modifier
-                .padding(end = 6.dp)
+                .padding(top = 3.dp, end = 6.dp)
                 .size(13.dp)
         )
-        visibleValues.forEachIndexed { index, value ->
-            if (index > 0 && separatorText != null) {
-                Text(
-                    text = separatorText,
-                    style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
-                    color = colorScheme.textTertiary,
+
+        when (layout) {
+            AlbumInlineValuesLayout.Scrollable -> {
+                val scrollState = rememberScrollState()
+                Row(
+                    modifier = Modifier
+                        .weight(1f)
+                        .horizontalScrollEdgeFade(scrollState)
+                        .horizontalScroll(scrollState),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    AlbumItemInlineValueItems(
+                        values = values,
+                        valuePrefix = valuePrefix,
+                        onValueClick = onValueClick,
+                        onValueLongClick = onValueLongClick,
+                    )
+                }
+            }
+
+            AlbumInlineValuesLayout.Flow -> FlowRow(
+                modifier = Modifier
+                    .weight(1f),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp),
+            ) {
+                AlbumItemInlineValueItems(
+                    values = values,
+                    valuePrefix = valuePrefix,
+                    onValueClick = onValueClick,
+                    onValueLongClick = onValueLongClick,
                 )
             }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun AlbumItemInlineValueItems(
+    values: List<String>,
+    valuePrefix: String,
+    onValueClick: ((String) -> Unit)?,
+    onValueLongClick: ((String) -> Unit)?,
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    values.forEach { value ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = valuePrefix + value.removePrefix(valuePrefix),
                 style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
@@ -212,14 +262,6 @@ private fun AlbumItemInlineValuesLightweight(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
-                    .then(
-                        if (index > 0 && separatorText == null) {
-                            Modifier.padding(start = itemSpacing)
-                        } else {
-                            Modifier
-                        }
-                    )
-                    .weight(1f, fill = false)
                     .clip(RoundedCornerShape(4.dp))
                     .then(
                         if (onValueClick != null || onValueLongClick != null) {
@@ -236,14 +278,41 @@ private fun AlbumItemInlineValuesLightweight(
                     .padding(horizontal = 2.dp, vertical = 2.dp)
             )
         }
-        if (hiddenCount > 0) {
-            Text(
-                text = "+$hiddenCount",
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
-                color = colorScheme.textTertiary,
-                maxLines = 1,
-                modifier = Modifier.padding(start = itemSpacing)
-            )
+    }
+}
+
+private fun Modifier.horizontalScrollEdgeFade(scrollState: ScrollState): Modifier {
+    return graphicsLayer {
+        compositingStrategy = CompositingStrategy.Offscreen
+    }.drawWithCache {
+        val fadeWidth = 18.dp.toPx().coerceAtMost(size.width / 3f)
+        val leftFade = Brush.horizontalGradient(
+            colors = listOf(Color.Transparent, Color.Black),
+            startX = 0f,
+            endX = fadeWidth,
+        )
+        val rightFade = Brush.horizontalGradient(
+            colors = listOf(Color.Black, Color.Transparent),
+            startX = size.width - fadeWidth,
+            endX = size.width,
+        )
+        onDrawWithContent {
+            drawContent()
+            if (scrollState.value > 0) {
+                drawRect(
+                    brush = leftFade,
+                    size = Size(fadeWidth, size.height),
+                    blendMode = BlendMode.DstIn,
+                )
+            }
+            if (scrollState.value < scrollState.maxValue) {
+                drawRect(
+                    brush = rightFade,
+                    topLeft = Offset(size.width - fadeWidth, 0f),
+                    size = Size(fadeWidth, size.height),
+                    blendMode = BlendMode.DstIn,
+                )
+            }
         }
     }
 }
