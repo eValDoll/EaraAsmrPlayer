@@ -879,6 +879,7 @@ private fun Player.toSnapshot(
         isConnected = isConnected,
         startupRestoreResolved = startupRestoreResolved,
         isPlaying = isPlaying,
+        playWhenReady = playWhenReady,
         playbackState = playbackState,
         repeatMode = repeatMode,
         shuffleEnabled = shuffleModeEnabled,

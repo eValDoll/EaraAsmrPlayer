@@ -8,6 +8,7 @@ data class PlaybackSnapshot(
     val isConnected: Boolean = false,
     val startupRestoreResolved: Boolean = false,
     val isPlaying: Boolean = false,
+    val playWhenReady: Boolean = false,
     val playbackState: Int = 0,
     val repeatMode: Int = 0,
     val shuffleEnabled: Boolean = false,

@@ -137,7 +137,7 @@ internal fun PlaybackControls(
     val currentMediaId = playback.currentMediaItem?.mediaId
     var optimisticIsPlaying by remember { mutableStateOf<Boolean?>(null) }
     var stableMediaId by remember { mutableStateOf<String?>(currentMediaId) }
-    val isPlayingEffective = optimisticIsPlaying ?: playback.isPlaying
+    val isPlayingEffective = optimisticIsPlaying ?: playback.playWhenReady
 
     LaunchedEffect(currentMediaId) {
         if (currentMediaId != null && currentMediaId != stableMediaId) {
@@ -327,7 +327,7 @@ internal fun PlaybackControls(
                             interactionSource = playButtonInteractionSource,
                             indication = null
                         ) {
-                            optimisticIsPlaying = !(optimisticIsPlaying ?: playback.isPlaying)
+                            optimisticIsPlaying = !(optimisticIsPlaying ?: playback.playWhenReady)
                             viewModel.togglePlayPause()
                         },
                     contentAlignment = Alignment.Center

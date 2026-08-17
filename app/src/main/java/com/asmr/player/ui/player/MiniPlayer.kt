@@ -127,9 +127,9 @@ fun MiniPlayer(
             .map { it.currentMediaItem }
             .distinctUntilChanged(::sameMiniPlayerMediaItem)
     }.collectAsStateWithLifecycle(initialValue = null)
-    val isPlaying by remember(viewModel) {
+    val playWhenReady by remember(viewModel) {
         viewModel.playback
-            .map { it.isPlaying }
+            .map { it.playWhenReady }
             .distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = false)
     val progressState = remember(viewModel, displayMode) {
@@ -159,7 +159,7 @@ fun MiniPlayer(
 
     var optimisticIsPlaying by remember { mutableStateOf<Boolean?>(null) }
     var stableMediaId by remember { mutableStateOf(currentMediaId) }
-    val isPlayingEffective = optimisticIsPlaying ?: isPlaying
+    val isPlayingEffective = optimisticIsPlaying ?: playWhenReady
 
     LaunchedEffect(currentMediaId) {
         if (currentMediaId != stableMediaId) {
@@ -323,7 +323,7 @@ fun MiniPlayer(
                                 }
                                     IconButton(
                                         onClick = {
-                                            optimisticIsPlaying = !(optimisticIsPlaying ?: isPlaying)
+                                            optimisticIsPlaying = !(optimisticIsPlaying ?: playWhenReady)
                                             viewModel.togglePlayPause()
                                         },
                                         modifier = Modifier.size(controlsButtonSize)
