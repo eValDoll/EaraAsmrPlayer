@@ -20,7 +20,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntSize
 import com.asmr.player.cache.CachePolicy
 import com.asmr.player.cache.ImageCacheEntryPoint
-import com.asmr.player.ui.common.computeCenterWeightedHintColorInt
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Deferred
@@ -234,123 +233,6 @@ fun rememberDynamicHuePalette(
             deriveHuePalette(animatable.value, mode, neutral, fallbackHue.onPrimary)
         }
     }
-}
-
-@Composable
-internal fun rememberBackdropDominantColorFromArtwork(
-    artworkModel: Any?,
-    fallbackColor: Color,
-    imageSizePx: Int = 256,
-    centerRegionRatio: Float = 0.62f,
-    transitionDurationMs: Int = 1000,
-    cachedTransitionDurationMs: Int = 260
-): State<Color> {
-    val context = LocalContext.current
-    val app = context.applicationContext
-    val manager = remember(app) {
-        EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java).imageCacheManager()
-    }
-    val rawBaseKey = artworkModel?.toString().orEmpty()
-    val lastNonBlankBaseKeyState = rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
-    if (rawBaseKey.isNotBlank() && rawBaseKey != lastNonBlankBaseKeyState.value) {
-        lastNonBlankBaseKeyState.value = rawBaseKey
-    }
-    val baseKey = if (rawBaseKey.isNotBlank()) rawBaseKey else lastNonBlankBaseKeyState.value
-    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
-    val seedKey = "dom:cw:$regionKey:$baseKey"
-
-    return rememberBackdropDominantColorAnimatable(
-        seedKey = seedKey,
-        fallbackColor = fallbackColor,
-        transitionDurationMs = transitionDurationMs,
-        cachedTransitionDurationMs = cachedTransitionDurationMs,
-        load = {
-            if (baseKey.isBlank()) return@rememberBackdropDominantColorAnimatable null
-            withContext(Dispatchers.Default) {
-                val model = artworkModel ?: return@withContext null
-                val image = runCatching {
-                    manager.loadImage(
-                        model = model,
-                        size = IntSize(imageSizePx, imageSizePx),
-                        cachePolicy = CachePolicy.DEFAULT
-                    )
-                }.getOrNull() ?: return@withContext null
-                val bitmap = image.asAndroidBitmap()
-                if (bitmap.width < 10 || bitmap.height < 10) return@withContext null
-                computeCenterWeightedHintColorInt(bitmap, centerRegionRatio)?.let { Color(it) }
-            }
-        }
-    )
-}
-
-@Composable
-internal fun rememberBackdropDominantColorFromVideoFrame(
-    videoUri: Uri?,
-    fallbackColor: Color,
-    imageSizePx: Int = 256,
-    centerRegionRatio: Float = 0.62f,
-    timeoutMs: Long = 2_500L,
-    transitionDurationMs: Int = 1000,
-    cachedTransitionDurationMs: Int = 260
-): State<Color> {
-    val context = LocalContext.current
-    val rawBaseKey = videoUri?.toString().orEmpty()
-    val lastNonBlankBaseKeyState = rememberSaveable { androidx.compose.runtime.mutableStateOf("") }
-    if (rawBaseKey.isNotBlank() && rawBaseKey != lastNonBlankBaseKeyState.value) {
-        lastNonBlankBaseKeyState.value = rawBaseKey
-    }
-    val baseKey = if (rawBaseKey.isNotBlank()) rawBaseKey else lastNonBlankBaseKeyState.value
-    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
-    val seedKey = "dom:vf:cw:$regionKey:$baseKey"
-
-    return rememberBackdropDominantColorAnimatable(
-        seedKey = seedKey,
-        fallbackColor = fallbackColor,
-        transitionDurationMs = transitionDurationMs,
-        cachedTransitionDurationMs = cachedTransitionDurationMs,
-        load = {
-            if (baseKey.isBlank() || videoUri == null) return@rememberBackdropDominantColorAnimatable null
-            withContext(Dispatchers.Default) {
-                withTimeoutOrNull(timeoutMs) {
-                    val bitmap = extractMeaningfulVideoFrameBitmap(context, videoUri, imageSizePx)
-                        ?: return@withTimeoutOrNull null
-                    computeCenterWeightedHintColorInt(bitmap, centerRegionRatio)?.let { Color(it) }
-                }
-            }
-        }
-    )
-}
-
-@Composable
-private fun rememberBackdropDominantColorAnimatable(
-    seedKey: String,
-    fallbackColor: Color,
-    transitionDurationMs: Int,
-    cachedTransitionDurationMs: Int,
-    load: suspend () -> Color?
-): State<Color> {
-    // Un-keyed for the same reason as the hue palette: retain the old backdrop color until
-    // the new dominant color is computed, then animate the transition.
-    val animatable = remember {
-        Animatable(DynamicHueCache.get(seedKey) ?: fallbackColor, ColorVectorConverter)
-    }
-
-    LaunchedEffect(seedKey) {
-        DynamicHueCache.get(seedKey)?.let {
-            if (cachedTransitionDurationMs <= 0) animatable.snapTo(it)
-            else animatable.animateTo(it, animationSpec = tween(cachedTransitionDurationMs))
-            return@LaunchedEffect
-        }
-        val computed = DynamicHueCache.getOrCompute(seedKey) { load() }
-        val target = computed ?: fallbackColor
-        if (transitionDurationMs <= 0) animatable.snapTo(target)
-        else animatable.animateTo(
-            target,
-            animationSpec = tween(durationMillis = transitionDurationMs, easing = FastOutSlowInEasing)
-        )
-    }
-
-    return remember(animatable) { derivedStateOf { animatable.value } }
 }
 
 @Composable

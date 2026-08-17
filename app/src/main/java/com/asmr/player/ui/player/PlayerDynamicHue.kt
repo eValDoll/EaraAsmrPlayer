@@ -12,8 +12,6 @@ import com.asmr.player.ui.theme.HuePalette
 import com.asmr.player.ui.theme.ThemeMode
 import com.asmr.player.ui.theme.deriveHuePalette
 import com.asmr.player.ui.theme.neutralPaletteForMode
-import com.asmr.player.ui.theme.rememberBackdropDominantColorFromArtwork
-import com.asmr.player.ui.theme.rememberBackdropDominantColorFromVideoFrame
 import com.asmr.player.ui.theme.rememberDynamicHuePalette
 import com.asmr.player.ui.theme.rememberDynamicHuePaletteFromVideoFrame
 import kotlin.math.abs
@@ -88,30 +86,12 @@ internal fun rememberPlayerThemeColors(
         transitionDurationMs = transitionDurationMs,
         cachedTransitionDurationMs = cachedTransitionDurationMs
     )
-    val themeMediaSource = remember(mediaItem) { mediaItem.toThemeMediaSource() }
-    val backdropDominant by if (themeMediaSource.isVideo && themeMediaSource.artworkUri == null) {
-        rememberBackdropDominantColorFromVideoFrame(
-            videoUri = themeMediaSource.videoUri,
-            fallbackColor = dynamicHue.primary,
-            transitionDurationMs = transitionDurationMs,
-            cachedTransitionDurationMs = cachedTransitionDurationMs
-        )
-    } else {
-        rememberBackdropDominantColorFromArtwork(
-            artworkModel = themeMediaSource.artworkUri,
-            fallbackColor = dynamicHue.primary,
-            transitionDurationMs = transitionDurationMs,
-            cachedTransitionDurationMs = cachedTransitionDurationMs
-        )
-    }
-
-    return remember(dynamicHue, colorScheme, coverBackgroundEnabled, artworkBackdropEnabled, backdropDominant) {
+    return remember(dynamicHue, colorScheme, coverBackgroundEnabled, artworkBackdropEnabled) {
         resolvePlayerThemeColors(
             dynamicHue = dynamicHue,
             colorScheme = colorScheme,
             coverBackgroundEnabled = coverBackgroundEnabled,
-            artworkBackdropEnabled = artworkBackdropEnabled,
-            backdropDominantColor = backdropDominant
+            artworkBackdropEnabled = artworkBackdropEnabled
         )
     }
 }
@@ -120,8 +100,7 @@ internal fun resolvePlayerThemeColors(
     dynamicHue: HuePalette,
     colorScheme: AsmrColorScheme,
     coverBackgroundEnabled: Boolean,
-    artworkBackdropEnabled: Boolean = coverBackgroundEnabled,
-    backdropDominantColor: Color? = null
+    artworkBackdropEnabled: Boolean = coverBackgroundEnabled
 ): PlayerThemeColors {
     val accentColor = if (coverBackgroundEnabled) {
         dynamicHue.primaryStrong
@@ -139,27 +118,20 @@ internal fun resolvePlayerThemeColors(
         background = colorScheme.background,
         mode = colorScheme.mode
     )
-    val dominantBackdropTintColor = usableBackdropDominant(backdropDominantColor)?.let { dominant ->
-        deriveBackdropTintFromDominant(
-            dominant = dominant,
-            background = colorScheme.background,
-            mode = colorScheme.mode
-        )
+    val backdropTintColor = if (artworkBackdropEnabled) {
+        dynamicBackdropTintColor
+    } else {
+        colorScheme.background
     }
-    val backdropTintColor = when {
-        !artworkBackdropEnabled -> colorScheme.background
-        dominantBackdropTintColor != null -> dominantBackdropTintColor
-        else -> dynamicBackdropTintColor
-    }
-    val videoBackdropColor = when {
-        !coverBackgroundEnabled -> derivePlayerBackdropTintColor(
+    val videoBackdropColor = if (coverBackgroundEnabled) {
+        dynamicBackdropTintColor
+    } else {
+        derivePlayerBackdropTintColor(
             primary = colorScheme.primary,
             primarySoft = colorScheme.primarySoft,
             background = colorScheme.background,
             mode = colorScheme.mode
         )
-        dominantBackdropTintColor != null -> dominantBackdropTintColor
-        else -> dynamicBackdropTintColor
     }
     return PlayerThemeColors(
         coverAccentColor = dynamicHue.primaryStrong,
@@ -168,23 +140,6 @@ internal fun resolvePlayerThemeColors(
         backdropTintColor = backdropTintColor,
         videoBackdropColor = videoBackdropColor
     )
-}
-
-internal fun deriveBackdropTintFromDominant(
-    dominant: Color,
-    background: Color,
-    mode: ThemeMode
-): Color = derivePlayerBackdropTintColor(
-    primary = dominant,
-    primarySoft = dominant,
-    background = background,
-    mode = mode
-)
-
-private fun usableBackdropDominant(dominant: Color?): Color? {
-    val d = dominant ?: return null
-    val hsl = d.toHsl()
-    return if (hsl[1] >= 0.08f) d else null
 }
 
 internal fun derivePlayerBackdropTintColor(
