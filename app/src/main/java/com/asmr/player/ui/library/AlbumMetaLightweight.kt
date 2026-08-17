@@ -191,6 +191,7 @@ internal fun AlbumItemPrimaryMetaLightweight(
                     text = normalizedCircle,
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
                     ),
                     color = creatorTextColor,
                     maxLines = 1,
@@ -218,7 +219,7 @@ internal fun AlbumItemPrimaryMetaLightweight(
             Text(
                 text = normalizedRj,
                 style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                 ),
                 color = colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.92f else 0.82f),
@@ -340,6 +341,7 @@ private fun AlbumItemInlineValuesLightweight(
                         values = values,
                         valuePrefix = valuePrefix,
                         valueColor = valueColor,
+                        prominent = prominent,
                         onValueClick = onValueClick,
                         onValueLongClick = onValueLongClick,
                     )
@@ -356,6 +358,7 @@ private fun AlbumItemInlineValuesLightweight(
                     values = values,
                     valuePrefix = valuePrefix,
                     valueColor = valueColor,
+                    prominent = prominent,
                     onValueClick = onValueClick,
                     onValueLongClick = onValueLongClick,
                 )
@@ -370,6 +373,7 @@ private fun AlbumItemInlineValueItems(
     values: List<String>,
     valuePrefix: String,
     valueColor: Color,
+    prominent: Boolean,
     onValueClick: ((String) -> Unit)?,
     onValueLongClick: ((String) -> Unit)?,
 ) {
@@ -377,7 +381,10 @@ private fun AlbumItemInlineValueItems(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = valuePrefix + value.removePrefix(valuePrefix),
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = if (prominent) 13.sp else 12.sp,
+                    fontWeight = if (prominent) FontWeight.SemiBold else FontWeight.Medium,
+                ),
                 color = valueColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
