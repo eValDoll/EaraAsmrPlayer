@@ -24,7 +24,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -180,9 +179,8 @@ internal sealed class AsmrTreeUiEntry {
 }
 
 private val DirectoryBrowserPanelCornerRadius = 22.dp
-private val DirectoryFolderRowCornerRadius = 14.dp
 private val DirectoryFileRowCornerRadius = 12.dp
-private val DirectoryBrowserPanelVerticalPadding = 8.dp
+private val DirectoryBrowserPanelVerticalPadding = 4.dp
 
 internal fun directoryBrowserHeaderBackground(colorScheme: AsmrColorScheme): Color {
     return colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.72f else 0.9f)
@@ -193,34 +191,6 @@ internal enum class DirectoryFolderPosition {
     First,
     Middle,
     Last,
-}
-
-private fun directoryFolderPosition(index: Int, total: Int): DirectoryFolderPosition {
-    return when {
-        total <= 1 -> DirectoryFolderPosition.Single
-        index == 0 -> DirectoryFolderPosition.First
-        index == total - 1 -> DirectoryFolderPosition.Last
-        else -> DirectoryFolderPosition.Middle
-    }
-}
-
-private fun directoryFolderShape(position: DirectoryFolderPosition): RoundedCornerShape {
-    return when (position) {
-        DirectoryFolderPosition.Single -> RoundedCornerShape(DirectoryFolderRowCornerRadius)
-        DirectoryFolderPosition.First -> RoundedCornerShape(
-            topStart = DirectoryFolderRowCornerRadius,
-            topEnd = DirectoryFolderRowCornerRadius,
-            bottomStart = 0.dp,
-            bottomEnd = 0.dp,
-        )
-        DirectoryFolderPosition.Middle -> RoundedCornerShape(0.dp)
-        DirectoryFolderPosition.Last -> RoundedCornerShape(
-            topStart = 0.dp,
-            topEnd = 0.dp,
-            bottomStart = DirectoryFolderRowCornerRadius,
-            bottomEnd = DirectoryFolderRowCornerRadius,
-        )
-    }
 }
 
 internal fun directorySelectedItemPosition(
@@ -2110,17 +2080,10 @@ internal fun CompactBreadcrumbNode(
     onClick: () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val containerColor = if (selected) {
-        colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.2f else 0.11f)
-    } else {
-        Color.Transparent
-    }
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(9.dp))
-            .background(containerColor)
             .clickable(onClick = onClick)
-            .padding(horizontal = if (selected) 8.dp else 3.dp, vertical = 5.dp),
+            .padding(horizontal = 4.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
@@ -2512,7 +2475,7 @@ internal fun DirectoryActionGroupButton(
     onDisabledClick: (() -> Unit)? = null
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    FilledTonalButton(
+    TextButton(
         onClick = {
             if (enabled) onClick() else onDisabledClick?.invoke()
         },
@@ -2520,10 +2483,8 @@ internal fun DirectoryActionGroupButton(
         modifier = modifier.height(32.dp),
         shape = RoundedCornerShape(10.dp),
         contentPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp),
-        colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.18f else 0.1f),
+        colors = ButtonDefaults.textButtonColors(
             contentColor = colorScheme.primary,
-            disabledContainerColor = colorScheme.surfaceVariant.copy(alpha = 0.48f),
             disabledContentColor = colorScheme.textTertiary
         )
     ) {
@@ -2866,110 +2827,87 @@ internal fun CompactDirectoryBreadcrumbContentV3(
 internal fun DirectoryFolderRowV3(
     title: String,
     onClick: () -> Unit,
-    position: DirectoryFolderPosition = DirectoryFolderPosition.Single,
     onDelete: (() -> Unit)? = null,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val materialColorScheme = MaterialTheme.colorScheme
     val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
-    val rowContainerColor = colorScheme.surfaceVariant.copy(
-        alpha = if (colorScheme.isDark) 0.42f else 0.58f
-    )
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(directoryFolderShape(position))
-            .background(rowContainerColor)
+            .defaultMinSize(minHeight = 52.dp)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .defaultMinSize(minHeight = 52.dp)
-                .clickable(onClick = onClick)
-                .padding(horizontal = 12.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier.size(32.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(
-                        colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.2f else 0.12f)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Folder,
-                    contentDescription = null,
-                    tint = colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(11.dp))
-            Text(
-                text = title,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                color = colorScheme.textPrimary
-            )
             Icon(
-                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                imageVector = Icons.Rounded.Folder,
                 contentDescription = null,
-                tint = colorScheme.textTertiary,
-                modifier = Modifier.size(17.dp)
+                tint = colorScheme.primary,
+                modifier = Modifier.size(22.dp)
             )
-            if (onDelete != null) {
-                var showMenuExpanded by rememberSaveable(title) { mutableStateOf(false) }
-                Box {
-                    IconButton(
-                        onClick = { showMenuExpanded = true },
-                        modifier = Modifier.size(AudioItemMenuButtonSize)
+        }
+        Spacer(modifier = Modifier.width(11.dp))
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+            color = colorScheme.textPrimary
+        )
+        Icon(
+            imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+            contentDescription = null,
+            tint = colorScheme.textTertiary,
+            modifier = Modifier.size(17.dp)
+        )
+        if (onDelete != null) {
+            var showMenuExpanded by rememberSaveable(title) { mutableStateOf(false) }
+            Box {
+                IconButton(
+                    onClick = { showMenuExpanded = true },
+                    modifier = Modifier.size(AudioItemMenuButtonSize)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.MoreVert,
+                        contentDescription = "目录操作",
+                        tint = colorScheme.textSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                MaterialTheme(
+                    colorScheme = materialColorScheme.copy(
+                        surface = dynamicContainerColor,
+                        surfaceContainer = dynamicContainerColor
+                    )
+                ) {
+                    DropdownMenu(
+                        expanded = showMenuExpanded,
+                        onDismissRequest = { showMenuExpanded = false },
+                        modifier = Modifier.background(dynamicContainerColor)
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.MoreVert,
-                            contentDescription = "目录操作",
-                            tint = colorScheme.textSecondary,
-                            modifier = Modifier.size(20.dp)
+                        DropdownMenuItem(
+                            text = { Text("删除目录", color = materialColorScheme.error) },
+                            onClick = {
+                                showMenuExpanded = false
+                                onDelete()
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Rounded.Delete,
+                                    contentDescription = null,
+                                    tint = materialColorScheme.error
+                                )
+                            }
                         )
-                    }
-                    MaterialTheme(
-                        colorScheme = materialColorScheme.copy(
-                            surface = dynamicContainerColor,
-                            surfaceContainer = dynamicContainerColor
-                        )
-                    ) {
-                        DropdownMenu(
-                            expanded = showMenuExpanded,
-                            onDismissRequest = { showMenuExpanded = false },
-                            modifier = Modifier.background(dynamicContainerColor)
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("删除目录", color = materialColorScheme.error) },
-                                onClick = {
-                                    showMenuExpanded = false
-                                    onDelete()
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Rounded.Delete,
-                                        contentDescription = null,
-                                        tint = materialColorScheme.error
-                                    )
-                                }
-                            )
-                        }
                     }
                 }
             }
-        }
-        if (position != DirectoryFolderPosition.Single && position != DirectoryFolderPosition.Last) {
-            HorizontalDivider(
-                modifier = Modifier.padding(start = 55.dp, end = 12.dp),
-                thickness = 0.5.dp,
-                color = colorScheme.textTertiary.copy(alpha = if (colorScheme.isDark) 0.2f else 0.13f)
-            )
         }
     }
 }
@@ -3251,15 +3189,7 @@ internal fun DirectoryBrowserPanelV4(
     }
     val colorScheme = AsmrTheme.colorScheme
     val containerColor = dynamicPageContainerColor(colorScheme)
-    val headerSectionColor = directoryBrowserHeaderBackground(colorScheme)
-    val actionSectionColor = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.56f else 0.78f)
-    val listSectionColor = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.42f else 0.66f)
-    val sectionDividerColor = colorScheme.textTertiary.copy(alpha = if (colorScheme.isDark) 0.18f else 0.11f)
-    val panelBorderColor = if (colorScheme.isDark) {
-        Color.White.copy(alpha = 0.1f)
-    } else {
-        colorScheme.textPrimary.copy(alpha = 0.08f)
-    }
+    val sectionDividerColor = colorScheme.textTertiary.copy(alpha = if (colorScheme.isDark) 0.14f else 0.09f)
 
     LaunchedEffect(panelKey, currentPath) {
         browserListState.scrollToItem(0)
@@ -3270,26 +3200,18 @@ internal fun DirectoryBrowserPanelV4(
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         color = containerColor,
-        border = BorderStroke(
-            width = 0.5.dp,
-            color = panelBorderColor
-        ),
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = AlbumDetailHorizontalPadding, vertical = DirectoryBrowserPanelVerticalPadding)
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(listSectionColor)
+            modifier = Modifier.fillMaxWidth()
         ) {
             CompactDirectoryBreadcrumbContentV3(
                 currentPath = currentPath,
                 breadcrumbs = breadcrumbs,
                 onNavigate = onNavigate,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(headerSectionColor)
+                modifier = Modifier.fillMaxWidth()
             )
             HorizontalDivider(
                 thickness = 0.5.dp,
@@ -3299,7 +3221,6 @@ internal fun DirectoryBrowserPanelV4(
                 modifier = dlsiteSectionRevealModifier(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(actionSectionColor)
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     enabled = animateIntro
                 ),
@@ -3326,19 +3247,13 @@ internal fun DirectoryBrowserPanelV4(
                 if (onTogglePreferredPath != null && !selectionMode) {
                     val preferredIcon = if (isPreferredPath) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder
                     val preferredTextColor = if (isPreferredPath) colorScheme.primary else colorScheme.textSecondary
-                    val preferredContainerColor = colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.22f else 0.12f)
-                    FilledTonalButton(
+                    TextButton(
                         onClick = {
                             val enable = !isPreferredPath
                             preferredPathState = if (enable) normalizedCurrentPath else ""
                             onTogglePreferredPath(enable)
                         },
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = if (isPreferredPath) {
-                                preferredContainerColor
-                            } else {
-                                colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.5f else 0.72f)
-                            },
+                        colors = ButtonDefaults.textButtonColors(
                             contentColor = preferredTextColor
                         ),
                         shape = RoundedCornerShape(10.dp),
@@ -3418,18 +3333,22 @@ internal fun DirectoryBrowserPanelV4(
                             key = { _, folder -> "$folderKeyPrefix:${folder.path}" },
                             contentType = { _, _ -> "folder" }
                         ) { index, folder ->
-                            val position = directoryFolderPosition(
-                                index = index,
-                                total = folders.size,
-                            )
-                            DirectoryFolderRowV3(
-                                title = folder.title,
-                                onClick = { onNavigate(folder.path) },
-                                position = position,
-                                onDelete = onDeleteFolder?.let { deleteFolder ->
-                                    { deleteFolder(folder) }
-                                },
-                            )
+                            Column {
+                                DirectoryFolderRowV3(
+                                    title = folder.title,
+                                    onClick = { onNavigate(folder.path) },
+                                    onDelete = onDeleteFolder?.let { deleteFolder ->
+                                        { deleteFolder(folder) }
+                                    },
+                                )
+                                if (index < folders.lastIndex) {
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(start = 55.dp, end = 12.dp),
+                                        thickness = 0.5.dp,
+                                        color = sectionDividerColor
+                                    )
+                                }
+                            }
                         }
                         itemsIndexed(
                             items = files,
@@ -3442,31 +3361,40 @@ internal fun DirectoryBrowserPanelV4(
                                 previousSelected = index > 0 && selectedPathSet.contains(files[index - 1].path),
                                 nextSelected = index < files.lastIndex && selectedPathSet.contains(files[index + 1].path),
                             )
-                            fileContent(
-                                file,
-                                selectionMode,
-                                isSelected,
-                                selectedPosition,
-                                {
-                                    selectionMode = true
-                                    if (!selectedPaths.contains(file.path)) {
-                                        selectedPaths.add(file.path)
-                                    }
-                                },
-                                { checked ->
-                                    if (checked) {
+                            Column {
+                                fileContent(
+                                    file,
+                                    selectionMode,
+                                    isSelected,
+                                    selectedPosition,
+                                    {
+                                        selectionMode = true
                                         if (!selectedPaths.contains(file.path)) {
                                             selectedPaths.add(file.path)
                                         }
-                                        selectionMode = true
-                                    } else {
-                                        selectedPaths.remove(file.path)
-                                        if (selectedPaths.isEmpty()) {
-                                            selectionMode = false
+                                    },
+                                    { checked ->
+                                        if (checked) {
+                                            if (!selectedPaths.contains(file.path)) {
+                                                selectedPaths.add(file.path)
+                                            }
+                                            selectionMode = true
+                                        } else {
+                                            selectedPaths.remove(file.path)
+                                            if (selectedPaths.isEmpty()) {
+                                                selectionMode = false
+                                            }
                                         }
                                     }
+                                )
+                                if (index < files.lastIndex) {
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(start = 50.dp, end = 12.dp),
+                                        thickness = 0.5.dp,
+                                        color = sectionDividerColor
+                                    )
                                 }
-                            )
+                            }
                         }
                     }
                 }
@@ -3573,19 +3501,14 @@ internal fun DirectoryFileRow(
                     )
                 } else {
                     Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(RoundedCornerShape(9.dp))
-                            .background(
-                                iconTint.copy(alpha = if (colorScheme.isDark) 0.17f else 0.09f)
-                            ),
+                        modifier = Modifier.size(32.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = icon,
                             contentDescription = null,
                             tint = iconTint,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }

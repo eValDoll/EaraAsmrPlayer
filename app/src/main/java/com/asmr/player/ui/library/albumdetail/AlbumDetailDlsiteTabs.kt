@@ -1104,7 +1104,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             AlbumDetailSectionHeading(
                 title = if (asmrOneTree.isNotEmpty()) "ONE（已收录）" else "ONE",
                 modifier = dlsiteAnimatedSectionModifier(
-                    Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
+                    Modifier.fillMaxWidth().padding(start = AlbumDetailHorizontalPadding, end = AlbumDetailHorizontalPadding, top = 8.dp, bottom = 0.dp),
                     animateIntro = animateIntro
                 ),
                 actions = {
