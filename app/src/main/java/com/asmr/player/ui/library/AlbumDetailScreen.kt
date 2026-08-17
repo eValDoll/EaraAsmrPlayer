@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.Animatable
@@ -240,6 +241,7 @@ private const val AlbumDetailHeroFlingSettleMillis = 980
 private const val AlbumDetailRevealSettleMs = 420L
 private const val AlbumDetailCvRevealDelayMs = 220
 private const val AlbumDetailTagsRevealDelayMs = 360
+private const val AlbumHeaderActionStateTransitionMillis = 800
 internal val AlbumDetailHorizontalPadding = 8.dp
 
 private class AlbumDetailIntroState(var settled: Boolean)
@@ -2242,12 +2244,12 @@ private fun AlbumHeaderBarAction(
     shape: RoundedCornerShape = RoundedCornerShape(11.dp),
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val contentColor = when {
+    val targetContentColor = when {
         !enabled -> colorScheme.textTertiary.copy(alpha = 0.72f)
         style == AlbumHeaderActionStyle.Primary -> colorScheme.onPrimary
         else -> colorScheme.primaryStrong
     }
-    val containerColor = when {
+    val targetContainerColor = when {
         !enabled -> Color.Transparent
         style == AlbumHeaderActionStyle.Primary -> colorScheme.primaryStrong
         style == AlbumHeaderActionStyle.Secondary -> colorScheme.primary.copy(
@@ -2255,6 +2257,17 @@ private fun AlbumHeaderBarAction(
         )
         else -> Color.Transparent
     }
+    // 网络数据到达后，下载/保存按钮从禁用态切到可用态时用约 800ms 渐入，避免状态瞬间“刷新”出来。
+    val contentColor by animateColorAsState(
+        targetValue = targetContentColor,
+        animationSpec = tween(durationMillis = AlbumHeaderActionStateTransitionMillis),
+        label = "albumHeaderBarActionContent"
+    )
+    val containerColor by animateColorAsState(
+        targetValue = targetContainerColor,
+        animationSpec = tween(durationMillis = AlbumHeaderActionStateTransitionMillis),
+        label = "albumHeaderBarActionContainer"
+    )
 
     CompositionLocalProvider(LocalContentColor provides contentColor) {
         Row(
