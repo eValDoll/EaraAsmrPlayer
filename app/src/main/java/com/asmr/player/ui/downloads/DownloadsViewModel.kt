@@ -244,9 +244,14 @@ class DownloadsViewModel @Inject constructor(
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    internal val subtitleTasks: StateFlow<List<SubtitleTaskUi>> = subtitleTaskRepository.tasks
+    // 字幕任务列表与顶栏常驻的 activeSubtitleTaskCount 共享同一份 stateIn 缓存：
+    // 顶栏在主页面上已持续收集该流，进入「任务管理」时 subtitleTasks 直接命中缓存，
+    // 不再在转场中途发起重复的 Room 查询并触发整页重组。
+    private val subtitleTaskList: StateFlow<List<SubtitleTaskUi>> = subtitleTaskRepository.tasks
         .flowOn(Dispatchers.IO)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    internal val subtitleTasks: StateFlow<List<SubtitleTaskUi>> = subtitleTaskList
 
     /** 正在执行作品级最终润色的作品 rjCode 集合。 */
     internal val polishingRjCodes: StateFlow<Set<String>> = subtitleTaskRepository.polishingRjCodes
@@ -272,7 +277,7 @@ class DownloadsViewModel @Inject constructor(
         }
     }
 
-    val activeSubtitleTaskCount: StateFlow<Int> = subtitleTaskRepository.tasks
+    val activeSubtitleTaskCount: StateFlow<Int> = subtitleTaskList
         .map { tasks ->
             tasks.sumOf { task ->
                 task.items.count { item ->

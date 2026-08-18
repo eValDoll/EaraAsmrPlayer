@@ -160,7 +160,6 @@ fun DownloadsScreen(
     viewModel: DownloadsViewModel = hiltViewModel()
 ) {
     val tasks by viewModel.tasks.collectAsStateWithLifecycle()
-    val translationSubtitleGroups by viewModel.translationSubtitleGroups.collectAsStateWithLifecycle()
     val subtitleTasks by viewModel.subtitleTasks.collectAsStateWithLifecycle()
     val polishingRjCodes by viewModel.polishingRjCodes.collectAsStateWithLifecycle()
     val activeDownloadFileCount = remember(tasks) { countActiveDownloadFiles(tasks) }
@@ -392,6 +391,9 @@ fun DownloadsScreen(
                 }
 
                 DownloadManagementMode.Translations -> {
+                    // 「翻译任务」数据只在切到该 Tab 时才订阅：进入页面默认落在
+                    // 「下载任务」，避免转场期间再触发一次 Room 查询并整页重组。
+                    val translationSubtitleGroups by viewModel.translationSubtitleGroups.collectAsStateWithLifecycle()
                     TranslationManagementContent(
                         normalizedQuery = normalizedQuery,
                         listState = listState,
