@@ -3,7 +3,6 @@ package com.asmr.player.ui.library
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -47,7 +46,6 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -115,8 +113,8 @@ private val AlbumOnlineDetailResizeSpring = spring<IntSize>(
     stiffness = Spring.StiffnessMediumLow
 )
 private const val AlbumOnlineDetailExitSettleMillis = 320L
-private const val AlbumCoverDepthFadeMillis = 320
 private const val AlbumCollectedRibbonFadeMillis = 240
+private const val AlbumCoverFadeInMillis = 800
 private const val AlbumStatsSeparator = "  "
 internal const val ALBUM_ITEM_CARD_TAG = "album_item_card"
 internal const val ALBUM_ITEM_STATS_TAG = "album_item_stats"
@@ -214,13 +212,7 @@ fun AlbumItem(
         mutableStateOf<State<Float>?>(null)
     }
     val isCoverFadeComplete = (coverPainterAlphaState?.value ?: 0f) >= 1f
-    val coverDepthProgress by key(imageModel, coverReloadKey) {
-        animateFloatAsState(
-            targetValue = if (isCoverFadeComplete) 1f else 0f,
-            animationSpec = tween(durationMillis = AlbumCoverDepthFadeMillis),
-            label = "albumListCoverDepth",
-        )
-    }
+    val coverDepthProgress = coverPainterAlphaState?.value ?: 0f
     val dividerColor = colorScheme.onSurfaceVariant.copy(
         alpha = if (colorScheme.isDark) 0.28f else 0.18f
     )
@@ -294,6 +286,7 @@ fun AlbumItem(
                             placeholderCornerRadius = 0,
                             fadeIn = coverFadeIn,
                             fadeInState = coverFadeInState,
+                            fadeInMillis = AlbumCoverFadeInMillis,
                             reloadKey = coverReloadKey,
                             retainPainterDuringReload = coverRetainPainterDuringReload,
                             peekAnySizeForInitial = true,
@@ -515,13 +508,7 @@ fun AlbumGridItem(
         mutableStateOf<State<Float>?>(null)
     }
     val isCoverFadeComplete = (coverPainterAlphaState?.value ?: 0f) >= 1f
-    val coverDepthProgress by key(imageModel, coverReloadKey) {
-        animateFloatAsState(
-            targetValue = if (isCoverFadeComplete) 1f else 0f,
-            animationSpec = tween(durationMillis = AlbumCoverDepthFadeMillis),
-            label = "albumGridCoverDepth",
-        )
-    }
+    val coverDepthProgress = coverPainterAlphaState?.value ?: 0f
     Column(
         modifier = modifier
             .combinedClickable(
@@ -553,6 +540,7 @@ fun AlbumGridItem(
                     placeholderCornerRadius = 0,
                     fadeIn = coverFadeIn,
                     fadeInState = coverFadeInState,
+                    fadeInMillis = AlbumCoverFadeInMillis,
                     reloadKey = coverReloadKey,
                     retainPainterDuringReload = coverRetainPainterDuringReload,
                     peekAnySizeForInitial = true,
