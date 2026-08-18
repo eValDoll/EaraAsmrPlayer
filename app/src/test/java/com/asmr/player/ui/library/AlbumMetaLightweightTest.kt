@@ -3,14 +3,12 @@ package com.asmr.player.ui.library
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.onNodeWithText
-import androidx.compose.ui.test.performClick
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.asmr.player.ui.theme.AsmrPlayerTheme
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -24,7 +22,6 @@ class AlbumMetaLightweightTest {
 
     @Test
     fun scrollableMeta_keepsEveryValueAvailableWithoutOverflowSummary() {
-        var clickedTag = ""
         composeRule.setContent {
             AsmrPlayerTheme {
                 Column(modifier = Modifier.width(140.dp)) {
@@ -33,13 +30,12 @@ class AlbumMetaLightweightTest {
                     )
                     AlbumItemTagsLightweight(
                         tags = listOf("环境音", "治愈", "睡眠", "耳语"),
-                        onTagClick = { clickedTag = it },
                     )
                 }
             }
         }
 
-        composeRule.onNodeWithText("#环境音").assertExists().performClick()
+        composeRule.onNodeWithText("#环境音").assertExists()
         composeRule.onNodeWithText("#治愈").assertExists()
         composeRule.onNodeWithText("#睡眠").assertExists()
         composeRule.onNodeWithText("#耳语").assertExists()
@@ -47,7 +43,6 @@ class AlbumMetaLightweightTest {
         composeRule.onNodeWithText("/").assertDoesNotExist()
         composeRule.onNodeWithText("+1").assertDoesNotExist()
         composeRule.onNodeWithText("+2").assertDoesNotExist()
-        assertEquals("环境音", clickedTag)
     }
 
     @Test

@@ -149,8 +149,8 @@ internal fun AlbumItemPrimaryMetaLightweight(
     rjCode: String,
     circle: String,
     modifier: Modifier = Modifier,
-    rjOnClick: (() -> Unit)? = null,
-    circleOnClick: (() -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
+    rjOnLongClick: (() -> Unit)? = null,
     circleOnLongClick: (() -> Unit)? = null,
 ) {
     val normalizedRj = remember(rjCode) { rjCode.trim() }
@@ -199,9 +199,9 @@ internal fun AlbumItemPrimaryMetaLightweight(
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
                         .then(
-                            if (circleOnClick != null || circleOnLongClick != null) {
+                            if (onClick != null || circleOnLongClick != null) {
                                 Modifier.combinedClickable(
-                                    onClick = { circleOnClick?.invoke() },
+                                    onClick = { onClick?.invoke() },
                                     onLongClick = circleOnLongClick,
                                 )
                             } else {
@@ -228,8 +228,11 @@ internal fun AlbumItemPrimaryMetaLightweight(
                 modifier = Modifier
                     .clip(RoundedCornerShape(4.dp))
                     .then(
-                        if (rjOnClick != null) {
-                            Modifier.combinedClickable(onClick = rjOnClick)
+                        if (onClick != null || rjOnLongClick != null) {
+                            Modifier.combinedClickable(
+                                onClick = { onClick?.invoke() },
+                                onLongClick = rjOnLongClick,
+                            )
                         } else {
                             Modifier
                         }
@@ -245,7 +248,7 @@ internal fun AlbumItemCvLightweight(
     cvText: String,
     modifier: Modifier = Modifier,
     layout: AlbumInlineValuesLayout = AlbumInlineValuesLayout.Scrollable,
-    onCvClick: ((String) -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
     onCvLongClick: ((String) -> Unit)? = null,
 ) {
     val cvs = remember(cvText) { parseAlbumCvNames(cvText) }
@@ -255,7 +258,7 @@ internal fun AlbumItemCvLightweight(
         layout = layout,
         prominent = true,
         modifier = modifier,
-        onValueClick = onCvClick,
+        onClick = onClick,
         onValueLongClick = onCvLongClick,
     )
 }
@@ -265,7 +268,7 @@ internal fun AlbumItemTagsLightweight(
     tags: List<String>,
     modifier: Modifier = Modifier,
     layout: AlbumInlineValuesLayout = AlbumInlineValuesLayout.Scrollable,
-    onTagClick: ((String) -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
     onTagLongClick: ((String) -> Unit)? = null,
 ) {
     val normalizedTags = remember(tags) { normalizeAlbumTags(tags) }
@@ -275,7 +278,7 @@ internal fun AlbumItemTagsLightweight(
         layout = layout,
         modifier = modifier,
         valuePrefix = "#",
-        onValueClick = onTagClick,
+        onClick = onClick,
         onValueLongClick = onTagLongClick,
     )
 }
@@ -294,7 +297,7 @@ private fun AlbumItemInlineValuesLightweight(
     modifier: Modifier = Modifier,
     valuePrefix: String = "",
     prominent: Boolean = false,
-    onValueClick: ((String) -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
     onValueLongClick: ((String) -> Unit)? = null,
 ) {
     if (values.isEmpty()) return
@@ -342,7 +345,7 @@ private fun AlbumItemInlineValuesLightweight(
                         valuePrefix = valuePrefix,
                         valueColor = valueColor,
                         prominent = prominent,
-                        onValueClick = onValueClick,
+                        onClick = onClick,
                         onValueLongClick = onValueLongClick,
                     )
                 }
@@ -359,7 +362,7 @@ private fun AlbumItemInlineValuesLightweight(
                     valuePrefix = valuePrefix,
                     valueColor = valueColor,
                     prominent = prominent,
-                    onValueClick = onValueClick,
+                    onClick = onClick,
                     onValueLongClick = onValueLongClick,
                 )
             }
@@ -374,7 +377,7 @@ private fun AlbumItemInlineValueItems(
     valuePrefix: String,
     valueColor: Color,
     prominent: Boolean,
-    onValueClick: ((String) -> Unit)?,
+    onClick: (() -> Unit)?,
     onValueLongClick: ((String) -> Unit)?,
 ) {
     values.forEach { value ->
@@ -391,9 +394,9 @@ private fun AlbumItemInlineValueItems(
                 modifier = Modifier
                     .clip(RoundedCornerShape(4.dp))
                     .then(
-                        if (onValueClick != null || onValueLongClick != null) {
+                        if (onClick != null || onValueLongClick != null) {
                             Modifier.combinedClickable(
-                                onClick = { onValueClick?.invoke(value) },
+                                onClick = { onClick?.invoke() },
                                 onLongClick = onValueLongClick?.let { longClick ->
                                     { longClick(value) }
                                 },

@@ -1087,12 +1087,9 @@ fun SearchScreen(
                                                 showStatsPlaceholders = true,
                                                 coverFadeInState = coverFadeInState,
                                                 coverReloadKey = state.resultRevision,
-                                                onRjClick = { copyMeta("作品编号", it) },
-                                                onCircleClick = { copyMeta("社团", it) },
+                                                onRjLongClick = ::openMetaActions,
                                                 onCircleLongClick = ::openMetaActions,
-                                                onCvClick = { copyMeta("声优", it) },
                                                 onCvLongClick = ::openMetaActions,
-                                                onTagClick = { copyMeta("标签", it) },
                                                 onTagLongClick = ::openMetaActions,
                                             )
                                         }
@@ -1163,12 +1160,9 @@ fun SearchScreen(
                                                 showStatsPlaceholders = true,
                                                 coverFadeInState = coverFadeInState,
                                                 coverReloadKey = state.resultRevision,
-                                                onRjClick = { copyMeta("作品编号", it) },
-                                                onCircleClick = { copyMeta("社团", it) },
+                                                onRjLongClick = ::openMetaActions,
                                                 onCircleLongClick = ::openMetaActions,
-                                                onCvClick = { copyMeta("声优", it) },
                                                 onCvLongClick = ::openMetaActions,
-                                                onTagClick = { copyMeta("标签", it) },
                                                 onTagLongClick = ::openMetaActions,
                                             )
                                         }
@@ -1359,6 +1353,7 @@ fun SearchScreen(
                     }
                 }
             },
+            onCopy = { copyMeta("内容", it) },
         )
     }
 }

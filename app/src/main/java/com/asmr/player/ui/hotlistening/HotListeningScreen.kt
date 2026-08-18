@@ -368,7 +368,6 @@ fun HotListeningScreen(
                                     HotListeningListItem(
                                         entry = entry,
                                         onAlbumClick = onAlbumClick,
-                                        copyMeta = copyMeta,
                                         onMetaLongClick = ::openMetaActions,
                                         coverFadeInState = listCoverFadeInState,
                                     )
@@ -395,7 +394,6 @@ fun HotListeningScreen(
                                             HotListeningListItem(
                                                 entry = entry,
                                                 onAlbumClick = onAlbumClick,
-                                                copyMeta = copyMeta,
                                                 onMetaLongClick = ::openMetaActions,
                                                 coverFadeInState = listCoverFadeInState,
                                             )
@@ -463,7 +461,6 @@ fun HotListeningScreen(
                                     HotListeningGridItem(
                                         entry = state.entries[index],
                                         onAlbumClick = onAlbumClick,
-                                        copyMeta = copyMeta,
                                         onMetaLongClick = ::openMetaActions,
                                         coverFadeInState = gridCoverFadeInState,
                                     )
@@ -494,7 +491,6 @@ fun HotListeningScreen(
                                             HotListeningGridItem(
                                                 entry = state.blockedEntries[index],
                                                 onAlbumClick = onAlbumClick,
-                                                copyMeta = copyMeta,
                                                 onMetaLongClick = ::openMetaActions,
                                                 coverFadeInState = gridCoverFadeInState,
                                             )
@@ -519,6 +515,7 @@ fun HotListeningScreen(
             onCreatePlaylist = playlistsViewModel::createPlaylist,
             onCreateGroup = albumGroupsViewModel::createGroup,
             onAddBlockedKeyword = ::addMetaBlockedKeyword,
+            onCopy = { copyMeta("内容", it) },
         )
     }
 }
@@ -527,7 +524,6 @@ fun HotListeningScreen(
 private fun HotListeningListItem(
     entry: HotListeningEntry,
     onAlbumClick: (Album) -> Unit,
-    copyMeta: (String, String) -> Unit,
     onMetaLongClick: (String) -> Unit,
     coverFadeInState: State<Boolean>? = null,
 ) {
@@ -541,12 +537,9 @@ private fun HotListeningListItem(
         animateOnlineDetails = false,
         coverFadeInState = coverFadeInState,
         cacheRenderLayer = true,
-        onRjClick = { copyMeta("作品编号", it) },
-        onCircleClick = { copyMeta("社团", it) },
+        onRjLongClick = onMetaLongClick,
         onCircleLongClick = onMetaLongClick,
-        onCvClick = { copyMeta("声优", it) },
         onCvLongClick = onMetaLongClick,
-        onTagClick = { copyMeta("标签", it) },
         onTagLongClick = onMetaLongClick,
     )
 }
@@ -555,7 +548,6 @@ private fun HotListeningListItem(
 private fun HotListeningGridItem(
     entry: HotListeningEntry,
     onAlbumClick: (Album) -> Unit,
-    copyMeta: (String, String) -> Unit,
     onMetaLongClick: (String) -> Unit,
     coverFadeInState: State<Boolean>? = null,
 ) {
@@ -568,12 +560,9 @@ private fun HotListeningGridItem(
         coverBadge = coverBadge,
         animateOnlineDetails = false,
         coverFadeInState = coverFadeInState,
-        onRjClick = { copyMeta("作品编号", it) },
-        onCircleClick = { copyMeta("社团", it) },
+        onRjLongClick = onMetaLongClick,
         onCircleLongClick = onMetaLongClick,
-        onCvClick = { copyMeta("声优", it) },
         onCvLongClick = onMetaLongClick,
-        onTagClick = { copyMeta("标签", it) },
         onTagLongClick = onMetaLongClick,
     )
 }
