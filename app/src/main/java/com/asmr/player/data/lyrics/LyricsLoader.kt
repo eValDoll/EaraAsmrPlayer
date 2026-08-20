@@ -31,7 +31,6 @@ import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
-import java.nio.charset.Charset
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -302,15 +301,7 @@ class LyricsLoader @Inject constructor(
                 input.readBytes()
             }
         }.getOrNull() ?: return emptyList()
-        val text = decodeText(content)
-        return SubtitleParser.parseText(extension, text)
-    }
-
-    private fun decodeText(bytes: ByteArray): String {
-        return runCatching { bytes.toString(Charsets.UTF_8) }
-            .recoverCatching { bytes.toString(Charset.forName("GBK")) }
-            .getOrDefault("")
-            .removePrefix("\uFEFF")
+        return SubtitleParser.parseBytes(extension, content)
     }
 
     private fun resolveDisplayName(uri: Uri): String {

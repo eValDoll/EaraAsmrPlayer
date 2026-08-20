@@ -3,6 +3,7 @@ package com.asmr.player.util
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.nio.charset.Charset
 
 class SubtitleParserTest {
     @Test
@@ -42,6 +43,55 @@ class SubtitleParserTest {
         assertEquals(2, parsed.size)
         assertEquals("a", parsed[0].text)
         assertEquals("b", parsed[1].text)
+    }
+
+    @Test
+    fun parseLrc_supportsLongMinutesHoursAndCommaFractions() {
+        val content = """
+            [100:01.23]超过一百分钟
+            [01:40:02.345]小时格式
+            [101:03,5]逗号小数
+        """.trimIndent()
+
+        val parsed = SubtitleParser.parseText("lrc", content)
+
+        assertEquals(3, parsed.size)
+        assertEquals(listOf(6_001_230L, 6_002_345L, 6_063_500L), parsed.map { it.startMs })
+        assertEquals(listOf("超过一百分钟", "小时格式", "逗号小数"), parsed.map { it.text })
+    }
+
+    @Test
+    fun parseLrc_appliesOffsetToTheWholeFile() {
+        val content = """
+            [00:01.00]第一行
+            [offset:500]
+            [00:02.00]第二行
+        """.trimIndent()
+
+        val parsed = SubtitleParser.parseText("lrc", content)
+
+        assertEquals(listOf(1_500L, 2_500L), parsed.map { it.startMs })
+    }
+
+    @Test
+    fun parseBytes_decodesGb18030LrcWithoutMojibake() {
+        val bytes = "[00:01.00]中文歌词".toByteArray(Charset.forName("GB18030"))
+
+        val parsed = SubtitleParser.parseBytes("lrc", bytes)
+
+        assertEquals(1, parsed.size)
+        assertEquals("中文歌词", parsed.single().text)
+    }
+
+    @Test
+    fun parseBytes_decodesUtf16BomLrc() {
+        val textBytes = "[00:01.00]日文字幕".toByteArray(Charsets.UTF_16LE)
+        val bytes = byteArrayOf(0xFF.toByte(), 0xFE.toByte()) + textBytes
+
+        val parsed = SubtitleParser.parseBytes("lrc", bytes)
+
+        assertEquals(1, parsed.size)
+        assertEquals("日文字幕", parsed.single().text)
     }
 
     @Test

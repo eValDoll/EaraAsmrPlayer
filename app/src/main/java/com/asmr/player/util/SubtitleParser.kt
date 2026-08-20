@@ -5,7 +5,9 @@ import com.google.gson.JsonElement
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import java.io.File
+import java.nio.ByteBuffer
 import java.nio.charset.Charset
+import java.nio.charset.CodingErrorAction
 
 data class SubtitleEntry(
     val startMs: Long,
@@ -19,18 +21,30 @@ object SubtitleParser {
         val file = File(path)
         if (!file.exists()) return emptyList()
 
-        val content = try {
-            file.readText(Charsets.UTF_8)
-        } catch (e: Exception) {
-            try {
-                file.readText(Charset.forName("GBK"))
-            } catch (e2: Exception) {
-                return emptyList()
-            }
-        }.removePrefix("\uFEFF")
+        val bytes = runCatching { file.readBytes() }.getOrNull() ?: return emptyList()
+        return parseBytes(file.extension, bytes)
+    }
 
-        val extension = file.extension.lowercase()
-        return parseText(extension, content)
+    internal fun parseBytes(extension: String, bytes: ByteArray): List<SubtitleEntry> {
+        return parseText(extension, decodeText(bytes))
+    }
+
+    private fun decodeText(bytes: ByteArray): String {
+        if (bytes.isEmpty()) return ""
+
+        val bomCharset = when {
+            bytes.hasPrefix(0xEF, 0xBB, 0xBF) -> Charsets.UTF_8
+            bytes.hasPrefix(0xFF, 0xFE) -> Charsets.UTF_16LE
+            bytes.hasPrefix(0xFE, 0xFF) -> Charsets.UTF_16BE
+            else -> null
+        }
+        if (bomCharset != null) {
+            return decodeStrict(bytes, bomCharset).orEmpty().removePrefix("\uFEFF")
+        }
+
+        return decodeStrict(bytes, Charsets.UTF_8)
+            ?: decodeStrict(bytes, Charset.forName("GB18030"))
+            ?: bytes.toString(Charset.forName("GB18030"))
     }
 
     fun parseText(extension: String, content: String): List<SubtitleEntry> {
@@ -93,39 +107,30 @@ object SubtitleParser {
 
     private fun parseLrc(content: String): List<SubtitleEntry> {
         val offsetRegex = Regex("""^\s*\[offset:([+-]?\d+)\]\s*$""", RegexOption.IGNORE_CASE)
-        val tsRegex = Regex("""\[(\d{1,2}):(\d{1,2}(?:\.\d{1,3})?)\]""")
+        val timestampRegex = Regex("""\[(?:(\d+):)?(\d+):(\d{1,2})(?:[.,](\d{1,3}))?]""")
 
-        var offsetMs = 0L
+        val offsetMs = content.lineSequence()
+            .mapNotNull { line ->
+                offsetRegex.matchEntire(line.trim())?.groupValues?.get(1)?.toLongOrNull()
+            }
+            .lastOrNull()
+            ?: 0L
         val raw = mutableListOf<Pair<Long, String>>()
 
         content.lines().forEach { rawLine ->
             val line = rawLine.trim()
             if (line.isBlank()) return@forEach
-            val offsetMatch = offsetRegex.matchEntire(line)
-            if (offsetMatch != null) {
-                offsetMs = offsetMatch.groupValues[1].toLongOrNull() ?: 0L
-                return@forEach
-            }
-            if (line.startsWith("[ti:", true) ||
-                line.startsWith("[ar:", true) ||
-                line.startsWith("[al:", true) ||
-                line.startsWith("[by:", true) ||
-                line.startsWith("[re:", true) ||
-                line.startsWith("[ve:", true)
-            ) {
-                return@forEach
-            }
 
-            val ts = tsRegex.findAll(line).toList()
-            if (ts.isEmpty()) return@forEach
-            val text = tsRegex.replace(line, "").trim()
+            val timestamps = timestampRegex.findAll(line).toList()
+            if (timestamps.isEmpty()) return@forEach
+            val text = timestampRegex.replace(line, "").trim()
             if (text.isBlank()) return@forEach
 
-            ts.forEach timestamps@{ m ->
-                val minutes = m.groupValues[1].toLongOrNull() ?: return@timestamps
-                val seconds = m.groupValues[2].toDoubleOrNull() ?: return@timestamps
-                val ms = ((minutes * 60.0 + seconds) * 1000.0).toLong() + offsetMs
-                raw.add(ms to text)
+            timestamps.forEach timestampLoop@{ match ->
+                val timestampMs = parseLrcTimestampMs(match) ?: return@timestampLoop
+                val adjustedMs = runCatching { Math.addExact(timestampMs, offsetMs) }.getOrNull()
+                    ?: return@timestampLoop
+                raw.add(adjustedMs to text)
             }
         }
 
@@ -139,6 +144,26 @@ object SubtitleParser {
             val end = if (idx < sorted.lastIndex) sorted[idx + 1].first else start + 5000L
             SubtitleEntry(start, end.coerceAtLeast(start + 200L), text)
         }
+    }
+
+    private fun parseLrcTimestampMs(match: MatchResult): Long? {
+        val rawHours = match.groupValues[1]
+        val hours = if (rawHours.isEmpty()) 0L else rawHours.toLongOrNull() ?: return null
+        val minutes = match.groupValues[2].toLongOrNull() ?: return null
+        val seconds = match.groupValues[3].toLongOrNull() ?: return null
+        val fractionMs = match.groupValues[4]
+            .takeIf { it.isNotEmpty() }
+            ?.padEnd(3, '0')
+            ?.take(3)
+            ?.toLongOrNull()
+            ?: 0L
+
+        return runCatching {
+            val hourMs = Math.multiplyExact(hours, 3_600_000L)
+            val minuteMs = Math.multiplyExact(minutes, 60_000L)
+            val secondMs = Math.multiplyExact(seconds, 1_000L)
+            Math.addExact(Math.addExact(hourMs, minuteMs), Math.addExact(secondMs, fractionMs))
+        }.getOrNull()
     }
 
     private fun parseVtt(content: String): List<SubtitleEntry> {
@@ -303,5 +328,20 @@ object SubtitleParser {
 
     private fun getOverlap(s1: Long, e1: Long, s2: Long, e2: Long): Long {
         return Math.max(0L, Math.min(e1, e2) - Math.max(s1, s2))
+    }
+
+    private fun decodeStrict(bytes: ByteArray, charset: Charset): String? {
+        return runCatching {
+            charset.newDecoder()
+                .onMalformedInput(CodingErrorAction.REPORT)
+                .onUnmappableCharacter(CodingErrorAction.REPORT)
+                .decode(ByteBuffer.wrap(bytes))
+                .toString()
+        }.getOrNull()
+    }
+
+    private fun ByteArray.hasPrefix(vararg prefix: Int): Boolean {
+        if (size < prefix.size) return false
+        return prefix.indices.all { index -> (this[index].toInt() and 0xFF) == prefix[index] }
     }
 }
