@@ -25,7 +25,6 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -123,7 +122,6 @@ import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.albumStableKey
 import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
-import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.clearFocusOnTapOutside
 import com.asmr.player.ui.common.CollapsibleHeaderState
 import com.asmr.player.ui.common.collapsibleHeaderUiState
@@ -821,7 +819,7 @@ fun SearchScreen(
     }
 
     Scaffold(
-        contentWindowInsets = StableWindowInsets.navigationBars,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground
     ) { padding ->

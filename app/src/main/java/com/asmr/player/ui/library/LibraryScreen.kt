@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -62,7 +61,6 @@ import com.asmr.player.ui.common.NoImageLoadingIndicator
 import com.asmr.player.ui.common.FlatActionDialog
 import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
-import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
 import com.asmr.player.ui.common.lightweightVerticalStretchOverscroll
 import com.asmr.player.ui.common.rememberAudioMeta
@@ -398,7 +396,7 @@ fun LibraryScreen(
     }
 
     Scaffold(
-        contentWindowInsets = StableWindowInsets.navigationBars,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground,
         // TopAppBar is now handled by MainActivity for better consistency

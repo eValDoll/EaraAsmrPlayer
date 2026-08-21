@@ -112,7 +112,6 @@ import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
-import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
@@ -293,7 +292,7 @@ fun SettingsScreen(
         selectedSection = null
     }
     Scaffold(
-        contentWindowInsets = StableWindowInsets.navigationBars,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground
     ) { padding ->
