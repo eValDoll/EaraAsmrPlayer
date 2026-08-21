@@ -42,7 +42,7 @@ import com.asmr.player.data.remote.auth.buildDlsiteCookieHeader
 import com.asmr.player.data.remote.crawler.AsmrOneCrawler
 import com.asmr.player.data.remote.crawler.AsmrOneSearchResult
 import com.asmr.player.data.remote.crawler.AsmrOneTracksResult
-import com.asmr.player.data.remote.crawler.asmrOneWorkMatchesRj
+import com.asmr.player.data.remote.crawler.selectAsmrOneWorkForRj
 import com.asmr.player.data.remote.dlsite.DLSITE_PLAY_PREVIEW_CACHE_VERSION
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncResolveResult
@@ -311,7 +311,7 @@ class AlbumDetailViewModel @Inject constructor(
         key: String,
         result: AsmrOneSearchResult
     ): Pair<String, Int?>? {
-        val found = result.response.works.firstOrNull { work -> asmrOneWorkMatchesRj(work, key) }
+        val found = selectAsmrOneWorkForRj(result.response.works, key)
         val workId = found?.id?.toString()?.trim().orEmpty()
         if (found == null) {
             asmrOneResolvedDetailsCache.remove(key)
@@ -332,6 +332,29 @@ class AlbumDetailViewModel @Inject constructor(
         return resolved
     }
 
+    private suspend fun resolveAsmrOneWorkUncached(
+        key: String,
+        throwOnRequestFailure: Boolean
+    ): Pair<String, Int?>? {
+        val backendItem = asmrOneAvailabilityApi.resolve(key)
+        val backendWorkId = backendItem?.workId?.takeIf { backendItem.collected && it > 0 }?.toString()
+        if (!backendWorkId.isNullOrBlank()) {
+            val details = runCatching { asmrOneCrawler.getDetails(backendWorkId) }.getOrNull()
+            if (details != null) {
+                asmrOneResolvedDetailsCache[key] = details
+            } else {
+                asmrOneResolvedDetailsCache.remove(key)
+            }
+            return (backendWorkId to null).also { resolved ->
+                asmrOneResolvedCache[key] = SystemClock.elapsedRealtime() to resolved
+            }
+        }
+        return cacheAsmrOneResolution(
+            key = key,
+            result = asmrOneCrawler.searchWithTrace(key, throwOnFailure = throwOnRequestFailure)
+        )
+    }
+
     private suspend fun resolveAsmrOneWork(
         workNo: String,
         timeoutMs: Long = 12_000L,
@@ -350,17 +373,12 @@ class AlbumDetailViewModel @Inject constructor(
 
         if (throwOnRequestFailure) {
             return withTimeout(timeoutMs) {
-                cacheAsmrOneResolution(
-                    key = key,
-                    result = asmrOneCrawler.searchWithTrace(key, throwOnFailure = true)
-                )
+                resolveAsmrOneWorkUncached(key, throwOnRequestFailure = true)
             }
         }
 
         val request = asmrOneResolutionInFlight[key] ?: viewModelScope.async {
-            val result = runCatching { asmrOneCrawler.searchWithTrace(key) }.getOrNull()
-                ?: return@async null
-            cacheAsmrOneResolution(key, result)
+            runCatching { resolveAsmrOneWorkUncached(key, throwOnRequestFailure = false) }.getOrNull()
         }.also { deferred ->
             asmrOneResolutionInFlight[key] = deferred
             deferred.invokeOnCompletion {

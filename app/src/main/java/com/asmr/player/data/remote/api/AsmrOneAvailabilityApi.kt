@@ -149,28 +149,12 @@ class AsmrOneAvailabilityApi @Inject constructor(
         if (normalized.isEmpty() || backendBaseUrl.isBlank()) return emptyMap()
 
         return try {
-            withContext(Dispatchers.IO) {
-                val request = Request.Builder()
-                    .url(resolveUrl("api/asmr-one/availability"))
-                    .header("User-Agent", userAgent)
-                    .header("X-Listen-Together-App", appHeaderValue)
-                    .header("X-Listen-Together-Client-Session-Id", clientSessionId)
-                    .header("X-Listen-Together-Device-Fingerprint", deviceFingerprint)
-                    .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
-                    .post(gson.toJson(AsmrOneAvailabilityRequest(normalized)).toRequestBody(JSON_MEDIA_TYPE))
-                    .build()
-                requestClient.newCall(request).awaitResponse().use { response ->
-                    if (!response.isSuccessful) return@withContext emptyMap()
-                    val raw = response.body?.string().orEmpty()
-                    if (raw.isBlank()) return@withContext emptyMap()
-                    val parsed = gson.fromJson(raw, AsmrOneAvailabilityResponse::class.java)
-                    val requested = normalized.toSet()
-                    buildMap {
-                        parsed.items.forEach { item ->
-                            item.matchedRequestRjs(requested).forEach { rj ->
-                                put(rj, item.collected)
-                            }
-                        }
+            val parsed = fetchAvailability(normalized) ?: return emptyMap()
+            val requested = normalized.toSet()
+            buildMap {
+                parsed.items.forEach { item ->
+                    item.matchedRequestRjs(requested).forEach { rj ->
+                        put(rj, item.collected)
                     }
                 }
             }
@@ -180,6 +164,42 @@ class AsmrOneAvailabilityApi @Inject constructor(
             emptyMap()
         }
     }
+
+    suspend fun resolve(rj: String): AsmrOneAvailabilityItem? {
+        val normalized = DlsiteWorkNo.normalizeWorkNo(rj, minimumDigits = 6)
+        if (normalized.isBlank() || backendBaseUrl.isBlank()) return null
+        return try {
+            fetchAvailability(listOf(normalized))
+                ?.items
+                ?.firstOrNull { item ->
+                    item.collected && item.workId > 0 &&
+                        item.rj.trim().equals(normalized, ignoreCase = true)
+                }
+        } catch (error: CancellationException) {
+            throw error
+        } catch (_: Throwable) {
+            null
+        }
+    }
+
+    private suspend fun fetchAvailability(normalized: List<String>): AsmrOneAvailabilityResponse? =
+        withContext(Dispatchers.IO) {
+            val request = Request.Builder()
+                .url(resolveUrl("api/asmr-one/availability"))
+                .header("User-Agent", userAgent)
+                .header("X-Listen-Together-App", appHeaderValue)
+                .header("X-Listen-Together-Client-Session-Id", clientSessionId)
+                .header("X-Listen-Together-Device-Fingerprint", deviceFingerprint)
+                .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
+                .post(gson.toJson(AsmrOneAvailabilityRequest(normalized)).toRequestBody(JSON_MEDIA_TYPE))
+                .build()
+            requestClient.newCall(request).awaitResponse().use { response ->
+                if (!response.isSuccessful) return@withContext null
+                val raw = response.body?.string().orEmpty()
+                if (raw.isBlank()) return@withContext null
+                gson.fromJson(raw, AsmrOneAvailabilityResponse::class.java)
+            }
+        }
 
     suspend fun search(keyword: String, limit: Int, offset: Int, sort: String): AsmrOneCollectedSearchResponse {
         if (backendBaseUrl.isBlank()) throw IOException("asmr.one backend is not configured")

@@ -56,7 +56,10 @@ data class Asmr200Work(
     val vas: List<Artist>? = null,
     val tags: List<Tag>? = null,
     val original_workno: String? = null,
-    val language_editions: List<Asmr200LanguageEdition>? = null
+    val translation_info: AsmrOneTranslationInfo? = null,
+    val language_editions: List<Asmr200LanguageEdition>? = null,
+    @SerializedName("other_language_editions_in_db")
+    val other_language_editions_in_db: List<AsmrOneOtherLanguageEditionInDb>? = null
 )
 
 data class Asmr200LanguageEdition(

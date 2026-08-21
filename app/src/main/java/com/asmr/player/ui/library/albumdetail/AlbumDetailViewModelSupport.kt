@@ -484,15 +484,23 @@ internal fun resolveAsmrOneTrackWorkId(
 ): String? {
     val normalizedWorkId = resolvedWorkId.trim().ifBlank { return null }
     val normalizedLang = selectedLang.trim().uppercase().ifBlank { "JPN" }
-    if (normalizedLang == "JPN") return normalizedWorkId
 
     val exactRjs = selectedRjs
         .map { DlsiteWorkNo.normalizeWorkNo(it, minimumDigits = 6) }
         .filter { it.isNotBlank() }
         .toSet()
-    val details = resolvedDetails ?: return null
+    val details = resolvedDetails
+        ?: return normalizedWorkId.takeIf { normalizedLang == "JPN" }
     val resolvedSourceRj = details.source_id.trim().uppercase()
     if (resolvedSourceRj in exactRjs) return normalizedWorkId
+
+    val currentLanguage = details.translation_info?.lang.orEmpty().trim()
+    val currentIsOriginal = details.translation_info?.is_original == true ||
+        (details.original_workno.orEmpty().isBlank() && currentLanguage.isBlank())
+    if (
+        asmrOneEditionMatchesLanguage(currentLanguage, normalizedLang) ||
+        (normalizedLang == "JPN" && currentIsOriginal)
+    ) return normalizedWorkId
 
     val otherEditions = details.other_language_editions_in_db.orEmpty()
     val exactEdition = otherEditions.firstOrNull { edition ->
@@ -507,6 +515,10 @@ internal fun resolveAsmrOneTrackWorkId(
 private fun asmrOneEditionMatchesLanguage(languageLabel: String, selectedLang: String): Boolean {
     val normalizedLabel = languageLabel.trim().uppercase()
     return when (selectedLang) {
+        "JPN" -> normalizedLabel.contains("JPN") ||
+            normalizedLabel.contains("日本語") ||
+            normalizedLabel.contains("日文")
+
         "CHI_HANS" -> normalizedLabel.contains("CHI_HANS") ||
             normalizedLabel.contains("简体") ||
             normalizedLabel.contains("簡体") ||

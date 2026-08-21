@@ -289,20 +289,11 @@ private fun mapBackupWorks(
 ): List<WorkDetailsResponse> {
     return works.mapNotNull { work ->
         if (work.id <= 0) return@mapNotNull null
-        val mappedSourceId = run {
-            val hasMatchingEdition = normalizedRj.isNotBlank() && work.language_editions.orEmpty().any { edition ->
-                edition.workno?.trim()?.equals(normalizedRj, ignoreCase = true) == true
-            }
-            if (hasMatchingEdition) {
-                normalizedRj
-            } else {
-                work.source_id.orEmpty().ifBlank { normalizedRj }
-            }
-        }
         WorkDetailsResponse(
             id = work.id,
-            source_id = mappedSourceId,
+            source_id = work.source_id.orEmpty().ifBlank { normalizedRj },
             original_workno = work.original_workno,
+            translation_info = work.translation_info,
             language_editions = work.language_editions?.map { edition ->
                 AsmrOneLanguageEdition(
                     lang = edition.lang,
@@ -310,6 +301,7 @@ private fun mapBackupWorks(
                     workno = edition.workno
                 )
             },
+            other_language_editions_in_db = work.other_language_editions_in_db,
             title = work.title.orEmpty(),
             circle = work.circle ?: work.name?.takeIf { it.isNotBlank() }?.let(::Circle),
             vas = work.vas,
@@ -330,4 +322,53 @@ fun asmrOneWorkMatchesRj(work: WorkDetailsResponse, rj: String): Boolean {
     return work.language_editions.orEmpty().any { edition ->
         edition.workno.orEmpty().trim().uppercase() == normalized
     }
+}
+
+internal fun selectAsmrOneWorkForRj(
+    works: List<WorkDetailsResponse>,
+    rj: String
+): WorkDetailsResponse? {
+    val normalized = rj.trim().uppercase()
+    if (normalized.isBlank()) return null
+    return works
+        .asSequence()
+        .map { work -> work to asmrOneWorkMatchPriority(work, normalized) }
+        .filter { (_, priority) -> priority > 0 }
+        .maxWithOrNull(compareBy<Pair<WorkDetailsResponse, Int>> { it.second }.thenBy { it.first.id })
+        ?.first
+}
+
+private fun asmrOneWorkMatchPriority(work: WorkDetailsResponse, normalizedRj: String): Int {
+    if (work.source_id.trim().uppercase() == normalizedRj) return 100
+
+    val requestedLanguage = work.language_editions.orEmpty()
+        .firstOrNull { edition -> edition.workno.orEmpty().trim().uppercase() == normalizedRj }
+        ?.lang
+        .orEmpty()
+        .trim()
+        .uppercase()
+    val currentLanguage = asmrOneWorkLanguage(work)
+    if (requestedLanguage.isNotBlank() && requestedLanguage == currentLanguage) return 80
+
+    if (work.language_editions.orEmpty().any { edition ->
+            edition.workno.orEmpty().trim().uppercase() == normalizedRj
+        }
+    ) return 40
+    if (work.original_workno.orEmpty().trim().uppercase() == normalizedRj) return 20
+    return 0
+}
+
+private fun asmrOneWorkLanguage(work: WorkDetailsResponse): String {
+    val translationInfo = work.translation_info
+    val explicit = translationInfo?.lang.orEmpty().trim().uppercase()
+    if (explicit.isNotBlank()) return explicit
+    if (translationInfo?.is_original == true || work.original_workno.orEmpty().isBlank()) return "JPN"
+    return work.language_editions.orEmpty()
+        .firstOrNull { edition ->
+            edition.workno.orEmpty().trim().equals(work.source_id.trim(), ignoreCase = true)
+        }
+        ?.lang
+        .orEmpty()
+        .trim()
+        .uppercase()
 }

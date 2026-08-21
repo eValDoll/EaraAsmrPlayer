@@ -1,6 +1,7 @@
 package com.asmr.player.ui.library
 
 import com.asmr.player.data.remote.api.AsmrOneOtherLanguageEditionInDb
+import com.asmr.player.data.remote.api.AsmrOneTranslationInfo
 import com.asmr.player.data.remote.api.WorkDetailsResponse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -84,14 +85,73 @@ class AlbumDetailAsmrOneLanguageTargetTest {
         assertEquals("1583802", workId)
     }
 
+    @Test
+    fun dlsiteParentWorkno_usesSameLanguageAsmrOneResource() {
+        val details = workDetails(
+            id = 1_569_012,
+            sourceId = "RJ01569012",
+            translationInfo = AsmrOneTranslationInfo(
+                lang = "CHI_HANS",
+                is_original = false,
+                parent_workno = "RJ01569011",
+                original_workno = "RJ01557280"
+            ),
+            otherEditions = listOf(
+                AsmrOneOtherLanguageEditionInDb(
+                    id = 1_557_280,
+                    lang = "日本語",
+                    source_id = "RJ01557280",
+                    is_original = true
+                )
+            )
+        )
+
+        val workId = resolveAsmrOneTrackWorkId(
+            resolvedWorkId = "1569012",
+            resolvedDetails = details,
+            selectedLang = "CHI_HANS",
+            selectedRjs = listOf("RJ01569011")
+        )
+
+        assertEquals("1569012", workId)
+    }
+
+    @Test
+    fun japaneseSelectionFromTranslatedDetails_usesCollectedOriginalEdition() {
+        val details = workDetails(
+            id = 1_569_012,
+            sourceId = "RJ01569012",
+            translationInfo = AsmrOneTranslationInfo(lang = "CHI_HANS", is_original = false),
+            otherEditions = listOf(
+                AsmrOneOtherLanguageEditionInDb(
+                    id = 1_557_280,
+                    lang = "日本語",
+                    source_id = "RJ01557280",
+                    is_original = true
+                )
+            )
+        )
+
+        val workId = resolveAsmrOneTrackWorkId(
+            resolvedWorkId = "1569012",
+            resolvedDetails = details,
+            selectedLang = "JPN",
+            selectedRjs = listOf("RJ01557280")
+        )
+
+        assertEquals("1557280", workId)
+    }
+
     private fun workDetails(
         id: Int,
         sourceId: String,
+        translationInfo: AsmrOneTranslationInfo? = null,
         otherEditions: List<AsmrOneOtherLanguageEditionInDb>
     ): WorkDetailsResponse {
         return WorkDetailsResponse(
             id = id,
             source_id = sourceId,
+            translation_info = translationInfo,
             title = "",
             circle = null,
             vas = null,
