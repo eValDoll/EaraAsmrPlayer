@@ -660,7 +660,20 @@ internal fun resolveExistingRemoteSelectionPaths(
         val canonicalUrl: String,
         val fileName: String,
         val trackKey: String,
-        val trackKeyWithoutGroup: String
+        val trackKeyWithoutGroup: String,
+        val extension: String,
+        val fileType: TreeFileType
+    )
+
+    data class RemoteCandidate(
+        val file: RemoteSelectionFileRef,
+        val normalizedRelativePath: String,
+        val canonicalUrl: String,
+        val fileName: String,
+        val trackKey: String,
+        val trackKeyWithoutGroup: String,
+        val extension: String,
+        val fileType: TreeFileType
     )
 
     fun normalizeRelativePath(path: String): String {
@@ -684,6 +697,16 @@ internal fun resolveExistingRemoteSelectionPaths(
         return TrackKeyNormalizer.buildKey(title, group, null)
     }
 
+    fun resolvedExtension(relativePath: String, sourcePath: String): String {
+        return fileExtensionFromName(relativePath)
+            .ifBlank { fileExtensionFromName(sourcePath) }
+    }
+
+    fun resolvedFileType(relativePath: String, sourcePath: String): TreeFileType {
+        return treeFileTypeForName(relativePath).takeIf { it != TreeFileType.Other }
+            ?: treeFileTypeForName(sourcePath)
+    }
+
     val candidates = localFiles.asSequence()
         .filter { local ->
             includeOnlineFiles || !isOnlineTrackPath(local.track?.path.orEmpty().ifBlank { local.absolutePath })
@@ -691,26 +714,42 @@ internal fun resolveExistingRemoteSelectionPaths(
         .map { local ->
             val track = local.track
             val fallbackGroup = local.relativePath.replace('\\', '/').substringBeforeLast('/', "")
+            val sourcePath = track?.path.orEmpty().ifBlank { local.absolutePath }
             MatchCandidate(
                 normalizedRelativePath = normalizeRelativePath(local.relativePath),
-                canonicalUrl = canonicalUrl(track?.path.orEmpty().ifBlank { local.absolutePath }),
+                canonicalUrl = canonicalUrl(sourcePath),
                 fileName = fileName(local.relativePath),
                 trackKey = track?.let {
                     TrackKeyNormalizer.buildKey(it.title, it.group.ifBlank { fallbackGroup }, null)
                 }.orEmpty(),
                 trackKeyWithoutGroup = track?.let {
                     TrackKeyNormalizer.buildKey(it.title, "", null)
-                }.orEmpty()
+                }.orEmpty(),
+                extension = resolvedExtension(local.relativePath, sourcePath),
+                fileType = resolvedFileType(local.relativePath, sourcePath)
             )
         }
-        .toMutableList()
+        .toList()
 
-    fun buildCandidateIndex(key: (MatchCandidate) -> String): Map<String, ArrayDeque<Int>> {
-        val index = linkedMapOf<String, ArrayDeque<Int>>()
+    val remotes = remoteFiles.map { remote ->
+        RemoteCandidate(
+            file = remote,
+            normalizedRelativePath = normalizeRelativePath(remote.relativePath),
+            canonicalUrl = canonicalUrl(remote.url),
+            fileName = fileName(remote.relativePath),
+            trackKey = remoteTrackKey(remote.relativePath, includeGroup = true),
+            trackKeyWithoutGroup = remoteTrackKey(remote.relativePath, includeGroup = false),
+            extension = resolvedExtension(remote.relativePath, remote.url),
+            fileType = treeFileTypeForNode(remote.relativePath, remote.url)
+        )
+    }
+
+    fun buildCandidateIndex(key: (MatchCandidate) -> String): Map<String, List<Int>> {
+        val index = linkedMapOf<String, MutableList<Int>>()
         candidates.forEachIndexed { candidateIndex, candidate ->
             val value = key(candidate)
             if (value.isNotBlank()) {
-                index.getOrPut(value) { ArrayDeque() }.addLast(candidateIndex)
+                index.getOrPut(value) { mutableListOf() }.add(candidateIndex)
             }
         }
         return index
@@ -722,37 +761,60 @@ internal fun resolveExistingRemoteSelectionPaths(
     val fileNameIndex = buildCandidateIndex(MatchCandidate::fileName)
     val trackKeyWithoutGroupIndex = buildCandidateIndex(MatchCandidate::trackKeyWithoutGroup)
     val available = BooleanArray(candidates.size) { true }
+    val unmatchedRemotes = BooleanArray(remotes.size) { true }
+    val matched = linkedSetOf<String>()
 
-    fun consume(index: Map<String, ArrayDeque<Int>>, key: String): Boolean {
-        if (key.isBlank()) return false
-        val candidateIndexes = index[key] ?: return false
-        while (candidateIndexes.isNotEmpty()) {
-            val candidateIndex = candidateIndexes.removeFirst()
-            if (available[candidateIndex]) {
-                available[candidateIndex] = false
-                return true
+    fun consume(
+        remoteIndex: Int,
+        index: Map<String, List<Int>>,
+        key: String,
+        isCompatible: (MatchCandidate) -> Boolean = { true }
+    ) {
+        if (!unmatchedRemotes[remoteIndex] || key.isBlank()) return
+        val candidateIndex = index[key]
+            ?.firstOrNull { available[it] && isCompatible(candidates[it]) }
+            ?: return
+        available[candidateIndex] = false
+        unmatchedRemotes[remoteIndex] = false
+        matched += remotes[remoteIndex].file.relativePath
+    }
+
+    fun consumePass(
+        index: Map<String, List<Int>>,
+        key: (RemoteCandidate) -> String,
+        isCompatible: (RemoteCandidate, MatchCandidate) -> Boolean = { _, _ -> true }
+    ) {
+        remotes.forEachIndexed { remoteIndex, remote ->
+            consume(remoteIndex, index, key(remote)) { local ->
+                isCompatible(remote, local)
             }
         }
-        return false
     }
 
-    val matched = linkedSetOf<String>()
-    remoteFiles.forEach { remote ->
-        val normalizedPath = normalizeRelativePath(remote.relativePath)
-        val remoteUrl = canonicalUrl(remote.url)
-        val remoteFileName = fileName(remote.relativePath)
-        val remoteKey = remoteTrackKey(remote.relativePath, includeGroup = true)
-        val remoteKeyWithoutGroup = remoteTrackKey(remote.relativePath, includeGroup = false)
-
-        val hasMatch = consume(relativePathIndex, normalizedPath) ||
-            consume(canonicalUrlIndex, remoteUrl) ||
-            consume(trackKeyIndex, remoteKey) ||
-            consume(fileNameIndex, remoteFileName) ||
-            consume(trackKeyWithoutGroupIndex, remoteKeyWithoutGroup)
-        if (hasMatch) {
-            matched += remote.relativePath
+    fun hasCompatibleFormat(remote: RemoteCandidate, local: MatchCandidate): Boolean {
+        if (remote.extension.isNotBlank() && local.extension.isNotBlank()) {
+            return remote.extension == local.extension
         }
+        return remote.fileType != TreeFileType.Other && remote.fileType == local.fileType
     }
+
+    // 先让所有远端条目完成强身份匹配，避免前面的模糊命中占用后续条目的精确候选。
+    consumePass(relativePathIndex, RemoteCandidate::normalizedRelativePath)
+    consumePass(canonicalUrlIndex, RemoteCandidate::canonicalUrl)
+
+    // 目录与标题仍一致时优先匹配，同时要求具体扩展名兼容。
+    consumePass(trackKeyIndex, RemoteCandidate::trackKey, ::hasCompatibleFormat)
+
+    // 完整文件名包含扩展名，可用于目录结构变化后的精确格式兜底。
+    consumePass(fileNameIndex, RemoteCandidate::fileName)
+
+    // 忽略目录的标题匹配最宽松，最后执行且同样不得跨格式占用候选。
+    consumePass(
+        trackKeyWithoutGroupIndex,
+        RemoteCandidate::trackKeyWithoutGroup,
+        ::hasCompatibleFormat
+    )
+
     return matched
 }
 
