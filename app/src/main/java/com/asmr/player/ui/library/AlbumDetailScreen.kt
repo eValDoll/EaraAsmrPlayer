@@ -318,7 +318,10 @@ internal fun albumDetailOnlineLoadPlan(
                 !hasAsmrOneTree &&
                 hasDlsitePlayCredentials
         )
-        1 -> AlbumDetailOnlineLoadPlan(loadDlsite = true, loadAsmrOne = true)
+        1 -> AlbumDetailOnlineLoadPlan(
+            loadDlsite = true,
+            loadAsmrOne = hasResolvedInitialDlsiteTarget
+        )
         2 -> AlbumDetailOnlineLoadPlan(
             loadDlsite = true,
             loadDlsitePlay = hasResolvedInitialDlsiteTarget
@@ -332,6 +335,15 @@ internal fun canUseAsmrOneOnlineTreeActions(
     hasAsmrOneTree: Boolean
 ): Boolean {
     return selectedTab == 1 && hasAsmrOneTree
+}
+
+internal fun asmrOneDirectoryTreeStateKey(
+    currentRj: String,
+    baseRj: String
+): String {
+    val targetRj = currentRj.trim().uppercase()
+        .ifBlank { baseRj.trim().uppercase() }
+    return "tree:asmrOne:$targetRj"
 }
 
 internal fun albumHeaderDownloadEnabled(
@@ -929,8 +941,10 @@ fun AlbumDetailScreen(
                                 }
                             }
 
-                            val asmrOneTreeStableRj = model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()
-                            val asmrOneTreeStateKey = "tree:asmrOne:$asmrOneTreeStableRj"
+                            val asmrOneTreeStateKey = asmrOneDirectoryTreeStateKey(
+                                currentRj = model.rjCode,
+                                baseRj = model.baseRjCode
+                            )
                             val asmrOneScrollStateKey = "scroll:$asmrOneTreeStateKey"
 
                             Box(

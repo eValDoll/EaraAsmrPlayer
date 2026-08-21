@@ -858,7 +858,15 @@ private class DlsiteContentFadeState<T>(
 
     val alpha = Animatable(1f)
 
-    suspend fun update(targetPanel: DlsiteContentPanel<T>) {
+    suspend fun update(
+        targetPanel: DlsiteContentPanel<T>,
+        showLoadingImmediately: Boolean = false
+    ) {
+        if (showLoadingImmediately && targetPanel.kind == DlsiteContentKind.Loading) {
+            panel = targetPanel
+            alpha.snapTo(1f)
+            return
+        }
         if (panel.kind != targetPanel.kind) {
             alpha.animateTo(
                 targetValue = 0f,
@@ -877,11 +885,15 @@ private class DlsiteContentFadeState<T>(
 private fun <T> rememberDlsiteContentFadeState(
     targetPanel: DlsiteContentPanel<T>,
     stateKey: Any,
-    fadeInMillis: Int = 180
+    fadeInMillis: Int = 180,
+    showLoadingImmediately: Boolean = false
 ): DlsiteContentFadeState<T> {
     val state = remember(stateKey) { DlsiteContentFadeState(targetPanel, fadeInMillis) }
-    LaunchedEffect(state, targetPanel) {
-        state.update(targetPanel)
+    LaunchedEffect(state, targetPanel, showLoadingImmediately) {
+        state.update(
+            targetPanel = targetPanel,
+            showLoadingImmediately = showLoadingImmediately
+        )
     }
     return state
 }
@@ -925,15 +937,21 @@ private fun StableOneDirectoryTreeContent(
     val fadeState = rememberDlsiteContentFadeState(
         targetPanel = targetPanel,
         stateKey = stateKey,
-        fadeInMillis = DirectoryTreeRevealFadeInMillis
+        fadeInMillis = DirectoryTreeRevealFadeInMillis,
+        showLoadingImmediately = true
     )
+    val displayedState = if (targetState == DirectoryTreePanelState.Loading) {
+        DirectoryTreePanelState.Loading
+    } else {
+        fadeState.panel.value ?: targetState
+    }
     Box(
         modifier = modifier
             .height(rememberStableOneDirectoryContainerHeight())
             .clipToBounds()
             .dlsiteContentFade(fadeState)
     ) {
-        content(fadeState.panel.value ?: targetState)
+        content(displayedState)
     }
 }
 

@@ -1178,9 +1178,12 @@ class AlbumDetailViewModel @Inject constructor(
                     val targetWorkno = resolvedTarget.workno.trim().uppercase()
                     val targetChanged = targetWorkno.isNotBlank() &&
                         !targetWorkno.equals(latestResolved.rjCode.trim().uppercase(), ignoreCase = true)
+                    val languageChanged = !resolvedTarget.selectedLang.trim()
+                        .equals(latestResolved.dlsiteSelectedLang.trim(), ignoreCase = true)
+                    val mustReloadAsmrOne = targetChanged || languageChanged
                     val keepAsmrOneContentDuringTargetSwitch = targetChanged &&
                         latestResolved.asmrOneTree.isNotEmpty()
-                    if (targetChanged) {
+                    if (mustReloadAsmrOne) {
                         asmrOneLoadToken++
                         asmrOneAttemptedRj.clear()
                     }
@@ -1191,31 +1194,31 @@ class AlbumDetailViewModel @Inject constructor(
                             localAlbum = latestResolved.localAlbum,
                             fetchedDlsiteInfo = latestResolved.dlsiteInfo,
                             rjCode = resolvedTarget.workno,
-                            asmrOneWorkId = if (targetChanged) null else latestResolved.asmrOneWorkId,
+                            asmrOneWorkId = if (mustReloadAsmrOne) null else latestResolved.asmrOneWorkId,
                             preserveHeaderAlbumMetadata = latestResolved.preserveHeaderAlbumMetadata
                         ),
                         dlsiteWorkno = resolvedTarget.workno,
                         dlsiteEditions = resolvedTarget.editions,
                         dlsiteSelectedLang = resolvedTarget.selectedLang,
                         hasResolvedInitialDlsiteTarget = true,
-                        hasResolvedAsmrOneContent = if (targetChanged) false else latestResolved.hasResolvedAsmrOneContent,
-                        asmrOneWorkId = if (targetChanged && !keepAsmrOneContentDuringTargetSwitch) {
+                        hasResolvedAsmrOneContent = if (mustReloadAsmrOne) false else latestResolved.hasResolvedAsmrOneContent,
+                        asmrOneWorkId = if (mustReloadAsmrOne && !keepAsmrOneContentDuringTargetSwitch) {
                             null
                         } else {
                             latestResolved.asmrOneWorkId
                         },
-                        asmrOneSite = if (targetChanged && !keepAsmrOneContentDuringTargetSwitch) {
+                        asmrOneSite = if (mustReloadAsmrOne && !keepAsmrOneContentDuringTargetSwitch) {
                             null
                         } else {
                             latestResolved.asmrOneSite
                         },
-                        asmrOneTree = if (targetChanged && !keepAsmrOneContentDuringTargetSwitch) {
+                        asmrOneTree = if (mustReloadAsmrOne && !keepAsmrOneContentDuringTargetSwitch) {
                             emptyList()
                         } else {
                             latestResolved.asmrOneTree
                         },
                         isLoadingDlsite = true,
-                        isLoadingAsmrOne = if (targetChanged) false else latestResolved.isLoadingAsmrOne,
+                        isLoadingAsmrOne = if (mustReloadAsmrOne) false else latestResolved.isLoadingAsmrOne,
                         isLoadingDlsiteTrial = false
                     )
                     _uiState.value = AlbumDetailUiState.Success(model = loadModel)
@@ -1541,7 +1544,10 @@ class AlbumDetailViewModel @Inject constructor(
                     ?.uppercase()
                     .orEmpty()
                 val originalRj = jpnWorkno.ifBlank { latestBase.ifBlank { keyRj } }
+                // 只有选中日语时才允许用入口 RJ 直接解析目录树。其他语言版本必须走
+                // 语言匹配解析，未收录时应显示“暂未收录”，而不是降级到日文目录树。
                 val preferInitialRj = !latest.isDlsiteLanguageUserSelected &&
+                    selectedLang == "JPN" &&
                     DlsiteWorkNo.normalizeWorkNo(latestBase, minimumDigits = 6).isNotBlank()
                 val directoryRjs = asmrOneTrackRjCandidates(
                     baseRj = latestBase,
