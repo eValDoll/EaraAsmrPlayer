@@ -238,6 +238,7 @@ class PlayerViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SliceUiState())
 
     init {
+        playerConnection.resumeAfterAppOpen()
         viewModelScope.launch {
             _sessionEqualizer
                 .filterNotNull()

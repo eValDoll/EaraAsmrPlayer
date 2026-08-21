@@ -225,6 +225,7 @@ import com.asmr.player.ui.common.rememberProtectedAppVolumeChangeState
 import com.asmr.player.ui.common.AudioOutputRouteIcon
 import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
 import com.asmr.player.service.AudioOutputRouteKind
+import com.asmr.player.service.PlaybackService
 import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -1509,7 +1510,10 @@ fun MainContainer(
     ) {
         val now = android.os.SystemClock.elapsedRealtime()
         if (now - lastLibraryBackPressElapsedRealtime <= 2_000L) {
-            activity?.finish()
+            activity?.let { currentActivity ->
+                PlaybackService.requestShutdownForAppExit(currentActivity)
+                currentActivity.finishAndRemoveTask()
+            }
         } else {
             lastLibraryBackPressElapsedRealtime = now
             messageManager.showInfo("再按一次返回退出应用")

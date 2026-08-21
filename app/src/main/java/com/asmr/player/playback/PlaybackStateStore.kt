@@ -1,11 +1,14 @@
 package com.asmr.player.playback
 
 import android.content.Context
+import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.google.gson.Gson
+import com.asmr.player.data.lyrics.EXTRA_REMOTE_SUBTITLE_SOURCES_JSON
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -58,6 +61,71 @@ data class PersistedPlaybackStateV2(
     val pitch: Float,
     val savedAtEpochMs: Long
 )
+
+internal fun capturePersistedPlaybackState(
+    player: Player,
+    preferredItems: List<MediaItem> = emptyList()
+): PersistedPlaybackStateV2? {
+    val items = preferredItems.ifEmpty {
+        (0 until player.mediaItemCount).map { index -> player.getMediaItemAt(index) }
+    }
+    if (items.isEmpty()) return null
+
+    val persistedQueue = items.mapNotNull { item ->
+        val mediaId = item.mediaId.trim()
+        if (mediaId.isBlank()) return@mapNotNull null
+        val metadata = item.mediaMetadata
+        val extras = metadata.extras
+        PersistedPlaybackQueueItem(
+            mediaId = mediaId,
+            uri = item.localConfiguration?.uri?.toString().orEmpty().trim().ifBlank { mediaId },
+            mimeType = item.localConfiguration?.mimeType,
+            title = metadata.title?.toString(),
+            artist = metadata.artist?.toString(),
+            albumTitle = metadata.albumTitle?.toString(),
+            artworkUri = metadata.artworkUri?.toString(),
+            albumId = extras?.takeIf { it.containsKey("album_id") }?.getLong("album_id"),
+            trackId = extras?.takeIf { it.containsKey("track_id") }?.getLong("track_id"),
+            rjCode = extras?.takeIf { it.containsKey("rj_code") }?.getString("rj_code"),
+            remoteSubtitleSources = decodePersistedRemoteSubtitleSources(
+                extras?.getString(EXTRA_REMOTE_SUBTITLE_SOURCES_JSON)
+            )
+        )
+    }
+    if (persistedQueue.isEmpty()) return null
+
+    val currentIndex = player.currentMediaItemIndex
+        .takeIf { it in persistedQueue.indices }
+        ?: 0
+    val speed = player.playbackParameters.speed.takeIf { it.isFinite() }?.coerceIn(0.5f, 2f) ?: 1f
+    val pitch = player.playbackParameters.pitch.takeIf { it.isFinite() }?.coerceIn(0.5f, 2f) ?: 1f
+    return PersistedPlaybackStateV2(
+        queue = persistedQueue,
+        currentIndex = currentIndex,
+        positionMs = player.currentPosition.coerceAtLeast(0L),
+        playWhenReady = player.playWhenReady,
+        repeatMode = player.repeatMode,
+        shuffleEnabled = player.shuffleModeEnabled,
+        speed = speed,
+        pitch = pitch,
+        savedAtEpochMs = System.currentTimeMillis()
+    )
+}
+
+private fun decodePersistedRemoteSubtitleSources(raw: String?): List<PersistedRemoteSubtitleSource> {
+    val trimmed = raw.orEmpty().trim()
+    if (trimmed.isBlank()) return emptyList()
+    return trimmed.split('\n').mapNotNull { line ->
+        val parts = line.split('\t')
+        val url = parts.getOrNull(0).orEmpty().trim()
+        if (url.isBlank()) return@mapNotNull null
+        PersistedRemoteSubtitleSource(
+            url = url,
+            language = parts.getOrNull(1)?.trim().orEmpty().ifBlank { "default" },
+            ext = parts.getOrNull(2)?.trim().orEmpty().ifBlank { url.substringAfterLast('.', "vtt") }
+        )
+    }
+}
 
 @Singleton
 class PlaybackStateStore @Inject constructor(

@@ -107,9 +107,7 @@ class PlayerConnection @Inject constructor(
         .stateIn(scope, SharingStarted.Eagerly, AppVolume.DefaultPercent)
 
     init {
-        scope.launch {
-            connect()
-        }
+        scheduleReconnect(delayMs = 0L)
         scope.launch {
             snapshot
                 .map { it.currentMediaItem?.mediaId?.takeIf { id -> id.isNotBlank() } }
@@ -219,24 +217,32 @@ class PlayerConnection @Inject constructor(
 
     private suspend fun connect() {
         connectMutex.withLock {
+            if (!PlaybackConnectionLifecycle.canConnect() || controller != null) return
             val token = SessionToken(context, ComponentName(context, PlaybackService::class.java))
             val future = MediaController.Builder(context, token)
                 .setListener(
                     object : MediaController.Listener {
                         override fun onDisconnected(controller: MediaController) {
+                            if (this@PlayerConnection.controller !== controller) return
                             this@PlayerConnection.controller = null
                             _snapshot.value = _snapshot.value.copy(
                                 isConnected = false,
                                 startupRestoreResolved = restoreAttemptResolved,
                                 isPlaying = false
                             )
-                            _queue.value = emptyList()
-                            scheduleReconnect()
+                            if (PlaybackConnectionLifecycle.canConnect()) {
+                                _queue.value = emptyList()
+                                scheduleReconnect()
+                            }
                         }
                     }
                 )
                 .buildAsync()
             val c = awaitMediaController(context, future)
+            if (!PlaybackConnectionLifecycle.canConnect()) {
+                c.release()
+                return
+            }
             controller = c
         c.addListener(
             object : Player.Listener {
@@ -295,19 +301,13 @@ class PlayerConnection @Inject constructor(
                 }
             }
         )
-            _snapshot.value = c.toSnapshot(
-                isConnected = true,
-                audioSessionId = _snapshot.value.audioSessionId,
-                startupRestoreResolved = restoreAttemptResolved
-            )
-            updateQueue()
-
             val restored = restorePlaybackStateIfNeeded(c)
             restoreAttemptResolved = true
             if (!restored) {
                 val mode = runCatching { settingsRepository.playMode.first() }.getOrDefault(0)
                 applyPlayModeToController(c, mode)
             }
+            updateQueue()
             _snapshot.value = c.toSnapshot(
                 isConnected = true,
                 audioSessionId = _snapshot.value.audioSessionId,
@@ -329,27 +329,38 @@ class PlayerConnection @Inject constructor(
         }
     }
 
-    private fun scheduleReconnect() {
-        if (reconnecting) return
+    private fun scheduleReconnect(delayMs: Long = 150L) {
+        if (!PlaybackConnectionLifecycle.canConnect() || controller != null || reconnecting) return
         reconnecting = true
         scope.launch {
-            delay(150L)
-            runCatching { connect() }
-                .onFailure { e ->
-                    android.util.Log.w("PlayerConnection", "Failed to reconnect controller", e)
-                    reconnecting = false
-                    delay(1_000L)
-                    scheduleReconnect()
-                    return@launch
-                }
+            if (delayMs > 0L) delay(delayMs)
+            if (!PlaybackConnectionLifecycle.canConnect() || controller != null) {
+                reconnecting = false
+                return@launch
+            }
+            val failure = runCatching { connect() }.exceptionOrNull()
             reconnecting = false
+            if (failure != null && PlaybackConnectionLifecycle.canConnect()) {
+                android.util.Log.w("PlayerConnection", "Failed to reconnect controller", failure)
+                delay(1_000L)
+                scheduleReconnect(delayMs = 0L)
+            }
         }
+    }
+
+    fun resumeAfterAppOpen() {
+        if (PlaybackConnectionLifecycle.markAppOpened()) {
+            didRestorePlaybackState = false
+            restoreAttemptResolved = false
+            _snapshot.value = _snapshot.value.copy(startupRestoreResolved = false)
+        }
+        scheduleReconnect(delayMs = 0L)
     }
 
     private suspend fun restorePlaybackStateIfNeeded(c: MediaController): Boolean {
         if (didRestorePlaybackState) return false
-        didRestorePlaybackState = true
         if (c.mediaItemCount > 0) return false
+        didRestorePlaybackState = true
 
         val saved = playbackStateStore.load() ?: return false
         val persisted = runCatching { saved.queue }.getOrNull().orEmpty()
@@ -457,7 +468,7 @@ class PlayerConnection @Inject constructor(
                         ext = persistedSource.ext.orEmpty().ifBlank { url.substringAfterLast('.', "vtt") }
                     )
                 }
-                val uri = toPlayableUri(persisted.uri.ifBlank { id })
+                val uri = MediaItemFactory.toPlayableUri(persisted.uri.ifBlank { id })
                 val title = persisted.title.orEmpty().ifBlank { deriveTitleFromId(id) }
                 val meta = MediaMetadata.Builder()
                     .setTitle(title)
@@ -513,30 +524,6 @@ class PlayerConnection @Inject constructor(
         return runCatching { decoded.toUri() }.getOrNull()
     }
 
-    private fun toPlayableUri(path: String): Uri {
-        val trimmed = path.trim()
-        return if (trimmed.startsWith("http", ignoreCase = true) || trimmed.startsWith("content://")) {
-            trimmed.toUri()
-        } else {
-            Uri.fromFile(File(trimmed))
-        }
-    }
-
-    private fun decodeRemoteSubtitleSources(raw: String?): List<PersistedRemoteSubtitleSource> {
-        val trimmed = raw.orEmpty().trim()
-        if (trimmed.isBlank()) return emptyList()
-        return trimmed.split('\n').mapNotNull { line ->
-            val parts = line.split('\t')
-            val url = parts.getOrNull(0).orEmpty().trim()
-            if (url.isBlank()) return@mapNotNull null
-            PersistedRemoteSubtitleSource(
-                url = url,
-                language = parts.getOrNull(1)?.trim().orEmpty().ifBlank { "default" },
-                ext = parts.getOrNull(2)?.trim().orEmpty().ifBlank { url.substringAfterLast('.', "vtt") }
-            )
-        }
-    }
-
     private fun encodeRemoteSubtitleSources(sources: List<RemoteSubtitleSource>): String? {
         val normalized = sources.mapNotNull { source ->
             val url = source.url.trim()
@@ -551,54 +538,12 @@ class PlayerConnection @Inject constructor(
 
     private suspend fun savePlaybackState() {
         val c = controller ?: return
-        val items = _queue.value.ifEmpty { (0 until c.mediaItemCount).map { idx -> c.getMediaItemAt(idx) } }
-        if (items.isEmpty()) {
+        val state = capturePersistedPlaybackState(c, _queue.value)
+        if (state == null) {
             playbackStateStore.clear()
             return
         }
-        val persistedQueue = items.mapNotNull { item ->
-            val mediaId = item.mediaId.trim()
-            if (mediaId.isBlank()) return@mapNotNull null
-            val uri = item.localConfiguration?.uri?.toString().orEmpty().trim().ifBlank { mediaId }
-            val meta = item.mediaMetadata
-            val extras = meta.extras
-            val albumId = if (extras?.containsKey("album_id") == true) extras.getLong("album_id") else null
-            val trackId = if (extras?.containsKey("track_id") == true) extras.getLong("track_id") else null
-            val rjCode = if (extras?.containsKey("rj_code") == true) extras.getString("rj_code") else null
-            PersistedPlaybackQueueItem(
-                mediaId = mediaId,
-                uri = uri,
-                mimeType = item.localConfiguration?.mimeType,
-                title = meta.title?.toString(),
-                artist = meta.artist?.toString(),
-                albumTitle = meta.albumTitle?.toString(),
-                artworkUri = meta.artworkUri?.toString(),
-                albumId = albumId,
-                trackId = trackId,
-                rjCode = rjCode,
-                remoteSubtitleSources = decodeRemoteSubtitleSources(extras?.getString(EXTRA_REMOTE_SUBTITLE_SOURCES_JSON))
-            )
-        }
-        if (persistedQueue.isEmpty()) return
-
-        val index0 = c.currentMediaItemIndex
-        val index = if (index0 in persistedQueue.indices) index0 else 0
-        val speed = c.playbackParameters.speed.takeIf { it.isFinite() }?.coerceIn(0.5f, 2f) ?: 1f
-        val pitch = c.playbackParameters.pitch.takeIf { it.isFinite() }?.coerceIn(0.5f, 2f) ?: 1f
-
-        playbackStateStore.save(
-            PersistedPlaybackStateV2(
-                queue = persistedQueue,
-                currentIndex = index,
-                positionMs = c.currentPosition.coerceAtLeast(0L),
-                playWhenReady = c.playWhenReady,
-                repeatMode = c.repeatMode,
-                shuffleEnabled = c.shuffleModeEnabled,
-                speed = speed,
-                pitch = pitch,
-                savedAtEpochMs = System.currentTimeMillis()
-            )
-        )
+        playbackStateStore.save(state)
     }
 
     fun getControllerOrNull(): MediaController? = controller

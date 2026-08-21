@@ -58,7 +58,9 @@ import com.asmr.player.playback.AppVolume
 import com.asmr.player.playback.AppVolumeBoostController
 import com.asmr.player.playback.GraphicEqualizerAudioProcessor
 import com.asmr.player.playback.PlaybackMediaCache
+import com.asmr.player.playback.PlaybackConnectionLifecycle
 import com.asmr.player.playback.PlaybackRecoveryPolicy
+import com.asmr.player.playback.PlaybackStateStore
 import com.asmr.player.playback.RoutingPlaybackDataSource
 import com.asmr.player.playback.SceneEffectAudioProcessor
 import com.asmr.player.playback.StereoFftAnalyzer
@@ -69,6 +71,7 @@ import com.asmr.player.playback.StereoSpectrumTapAudioProcessor
 import com.asmr.player.playback.VolumeThresholdAudioProcessor
 import com.asmr.player.playback.VolumeFader
 import com.asmr.player.playback.isRecoverableRemotePlaybackFailure
+import com.asmr.player.playback.capturePersistedPlaybackState
 import com.asmr.player.util.EmbeddedMediaExtractor
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.SubtitleIndexFinder
@@ -219,11 +222,15 @@ class PlaybackService : MediaSessionService() {
     @Inject
     lateinit var okHttpClient: OkHttpClient
 
+    @Inject
+    lateinit var playbackStateStore: PlaybackStateStore
+
     private var lastMarkedMediaId: String? = null
     private var lastMarkedElapsedMs: Long = 0L
 
     private var statsJob: Job? = null
     private var playbackRecoveryJob: Job? = null
+    private var appExitJob: Job? = null
     private val playbackRecoveryPolicy = PlaybackRecoveryPolicy()
     private var currentTrackListenedMs: Long = 0L
     private var isCurrentTrackCounted: Boolean = false
@@ -1303,6 +1310,14 @@ class PlaybackService : MediaSessionService() {
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP_FOR_APP_EXIT) {
+            shutdownForExplicitAppExit()
+            return START_NOT_STICKY
+        }
+        return super.onStartCommand(intent, flags, startId)
+    }
+
     private fun createContentIntent(): PendingIntent {
         val intent = Intent(this, MainActivity::class.java)
         return TaskStackBuilder.create(this)
@@ -1329,24 +1344,54 @@ class PlaybackService : MediaSessionService() {
         abandonPlaybackAudioFocus()
         appVolumeBoostController.release()
         spectrumAnalyzer.stop()
-        mediaSession?.run {
-            player.release()
-            release()
-            mediaSession = null
-        }
+        releaseMediaSession()
         notificationProvider = null
         runCatching { PlaybackMediaCache.release() }
         super.onDestroy()
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        val player = mediaSession?.player
-        if (player == null || !player.playWhenReady || player.mediaItemCount == 0) {
+        shutdownForExplicitAppExit()
+    }
+
+    private fun shutdownForExplicitAppExit() {
+        if (appExitJob?.isActive == true) return
+        // 先阻止控制器重连，再保存暂停后的状态；释放会话只移除系统媒体组件，不清空队列。
+        PlaybackConnectionLifecycle.markAppExit()
+        val state = mediaSession?.player?.let { player ->
+            player.playWhenReady = false
+            capturePersistedPlaybackState(player)
+        }
+        appExitJob = serviceScope.launch {
+            if (state != null) {
+                runCatching { playbackStateStore.save(state) }
+                    .onFailure { error ->
+                        Log.e("PlaybackService", "保存退出时播放状态失败", error)
+                    }
+            }
+            releaseMediaSession()
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
     }
 
-    private companion object {
+    private fun releaseMediaSession() {
+        val session = mediaSession ?: return
+        mediaSession = null
+        session.player.release()
+        session.release()
+    }
+
+    companion object {
+        private const val ACTION_STOP_FOR_APP_EXIT =
+            "com.asmr.player.action.STOP_PLAYBACK_FOR_APP_EXIT"
+
+        internal fun requestShutdownForAppExit(context: Context) {
+            context.startService(
+                Intent(context, PlaybackService::class.java).setAction(ACTION_STOP_FOR_APP_EXIT)
+            )
+        }
+
         private const val DLSITE_UA =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         private const val LYRICS_CHANNEL_ID = "playback"
