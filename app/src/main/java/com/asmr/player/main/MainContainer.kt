@@ -112,6 +112,8 @@ import com.asmr.player.ui.playlists.SystemPlaylistScreen
 import com.asmr.player.ui.search.SEARCH_ASSIST_RESULT_CHINESE_TRANSLATED_ONLY_KEY
 import com.asmr.player.ui.search.SEARCH_ASSIST_RESULT_COLLECTED_ONLY_KEY
 import com.asmr.player.ui.search.SEARCH_ASSIST_RESULT_COLLECTED_SORT_KEY
+import com.asmr.player.ui.search.SEARCH_ASSIST_RESULT_HAS_SUBTITLE_KEY
+import com.asmr.player.ui.search.SEARCH_ASSIST_RESULT_ALL_AGES_KEY
 import com.asmr.player.ui.search.SEARCH_ASSIST_RESULT_KEY
 import com.asmr.player.ui.search.SEARCH_ASSIST_RESULT_LOCALE_KEY
 import com.asmr.player.ui.search.SEARCH_ASSIST_RESULT_ORDER_KEY
@@ -968,6 +970,8 @@ fun MainContainer(
         mutableStateOf(SearchAssistSearchRequest().chineseTranslatedOnly)
     }
     var submittedSearchCollectedOnly by rememberSaveable { mutableStateOf(SearchAssistSearchRequest().collectedOnly) }
+    var submittedSearchHasSubtitle by rememberSaveable { mutableStateOf(SearchAssistSearchRequest().hasSubtitle) }
+    var submittedSearchAllAges by rememberSaveable { mutableStateOf(SearchAssistSearchRequest().allAges) }
     var submittedSearchCollectedSortName by rememberSaveable {
         mutableStateOf(SearchAssistSearchRequest().collectedSortName)
     }
@@ -1163,6 +1167,8 @@ fun MainContainer(
             request.chineseTranslatedOnly
         )
         targetEntry?.savedStateHandle?.set(SEARCH_ASSIST_RESULT_COLLECTED_ONLY_KEY, request.collectedOnly)
+        targetEntry?.savedStateHandle?.set(SEARCH_ASSIST_RESULT_HAS_SUBTITLE_KEY, request.hasSubtitle)
+        targetEntry?.savedStateHandle?.set(SEARCH_ASSIST_RESULT_ALL_AGES_KEY, request.allAges)
         targetEntry?.savedStateHandle?.set(SEARCH_ASSIST_RESULT_COLLECTED_SORT_KEY, request.collectedSortName)
         targetEntry?.savedStateHandle?.set(SEARCH_ASSIST_RESULT_LOCALE_KEY, request.locale)
         targetEntry?.savedStateHandle?.set(
@@ -1182,6 +1188,8 @@ fun MainContainer(
         submittedSearchPresaleOnly = request.presaleOnly
         submittedSearchChineseTranslatedOnly = request.chineseTranslatedOnly
         submittedSearchCollectedOnly = request.collectedOnly
+        submittedSearchHasSubtitle = request.hasSubtitle
+        submittedSearchAllAges = request.allAges
         submittedSearchCollectedSortName = request.collectedSortName
         submittedSearchLocale = request.locale
         submittedSearchSignal = System.currentTimeMillis()
@@ -2096,6 +2104,8 @@ fun MainContainer(
                                                 submittedSearchPresaleOnly = submittedSearchPresaleOnly,
                                                 submittedSearchChineseTranslatedOnly = submittedSearchChineseTranslatedOnly,
                                                 submittedSearchCollectedOnly = submittedSearchCollectedOnly,
+                                                submittedSearchHasSubtitle = submittedSearchHasSubtitle,
+                                                submittedSearchAllAges = submittedSearchAllAges,
                                                 submittedSearchCollectedSortName = submittedSearchCollectedSortName,
                                                 submittedSearchLocale = submittedSearchLocale,
                                                 submittedSearchSignal = submittedSearchSignal,
@@ -2334,6 +2344,12 @@ fun MainContainer(
                     val submittedCollectedOnly by backStackEntry.savedStateHandle
                         .getStateFlow(SEARCH_ASSIST_RESULT_COLLECTED_ONLY_KEY, SearchAssistSearchRequest().collectedOnly)
                         .collectAsStateWithLifecycle()
+                    val submittedHasSubtitle by backStackEntry.savedStateHandle
+                        .getStateFlow(SEARCH_ASSIST_RESULT_HAS_SUBTITLE_KEY, SearchAssistSearchRequest().hasSubtitle)
+                        .collectAsStateWithLifecycle()
+                    val submittedAllAges by backStackEntry.savedStateHandle
+                        .getStateFlow(SEARCH_ASSIST_RESULT_ALL_AGES_KEY, SearchAssistSearchRequest().allAges)
+                        .collectAsStateWithLifecycle()
                     val submittedCollectedSortName by backStackEntry.savedStateHandle
                         .getStateFlow(
                             SEARCH_ASSIST_RESULT_COLLECTED_SORT_KEY,
@@ -2355,6 +2371,8 @@ fun MainContainer(
                         submittedPresaleOnly,
                         submittedChineseTranslatedOnly,
                         submittedCollectedOnly,
+                        submittedHasSubtitle,
+                        submittedAllAges,
                         submittedCollectedSortName,
                         submittedLocale
                     ) {
@@ -2365,6 +2383,8 @@ fun MainContainer(
                         submittedSearchPresaleOnly = submittedPresaleOnly
                         submittedSearchChineseTranslatedOnly = submittedChineseTranslatedOnly
                         submittedSearchCollectedOnly = submittedCollectedOnly
+                        submittedSearchHasSubtitle = submittedHasSubtitle
+                        submittedSearchAllAges = submittedAllAges
                         submittedSearchCollectedSortName = submittedCollectedSortName
                         submittedSearchLocale = submittedLocale
                         submittedSearchSignal = submittedSignal
@@ -2379,6 +2399,10 @@ fun MainContainer(
                             SearchAssistSearchRequest().chineseTranslatedOnly
                         backStackEntry.savedStateHandle[SEARCH_ASSIST_RESULT_COLLECTED_ONLY_KEY] =
                             SearchAssistSearchRequest().collectedOnly
+                        backStackEntry.savedStateHandle[SEARCH_ASSIST_RESULT_HAS_SUBTITLE_KEY] =
+                            SearchAssistSearchRequest().hasSubtitle
+                        backStackEntry.savedStateHandle[SEARCH_ASSIST_RESULT_ALL_AGES_KEY] =
+                            SearchAssistSearchRequest().allAges
                         backStackEntry.savedStateHandle[SEARCH_ASSIST_RESULT_COLLECTED_SORT_KEY] =
                             SearchAssistSearchRequest().collectedSortName
                         backStackEntry.savedStateHandle[SEARCH_ASSIST_RESULT_LOCALE_KEY] =

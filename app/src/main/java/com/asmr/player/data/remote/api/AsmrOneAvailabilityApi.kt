@@ -11,14 +11,15 @@ import com.asmr.player.util.DlsiteWorkNo
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
-import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import java.io.IOException
 import java.util.UUID
 import javax.inject.Inject
@@ -201,18 +202,25 @@ class AsmrOneAvailabilityApi @Inject constructor(
             }
         }
 
-    suspend fun search(keyword: String, limit: Int, offset: Int, sort: String): AsmrOneCollectedSearchResponse {
+    suspend fun search(
+        keyword: String,
+        limit: Int,
+        offset: Int,
+        sort: String,
+        hasSubtitle: Boolean = false,
+        allAges: Boolean = false
+    ): AsmrOneCollectedSearchResponse {
         if (backendBaseUrl.isBlank()) throw IOException("asmr.one backend is not configured")
         return withContext(Dispatchers.IO) {
-            val url = resolveUrl("api/asmr-one/search")
-                .toHttpUrlOrNull()
-                ?.newBuilder()
-                ?.addQueryParameter("q", keyword.trim())
-                ?.addQueryParameter("limit", limit.coerceIn(1, 100).toString())
-                ?.addQueryParameter("offset", offset.coerceAtLeast(0).toString())
-                ?.addQueryParameter("sort", sort.trim().ifBlank { "release" })
-                ?.build()
-                ?: throw IOException("invalid asmr.one backend url")
+            val url = buildAsmrOneCollectedSearchUrl(
+                baseUrl = backendBaseUrl,
+                keyword = keyword,
+                limit = limit,
+                offset = offset,
+                sort = sort,
+                hasSubtitle = hasSubtitle,
+                allAges = allAges
+            )
             val request = Request.Builder()
                 .url(url)
                 .header("User-Agent", userAgent)
@@ -368,6 +376,30 @@ class AsmrOneAvailabilityApi @Inject constructor(
         private const val MAX_RECOMMENDATION_EXCLUDES = 200
         private const val MAX_RECOMMENDATION_LIMIT = 50
     }
+}
+
+internal fun buildAsmrOneCollectedSearchUrl(
+    baseUrl: String,
+    keyword: String,
+    limit: Int,
+    offset: Int,
+    sort: String,
+    hasSubtitle: Boolean,
+    allAges: Boolean
+): HttpUrl {
+    return "${baseUrl.trimEnd('/')}/api/asmr-one/search"
+        .toHttpUrlOrNull()
+        ?.newBuilder()
+        ?.addQueryParameter("q", keyword.trim())
+        ?.addQueryParameter("limit", limit.coerceIn(1, 100).toString())
+        ?.addQueryParameter("offset", offset.coerceAtLeast(0).toString())
+        ?.addQueryParameter("sort", sort.trim().ifBlank { "release" })
+        ?.apply {
+            if (hasSubtitle) addQueryParameter("hasSubtitle", "true")
+            if (allAges) addQueryParameter("allAges", "true")
+        }
+        ?.build()
+        ?: throw IOException("invalid asmr.one backend url")
 }
 
 internal fun normalizeRecommendationRjs(values: List<String>, limit: Int): List<String> =

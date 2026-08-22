@@ -10,6 +10,16 @@ import org.junit.Test
 
 class AsmrOneSiteSelectionTest {
     @Test
+    fun allAgesSearch_excludesAdultAndKeepsGeneralAndR15() {
+        assertEquals("$-age:adult$", appendAsmrOneSearchFilters("", allAges = true))
+        assertEquals(
+            "$-age:adult$ 治愈",
+            appendAsmrOneSearchFilters(" 治愈 ", allAges = true)
+        )
+        assertEquals("治愈", appendAsmrOneSearchFilters(" 治愈 ", allAges = false))
+    }
+
+    @Test
     fun endpointOptions_containMainSiteThreeMirrorsAndBackup() {
         assertEquals(listOf(0, 100, 200, 300, -1), AsmrOneEndpoint.options)
         assertEquals("asmr.one", AsmrOneEndpoint.displayName(0))

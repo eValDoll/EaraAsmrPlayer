@@ -44,10 +44,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.FamilyRestroom
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.Subtitles
 import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
@@ -98,6 +100,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -114,8 +117,8 @@ import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.cache.LazyListPreloader
 import com.asmr.player.cache.LazyStaggeredGridPreloader
-import com.asmr.player.ui.common.CustomSearchBar
 import com.asmr.player.ui.common.ActiveDropdownMenuItem
+import com.asmr.player.ui.common.CustomSearchBar
 import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
@@ -156,10 +159,12 @@ import kotlin.math.roundToInt
 internal const val SEARCH_INPUT_TAG = "search_input"
 internal const val SEARCH_SCOPE_BUTTON_TAG = "search_scope_button"
 internal const val SEARCH_SCOPE_OPTION_TAG_PREFIX = "search_scope_option"
-internal const val SEARCH_LANGUAGE_BUTTON_TAG = "search_language_button"
-internal const val SEARCH_LANGUAGE_OPTION_TAG_PREFIX = "search_language_option"
-internal const val SEARCH_COLLECTED_SORT_BUTTON_TAG = "search_collected_sort_button"
+internal const val SEARCH_SORT_BUTTON_TAG = "search_sort_button"
 internal const val SEARCH_COLLECTED_SORT_OPTION_TAG_PREFIX = "search_collected_sort_option"
+internal const val SEARCH_SORT_OPTION_TAG_PREFIX = "search_sort_option"
+internal const val SEARCH_LANGUAGE_OPTION_TAG_PREFIX = "search_language_option"
+internal const val SEARCH_HAS_SUBTITLE_OPTION_TAG = "search_has_subtitle_option"
+internal const val SEARCH_ALL_AGES_OPTION_TAG = "search_all_ages_option"
 internal const val SEARCH_CLEAR_BUTTON_TAG = "search_clear_button"
 internal const val SEARCH_SUBMIT_BUTTON_TAG = "search_submit_button"
 internal const val SEARCH_SUBMIT_SPINNER_TAG = "search_submit_spinner"
@@ -216,6 +221,10 @@ internal fun searchResultScrollKey(success: SearchUiState.Success?): String {
         append(success.chineseTranslatedOnly)
         append(':')
         append(success.collectedOnly)
+        append(':')
+        append(success.hasSubtitle)
+        append(':')
+        append(success.allAges)
         append(':')
         append(success.locale.orEmpty())
     }
@@ -300,6 +309,8 @@ fun SearchScreen(
     submittedSearchPresaleOnly: Boolean = false,
     submittedSearchChineseTranslatedOnly: Boolean = false,
     submittedSearchCollectedOnly: Boolean = true,
+    submittedSearchHasSubtitle: Boolean = false,
+    submittedSearchAllAges: Boolean = false,
     submittedSearchCollectedSortName: String = SearchCollectedSortOption.ReleaseNew.name,
     submittedSearchLocale: String = "ja_JP",
     submittedSearchSignal: Long = 0L,
@@ -312,6 +323,8 @@ fun SearchScreen(
     var presaleOnly by rememberSaveable { mutableStateOf(false) }
     var chineseTranslatedOnly by rememberSaveable { mutableStateOf(false) }
     var collectedOnly by rememberSaveable { mutableStateOf(true) }
+    var hasSubtitle by rememberSaveable { mutableStateOf(false) }
+    var allAges by rememberSaveable { mutableStateOf(false) }
     var selectedCollectedSortName by rememberSaveable { mutableStateOf(SearchCollectedSortOption.ReleaseNew.name) }
     var selectedLocale by rememberSaveable { mutableStateOf("ja_JP") }
     var selectedOrderName by rememberSaveable { mutableStateOf(SearchSortOption.Trend.name) }
@@ -321,9 +334,8 @@ fun SearchScreen(
     val selectedCollectedSort = remember(selectedCollectedSortName) {
         SearchCollectedSortOption.fromName(selectedCollectedSortName)
     }
-    val selectedFilter = remember(selectedOrderName, purchasedOnly, presaleOnly, chineseTranslatedOnly, collectedOnly) {
+    val selectedFilter = remember(purchasedOnly, presaleOnly, chineseTranslatedOnly, collectedOnly) {
         SearchFilterOption.fromState(
-            order = selectedOrder,
             purchasedOnly = purchasedOnly,
             presaleOnly = presaleOnly,
             chineseTranslatedOnly = chineseTranslatedOnly,
@@ -367,7 +379,9 @@ fun SearchScreen(
             initialPurchasedOnly = purchasedOnly,
             initialLocale = selectedLocale,
             initialCollectedOnly = collectedOnly,
-            initialCollectedSort = selectedCollectedSort
+            initialCollectedSort = selectedCollectedSort,
+            initialHasSubtitle = hasSubtitle,
+            initialAllAges = allAges
         )
     }
 
@@ -391,6 +405,8 @@ fun SearchScreen(
         success?.presaleOnly,
         success?.chineseTranslatedOnly,
         success?.collectedOnly,
+        success?.hasSubtitle,
+        success?.allAges,
         success?.locale
     ) {
         val state = success ?: return@LaunchedEffect
@@ -399,6 +415,8 @@ fun SearchScreen(
             presaleOnly = state.presaleOnly
             chineseTranslatedOnly = state.chineseTranslatedOnly
             collectedOnly = state.collectedOnly
+            hasSubtitle = state.hasSubtitle
+            allAges = state.allAges
             selectedCollectedSortName = state.collectedSort.name
             selectedLocale = state.locale ?: "ja_JP"
             selectedOrderName = state.order.name
@@ -473,6 +491,8 @@ fun SearchScreen(
             presaleOnly = presaleOnly,
             chineseTranslatedOnly = chineseTranslatedOnly,
             collectedOnly = collectedOnly,
+            hasSubtitle = hasSubtitle,
+            allAges = allAges,
             locale = selectedLocale
         )
         if (!accepted) return
@@ -489,6 +509,8 @@ fun SearchScreen(
             presaleOnly = presaleOnly,
             chineseTranslatedOnly = chineseTranslatedOnly,
             collectedOnly = collectedOnly,
+            hasSubtitle = hasSubtitle,
+            allAges = allAges,
             collectedSortName = selectedCollectedSort.name,
             locale = selectedLocale
         )
@@ -502,6 +524,8 @@ fun SearchScreen(
         submittedSearchPresaleOnly,
         submittedSearchChineseTranslatedOnly,
         submittedSearchCollectedOnly,
+        submittedSearchHasSubtitle,
+        submittedSearchAllAges,
         submittedSearchCollectedSortName,
         submittedSearchLocale,
         searchSubmitLocked
@@ -528,6 +552,8 @@ fun SearchScreen(
             presaleOnly = submittedSearchPresaleOnly,
             chineseTranslatedOnly = submittedSearchChineseTranslatedOnly,
             collectedOnly = submittedSearchCollectedOnly,
+            hasSubtitle = submittedSearchHasSubtitle,
+            allAges = submittedSearchAllAges,
             locale = submittedSearchLocale
         )
         if (!accepted) return@LaunchedEffect
@@ -539,6 +565,8 @@ fun SearchScreen(
         presaleOnly = submittedSearchPresaleOnly
         chineseTranslatedOnly = submittedSearchChineseTranslatedOnly
         collectedOnly = submittedSearchCollectedOnly
+        hasSubtitle = submittedSearchHasSubtitle
+        allAges = submittedSearchAllAges
         selectedLocale = submittedSearchLocale
         scrollResultsToTop()
         chromeState.expand()
@@ -1240,7 +1268,10 @@ fun SearchScreen(
                         searchFieldReadOnly = true,
                         onSearchFieldClick = { onOpenSearchAssist(currentSearchAssistRequest()) },
                         selectedFilter = selectedFilter,
+                        selectedOrder = selectedOrder,
                         selectedCollectedSort = selectedCollectedSort,
+                        hasSubtitle = hasSubtitle,
+                        allAges = allAges,
                         selectedLocale = selectedLocale,
                         filterControlsLocked = filterControlsLocked,
                         searchSubmitLocked = searchSubmitLocked,
@@ -1255,58 +1286,29 @@ fun SearchScreen(
                         onMeasured = { size: IntSize -> chromeState.updateHeight(size.height.toFloat()) },
                         onSearchSubmit = { submitSearch() },
                         onClearKeyword = { clearKeywordAndSearch() },
-                        onFilterSelected = { option ->
-                            val nextOrder = option.sortOption ?: selectedOrder
-                            val nextKeyword = keyword.trim()
-                            val accepted = viewModel.search(
-                                keyword = nextKeyword,
-                                order = nextOrder,
-                                collectedSort = selectedCollectedSort,
+                        onOptionsChanged = { options ->
+                            val option = options.scope
+                            val accepted = viewModel.updateSearchOptions(
+                                order = options.order,
+                                collectedSort = options.collectedSort,
                                 purchasedOnly = option.isPurchasedOnly,
                                 presaleOnly = option.isPresaleOnly,
                                 chineseTranslatedOnly = option.isChineseTranslated,
                                 collectedOnly = option.isCollectedOnly,
-                                locale = selectedLocale
+                                hasSubtitle = options.hasSubtitle,
+                                allAges = options.allAges,
+                                locale = options.locale
                             )
                             if (accepted) {
-                                selectedOrderName = nextOrder.name
                                 purchasedOnly = option.isPurchasedOnly
                                 presaleOnly = option.isPresaleOnly
                                 chineseTranslatedOnly = option.isChineseTranslated
                                 collectedOnly = option.isCollectedOnly
-                                keyword = nextKeyword
-                                scrollResultsToTop()
-                                chromeState.expand()
-                            }
-                        },
-                        onLocaleSelected = { locale ->
-                            selectedLocale = locale
-                            val accepted = viewModel.updateSearchOptions(
-                                order = selectedOrder,
-                                collectedSort = selectedCollectedSort,
-                                purchasedOnly = purchasedOnly,
-                                presaleOnly = presaleOnly,
-                                chineseTranslatedOnly = chineseTranslatedOnly,
-                                collectedOnly = collectedOnly,
-                                locale = locale
-                            )
-                            if (accepted) {
-                                scrollResultsToTop()
-                                chromeState.expand()
-                            }
-                        },
-                        onCollectedSortSelected = { sort ->
-                            selectedCollectedSortName = sort.name
-                            val accepted = viewModel.updateSearchOptions(
-                                order = selectedOrder,
-                                collectedSort = sort,
-                                purchasedOnly = purchasedOnly,
-                                presaleOnly = presaleOnly,
-                                chineseTranslatedOnly = chineseTranslatedOnly,
-                                collectedOnly = collectedOnly,
-                                locale = selectedLocale
-                            )
-                            if (accepted) {
+                                selectedOrderName = options.order.name
+                                selectedCollectedSortName = options.collectedSort.name
+                                hasSubtitle = options.hasSubtitle
+                                allAges = options.allAges
+                                selectedLocale = options.locale
                                 scrollResultsToTop()
                                 chromeState.expand()
                             }
@@ -1443,7 +1445,10 @@ internal fun SearchChrome(
     searchFieldReadOnly: Boolean = false,
     onSearchFieldClick: (() -> Unit)? = null,
     selectedFilter: SearchFilterOption,
+    selectedOrder: SearchSortOption = SearchSortOption.Trend,
     selectedCollectedSort: SearchCollectedSortOption = SearchCollectedSortOption.ReleaseNew,
+    hasSubtitle: Boolean = false,
+    allAges: Boolean = false,
     selectedLocale: String,
     filterControlsLocked: Boolean,
     searchSubmitLocked: Boolean,
@@ -1463,9 +1468,7 @@ internal fun SearchChrome(
     onMeasured: (IntSize) -> Unit,
     onSearchSubmit: () -> Unit,
     onClearKeyword: (() -> Unit)? = null,
-    onFilterSelected: (SearchFilterOption) -> Unit,
-    onLocaleSelected: (String) -> Unit,
-    onCollectedSortSelected: (SearchCollectedSortOption) -> Unit = {},
+    onOptionsChanged: (SearchToolbarOptions) -> Unit,
     onFirstPage: () -> Unit,
     onPrev: () -> Unit,
     onNext: () -> Unit
@@ -1489,7 +1492,10 @@ internal fun SearchChrome(
             searchFieldReadOnly = searchFieldReadOnly,
             onSearchFieldClick = onSearchFieldClick,
             selectedFilter = selectedFilter,
+            selectedOrder = selectedOrder,
             selectedCollectedSort = selectedCollectedSort,
+            hasSubtitle = hasSubtitle,
+            allAges = allAges,
             selectedLocale = selectedLocale,
             filterControlsLocked = filterControlsLocked,
             searchSubmitLocked = searchSubmitLocked,
@@ -1500,9 +1506,7 @@ internal fun SearchChrome(
             inputFocusRequester = inputFocusRequester,
             onSearchSubmit = onSearchSubmit,
             onClearKeyword = onClearKeyword,
-            onFilterSelected = onFilterSelected,
-            onLocaleSelected = onLocaleSelected,
-            onCollectedSortSelected = onCollectedSortSelected,
+            onOptionsChanged = onOptionsChanged,
             rightPanelToggle = rightPanelToggle
         )
         if (showPagination) {
@@ -1519,6 +1523,15 @@ internal fun SearchChrome(
     }
 }
 
+internal data class SearchToolbarOptions(
+    val scope: SearchFilterOption,
+    val order: SearchSortOption,
+    val collectedSort: SearchCollectedSortOption,
+    val hasSubtitle: Boolean,
+    val allAges: Boolean,
+    val locale: String
+)
+
 @Composable
 internal fun SearchToolbar(
     keyword: String,
@@ -1527,7 +1540,10 @@ internal fun SearchToolbar(
     searchFieldReadOnly: Boolean = false,
     onSearchFieldClick: (() -> Unit)? = null,
     selectedFilter: SearchFilterOption,
+    selectedOrder: SearchSortOption = SearchSortOption.Trend,
     selectedCollectedSort: SearchCollectedSortOption = SearchCollectedSortOption.ReleaseNew,
+    hasSubtitle: Boolean = false,
+    allAges: Boolean = false,
     selectedLocale: String,
     filterControlsLocked: Boolean,
     searchSubmitLocked: Boolean,
@@ -1538,14 +1554,26 @@ internal fun SearchToolbar(
     inputFocusRequester: FocusRequester? = null,
     onSearchSubmit: () -> Unit,
     onClearKeyword: (() -> Unit)? = null,
-    onFilterSelected: (SearchFilterOption) -> Unit,
-    onLocaleSelected: (String) -> Unit,
-    onCollectedSortSelected: (SearchCollectedSortOption) -> Unit = {},
+    onOptionsChanged: (SearchToolbarOptions) -> Unit,
     rightPanelToggle: (@Composable (Modifier) -> Unit)? = null
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    var scopeMenuExpanded by remember { mutableStateOf(false) }
-    var secondaryMenuExpanded by remember { mutableStateOf(false) }
+    var filterMenuExpanded by remember { mutableStateOf(false) }
+    var sortMenuExpanded by remember { mutableStateOf(false) }
+    val options = SearchToolbarOptions(
+        scope = selectedFilter,
+        order = selectedOrder,
+        collectedSort = selectedCollectedSort,
+        hasSubtitle = hasSubtitle,
+        allAges = allAges,
+        locale = selectedLocale
+    )
+    val supportsWorkFilters = selectedFilter.supportsWorkFilters
+    val activeWorkFilterCount = if (supportsWorkFilters) {
+        (if (hasSubtitle) 1 else 0) + (if (allAges) 1 else 0)
+    } else {
+        0
+    }
     val dropdownContainerColor = lerp(
         colorScheme.surface,
         colorScheme.primarySoft,
@@ -1555,8 +1583,8 @@ internal fun SearchToolbar(
 
     LaunchedEffect(filterControlsLocked, searchSubmitLocked) {
         if (filterControlsLocked || searchSubmitLocked) {
-            scopeMenuExpanded = false
-            secondaryMenuExpanded = false
+            filterMenuExpanded = false
+            sortMenuExpanded = false
         }
     }
 
@@ -1570,8 +1598,7 @@ internal fun SearchToolbar(
             value = keyword,
             onValueChange = onKeywordChange,
             placeholder = placeholder,
-            modifier = Modifier
-                .weight(1f),
+            modifier = Modifier.weight(1f),
             readOnly = searchFieldReadOnly,
             onFieldClick = onSearchFieldClick,
             focusRequester = inputFocusRequester,
@@ -1579,25 +1606,48 @@ internal fun SearchToolbar(
             leadingIcon = {
                 Box {
                     TextButton(
-                        onClick = { scopeMenuExpanded = true },
+                        onClick = { filterMenuExpanded = true },
                         enabled = !filterControlsLocked,
                         modifier = Modifier
                             .height(32.dp)
+                            .semantics {
+                                stateDescription = when {
+                                    !supportsWorkFilters -> "当前范围不支持作品筛选"
+                                    activeWorkFilterCount == 0 -> "未启用作品筛选"
+                                    activeWorkFilterCount == 1 -> "已启用 1 项作品筛选"
+                                    else -> "已启用 2 项作品筛选"
+                                }
+                            }
                             .testTag(SEARCH_SCOPE_BUTTON_TAG),
                         contentPadding = PaddingValues(horizontal = 6.dp, vertical = 0.dp),
                         colors = ButtonDefaults.textButtonColors(
-                            contentColor = colorScheme.primary
+                            contentColor = colorScheme.primary,
+                            disabledContentColor = colorScheme.textTertiary
                         )
                     ) {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            SearchFilterIconView(
-                                icon = selectedFilter.icon,
-                                tint = colorScheme.primary,
-                                modifier = Modifier.size(14.dp)
-                            )
+                            Box {
+                                SearchFilterIconView(
+                                    icon = selectedFilter.icon,
+                                    tint = if (filterControlsLocked) {
+                                        colorScheme.textTertiary
+                                    } else {
+                                        colorScheme.primary
+                                    },
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                if (activeWorkFilterCount > 0) {
+                                    Box(
+                                        modifier = Modifier
+                                            .align(Alignment.TopEnd)
+                                            .size(5.dp)
+                                            .background(colorScheme.primaryStrong, CircleShape)
+                                    )
+                                }
+                            }
                             Text(
                                 text = selectedFilter.label,
                                 style = MaterialTheme.typography.labelSmall,
@@ -1606,20 +1656,18 @@ internal fun SearchToolbar(
                         }
                     }
                     DropdownMenu(
-                        expanded = scopeMenuExpanded,
-                        onDismissRequest = { scopeMenuExpanded = false },
+                        expanded = filterMenuExpanded,
+                        onDismissRequest = { filterMenuExpanded = false },
                         modifier = Modifier.background(dropdownContainerColor)
                     ) {
-                        SearchFilterOption.values().forEachIndexed { index, option ->
+                        SearchFilterOption.entries.forEachIndexed { index, option ->
                             if (index > 0) {
-                                HorizontalDivider(
-                                    modifier = Modifier.padding(horizontal = 8.dp),
-                                    thickness = 0.5.dp,
-                                    color = colorScheme.textSecondary.copy(alpha = 0.2f)
-                                )
+                                SearchMenuDivider()
                             }
                             DropdownMenuItem(
-                                modifier = Modifier.testTag("${SEARCH_SCOPE_OPTION_TAG_PREFIX}_${option.name}"),
+                                modifier = Modifier.testTag(
+                                    "${SEARCH_SCOPE_OPTION_TAG_PREFIX}_${option.name}"
+                                ),
                                 text = {
                                     Row(
                                         horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -1627,20 +1675,77 @@ internal fun SearchToolbar(
                                     ) {
                                         SearchFilterIconView(
                                             icon = option.icon,
-                                            tint = if (option == selectedFilter) colorScheme.primary else colorScheme.textSecondary,
+                                            tint = if (option == selectedFilter) {
+                                                colorScheme.primary
+                                            } else {
+                                                colorScheme.textSecondary
+                                            },
                                             modifier = Modifier.size(18.dp)
                                         )
                                         Text(
                                             text = option.label,
-                                            color = if (option == selectedFilter) colorScheme.primary else colorScheme.textPrimary
+                                            color = if (option == selectedFilter) {
+                                                colorScheme.primary
+                                            } else {
+                                                colorScheme.textPrimary
+                                            }
                                         )
                                     }
                                 },
                                 onClick = {
-                                    scopeMenuExpanded = false
-                                    onFilterSelected(option)
+                                    filterMenuExpanded = false
+                                    if (option != selectedFilter) {
+                                        onOptionsChanged(
+                                            options.copy(scope = option)
+                                        )
+                                    }
                                 }
                             )
+                        }
+
+                        if (supportsWorkFilters) {
+                            SearchMenuSectionLabel("作品筛选")
+                            SearchCheckableMenuItem(
+                                label = "有字幕",
+                                icon = Icons.Rounded.Subtitles,
+                                selected = hasSubtitle,
+                                testTag = SEARCH_HAS_SUBTITLE_OPTION_TAG,
+                                onClick = {
+                                    onOptionsChanged(options.copy(hasSubtitle = !hasSubtitle))
+                                }
+                            )
+                            SearchMenuDivider()
+                            SearchCheckableMenuItem(
+                                label = "全年龄",
+                                icon = Icons.Rounded.FamilyRestroom,
+                                selected = allAges,
+                                testTag = SEARCH_ALL_AGES_OPTION_TAG,
+                                onClick = {
+                                    onOptionsChanged(options.copy(allAges = !allAges))
+                                }
+                            )
+                        }
+
+                        if (!selectedFilter.isCollectedOnly) {
+                            SearchMenuSectionLabel("作品语言")
+                            SearchLocaleOptions.forEachIndexed { index, (locale, label) ->
+                                if (index > 0) {
+                                    SearchMenuDivider()
+                                }
+                                ActiveDropdownMenuItem(
+                                    label = label,
+                                    selected = locale == selectedLocale.trim(),
+                                    testTag = "${SEARCH_LANGUAGE_OPTION_TAG_PREFIX}_$locale",
+                                    activeColor = colorScheme.primary,
+                                    inactiveColor = colorScheme.textPrimary,
+                                    onClick = {
+                                        filterMenuExpanded = false
+                                        if (locale != selectedLocale.trim()) {
+                                            onOptionsChanged(options.copy(locale = locale))
+                                        }
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -1667,47 +1772,38 @@ internal fun SearchToolbar(
                         }
                     }
                     Box {
-                        val secondaryButtonTag = if (selectedFilter.isCollectedOnly) {
-                            SEARCH_COLLECTED_SORT_BUTTON_TAG
-                        } else {
-                            SEARCH_LANGUAGE_BUTTON_TAG
-                        }
                         TextButton(
-                            onClick = { secondaryMenuExpanded = true },
+                            onClick = { sortMenuExpanded = true },
                             enabled = !filterControlsLocked,
                             modifier = Modifier
                                 .defaultMinSize(minWidth = 1.dp, minHeight = 30.dp)
                                 .height(30.dp)
-                                .testTag(secondaryButtonTag),
+                                .testTag(SEARCH_SORT_BUTTON_TAG),
                             contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
                             colors = ButtonDefaults.textButtonColors(
-                                contentColor = colorScheme.primary
+                                contentColor = colorScheme.primary,
+                                disabledContentColor = colorScheme.textTertiary
                             )
                         ) {
-                            val label = if (selectedFilter.isCollectedOnly) {
-                                selectedCollectedSort.label
-                            } else {
-                                when (selectedLocale.trim()) {
-                                    "zh_CN" -> "简中"
-                                    "zh_TW" -> "繁中"
-                                    else -> "日语"
-                                }
-                            }
-                            Text(label, style = MaterialTheme.typography.labelSmall, maxLines = 1)
+                            Text(
+                                text = if (selectedFilter.isCollectedOnly) {
+                                    selectedCollectedSort.label
+                                } else {
+                                    selectedOrder.label
+                                },
+                                style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1
+                            )
                         }
                         DropdownMenu(
-                            expanded = secondaryMenuExpanded,
-                            onDismissRequest = { secondaryMenuExpanded = false },
+                            expanded = sortMenuExpanded,
+                            onDismissRequest = { sortMenuExpanded = false },
                             modifier = Modifier.background(dropdownContainerColor)
                         ) {
                             if (selectedFilter.isCollectedOnly) {
-                                SearchCollectedSortOption.values().forEachIndexed { index, option ->
+                                SearchCollectedSortOption.entries.forEachIndexed { index, option ->
                                     if (index > 0) {
-                                        HorizontalDivider(
-                                            modifier = Modifier.padding(horizontal = 8.dp),
-                                            thickness = 0.5.dp,
-                                            color = colorScheme.textSecondary.copy(alpha = 0.2f)
-                                        )
+                                        SearchMenuDivider()
                                     }
                                     ActiveDropdownMenuItem(
                                         label = option.label,
@@ -1716,33 +1812,29 @@ internal fun SearchToolbar(
                                         activeColor = colorScheme.primary,
                                         inactiveColor = colorScheme.textPrimary,
                                         onClick = {
-                                            secondaryMenuExpanded = false
-                                            onCollectedSortSelected(option)
+                                            sortMenuExpanded = false
+                                            if (option != selectedCollectedSort) {
+                                                onOptionsChanged(options.copy(collectedSort = option))
+                                            }
                                         }
                                     )
                                 }
                             } else {
-                                listOf(
-                                    "ja_JP" to "日语",
-                                    "zh_CN" to "简中",
-                                    "zh_TW" to "繁中"
-                                ).forEachIndexed { index, (locale, label) ->
+                                SearchSortOption.entries.forEachIndexed { index, option ->
                                     if (index > 0) {
-                                        HorizontalDivider(
-                                            modifier = Modifier.padding(horizontal = 8.dp),
-                                            thickness = 0.5.dp,
-                                            color = colorScheme.textSecondary.copy(alpha = 0.2f)
-                                        )
+                                        SearchMenuDivider()
                                     }
                                     ActiveDropdownMenuItem(
-                                        label = label,
-                                        selected = locale == selectedLocale.trim(),
-                                        testTag = "${SEARCH_LANGUAGE_OPTION_TAG_PREFIX}_$locale",
+                                        label = option.label,
+                                        selected = option == selectedOrder,
+                                        testTag = "${SEARCH_SORT_OPTION_TAG_PREFIX}_${option.name}",
                                         activeColor = colorScheme.primary,
                                         inactiveColor = colorScheme.textPrimary,
                                         onClick = {
-                                            secondaryMenuExpanded = false
-                                            onLocaleSelected(locale)
+                                            sortMenuExpanded = false
+                                            if (option != selectedOrder) {
+                                                onOptionsChanged(options.copy(order = option))
+                                            }
                                         }
                                     )
                                 }
@@ -1760,14 +1852,17 @@ internal fun SearchToolbar(
                             EaraLogoLoadingIndicator(
                                 size = 14.dp,
                                 tint = colorScheme.primary,
-                                modifier = Modifier
-                                    .testTag(SEARCH_SUBMIT_SPINNER_TAG)
+                                modifier = Modifier.testTag(SEARCH_SUBMIT_SPINNER_TAG)
                             )
                         } else {
                             Icon(
                                 imageVector = Icons.Rounded.Search,
                                 contentDescription = null,
-                                tint = if (!searchSubmitLocked) colorScheme.primary else colorScheme.textTertiary,
+                                tint = if (!searchSubmitLocked) {
+                                    colorScheme.primary
+                                } else {
+                                    colorScheme.textTertiary
+                                },
                                 modifier = Modifier.size(17.dp)
                             )
                         }
@@ -1786,6 +1881,75 @@ internal fun SearchToolbar(
             rightPanelToggle(Modifier.size(50.dp))
         }
     }
+}
+
+private val SearchLocaleOptions = listOf(
+    "ja_JP" to "日语",
+    "zh_CN" to "简中",
+    "zh_TW" to "繁中"
+)
+
+@Composable
+private fun SearchMenuSectionLabel(label: String) {
+    val colorScheme = AsmrTheme.colorScheme
+    HorizontalDivider(
+        modifier = Modifier.padding(top = 4.dp, start = 8.dp, end = 8.dp),
+        thickness = 0.5.dp,
+        color = colorScheme.textSecondary.copy(alpha = 0.24f)
+    )
+    Text(
+        text = label,
+        style = MaterialTheme.typography.labelSmall,
+        color = colorScheme.textSecondary,
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 2.dp)
+    )
+}
+
+@Composable
+private fun SearchMenuDivider() {
+    val colorScheme = AsmrTheme.colorScheme
+    HorizontalDivider(
+        modifier = Modifier.padding(horizontal = 8.dp),
+        thickness = 0.5.dp,
+        color = colorScheme.textSecondary.copy(alpha = 0.2f)
+    )
+}
+
+@Composable
+private fun SearchCheckableMenuItem(
+    label: String,
+    icon: ImageVector,
+    selected: Boolean,
+    testTag: String,
+    onClick: () -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    DropdownMenuItem(
+        text = {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = if (selected) colorScheme.primary else colorScheme.textSecondary,
+                    modifier = Modifier.size(18.dp)
+                )
+                Text(
+                    text = label,
+                    color = if (selected) colorScheme.primary else colorScheme.textPrimary
+                )
+            }
+        },
+        onClick = onClick,
+        modifier = Modifier
+            .semantics {
+                this.selected = selected
+                stateDescription = if (selected) "已筛选" else "未筛选"
+            }
+            .testTag(testTag)
+    )
 }
 
 @Composable

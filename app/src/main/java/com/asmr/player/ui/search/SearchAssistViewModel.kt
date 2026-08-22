@@ -29,6 +29,8 @@ internal const val SEARCH_ASSIST_RESULT_PURCHASED_ONLY_KEY = "searchPurchasedOnl
 internal const val SEARCH_ASSIST_RESULT_PRESALE_ONLY_KEY = "searchPresaleOnly"
 internal const val SEARCH_ASSIST_RESULT_CHINESE_TRANSLATED_ONLY_KEY = "searchChineseTranslatedOnly"
 internal const val SEARCH_ASSIST_RESULT_COLLECTED_ONLY_KEY = "searchCollectedOnly"
+internal const val SEARCH_ASSIST_RESULT_HAS_SUBTITLE_KEY = "searchHasSubtitle"
+internal const val SEARCH_ASSIST_RESULT_ALL_AGES_KEY = "searchAllAges"
 internal const val SEARCH_ASSIST_RESULT_COLLECTED_SORT_KEY = "searchCollectedSortName"
 internal const val SEARCH_ASSIST_RESULT_LOCALE_KEY = "searchLocale"
 internal const val SEARCH_ASSIST_RECOMMENDATION_DISPLAY_LIMIT = 10
@@ -40,6 +42,8 @@ data class SearchAssistSearchRequest(
     val presaleOnly: Boolean = false,
     val chineseTranslatedOnly: Boolean = false,
     val collectedOnly: Boolean = true,
+    val hasSubtitle: Boolean = false,
+    val allAges: Boolean = false,
     val collectedSortName: String = SearchCollectedSortOption.ReleaseNew.name,
     val locale: String = "ja_JP"
 ) {
@@ -48,7 +52,6 @@ data class SearchAssistSearchRequest(
 
     val selectedFilter: SearchFilterOption
         get() = SearchFilterOption.fromState(
-            order = selectedOrder,
             purchasedOnly = purchasedOnly,
             presaleOnly = presaleOnly,
             chineseTranslatedOnly = chineseTranslatedOnly,

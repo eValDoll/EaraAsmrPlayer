@@ -14,6 +14,7 @@ interface AsmrOneApi {
         @Query("page") page: Int = 1,
         @Query("order") order: String = "release",
         @Query("sort") sort: String = "desc",
+        @Query("subtitle") subtitle: Int = 0,
         @Header(NetworkHeaders.HEADER_SILENT_IO_ERROR) silentIoError: String? = null
     ): SearchResponse
 

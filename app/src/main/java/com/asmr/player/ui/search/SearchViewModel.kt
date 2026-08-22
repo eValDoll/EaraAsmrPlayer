@@ -78,6 +78,8 @@ class SearchViewModel @Inject constructor(
     private var presaleOnly: Boolean = false
     private var chineseTranslatedOnly: Boolean = false
     private var collectedOnly: Boolean = true
+    private var hasSubtitle: Boolean = false
+    private var allAges: Boolean = false
     private var enrichJob: Job? = null
     private var asmrOneJob: Job? = null
     private var collectedWorkNoJob: Job? = null
@@ -132,7 +134,9 @@ class SearchViewModel @Inject constructor(
         initialPurchasedOnly: Boolean,
         initialLocale: String?,
         initialCollectedOnly: Boolean = true,
-        initialCollectedSort: SearchCollectedSortOption = SearchCollectedSortOption.ReleaseNew
+        initialCollectedSort: SearchCollectedSortOption = SearchCollectedSortOption.ReleaseNew,
+        initialHasSubtitle: Boolean = false,
+        initialAllAges: Boolean = false
     ) {
         if (!bootstrapped.compareAndSet(false, true)) return
         viewModelScope.launch {
@@ -141,10 +145,18 @@ class SearchViewModel @Inject constructor(
                 applyCachedState(cached)
                 lastRequestedKeyword = cached.keyword
             } else {
-                purchasedOnly = initialPurchasedOnly
-                presaleOnly = false
-                chineseTranslatedOnly = false
-                collectedOnly = initialCollectedOnly
+                val initialFilters = normalizeSearchFilters(
+                    purchasedOnly = initialPurchasedOnly,
+                    presaleOnly = false,
+                    chineseTranslatedOnly = false,
+                    collectedOnly = initialCollectedOnly
+                )
+                purchasedOnly = initialFilters.purchasedOnly
+                presaleOnly = initialFilters.presaleOnly
+                chineseTranslatedOnly = initialFilters.chineseTranslatedOnly
+                collectedOnly = initialFilters.collectedOnly
+                hasSubtitle = initialHasSubtitle
+                allAges = initialAllAges
                 currentCollectedSort = initialCollectedSort
                 currentLocale = initialLocale
                 lastRequestedKeyword = initialKeyword.trim()
@@ -177,6 +189,8 @@ class SearchViewModel @Inject constructor(
             presaleOnly = presaleOnly,
             chineseTranslatedOnly = chineseTranslatedOnly,
             collectedOnly = collectedOnly,
+            hasSubtitle = hasSubtitle,
+            allAges = allAges,
             locale = currentLocale
         )
     }
@@ -189,6 +203,8 @@ class SearchViewModel @Inject constructor(
         presaleOnly: Boolean,
         chineseTranslatedOnly: Boolean,
         collectedOnly: Boolean,
+        hasSubtitle: Boolean,
+        allAges: Boolean,
         locale: String?
     ): Boolean {
         if (_uiState.value is SearchUiState.Loading) return false
@@ -212,6 +228,8 @@ class SearchViewModel @Inject constructor(
         this.presaleOnly = nextFilters.presaleOnly
         this.chineseTranslatedOnly = nextFilters.chineseTranslatedOnly
         this.collectedOnly = nextFilters.collectedOnly
+        this.hasSubtitle = hasSubtitle
+        this.allAges = allAges
         currentLocale = locale
         lastRequestedKeyword = normalizedKeyword
         requestPage(normalizedKeyword, 1, SearchPendingRequestKind.Search)
@@ -241,6 +259,8 @@ class SearchViewModel @Inject constructor(
         presaleOnly: Boolean = this.presaleOnly,
         chineseTranslatedOnly: Boolean = this.chineseTranslatedOnly,
         collectedOnly: Boolean = this.collectedOnly,
+        hasSubtitle: Boolean = this.hasSubtitle,
+        allAges: Boolean = this.allAges,
         locale: String? = currentLocale
     ): Boolean {
         val nextFilters = normalizeSearchFilters(
@@ -262,6 +282,8 @@ class SearchViewModel @Inject constructor(
             this.presaleOnly == nextFilters.presaleOnly &&
             this.chineseTranslatedOnly == nextFilters.chineseTranslatedOnly &&
             this.collectedOnly == nextFilters.collectedOnly &&
+            this.hasSubtitle == hasSubtitle &&
+            this.allAges == allAges &&
             currentLocale == locale
         ) return true
         currentOrder = order
@@ -270,6 +292,8 @@ class SearchViewModel @Inject constructor(
         this.presaleOnly = nextFilters.presaleOnly
         this.chineseTranslatedOnly = nextFilters.chineseTranslatedOnly
         this.collectedOnly = nextFilters.collectedOnly
+        this.hasSubtitle = hasSubtitle
+        this.allAges = allAges
         currentLocale = locale
         requestPage(current.keyword, 1, SearchPendingRequestKind.Search)
         return true
@@ -331,7 +355,9 @@ class SearchViewModel @Inject constructor(
                     purchasedOnly = purchasedOnly,
                     presaleOnly = presaleOnly,
                     chineseTranslatedOnly = chineseTranslatedOnly,
-                    collectedOnly = collectedOnly
+                    collectedOnly = collectedOnly,
+                    hasSubtitle = hasSubtitle,
+                    allAges = allAges
                 )
                 val resultRevision = ++searchResultRevision
                 _uiState.value = SearchUiState.Success(
@@ -344,6 +370,8 @@ class SearchViewModel @Inject constructor(
                     presaleOnly = presaleOnly,
                     chineseTranslatedOnly = chineseTranslatedOnly,
                     collectedOnly = collectedOnly,
+                    hasSubtitle = hasSubtitle,
+                    allAges = allAges,
                     locale = currentLocale,
                     canGoPrev = page > 1,
                     canGoNext = pageResult.canGoNext,
@@ -407,6 +435,8 @@ class SearchViewModel @Inject constructor(
                     presaleOnly = previousSuccess.presaleOnly
                     chineseTranslatedOnly = previousSuccess.chineseTranslatedOnly
                     collectedOnly = previousSuccess.collectedOnly
+                    hasSubtitle = previousSuccess.hasSubtitle
+                    allAges = previousSuccess.allAges
                     currentLocale = previousSuccess.locale
                     _uiState.value = previousSuccess.copy(
                         pendingRequest = null,
@@ -456,8 +486,18 @@ class SearchViewModel @Inject constructor(
         purchasedOnly: Boolean,
         presaleOnly: Boolean,
         chineseTranslatedOnly: Boolean,
-        collectedOnly: Boolean
+        collectedOnly: Boolean,
+        hasSubtitle: Boolean,
+        allAges: Boolean
     ): SearchPageResult {
+        val selectedFilter = SearchFilterOption.fromState(
+            purchasedOnly = purchasedOnly,
+            presaleOnly = presaleOnly,
+            chineseTranslatedOnly = chineseTranslatedOnly,
+            collectedOnly = collectedOnly
+        )
+        val appliedHasSubtitle = hasSubtitle && selectedFilter.supportsWorkFilters
+        val appliedAllAges = allAges && selectedFilter.supportsWorkFilters
         if (purchasedOnly) {
             val resp = dlsitePlayLibraryClient.searchPurchased(keyword, page, pageSize)
             return SearchPageResult(items = resp.items, canGoNext = resp.canGoNext)
@@ -468,7 +508,14 @@ class SearchViewModel @Inject constructor(
         )
         if (collectedOnly) {
             val offset = (page.coerceAtLeast(1) - 1) * pageSize
-            val resp = asmrOneAvailabilityApi.search(keywordWithBlockedTerms, pageSize, offset, collectedSort.backendSort)
+            val resp = asmrOneAvailabilityApi.search(
+                keyword = keywordWithBlockedTerms,
+                limit = pageSize,
+                offset = offset,
+                sort = collectedSort.backendSort,
+                hasSubtitle = appliedHasSubtitle,
+                allAges = appliedAllAges
+            )
             val collectedItems = resp.items.orEmpty()
             val mappedItems = withContext(Dispatchers.Default) {
                 collectedItems.map { it.toCollectedAlbum() }
@@ -503,6 +550,8 @@ class SearchViewModel @Inject constructor(
             keywordWithBlockedTerms == normalizedKeyword &&
             !presaleOnly &&
             !chineseTranslatedOnly &&
+            !appliedHasSubtitle &&
+            !appliedAllAges &&
             page == 1 &&
             normalizedWorkNo.isNotBlank()
         ) {
@@ -536,7 +585,9 @@ class SearchViewModel @Inject constructor(
             order = order.dlsiteOrder,
             locale = currentLocale,
             presaleOnly = presaleOnly,
-            chineseTranslatedOnly = chineseTranslatedOnly
+            chineseTranslatedOnly = chineseTranslatedOnly,
+            hasSubtitle = appliedHasSubtitle,
+            allAges = appliedAllAges
         )
         return SearchPageResult(items = result.items, canGoNext = result.canGoNext)
     }
@@ -698,6 +749,8 @@ class SearchViewModel @Inject constructor(
         presaleOnly = filters.presaleOnly
         chineseTranslatedOnly = filters.chineseTranslatedOnly
         collectedOnly = filters.collectedOnly
+        hasSubtitle = cached.hasSubtitle
+        allAges = cached.allAges
         currentLocale = cached.locale
         _uiState.value = SearchUiState.Success(
             results = cached.results,
@@ -709,6 +762,8 @@ class SearchViewModel @Inject constructor(
             presaleOnly = filters.presaleOnly,
             chineseTranslatedOnly = filters.chineseTranslatedOnly,
             collectedOnly = filters.collectedOnly,
+            hasSubtitle = cached.hasSubtitle,
+            allAges = cached.allAges,
             locale = cached.locale,
             canGoPrev = page > 1,
             canGoNext = cached.canGoNext,
@@ -758,6 +813,8 @@ class SearchViewModel @Inject constructor(
                         presaleOnly = latest.presaleOnly,
                         chineseTranslatedOnly = latest.chineseTranslatedOnly,
                         collectedOnly = latest.collectedOnly,
+                        hasSubtitle = latest.hasSubtitle,
+                        allAges = latest.allAges,
                         locale = latest.locale,
                         page = latest.page,
                         canGoNext = latest.canGoNext,
@@ -1248,6 +1305,8 @@ sealed class SearchUiState {
         val presaleOnly: Boolean,
         val chineseTranslatedOnly: Boolean,
         val collectedOnly: Boolean,
+        val hasSubtitle: Boolean = false,
+        val allAges: Boolean = false,
         val locale: String?,
         val canGoPrev: Boolean,
         val canGoNext: Boolean,

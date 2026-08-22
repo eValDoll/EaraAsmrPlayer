@@ -48,7 +48,9 @@ internal fun buildDlsiteSearchUrls(
     order: String,
     locale: String? = null,
     presaleOnly: Boolean = false,
-    chineseTranslatedOnly: Boolean = false
+    chineseTranslatedOnly: Boolean = false,
+    hasSubtitle: Boolean = false,
+    allAges: Boolean = false
 ): List<String> {
     val normalizedKeyword = keyword.trim()
     val encodedKeyword = URLEncoder.encode(normalizedKeyword, "UTF-8")
@@ -95,18 +97,29 @@ internal fun buildDlsiteSearchUrls(
     }
 
     val language = languageSegmentForLocale(locale)
+    val ageFilterSegment = if (allAges) {
+        "age_category%5B0%5D/general/age_category%5B1%5D/r15/"
+    } else {
+        ""
+    }
+    val subtitleFilterSegment = if (hasSubtitle) {
+        "/options%5B0%5D/CHI/options%5B1%5D/CHI_HANS/options%5B2%5D/CHI_HANT"
+    } else {
+        ""
+    }
     val modernBase =
-        "$DLSITE_DOMAIN${storeSegment()}/fsr/=/language/$language/${sexCategoryMaleSegment()}/work_category%5B0%5D/doujin/" +
-            "order%5B0%5D/$encodedOrder/work_type_category%5B0%5D/audio/per_page/30/show_type/3/from/fsr.again"
+        "$DLSITE_DOMAIN${storeSegment()}/fsr/=/language/$language/${sexCategoryMaleSegment()}/" +
+            "${ageFilterSegment}work_category%5B0%5D/doujin/order%5B0%5D/$encodedOrder/" +
+            "work_type_category%5B0%5D/audio$subtitleFilterSegment/per_page/30/show_type/3/from/fsr.again"
     val modern = if (normalizedKeyword.isBlank()) {
         "$modernBase/page/$safePage"
     } else {
         "$modernBase/keyword/$encodedKeyword/page/$safePage"
     }
     val legacy = if (normalizedKeyword.isBlank()) {
-        "$DLSITE_DOMAIN${storeSegment()}/fsr/=/language/$language/${sexCategoryMaleSegment()}/work_category%5B0%5D/doujin/work_type_category%5B0%5D/audio/per_page/30/show_type/1/page/$safePage/without_order/1/order/$encodedOrder"
+        "$DLSITE_DOMAIN${storeSegment()}/fsr/=/language/$language/${sexCategoryMaleSegment()}/${ageFilterSegment}work_category%5B0%5D/doujin/work_type_category%5B0%5D/audio$subtitleFilterSegment/per_page/30/show_type/1/page/$safePage/without_order/1/order/$encodedOrder"
     } else {
-        "$DLSITE_DOMAIN${storeSegment()}/fsr/=/language/$language/${sexCategoryMaleSegment()}/work_category%5B0%5D/doujin/work_type_category%5B0%5D/audio/per_page/30/show_type/1/keyword/$encodedKeyword/page/$safePage/without_order/1/order/$encodedOrder"
+        "$DLSITE_DOMAIN${storeSegment()}/fsr/=/language/$language/${sexCategoryMaleSegment()}/${ageFilterSegment}work_category%5B0%5D/doujin/work_type_category%5B0%5D/audio$subtitleFilterSegment/per_page/30/show_type/1/keyword/$encodedKeyword/page/$safePage/without_order/1/order/$encodedOrder"
     }
     return listOf(modern, legacy)
 }
@@ -336,7 +349,9 @@ class DLSiteScraper @Inject constructor(
         order: String = "trend",
         locale: String? = null,
         presaleOnly: Boolean = false,
-        chineseTranslatedOnly: Boolean = false
+        chineseTranslatedOnly: Boolean = false,
+        hasSubtitle: Boolean = false,
+        allAges: Boolean = false
     ): DlsiteSearchResult = withContext(Dispatchers.IO) {
         fun parseItems(items: List<Element>, doc: Document): List<Album> {
             val results = mutableListOf<Album>()
@@ -475,7 +490,9 @@ class DLSiteScraper @Inject constructor(
             order = order,
             locale = locale,
             presaleOnly = presaleOnly,
-            chineseTranslatedOnly = chineseTranslatedOnly
+            chineseTranslatedOnly = chineseTranslatedOnly,
+            hasSubtitle = hasSubtitle,
+            allAges = allAges
         )
         var lastEmpty = DlsiteSearchResult(items = emptyList(), canGoNext = false)
         for (u in urls) {

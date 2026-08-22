@@ -193,7 +193,7 @@ class SearchAssistScreenTest {
     }
 
     @Test
-    fun currentFilterSelectionSubmitsInputWithoutHotKeywordFallback() {
+    fun applyingOptionsDoesNotSubmitSearch() {
         val submitted = mutableListOf<SearchAssistSearchRequest>()
 
         composeRule.setContent {
@@ -219,14 +219,12 @@ class SearchAssistScreenTest {
             .performClick()
 
         composeRule.runOnIdle {
-            assertEquals(1, submitted.size)
-            assertEquals("", submitted.single().keyword)
-            assertEquals(SearchFilterOption.Collected, submitted.single().selectedFilter)
+            assertEquals(0, submitted.size)
         }
     }
 
     @Test
-    fun filterSelectionSubmitsTypedInputAndSelectedFilter() {
+    fun scopeSelectionSubmitsTypedInputAndSelectedFilter() {
         val submitted = mutableListOf<SearchAssistSearchRequest>()
 
         composeRule.setContent {

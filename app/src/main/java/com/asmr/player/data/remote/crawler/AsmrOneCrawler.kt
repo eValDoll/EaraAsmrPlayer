@@ -48,9 +48,11 @@ class AsmrOneCrawler @Inject constructor(
     suspend fun searchWithTrace(
         keyword: String,
         page: Int = 1,
+        hasSubtitle: Boolean = false,
+        allAges: Boolean = false,
         throwOnFailure: Boolean = false
     ): AsmrOneSearchResult {
-        val normalized = keyword.trim()
+        val normalized = appendAsmrOneSearchFilters(keyword, allAges)
         val selected = selectedMetadataApi()
         if (normalized.isBlank()) {
             return emptySearchResult(normalized, page, selected.site)
@@ -61,6 +63,7 @@ class AsmrOneCrawler @Inject constructor(
                 selected.api.search(
                     keyword = normalized,
                     page = page,
+                    subtitle = if (hasSubtitle) 1 else 0,
                     silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON
                 )
             }
@@ -173,6 +176,7 @@ private interface AsmrSelectedApi {
     suspend fun search(
         keyword: String,
         page: Int = 1,
+        subtitle: Int = 0,
         silentIoError: String? = null
     ): SearchResponse
 
@@ -188,8 +192,13 @@ private interface AsmrSelectedApi {
 }
 
 private fun AsmrOneApi.asSelected(): AsmrSelectedApi = object : AsmrSelectedApi {
-    override suspend fun search(keyword: String, page: Int, silentIoError: String?) =
-        this@asSelected.search(keyword = keyword, page = page, silentIoError = silentIoError)
+    override suspend fun search(keyword: String, page: Int, subtitle: Int, silentIoError: String?) =
+        this@asSelected.search(
+            keyword = keyword,
+            page = page,
+            subtitle = subtitle,
+            silentIoError = silentIoError
+        )
 
     override suspend fun getWorkDetails(workId: String, silentIoError: String?) =
         this@asSelected.getWorkDetails(workId, silentIoError = silentIoError)
@@ -199,9 +208,14 @@ private fun AsmrOneApi.asSelected(): AsmrSelectedApi = object : AsmrSelectedApi 
 }
 
 private fun Asmr100Api.asSelected(): AsmrSelectedApi = object : AsmrSelectedApi {
-    override suspend fun search(keyword: String, page: Int, silentIoError: String?) =
+    override suspend fun search(keyword: String, page: Int, subtitle: Int, silentIoError: String?) =
         mapMirrorSearchResponse(
-            response = this@asSelected.search(keyword = keyword, page = page, silentIoError = silentIoError),
+            response = this@asSelected.search(
+                keyword = keyword,
+                page = page,
+                subtitle = subtitle,
+                silentIoError = silentIoError
+            ),
             keyword = keyword,
             page = page
         )
@@ -214,9 +228,14 @@ private fun Asmr100Api.asSelected(): AsmrSelectedApi = object : AsmrSelectedApi 
 }
 
 private fun Asmr200Api.asSelected(): AsmrSelectedApi = object : AsmrSelectedApi {
-    override suspend fun search(keyword: String, page: Int, silentIoError: String?) =
+    override suspend fun search(keyword: String, page: Int, subtitle: Int, silentIoError: String?) =
         mapMirrorSearchResponse(
-            response = this@asSelected.search(keyword = keyword, page = page, silentIoError = silentIoError),
+            response = this@asSelected.search(
+                keyword = keyword,
+                page = page,
+                subtitle = subtitle,
+                silentIoError = silentIoError
+            ),
             keyword = keyword,
             page = page
         )
@@ -229,9 +248,14 @@ private fun Asmr200Api.asSelected(): AsmrSelectedApi = object : AsmrSelectedApi 
 }
 
 private fun Asmr300Api.asSelected(): AsmrSelectedApi = object : AsmrSelectedApi {
-    override suspend fun search(keyword: String, page: Int, silentIoError: String?) =
+    override suspend fun search(keyword: String, page: Int, subtitle: Int, silentIoError: String?) =
         mapMirrorSearchResponse(
-            response = this@asSelected.search(keyword = keyword, page = page, silentIoError = silentIoError),
+            response = this@asSelected.search(
+                keyword = keyword,
+                page = page,
+                subtitle = subtitle,
+                silentIoError = silentIoError
+            ),
             keyword = keyword,
             page = page
         )
@@ -323,6 +347,16 @@ fun asmrOneWorkMatchesRj(work: WorkDetailsResponse, rj: String): Boolean {
         edition.workno.orEmpty().trim().uppercase() == normalized
     }
 }
+
+internal fun appendAsmrOneSearchFilters(keyword: String, allAges: Boolean): String {
+    val normalized = keyword.trim()
+    if (!allAges) return normalized
+    return listOf(ASMR_ONE_NON_ADULT_FILTER, normalized)
+        .filter(String::isNotBlank)
+        .joinToString(separator = " ")
+}
+
+private const val ASMR_ONE_NON_ADULT_FILTER = "$-age:adult$"
 
 internal fun selectAsmrOneWorkForRj(
     works: List<WorkDetailsResponse>,

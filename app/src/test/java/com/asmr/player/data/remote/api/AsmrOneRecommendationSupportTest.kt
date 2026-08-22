@@ -5,6 +5,42 @@ import org.junit.Test
 
 class AsmrOneRecommendationSupportTest {
     @Test
+    fun collectedSearchUrl_addsEnabledSubtitleAndAllAgesFilters() {
+        val url = buildAsmrOneCollectedSearchUrl(
+            baseUrl = "https://eara.example/",
+            keyword = " 治愈 ",
+            limit = 30,
+            offset = 60,
+            sort = "rating",
+            hasSubtitle = true,
+            allAges = true
+        )
+
+        assertEquals("治愈", url.queryParameter("q"))
+        assertEquals("30", url.queryParameter("limit"))
+        assertEquals("60", url.queryParameter("offset"))
+        assertEquals("rating", url.queryParameter("sort"))
+        assertEquals("true", url.queryParameter("hasSubtitle"))
+        assertEquals("true", url.queryParameter("allAges"))
+    }
+
+    @Test
+    fun collectedSearchUrl_omitsDisabledFilters() {
+        val url = buildAsmrOneCollectedSearchUrl(
+            baseUrl = "https://eara.example",
+            keyword = "",
+            limit = 30,
+            offset = 0,
+            sort = "release",
+            hasSubtitle = false,
+            allAges = false
+        )
+
+        assertEquals(null, url.queryParameter("hasSubtitle"))
+        assertEquals(null, url.queryParameter("allAges"))
+    }
+
+    @Test
     fun normalizeRecommendationRjsKeepsRecentValidUniqueValuesWithinLimit() {
         val result = normalizeRecommendationRjs(
             values = listOf(
