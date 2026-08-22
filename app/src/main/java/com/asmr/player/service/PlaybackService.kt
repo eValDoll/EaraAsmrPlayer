@@ -148,7 +148,7 @@ class PlaybackService : MediaSessionService() {
     private var hasAudioFocus: Boolean = false
     private var notificationProvider: LyricMediaNotificationProvider? = null
     private var sfwHideSystemControlsEnabled: Boolean = false
-    private var videoSurfaceVisible: Boolean = false
+    private var videoOutputEnabled: Boolean = false
 
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
@@ -351,7 +351,7 @@ class PlaybackService : MediaSessionService() {
             )
             .setHandleAudioBecomingNoisy(true)
             .build()
-        applyVideoSurfaceVisibility()
+        applyVideoOutputEnabled()
 
         spectrumAnalyzer.start()
 
@@ -401,7 +401,7 @@ class PlaybackService : MediaSessionService() {
                 cancelPlaybackRecovery(resetPolicy = true)
                 serviceScope.launch { updateArtworkForCurrentMedia() }
                 serviceScope.launch { loadLyricsForCurrentMedia() }
-                applyVideoSurfaceVisibility()
+                applyVideoOutputEnabled()
                 if (exoPlayer.isPlaying) {
                     markCurrentAlbumPlayed()
                 }
@@ -975,7 +975,7 @@ class PlaybackService : MediaSessionService() {
                             .add(androidx.media3.session.SessionCommand("GET_AUDIO_SESSION_ID", android.os.Bundle.EMPTY))
                             .add(androidx.media3.session.SessionCommand("UPDATE_SESSION_EQ", android.os.Bundle.EMPTY))
                             .add(androidx.media3.session.SessionCommand("RELOAD_LYRICS", android.os.Bundle.EMPTY))
-                            .add(androidx.media3.session.SessionCommand("SET_VIDEO_SURFACE_VISIBLE", android.os.Bundle.EMPTY))
+                            .add(androidx.media3.session.SessionCommand("SET_VIDEO_OUTPUT_ENABLED", android.os.Bundle.EMPTY))
                             .build()
                     }
                     val playerCommands = if (
@@ -1080,8 +1080,8 @@ class PlaybackService : MediaSessionService() {
                             )
                         }
 
-                        "SET_VIDEO_SURFACE_VISIBLE" -> {
-                            setVideoSurfaceVisible(args.getBoolean("visible", false))
+                        "SET_VIDEO_OUTPUT_ENABLED" -> {
+                            setVideoOutputEnabled(args.getBoolean("enabled", false))
                             return com.google.common.util.concurrent.Futures.immediateFuture(
                                 androidx.media3.session.SessionResult(androidx.media3.session.SessionResult.RESULT_SUCCESS, android.os.Bundle.EMPTY)
                             )
@@ -1093,15 +1093,15 @@ class PlaybackService : MediaSessionService() {
             .build()
     }
 
-    private fun setVideoSurfaceVisible(visible: Boolean) {
-        if (videoSurfaceVisible == visible) return
-        videoSurfaceVisible = visible
-        applyVideoSurfaceVisibility()
+    private fun setVideoOutputEnabled(enabled: Boolean) {
+        if (videoOutputEnabled == enabled) return
+        videoOutputEnabled = enabled
+        applyVideoOutputEnabled()
     }
 
-    private fun applyVideoSurfaceVisibility() {
+    private fun applyVideoOutputEnabled() {
         val item = exoPlayer.currentMediaItem
-        val videoActive = videoSurfaceVisible && item.isVideoMediaItem()
+        val videoActive = videoOutputEnabled && item.isVideoMediaItem()
         val params = exoPlayer.trackSelectionParameters
         val updated = params.buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, !videoActive)

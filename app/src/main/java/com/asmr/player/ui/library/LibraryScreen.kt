@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -179,6 +180,7 @@ import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.collectAsStateWhileActive
+import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.playback.MediaItemFactory
 
 internal const val LIBRARY_CHROME_TAG = "library_chrome"
@@ -997,9 +999,15 @@ fun LibraryScreen(
         val album = actionAlbum
         ModalBottomSheet(
             onDismissRequest = { showAlbumActions = false },
-            sheetState = sheetState
+            sheetState = sheetState,
+            windowInsets = WindowInsets(0, 0, 0, 0)
         ) {
-            if (album != null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .windowInsetsPadding(StableWindowInsets.navigationBars)
+            ) {
+                if (album != null) {
                 val syncStatus = (uiState as? LibraryUiState.Success)?.syncingAlbums?.get(album.id) ?: SyncStatus.Idle
                 val isSyncing = syncStatus is SyncStatus.Syncing
                 val hasLocalPaths = remember(album) { album.getAllLocalPaths().isNotEmpty() }
@@ -1079,8 +1087,9 @@ fun LibraryScreen(
                     )
                 }
                 Spacer(modifier = Modifier.height(18.dp))
-            } else {
-                Spacer(modifier = Modifier.height(24.dp))
+                } else {
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
             }
         }
     }

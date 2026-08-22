@@ -1,14 +1,8 @@
 package com.asmr.player.ui.player
 
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
-import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.content.Intent
-import android.os.SystemClock
 import android.view.KeyEvent as AndroidKeyEvent
-import android.view.LayoutInflater
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
@@ -80,13 +74,10 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
-import androidx.media3.ui.PlayerView
 import com.asmr.player.R
 import com.asmr.player.HardwareVolumeOverlay
 import com.asmr.player.cache.CachePolicy
@@ -1071,6 +1062,7 @@ internal fun NowPlayingScreen(
     hardwareVolumeEventTick: Long,
     onInlineVolumeControlVisibilityChanged: (Boolean) -> Unit = {},
     onEqualizerVisibilityChanged: (Boolean) -> Unit = {},
+    onVideoFullscreenChanged: (Boolean) -> Unit = {},
     onBack: () -> Unit,
     onRouteExitStarted: (exitDurationMs: Int) -> Unit = {},
     onShowQueue: () -> Unit,
@@ -1271,6 +1263,10 @@ internal fun NowPlayingScreen(
     // 平板横屏：高度不为 Compact 且处于横屏状态
     val useSplitLayout = heightClass != WindowHeightSizeClass.Compact && isLandscape
     val player = viewModel.playerOrNull()
+    val videoPlayerCoordinator = remember { NowPlayingVideoPlayerCoordinator() }
+    DisposableEffect(videoPlayerCoordinator) {
+        onDispose { videoPlayerCoordinator.release() }
+    }
     val videoAspectRatio = rememberPlayerVideoAspectRatio(player)
     val useDragPreview = coverPreviewMode == CoverPreviewMode.Drag && !isVideo
     val useMotionPreview = coverPreviewMode == CoverPreviewMode.Motion && !isVideo
@@ -1291,6 +1287,15 @@ internal fun NowPlayingScreen(
         else -> Alignment.Center
     }
     var surfaceMode by rememberSaveable { mutableStateOf(NowPlayingSurfaceMode.PLAYER) }
+    var videoFullscreen by rememberSaveable(item?.mediaId) { mutableStateOf(false) }
+    val activeVideoFullscreen = videoFullscreen && isVideo
+    val latestOnVideoFullscreenChanged = rememberUpdatedState(onVideoFullscreenChanged)
+    LaunchedEffect(activeVideoFullscreen) {
+        latestOnVideoFullscreenChanged.value(activeVideoFullscreen)
+    }
+    DisposableEffect(Unit) {
+        onDispose { latestOnVideoFullscreenChanged.value(false) }
+    }
     val currentMotionLayout = when {
         useSplitLayout -> NowPlayingMotionLayout.SPLIT_LANDSCAPE
         isPhoneLandscape -> NowPlayingMotionLayout.PHONE_LANDSCAPE
@@ -1346,7 +1351,7 @@ internal fun NowPlayingScreen(
         }
     }
 
-    BackHandler(enabled = !pendingRouteExit) {
+    BackHandler(enabled = !pendingRouteExit && !videoFullscreen) {
         handleNavigateUp()
     }
     val playerHeaderTitle = metadata?.title?.toString().orEmpty().ifBlank {
@@ -1453,6 +1458,8 @@ internal fun NowPlayingScreen(
                     },
                     label = "nowPlayingLayout"
                 ) { (split, phoneLandscape) ->
+            val renderVideoSurface = split == layoutState.first &&
+                phoneLandscape == layoutState.second
             val motionLayout = when {
                 split -> NowPlayingMotionLayout.SPLIT_LANDSCAPE
                 phoneLandscape -> NowPlayingMotionLayout.PHONE_LANDSCAPE
@@ -1511,6 +1518,10 @@ internal fun NowPlayingScreen(
                                     isVideo = isVideo,
                                     metadata = metadata,
                                     viewModel = viewModel,
+                                    videoPlayerCoordinator = videoPlayerCoordinator,
+                                    renderVideoSurface = renderVideoSurface,
+                                    videoFullscreen = videoFullscreen,
+                                    onOpenVideoFullscreen = { videoFullscreen = true },
                                     onOpenLyrics = showLyricsSurface,
                                     edgeBlendEnabled = false,
                                     edgeBlendColor = if (playerArtworkBackdropEnabled) playerThemeColors.backdropTintColor else colorScheme.background,
@@ -1591,7 +1602,8 @@ internal fun NowPlayingScreen(
                                     factory = { context ->
                                         ChannelSpectrumView(context).apply {
                                             setChannel(ChannelSpectrumView.Channel.Left)
-                                            setBarCount(64)
+                                            setRenderStyle(ChannelSpectrumView.RenderStyle.ThinLines)
+                                            setBarCount(56)
                                             setBarColor(accentColor.toArgb())
                                         }
                                     },
@@ -1628,7 +1640,8 @@ internal fun NowPlayingScreen(
                                     factory = { context ->
                                         ChannelSpectrumView(context).apply {
                                             setChannel(ChannelSpectrumView.Channel.Right)
-                                            setBarCount(64)
+                                            setRenderStyle(ChannelSpectrumView.RenderStyle.ThinLines)
+                                            setBarCount(56)
                                             setBarColor(accentColor.toArgb())
                                         }
                                     },
@@ -1708,6 +1721,10 @@ internal fun NowPlayingScreen(
                                     isVideo = isVideo,
                                     metadata = metadata,
                                     viewModel = viewModel,
+                                    videoPlayerCoordinator = videoPlayerCoordinator,
+                                    renderVideoSurface = renderVideoSurface,
+                                    videoFullscreen = videoFullscreen,
+                                    onOpenVideoFullscreen = { videoFullscreen = true },
                                     onOpenLyrics = showLyricsSurface,
                                     edgeBlendEnabled = false,
                                     edgeBlendColor = if (playerArtworkBackdropEnabled) playerThemeColors.backdropTintColor else colorScheme.background,
@@ -1775,6 +1792,7 @@ internal fun NowPlayingScreen(
                                     factory = { context ->
                                         ChannelSpectrumView(context).apply {
                                             setChannel(ChannelSpectrumView.Channel.Left)
+                                            setRenderStyle(ChannelSpectrumView.RenderStyle.ThinLines)
                                             setBarCount(56)
                                             setBarColor(accentColor.toArgb())
                                         }
@@ -1812,6 +1830,7 @@ internal fun NowPlayingScreen(
                                     factory = { context ->
                                         ChannelSpectrumView(context).apply {
                                             setChannel(ChannelSpectrumView.Channel.Right)
+                                            setRenderStyle(ChannelSpectrumView.RenderStyle.ThinLines)
                                             setBarCount(56)
                                             setBarColor(accentColor.toArgb())
                                         }
@@ -2103,6 +2122,10 @@ internal fun NowPlayingScreen(
                                             isVideo = isVideo,
                                             metadata = metadata,
                                             viewModel = viewModel,
+                                            videoPlayerCoordinator = videoPlayerCoordinator,
+                                            renderVideoSurface = renderVideoSurface,
+                                            videoFullscreen = videoFullscreen,
+                                            onOpenVideoFullscreen = { videoFullscreen = true },
                                             onOpenLyrics = showLyricsSurface,
                                             edgeBlendEnabled = false,
                                             edgeBlendColor = if (playerArtworkBackdropEnabled) playerThemeColors.backdropTintColor else colorScheme.background,
@@ -2331,6 +2354,16 @@ internal fun NowPlayingScreen(
             }
         }
 
+        if (videoFullscreen && isVideo) {
+            BackHandler { videoFullscreen = false }
+            NowPlayingFullscreenVideo(
+                player = player,
+                coordinator = videoPlayerCoordinator,
+                onDismiss = { videoFullscreen = false },
+                modifier = Modifier.fillMaxSize()
+            )
+        }
+
         val dialog = tagDialog
         if (dialog != null) {
             TagAssignDialog(
@@ -2349,12 +2382,14 @@ internal fun NowPlayingScreen(
                 onDismissRequest = dismissSliceSheet,
                 sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
                 containerColor = colorScheme.surface,
-                contentColor = colorScheme.onSurface
+                contentColor = colorScheme.onSurface,
+                windowInsets = WindowInsets(0, 0, 0, 0)
             ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .heightIn(min = sheetMinHeight)
+                        .windowInsetsPadding(WindowInsets.navigationBars)
                         .padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
                     Row(
@@ -2546,12 +2581,14 @@ internal fun NowPlayingScreen(
                 onDismissRequest = { showEqualizer = false },
                 sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
                 containerColor = colorScheme.surface,
-                contentColor = colorScheme.onSurface
+                contentColor = colorScheme.onSurface,
+                windowInsets = WindowInsets(0, 0, 0, 0)
             ) {
                 val scrollState = rememberScrollState()
                 Box(
                     modifier = Modifier
                         .fillMaxHeight()
+                        .windowInsetsPadding(WindowInsets.navigationBars)
                         .focusRequester(equalizerFocusRequester)
                         .focusable()
                         .onPreviewKeyEvent { event ->

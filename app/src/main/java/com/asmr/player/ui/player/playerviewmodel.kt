@@ -792,8 +792,8 @@ class PlayerViewModel @Inject constructor(
 
     fun playerOrNull(): Player? = playerConnection.getControllerOrNull()
 
-    fun setVideoSurfaceVisible(visible: Boolean) {
-        playerConnection.setVideoSurfaceVisible(visible)
+    fun setVideoOutputEnabled(enabled: Boolean) {
+        playerConnection.setVideoOutputEnabled(enabled)
     }
 
     override fun onCleared() {

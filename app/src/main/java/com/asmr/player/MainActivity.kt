@@ -624,12 +624,14 @@ class MainActivity : ComponentActivity() {
                                 onDismissRequest = { overlaySheet = null },
                                 sheetState = sheetState,
                                 containerColor = MaterialTheme.colorScheme.background,
-                                contentColor = MaterialTheme.colorScheme.onBackground
+                                contentColor = MaterialTheme.colorScheme.onBackground,
+                                windowInsets = WindowInsets(0, 0, 0, 0)
                             ) {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .heightIn(max = sheetMaxHeight)
+                                        .windowInsetsPadding(StableWindowInsets.navigationBars)
                                 ) {
                                     when (activeOverlaySheet) {
                                         OverlaySheet.Queue -> QueueSheetContent(

@@ -26,6 +26,7 @@ import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.net.Uri
+import com.asmr.player.data.local.db.entities.PlaylistItemEntity
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -437,6 +438,61 @@ internal data class ThemeMediaSource(
     val isVideo: Boolean = false
 )
 
+private val VideoPlaybackExtensions = setOf("mp4", "m4v", "webm", "mkv", "mov")
+
+private fun isVideoPlaybackSource(
+    uriText: String,
+    mimeType: String,
+    metadataFlag: Boolean
+): Boolean {
+    val fileExtension = uriText
+        .substringBefore('#')
+        .substringBefore('?')
+        .substringAfterLast('.', "")
+        .lowercase()
+    return metadataFlag || mimeType.startsWith("video/") || fileExtension in VideoPlaybackExtensions
+}
+
+internal fun MediaItem?.isVideoPlaybackItem(): Boolean {
+    val item = this ?: return false
+    return isVideoPlaybackSource(
+        uriText = item.localConfiguration?.uri?.toString().orEmpty(),
+        mimeType = item.localConfiguration?.mimeType.orEmpty(),
+        metadataFlag = item.mediaMetadata.extras?.getBoolean("is_video") == true
+    )
+}
+
+internal fun PlaylistItemEntity?.isVideoPlaybackItem(): Boolean {
+    val item = this ?: return false
+    return isVideoPlaybackSource(
+        uriText = item.uri,
+        mimeType = item.mimeType,
+        metadataFlag = item.isVideo
+    )
+}
+
+internal fun resolveMainRequestedOrientation(
+    isPhone: Boolean,
+    nowPlayingVisible: Boolean,
+    videoFullscreen: Boolean,
+    portraitExitPending: Boolean
+): Int = when {
+    isPhone && portraitExitPending -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+    nowPlayingVisible && videoFullscreen -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+    isPhone && nowPlayingVisible -> ActivityInfo.SCREEN_ORIENTATION_FULL_USER
+    isPhone -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+    else -> ActivityInfo.SCREEN_ORIENTATION_SENSOR
+}
+
+internal fun shouldKeepVideoOutputEnabled(
+    currentItemIsVideo: Boolean,
+    miniPlayerEnabled: Boolean,
+    nowPlayingVisible: Boolean
+): Boolean {
+    return currentItemIsVideo &&
+        (miniPlayerEnabled || nowPlayingVisible)
+}
+
 internal fun MediaItem?.toThemeMediaSource(): ThemeMediaSource {
     val item = this ?: return ThemeMediaSource()
     val metadata = item.mediaMetadata
@@ -446,20 +502,10 @@ internal fun MediaItem?.toThemeMediaSource(): ThemeMediaSource {
             uriTextValue.contains("ic_placeholder", ignoreCase = true)
     }
     val videoUri = item.localConfiguration?.uri
-    val mimeType = item.localConfiguration?.mimeType.orEmpty()
-    val uriText = videoUri?.toString().orEmpty()
-    val fileExtension = uriText
-        .substringBefore('#')
-        .substringBefore('?')
-        .substringAfterLast('.', "")
-        .lowercase()
-    val isVideo = metadata.extras?.getBoolean("is_video") == true ||
-        mimeType.startsWith("video/") ||
-        fileExtension in setOf("mp4", "m4v", "webm", "mkv", "mov")
     return ThemeMediaSource(
         artworkUri = artworkUri,
         videoUri = videoUri,
-        isVideo = isVideo
+        isVideo = item.isVideoPlaybackItem()
     )
 }
 

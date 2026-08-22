@@ -32,7 +32,6 @@ import androidx.compose.material.icons.rounded.CloudDownload
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
-import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.net.Uri
 import androidx.compose.ui.platform.LocalConfiguration
@@ -999,9 +998,12 @@ fun MainContainer(
     var automaticUpdateInstallRequested by rememberSaveable { mutableStateOf(false) }
     var pendingAutomaticInstallPath by rememberSaveable { mutableStateOf<String?>(null) }
     var nowPlayingVisible by rememberSaveable { mutableStateOf(false) }
+    var nowPlayingVideoFullscreen by remember { mutableStateOf(false) }
     var nowPlayingUsesInlineVolumeControl by remember { mutableStateOf(false) }
     var nowPlayingEqualizerVisible by remember { mutableStateOf(false) }
     var nowPlayingBackdropActive by rememberSaveable { mutableStateOf(false) }
+    var nowPlayingPortraitExitPending by remember { mutableStateOf(false) }
+    var nowPlayingRouteExitFinished by remember { mutableStateOf(false) }
     var nowPlayingBackdropExitDurationMs by rememberSaveable {
         mutableIntStateOf(NowPlayingMotionSpec.totalExitDurationMs(NowPlayingMotionLayout.PORTRAIT))
     }
@@ -1015,27 +1017,58 @@ fun MainContainer(
     )
     val openNowPlaying = openNowPlaying@{
         if (nowPlayingVisible) return@openNowPlaying
+        nowPlayingPortraitExitPending = false
+        nowPlayingRouteExitFinished = false
         nowPlayingBackdropActive = true
         nowPlayingVisible = true
     }
-    val closeNowPlaying: () -> Unit = {
+    val finalizeNowPlayingClose: () -> Unit = {
         nowPlayingPlaylistPickerRequest = null
         albumBatchPlaylistPickerRequest = null
         nowPlayingBackdropActive = false
+        nowPlayingPortraitExitPending = false
+        nowPlayingRouteExitFinished = false
+        nowPlayingVideoFullscreen = false
         nowPlayingUsesInlineVolumeControl = false
+        nowPlayingEqualizerVisible = false
         nowPlayingVisible = false
     }
+    val closeNowPlaying: () -> Unit = {
+        nowPlayingRouteExitFinished = true
+        if (isPhone && isLandscape) {
+            nowPlayingPortraitExitPending = true
+            nowPlayingBackdropActive = true
+        } else {
+            finalizeNowPlayingClose()
+        }
+    }
+    LaunchedEffect(
+        nowPlayingPortraitExitPending,
+        nowPlayingRouteExitFinished,
+        isPhone,
+        isLandscape
+    ) {
+        if (
+            nowPlayingPortraitExitPending &&
+            nowPlayingRouteExitFinished &&
+            (!isPhone || !isLandscape)
+        ) {
+            finalizeNowPlayingClose()
+        }
+    }
     val playerBackdropVisible = nowPlayingVisible
-    val sharedPlayerUriText = sharedPlayerItem?.localConfiguration?.uri?.toString().orEmpty()
-    val sharedPlayerMimeType = sharedPlayerItem?.localConfiguration?.mimeType.orEmpty()
-    val sharedPlayerExt = sharedPlayerUriText
-        .substringBefore('#')
-        .substringBefore('?')
-        .substringAfterLast('.', "")
-        .lowercase()
-    val sharedPlayerIsVideo = sharedPlayerItem?.mediaMetadata?.extras?.getBoolean("is_video") == true ||
-        sharedPlayerMimeType.startsWith("video/") ||
-        sharedPlayerExt in setOf("mp4", "m4v", "webm", "mkv", "mov")
+    val sharedPlayerIsVideo = sharedPlayerItem.isVideoPlaybackItem()
+    val videoOutputEnabled = shouldKeepVideoOutputEnabled(
+        currentItemIsVideo = sharedPlayerIsVideo,
+        miniPlayerEnabled = showMiniPlayerBar,
+        nowPlayingVisible = nowPlayingVisible
+    )
+    DisposableEffect(playerViewModel, videoOutputEnabled) {
+        playerViewModel.setVideoOutputEnabled(videoOutputEnabled)
+        onDispose {
+            if (videoOutputEnabled) playerViewModel.setVideoOutputEnabled(false)
+        }
+    }
     val sharedUseDragPreview = playerBackdropVisible &&
         coverBackgroundEnabled &&
         coverPreviewMode == CoverPreviewMode.Drag &&
@@ -1448,21 +1481,20 @@ fun MainContainer(
         onDispose { }
     }
 
-    // 屏幕旋转管理逻辑
-    LaunchedEffect(nowPlayingVisible, isPhone) {
+    // 普通播放页保持原方向策略，仅视频全屏时锁定横屏。
+    LaunchedEffect(
+        nowPlayingVisible,
+        isPhone,
+        nowPlayingVideoFullscreen,
+        nowPlayingPortraitExitPending
+    ) {
         activity?.let { act ->
-            if (isPhone) {
-                if (nowPlayingVisible) {
-                    // 手机端在播放页和歌词页允许横屏（遵守系统自动旋转/旋转锁定设置）
-                    act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_USER
-                } else {
-                    // 手机端其他页面强制锁定竖屏
-                    act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                }
-            } else {
-                // 平板端始终允许旋转
-                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR
-            }
+            act.requestedOrientation = resolveMainRequestedOrientation(
+                isPhone = isPhone,
+                nowPlayingVisible = nowPlayingVisible,
+                videoFullscreen = nowPlayingVideoFullscreen,
+                portraitExitPending = nowPlayingPortraitExitPending
+            )
         }
     }
     LaunchedEffect(appVolumePercent) {
@@ -2074,9 +2106,7 @@ fun MainContainer(
                                                 },
                                                 onPlayTracks = { album, tracks, startTrack ->
                                                     scope.launch {
-                                                        if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                                            openNowPlaying()
-                                                        }
+                                                        playerViewModel.playTracksPrepared(album, tracks, startTrack)
                                                     }
                                                 },
                                                 onOpenPlaylistPicker = { item ->
@@ -2187,7 +2217,7 @@ fun MainContainer(
                                                 scrollToTopSignal = favoritesScrollToTopSignal,
                                                 onPlayAll = { items, startItem ->
                                                     playerViewModel.playPlaylistItems(items, startItem)
-                                                    openNowPlaying()
+                                                    if (startItem.isVideoPlaybackItem()) openNowPlaying()
                                                 },
                                                 viewModel = playlistsViewModel
                                             )
@@ -2487,14 +2517,12 @@ fun MainContainer(
                                 .toAlbumDetailInitialTab(),
                             onPlayTracks = { album, tracks, startTrack ->
                                 scope.launch {
-                                    if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                        openNowPlaying()
-                                    }
+                                    playerViewModel.playTracksPrepared(album, tracks, startTrack)
                                 }
                             },
                             onPlayMediaItems = { items, startIndex ->
                                 playerViewModel.playMediaItems(items, startIndex)
-                                openNowPlaying()
+                                if (items.getOrNull(startIndex).isVideoPlaybackItem()) openNowPlaying()
                             },
                             onAddToQueue = { album, track ->
                                 playerViewModel.addTrackToQueue(album, track)
@@ -2570,14 +2598,12 @@ fun MainContainer(
                                 .toAlbumDetailInitialTab(),
                             onPlayTracks = { album, tracks, startTrack ->
                                 scope.launch {
-                                    if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                        openNowPlaying()
-                                    }
+                                    playerViewModel.playTracksPrepared(album, tracks, startTrack)
                                 }
                             },
                             onPlayMediaItems = { items, startIndex ->
                                 playerViewModel.playMediaItems(items, startIndex)
-                                openNowPlaying()
+                                if (items.getOrNull(startIndex).isVideoPlaybackItem()) openNowPlaying()
                             },
                             onAddToQueue = { album, track ->
                                 playerViewModel.addTrackToQueue(album, track)
@@ -2644,14 +2670,12 @@ fun MainContainer(
                             rjCode = rj,
                             onPlayTracks = { album, tracks, startTrack ->
                                 scope.launch {
-                                    if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                        openNowPlaying()
-                                    }
+                                    playerViewModel.playTracksPrepared(album, tracks, startTrack)
                                 }
                             },
                             onPlayMediaItems = { items, startIndex ->
                                 playerViewModel.playMediaItems(items, startIndex)
-                                openNowPlaying()
+                                if (items.getOrNull(startIndex).isVideoPlaybackItem()) openNowPlaying()
                             },
                             onAddToQueue = { album, track ->
                                 playerViewModel.addTrackToQueue(album, track)
@@ -2722,7 +2746,7 @@ fun MainContainer(
                             title = groupName,
                             onPlayMediaItems = { items, startIndex ->
                                 playerViewModel.playMediaItems(items, startIndex)
-                                openNowPlaying()
+                                if (items.getOrNull(startIndex).isVideoPlaybackItem()) openNowPlaying()
                             }
                         )
                     }
@@ -2760,7 +2784,7 @@ fun MainContainer(
                             title = playlistName,
                             onPlayAll = { items, startItem ->
                                 playerViewModel.playPlaylistItems(items, startItem)
-                                openNowPlaying()
+                                if (startItem.isVideoPlaybackItem()) openNowPlaying()
                             }
                         )
                     }
@@ -2776,7 +2800,7 @@ fun MainContainer(
                                 windowSizeClass = windowSizeClass,
                                 onPlayAll = { items, startItem ->
                                     playerViewModel.playPlaylistItems(items, startItem)
-                                    openNowPlaying()
+                                    if (startItem.isVideoPlaybackItem()) openNowPlaying()
                                 },
                                 viewModel = playlistsViewModel
                             )
@@ -2983,10 +3007,16 @@ fun MainContainer(
                     hardwareVolumeEventTick = nowPlayingVolumeEventTick,
                     onInlineVolumeControlVisibilityChanged = { nowPlayingUsesInlineVolumeControl = it },
                     onEqualizerVisibilityChanged = { nowPlayingEqualizerVisible = it },
+                    onVideoFullscreenChanged = { nowPlayingVideoFullscreen = it },
                     onBack = closeNowPlaying,
                     onRouteExitStarted = { exitDurationMs ->
                         nowPlayingBackdropExitDurationMs = exitDurationMs
-                        nowPlayingBackdropActive = false
+                        if (isPhone && isLandscape) {
+                            nowPlayingPortraitExitPending = true
+                            nowPlayingBackdropActive = true
+                        } else {
+                            nowPlayingBackdropActive = false
+                        }
                     },
                     onShowQueue = onShowQueue,
                     onShowSleepTimer = onShowSleepTimer,

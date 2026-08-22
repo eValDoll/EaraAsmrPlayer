@@ -100,7 +100,7 @@ class PlayerConnection @Inject constructor(
     private var lastMeteredWarnAtMs: Long = 0L
     private val connectMutex = Mutex()
     private val mainHandler = Handler(Looper.getMainLooper())
-    private var videoSurfaceVisible: Boolean = false
+    private var videoOutputEnabled: Boolean = false
     @Volatile private var reconnecting = false
 
     val appVolumePercent: StateFlow<Int> = settingsRepository.appVolumePercent
@@ -244,6 +244,7 @@ class PlayerConnection @Inject constructor(
                 return
             }
             controller = c
+            sendVideoOutputEnabled(c, videoOutputEnabled)
         c.addListener(
             object : Player.Listener {
                 override fun onEvents(player: Player, events: Player.Events) {
@@ -684,11 +685,20 @@ class PlayerConnection @Inject constructor(
         sendCustomCommand("RELOAD_LYRICS", android.os.Bundle.EMPTY)
     }
 
-    fun setVideoSurfaceVisible(visible: Boolean) {
-        videoSurfaceVisible = visible
-        sendCustomCommand(
-            "SET_VIDEO_SURFACE_VISIBLE",
-            android.os.Bundle().apply { putBoolean("visible", visible) }
+    fun setVideoOutputEnabled(enabled: Boolean) {
+        if (videoOutputEnabled == enabled) return
+        videoOutputEnabled = enabled
+        controller?.let { sendVideoOutputEnabled(it, enabled) }
+    }
+
+    private fun sendVideoOutputEnabled(controller: MediaController, enabled: Boolean) {
+        val command = androidx.media3.session.SessionCommand(
+            "SET_VIDEO_OUTPUT_ENABLED",
+            android.os.Bundle.EMPTY
+        )
+        controller.sendCustomCommand(
+            command,
+            android.os.Bundle().apply { putBoolean("enabled", enabled) }
         )
     }
 
@@ -741,7 +751,7 @@ class PlayerConnection @Inject constructor(
         if (slicePlaybackController.sliceModeEnabled.value || slicePlaybackController.previewSlice.value != null) {
             return 250L
         }
-        return if (snapshot.currentMediaItem.isVideoMediaItem() && !videoSurfaceVisible) {
+        return if (snapshot.currentMediaItem.isVideoMediaItem() && !videoOutputEnabled) {
             1_000L
         } else {
             250L
