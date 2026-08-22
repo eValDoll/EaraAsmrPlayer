@@ -372,7 +372,7 @@ class SearchScreenChromeTest {
     }
 
     @Test
-    fun languageMenu_marksCurrentLocaleSelected() {
+    fun sortMenu_marksCurrentLocaleSelected() {
         composeRule.setContent {
             AsmrPlayerTheme {
                 SearchToolbar(
@@ -389,7 +389,7 @@ class SearchScreenChromeTest {
             }
         }
 
-        composeRule.onNodeWithTag(SEARCH_SCOPE_BUTTON_TAG).performClick()
+        composeRule.onNodeWithTag(SEARCH_SORT_BUTTON_TAG).performClick()
         composeRule.onNodeWithTag("${SEARCH_LANGUAGE_OPTION_TAG_PREFIX}_zh_CN").assert(
             SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)
         )

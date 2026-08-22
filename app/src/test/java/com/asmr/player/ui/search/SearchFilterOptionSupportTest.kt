@@ -13,4 +13,13 @@ class SearchFilterOptionSupportTest {
         assertFalse(SearchFilterOption.Presale.supportsWorkFilters)
         assertFalse(SearchFilterOption.PurchasedOnly.supportsWorkFilters)
     }
+
+    @Test
+    fun supportsSortAndLanguageOptions_excludesPresaleAndPurchasedScopes() {
+        assertTrue(SearchFilterOption.Collected.supportsSortAndLanguageOptions)
+        assertTrue(SearchFilterOption.Standard.supportsSortAndLanguageOptions)
+        assertTrue(SearchFilterOption.ChineseTranslated.supportsSortAndLanguageOptions)
+        assertFalse(SearchFilterOption.Presale.supportsSortAndLanguageOptions)
+        assertFalse(SearchFilterOption.PurchasedOnly.supportsSortAndLanguageOptions)
+    }
 }

@@ -2,17 +2,17 @@ package com.asmr.player.data.remote.auth
 
 internal fun adultCheckedCookie(): String = String.format("%s%s", "a", "dultchecked=1")
 
-fun buildDlsiteCookieHeader(baseCookie: String): String {
-    val base = baseCookie.trim().trimEnd(';')
-    val extras = listOf("locale=ja_JP", adultCheckedCookie())
-    return buildString {
-        if (base.isNotBlank()) append(base)
-        extras.forEach { kv ->
-            if (contains(kv)) return@forEach
-            if (isNotEmpty()) append("; ")
-            append(kv)
+fun buildDlsiteCookieHeader(baseCookie: String, locale: String? = null): String {
+    val normalizedLocale = locale?.trim().takeIf { !it.isNullOrBlank() } ?: "ja_JP"
+    val retainedCookies = baseCookie
+        .split(';')
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .filterNot { cookie ->
+            cookie.startsWith("locale=", ignoreCase = true) ||
+                cookie.startsWith("adultchecked=", ignoreCase = true)
         }
-    }
+    return (retainedCookies + "locale=$normalizedLocale" + adultCheckedCookie()).joinToString("; ")
 }
 
 fun mergeDlsiteCookieHeaders(vararg cookieHeaders: String): String {

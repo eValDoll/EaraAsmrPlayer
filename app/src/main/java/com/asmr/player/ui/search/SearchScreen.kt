@@ -240,6 +240,24 @@ private fun onlineDetailLoadingFor(album: Album, state: SearchUiState.Success): 
     return rj.isNotBlank() && rj in state.enrichingRjCodes
 }
 
+internal enum class SearchResultSkeletonMode {
+    None,
+    DetailMetadata,
+    LocalizedText
+}
+
+internal fun searchResultSkeletonMode(
+    onlineDetailLoading: Boolean,
+    isRefreshingLocalizedText: Boolean
+): SearchResultSkeletonMode {
+    if (!onlineDetailLoading) return SearchResultSkeletonMode.None
+    return if (isRefreshingLocalizedText) {
+        SearchResultSkeletonMode.LocalizedText
+    } else {
+        SearchResultSkeletonMode.DetailMetadata
+    }
+}
+
 private fun searchRubberBandOffset(
     dragPx: Float,
     triggerPx: Float,
@@ -1097,6 +1115,10 @@ fun SearchScreen(
                                             contentType = { _, _ -> "album" }
                                         ) { _, album ->
                                             val onlineDetailLoading = onlineDetailLoadingFor(album, state)
+                                            val skeletonMode = searchResultSkeletonMode(
+                                                onlineDetailLoading = onlineDetailLoading,
+                                                isRefreshingLocalizedText = state.isRefreshingLocalizedText
+                                            )
                                             val rj = album.rjCode.ifBlank { album.workId }.trim().uppercase()
                                             val hasResolvedDetail = rj.isNotBlank() && rj in state.enrichedDetailRjCodes
                                             AlbumItem(
@@ -1107,8 +1129,13 @@ fun SearchScreen(
                                                     placementSpec = SearchResultPlacementSpring,
                                                     fadeOutSpec = null,
                                                 ),
-                                                onlineDetailLoading = onlineDetailLoading,
-                                                onlineCvLoading = onlineDetailLoading,
+                                                onlineDetailLoading =
+                                                    skeletonMode == SearchResultSkeletonMode.DetailMetadata,
+                                                onlineTitleLoading =
+                                                    skeletonMode == SearchResultSkeletonMode.LocalizedText,
+                                                onlineCvLoading =
+                                                    skeletonMode == SearchResultSkeletonMode.DetailMetadata,
+                                                onlineTagsLoading = skeletonMode != SearchResultSkeletonMode.None,
                                                 showCollectedIndicator = !state.collectedOnly,
                                                 showStatsPlaceholders = true,
                                                 coverFadeInState = coverFadeInState,
@@ -1170,6 +1197,10 @@ fun SearchScreen(
                                         ) { index ->
                                             val album = state.results[index]
                                             val onlineDetailLoading = onlineDetailLoadingFor(album, state)
+                                            val skeletonMode = searchResultSkeletonMode(
+                                                onlineDetailLoading = onlineDetailLoading,
+                                                isRefreshingLocalizedText = state.isRefreshingLocalizedText
+                                            )
                                             val rj = album.rjCode.ifBlank { album.workId }.trim().uppercase()
                                             val hasResolvedDetail = rj.isNotBlank() && rj in state.enrichedDetailRjCodes
                                             AlbumGridItem(
@@ -1180,8 +1211,13 @@ fun SearchScreen(
                                                     placementSpec = SearchResultPlacementSpring,
                                                     fadeOutSpec = null,
                                                 ),
-                                                onlineDetailLoading = onlineDetailLoading,
-                                                onlineCvLoading = onlineDetailLoading,
+                                                onlineDetailLoading =
+                                                    skeletonMode == SearchResultSkeletonMode.DetailMetadata,
+                                                onlineTitleLoading =
+                                                    skeletonMode == SearchResultSkeletonMode.LocalizedText,
+                                                onlineCvLoading =
+                                                    skeletonMode == SearchResultSkeletonMode.DetailMetadata,
+                                                onlineTagsLoading = skeletonMode != SearchResultSkeletonMode.None,
                                                 showCollectedIndicator = !state.collectedOnly,
                                                 showStatsPlaceholders = true,
                                                 coverFadeInState = coverFadeInState,
@@ -1288,6 +1324,12 @@ fun SearchScreen(
                         onClearKeyword = { clearKeywordAndSearch() },
                         onOptionsChanged = { options ->
                             val option = options.scope
+                            val resultSetOptionsChanged =
+                                option != selectedFilter ||
+                                    options.order != selectedOrder ||
+                                    options.collectedSort != selectedCollectedSort ||
+                                    options.hasSubtitle != hasSubtitle ||
+                                    options.allAges != allAges
                             val accepted = viewModel.updateSearchOptions(
                                 order = options.order,
                                 collectedSort = options.collectedSort,
@@ -1309,8 +1351,10 @@ fun SearchScreen(
                                 hasSubtitle = options.hasSubtitle
                                 allAges = options.allAges
                                 selectedLocale = options.locale
-                                scrollResultsToTop()
-                                chromeState.expand()
+                                if (resultSetOptionsChanged) {
+                                    scrollResultsToTop()
+                                    chromeState.expand()
+                                }
                             }
                         },
                         onFirstPage = {
@@ -1569,6 +1613,7 @@ internal fun SearchToolbar(
         locale = selectedLocale
     )
     val supportsWorkFilters = selectedFilter.supportsWorkFilters
+    val supportsSortAndLanguageOptions = selectedFilter.supportsSortAndLanguageOptions
     val activeWorkFilterCount = if (supportsWorkFilters) {
         (if (hasSubtitle) 1 else 0) + (if (allAges) 1 else 0)
     } else {
@@ -1581,8 +1626,8 @@ internal fun SearchToolbar(
     ).copy(alpha = if (colorScheme.isDark) 0.95f else 0.97f)
         .compositeOver(colorScheme.background)
 
-    LaunchedEffect(filterControlsLocked, searchSubmitLocked) {
-        if (filterControlsLocked || searchSubmitLocked) {
+    LaunchedEffect(filterControlsLocked, searchSubmitLocked, supportsSortAndLanguageOptions) {
+        if (filterControlsLocked || searchSubmitLocked || !supportsSortAndLanguageOptions) {
             filterMenuExpanded = false
             sortMenuExpanded = false
         }
@@ -1726,27 +1771,6 @@ internal fun SearchToolbar(
                             )
                         }
 
-                        if (!selectedFilter.isCollectedOnly) {
-                            SearchMenuSectionLabel("作品语言")
-                            SearchLocaleOptions.forEachIndexed { index, (locale, label) ->
-                                if (index > 0) {
-                                    SearchMenuDivider()
-                                }
-                                ActiveDropdownMenuItem(
-                                    label = label,
-                                    selected = locale == selectedLocale.trim(),
-                                    testTag = "${SEARCH_LANGUAGE_OPTION_TAG_PREFIX}_$locale",
-                                    activeColor = colorScheme.primary,
-                                    inactiveColor = colorScheme.textPrimary,
-                                    onClick = {
-                                        filterMenuExpanded = false
-                                        if (locale != selectedLocale.trim()) {
-                                            onOptionsChanged(options.copy(locale = locale))
-                                        }
-                                    }
-                                )
-                            }
-                        }
                     }
                 }
             },
@@ -1771,72 +1795,94 @@ internal fun SearchToolbar(
                             )
                         }
                     }
-                    Box {
-                        TextButton(
-                            onClick = { sortMenuExpanded = true },
-                            enabled = !filterControlsLocked,
-                            modifier = Modifier
-                                .defaultMinSize(minWidth = 1.dp, minHeight = 30.dp)
-                                .height(30.dp)
-                                .testTag(SEARCH_SORT_BUTTON_TAG),
-                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
-                            colors = ButtonDefaults.textButtonColors(
-                                contentColor = colorScheme.primary,
-                                disabledContentColor = colorScheme.textTertiary
-                            )
-                        ) {
-                            Text(
-                                text = if (selectedFilter.isCollectedOnly) {
-                                    selectedCollectedSort.label
+                    if (supportsSortAndLanguageOptions) {
+                        Box {
+                            TextButton(
+                                onClick = { sortMenuExpanded = true },
+                                enabled = !filterControlsLocked,
+                                modifier = Modifier
+                                    .defaultMinSize(minWidth = 1.dp, minHeight = 30.dp)
+                                    .height(30.dp)
+                                    .testTag(SEARCH_SORT_BUTTON_TAG),
+                                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp),
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = colorScheme.primary,
+                                    disabledContentColor = colorScheme.textTertiary
+                                )
+                            ) {
+                                Text(
+                                    text = if (selectedFilter.isCollectedOnly) {
+                                        selectedCollectedSort.label
+                                    } else {
+                                        selectedOrder.label
+                                    },
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = sortMenuExpanded,
+                                onDismissRequest = { sortMenuExpanded = false },
+                                modifier = Modifier.background(dropdownContainerColor)
+                            ) {
+                                if (selectedFilter.isCollectedOnly) {
+                                    SearchCollectedSortOption.entries.forEachIndexed { index, option ->
+                                        if (index > 0) {
+                                            SearchMenuDivider()
+                                        }
+                                        ActiveDropdownMenuItem(
+                                            label = option.label,
+                                            selected = option == selectedCollectedSort,
+                                            testTag = "${SEARCH_COLLECTED_SORT_OPTION_TAG_PREFIX}_${option.name}",
+                                            activeColor = colorScheme.primary,
+                                            inactiveColor = colorScheme.textPrimary,
+                                            onClick = {
+                                                sortMenuExpanded = false
+                                                if (option != selectedCollectedSort) {
+                                                    onOptionsChanged(options.copy(collectedSort = option))
+                                                }
+                                            }
+                                        )
+                                    }
                                 } else {
-                                    selectedOrder.label
-                                },
-                                style = MaterialTheme.typography.labelSmall,
-                                maxLines = 1
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = sortMenuExpanded,
-                            onDismissRequest = { sortMenuExpanded = false },
-                            modifier = Modifier.background(dropdownContainerColor)
-                        ) {
-                            if (selectedFilter.isCollectedOnly) {
-                                SearchCollectedSortOption.entries.forEachIndexed { index, option ->
-                                    if (index > 0) {
-                                        SearchMenuDivider()
-                                    }
-                                    ActiveDropdownMenuItem(
-                                        label = option.label,
-                                        selected = option == selectedCollectedSort,
-                                        testTag = "${SEARCH_COLLECTED_SORT_OPTION_TAG_PREFIX}_${option.name}",
-                                        activeColor = colorScheme.primary,
-                                        inactiveColor = colorScheme.textPrimary,
-                                        onClick = {
-                                            sortMenuExpanded = false
-                                            if (option != selectedCollectedSort) {
-                                                onOptionsChanged(options.copy(collectedSort = option))
-                                            }
+                                    SearchSortOption.entries.forEachIndexed { index, option ->
+                                        if (index > 0) {
+                                            SearchMenuDivider()
                                         }
-                                    )
-                                }
-                            } else {
-                                SearchSortOption.entries.forEachIndexed { index, option ->
-                                    if (index > 0) {
-                                        SearchMenuDivider()
-                                    }
-                                    ActiveDropdownMenuItem(
-                                        label = option.label,
-                                        selected = option == selectedOrder,
-                                        testTag = "${SEARCH_SORT_OPTION_TAG_PREFIX}_${option.name}",
-                                        activeColor = colorScheme.primary,
-                                        inactiveColor = colorScheme.textPrimary,
-                                        onClick = {
-                                            sortMenuExpanded = false
-                                            if (option != selectedOrder) {
-                                                onOptionsChanged(options.copy(order = option))
+                                        ActiveDropdownMenuItem(
+                                            label = option.label,
+                                            selected = option == selectedOrder,
+                                            testTag = "${SEARCH_SORT_OPTION_TAG_PREFIX}_${option.name}",
+                                            activeColor = colorScheme.primary,
+                                            inactiveColor = colorScheme.textPrimary,
+                                            onClick = {
+                                                sortMenuExpanded = false
+                                                if (option != selectedOrder) {
+                                                    onOptionsChanged(options.copy(order = option))
+                                                }
                                             }
+                                        )
+                                    }
+
+                                    SearchMenuSectionLabel("作品语言")
+                                    SearchLocaleOptions.forEachIndexed { index, (locale, label) ->
+                                        if (index > 0) {
+                                            SearchMenuDivider()
                                         }
-                                    )
+                                        ActiveDropdownMenuItem(
+                                            label = label,
+                                            selected = locale == selectedLocale.trim(),
+                                            testTag = "${SEARCH_LANGUAGE_OPTION_TAG_PREFIX}_$locale",
+                                            activeColor = colorScheme.primary,
+                                            inactiveColor = colorScheme.textPrimary,
+                                            onClick = {
+                                                sortMenuExpanded = false
+                                                if (locale != selectedLocale.trim()) {
+                                                    onOptionsChanged(options.copy(locale = locale))
+                                                }
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }

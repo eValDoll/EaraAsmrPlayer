@@ -184,7 +184,9 @@ fun AlbumItem(
     onTagLongClick: ((String) -> Unit)? = null,
     coverBadge: AlbumCoverBadge? = null,
     onlineDetailLoading: Boolean = false,
+    onlineTitleLoading: Boolean = false,
     onlineCvLoading: Boolean = onlineDetailLoading,
+    onlineTagsLoading: Boolean = onlineDetailLoading,
     animateOnlineDetails: Boolean = true,
     coverFadeIn: Boolean = true,
     coverFadeInState: State<Boolean>? = null,
@@ -349,17 +351,21 @@ fun AlbumItem(
                     maxGap = 10.dp,
                 ) {
                     val rj = album.rjCode.ifBlank { album.workId }
-                    Text(
-                        text = album.title,
-                        style = MaterialTheme.typography.titleSmall.copy(
-                            fontSize = 16.sp,
-                            lineHeight = 22.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        ),
-                        color = colorScheme.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    if (onlineTitleLoading) {
+                        AlbumDetailSkeletonLine(widthFraction = 0.94f)
+                    } else {
+                        Text(
+                            text = album.title,
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontSize = 16.sp,
+                                lineHeight = 22.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            ),
+                            color = colorScheme.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
 
                     AlbumItemPrimaryMetaLightweight(
                         rjCode = rj,
@@ -383,8 +389,8 @@ fun AlbumItem(
                         )
                     }
                     AlbumOnlineDetailAnimatedLine(
-                        content = tagsStateContent,
-                        loading = onlineDetailLoading,
+                        content = if (onlineTagsLoading) "" else tagsStateContent,
+                        loading = onlineTagsLoading,
                         animated = animateOnlineDetails,
                         loadingContent = {
                             AlbumDetailSkeletonLine(widthFraction = 0.86f)
@@ -489,7 +495,9 @@ fun AlbumGridItem(
     onTagLongClick: ((String) -> Unit)? = null,
     coverBadge: AlbumCoverBadge? = null,
     onlineDetailLoading: Boolean = false,
+    onlineTitleLoading: Boolean = false,
     onlineCvLoading: Boolean = onlineDetailLoading,
+    onlineTagsLoading: Boolean = onlineDetailLoading,
     animateOnlineDetails: Boolean = true,
     coverFadeIn: Boolean = true,
     coverFadeInState: State<Boolean>? = null,
@@ -584,17 +592,24 @@ fun AlbumGridItem(
                 .padding(horizontal = AlbumGridInfoHorizontalPadding, vertical = AlbumGridInfoVerticalPadding),
             verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            Text(
-                text = album.title,
-                style = MaterialTheme.typography.titleSmall.copy(
-                    fontSize = 16.sp,
-                    lineHeight = 22.sp,
-                    fontWeight = FontWeight.SemiBold,
-                ),
-                color = colorScheme.textPrimary,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (onlineTitleLoading) {
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    AlbumDetailSkeletonLine(widthFraction = 0.96f)
+                    AlbumDetailSkeletonLine(widthFraction = 0.68f)
+                }
+            } else {
+                Text(
+                    text = album.title,
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 16.sp,
+                        lineHeight = 22.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                    color = colorScheme.textPrimary,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
 
             val rj = album.rjCode.ifBlank { album.workId }
             AlbumItemPrimaryMetaLightweight(
@@ -640,8 +655,8 @@ fun AlbumGridItem(
             }
 
             AlbumOnlineDetailAnimatedLine(
-                content = tagsStateContent,
-                loading = onlineDetailLoading,
+                content = if (onlineTagsLoading) "" else tagsStateContent,
+                loading = onlineTagsLoading,
                 animated = animateOnlineDetails,
                 loadingContent = {
                     AlbumDetailSkeletonLine(widthFraction = 0.92f)

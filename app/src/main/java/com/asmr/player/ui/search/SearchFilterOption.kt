@@ -60,6 +60,9 @@ enum class SearchFilterOption(
     val supportsWorkFilters: Boolean
         get() = mode == SearchFilterMode.CollectedOnly || mode == SearchFilterMode.Standard
 
+    val supportsSortAndLanguageOptions: Boolean
+        get() = mode != SearchFilterMode.PurchasedOnly && mode != SearchFilterMode.PresaleOnly
+
     companion object {
         fun fromState(
             purchasedOnly: Boolean,
