@@ -1051,7 +1051,8 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     onPersistScroll: (Int, Int) -> Unit,
     dlsiteRecommendations: DlsiteRecommendations,
     onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit,
-    loadRemoteFileSize: suspend (String) -> Long?
+    loadRemoteFileSize: suspend (String) -> Long?,
+    onListStateAvailable: (LazyListState?) -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     val colorScheme = AsmrTheme.colorScheme
@@ -1082,6 +1083,10 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     }
     val listState = rememberSaveable("scroll:$treeStateKey", saver = LazyListState.Saver) {
         LazyListState(initialScroll.first, initialScroll.second)
+    }
+    DisposableEffect(listState) {
+        onListStateAvailable(listState)
+        onDispose { onListStateAvailable(null) }
     }
     PersistAlbumDetailListScroll(
         listState = listState,
@@ -1514,7 +1519,8 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
     initialScroll: Pair<Int, Int>,
     onPersistScroll: (Int, Int) -> Unit,
     loadRemoteFileSize: suspend (String) -> Long?,
-    prepareImagePreview: suspend (String, String?, Boolean, Int?, Int?) -> String?
+    prepareImagePreview: suspend (String, String?, Boolean, Int?, Int?) -> String?,
+    onListStateAvailable: (LazyListState?) -> Unit = {}
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -1555,6 +1561,10 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
     val restoredIndex = if (initialScroll.first <= 0) 0 else initialScroll.first + headerItemCount
     val listState = rememberSaveable("scroll:$treeStateKey", saver = LazyListState.Saver) {
         LazyListState(restoredIndex, initialScroll.second)
+    }
+    DisposableEffect(listState) {
+        onListStateAvailable(listState)
+        onDispose { onListStateAvailable(null) }
     }
     PersistAlbumDetailListScroll(
         listState = listState,

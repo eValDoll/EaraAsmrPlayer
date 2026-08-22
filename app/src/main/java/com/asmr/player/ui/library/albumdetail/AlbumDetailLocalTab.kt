@@ -169,6 +169,7 @@ internal fun AlbumLocalBreadcrumbTabV2(
     onSubtitleGenerationError: (String) -> Unit,
     onSubtitleGenerationUnavailable: (String) -> Unit,
     onSubtitleGenerationQueued: (String) -> Unit,
+    onListStateAvailable: (LazyListState?) -> Unit = {},
 ) {
     var locallyDeletedTrackIds by remember(stateKey) { mutableStateOf(emptySet<Long>()) }
     var treeRevision by rememberSaveable(stateKey) { mutableIntStateOf(0) }
@@ -200,6 +201,10 @@ internal fun AlbumLocalBreadcrumbTabV2(
 
     val listState = rememberSaveable("scroll:$stateKey", saver = LazyListState.Saver) {
         LazyListState(initialScroll.first, initialScroll.second)
+    }
+    DisposableEffect(listState) {
+        onListStateAvailable(listState)
+        onDispose { onListStateAvailable(null) }
     }
     PersistAlbumDetailListScroll(
         listState = listState,
