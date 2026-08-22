@@ -80,6 +80,31 @@ class AlbumDetailLandscapeLayoutTest {
     }
 
     @Test
+    fun landscapeLyricsViewport_growsWithVisibleSurfaceDuringCollapse() {
+        val surfaceHeightPx = 680
+        val collapseMaxPx = 108f
+
+        assertEquals(
+            572,
+            albumLandscapeLyricsViewportHeightPx(surfaceHeightPx, 0f, collapseMaxPx)
+        )
+        assertEquals(
+            626,
+            albumLandscapeLyricsViewportHeightPx(surfaceHeightPx, 54f, collapseMaxPx)
+        )
+        assertEquals(
+            680,
+            albumLandscapeLyricsViewportHeightPx(surfaceHeightPx, collapseMaxPx, collapseMaxPx)
+        )
+    }
+
+    @Test
+    fun landscapeSpectrum_startsHigherAndFollowsCollapsePartially() {
+        assertEquals(114f, albumLandscapeSpectrumOffsetY(300.dp).value, 0.01f)
+        assertEquals(-68.88f, albumLandscapeSpectrumTranslationY(84f), 0.01f)
+    }
+
+    @Test
     fun landscapePlaybackProgress_isReadOnlyFractionClampedToTrackDuration() {
         assertEquals(0f, albumLandscapePlaybackProgress(20_000L, 0L), 0.001f)
         assertEquals(0.25f, albumLandscapePlaybackProgress(15_000L, 60_000L), 0.001f)

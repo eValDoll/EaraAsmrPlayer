@@ -91,7 +91,7 @@ internal fun AlbumHeroPrimaryMetaLightweight(
                     .combinedClickable(onClick = { rjOnClick?.invoke() })
                     .padding(horizontal = 2.dp, vertical = 2.dp),
                 style = MaterialTheme.typography.labelMedium.copy(
-                    fontSize = if (emphasized) 13.sp else 12.sp,
+                    fontSize = 12.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = 0.35.sp,
                     shadow = textShadow,
@@ -132,7 +132,7 @@ internal fun AlbumHeroPrimaryMetaLightweight(
                 Text(
                     text = normalizedCircle,
                     style = MaterialTheme.typography.labelMedium.copy(
-                        fontSize = if (emphasized) 14.sp else 13.sp,
+                        fontSize = if (emphasized) 12.sp else 13.sp,
                         shadow = textShadow,
                     ),
                     color = contentColor,
@@ -499,7 +499,7 @@ internal fun AlbumHeaderCvLightweight(
                 Text(
                     text = cv,
                     style = MaterialTheme.typography.labelMedium.copy(
-                        fontSize = if (emphasized) 14.sp else 13.sp
+                        fontSize = if (emphasized) 12.sp else 13.sp
                     ),
                     color = colorScheme.textPrimary,
                     maxLines = 1,
@@ -568,7 +568,7 @@ internal fun AlbumHeaderTagsLightweight(
                 Text(
                     text = if (tag.startsWith("#")) tag else "#$tag",
                     style = MaterialTheme.typography.labelMedium.copy(
-                        fontSize = if (emphasized) 14.sp else 13.sp
+                        fontSize = if (emphasized) 12.sp else 13.sp
                     ),
                     color = colorScheme.textSecondary,
                     maxLines = 1,

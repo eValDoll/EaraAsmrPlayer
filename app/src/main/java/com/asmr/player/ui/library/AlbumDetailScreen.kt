@@ -169,13 +169,12 @@ import com.asmr.player.ui.groups.AlbumGroupsViewModel
 import com.asmr.player.ui.groups.AlbumGroupPickerScreen
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.playlists.PlaylistsViewModel
-import com.asmr.player.ui.player.AppleLyricsView
 import com.asmr.player.ui.player.LyricsViewModel
+import com.asmr.player.ui.player.NowPlayingLyricsSurface
 import com.asmr.player.ui.player.PlayerViewModel
 import com.asmr.player.ui.player.rememberLyricReadableColors
 import com.asmr.player.ui.settings.SettingsViewModel
 import com.asmr.player.ui.theme.AsmrTheme
-import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
@@ -265,6 +264,8 @@ private val AlbumLandscapeArtworkContentGap = 12.dp
 private val AlbumLandscapeSurfaceBorderWidth = 0.5.dp
 private val AlbumLandscapeCollapsedArtworkShiftX = 24.dp
 private val AlbumLandscapeCollapsedArtworkShiftY = 18.dp
+private const val AlbumLandscapeSpectrumArtworkOffsetFraction = 0.26f
+private const val AlbumLandscapeSpectrumCollapseFollowFraction = 0.82f
 
 internal fun shouldUseAlbumDetailLandscapeLayout(
     compactWidth: Boolean,
@@ -303,6 +304,55 @@ internal fun albumLandscapePlaybackProgress(positionMs: Long, durationMs: Long):
 
 internal fun albumLandscapeSurfaceHeight(contentViewportHeight: Dp, artworkSize: Dp): Dp {
     return contentViewportHeight + albumLandscapeCollapseDistance(artworkSize)
+}
+
+internal fun albumLandscapeLyricsViewportHeightPx(
+    surfaceHeightPx: Int,
+    collapsePx: Float,
+    collapseMaxPx: Float
+): Int {
+    if (surfaceHeightPx <= 0) return 0
+    val safeCollapseMaxPx = collapseMaxPx.coerceAtLeast(0f)
+    val hiddenBottomPx = (
+        safeCollapseMaxPx - collapsePx.coerceIn(0f, safeCollapseMaxPx)
+        ).roundToInt()
+    return (surfaceHeightPx - hiddenBottomPx).coerceIn(0, surfaceHeightPx)
+}
+
+internal fun albumLandscapeSpectrumOffsetY(artworkSize: Dp): Dp {
+    return AlbumLandscapeArtworkTopPadding +
+        artworkSize * AlbumLandscapeSpectrumArtworkOffsetFraction
+}
+
+internal fun albumLandscapeSpectrumTranslationY(collapsePx: Float): Float {
+    return -collapsePx.coerceAtLeast(0f) * AlbumLandscapeSpectrumCollapseFollowFraction
+}
+
+private fun Modifier.albumLandscapeLyricsViewportHeight(
+    collapsePx: () -> Float,
+    collapseMaxPx: Float
+): Modifier = layout { measurable, constraints ->
+    if (!constraints.hasBoundedHeight) {
+        val placeable = measurable.measure(constraints)
+        layout(placeable.width, placeable.height) {
+            placeable.placeRelative(0, 0)
+        }
+    } else {
+        val viewportHeight = albumLandscapeLyricsViewportHeightPx(
+            surfaceHeightPx = constraints.maxHeight,
+            collapsePx = collapsePx(),
+            collapseMaxPx = collapseMaxPx
+        ).coerceAtLeast(constraints.minHeight)
+        val placeable = measurable.measure(
+            constraints.copy(
+                minHeight = viewportHeight,
+                maxHeight = viewportHeight
+            )
+        )
+        layout(placeable.width, viewportHeight) {
+            placeable.placeRelative(0, 0)
+        }
+    }
 }
 
 private class AlbumDetailIntroState(var settled: Boolean)
@@ -1390,8 +1440,11 @@ fun AlbumDetailScreen(
                                         settingsViewModel = settingsViewModel,
                                         modifier = Modifier
                                             .align(Alignment.TopStart)
-                                            .fillMaxHeight()
                                             .width(landscapeHeaderStart)
+                                            .albumLandscapeLyricsViewportHeight(
+                                                collapsePx = { heroMotion.collapsePx },
+                                                collapseMaxPx = heroCollapseMaxPx
+                                            )
                                             .padding(
                                                 start = 20.dp,
                                                 end = 12.dp,
@@ -1851,8 +1904,8 @@ private fun rememberAlbumLandscapeArtworkRibbonCoreShape(edgeInset: Dp): Shape {
     return remember(edgeInsetPx) {
         GenericShape { size, _ ->
             val inset = edgeInsetPx.coerceAtMost(size.height * 0.08f)
-            moveTo(0f, inset)
-            lineTo(size.width, inset)
+            moveTo(0f, 0f)
+            lineTo(size.width, 0f)
             lineTo(size.width, size.height * 0.88f - inset)
             cubicTo(
                 size.width * 0.82f,
@@ -1962,9 +2015,9 @@ private fun AlbumDetailLandscapeArtworkBackdrop(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(94.dp)
-                .offset(y = AlbumLandscapeArtworkTopPadding + artworkSize * 0.30f)
+                .offset(y = albumLandscapeSpectrumOffsetY(artworkSize))
                 .graphicsLayer {
-                    translationY = -collapsePx().coerceAtLeast(0f)
+                    translationY = albumLandscapeSpectrumTranslationY(collapsePx())
                 }
         )
     }
@@ -2142,8 +2195,8 @@ private fun AlbumDetailLandscapeIdentity(
             modifier = Modifier.clickable { copyMeta("标题", identity.title) },
             style = MaterialTheme.typography.headlineMedium.copy(
                 fontWeight = FontWeight.Bold,
-                fontSize = 28.sp,
-                lineHeight = 34.sp,
+                fontSize = 24.sp,
+                lineHeight = 30.sp,
                 shadow = titleShadow
             ),
             color = colorScheme.textPrimary,
@@ -2186,7 +2239,9 @@ private fun AlbumDetailLandscapeLyricsPane(
     val lyricsState by lyricsViewModel.uiState.collectAsStateWithLifecycle()
     val playback by playerViewModel.playback.collectAsStateWithLifecycle()
     val lyricsPageSettings by settingsViewModel.lyricsPageSettings.collectAsStateWithLifecycle()
-    val bottomOverlayPadding = LocalBottomOverlayPadding.current
+    val expandedLyricsSettings = remember(lyricsPageSettings) {
+        lyricsPageSettings.copy(displayAreaMode = 0)
+    }
     val lyricColors = rememberLyricReadableColors(
         accentColor = colorScheme.primaryStrong,
         backdropTintColor = pageContainerColor,
@@ -2200,7 +2255,7 @@ private fun AlbumDetailLandscapeLyricsPane(
         .orEmpty()
 
     Column(
-        modifier = modifier.padding(bottom = bottomOverlayPadding + 12.dp),
+        modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
@@ -2208,13 +2263,15 @@ private fun AlbumDetailLandscapeLyricsPane(
             style = MaterialTheme.typography.labelMedium,
             color = colorScheme.primaryStrong
         )
-        Text(
-            text = currentTitle.ifBlank { "尚未播放音频" },
-            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-            color = colorScheme.textPrimary,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
+        if (currentTitle.isNotBlank()) {
+            Text(
+                text = currentTitle,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+                color = colorScheme.textPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
 
         Box(
             modifier = Modifier
@@ -2224,12 +2281,14 @@ private fun AlbumDetailLandscapeLyricsPane(
             when {
                 playback.currentMediaItem == null -> {
                     Text(
-                        text = "播放音频后，这里会显示同步滚动歌词",
+                        text = "尚未播放音频",
                         modifier = Modifier
                             .align(Alignment.Center)
                             .fillMaxWidth(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colorScheme.textSecondary,
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = colorScheme.textPrimary,
                         textAlign = TextAlign.Center
                     )
                 }
@@ -2257,17 +2316,26 @@ private fun AlbumDetailLandscapeLyricsPane(
                 }
 
                 else -> {
-                    AppleLyricsView(
+                    NowPlayingLyricsSurface(
+                        isLandscape = false,
+                        playbackPositionMs = playback.positionMs,
                         lyrics = lyricsState.lyrics,
-                        currentPosition = playback.positionMs,
+                        lyricColors = lyricColors,
+                        accentColor = colorScheme.primaryStrong,
+                        onAccentColor = colorScheme.onPrimary,
+                        lyricsPageSettings = expandedLyricsSettings,
                         onSeekTo = playerViewModel::seekTo,
-                        colors = lyricColors,
-                        modifier = Modifier.fillMaxSize(),
-                        isLandscape = true,
-                        settings = lyricsPageSettings,
+                        onTimelinePlay = { targetMs ->
+                            playerViewModel.seekTo(targetMs)
+                            playerViewModel.play()
+                        },
                         stableFocusAnchor = true,
+                        expandedHomeVisualEffects = true,
+                        lyricItemOuterHorizontalPadding = 6.dp,
+                        lyricItemInnerHorizontalPadding = 8.dp,
                         contentKey = lyricsState.contentKey,
-                        contentVisible = !lyricsState.isLoading
+                        contentVisible = !lyricsState.isLoading,
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
             }
@@ -2705,7 +2773,7 @@ private fun AlbumOnlineListenerInfo(
                 Text(
                     text = "$count 人正在听",
                     style = MaterialTheme.typography.labelSmall.copy(
-                        fontSize = if (emphasized) 13.sp else MaterialTheme.typography.labelSmall.fontSize,
+                        fontSize = if (emphasized) 12.sp else MaterialTheme.typography.labelSmall.fontSize,
                         shadow = textShadow
                     ),
                     color = contentColor,
@@ -3099,7 +3167,7 @@ private fun AlbumHeaderActionBar(
                             onClick = onGroupClick,
                             shape = floatingSegmentShape,
                             modifier = Modifier
-                                .width(62.dp)
+                                .widthIn(min = 62.dp)
                                 .fillMaxHeight(),
                         )
                     }
@@ -3115,7 +3183,6 @@ private fun AlbumHeaderActionBar(
                         val languageSelectable = langCandidates.size > 1
                         Box(
                             modifier = Modifier
-                                .width(if (compact) 54.dp else 64.dp)
                                 .fillMaxHeight()
                         ) {
                             AlbumHeaderBarAction(
@@ -3125,7 +3192,9 @@ private fun AlbumHeaderActionBar(
                                 enabled = languageSelectable,
                                 onClick = { languageMenuExpanded = true },
                                 shape = floatingSegmentShape,
-                                modifier = Modifier.fillMaxSize(),
+                                modifier = Modifier
+                                    .widthIn(min = 64.dp)
+                                    .fillMaxHeight(),
                             )
                             AlbumHeaderLanguageDropdownMenu(
                                 expanded = languageMenuExpanded,
@@ -3161,7 +3230,7 @@ private fun AlbumHeaderActionBar(
                         },
                         shape = floatingSegmentShape,
                         modifier = Modifier
-                            .width(58.dp)
+                            .widthIn(min = 58.dp)
                             .fillMaxHeight(),
                     )
 
@@ -3184,7 +3253,7 @@ private fun AlbumHeaderActionBar(
                         },
                         shape = floatingSegmentShape,
                         modifier = Modifier
-                            .width(if (compact) 42.dp else 46.dp)
+                            .widthIn(min = 46.dp)
                             .fillMaxHeight(),
                     )
                 }
