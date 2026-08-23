@@ -3247,7 +3247,6 @@ internal fun DirectoryBrowserPanelV4(
         (screenHeight * 0.48f).coerceIn(240.dp, 460.dp)
     }
     val colorScheme = AsmrTheme.colorScheme
-    val containerColor = dynamicPageContainerColor(colorScheme)
     val sectionDividerColor = colorScheme.textTertiary.copy(alpha = if (colorScheme.isDark) 0.14f else 0.09f)
 
     LaunchedEffect(panelKey, currentPath) {
@@ -3258,7 +3257,7 @@ internal fun DirectoryBrowserPanelV4(
         shape = RoundedCornerShape(DirectoryBrowserPanelCornerRadius),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        color = containerColor,
+        color = Color.Transparent,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = AlbumDetailHorizontalPadding, vertical = DirectoryBrowserPanelVerticalPadding)
