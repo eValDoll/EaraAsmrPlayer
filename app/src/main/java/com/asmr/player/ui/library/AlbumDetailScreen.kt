@@ -1626,46 +1626,37 @@ fun AlbumDetailScreen(
                 }
 
                 groupPickerAlbumId?.let { targetAlbumId ->
-                    Dialog(
+                    AlbumDetailPickerSheet(
                         onDismissRequest = { groupPickerAlbumId = null },
-                        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+                        color = MaterialTheme.colorScheme.background,
+                        contentColor = colorScheme.textPrimary
                     ) {
-                        AlbumDetailPickerSheetSurface(
-                            color = MaterialTheme.colorScheme.background,
-                            contentColor = colorScheme.textPrimary
-                        ) {
-                            AlbumGroupPickerScreen(
-                                windowSizeClass = windowSizeClass,
-                                albumId = targetAlbumId,
-                                onBack = { groupPickerAlbumId = null },
-                                embeddedInDialog = true
-                            )
-                        }
+                        AlbumGroupPickerScreen(
+                            windowSizeClass = windowSizeClass,
+                            albumId = targetAlbumId,
+                            onBack = { groupPickerAlbumId = null },
+                            embeddedInDialog = true
+                        )
                     }
                 }
 
                 batchPlaylistItems?.let { items ->
-                    Dialog(
+                    AlbumDetailPickerSheet(
                         onDismissRequest = { batchPlaylistItems = null },
-                        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+                        color = colorScheme.background.copy(alpha = 0.96f),
+                        contentColor = colorScheme.textPrimary
                     ) {
-                        Surface(
-                            modifier = Modifier.fillMaxSize(),
-                            color = colorScheme.background.copy(alpha = 0.96f),
-                            contentColor = colorScheme.textPrimary
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 12.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(horizontal = 12.dp)
-                            ) {
-                                PlaylistPickerScreen(
-                                    windowSizeClass = windowSizeClass,
-                                    items = items,
-                                    onBack = { batchPlaylistItems = null },
-                                    embeddedInDialog = true
-                                )
-                            }
+                            PlaylistPickerScreen(
+                                windowSizeClass = windowSizeClass,
+                                items = items,
+                                onBack = { batchPlaylistItems = null },
+                                embeddedInDialog = true
+                            )
                         }
                     }
                 }
