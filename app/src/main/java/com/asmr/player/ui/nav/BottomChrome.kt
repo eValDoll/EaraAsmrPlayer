@@ -152,6 +152,16 @@ internal fun bottomChromeWidthLimit(availableWidth: Dp, largeLayout: Boolean): D
     return availableWidth.coerceAtMost(maximumWidth)
 }
 
+internal fun bottomChromeMiniPlayerExpandedWidth(
+    chromeWidthLimit: Dp,
+    collapsedNavWidth: Dp,
+    chromeSpacing: Dp,
+    minimumWidth: Dp,
+    expandedNavWidth: Dp
+): Dp = (chromeWidthLimit - collapsedNavWidth - chromeSpacing)
+    .coerceAtLeast(minimumWidth)
+    .coerceAtMost(expandedNavWidth)
+
 data class BottomChromeNavItem(
     val icon: ImageVector,
     val label: String,
@@ -561,15 +571,14 @@ fun BottomChrome(
         val miniExpandedMinWidth = (if (largeLayout) 244.dp else 204.dp) * compactScale
         val chromeSpacing = baseChromeSpacing * compactScale
         val expandedNavWidthLimit = chromeWidthLimit.coerceAtMost(metrics.preferredExpandedWidth)
-        val miniExpandedWidth = (chromeWidthLimit - metrics.collapsedWidth - chromeSpacing)
-            .coerceAtLeast(miniExpandedMinWidth)
-        val expandedNavWidth = if (!miniPlayerVisible) {
-            expandedNavWidthLimit
-        } else {
-            (chromeWidthLimit - miniCollapsedWidth - chromeSpacing)
-                .coerceAtLeast(metrics.preferredExpandedWidth)
-                .coerceAtMost(expandedNavWidthLimit)
-        }
+        val expandedNavWidth = expandedNavWidthLimit
+        val miniExpandedWidth = bottomChromeMiniPlayerExpandedWidth(
+            chromeWidthLimit = chromeWidthLimit,
+            collapsedNavWidth = metrics.collapsedWidth,
+            chromeSpacing = chromeSpacing,
+            minimumWidth = miniExpandedMinWidth,
+            expandedNavWidth = expandedNavWidth
+        )
         val expansionProgress by animateFloatAsState(
             targetValue = if (miniPlayerVisible && miniPlayerDisplayMode == MiniPlayerDisplayMode.Expanded) 1f else 0f,
             animationSpec = spring(
