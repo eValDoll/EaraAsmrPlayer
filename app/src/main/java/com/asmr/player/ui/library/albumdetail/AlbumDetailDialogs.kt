@@ -122,6 +122,7 @@ import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
 import com.asmr.player.ui.common.CvChipsFlow
+import com.asmr.player.ui.common.EdgeToEdgeFullHeightSheet
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.collapsibleHeaderUiState
@@ -140,7 +141,6 @@ private val AlbumDetailPickerSheetTopRadius = 28.dp
 private val AlbumDetailPickerSheetTopGap = 11.dp
 private val AlbumDetailPickerSheetContentTopInset = 12.dp
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AlbumDetailPickerSheet(
     onDismissRequest: () -> Unit,
@@ -148,22 +148,17 @@ internal fun AlbumDetailPickerSheet(
     contentColor: Color = MaterialTheme.colorScheme.onBackground,
     content: @Composable () -> Unit
 ) {
-    ModalBottomSheet(
+    EdgeToEdgeFullHeightSheet(
         onDismissRequest = onDismissRequest,
         modifier = Modifier
             .fillMaxHeight()
             .padding(top = AlbumDetailPickerSheetTopGap),
-        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-        sheetMaxWidth = Dp.Unspecified,
         shape = RoundedCornerShape(
             topStart = AlbumDetailPickerSheetTopRadius,
             topEnd = AlbumDetailPickerSheetTopRadius
         ),
         containerColor = color,
-        contentColor = contentColor,
-        scrimColor = Color.Black.copy(alpha = 0.32f),
-        dragHandle = null,
-        windowInsets = WindowInsets(0, 0, 0, 0)
+        contentColor = contentColor
     ) {
         Box(
             modifier = Modifier

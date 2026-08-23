@@ -132,6 +132,7 @@ import com.asmr.player.ui.common.FlatActionDialog
 import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.FlatTextFieldDialog
+import com.asmr.player.ui.common.EdgeToEdgeFullHeightSheet
 import com.asmr.player.ui.common.EaraTopBarContainer
 import com.asmr.player.ui.common.EaraMainTopBarHeight
 import com.asmr.player.ui.common.EaraTopBarIconButton
@@ -249,8 +250,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.ui.common.AppVolumeVerticalSlider
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -3041,73 +3040,32 @@ fun MainContainer(
                 )
                 nowPlayingPlaylistPickerRequest?.let { request ->
                     val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
-                    Dialog(
+                    EdgeToEdgeFullHeightSheet(
                         onDismissRequest = { nowPlayingPlaylistPickerRequest = null },
-                        properties = DialogProperties(usePlatformDefaultWidth = false)
+                        containerColor = colorScheme.background.copy(alpha = 0.96f),
+                        contentColor = colorScheme.onBackground
                     ) {
-                        Surface(
-                            modifier = Modifier.fillMaxSize(),
-                            color = colorScheme.background.copy(alpha = 0.96f),
-                            contentColor = colorScheme.onBackground
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .windowInsetsPadding(StableWindowInsets.statusBars)
+                                .windowInsetsPadding(StableWindowInsets.navigationBars)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .windowInsetsPadding(StableWindowInsets.statusBars)
-                                    .windowInsetsPadding(StableWindowInsets.navigationBars)
-                            ) {
-                                PlaylistPickerScreen(
-                                    windowSizeClass = windowSizeClass,
-                                    items = request.items,
-                                    onBack = { nowPlayingPlaylistPickerRequest = null },
-                                    embeddedInDialog = true,
-                                    viewModel = playlistsViewModel
-                                )
-                            }
+                            PlaylistPickerScreen(
+                                windowSizeClass = windowSizeClass,
+                                items = request.items,
+                                onBack = { nowPlayingPlaylistPickerRequest = null },
+                                embeddedInDialog = true,
+                                viewModel = playlistsViewModel
+                            )
                         }
                     }
                 }
                 albumBatchPlaylistPickerRequest?.let { request ->
                     val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
-                    Dialog(
+                    EdgeToEdgeFullHeightSheet(
                         onDismissRequest = { albumBatchPlaylistPickerRequest = null },
-                        properties = DialogProperties(usePlatformDefaultWidth = false)
-                    ) {
-                        Surface(
-                            modifier = Modifier.fillMaxSize(),
-                            color = colorScheme.background.copy(alpha = 0.96f),
-                            contentColor = colorScheme.onBackground
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .windowInsetsPadding(StableWindowInsets.statusBars)
-                                    .windowInsetsPadding(StableWindowInsets.navigationBars)
-                            ) {
-                                PlaylistPickerScreen(
-                                    windowSizeClass = windowSizeClass,
-                                    items = request.items,
-                                    onBack = { albumBatchPlaylistPickerRequest = null },
-                                    embeddedInDialog = true,
-                                    viewModel = playlistsViewModel
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (!nowPlayingVisible) {
-            albumBatchPlaylistPickerRequest?.let { request ->
-                val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
-                Dialog(
-                    onDismissRequest = { albumBatchPlaylistPickerRequest = null },
-                    properties = DialogProperties(usePlatformDefaultWidth = false)
-                ) {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = colorScheme.background.copy(alpha = 0.96f),
+                        containerColor = colorScheme.background.copy(alpha = 0.96f),
                         contentColor = colorScheme.onBackground
                     ) {
                         Box(
@@ -3124,6 +3082,32 @@ fun MainContainer(
                                 viewModel = playlistsViewModel
                             )
                         }
+                    }
+                }
+            }
+        }
+
+        if (!nowPlayingVisible) {
+            albumBatchPlaylistPickerRequest?.let { request ->
+                val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
+                EdgeToEdgeFullHeightSheet(
+                    onDismissRequest = { albumBatchPlaylistPickerRequest = null },
+                    containerColor = colorScheme.background.copy(alpha = 0.96f),
+                    contentColor = colorScheme.onBackground
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .windowInsetsPadding(StableWindowInsets.statusBars)
+                            .windowInsetsPadding(StableWindowInsets.navigationBars)
+                    ) {
+                        PlaylistPickerScreen(
+                            windowSizeClass = windowSizeClass,
+                            items = request.items,
+                            onBack = { albumBatchPlaylistPickerRequest = null },
+                            embeddedInDialog = true,
+                            viewModel = playlistsViewModel
+                        )
                     }
                 }
             }
