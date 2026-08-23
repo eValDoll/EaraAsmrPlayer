@@ -163,7 +163,7 @@ android {
 }
 
 dependencies {
-    val media3_version = "1.2.1"
+    val media3_version = "1.8.0"
     val room_version = "2.6.1"
     val hilt_version = "2.49"
     val paging_version = "3.2.1"
