@@ -15,6 +15,8 @@ import androidx.compose.ui.unit.dp
 import com.asmr.player.ui.theme.AsmrColorScheme
 import com.asmr.player.ui.theme.AsmrTheme
 
+internal val EaraMainTopBarHeight = 48.dp
+
 internal fun resolveMainPageBackgroundColor(colorScheme: AsmrColorScheme): Color {
     return if (colorScheme.isDark) {
         colorScheme.background

@@ -10,10 +10,11 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -42,8 +43,7 @@ fun AppMessageOverlay(
     Column(
         modifier = modifier
             .widthIn(max = 360.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        horizontalAlignment = Alignment.Start
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
         messages.asReversed().forEach { msg ->
             key(msg.id) {
@@ -73,6 +73,10 @@ fun AppMessageOverlay(
                         scaleOut(
                             animationSpec = tween(durationMillis = 180, easing = FastOutLinearInEasing),
                             targetScale = 0.96f
+                        ) +
+                        shrinkVertically(
+                            animationSpec = tween(durationMillis = 180, easing = FastOutLinearInEasing),
+                            shrinkTowards = Alignment.Top
                         )
                 ) {
                     AppSnackbar(
@@ -80,7 +84,8 @@ fun AppMessageOverlay(
                         message = msg.message,
                         type = msg.type,
                         count = msg.count,
-                        durationMs = msg.durationMs
+                        durationMs = msg.durationMs,
+                        modifier = Modifier.padding(vertical = 4.dp)
                     )
                 }
             }

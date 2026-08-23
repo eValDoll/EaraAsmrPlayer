@@ -133,6 +133,7 @@ import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.FlatTextFieldDialog
 import com.asmr.player.ui.common.EaraTopBarContainer
+import com.asmr.player.ui.common.EaraMainTopBarHeight
 import com.asmr.player.ui.common.EaraTopBarIconButton
 import com.asmr.player.ui.common.resolveMainPageBackgroundColor
 import com.asmr.player.ui.common.glassMenu
@@ -1759,7 +1760,7 @@ fun MainContainer(
                                     Column {
                                         Spacer(modifier = Modifier.windowInsetsTopHeight(StableWindowInsets.statusBars))
                                         CenterAlignedTopAppBar(
-                                            modifier = Modifier.height(48.dp),
+                                            modifier = Modifier.height(EaraMainTopBarHeight),
                                             title = {
                                                 val entry = navBackStackEntry
                                                 val resolvedTitleRoute = if (currentScreenIsPrimary || albumDetailTransitionActive) {
