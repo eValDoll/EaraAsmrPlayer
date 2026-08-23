@@ -145,7 +145,6 @@ import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.theme.AsmrColorScheme
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.util.Formatting
@@ -2308,8 +2307,7 @@ internal fun DirectoryBrowserPanel(
                 state = browserListState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = maxHeight)
-                    .thinScrollbar(browserListState),
+                    .heightIn(max = maxHeight),
                 flingBehavior = rememberCalmScrollableFlingBehavior(),
                 contentPadding = PaddingValues(vertical = 6.dp)
             ) {
@@ -2718,8 +2716,7 @@ internal fun DirectoryBrowserPanelV2(
                 state = browserListState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = maxHeight)
-                    .thinScrollbar(browserListState),
+                    .heightIn(max = maxHeight),
                 flingBehavior = rememberCalmScrollableFlingBehavior(),
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
             ) {
@@ -3346,8 +3343,7 @@ internal fun DirectoryBrowserPanelV4(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(fixedHeight)
-                    .nestedScroll(listNestedScrollConnection)
-                    .thinScrollbar(browserListState),
+                    .nestedScroll(listNestedScrollConnection),
                 flingBehavior = rememberCalmScrollableFlingBehavior(),
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 9.dp)
             ) {

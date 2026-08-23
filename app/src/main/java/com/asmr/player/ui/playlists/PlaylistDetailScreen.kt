@@ -72,7 +72,6 @@ import com.asmr.player.ui.common.rememberAudioMeta
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.smoothScrollToTop
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.common.rememberAudioMetaText
 import com.asmr.player.ui.common.reorderable.ItemPosition
@@ -218,8 +217,7 @@ internal fun PlaylistDetailContent(
                 LazyColumn(
                     state = listState,
                     modifier = contentModifier
-                        .reorderable(reorderState)
-                        .thinScrollbar(listState),
+                        .reorderable(reorderState),
                     flingBehavior = rememberCalmScrollableFlingBehavior(),
                     contentPadding = PaddingValues(top = 6.dp, bottom = LocalBottomOverlayPadding.current)
                 ) {

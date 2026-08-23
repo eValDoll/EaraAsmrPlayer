@@ -208,6 +208,8 @@ class AlbumDetailViewModel @Inject constructor(
     private var dlsiteTrialLoadToken: Int = 0
     private var asmrOneLoadToken: Int = 0
     private var lastAlbumKey: String? = null
+    private var completedAlbumKey: String? = null
+    private var initialIntroSettled: Boolean = false
     private var albumLoadJob: Job? = null
     private var dlsiteLoadJob: Job? = null
     private var dlsiteRecommendationEnrichJob: Job? = null
@@ -488,16 +490,31 @@ class AlbumDetailViewModel @Inject constructor(
 
     fun cancelActiveLoads() {
         setListenTogetherRjSummaryPollingEnabled(false)
-        // 该方法只在详情页退出/清理时调用，界面已经不可见；不要为 loading 标志
-        // 再发布一份新 UiState，与弹栈处置争用同一帧。
-        cancelPendingOnlineJobs(resetLoadingState = false)
+        // 保留已完成的页面数据与推荐结果，仅将被中断的 loading 标志收口。
+        // 返回时已完成的部分直接复用，未完成的部分仍可以重试。
+        cancelPendingOnlineJobs(resetLoadingState = true)
         albumLoadJob?.cancel()
         albumLoadJob = null
         localTracksObserveJob?.cancel()
         localTracksObserveJob = null
-        similarWorksLoadJob?.cancel()
-        similarWorksLoadJob = null
-        lastAlbumKey = null
+        cancelSimilarWorksLoad()
+    }
+
+    internal fun hasCachedAlbum(albumId: Long?, rjCode: String?): Boolean {
+        val requestKey = albumDetailRequestKey(albumId, rjCode)
+        return shouldReuseAlbumDetailModel(
+            force = false,
+            hasCurrentModel = _uiState.value is AlbumDetailUiState.Success,
+            requestKey = requestKey,
+            activeRequestKey = lastAlbumKey,
+            completedRequestKey = completedAlbumKey
+        )
+    }
+
+    internal fun isInitialIntroSettled(): Boolean = initialIntroSettled
+
+    internal fun markInitialIntroSettled() {
+        initialIntroSettled = true
     }
 
     fun ensureSimilarWorksLoaded(seedRjCode: String, force: Boolean = false) {
@@ -835,12 +852,24 @@ class AlbumDetailViewModel @Inject constructor(
 
     fun loadAlbum(albumId: Long?, rjCode: String?, force: Boolean = false) {
         val normalizedRj = rjCode?.trim().orEmpty().uppercase()
-        val key = if (normalizedRj.isNotBlank()) "rj:$normalizedRj" else "id:${albumId ?: 0L}"
+        val key = albumDetailRequestKey(albumId, normalizedRj)
         val current = _uiState.value as? AlbumDetailUiState.Success
         val isAlbumSwitch = lastAlbumKey != key
-        if (!force && current != null && !isAlbumSwitch) return
+        if (
+            shouldReuseAlbumDetailModel(
+                force = force,
+                hasCurrentModel = current != null,
+                requestKey = key,
+                activeRequestKey = lastAlbumKey,
+                completedRequestKey = completedAlbumKey
+            )
+        ) {
+            observeLocalTracks(current?.model?.localAlbum?.id ?: 0L)
+            return
+        }
         cancelPendingOnlineJobs(resetLoadingState = false)
         if (force || isAlbumSwitch) {
+            completedAlbumKey = null
             similarWorksLoadJob?.cancel()
             similarWorksLoadJob = null
             _similarWorksState.value = AlbumDetailSimilarWorksState()
@@ -895,40 +924,45 @@ class AlbumDetailViewModel @Inject constructor(
                         model = loadedModel
                     )
                 }
-                localTracksObserveJob?.cancel()
-                localTracksObserveJob = null
                 val localId = localAlbum?.id ?: 0L
-                if (localId > 0L) {
-                    localTracksObserveJob = viewModelScope.launch {
-                        trackDao.getTracksForAlbum(localId)
-                            .map { entities -> entities.map { it.toDomain() } }
-                            .flowOn(Dispatchers.Default)
-                            .distinctUntilChanged()
-                            .collect { tracks ->
-                                val cur = _uiState.value as? AlbumDetailUiState.Success ?: return@collect
-                                val curLocal = cur.model.localAlbum ?: return@collect
-                                if (curLocal.id != localId) return@collect
-
-                                val updatedLocal = curLocal.copy(tracks = tracks)
-                                val updatedDisplay = if (cur.model.displayAlbum.id == localId) {
-                                    cur.model.displayAlbum.copy(tracks = tracks)
-                                } else {
-                                    cur.model.displayAlbum
-                                }
-                                _uiState.value = AlbumDetailUiState.Success(
-                                    model = cur.model.copy(
-                                        localAlbum = updatedLocal,
-                                        displayAlbum = updatedDisplay
-                                    )
-                                )
-                            }
-                    }
-                }
+                observeLocalTracks(localId)
+                completedAlbumKey = key
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
                 _uiState.value = AlbumDetailUiState.Error(e.message ?: "加载失败")
             }
+        }
+    }
+
+    private fun observeLocalTracks(localId: Long) {
+        localTracksObserveJob?.cancel()
+        localTracksObserveJob = null
+        if (localId <= 0L) return
+
+        localTracksObserveJob = viewModelScope.launch {
+            trackDao.getTracksForAlbum(localId)
+                .map { entities -> entities.map { it.toDomain() } }
+                .flowOn(Dispatchers.Default)
+                .distinctUntilChanged()
+                .collect { tracks ->
+                    val current = _uiState.value as? AlbumDetailUiState.Success ?: return@collect
+                    val currentLocal = current.model.localAlbum ?: return@collect
+                    if (currentLocal.id != localId) return@collect
+
+                    val updatedLocal = currentLocal.copy(tracks = tracks)
+                    val updatedDisplay = if (current.model.displayAlbum.id == localId) {
+                        current.model.displayAlbum.copy(tracks = tracks)
+                    } else {
+                        current.model.displayAlbum
+                    }
+                    _uiState.value = AlbumDetailUiState.Success(
+                        model = current.model.copy(
+                            localAlbum = updatedLocal,
+                            displayAlbum = updatedDisplay
+                        )
+                    )
+                }
         }
     }
 

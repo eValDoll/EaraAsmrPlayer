@@ -77,7 +77,6 @@ import com.asmr.player.ui.common.rememberAudioMetaText
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.smoothScrollToTop
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.rememberTrackMetaLine
 import com.asmr.player.ui.common.reorderable.ItemPosition
 import com.asmr.player.ui.common.reorderable.ReorderableItem
@@ -242,8 +241,7 @@ internal fun AlbumGroupDetailContent(
                     state = listState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .reorderable(reorderState)
-                        .thinScrollbar(listState),
+                        .reorderable(reorderState),
                     flingBehavior = rememberCalmScrollableFlingBehavior(),
                     contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
                 ) {

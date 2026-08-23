@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.library
+package com.asmr.player.ui.library
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -47,7 +47,6 @@ import com.asmr.player.ui.common.FlatActionDialog
 import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrTheme
 
 @Composable
@@ -112,8 +111,7 @@ fun TagManagerSheet(
             state = listState,
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f, fill = true)
-                .thinScrollbar(listState),
+                .weight(1f, fill = true),
             flingBehavior = rememberCalmScrollableFlingBehavior()
         ) {
             items(visibleTags, key = { it.id }) { tag ->

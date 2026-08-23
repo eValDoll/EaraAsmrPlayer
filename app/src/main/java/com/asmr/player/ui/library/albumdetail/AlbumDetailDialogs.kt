@@ -129,7 +129,6 @@ import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.util.Formatting
@@ -230,7 +229,7 @@ internal fun AsmrOneDownloadDialog(
                         val entries = flattenAsmrOneTreeForUi(mediaTree, expanded.toSet()).entries
                         LazyColumn(
                             state = listState,
-                            modifier = Modifier.fillMaxSize().thinScrollbar(listState),
+                            modifier = Modifier.fillMaxSize(),
                             flingBehavior = rememberCalmScrollableFlingBehavior(),
                             contentPadding = PaddingValues(vertical = 2.dp)
                         ) {
@@ -495,7 +494,7 @@ internal fun OnlineSaveDialog(
                         val entries = flattenAsmrOneSaveTreeForUi(trackTree, expanded.toSet()).entries
                         LazyColumn(
                             state = listState,
-                            modifier = Modifier.fillMaxSize().thinScrollbar(listState),
+                            modifier = Modifier.fillMaxSize(),
                             flingBehavior = rememberCalmScrollableFlingBehavior(),
                             contentPadding = PaddingValues(vertical = 2.dp)
                         ) {

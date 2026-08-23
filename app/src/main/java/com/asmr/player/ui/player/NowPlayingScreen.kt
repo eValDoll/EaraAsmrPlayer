@@ -89,7 +89,6 @@ import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AudioOutputRouteIcon
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
 import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
 import com.asmr.player.ui.common.AppVolumeSlider
@@ -2448,8 +2447,7 @@ internal fun NowPlayingScreen(
                             state = sliceListState,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(1f, fill = true)
-                                .thinScrollbar(sliceListState),
+                                .weight(1f, fill = true),
                             flingBehavior = rememberCalmScrollableFlingBehavior(),
                             verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {

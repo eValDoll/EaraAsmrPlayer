@@ -78,7 +78,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.util.Formatting
 import com.asmr.player.util.SubtitleEntry
@@ -531,8 +530,7 @@ internal fun AppleLyricsView(
                     .then(edgeFadeModifier)
                     .then(if (expandedHomeVisualEffects) Modifier.graphicsLayer { clip = false } else Modifier)
                     .graphicsLayer { alpha = lyricsContentAlpha }
-                    .then(if (effectiveInteractionEnabled) Modifier.nestedScroll(nestedScrollConnection) else Modifier)
-                    .thinScrollbar(listState),
+                    .then(if (effectiveInteractionEnabled) Modifier.nestedScroll(nestedScrollConnection) else Modifier),
                 flingBehavior = rememberCalmScrollableFlingBehavior(),
                 userScrollEnabled = effectiveInteractionEnabled,
                 horizontalAlignment = Alignment.CenterHorizontally,

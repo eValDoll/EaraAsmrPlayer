@@ -127,7 +127,6 @@ import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.util.Formatting
@@ -469,7 +468,7 @@ internal fun AlbumTracks(album: Album, onTrackClick: (Track) -> Unit) {
     } else {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize().thinScrollbar(listState),
+            modifier = Modifier.fillMaxSize(),
             flingBehavior = rememberCalmScrollableFlingBehavior(),
             contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
         ) {

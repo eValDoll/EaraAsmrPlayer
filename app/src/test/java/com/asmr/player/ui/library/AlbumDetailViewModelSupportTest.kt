@@ -13,6 +13,43 @@ import org.junit.Test
 
 class AlbumDetailViewModelSupportTest {
     @Test
+    fun albumDetailRequestKey_normalizesRjAndFallsBackToLocalId() {
+        assertEquals("rj:RJ01554925", albumDetailRequestKey(42L, " rj01554925 "))
+        assertEquals("id:42", albumDetailRequestKey(42L, null))
+    }
+
+    @Test
+    fun shouldReuseAlbumDetailModel_reusesOnlyCompletedMatchingPage() {
+        assertTrue(
+            shouldReuseAlbumDetailModel(
+                force = false,
+                hasCurrentModel = true,
+                requestKey = "rj:RJ01554925",
+                activeRequestKey = "rj:RJ01554925",
+                completedRequestKey = "rj:RJ01554925"
+            )
+        )
+        assertFalse(
+            shouldReuseAlbumDetailModel(
+                force = false,
+                hasCurrentModel = true,
+                requestKey = "rj:RJ01554925",
+                activeRequestKey = "rj:RJ01554925",
+                completedRequestKey = null
+            )
+        )
+        assertFalse(
+            shouldReuseAlbumDetailModel(
+                force = true,
+                hasCurrentModel = true,
+                requestKey = "rj:RJ01554925",
+                activeRequestKey = "rj:RJ01554925",
+                completedRequestKey = "rj:RJ01554925"
+            )
+        )
+    }
+
+    @Test
     fun resolveAlbumDetailRj_fallsBackToImportedAlbumMetadataAndTitle() {
         assertEquals(
             "RJ123456",

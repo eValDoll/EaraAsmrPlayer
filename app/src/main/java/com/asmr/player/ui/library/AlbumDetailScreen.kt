@@ -15,12 +15,14 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
@@ -145,6 +147,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
@@ -164,6 +167,7 @@ import com.asmr.player.ui.common.AsmrImageLoadingPlaceholder
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.ImagePreviewDialog
 import com.asmr.player.ui.common.ImagePreviewRequest
+import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.consumeTapThrough
 import com.asmr.player.ui.groups.AlbumGroupsViewModel
 import com.asmr.player.ui.groups.AlbumGroupPickerScreen
@@ -172,7 +176,6 @@ import com.asmr.player.ui.playlists.PlaylistsViewModel
 import com.asmr.player.ui.player.PlayerViewModel
 import com.asmr.player.ui.settings.SettingsViewModel
 import com.asmr.player.ui.theme.AsmrTheme
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.util.Formatting
@@ -249,19 +252,21 @@ private const val AlbumDetailHeroFlingOvershootPortion = 0.24f
 private const val AlbumDetailHeroFlingOvershootMaxPortion = 0.14f
 private const val AlbumDetailHeroFlingApproachMillis = 560
 private const val AlbumDetailHeroFlingSettleMillis = 980
-private const val AlbumDetailRevealSettleMs = 420L
-private const val AlbumDetailCvRevealDelayMs = 220
-private const val AlbumDetailTagsRevealDelayMs = 360
+private const val AlbumDetailCvRevealDelayMs = 0
+private const val AlbumDetailTagsRevealDelayMs = 90
 private const val AlbumHeaderActionStateTransitionMillis = 800
 internal val AlbumDetailHorizontalPadding = 8.dp
 private val AlbumLandscapeArtworkStartPadding = 68.dp
 private val AlbumLandscapeArtworkTopPadding = 36.dp
+private val AlbumLandscapeSpectrumTopPadding = 12.dp
 private val AlbumLandscapeHeaderEndPadding = 32.dp
+private val AlbumLandscapeHeaderLift = 52.dp
+private const val AlbumLandscapeCoverShadowStartAlpha = 0.16f
 private val AlbumLandscapeArtworkContentGap = 12.dp
 private val AlbumLandscapeSurfaceBorderWidth = 0.5.dp
 private val AlbumLandscapeCollapsedArtworkShiftX = 24.dp
 private val AlbumLandscapeCollapsedArtworkShiftY = 18.dp
-private const val AlbumLandscapeSpectrumArtworkOffsetFraction = 0.26f
+private const val AlbumLandscapeSpectrumArtworkOffsetFraction = 0.15f
 private const val AlbumLandscapeSpectrumCollapseFollowFraction = 0.82f
 
 internal fun shouldUseAlbumDetailLandscapeLayout(
@@ -299,6 +304,34 @@ internal fun albumLandscapePlaybackProgress(positionMs: Long, durationMs: Long):
     return (positionMs.toDouble() / durationMs.toDouble()).toFloat().coerceIn(0f, 1f)
 }
 
+internal fun albumLandscapePulseSweepFraction(phase: Float): Float {
+    val clamped = phase.coerceIn(0f, 1f)
+    val remaining = 1f - clamped
+    return 1f - remaining * remaining
+}
+
+internal fun albumLandscapeCoverShadowAlpha(imageAlpha: Float): Float {
+    val normalizedImageAlpha = imageAlpha.coerceIn(0f, 1f)
+    return (
+        (normalizedImageAlpha - AlbumLandscapeCoverShadowStartAlpha) /
+            (1f - AlbumLandscapeCoverShadowStartAlpha)
+        ).coerceIn(0f, normalizedImageAlpha)
+}
+
+internal fun albumLandscapeDirectoryTop(
+    headerHeight: Dp,
+    headerLift: Dp
+): Dp {
+    return (headerHeight - headerLift + 4.dp).coerceAtLeast(0.dp)
+}
+
+internal fun albumLandscapePulseEnabled(
+    isPlaying: Boolean,
+    progress: Float
+): Boolean {
+    return isPlaying && progress > 0f
+}
+
 internal fun albumLandscapeSurfaceHeight(contentViewportHeight: Dp, artworkSize: Dp): Dp {
     return contentViewportHeight + albumLandscapeCollapseDistance(artworkSize)
 }
@@ -317,7 +350,7 @@ internal fun albumLandscapePaneViewportHeightPx(
 }
 
 internal fun albumLandscapeSpectrumOffsetY(artworkSize: Dp): Dp {
-    return AlbumLandscapeArtworkTopPadding +
+    return AlbumLandscapeSpectrumTopPadding +
         artworkSize * AlbumLandscapeSpectrumArtworkOffsetFraction
 }
 
@@ -351,8 +384,6 @@ private fun Modifier.albumLandscapePaneViewportHeight(
         }
     }
 }
-
-private class AlbumDetailIntroState(var settled: Boolean)
 
 private val AlbumDetailHeroBounceBackSpec = spring<Float>(
     dampingRatio = Spring.DampingRatioNoBouncy,
@@ -396,10 +427,12 @@ internal fun dlsiteSectionRevealModifier(
     }
 }
 
-internal fun shouldExpandAlbumHeaderMetaReveal(
-    presentInitially: Boolean
+internal fun shouldAnimateAlbumHeaderMetaReveal(
+    presentInitially: Boolean,
+    hasContent: Boolean,
+    animationsEnabled: Boolean
 ): Boolean {
-    return !presentInitially
+    return animationsEnabled && !presentInitially && hasContent
 }
 
 internal data class AlbumDetailOnlineLoadPlan(
@@ -515,8 +548,9 @@ fun AlbumDetailScreen(
     val selectedTab = remember(albumId, initialTab) {
         initialTab?.coerceIn(0, 2) ?: if (albumId != null && albumId > 0) 0 else 1
     }
-    var isInitialRouteReady by remember(screenKey) { mutableStateOf(false) }
-    val initialIntroState = remember(screenKey) { AlbumDetailIntroState(settled = false) }
+    var isInitialRouteReady by remember(screenKey) {
+        mutableStateOf(viewModel.hasCachedAlbum(albumId, rjCode))
+    }
     var showAsmrDownloadDialog by remember { mutableStateOf(false) }
     var showOnlineSaveDialog by remember { mutableStateOf(false) }
     var pendingOnlineSaveSelection by remember { mutableStateOf<PendingOnlineSaveSelection?>(null) }
@@ -568,8 +602,9 @@ fun AlbumDetailScreen(
         viewModel.setListenTogetherRjSummaryPollingEnabled(true)
     }
     LaunchedEffect(albumId, rjCode) {
-        isInitialRouteReady = false
-        withFrameNanos { }
+        val hasCachedAlbum = viewModel.hasCachedAlbum(albumId, rjCode)
+        isInitialRouteReady = hasCachedAlbum
+        if (!hasCachedAlbum) withFrameNanos { }
         viewModel.loadAlbumAndAwait(albumId, rjCode, force = false)
         isInitialRouteReady = true
     }
@@ -620,11 +655,11 @@ fun AlbumDetailScreen(
                 }
                 is AlbumDetailUiState.Success -> {
                     LaunchedEffect(screenKey) {
-                        if (initialIntroState.settled) return@LaunchedEffect
+                        if (viewModel.isInitialIntroSettled()) return@LaunchedEffect
                         delay(AlbumDetailInitialIntroDurationMs)
                         // 这只是供之后新到数据判断是否还需入场动画的生命周期标记。
                         // 已经在树上的动画会自行完整收尾，计时结束时无需强制整页重组。
-                        initialIntroState.settled = true
+                        viewModel.markInitialIntroSettled()
                     }
                     val model = state.model
                     val album = model.displayAlbum
@@ -678,7 +713,7 @@ fun AlbumDetailScreen(
                     val trialDownloadTree = remember(model.dlsiteTrialTracks) {
                         buildDlsiteTrialDownloadTree(model.dlsiteTrialTracks)
                     }
-                    val shouldPlayInitialAnimations = !initialIntroState.settled
+                    val shouldPlayInitialAnimations = !viewModel.isInitialIntroSettled()
                     val shouldAnimateHeaderIntro = true
                     var showTagManager by remember { mutableStateOf(false) }
                     var tagManageTrack by remember { mutableStateOf<Track?>(null) }
@@ -712,9 +747,15 @@ fun AlbumDetailScreen(
                             landscapeFixedHeaderHeightPx.toDp()
                         }
                         val landscapeDirectoryTop = if (landscapeFixedHeaderHeightPx > 0) {
-                            landscapeHeaderMeasuredHeight + 4.dp
+                            albumLandscapeDirectoryTop(
+                                headerHeight = landscapeHeaderMeasuredHeight,
+                                headerLift = AlbumLandscapeHeaderLift
+                            )
                         } else {
-                            landscapeHeaderFallbackHeight
+                            albumLandscapeDirectoryTop(
+                                headerHeight = landscapeHeaderFallbackHeight,
+                                headerLift = AlbumLandscapeHeaderLift
+                            )
                         }
                         val landscapeHeaderStart = albumLandscapeHeaderStart(landscapeArtworkSize)
                         val landscapeHeaderAvailableWidth = (
@@ -1466,7 +1507,11 @@ fun AlbumDetailScreen(
                                         .offset {
                                             IntOffset(
                                                 0,
-                                                (contentViewportTopPx - heroMotion.collapsePx).roundToInt()
+                                                (
+                                                    contentViewportTopPx -
+                                                        AlbumLandscapeHeaderLift.toPx() -
+                                                        heroMotion.collapsePx
+                                                    ).roundToInt()
                                             )
                                         }
                                         .padding(end = AlbumLandscapeHeaderEndPadding)
@@ -1807,17 +1852,46 @@ private fun AlbumLandscapeCurvePlaybackProgress(
     modifier: Modifier = Modifier,
     playerViewModel: PlayerViewModel = hiltViewModel()
 ) {
-    val progress by remember(playerViewModel) {
+    val playbackIndicator by remember(playerViewModel) {
         playerViewModel.playback
-            .map { albumLandscapePlaybackProgress(it.positionMs, it.durationMs) }
+            .map { playback ->
+                AlbumLandscapePlaybackIndicator(
+                    progress = albumLandscapePlaybackProgress(
+                        playback.positionMs,
+                        playback.durationMs
+                    ),
+                    isPlaying = playback.isPlaying
+                )
+            }
             .distinctUntilChanged()
-    }.collectAsStateWithLifecycle(initialValue = 0f)
-    val progressState = rememberUpdatedState(progress)
+    }.collectAsStateWithLifecycle(initialValue = AlbumLandscapePlaybackIndicator())
+    val progressState = rememberUpdatedState(playbackIndicator.progress)
+    val pulseEnabled = albumLandscapePulseEnabled(
+        isPlaying = playbackIndicator.isPlaying,
+        progress = playbackIndicator.progress
+    )
+    val pulseEnabledState = rememberUpdatedState(pulseEnabled)
+    val pulsePhase = remember { Animatable(0f) }
+    LaunchedEffect(pulseEnabled) {
+        if (!pulseEnabled) {
+            pulsePhase.snapTo(0f)
+            return@LaunchedEffect
+        }
+        while (true) {
+            pulsePhase.snapTo(0f)
+            pulsePhase.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 3_200, easing = LinearEasing)
+            )
+            delay(260L)
+        }
+    }
     val colorScheme = AsmrTheme.colorScheme
     val trackColor = colorScheme.primary.copy(
         alpha = if (colorScheme.isDark) 0.24f else 0.18f
     )
     val activeColor = colorScheme.primaryStrong.copy(alpha = 0.92f)
+    val pulseColor = colorScheme.primaryStrong
 
     Box(
         modifier = modifier.drawWithCache {
@@ -1827,8 +1901,13 @@ private fun AlbumLandscapeCurvePlaybackProgress(
             }
             val pathMeasure = AndroidPathMeasure(curvePath.asAndroidPath(), false)
             val activePath = Path()
+            val pulsePath = Path()
+            val pulsePosition = FloatArray(2)
             val trackStroke = Stroke(width = 0.75.dp.toPx(), cap = StrokeCap.Round)
             val activeStroke = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
+            val pulseGlowStroke = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
+            val pulseCoreStroke = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round)
+            val maximumPulseLength = 58.dp.toPx()
 
             onDrawBehind {
                 drawPath(path = curvePath, color = trackColor, style = trackStroke)
@@ -1842,11 +1921,54 @@ private fun AlbumLandscapeCurvePlaybackProgress(
                         true
                     )
                     drawPath(path = activePath, color = activeColor, style = activeStroke)
+
+                    if (pulseEnabledState.value) {
+                        val activeLength = pathMeasure.length * fraction
+                        val rawPulsePhase = pulsePhase.value.coerceIn(0f, 1f)
+                        val pulseEnd = activeLength *
+                            albumLandscapePulseSweepFraction(rawPulsePhase)
+                        val pulseLength = minOf(maximumPulseLength, activeLength * 0.24f)
+                        val pulseStart = (pulseEnd - pulseLength).coerceAtLeast(0f)
+                        val pulseEnvelope = kotlin.math.sin(Math.PI * rawPulsePhase)
+                            .toFloat()
+                            .coerceIn(0f, 1f)
+                        if (pulseEnvelope > 0f && pulseEnd > pulseStart) {
+                            pulsePath.reset()
+                            pathMeasure.getSegment(
+                                pulseStart,
+                                pulseEnd,
+                                pulsePath.asAndroidPath(),
+                                true
+                            )
+                            drawPath(
+                                path = pulsePath,
+                                color = pulseColor.copy(alpha = 0.20f * pulseEnvelope),
+                                style = pulseGlowStroke
+                            )
+                            drawPath(
+                                path = pulsePath,
+                                color = pulseColor.copy(alpha = 0.96f * pulseEnvelope),
+                                style = pulseCoreStroke
+                            )
+                            if (pathMeasure.getPosTan(pulseEnd, pulsePosition, null)) {
+                                drawCircle(
+                                    color = pulseColor.copy(alpha = 0.88f * pulseEnvelope),
+                                    radius = 2.8.dp.toPx(),
+                                    center = Offset(pulsePosition[0], pulsePosition[1])
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
     )
 }
+
+private data class AlbumLandscapePlaybackIndicator(
+    val progress: Float = 0f,
+    val isPlaying: Boolean = false
+)
 
 private fun Path.addCatmullRomSpline(
     points: List<Offset>,
@@ -2040,6 +2162,27 @@ private fun AlbumDetailLandscapeArtworkCover(
     val heroIntroProgress = remember(introSessionKey) {
         Animatable(if (animateIntro) 0f else 1f)
     }
+    var coverPainterAlphaState by remember(imageModel, coverSessionKey) {
+        mutableStateOf<State<Float>?>(null)
+    }
+    var shouldRenderCoverShadow by remember(imageModel, coverSessionKey) {
+        mutableStateOf(coverSource.isBlank())
+    }
+    LaunchedEffect(coverSource, coverPainterAlphaState) {
+        if (coverSource.isBlank()) {
+            shouldRenderCoverShadow = true
+            return@LaunchedEffect
+        }
+        shouldRenderCoverShadow = false
+        val painterAlphaState = coverPainterAlphaState ?: return@LaunchedEffect
+        snapshotFlow { painterAlphaState.value }
+            .first { imageAlpha ->
+                imageAlpha > AlbumLandscapeCoverShadowStartAlpha
+            }
+        // 至少让已经开始渐入的图片先完整绘制一帧，再把阴影节点插入组合树。
+        withFrameNanos { }
+        shouldRenderCoverShadow = true
+    }
     LaunchedEffect(introSessionKey, animateIntro) {
         if (!animateIntro) {
             heroIntroProgress.snapTo(1f)
@@ -2094,44 +2237,58 @@ private fun AlbumDetailLandscapeArtworkCover(
                     scaleY = scale
                     transformOrigin = TransformOrigin.Center
                 }
-                .shadow(
-                    elevation = if (colorScheme.isDark) 6.dp else 14.dp,
-                    shape = artworkShape,
-                    clip = false
-                )
-                .clip(artworkShape)
-                .background(colorScheme.surfaceVariant)
         ) {
-            AsmrAsyncImage(
-                model = imageModel,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                alignment = Alignment.Center,
-                placeholderCornerRadius = 26,
-                peekAnySizeForInitial = true,
-                loadAtOriginalSize = true,
-                fadeInMillis = AlbumDetailHeroIntroDurationMs,
-                modifier = Modifier.fillMaxSize(),
-                placeholder = { m -> DiscPlaceholder(modifier = m, cornerRadius = 26) },
-                loading = { m ->
-                    AsmrImageLoadingPlaceholder(
-                        modifier = m,
-                        cornerRadius = 26,
-                        indicatorSize = 34.dp
-                    )
-                },
-                empty = { m ->
-                    if (showCoverLoadingState) {
-                        AsmrImageLoadingPlaceholder(
-                            modifier = m,
-                            cornerRadius = 26,
-                            indicatorSize = 34.dp
+            if (shouldRenderCoverShadow) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .graphicsLayer {
+                            val imageAlpha = coverPainterAlphaState?.value ?: 1f
+                            alpha = albumLandscapeCoverShadowAlpha(imageAlpha)
+                            compositingStrategy = CompositingStrategy.ModulateAlpha
+                        }
+                        .shadow(
+                            elevation = if (colorScheme.isDark) 6.dp else 14.dp,
+                            shape = artworkShape,
+                            clip = false
                         )
-                    } else {
-                        DiscPlaceholder(modifier = m, cornerRadius = 26)
+                        .background(colorScheme.surfaceVariant, artworkShape)
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(artworkShape)
+            ) {
+                AsmrAsyncImage(
+                    model = imageModel,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.Center,
+                    placeholderCornerRadius = 26,
+                    peekAnySizeForInitial = true,
+                    loadAtOriginalSize = true,
+                    fadeInMillis = AlbumDetailHeroIntroDurationMs,
+                    onBitmapPainterState = { painter, alphaState ->
+                        coverPainterAlphaState = if (painter != null) alphaState else null
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                    placeholder = { m -> DiscPlaceholder(modifier = m, cornerRadius = 26) },
+                    // 加载阶段保持封面槽为空，避免占位底色被误认为先出现的黑框。
+                    loading = { _ -> },
+                    empty = { m ->
+                        if (showCoverLoadingState) {
+                            AsmrImageLoadingPlaceholder(
+                                modifier = m,
+                                cornerRadius = 26,
+                                indicatorSize = 34.dp
+                            )
+                        } else {
+                            DiscPlaceholder(modifier = m, cornerRadius = 26)
+                        }
                     }
-                }
-            )
+                )
+            }
         }
     }
 }
@@ -2254,19 +2411,14 @@ private fun AlbumDetailLandscapeSimilarWorksPane(
             style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
             color = colorScheme.textPrimary
         )
-        Text(
-            text = "根据当前作品为你推荐",
-            style = MaterialTheme.typography.labelSmall,
-            color = colorScheme.textSecondary
-        )
-
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
         ) {
             when {
-                !isRouteReady || (state.isLoading && state.works.isEmpty()) -> {
+                (!isRouteReady && state.works.isEmpty()) ||
+                    (state.isLoading && state.works.isEmpty()) -> {
                     CircularProgressIndicator(
                         modifier = Modifier
                             .align(Alignment.Center)
@@ -2304,9 +2456,10 @@ private fun AlbumDetailLandscapeSimilarWorksPane(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier
-                            .fillMaxSize()
-                            .thinScrollbar(listState),
-                        contentPadding = PaddingValues(bottom = 12.dp),
+                            .fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            bottom = LocalBottomOverlayPadding.current + 12.dp
+                        ),
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         items(
@@ -2975,12 +3128,10 @@ private fun AlbumHeader(
 
     val headerAnimationScopeKey = remember(introSessionKey) { "albumHeader:$introSessionKey" }
 
-    // 记录"首帧时各信息块是否已存在"：本地库专辑进入时 cv/tags 已就绪，应直接显示，不做渐入或撑开；
-    // 列表 hint 已经提供的信息首帧直接占住最终高度，只有网络到达后才新增的信息才纵向展开。
+    // 首帧已有的信息直接显示；网络到达后新增的声优与标签分别向下滑入并展开，
+    // 避免把整列元信息一次性替换而造成突跳。
     val cvPresentInitially = remember(headerAnimationScopeKey) { album.cv.isNotBlank() }
     val tagsPresentInitially = remember(headerAnimationScopeKey) { album.tags.isNotEmpty() }
-    val cvExpandLayout = shouldExpandAlbumHeaderMetaReveal(cvPresentInitially)
-    val tagsExpandLayout = shouldExpandAlbumHeaderMetaReveal(tagsPresentInitially)
     val headerContainerModifier = Modifier
         .fillMaxWidth()
         .padding(horizontal = AlbumDetailHorizontalPadding)
@@ -2995,42 +3146,37 @@ private fun AlbumHeader(
         // 每个信息行自身的底部 padding 放进 reveal 内部——这样间距属于被 expandVertically 裁剪的高度，
         // 会随展开动画一起从 0 平滑增长，按钮行始终被平滑下移而非瞬间跳变。
     ) {
-        // 使用新的轻量级信息组件替换原有的胶囊样式
         val metaRevealKey = headerAnimationScopeKey + ":meta"
         AlbumHeaderLateMetaReveal(
-            revealKey = metaRevealKey,
+            revealKey = "$metaRevealKey:cv",
+            hasContent = album.cv.isNotBlank(),
+            presentInitially = cvPresentInitially,
             delayMillis = AlbumDetailCvRevealDelayMs,
-            enabled = animateIntro,
-            lateArrival = cvExpandLayout || tagsExpandLayout
+            animationsEnabled = animateIntro
         ) {
             Box(modifier = Modifier.padding(bottom = 8.dp)) {
-                val labelCv = "声优"
-                val labelTag = "标签"
-                // 只显示声优和标签，作品编号和社团已经在 Hero 封面底部显示
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // 声优
-                    if (album.cv.isNotBlank()) {
-                        AlbumHeaderCvLightweight(
-                            cvText = album.cv,
-                            emphasized = landscapeFloatingActions,
-                            onCvClick = { cv -> copyMeta(labelCv, cv) },
-                            onCvLongClick = onMetaLongClick
-                        )
-                    }
-
-                    // 标签
-                    if (album.tags.isNotEmpty()) {
-                        AlbumHeaderTagsLightweight(
-                            tags = album.tags,
-                            emphasized = landscapeFloatingActions,
-                            onTagClick = { tag -> copyMeta(labelTag, tag) },
-                            onTagLongClick = onMetaLongClick
-                        )
-                    }
-                }
+                AlbumHeaderCvLightweight(
+                    cvText = album.cv,
+                    emphasized = landscapeFloatingActions,
+                    onCvClick = { cv -> copyMeta("声优", cv) },
+                    onCvLongClick = onMetaLongClick
+                )
+            }
+        }
+        AlbumHeaderLateMetaReveal(
+            revealKey = "$metaRevealKey:tags",
+            hasContent = album.tags.isNotEmpty(),
+            presentInitially = tagsPresentInitially,
+            delayMillis = AlbumDetailTagsRevealDelayMs,
+            animationsEnabled = animateIntro
+        ) {
+            Box(modifier = Modifier.padding(bottom = 8.dp)) {
+                AlbumHeaderTagsLightweight(
+                    tags = album.tags,
+                    emphasized = landscapeFloatingActions,
+                    onTagClick = { tag -> copyMeta("标签", tag) },
+                    onTagLongClick = onMetaLongClick
+                )
             }
         }
 
@@ -3220,7 +3366,7 @@ private fun AlbumHeaderActionBar(
                             onClick = onGroupClick,
                             shape = floatingSegmentShape,
                             modifier = Modifier
-                                .widthIn(min = 62.dp)
+                                .widthIn(min = 82.dp)
                                 .fillMaxHeight(),
                         )
                     }
@@ -3246,7 +3392,7 @@ private fun AlbumHeaderActionBar(
                                 onClick = { languageMenuExpanded = true },
                                 shape = floatingSegmentShape,
                                 modifier = Modifier
-                                    .widthIn(min = 64.dp)
+                                    .widthIn(min = 88.dp)
                                     .fillMaxHeight(),
                             )
                             AlbumHeaderLanguageDropdownMenu(
@@ -3283,7 +3429,7 @@ private fun AlbumHeaderActionBar(
                         },
                         shape = floatingSegmentShape,
                         modifier = Modifier
-                            .widthIn(min = 58.dp)
+                            .widthIn(min = 78.dp)
                             .fillMaxHeight(),
                     )
 
@@ -3306,7 +3452,7 @@ private fun AlbumHeaderActionBar(
                         },
                         shape = floatingSegmentShape,
                         modifier = Modifier
-                            .widthIn(min = 46.dp)
+                            .widthIn(min = 66.dp)
                             .fillMaxHeight(),
                     )
                 }
@@ -3628,47 +3774,40 @@ private fun AlbumHeaderLanguageDropdownMenu(
 @Composable
 private fun AlbumHeaderLateMetaReveal(
     revealKey: String,
+    hasContent: Boolean,
+    presentInitially: Boolean,
     delayMillis: Int,
-    enabled: Boolean,
-    lateArrival: Boolean,
+    animationsEnabled: Boolean,
     content: @Composable () -> Unit
 ) {
-    if (!lateArrival) {
-        content()
-        return
+    val shouldAnimate = shouldAnimateAlbumHeaderMetaReveal(
+        presentInitially = presentInitially,
+        hasContent = hasContent,
+        animationsEnabled = animationsEnabled
+    )
+    var visible by remember(revealKey) {
+        mutableStateOf(presentInitially && hasContent)
     }
-    var hasPlayed by rememberSaveable(revealKey) { mutableStateOf(false) }
-    LaunchedEffect(revealKey, enabled) {
-        if (!enabled && !hasPlayed) {
-            hasPlayed = true
+    LaunchedEffect(revealKey, hasContent, shouldAnimate) {
+        when {
+            !hasContent -> visible = false
+            !shouldAnimate -> visible = true
+            else -> {
+                visible = false
+                if (delayMillis > 0) delay(delayMillis.toLong())
+                withFrameNanos { }
+                visible = true
+            }
         }
     }
-    if (!enabled) {
-        content()
-        return
-    }
-    var visible by remember(revealKey) { mutableStateOf(false) }
-    LaunchedEffect(revealKey, enabled) {
-        visible = false
-        if (delayMillis > 0) {
-            delay(delayMillis.toLong())
-        }
-        withFrameNanos { }
-        visible = true
-        delay(AlbumDetailRevealSettleMs)
-        hasPlayed = true
-    }
-    if (hasPlayed) {
-        content()
-        return
-    }
-    // 网络数据到达后才出现的内容（在线 cv/tags）：保留原有的纵向展开，
-    // 但避免再叠加父级 animateContentSize，减少同一尺寸变化被双重动画驱动。
     AnimatedVisibility(
-        visible = visible,
+        visible = visible && hasContent,
         enter = fadeIn(animationSpec = AlbumHeaderEnterTweenSpec) + expandVertically(
             animationSpec = AlbumHeaderExpandTweenSpec,
             expandFrom = Alignment.Top
+        ) + slideInVertically(
+            animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
+            initialOffsetY = { fullHeight -> -(fullHeight * 0.55f).roundToInt() }
         ),
         exit = fadeOut(animationSpec = tween(durationMillis = 120)) + shrinkVertically(
             animationSpec = tween(durationMillis = 160, easing = FastOutLinearInEasing),

@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.common
+package com.asmr.player.ui.common
 
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateDpAsState
@@ -168,8 +168,7 @@ internal fun ManualReorderDialog(
                     modifier = Modifier
                         .fillMaxSize()
                         .reorderable(reorderState)
-                        .detectReorderAfterLongPress(reorderState)
-                        .thinScrollbar(listState),
+                        .detectReorderAfterLongPress(reorderState),
                     flingBehavior = rememberCalmScrollableFlingBehavior(),
                     contentPadding = PaddingValues(
                         start = 16.dp,

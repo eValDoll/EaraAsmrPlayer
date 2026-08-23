@@ -248,6 +248,28 @@ internal fun resolveAlbumDetailRj(routeRj: String?, localAlbum: Album?): String 
         .orEmpty()
 }
 
+internal fun albumDetailRequestKey(albumId: Long?, rjCode: String?): String {
+    val normalizedRj = rjCode?.trim().orEmpty().uppercase()
+    return if (normalizedRj.isNotBlank()) {
+        "rj:$normalizedRj"
+    } else {
+        "id:${albumId ?: 0L}"
+    }
+}
+
+internal fun shouldReuseAlbumDetailModel(
+    force: Boolean,
+    hasCurrentModel: Boolean,
+    requestKey: String,
+    activeRequestKey: String?,
+    completedRequestKey: String?
+): Boolean {
+    return !force &&
+        hasCurrentModel &&
+        activeRequestKey == requestKey &&
+        completedRequestKey == requestKey
+}
+
 internal fun AlbumDetailModel.listenTogetherSummaryRj(): String {
     return baseRjCode.trim().uppercase().ifBlank { rjCode.trim().uppercase() }
 }

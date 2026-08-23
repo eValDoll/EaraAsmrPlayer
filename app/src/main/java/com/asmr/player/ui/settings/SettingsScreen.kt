@@ -113,7 +113,6 @@ import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.smoothScrollToTop
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.update.launchDownloadedApkInstall
@@ -328,7 +327,7 @@ fun SettingsScreen(
             }
             LazyColumn(
                 state = rootListState,
-                modifier = contentModifier.thinScrollbar(rootListState),
+                modifier = contentModifier,
                 flingBehavior = rememberCalmScrollableFlingBehavior(),
                 contentPadding = PaddingValues(horizontal = SettingsPageHorizontalPadding, vertical = 10.dp)
                     .withAddedBottomPadding(LocalBottomOverlayPadding.current),
@@ -359,8 +358,7 @@ fun SettingsScreen(
                     state = detailListState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(colorScheme.background)
-                        .thinScrollbar(detailListState),
+                        .background(colorScheme.background),
                     flingBehavior = rememberCalmScrollableFlingBehavior(),
                     contentPadding = PaddingValues(horizontal = SettingsPageHorizontalPadding, vertical = 10.dp)
                         .withAddedBottomPadding(LocalBottomOverlayPadding.current),

@@ -133,7 +133,6 @@ import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
 import com.asmr.player.ui.common.shouldFadeInCover
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.library.AlbumGridItem
@@ -1103,8 +1102,7 @@ fun SearchScreen(
                                         state = listState,
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .nestedScroll(chromeState.nestedScrollConnection)
-                                            .thinScrollbar(listState),
+                                            .nestedScroll(chromeState.nestedScrollConnection),
                                         flingBehavior = rememberCalmScrollableFlingBehavior(),
                                         contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
@@ -1178,8 +1176,7 @@ fun SearchScreen(
                                         state = gridState,
                                         modifier = Modifier
                                             .fillMaxSize()
-                                            .nestedScroll(chromeState.nestedScrollConnection)
-                                            .thinScrollbar(gridState),
+                                            .nestedScroll(chromeState.nestedScrollConnection),
                                         flingBehavior = rememberCalmScrollableFlingBehavior(),
                                         contentPadding = PaddingValues(
                                             top = topPadding,

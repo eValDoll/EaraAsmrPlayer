@@ -60,7 +60,6 @@ import com.asmr.player.data.local.db.dao.TagWithCount
 import com.asmr.player.ui.common.FlatTextFieldDialog
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
@@ -154,8 +153,7 @@ fun LibraryFilterSheet(
             state = listState,
             modifier = Modifier
                 .weight(1f)
-                .fillMaxWidth()
-                .thinScrollbar(listState),
+                .fillMaxWidth(),
             flingBehavior = rememberCalmScrollableFlingBehavior(),
             contentPadding = PaddingValues(top = 4.dp, bottom = 96.dp)
                 .withAddedBottomPadding(LocalBottomOverlayPadding.current),

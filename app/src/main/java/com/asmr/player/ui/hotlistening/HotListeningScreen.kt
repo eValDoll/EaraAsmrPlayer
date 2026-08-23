@@ -79,7 +79,6 @@ import com.asmr.player.ui.common.lightweightVerticalStretchOverscroll
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
 import com.asmr.player.ui.common.shouldFadeInCover
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.library.AlbumGridItem
@@ -354,8 +353,7 @@ fun HotListeningScreen(
                             LazyColumn(
                                 state = listState,
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .thinScrollbar(listState),
+                                    .fillMaxSize(),
                                 flingBehavior = rememberCalmScrollableFlingBehavior(),
                                 contentPadding = PaddingValues(bottom = 8.dp)
                                     .withAddedBottomPadding(LocalBottomOverlayPadding.current)
@@ -442,8 +440,7 @@ fun HotListeningScreen(
                                 columns = StaggeredGridCells.Adaptive(adaptiveCellSize),
                                 state = gridState,
                                 modifier = Modifier
-                                    .fillMaxSize()
-                                    .thinScrollbar(gridState),
+                                    .fillMaxSize(),
                                 flingBehavior = rememberCalmScrollableFlingBehavior(),
                                 contentPadding = PaddingValues(
                                     start = 8.dp,

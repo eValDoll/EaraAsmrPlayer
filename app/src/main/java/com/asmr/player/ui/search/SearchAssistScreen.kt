@@ -72,7 +72,6 @@ import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.clearFocusOnTapOutside
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.util.DlsiteAntiHotlink
@@ -265,8 +264,7 @@ internal fun SearchAssistContent(
             modifier = Modifier
                 .fillMaxSize()
                 .clearFocusOnTapOutside()
-                .nestedScroll(chromeState.nestedScrollConnection)
-                .thinScrollbar(listState),
+                .nestedScroll(chromeState.nestedScrollConnection),
             flingBehavior = rememberCalmScrollableFlingBehavior(),
             contentPadding = PaddingValues(
                 top = topPadding,

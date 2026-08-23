@@ -142,7 +142,6 @@ import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.util.Formatting
@@ -1126,8 +1125,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
 
     LazyColumn(
         modifier = Modifier
-            .fillMaxSize()
-            .thinScrollbar(listState),
+            .fillMaxSize(),
         state = listState,
         flingBehavior = rememberCalmScrollableFlingBehavior(),
         contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
@@ -1608,8 +1606,7 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
 
     LazyColumn(
         modifier = Modifier
-            .fillMaxSize()
-            .thinScrollbar(listState),
+            .fillMaxSize(),
         state = listState,
         flingBehavior = rememberCalmScrollableFlingBehavior(),
         contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)

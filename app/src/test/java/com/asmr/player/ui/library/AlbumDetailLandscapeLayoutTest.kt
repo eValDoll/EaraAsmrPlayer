@@ -100,8 +100,45 @@ class AlbumDetailLandscapeLayoutTest {
 
     @Test
     fun landscapeSpectrum_startsHigherAndFollowsCollapsePartially() {
-        assertEquals(114f, albumLandscapeSpectrumOffsetY(300.dp).value, 0.01f)
+        assertEquals(57f, albumLandscapeSpectrumOffsetY(300.dp).value, 0.01f)
         assertEquals(-68.88f, albumLandscapeSpectrumTranslationY(84f), 0.01f)
+    }
+
+    @Test
+    fun landscapeProgressPulse_slowsAsItApproachesCurrentPlaybackPosition() {
+        assertEquals(0f, albumLandscapePulseSweepFraction(0f), 0.001f)
+        assertEquals(0.75f, albumLandscapePulseSweepFraction(0.5f), 0.001f)
+        assertEquals(1f, albumLandscapePulseSweepFraction(1f), 0.001f)
+
+        val earlyDistance = albumLandscapePulseSweepFraction(0.25f) -
+            albumLandscapePulseSweepFraction(0f)
+        val lateDistance = albumLandscapePulseSweepFraction(1f) -
+            albumLandscapePulseSweepFraction(0.75f)
+        assertTrue(earlyDistance > lateDistance)
+    }
+
+    @Test
+    fun landscapeCoverShadow_startsAfterImageFadeAndNeverOutrunsIt() {
+        assertEquals(0f, albumLandscapeCoverShadowAlpha(0f), 0.001f)
+        assertEquals(0f, albumLandscapeCoverShadowAlpha(0.16f), 0.001f)
+
+        val earlyShadowAlpha = albumLandscapeCoverShadowAlpha(0.20f)
+        assertTrue(earlyShadowAlpha > 0f)
+        assertTrue(earlyShadowAlpha < 0.20f)
+        assertEquals(1f, albumLandscapeCoverShadowAlpha(1f), 0.001f)
+    }
+
+    @Test
+    fun landscapeHeaderLift_releasesTheSameAmountOfScrollableSpace() {
+        assertEquals(172f, albumLandscapeDirectoryTop(220.dp, 52.dp).value, 0.001f)
+        assertEquals(0f, albumLandscapeDirectoryTop(40.dp, 52.dp).value, 0.001f)
+    }
+
+    @Test
+    fun landscapeProgressPulse_onlyRunsDuringActivePlayback() {
+        assertFalse(albumLandscapePulseEnabled(isPlaying = false, progress = 0.4f))
+        assertFalse(albumLandscapePulseEnabled(isPlaying = true, progress = 0f))
+        assertTrue(albumLandscapePulseEnabled(isPlaying = true, progress = 0.4f))
     }
 
     @Test

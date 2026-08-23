@@ -178,7 +178,6 @@ import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.playback.MediaItemFactory
@@ -608,8 +607,7 @@ fun LibraryScreen(
                                                 isAtEnd = { !listState.canScrollForward },
                                             )
                                             .clearFocusOnTapOutside()
-                                            .nestedScroll(chromeState.nestedScrollConnection)
-                                            .thinScrollbar(listState),
+                                            .nestedScroll(chromeState.nestedScrollConnection),
                                         flingBehavior = rememberCalmScrollableFlingBehavior(),
                                         contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
@@ -824,8 +822,7 @@ fun LibraryScreen(
                                                 isAtEnd = { !gridState.canScrollForward },
                                             )
                                             .clearFocusOnTapOutside()
-                                            .nestedScroll(chromeState.nestedScrollConnection)
-                                            .thinScrollbar(gridState),
+                                            .nestedScroll(chromeState.nestedScrollConnection),
                                         flingBehavior = rememberCalmScrollableFlingBehavior(),
                                         contentPadding = PaddingValues(top = topPadding, start = LibraryPageHorizontalPadding, end = LibraryPageHorizontalPadding, bottom = 16.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current),
@@ -901,8 +898,7 @@ fun LibraryScreen(
                                                 isAtEnd = { !listState.canScrollForward },
                                             )
                                             .clearFocusOnTapOutside()
-                                            .nestedScroll(chromeState.nestedScrollConnection)
-                                            .thinScrollbar(listState),
+                                            .nestedScroll(chromeState.nestedScrollConnection),
                                         flingBehavior = rememberCalmScrollableFlingBehavior(),
                                         contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)

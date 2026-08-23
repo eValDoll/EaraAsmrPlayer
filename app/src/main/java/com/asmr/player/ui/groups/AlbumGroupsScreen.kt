@@ -61,7 +61,6 @@ import com.asmr.player.ui.common.FlatTextFieldDialog
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.smoothScrollToTop
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.theme.AsmrTheme
@@ -124,7 +123,7 @@ fun AlbumGroupsScreen(
                 } else {
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize().thinScrollbar(listState),
+                        modifier = Modifier.fillMaxSize(),
                         flingBehavior = rememberCalmScrollableFlingBehavior(),
                         contentPadding = PaddingValues(horizontal = AlbumGroupsPageHorizontalPadding, vertical = 8.dp)
                             .withAddedBottomPadding(LocalBottomOverlayPadding.current + 72.dp),
