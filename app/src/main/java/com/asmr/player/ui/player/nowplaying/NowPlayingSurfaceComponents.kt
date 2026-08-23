@@ -196,6 +196,7 @@ internal fun NowPlayingLyricsSurface(
     lyrics: List<SubtitleEntry>,
     lyricColors: LyricReadableColors,
     accentColor: Color,
+    spectrumColor: Color,
     onAccentColor: Color,
     lyricsPageSettings: LyricsPageSettings,
     onSeekTo: (Long) -> Unit,
@@ -223,7 +224,7 @@ internal fun NowPlayingLyricsSurface(
     ) {
         if (isLandscape) {
             HorizontalStereoSpectrum(
-                lineColor = AsmrTheme.colorScheme.primaryStrong,
+                lineColor = spectrumColor,
                 intensity = 0.72f,
                 modifier = Modifier
                     .fillMaxWidth()

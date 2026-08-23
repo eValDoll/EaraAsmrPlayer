@@ -61,7 +61,8 @@ internal fun LyricsPage(
         coverBackgroundEnabled = coverBackgroundEnabled
     )
     val lyricColors = rememberLyricReadableColors(
-        accentColor = playerThemeColors.accentColor
+        accentColor = playerThemeColors.accentColor,
+        useReadablePageInactiveText = true
     )
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
