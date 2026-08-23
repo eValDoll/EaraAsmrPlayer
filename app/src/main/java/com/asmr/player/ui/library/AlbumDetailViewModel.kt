@@ -57,6 +57,9 @@ import com.asmr.player.data.remote.dlsite.resolveCloudSyncWorkId
 import com.asmr.player.data.remote.dlsite.resolveDlsiteCloudSync
 import com.asmr.player.data.remote.dlsite.resolveSelectedDlsiteCloudSync
 import com.asmr.player.data.remote.download.DownloadManager
+import com.asmr.player.data.remote.download.DownloadBatchRequest
+import com.asmr.player.data.remote.download.EnqueueDownloadBatchResult
+import com.asmr.player.data.remote.download.RelativeDownloadItem
 import com.asmr.player.data.remote.scraper.DLSiteScraper
 import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
 import com.asmr.player.data.remote.scraper.DlsiteRecommendations
@@ -2105,33 +2108,12 @@ class AlbumDetailViewModel @Inject constructor(
                 existingLocalKeysNoGroup.add(TrackKeyNormalizer.buildKey(t.title, "", null))
             }
         
-        messageManager.showInfo("正在加入下载队列")
-        
         val folderName = safeFolderName(album.rjCode.ifBlank { album.workId }.ifBlank { album.title })
-        val baseDir = File(context.getExternalFilesDir(null), "albums")
-        val targetDir = File(baseDir, folderName)
-        if (!targetDir.exists()) targetDir.mkdirs()
-
+        val items = mutableListOf<RelativeDownloadItem>()
         val coverUrl = album.coverUrl.trim()
         if (coverUrl.startsWith("http", ignoreCase = true)) {
             val ext = coverUrl.substringBefore('?').substringAfterLast('.', "").takeIf { it.length in 2..5 } ?: "jpg"
-            val coverFileName = "cover.$ext"
-            downloadManager.enqueueDownload(
-                url = coverUrl,
-                fileName = coverFileName,
-                targetDir = targetDir.absolutePath,
-                taskRootDir = targetDir.absolutePath,
-                relativePath = coverFileName,
-                taskSubtitle = album.title,
-                tags = listOf("album:$folderName"),
-                albumTitle = album.title,
-                albumCircle = album.circle,
-                albumCv = album.cv,
-                albumTagsCsv = album.tags.joinToString(","),
-                albumCoverUrl = album.coverUrl,
-                albumWorkId = album.workId,
-                albumRjCode = album.rjCode
-            )
+            items += RelativeDownloadItem(url = coverUrl, relativePath = "cover.$ext")
         }
 
         album.tracks.forEachIndexed { index, track ->
@@ -2144,20 +2126,26 @@ class AlbumDetailViewModel @Inject constructor(
             }
             val ext = url.substringBefore('?').substringAfterLast('.', "").takeIf { it.length in 2..6 } ?: "mp3"
             val fileName = "${(index + 1).toString().padStart(2, '0')}_${safeFileName(track.title)}.$ext"
-            downloadManager.enqueueDownload(
-                url = url,
-                fileName = fileName,
-                targetDir = targetDir.absolutePath,
-                taskRootDir = targetDir.absolutePath,
-                relativePath = fileName,
-                tags = listOf("album:$folderName"),
-                albumTitle = album.title,
-                albumCircle = album.circle,
-                albumCv = album.cv,
-                albumTagsCsv = album.tags.joinToString(","),
-                albumCoverUrl = album.coverUrl,
-                albumWorkId = album.workId,
-                albumRjCode = album.rjCode
+            items += RelativeDownloadItem(url = url, relativePath = fileName)
+        }
+        if (items.isEmpty()) return
+        viewModelScope.launch(Dispatchers.IO) {
+            showEnqueueBatchResult(
+                downloadManager.enqueueBatch(
+                    DownloadBatchRequest(
+                        albumDirectoryName = folderName,
+                        logicalTaskKey = "album:$folderName",
+                        items = items,
+                        taskSubtitle = album.title,
+                        albumTitle = album.title,
+                        albumCircle = album.circle,
+                        albumCv = album.cv,
+                        albumTagsCsv = album.tags.joinToString(","),
+                        albumCoverUrl = album.coverUrl,
+                        albumWorkId = album.workId,
+                        albumRjCode = album.rjCode,
+                    ),
+                ),
             )
         }
     }
@@ -2200,35 +2188,37 @@ class AlbumDetailViewModel @Inject constructor(
         }
 
         val folderName = safeFolderName(album.rjCode.ifBlank { album.workId }.ifBlank { workno }.ifBlank { album.title })
-        val baseDir = File(context.getExternalFilesDir(null), "albums")
-        val targetDir = File(baseDir, folderName)
-        if (!targetDir.exists()) targetDir.mkdirs()
-
-        enqueueRemoteDownloadCover(
-            album = album,
-            targetRootDir = targetDir,
-            taskKey = "album:$folderName",
-            taskSubtitle = album.title
+        val items = mutableListOf(
+            RelativeDownloadItem(
+                url = "https://play.dlsite.com/api/v3/download?workno=$workno",
+                relativePath = "dlsite_lossless_archive.zip",
+            ),
         )
-
-        downloadManager.enqueueDownload(
-            url = "https://play.dlsite.com/api/v3/download?workno=$workno",
-            fileName = "dlsite_lossless_archive.zip",
-            targetDir = targetDir.absolutePath,
-            taskRootDir = targetDir.absolutePath,
-            relativePath = "dlsite_lossless_archive.zip",
-            taskSubtitle = album.title,
-            tags = listOf("album:$folderName"),
-            albumTitle = album.title,
-            albumCircle = album.circle,
-            albumCv = album.cv,
-            albumTagsCsv = album.tags.joinToString(","),
-            albumCoverUrl = album.coverUrl,
-            albumWorkId = album.workId,
-            albumRjCode = album.rjCode
-        )
-
-        messageManager.showInfo("正在加入无损下载队列")
+        val coverUrl = album.coverUrl.trim()
+        if (coverUrl.startsWith("http", ignoreCase = true)) {
+            val ext = coverUrl.substringBefore('?').substringAfterLast('.', "")
+                .takeIf { it.length in 2..5 } ?: "jpg"
+            items.add(0, RelativeDownloadItem(url = coverUrl, relativePath = "cover.$ext"))
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            showEnqueueBatchResult(
+                downloadManager.enqueueBatch(
+                    DownloadBatchRequest(
+                        albumDirectoryName = folderName,
+                        logicalTaskKey = "album:$folderName",
+                        items = items,
+                        taskSubtitle = album.title,
+                        albumTitle = album.title,
+                        albumCircle = album.circle,
+                        albumCv = album.cv,
+                        albumTagsCsv = album.tags.joinToString(","),
+                        albumCoverUrl = album.coverUrl,
+                        albumWorkId = album.workId,
+                        albumRjCode = album.rjCode,
+                    ),
+                ),
+            )
+        }
     }
 
     fun downloadDlsiteTrialSelected(selectedLeafPaths: Set<String>) {
@@ -2282,7 +2272,8 @@ class AlbumDetailViewModel @Inject constructor(
                 albumId = localAlbum.id,
                 albumPaths = localAlbum.getAllLocalPaths(),
                 tracks = localAlbum.tracks,
-                onlineSavedResources = savedResources
+                onlineSavedResources = savedResources,
+                sources = localTreeSourcesForAlbum(localAlbum),
             )
             val localFiles = collectLocalSelectionFiles(localIndex)
             val remoteFiles = flattenAsmrOneLeafDownloads(tree)
@@ -2837,89 +2828,6 @@ class AlbumDetailViewModel @Inject constructor(
         return emptyList()
     }
 
-    private fun scanDocumentTreeTracks(albumId: Long, albumPath: String): List<Track> {
-        val uri = runCatching { android.net.Uri.parse(albumPath) }.getOrNull() ?: return emptyList()
-        val resolver = context.contentResolver
-        val treeId = runCatching { android.provider.DocumentsContract.getTreeDocumentId(uri) }.getOrNull() ?: ""
-        val documentId = runCatching { android.provider.DocumentsContract.getDocumentId(uri) }.getOrNull() ?: treeId
-        val treeUri = if (treeId.isNotBlank()) android.provider.DocumentsContract.buildTreeDocumentUri(uri.authority, treeId) else uri
-        
-        val audioExtensions = setOf("mp3", "flac", "wav", "m4a", "ogg", "aac", "opus")
-        val result = mutableListOf<Track>()
-        
-        fun walk(parentDocId: String, parentRelativePath: String) {
-            val childrenUri = android.provider.DocumentsContract.buildChildDocumentsUriUsingTree(treeUri, parentDocId)
-            val projection = arrayOf(
-                android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID,
-                android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME,
-                android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE
-            )
-            
-            runCatching {
-                resolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
-                    val idIndex = cursor.getColumnIndex(android.provider.DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-                    val nameIndex = cursor.getColumnIndex(android.provider.DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-                    val mimeIndex = cursor.getColumnIndex(android.provider.DocumentsContract.Document.COLUMN_MIME_TYPE)
-                    
-                    while (cursor.moveToNext()) {
-                        val id = cursor.getString(idIndex)
-                        val name = cursor.getString(nameIndex).orEmpty()
-                        val mime = cursor.getString(mimeIndex).orEmpty()
-                        
-                        if (mime == android.provider.DocumentsContract.Document.MIME_TYPE_DIR) {
-                            val relPath = if (parentRelativePath.isEmpty()) name else "$parentRelativePath/$name"
-                            walk(id, relPath)
-                        } else if (audioExtensions.contains(name.substringAfterLast('.', "").lowercase())) {
-                            val trackUri = android.provider.DocumentsContract.buildDocumentUriUsingTree(treeUri, id)
-                            val group = if (parentRelativePath.contains("/")) parentRelativePath.substringAfterLast('/') else parentRelativePath
-                            result.add(
-                                Track(
-                                    albumId = albumId,
-                                    title = name.substringBeforeLast('.'),
-                                    path = trackUri.toString(),
-                                    duration = 0.0,
-                                    group = group,
-                                    lyricsRelativePathNoExt = if (parentRelativePath.isEmpty()) {
-                                        name.substringBeforeLast('.')
-                                    } else {
-                                        "$parentRelativePath/${name.substringBeforeLast('.')}"
-                                    }
-                                )
-                            )
-                        }
-                    }
-                }
-            }
-        }
-        
-        if (documentId.isNotBlank()) {
-            walk(documentId, "")
-        }
-        return result.sortedBy { it.path }
-    }
-
-    private fun scanLocalTracks(albumId: Long, albumPath: String): List<Track> {
-        val root = File(albumPath)
-        if (!root.exists() || !root.isDirectory) return emptyList()
-        val audioExtensions = setOf("mp3", "flac", "wav", "m4a", "ogg", "aac", "opus")
-        val files = root.walkTopDown()
-            .filter { it.isFile && audioExtensions.contains(it.extension.lowercase()) }
-            .toList()
-            .sortedBy { it.absolutePath }
-        return files.map { file ->
-            val parent = file.parentFile
-            val group = if (parent != null && parent != root) parent.name else ""
-            Track(
-                albumId = albumId,
-                title = file.nameWithoutExtension,
-                path = file.absolutePath,
-                duration = 0.0,
-                group = group,
-                lyricsRelativePathNoExt = deriveLyricsRelativePathNoExt(file.absolutePath, listOf(root.absolutePath))
-            )
-        }
-    }
-
     private fun TrackEntity.toDomain(): Track {
         return Track(
             id = id,
@@ -3048,26 +2956,22 @@ class AlbumDetailViewModel @Inject constructor(
 
         val rjOrWorkId = album.rjCode.ifBlank { album.workId }
         val folderName = safeFolderName(rjOrWorkId.ifBlank { album.title })
-        val baseDir = File(context.getExternalFilesDir(null), "albums")
-        val albumDir = File(baseDir, folderName)
         val normalizedBaseDir = relativeBaseDir.trim().trim('/', '\\')
-        val targetRootDir = if (normalizedBaseDir.isBlank()) albumDir else File(albumDir, normalizedBaseDir)
-        if (!targetRootDir.exists()) targetRootDir.mkdirs()
-
         val taskKey = buildRemoteDownloadTaskKey(folderName, normalizedBaseDir)
         val taskSubtitle = album.title
-
+        val batchItems = mutableListOf<RelativeDownloadItem>()
         if (includeCover) {
-            enqueueRemoteDownloadCover(
-                album = album,
-                targetRootDir = targetRootDir,
-                taskKey = taskKey,
-                taskSubtitle = taskSubtitle
-            )
+            val coverUrl = album.coverUrl.trim()
+            if (coverUrl.startsWith("http", ignoreCase = true)) {
+                val ext = coverUrl.substringBefore('?').substringAfterLast('.', "")
+                    .takeIf { it.length in 2..5 } ?: "jpg"
+                val relativeCover = listOf(normalizedBaseDir, "cover.$ext")
+                    .filter { it.isNotBlank() }
+                    .joinToString("/")
+                batchItems += RelativeDownloadItem(url = coverUrl, relativePath = relativeCover)
+            }
         }
 
-        var skipped = 0
-        var enqueued = 0
         selected.forEach { item ->
             val relPath = item.relativePath.replace('\\', '/')
             val rawName = relPath.substringAfterLast('/', relPath)
@@ -3100,50 +3004,51 @@ class AlbumDetailViewModel @Inject constructor(
             }
 
             val relDir = relPath.substringBeforeLast('/', "")
-            val dir = if (relDir.isBlank()) targetRootDir else File(targetRootDir, relDir)
-            if (!dir.exists()) dir.mkdirs()
-            val outFile = File(dir, fileName)
-            if (outFile.exists() && outFile.isFile) {
-                skipped += 1
-                return@forEach
-            }
-
-            val relativeFilePath = buildString {
-                if (relDir.isNotBlank()) {
-                    append(relDir)
-                    append('/')
-                }
-                append(fileName)
-            }
-
-            downloadManager.enqueueDownload(
+            val relativeFilePath = listOf(normalizedBaseDir, relDir, fileName)
+                .filter { it.isNotBlank() }
+                .joinToString("/")
+            batchItems += RelativeDownloadItem(
                 url = url,
-                fileName = fileName,
-                targetDir = dir.absolutePath,
-                taskRootDir = targetRootDir.absolutePath,
                 relativePath = relativeFilePath,
-                taskSubtitle = taskSubtitle,
-                tags = listOf(taskKey),
-                albumTitle = album.title,
-                albumCircle = album.circle,
-                albumCv = album.cv,
-                albumTagsCsv = album.tags.joinToString(","),
-                albumCoverUrl = album.coverUrl,
-                albumWorkId = album.workId,
-                albumRjCode = album.rjCode,
                 dlsitePlayImageSeed = item.dlsitePlayImageSeed,
                 dlsitePlayImageWidth = item.dlsitePlayImageWidth,
-                dlsitePlayImageHeight = item.dlsitePlayImageHeight
+                dlsitePlayImageHeight = item.dlsitePlayImageHeight,
             )
-            enqueued += 1
         }
+        if (batchItems.isEmpty()) return
 
-        if (skipped > 0 && enqueued == 0) {
-            messageManager.showInfo("本地已存在，已跳过下载（${skipped}项）")
-        } else if (skipped > 0) {
-            messageManager.showInfo("已加入下载队列（${enqueued}项），跳过已存在（${skipped}项）")
-        } else if (enqueued > 0) {
-            messageManager.showInfo("正在加入下载队列（${enqueued}项）")
+        viewModelScope.launch(Dispatchers.IO) {
+            showEnqueueBatchResult(
+                downloadManager.enqueueBatch(
+                    DownloadBatchRequest(
+                        albumDirectoryName = folderName,
+                        logicalTaskKey = taskKey,
+                        items = batchItems,
+                        taskSubtitle = taskSubtitle,
+                        albumTitle = album.title,
+                        albumCircle = album.circle,
+                        albumCv = album.cv,
+                        albumTagsCsv = album.tags.joinToString(","),
+                        albumCoverUrl = album.coverUrl,
+                        albumWorkId = album.workId,
+                        albumRjCode = album.rjCode,
+                    ),
+                ),
+            )
+        }
+    }
+
+    private fun showEnqueueBatchResult(result: EnqueueDownloadBatchResult) {
+        when (result) {
+            is EnqueueDownloadBatchResult.Accepted -> {
+                messageManager.showInfo("正在加入下载队列（${result.itemCount}项）")
+            }
+            EnqueueDownloadBatchResult.DirectoryUnavailable -> {
+                messageManager.showError("下载目录不可用，请重新选择或重置为默认目录")
+            }
+            EnqueueDownloadBatchResult.TaskBlocked -> {
+                messageManager.showInfo("相同作品已有下载任务正在处理")
+            }
         }
     }
 
@@ -3153,35 +3058,6 @@ class AlbumDetailViewModel @Inject constructor(
         } else {
             "album:$folderName/$relativeBaseDir"
         }
-    }
-
-    private fun enqueueRemoteDownloadCover(
-        album: Album,
-        targetRootDir: File,
-        taskKey: String,
-        taskSubtitle: String
-    ) {
-        val coverUrl = album.coverUrl.trim()
-        if (!coverUrl.startsWith("http", ignoreCase = true)) return
-
-        val ext = coverUrl.substringBefore('?').substringAfterLast('.', "").takeIf { it.length in 2..5 } ?: "jpg"
-        val coverFileName = "cover.$ext"
-        downloadManager.enqueueDownload(
-            url = coverUrl,
-            fileName = coverFileName,
-            targetDir = targetRootDir.absolutePath,
-            taskRootDir = targetRootDir.absolutePath,
-            relativePath = coverFileName,
-            taskSubtitle = taskSubtitle,
-            tags = listOf(taskKey),
-            albumTitle = album.title,
-            albumCircle = album.circle,
-            albumCv = album.cv,
-            albumTagsCsv = album.tags.joinToString(","),
-            albumCoverUrl = album.coverUrl,
-            albumWorkId = album.workId,
-            albumRjCode = album.rjCode
-        )
     }
 
     override fun onCleared() {

@@ -86,6 +86,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.BuildConfig
 import com.asmr.player.cache.AppCacheLimits
 import com.asmr.player.cache.AppCacheState
+import com.asmr.player.data.remote.download.DownloadDestination
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.DeepSeekReasoningEffort
 import com.asmr.player.data.settings.DeepSeekTranslationSettings
@@ -104,6 +105,7 @@ import com.asmr.player.subtitle.formatDeepSeekBalances
 import com.asmr.player.subtitle.formatDeepSeekTokenTotal
 import com.asmr.player.ui.library.BulkPhase
 import com.asmr.player.ui.library.LibraryViewModel
+import com.asmr.player.util.documentTreeDisplayPath
 import com.asmr.player.ui.common.AppSupportStatusSection
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.FlatActionDialog
@@ -117,6 +119,7 @@ import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.update.launchDownloadedApkInstall
 import com.asmr.player.util.Formatting
+import java.io.File
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -219,6 +222,7 @@ fun SettingsScreen(
     val updateState by viewModel.updateState.collectAsStateWhileActive(aboutDataActive)
     val autoUpdateCheckEnabled by viewModel.autoUpdateCheckEnabled.collectAsStateWhileActive(aboutDataActive)
     val scanRoots by libraryViewModel.scanRoots.collectAsStateWhileActive(localLibraryDataActive)
+    val downloadDestination by viewModel.downloadDestination.collectAsStateWhileActive(localLibraryDataActive)
     val bulkProgress by libraryViewModel.bulkProgress.collectAsStateWhileActive(localLibraryDataActive)
     val isGlobalSyncRunning by libraryViewModel.isGlobalSyncRunning.collectAsStateWhileActive(localLibraryDataActive)
     val context = LocalContext.current
@@ -282,6 +286,27 @@ fun SettingsScreen(
                 }
             }
         }
+    )
+    var pendingDownloadDestination by remember { mutableStateOf<DownloadDestination?>(null) }
+    val pickDownloadRootLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree(),
+        onResult = { uri ->
+            if (uri != null) {
+                val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                val granted = runCatching {
+                    context.contentResolver.takePersistableUriPermission(uri, flags)
+                    true
+                }.getOrDefault(false)
+                if (granted) {
+                    pendingDownloadDestination = DownloadDestination.DocumentTree(
+                        root = uri.toString(),
+                        label = formatTreeRootLabel(uri.toString()),
+                    )
+                } else {
+                    libraryViewModel.messageManager.showError("无法获取下载目录读写权限")
+                }
+            }
+        },
     )
     var pendingRemoveRoot by remember { mutableStateOf<String?>(null) }
 
@@ -379,6 +404,58 @@ fun SettingsScreen(
                     containerColor = colorScheme.primarySoft,
                     contentColor = if (isDark) colorScheme.onPrimaryContainer else colorScheme.primaryStrong
                 )
+
+                Text("下载目录", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = colorScheme.surface.copy(alpha = 0.35f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text(downloadDestination.label, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = downloadDestination.displayPath,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colorScheme.textSecondary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            FilledTonalButton(
+                                onClick = {
+                                    viewModel.requestDownloadDirectoryChange {
+                                        pickDownloadRootLauncher.launch(null)
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = buttonColors,
+                                enabled = !isGlobalSyncRunning,
+                            ) {
+                                Icon(Icons.Rounded.FolderOpen, contentDescription = null, tint = buttonColors.contentColor)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("选择目录")
+                            }
+                            TextButton(
+                                onClick = {
+                                    viewModel.requestDownloadDirectoryChange {
+                                        pendingDownloadDestination = DownloadDestination.Default(
+                                            root = File(context.getExternalFilesDir(null), "albums").absolutePath,
+                                        )
+                                    }
+                                },
+                                enabled = downloadDestination is DownloadDestination.DocumentTree && !isGlobalSyncRunning,
+                            ) {
+                                Text("重置默认")
+                            }
+                        }
+                    }
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -485,7 +562,13 @@ fun SettingsScreen(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(label, style = MaterialTheme.typography.bodyMedium)
-                                    Text(root, style = MaterialTheme.typography.bodySmall, color = colorScheme.textSecondary, maxLines = 1)
+                                    Text(
+                                        documentTreeDisplayPath(context, root),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colorScheme.textSecondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
                                 }
                                 IconButton(onClick = { libraryViewModel.scanSingleRoot(root) }, enabled = !isGlobalSyncRunning) {
                                     Icon(Icons.Rounded.Refresh, contentDescription = null, tint = colorScheme.onSurface)
@@ -1090,6 +1173,26 @@ fun SettingsScreen(
                     }
                 )
             )
+        )
+    }
+    val nextDownloadDestination = pendingDownloadDestination
+    if (nextDownloadDestination != null) {
+        FlatActionDialog(
+            onDismissRequest = { pendingDownloadDestination = null },
+            message = "切换后将清理旧目录中由 App 下载的本地库、下载任务和字幕翻译任务记录，但不会删除或移动物理文件；同一目录内手动导入的其他作品会保留。切换成功后会自动扫描新的目标目录。是否继续？",
+            actions = listOf(
+                FlatDialogAction("取消", onClick = { pendingDownloadDestination = null }),
+                FlatDialogAction(
+                    text = if (nextDownloadDestination is DownloadDestination.Default) "重置" else "切换",
+                    tone = FlatDialogActionTone.Danger,
+                    onClick = {
+                        pendingDownloadDestination = null
+                        viewModel.changeDownloadDirectory(nextDownloadDestination) {
+                            libraryViewModel.scanCurrentDownloadDestinationAsImport()
+                        }
+                    },
+                ),
+            ),
         )
     }
     if (showClearAppCacheConfirmation) {

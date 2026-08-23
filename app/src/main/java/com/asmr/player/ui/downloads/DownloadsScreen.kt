@@ -103,7 +103,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -160,11 +159,11 @@ fun DownloadsScreen(
 ) {
     val tasks by viewModel.tasks.collectAsStateWithLifecycle()
     val subtitleTasks by viewModel.subtitleTasks.collectAsStateWithLifecycle()
+    val downloadDestination by viewModel.downloadDestination.collectAsStateWithLifecycle()
     val polishingRjCodes by viewModel.polishingRjCodes.collectAsStateWithLifecycle()
     val activeDownloadFileCount = remember(tasks) { countActiveDownloadFiles(tasks) }
     val activeTranslationTaskCount = remember(subtitleTasks) { countActiveSubtitleTaskItems(subtitleTasks) }
     val expandedTasks = remember { mutableStateListOf<Long>() }
-    val context = LocalContext.current
     var rjQuery by rememberSaveable { mutableStateOf("") }
     var managementMode by rememberSaveable { mutableStateOf(DownloadManagementMode.Downloads) }
     var pendingDelete by remember { mutableStateOf<PendingDeleteAction?>(null) }
@@ -173,9 +172,6 @@ fun DownloadsScreen(
     var revealedTaskBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
     var pagePositionInRoot by remember { mutableStateOf(Offset.Zero) }
     val swipeRevealCloseController = remember { SwipeRevealCloseController() }
-    val downloadRoot = remember {
-        File(context.getExternalFilesDir(null), "albums").absolutePath
-    }
     val listState = rememberLazyListState()
 
     LaunchedEffect(scrollToTopSignal) {
@@ -375,7 +371,7 @@ fun DownloadsScreen(
                         }
                         item(key = "download_root") {
                             Text(
-                                text = "下载目录：$downloadRoot",
+                                text = "下载目录：${downloadDestination.label} · ${downloadDestination.displayPath}",
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 2.dp, vertical = 4.dp),

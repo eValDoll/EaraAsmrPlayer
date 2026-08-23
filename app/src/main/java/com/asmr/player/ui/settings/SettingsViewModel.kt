@@ -10,6 +10,10 @@ import com.asmr.player.cache.AppCacheManager
 import com.asmr.player.cache.AppCacheState
 import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.data.remote.NetworkHeaders
+import com.asmr.player.data.remote.download.DownloadDestination
+import com.asmr.player.data.remote.download.DownloadDestinationStore
+import com.asmr.player.data.remote.download.DownloadDirectoryChangeResult
+import com.asmr.player.data.remote.download.DownloadDirectoryCoordinator
 import com.asmr.player.data.remote.update.GitHubUpdateClient
 import com.asmr.player.data.remote.update.UpdateRelease
 import com.asmr.player.data.settings.CoverPreviewMode
@@ -25,6 +29,7 @@ import com.asmr.player.subtitle.SubtitleModelRepository
 import com.asmr.player.subtitle.SubtitleModelState
 import com.asmr.player.subtitle.DeepSeekApiKeyStore
 import com.asmr.player.subtitle.DeepSeekAccountRepository
+import com.asmr.player.util.MessageManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
@@ -93,10 +98,53 @@ class SettingsViewModel @Inject constructor(
     private val appCacheManager: AppCacheManager,
     private val okHttpClient: OkHttpClient,
     private val deepSeekAccountRepository: DeepSeekAccountRepository,
+    private val downloadDestinationStore: DownloadDestinationStore,
+    private val downloadDirectoryCoordinator: DownloadDirectoryCoordinator,
+    private val messageManager: MessageManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
     private val subtitleModelRepository = SubtitleModelRepository.get(context)
     private val deepSeekApiKeyStore = DeepSeekApiKeyStore.get(context)
+
+    val downloadDestination: StateFlow<DownloadDestination> = downloadDestinationStore.destination
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            downloadDestinationStore.defaultDestination(),
+        )
+
+    fun requestDownloadDirectoryChange(onAllowed: () -> Unit) {
+        viewModelScope.launch {
+            if (withContext(Dispatchers.IO) { downloadDirectoryCoordinator.hasUnfinishedDownloads() }) {
+                messageManager.showError("请先完成或删除未完成任务")
+            } else {
+                onAllowed()
+            }
+        }
+    }
+
+    fun changeDownloadDirectory(destination: DownloadDestination, onChanged: () -> Unit = {}) {
+        viewModelScope.launch {
+            when (withContext(Dispatchers.IO) {
+                downloadDirectoryCoordinator.changeDestination(destination)
+            }) {
+                DownloadDirectoryChangeResult.Changed -> {
+                    messageManager.showInfo("下载目录已切换，正在扫描目标目录")
+                    onChanged()
+                }
+                DownloadDirectoryChangeResult.Unchanged -> messageManager.showInfo("当前已使用该下载目录")
+                DownloadDirectoryChangeResult.BlockedByUnfinishedTasks -> {
+                    messageManager.showError("请先完成或删除未完成任务")
+                }
+                DownloadDirectoryChangeResult.DirectoryUnavailable -> {
+                    messageManager.showError("下载目录不可用，请重新选择或重置为默认目录")
+                }
+                is DownloadDirectoryChangeResult.Failed -> {
+                    messageManager.showError("切换下载目录失败")
+                }
+            }
+        }
+    }
 
     val floatingLyricsEnabled: StateFlow<Boolean> = settingsRepository.floatingLyricsEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)

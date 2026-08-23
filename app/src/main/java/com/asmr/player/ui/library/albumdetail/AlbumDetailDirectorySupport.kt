@@ -1277,15 +1277,59 @@ internal data class LocalTreeIndexBuildResult(
     val leaves: List<LocalTreeLeafCacheEntry>
 )
 
+internal enum class LocalTreeSourceKind {
+    Imported,
+    Downloaded,
+}
+
+internal data class LocalTreeSource(
+    val path: String,
+    val kind: LocalTreeSourceKind,
+)
+
+internal fun localTreeSourcesForAlbum(album: Album): List<LocalTreeSource> {
+    val imported = buildList {
+        val path = album.path.trim()
+        if (path.isNotBlank() && !path.startsWith("http", ignoreCase = true) && !path.startsWith("web://", ignoreCase = true)) {
+            add(path)
+        }
+        album.localPath?.trim()?.takeIf { it.isNotBlank() }?.let(::add)
+    }.distinctBy(::localTreeSourceIdentity)
+    val downloaded = listOfNotNull(album.downloadPath?.trim()?.takeIf { it.isNotBlank() })
+    val importedIdentities = imported.map(::localTreeSourceIdentity).toSet()
+    return buildList {
+        imported.forEach { add(LocalTreeSource(it, LocalTreeSourceKind.Imported)) }
+        downloaded.filterNot { localTreeSourceIdentity(it) in importedIdentities }
+            .forEach { add(LocalTreeSource(it, LocalTreeSourceKind.Downloaded)) }
+    }.distinctBy { localTreeSourceIdentity(it.path) }
+}
+
+private fun localTreeSourceIdentity(path: String): String {
+    val trimmed = path.trim()
+    if (!trimmed.startsWith("content://", ignoreCase = true)) {
+        return runCatching { File(trimmed).canonicalPath }.getOrDefault(File(trimmed).absolutePath)
+    }
+    val uri = runCatching { Uri.parse(trimmed) }.getOrNull() ?: return trimmed
+    val documentId = runCatching { DocumentsContract.getDocumentId(uri) }.getOrNull()
+        ?: runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull()
+        ?: return trimmed
+    return "${uri.authority.orEmpty()}:${documentId.replace('\\', '/').trimEnd('/')}"
+}
+
 internal suspend fun loadOrBuildLocalTreeIndex(
     context: android.content.Context,
     albumId: Long,
     albumPaths: List<String>,
     tracks: List<Track>,
-    onlineSavedResources: List<OnlineSavedResourceEntity> = emptyList()
+    onlineSavedResources: List<OnlineSavedResourceEntity> = emptyList(),
+    sources: List<LocalTreeSource> = albumPaths.map { LocalTreeSource(it, LocalTreeSourceKind.Imported) },
 ): LocalTreeIndex {
     val gson = Gson()
-    val cacheKey = albumPaths.map { it.trim() }.filter { it.isNotBlank() }.sorted().joinToString("|")
+    val normalizedSources = sources.filter { it.path.isNotBlank() }.distinctBy { localTreeSourceIdentity(it.path) }
+    val cacheKey = normalizedSources
+        .map { "${it.kind.name}:${it.path.trim()}" }
+        .sorted()
+        .joinToString("|")
     val stamp = computeLocalTreeCacheStamp(context, albumPaths, tracks)
     val dao = AppDatabaseProvider.get(context).localTreeCacheDao()
     val onlineTracks = tracks.filter { it.path.trim().startsWith("http", ignoreCase = true) }
@@ -1393,7 +1437,11 @@ internal suspend fun loadOrBuildLocalTreeIndex(
         }
     }
 
-    val built = buildLocalTreeIndexByScanning(context = context, albumPaths = albumPaths, tracks = tracks)
+    val built = buildLocalTreeIndexByScanningSources(
+        context = context,
+        sources = normalizedSources,
+        tracks = tracks,
+    )
     val merged = mergeLeaves(
         localLeaves = built.leaves,
         onlineLeaves = onlineLeaves,
@@ -1409,6 +1457,42 @@ internal suspend fun loadOrBuildLocalTreeIndex(
         )
     )
     return buildLocalTreeIndexFromLeaves(leaves = merged, tracks = tracks)
+}
+
+private fun buildLocalTreeIndexByScanningSources(
+    context: android.content.Context,
+    sources: List<LocalTreeSource>,
+    tracks: List<Track>,
+): LocalTreeIndexBuildResult {
+    val hasImported = sources.any { it.kind == LocalTreeSourceKind.Imported }
+    val hasDownloaded = sources.any { it.kind == LocalTreeSourceKind.Downloaded }
+    val separateSources = hasImported && hasDownloaded &&
+        sources.map { localTreeSourceIdentity(it.path) }.distinct().size > 1
+    if (!separateSources) {
+        return buildLocalTreeIndexByScanning(
+            context = context,
+            albumPaths = sources.map { it.path },
+            tracks = tracks,
+        )
+    }
+
+    val leaves = sources.flatMap { source ->
+        val prefix = when (source.kind) {
+            LocalTreeSourceKind.Imported -> "导入内容"
+            LocalTreeSourceKind.Downloaded -> "下载内容"
+        }
+        buildLocalTreeIndexByScanning(
+            context = context,
+            albumPaths = listOf(source.path),
+            tracks = tracks,
+        ).leaves.map { leaf ->
+            leaf.copy(relativePath = "$prefix/${leaf.relativePath}")
+        }
+    }
+    return LocalTreeIndexBuildResult(
+        index = buildLocalTreeIndexFromLeaves(leaves, tracks),
+        leaves = leaves,
+    )
 }
 
 internal fun computeAlbumPathsStamp(context: android.content.Context, albumPaths: List<String>): Long {

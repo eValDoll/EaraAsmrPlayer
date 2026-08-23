@@ -1,31 +1,46 @@
 package com.asmr.player.ui.dlsite
 
-import android.content.Context
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.asmr.player.data.remote.download.DownloadBatchRequest
+import com.asmr.player.data.remote.download.EnqueueDownloadBatchResult
 import com.asmr.player.data.remote.download.DownloadManager
+import com.asmr.player.data.remote.download.RelativeDownloadItem
+import com.asmr.player.util.MessageManager
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
-import java.io.File
 import javax.inject.Inject
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 @HiltViewModel
 class DlsitePlayViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val downloadManager: DownloadManager
+    private val downloadManager: DownloadManager,
+    private val messageManager: MessageManager,
 ) : ViewModel() {
     fun enqueueDownload(rjCode: String, url: String, suggestedFileName: String?) {
         val rj = rjCode.trim().ifBlank { "dlsite" }
-        val baseDir = File(context.getExternalFilesDir(null), "albums")
-        val targetDir = File(baseDir, rj)
         val fileName = (suggestedFileName?.trim().takeIf { !it.isNullOrBlank() } ?: "download.bin")
             .replace(Regex("""[\\/:*?"<>|]"""), "_")
-        downloadManager.enqueueDownload(
-            url = url,
-            fileName = fileName,
-            targetDir = targetDir.absolutePath,
-            taskRootDir = targetDir.absolutePath,
-            relativePath = fileName,
-            tags = listOf("album:$rj")
-        )
+        viewModelScope.launch(Dispatchers.IO) {
+            when (
+                downloadManager.enqueueBatch(
+                    DownloadBatchRequest(
+                        albumDirectoryName = rj,
+                        logicalTaskKey = "album:$rj",
+                        items = listOf(RelativeDownloadItem(url = url, relativePath = fileName)),
+                        albumWorkId = rj,
+                        albumRjCode = rj,
+                    ),
+                )
+            ) {
+                is EnqueueDownloadBatchResult.Accepted -> Unit
+                EnqueueDownloadBatchResult.DirectoryUnavailable -> {
+                    messageManager.showError("下载目录不可用，请重新选择或重置为默认目录")
+                }
+                EnqueueDownloadBatchResult.TaskBlocked -> {
+                    messageManager.showInfo("相同作品已有下载任务正在处理")
+                }
+            }
+        }
     }
 }

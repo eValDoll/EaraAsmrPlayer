@@ -205,4 +205,38 @@ class DownloadLibraryMergeTest {
             )
         )
     }
+
+    @Test
+    fun downloadMimeType_preservesSubtitleFileExtensionsForSafProviders() {
+        assertEquals("text/vtt", downloadMimeType("voice.vtt"))
+        assertEquals("application/x-subrip", downloadMimeType("voice.srt"))
+        assertEquals("application/octet-stream", downloadMimeType("voice.lrc"))
+        assertEquals("text/plain", downloadMimeType("notes.txt"))
+    }
+
+    @Test
+    fun parseDownloadedSubtitles_matchesAndParsesVttForSafAudio() {
+        val audio = DownloadStorageEntry(
+            reference = "content://provider/audio",
+            relativePath = "voice/track01.mp3",
+            displayName = "track01.mp3",
+            mimeType = "audio/mpeg",
+            sizeBytes = 1L,
+            isDirectory = false,
+        )
+        val subtitle = DownloadStorageEntry(
+            reference = "content://provider/subtitle",
+            relativePath = "voice/track01.vtt",
+            displayName = "track01.vtt",
+            mimeType = "text/vtt",
+            sizeBytes = 32L,
+            isDirectory = false,
+        )
+
+        val parsed = parseDownloadedSubtitles(listOf(audio, subtitle)) {
+            "WEBVTT\n\n00:00:00.000 --> 00:00:01.000\n字幕内容".toByteArray()
+        }
+
+        assertEquals("字幕内容", parsed.getValue(audio.reference).single().text)
+    }
 }

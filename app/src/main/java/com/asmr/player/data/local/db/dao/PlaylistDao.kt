@@ -70,6 +70,18 @@ interface PlaylistDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertPlaylistTrackCrossRef(crossRef: PlaylistTrackCrossRef)
 
+    @Query(
+        "INSERT OR IGNORE INTO playlist_track_cross_ref (playlistId, trackId, trackOrder) " +
+            "SELECT playlistId, :toTrackId, trackOrder FROM playlist_track_cross_ref WHERE trackId = :fromTrackId"
+    )
+    suspend fun copyTrackReferences(fromTrackId: Long, toTrackId: Long)
+
+    @Query("DELETE FROM playlist_track_cross_ref WHERE trackId = :trackId")
+    suspend fun deleteTrackReferences(trackId: Long)
+
+    @Query("DELETE FROM playlist_track_cross_ref WHERE trackId IN (:trackIds)")
+    suspend fun deleteTrackReferences(trackIds: List<Long>)
+
     @Query("DELETE FROM playlist_track_cross_ref WHERE playlistId = :playlistId AND trackId = :trackId")
     suspend fun deleteTrackFromPlaylist(playlistId: Long, trackId: Long)
 

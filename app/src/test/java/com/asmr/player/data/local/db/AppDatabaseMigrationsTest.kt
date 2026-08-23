@@ -15,6 +15,63 @@ import java.io.File
 @Config(application = Application::class, sdk = [34])
 class AppDatabaseMigrationsTest {
     @Test
+    fun migration30To31_scopesLegacyTaskToDefaultDownloadRoot() {
+        val context = RuntimeEnvironment.getApplication()
+        val dbName = "migration-test-${System.nanoTime()}.db"
+        val dbFile = context.getDatabasePath(dbName)
+        dbFile.parentFile?.mkdirs()
+        if (dbFile.exists()) dbFile.delete()
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(context)
+                .name(dbName)
+                .callback(object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(30) {
+                    override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                        db.execSQL(
+                            "CREATE TABLE download_tasks (" +
+                                "`id` INTEGER NOT NULL PRIMARY KEY, `taskKey` TEXT NOT NULL, " +
+                                "`rootDir` TEXT NOT NULL)"
+                        )
+                        db.execSQL(
+                            "INSERT INTO download_tasks VALUES(" +
+                                "1,'album:RJ12345678','/storage/emulated/0/Android/data/com.asmr.player/files/albums/RJ12345678')"
+                        )
+                    }
+
+                    override fun onUpgrade(
+                        db: androidx.sqlite.db.SupportSQLiteDatabase,
+                        oldVersion: Int,
+                        newVersion: Int,
+                    ) = Unit
+                })
+                .build()
+        )
+        val db = helper.writableDatabase
+
+        AppDatabaseMigrations.MIGRATION_30_31.migrate(db)
+
+        db.query(
+            "SELECT logicalTaskKey, destinationRoot, albumRootDir FROM download_tasks WHERE id = 1"
+        ).use { cursor ->
+            assertTrue(cursor.moveToFirst())
+            assertEquals("album:RJ12345678", cursor.getString(0))
+            assertEquals(
+                "/storage/emulated/0/Android/data/com.asmr.player/files/albums",
+                cursor.getString(1),
+            )
+            assertEquals(
+                "/storage/emulated/0/Android/data/com.asmr.player/files/albums/RJ12345678",
+                cursor.getString(2),
+            )
+        }
+
+        db.close()
+        helper.close()
+        File(dbFile.absolutePath).delete()
+        File(dbFile.absolutePath + "-wal").delete()
+        File(dbFile.absolutePath + "-shm").delete()
+    }
+
+    @Test
     fun migration29To30_preservesDownloadAndAddsEmptyDlsiteImageMetadata() {
         val context = RuntimeEnvironment.getApplication()
         val dbName = "migration-test-${System.nanoTime()}.db"

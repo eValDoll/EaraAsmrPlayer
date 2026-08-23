@@ -250,7 +250,8 @@ internal fun AlbumLocalBreadcrumbTabV2(
                 albumId = album.id,
                 albumPaths = allPaths,
                 tracks = queueTracks,
-                onlineSavedResources = onlineSavedResources
+                onlineSavedResources = onlineSavedResources,
+                sources = localTreeSourcesForAlbum(album),
             )
         }
     }

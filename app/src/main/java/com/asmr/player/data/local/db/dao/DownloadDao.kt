@@ -15,6 +15,9 @@ interface DownloadDao {
     @Query("SELECT * FROM download_tasks ORDER BY createdAt DESC")
     fun observeTasksWithItems(): Flow<List<DownloadTaskWithItems>>
 
+    @Query("SELECT * FROM download_tasks ORDER BY createdAt DESC")
+    suspend fun getAllTasksOnce(): List<DownloadTaskEntity>
+
     @Query(
         """
         SELECT d.id AS taskId,
@@ -97,6 +100,12 @@ interface DownloadDao {
     @Query("SELECT * FROM download_items WHERE filePath = :filePath LIMIT 1")
     suspend fun getItemByFilePath(filePath: String): DownloadItemEntity?
 
+    @Query("SELECT * FROM download_items WHERE taskId = :taskId AND relativePath = :relativePath LIMIT 1")
+    suspend fun getItemByTaskAndRelativePath(taskId: Long, relativePath: String): DownloadItemEntity?
+
+    @Query("UPDATE download_items SET filePath = :filePath, targetDir = :targetDir, updatedAt = :updatedAt WHERE workId = :workId")
+    suspend fun updateItemDestination(workId: String, filePath: String, targetDir: String, updatedAt: Long)
+
     @Query(
         "SELECT * FROM download_items " +
             "WHERE state = 'QUEUED' " +
@@ -177,6 +186,9 @@ interface DownloadDao {
 
     @Query("SELECT COUNT(*) FROM download_items WHERE state = 'PAUSED'")
     suspend fun countPausedItems(): Int
+
+    @Query("SELECT COUNT(*) FROM download_items WHERE state != 'SUCCEEDED'")
+    suspend fun countUnfinishedItems(): Int
 }
 
 data class DownloadTaskAlbumCoverRow(
