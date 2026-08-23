@@ -7,10 +7,8 @@ import org.junit.Test
 
 class NowPlayingHomeLayoutCoverTest {
     @Test
-    fun classicTrackInfoHeightOnlyExpandsWhenTitleWraps() {
-        assertEquals(88.dp, nowPlayingClassicTrackInfoHeight(titleLineCount = 1))
-        assertEquals(108.dp, nowPlayingClassicTrackInfoHeight(titleLineCount = 2))
-        assertEquals(108.dp, nowPlayingClassicTrackInfoHeight(titleLineCount = 3))
+    fun classicTrackInfoHeightStaysSingleLine() {
+        assertEquals(88.dp, nowPlayingClassicTrackInfoHeight())
     }
 
     @Test
@@ -24,8 +22,7 @@ class NowPlayingHomeLayoutCoverTest {
         assertEquals(8.dp, metrics.topPadding)
         assertEquals(4.dp, metrics.coverVerticalPadding)
         assertEquals(148.dp, metrics.minimumCoverWidth)
-        assertEquals(65.dp, nowPlayingClassicTrackInfoHeight(titleLineCount = 1, metrics = metrics))
-        assertEquals(80.dp, nowPlayingClassicTrackInfoHeight(titleLineCount = 2, metrics = metrics))
+        assertEquals(65.dp, nowPlayingClassicTrackInfoHeight(metrics = metrics))
     }
 
     @Test
@@ -39,8 +36,7 @@ class NowPlayingHomeLayoutCoverTest {
         assertEquals(24.dp, metrics.topPadding)
         assertEquals(16.dp, metrics.coverVerticalPadding)
         assertEquals(180.dp, metrics.minimumCoverWidth)
-        assertEquals(88.dp, nowPlayingClassicTrackInfoHeight(titleLineCount = 1, metrics = metrics))
-        assertEquals(108.dp, nowPlayingClassicTrackInfoHeight(titleLineCount = 2, metrics = metrics))
+        assertEquals(88.dp, nowPlayingClassicTrackInfoHeight(metrics = metrics))
     }
 
     @Test
@@ -91,7 +87,7 @@ class NowPlayingHomeLayoutCoverTest {
         )
 
         assertEquals(
-            202.dp,
+            217.dp,
             nowPlayingHomeCoverWidth(
                 expanded = false,
                 availableWidth = 360.dp,
@@ -101,7 +97,7 @@ class NowPlayingHomeLayoutCoverTest {
                 topPadding = metrics.topPadding,
                 coverVerticalPadding = metrics.coverVerticalPadding,
                 identityHeight = metrics.audienceHeight +
-                    nowPlayingClassicTrackInfoHeight(titleLineCount = 2, metrics = metrics),
+                    nowPlayingClassicTrackInfoHeight(metrics = metrics),
                 lyricsReserveHeight = metrics.classicLyricsReserveHeight,
                 minimumCoverWidth = metrics.minimumCoverWidth
             )

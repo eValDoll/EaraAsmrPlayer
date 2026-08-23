@@ -10,6 +10,8 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -50,8 +52,8 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.nativeCanvas
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
@@ -71,9 +73,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -88,6 +90,7 @@ import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AudioOutputRouteIcon
+import com.asmr.player.ui.common.HorizontalStereoSpectrum
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
 import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
@@ -127,21 +130,18 @@ private const val VideoProgressUiTickMs = 1_000L
 private const val NowPlayingHomeLayoutAnimationDurationMillis = 620
 private const val NowPlayingHomeLyricsFadeInDurationMillis = 240
 private const val NowPlayingHomeLyricsFadeOutDurationMillis = 160
+private const val TabletLandscapeQueueAutoCollapseMillis = 10_000L
 private val NowPlayingPortraitMaxContentWidth = 600.dp
 private val NowPlayingCompactShortScreenHeight = 700.dp
 private val NowPlayingClassicAudienceHeight = 18.dp
 private val NowPlayingClassicTrackInfoSingleLineHeight = 88.dp
-private val NowPlayingClassicTrackInfoExtraTitleLineHeight = 20.dp
 private val NowPlayingHomeClassicLyricsReserveHeight = 56.dp
 private val NowPlayingHomeExpandedLyricsReserveHeight = 118.dp
 private val NowPlayingHomeCompactMinCoverWidth = 180.dp
 private val NowPlayingHomeRegularMinCoverWidth = 240.dp
 private val NowPlayingHomeClassicRegularMaxCoverWidth = 360.dp
-private val NowPlayingHomeClassicLyricsBottomPadding = 6.dp
 private val NowPlayingPortraitIdentityMaxWidth = 320.dp
-private val NowPlayingLandscapeIdentityHeight = 28.dp
-private val NowPlayingLandscapeCoreRowHeight = 82.dp
-private val NowPlayingLandscapeProgressTopPadding = 12.dp
+private val NowPlayingPhoneLandscapeCompactHeight = 360.dp
 private const val NowPlayingHomeClassicCompactCoverScale = 0.92f
 
 internal data class NowPlayingPortraitLayoutMetrics(
@@ -151,16 +151,99 @@ internal data class NowPlayingPortraitLayoutMetrics(
     val coverVerticalPadding: Dp,
     val audienceHeight: Dp,
     val trackInfoSingleLineHeight: Dp,
-    val trackInfoExtraTitleLineHeight: Dp,
     val classicLyricsReserveHeight: Dp,
     val expandedLyricsReserveHeight: Dp,
     val minimumCoverWidth: Dp,
     val expandedLyricsTopPadding: Dp,
-    val classicLyricsContainerHeight: Dp,
-    val classicLyricsBottomPadding: Dp,
     val bottomPadding: Dp,
     val bottomSectionSpacing: Dp
 )
+
+internal data class NowPlayingLandscapeLayoutMetrics(
+    val compactHeight: Boolean,
+    val tabletLayout: Boolean,
+    val horizontalPadding: Dp,
+    val topPadding: Dp,
+    val bottomPadding: Dp,
+    val contentSpacing: Dp,
+    val sectionSpacing: Dp,
+    val artworkWeight: Float,
+    val contentWeight: Float,
+    val identityHeight: Dp,
+    val lyricsTopPadding: Dp,
+    val progressHeight: Dp,
+    val controlsHeight: Dp,
+    val artworkCornerRadius: Dp,
+    val artworkMaxSize: Dp,
+    val progressMaxWidth: Dp
+)
+
+internal fun nowPlayingLandscapeLayoutMetrics(
+    screenHeight: Dp,
+    tabletLayout: Boolean
+): NowPlayingLandscapeLayoutMetrics {
+    if (tabletLayout) {
+        return NowPlayingLandscapeLayoutMetrics(
+            compactHeight = false,
+            tabletLayout = true,
+            horizontalPadding = 32.dp,
+            topPadding = 20.dp,
+            bottomPadding = 20.dp,
+            contentSpacing = 40.dp,
+            sectionSpacing = 12.dp,
+            artworkWeight = 0.45f,
+            contentWeight = 0.55f,
+            identityHeight = 90.dp,
+            lyricsTopPadding = 76.dp,
+            progressHeight = 64.dp,
+            controlsHeight = 80.dp,
+            artworkCornerRadius = 18.dp,
+            artworkMaxSize = 336.dp,
+            progressMaxWidth = 380.dp
+        )
+    }
+    val compactHeight = screenHeight.isFiniteDp() &&
+        screenHeight <= NowPlayingPhoneLandscapeCompactHeight
+    return if (compactHeight) {
+        NowPlayingLandscapeLayoutMetrics(
+            compactHeight = true,
+            tabletLayout = false,
+            horizontalPadding = 12.dp,
+            topPadding = 4.dp,
+            bottomPadding = 14.dp,
+            contentSpacing = 16.dp,
+            sectionSpacing = 2.dp,
+            artworkWeight = 0.39f,
+            contentWeight = 0.61f,
+            identityHeight = 64.dp,
+            lyricsTopPadding = 48.dp,
+            progressHeight = 60.dp,
+            controlsHeight = 72.dp,
+            artworkCornerRadius = 14.dp,
+            artworkMaxSize = 260.dp,
+            progressMaxWidth = 300.dp
+        )
+    } else {
+        NowPlayingLandscapeLayoutMetrics(
+            compactHeight = false,
+            tabletLayout = false,
+            horizontalPadding = 20.dp,
+            topPadding = 8.dp,
+            bottomPadding = 16.dp,
+            contentSpacing = 24.dp,
+            sectionSpacing = 6.dp,
+            artworkWeight = 0.40f,
+            contentWeight = 0.60f,
+            identityHeight = 76.dp,
+            lyricsTopPadding = 56.dp,
+            progressHeight = 62.dp,
+            controlsHeight = 72.dp,
+            artworkCornerRadius = 16.dp,
+            artworkMaxSize = 292.dp,
+            progressMaxWidth = 340.dp
+        )
+    }
+}
 
 internal fun nowPlayingPortraitLayoutMetrics(
     screenHeight: Dp,
@@ -177,13 +260,10 @@ internal fun nowPlayingPortraitLayoutMetrics(
             coverVerticalPadding = 4.dp,
             audienceHeight = 16.dp,
             trackInfoSingleLineHeight = 65.dp,
-            trackInfoExtraTitleLineHeight = 15.dp,
             classicLyricsReserveHeight = 46.dp,
             expandedLyricsReserveHeight = 96.dp,
             minimumCoverWidth = 148.dp,
             expandedLyricsTopPadding = 8.dp,
-            classicLyricsContainerHeight = 48.dp,
-            classicLyricsBottomPadding = 2.dp,
             bottomPadding = 8.dp,
             bottomSectionSpacing = 2.dp
         )
@@ -195,28 +275,18 @@ internal fun nowPlayingPortraitLayoutMetrics(
         coverVerticalPadding = if (widthClass == WindowWidthSizeClass.Compact) 16.dp else 32.dp,
         audienceHeight = NowPlayingClassicAudienceHeight,
         trackInfoSingleLineHeight = NowPlayingClassicTrackInfoSingleLineHeight,
-        trackInfoExtraTitleLineHeight = NowPlayingClassicTrackInfoExtraTitleLineHeight,
         classicLyricsReserveHeight = NowPlayingHomeClassicLyricsReserveHeight,
         expandedLyricsReserveHeight = NowPlayingHomeExpandedLyricsReserveHeight,
         minimumCoverWidth = nowPlayingHomeMinCoverWidth(widthClass),
         expandedLyricsTopPadding = 14.dp,
-        classicLyricsContainerHeight = 58.dp,
-        classicLyricsBottomPadding = NowPlayingHomeClassicLyricsBottomPadding,
         bottomPadding = 16.dp,
         bottomSectionSpacing = 4.dp
     )
 }
 
 internal fun nowPlayingClassicTrackInfoHeight(
-    titleLineCount: Int,
     metrics: NowPlayingPortraitLayoutMetrics? = null
-): Dp {
-    val extraLineCount = titleLineCount.coerceIn(1, 2) - 1
-    val singleLineHeight = metrics?.trackInfoSingleLineHeight ?: NowPlayingClassicTrackInfoSingleLineHeight
-    val extraTitleLineHeight = metrics?.trackInfoExtraTitleLineHeight
-        ?: NowPlayingClassicTrackInfoExtraTitleLineHeight
-    return singleLineHeight + extraTitleLineHeight * extraLineCount
-}
+): Dp = metrics?.trackInfoSingleLineHeight ?: NowPlayingClassicTrackInfoSingleLineHeight
 
 internal fun nowPlayingHomeCoverWidth(
     expanded: Boolean,
@@ -230,7 +300,7 @@ internal fun nowPlayingHomeCoverWidth(
     identityHeight: Dp = if (expanded) {
         0.dp
     } else {
-        NowPlayingClassicAudienceHeight + nowPlayingClassicTrackInfoHeight(titleLineCount = 1)
+        NowPlayingClassicAudienceHeight + nowPlayingClassicTrackInfoHeight()
     },
     lyricsReserveHeight: Dp = if (expanded) NowPlayingHomeExpandedLyricsReserveHeight else NowPlayingHomeClassicLyricsReserveHeight,
     minimumCoverWidth: Dp = nowPlayingHomeMinCoverWidth(widthClass)
@@ -267,6 +337,13 @@ private fun nowPlayingHomeMinCoverWidth(widthClass: WindowWidthSizeClass): Dp {
     } else {
         NowPlayingHomeRegularMinCoverWidth
     }
+}
+
+internal fun portraitClassicLyricsUpcomingCount(availableHeight: Dp): Int = when {
+    !availableHeight.isFiniteDp() -> 0
+    availableHeight >= 112.dp -> 2
+    availableHeight >= 76.dp -> 1
+    else -> 0
 }
 
 private fun Dp.isFiniteDp(): Boolean = value.isFinite()
@@ -607,6 +684,7 @@ private fun ListenTogetherAudienceLine(
     accentColor: Color = AsmrTheme.colorScheme.primary,
     textColor: Color = AsmrTheme.colorScheme.textTertiary,
     textShadow: Shadow? = null,
+    contentAlignment: Alignment = Alignment.Center,
     pageEntranceSettled: Boolean = true
 ) {
     val presentation = resolveListenTogetherAudiencePresentation(state)
@@ -615,7 +693,7 @@ private fun ListenTogetherAudienceLine(
 
     Box(
         modifier = modifier.height(18.dp),
-        contentAlignment = Alignment.Center
+        contentAlignment = contentAlignment
     ) {
         Row(
             modifier = Modifier.animateContentSize(
@@ -658,6 +736,79 @@ private fun ListenTogetherAudienceLine(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun LandscapePlayerIdentity(
+    title: String,
+    artist: String,
+    listenTogetherState: ListenTogetherUiState,
+    accentColor: Color,
+    pageEntranceSettled: Boolean,
+    compactHeight: Boolean,
+    tabletLayout: Boolean,
+    onArtistBottomChanged: (Float) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .clipToBounds(),
+        verticalArrangement = Arrangement.spacedBy(if (compactHeight) 1.dp else 3.dp)
+    ) {
+        ListenTogetherAudienceLine(
+            state = listenTogetherState,
+            modifier = Modifier.fillMaxWidth(),
+            accentColor = accentColor,
+            textColor = colorScheme.textTertiary,
+            contentAlignment = Alignment.CenterStart,
+            pageEntranceSettled = pageEntranceSettled
+        )
+        Text(
+            text = title.ifBlank { "未播放" },
+            modifier = Modifier.fillMaxWidth(),
+            style = MaterialTheme.typography.titleLarge.copy(
+                fontSize = when {
+                    tabletLayout -> 24.sp
+                    compactHeight -> 18.sp
+                    else -> 20.sp
+                },
+                lineHeight = when {
+                    tabletLayout -> 28.sp
+                    compactHeight -> 20.sp
+                    else -> 23.sp
+                },
+                fontWeight = FontWeight.SemiBold
+            ),
+            color = colorScheme.textPrimary,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            text = artist,
+            modifier = Modifier
+                .fillMaxWidth()
+                .onGloballyPositioned { coordinates ->
+                    onArtistBottomChanged(coordinates.boundsInRoot().bottom)
+                },
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontSize = when {
+                    tabletLayout -> 15.sp
+                    compactHeight -> 12.sp
+                    else -> 13.sp
+                },
+                lineHeight = when {
+                    tabletLayout -> 19.sp
+                    compactHeight -> 14.sp
+                    else -> 16.sp
+                }
+            ),
+            color = colorScheme.textSecondary,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis
+        )
     }
 }
 
@@ -722,12 +873,19 @@ internal fun formatExpandedArtistSummary(artistMeta: NowPlayingArtistMeta): Stri
         .joinToString(" | ")
 }
 
+internal fun formatClassicArtistSummary(artistMeta: NowPlayingArtistMeta): String {
+    val circle = artistMeta.circle.takeIf { it.isNotBlank() }?.let { "社团 $it" }
+    val cv = artistMeta.cvNames
+        .joinToString("、")
+        .takeIf { it.isNotBlank() }
+        ?.let { "CV $it" }
+    return listOfNotNull(circle, cv).joinToString(" / ")
+}
+
 @Composable
 private fun ClassicPlayerIdentity(
     title: String,
     artistMeta: NowPlayingArtistMeta,
-    accentColor: Color,
-    onTitleLineCountChanged: (Int) -> Unit,
     compactLayout: Boolean,
     modifier: Modifier = Modifier
 ) {
@@ -754,7 +912,10 @@ private fun ClassicPlayerIdentity(
             .clipToBounds()
             .padding(horizontal = if (compactLayout) 20.dp else 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(if (compactLayout) 3.dp else 5.dp)
+        verticalArrangement = Arrangement.spacedBy(
+            space = if (compactLayout) 4.dp else 6.dp,
+            alignment = Alignment.CenterVertically
+        )
     ) {
         Text(
             text = title.ifBlank { "未播放" },
@@ -766,120 +927,25 @@ private fun ClassicPlayerIdentity(
                 shadow = textShadow
             ),
             color = colorScheme.textPrimary,
-            maxLines = 2,
+            maxLines = 1,
             overflow = TextOverflow.Ellipsis,
-            textAlign = TextAlign.Center,
-            onTextLayout = { result ->
-                onTitleLineCountChanged(result.lineCount.coerceIn(1, 2))
-            }
+            textAlign = TextAlign.Center
         )
-        ClassicArtistRows(
-            artistMeta = artistMeta,
-            accentColor = accentColor,
-            compactLayout = compactLayout,
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
-}
-
-@Composable
-private fun ClassicArtistRows(
-    artistMeta: NowPlayingArtistMeta,
-    accentColor: Color,
-    compactLayout: Boolean,
-    modifier: Modifier = Modifier
-) {
-    if (artistMeta.circle.isBlank() && artistMeta.cvNames.isEmpty()) return
-
-    Column(
-        modifier = modifier,
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(if (compactLayout) 6.dp else 10.dp)
-    ) {
-        if (artistMeta.circle.isNotBlank()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(NowPlayingClassicArtistChipHeight),
-                contentAlignment = Alignment.Center
-            ) {
-                ClassicArtistChip(
-                    label = "社团",
-                    value = artistMeta.circle,
-                    accentColor = accentColor,
-                    emphasized = true,
-                    compactLayout = compactLayout
-                )
-            }
-        }
-        if (artistMeta.cvNames.isNotEmpty()) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(NowPlayingClassicArtistChipHeight)
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(
-                    if (compactLayout) 5.dp else 7.dp,
-                    Alignment.CenterHorizontally
+        val artistSummary = remember(artistMeta) { formatClassicArtistSummary(artistMeta) }
+        if (artistSummary.isNotBlank()) {
+            Text(
+                text = artistSummary,
+                modifier = Modifier.fillMaxWidth(),
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontSize = if (compactLayout) 11.sp else 13.sp,
+                    lineHeight = if (compactLayout) 14.sp else 17.sp,
+                    fontWeight = FontWeight.Medium,
+                    shadow = textShadow
                 ),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                artistMeta.cvNames.forEach { cv ->
-                    ClassicArtistChip(
-                        label = "CV",
-                        value = cv,
-                        accentColor = accentColor,
-                        emphasized = false,
-                        compactLayout = compactLayout
-                    )
-                }
-            }
-        }
-    }
-}
-
-private val NowPlayingClassicArtistChipHeight = 20.dp
-
-@Composable
-private fun ClassicArtistChip(
-    label: String,
-    value: String,
-    accentColor: Color,
-    emphasized: Boolean,
-    compactLayout: Boolean
-) {
-    val colorScheme = AsmrTheme.colorScheme
-    val containerColor = accentColor.copy(alpha = if (emphasized) 0.16f else 0.10f)
-    val chipTextStyle = MaterialTheme.typography.labelMedium.copy(
-        fontSize = if (compactLayout) 11.sp else 12.sp,
-        lineHeight = if (compactLayout) 13.sp else 14.sp
-    )
-    Box(
-        modifier = Modifier
-            .height(NowPlayingClassicArtistChipHeight)
-            .background(containerColor, RoundedCornerShape(999.dp))
-            .padding(horizontal = if (compactLayout) 7.dp else 9.dp),
-        contentAlignment = Alignment.Center
-    ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(if (compactLayout) 3.dp else 4.dp)
-        ) {
-            Text(
-                text = label,
-                modifier = Modifier.alignByBaseline(),
-                style = chipTextStyle.copy(fontWeight = FontWeight.SemiBold),
-                color = accentColor.copy(alpha = 0.92f),
-                maxLines = 1
-            )
-            Text(
-                text = value,
-                modifier = Modifier
-                    .widthIn(max = if (emphasized) 220.dp else 180.dp)
-                    .alignByBaseline(),
-                style = chipTextStyle,
-                color = if (emphasized) colorScheme.textPrimary else colorScheme.textSecondary,
+                color = colorScheme.textSecondary,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow = TextOverflow.Ellipsis,
+                textAlign = TextAlign.Center
             )
         }
     }
@@ -1122,10 +1188,7 @@ internal fun NowPlayingScreen(
     )
     val accentColor = playerThemeColors.accentColor
     val lyricColors = rememberLyricReadableColors(
-        accentColor = accentColor,
-        backdropTintColor = playerThemeColors.backdropTintColor,
-        coverBackgroundEnabled = playerArtworkBackdropEnabled,
-        coverBackgroundClarity = coverBackgroundClarity
+        accentColor = accentColor
     )
     val onAccentColor = playerThemeColors.onAccentColor
     val videoBackdropColor = if (isVideo) playerThemeColors.videoBackdropColor else Color.Transparent
@@ -1258,9 +1321,15 @@ internal fun NowPlayingScreen(
     val heightClass = windowSizeClass.heightSizeClass
     
     // 手机横屏：高度为 Compact
-    val isPhoneLandscape = heightClass == WindowHeightSizeClass.Compact
+    val isPhoneLandscape = isLandscape && heightClass == WindowHeightSizeClass.Compact
     // 平板横屏：高度不为 Compact 且处于横屏状态
     val useSplitLayout = heightClass != WindowHeightSizeClass.Compact && isLandscape
+    val landscapeLayoutMetrics = remember(configuration.screenHeightDp, useSplitLayout) {
+        nowPlayingLandscapeLayoutMetrics(
+            screenHeight = configuration.screenHeightDp.dp,
+            tabletLayout = useSplitLayout
+        )
+    }
     val player = viewModel.playerOrNull()
     val videoPlayerCoordinator = remember { NowPlayingVideoPlayerCoordinator() }
     DisposableEffect(videoPlayerCoordinator) {
@@ -1286,6 +1355,10 @@ internal fun NowPlayingScreen(
         else -> Alignment.Center
     }
     var surfaceMode by rememberSaveable { mutableStateOf(NowPlayingSurfaceMode.PLAYER) }
+    var tabletQueueExpanded by rememberSaveable { mutableStateOf(true) }
+    var tabletQueueInteractionTick by remember { mutableIntStateOf(0) }
+    var landscapeArtistBottom by remember { mutableFloatStateOf(Float.NaN) }
+    var landscapeCurrentLyricAnchorTop by remember { mutableFloatStateOf(Float.NaN) }
     var videoFullscreen by rememberSaveable(item?.mediaId) { mutableStateOf(false) }
     val activeVideoFullscreen = videoFullscreen && isVideo
     val latestOnVideoFullscreenChanged = rememberUpdatedState(onVideoFullscreenChanged)
@@ -1342,6 +1415,23 @@ internal fun NowPlayingScreen(
             }
         }
     }
+    LaunchedEffect(
+        useSplitLayout,
+        isVideo,
+        surfaceMode,
+        tabletQueueExpanded,
+        tabletQueueInteractionTick
+    ) {
+        if (
+            useSplitLayout &&
+            !isVideo &&
+            surfaceMode == NowPlayingSurfaceMode.PLAYER &&
+            tabletQueueExpanded
+        ) {
+            delay(TabletLandscapeQueueAutoCollapseMillis)
+            tabletQueueExpanded = false
+        }
+    }
     val handleNavigateUp = {
         if (surfaceMode == NowPlayingSurfaceMode.LYRICS) {
             surfaceMode = NowPlayingSurfaceMode.PLAYER
@@ -1365,7 +1455,7 @@ internal fun NowPlayingScreen(
     } else {
         playerHeaderTitle
     }
-    val showSharedHeaderTitle = isLandscape || surfaceMode == NowPlayingSurfaceMode.LYRICS
+    val showSharedHeaderTitle = surfaceMode == NowPlayingSurfaceMode.LYRICS
     val sharedHeaderMotion = routeTransition.nowPlayingMotionModifier(
         currentMotionLayout,
         NowPlayingMotionSlot.HEADER
@@ -1404,8 +1494,29 @@ internal fun NowPlayingScreen(
         }
     }
 
+    val tabletQueueInteractionModifier = if (
+        useSplitLayout &&
+        !isVideo &&
+        surfaceMode == NowPlayingSurfaceMode.PLAYER &&
+        tabletQueueExpanded
+    ) {
+        Modifier.pointerInput(Unit) {
+            awaitEachGesture {
+                awaitFirstDown(
+                    requireUnconsumed = false,
+                    pass = PointerEventPass.Final
+                )
+                tabletQueueInteractionTick++
+            }
+        }
+    } else {
+        Modifier
+    }
+
     Box(
-        modifier = Modifier.fillMaxSize()
+        modifier = Modifier
+            .fillMaxSize()
+            .then(tabletQueueInteractionModifier)
     ) {
         if (renderBackdrop && !isVideo) {
             CoverArtworkBackground(
@@ -1418,6 +1529,42 @@ internal fun NowPlayingScreen(
                 isDark = colorScheme.isDark
             )
         }
+        if (isLandscape && surfaceMode == NowPlayingSurfaceMode.PLAYER && !isVideo) {
+            val spectrumMotion = routeTransition.nowPlayingMotionModifier(
+                currentMotionLayout,
+                NowPlayingMotionSlot.SPECTRUM
+            )
+            val spectrumHeight = if (landscapeLayoutMetrics.tabletLayout) 112.dp else 88.dp
+            val density = LocalDensity.current
+            val fallbackCenterY = with(density) {
+                configuration.screenHeightDp.dp.toPx() *
+                    if (landscapeLayoutMetrics.tabletLayout) 0.28f else 0.34f
+            }
+            val spectrumCenterY = if (
+                landscapeArtistBottom.isFinite() &&
+                landscapeCurrentLyricAnchorTop.isFinite() &&
+                landscapeCurrentLyricAnchorTop > landscapeArtistBottom
+            ) {
+                (landscapeArtistBottom + landscapeCurrentLyricAnchorTop) / 2f
+            } else {
+                fallbackCenterY
+            }
+            HorizontalStereoSpectrum(
+                lineColor = colorScheme.primaryStrong,
+                intensity = if (landscapeLayoutMetrics.tabletLayout) 0.78f else 0.72f,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(spectrumHeight)
+                    .align(Alignment.TopCenter)
+                    .offset {
+                        IntOffset(
+                            x = 0,
+                            y = (spectrumCenterY - spectrumHeight.toPx() / 2f).roundToInt()
+                        )
+                    }
+                    .then(spectrumMotion)
+            )
+        }
         Column(modifier = Modifier.fillMaxSize()) {
             PlayerSurfaceHeader(
                 title = sharedHeaderTitle,
@@ -1428,6 +1575,7 @@ internal fun NowPlayingScreen(
                 onManualBindLyrics = if (surfaceMode == NowPlayingSurfaceMode.LYRICS) openManualLyricsAction else null,
                 navigationEnabled = !pendingRouteExit,
                 showTitle = showSharedHeaderTitle,
+                showDivider = !(isLandscape && surfaceMode == NowPlayingSurfaceMode.PLAYER),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = sharedHeaderHorizontalPadding)
@@ -1467,49 +1615,54 @@ internal fun NowPlayingScreen(
 
             if (split) {
                 val coverMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.COVER)
+                val queueMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.QUEUE)
                 val progressMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.PROGRESS)
                 val infoMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.INFO_PANEL)
                 val controlsMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.CONTROLS)
-            // --- 平板端横屏布局 (左右分栏) ---
+            // 平板横屏沿用与手机一致的封面优先结构，仅放大留白与歌词容量。
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 32.dp, vertical = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(
+                        start = landscapeLayoutMetrics.horizontalPadding,
+                        top = landscapeLayoutMetrics.topPadding,
+                        end = landscapeLayoutMetrics.horizontalPadding,
+                        bottom = landscapeLayoutMetrics.bottomPadding
+                    )
             ) {
-                // 主内容区：左右分栏
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(48.dp),
+                    horizontalArrangement = Arrangement.spacedBy(landscapeLayoutMetrics.contentSpacing),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // 左侧：封面/视频区 + 进度条
                     Column(
                         modifier = Modifier
-                            .weight(1f)
-                            .padding(horizontal = 24.dp),
+                            .weight(landscapeLayoutMetrics.artworkWeight)
+                            .fillMaxHeight(),
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        verticalArrangement = Arrangement.spacedBy(
+                            landscapeLayoutMetrics.sectionSpacing,
+                            Alignment.CenterVertically
+                        )
                     ) {
-                        Spacer(modifier = Modifier.height(NowPlayingLandscapeIdentityHeight))
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .weight(1f)
                                 .then(coverMotion),
-                            contentAlignment = Alignment.TopCenter
+                            contentAlignment = Alignment.Center
                         ) {
                             Box(
                                 modifier = if (isVideo) {
                                     Modifier.fitVideoPreviewAspectRatio(
                                         aspectRatio = videoAspectRatio,
-                                        maxWidth = 420.dp
+                                        maxWidth = landscapeLayoutMetrics.artworkMaxSize
                                     )
                                 } else {
                                     Modifier
-                                        .widthIn(max = 420.dp)
+                                        .widthIn(max = landscapeLayoutMetrics.artworkMaxSize)
                                         .aspectRatio(1f)
                                 }
                             ) {
@@ -1526,128 +1679,108 @@ internal fun NowPlayingScreen(
                                     edgeBlendColor = if (playerArtworkBackdropEnabled) playerThemeColors.backdropTintColor else colorScheme.background,
                                     videoBackdropColor = videoBackdropColor,
                                     artworkAlignment = coverPreviewAlignment,
+                                    artworkCornerRadius = landscapeLayoutMetrics.artworkCornerRadius,
                                     dragPreviewEnabled = useDragPreview,
                                     dragPreviewState = coverDragPreviewState
                                 )
                             }
+                        }
+
+                        if (!isVideo) {
+                            TabletLandscapeQueuePanel(
+                                viewModel = viewModel,
+                                currentMediaId = item?.mediaId.orEmpty(),
+                                isPlaying = playback.isPlaying,
+                                expanded = tabletQueueExpanded,
+                                onExpandedChange = { tabletQueueExpanded = it },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .widthIn(max = landscapeLayoutMetrics.progressMaxWidth)
+                                    .then(queueMotion)
+                            )
                         }
                         
                         key(item?.mediaId) {
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(NowPlayingLandscapeCoreRowHeight)
+                                    .widthIn(max = landscapeLayoutMetrics.progressMaxWidth)
+                                    .height(landscapeLayoutMetrics.progressHeight)
                                     .then(progressMotion),
-                                contentAlignment = Alignment.TopCenter
+                                contentAlignment = Alignment.Center
                             ) {
-                                Box(modifier = Modifier.padding(top = NowPlayingLandscapeProgressTopPadding)) {
-                                    PlaybackProgressContent(viewModel, isVideo) { progress ->
-                                        PlayerProgress(
-                                            positionMs = progress.positionMs,
-                                            durationMs = progressDurationMs,
-                                            sliceUiState = sliceUiState,
-                                            onSeekTo = { viewModel.seekTo(it) },
-                                            onCutPressed = { viewModel.onCutPressed(progressDurationMs) },
-                                            onScrubbingChanged = { viewModel.setUserScrubbing(it) },
-                                            onSelectSlice = { viewModel.selectSlice(it) },
-                                            onLongPressSlice = {
-                                                viewModel.selectSlice(it)
-                                                showSliceSheet = true
-                                            },
-                                            onUpdateSliceRange = { sliceId, startMs, endMs ->
-                                                viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
-                                            },
-                                            activeColor = accentColor,
-                                            inactiveColor = accentColor.copy(alpha = 0.2f)
-                                        )
-                                    }
+                                PlaybackProgressContent(viewModel, isVideo) { progress ->
+                                    PlayerProgress(
+                                        positionMs = progress.positionMs,
+                                        durationMs = progressDurationMs,
+                                        sliceUiState = sliceUiState,
+                                        onSeekTo = { viewModel.seekTo(it) },
+                                        onScrubbingChanged = { viewModel.setUserScrubbing(it) },
+                                        onSelectSlice = { viewModel.selectSlice(it) },
+                                        onLongPressSlice = {
+                                            viewModel.selectSlice(it)
+                                            showSliceSheet = true
+                                        },
+                                        onUpdateSliceRange = { sliceId, startMs, endMs ->
+                                            viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
+                                        },
+                                        activeColor = accentColor,
+                                        inactiveColor = accentColor.copy(alpha = 0.2f)
+                                    )
                                 }
                             }
                         }
                     }
 
-                    // 右侧：信息与控制区
                     Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                        modifier = Modifier
+                            .weight(landscapeLayoutMetrics.contentWeight)
+                            .fillMaxHeight(),
+                        verticalArrangement = Arrangement.spacedBy(landscapeLayoutMetrics.sectionSpacing)
                     ) {
-                        // 艺术家 (标题已移动到 header)
-                        ArtistWithListenTogetherInfo(
+                        LandscapePlayerIdentity(
+                            title = playerHeaderTitle,
                             artist = metadata?.artist?.toString().orEmpty(),
                             listenTogetherState = listenTogetherUiState,
-                            modifier = Modifier
-                                .height(NowPlayingLandscapeIdentityHeight)
-                                .then(infoMotion),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = colorScheme.textSecondary,
                             accentColor = accentColor,
-                            pageEntranceSettled = pageEntranceSettled
+                            pageEntranceSettled = pageEntranceSettled,
+                            compactHeight = false,
+                            tabletLayout = true,
+                            onArtistBottomChanged = { bottom ->
+                                if (!landscapeArtistBottom.isFinite() || abs(landscapeArtistBottom - bottom) > 0.5f) {
+                                    landscapeArtistBottom = bottom
+                                }
+                            },
+                            modifier = Modifier
+                                .height(landscapeLayoutMetrics.identityHeight)
+                                .then(infoMotion)
                         )
 
                         if (!isVideo) {
-                            Row(
+                            Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .fillMaxWidth()
                                     .then(infoMotion),
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                contentAlignment = Alignment.CenterStart
                             ) {
-                                AndroidView(
-                                    modifier = Modifier
-                                        .fillMaxHeight()
-                                        .width(54.dp)
-                                        .graphicsLayer { clip = false },
-                                    factory = { context ->
-                                        ChannelSpectrumView(context).apply {
-                                            setChannel(ChannelSpectrumView.Channel.Left)
-                                            setRenderStyle(ChannelSpectrumView.RenderStyle.ThinLines)
-                                            setBarCount(56)
-                                            setBarColor(accentColor.toArgb())
-                                        }
-                                    },
-                                    update = { view ->
-                                        view.setBarColor(accentColor.toArgb())
-                                    }
-                                )
-
-                                Box(
-                                    modifier = Modifier
-                                        .weight(0.70f)
-                                        .fillMaxHeight()
-                                ) {
-                                    PlaybackProgressContent(viewModel, isVideo) { progress ->
-                                        AppleLyricsView(
-                                            lyrics = lyricsState.lyrics,
-                                            currentPosition = progress.positionMs,
-                                            onSeekTo = { viewModel.seekTo(it) },
-                                            onOpenLyrics = showLyricsSurface,
-                                            colors = lyricColors,
-                                            modifier = Modifier.fillMaxSize(),
-                                            isLandscape = true,
-                                            contentKey = lyricsState.contentKey,
-                                            contentVisible = !lyricsState.isLoading
-                                        )
-                                    }
+                                PlaybackProgressContent(viewModel, isVideo) { progress ->
+                                    NowPlayingLyricsPreview(
+                                        lyrics = lyricsState.lyrics,
+                                        currentPosition = progress.positionMs,
+                                        onOpenLyrics = showLyricsSurface,
+                                        colors = lyricColors,
+                                        interactionEnabled = !lyricsState.isLoading,
+                                        tabletLayout = true,
+                                        contentTopPadding = landscapeLayoutMetrics.lyricsTopPadding,
+                                        onCurrentLineAnchorChanged = { top ->
+                                            if (!landscapeCurrentLyricAnchorTop.isFinite() || abs(landscapeCurrentLyricAnchorTop - top) > 0.5f) {
+                                                landscapeCurrentLyricAnchorTop = top
+                                            }
+                                        },
+                                        modifier = Modifier.fillMaxSize()
+                                    )
                                 }
-
-                                AndroidView(
-                                    modifier = Modifier
-                                        .fillMaxHeight()
-                                        .width(54.dp)
-                                        .graphicsLayer { clip = false },
-                                    factory = { context ->
-                                        ChannelSpectrumView(context).apply {
-                                            setChannel(ChannelSpectrumView.Channel.Right)
-                                            setRenderStyle(ChannelSpectrumView.RenderStyle.ThinLines)
-                                            setBarCount(56)
-                                            setBarColor(accentColor.toArgb())
-                                        }
-                                    },
-                                    update = { view ->
-                                        view.setBarColor(accentColor.toArgb())
-                                    }
-                                )
                             }
                         } else {
                             Spacer(modifier = Modifier.weight(1f).then(infoMotion))
@@ -1668,8 +1801,9 @@ internal fun NowPlayingScreen(
                                 tagViewModel.openForMediaId(mediaId, fallback)
                             },
                             sliceUiState = sliceUiState,
-                            modifier = Modifier.height(NowPlayingLandscapeCoreRowHeight),
+                            modifier = Modifier.height(landscapeLayoutMetrics.controlsHeight),
                             showActionRow = false,
+                            landscapeControls = true,
                             coreControlsModifier = controlsMotion,
                             primaryColor = accentColor,
                             onPrimaryColor = onAccentColor
@@ -1682,189 +1816,174 @@ internal fun NowPlayingScreen(
             val progressMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.PROGRESS)
             val lyricsMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.LYRICS)
             val controlsMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.CONTROLS)
-            // --- 手机端横屏布局 (特殊适配) ---
-            Column(
+            Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                    .padding(
+                        start = landscapeLayoutMetrics.horizontalPadding,
+                        top = landscapeLayoutMetrics.topPadding,
+                        end = landscapeLayoutMetrics.horizontalPadding,
+                        bottom = landscapeLayoutMetrics.bottomPadding
+                    ),
+                horizontalArrangement = Arrangement.spacedBy(landscapeLayoutMetrics.contentSpacing),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
+                Column(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    horizontalArrangement = Arrangement.spacedBy(24.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                        .weight(landscapeLayoutMetrics.artworkWeight)
+                        .fillMaxHeight(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(landscapeLayoutMetrics.sectionSpacing)
                 ) {
-                    // 左侧：封面 + 进度条
-                    Column(
-                        modifier = Modifier.weight(0.4f),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f)
+                            .then(coverMotion),
+                        contentAlignment = Alignment.Center
                     ) {
+                        Box(
+                            modifier = if (isVideo) {
+                                Modifier.fitVideoPreviewAspectRatio(
+                                    aspectRatio = videoAspectRatio,
+                                    maxWidth = landscapeLayoutMetrics.artworkMaxSize
+                                )
+                            } else {
+                                Modifier
+                                    .widthIn(max = landscapeLayoutMetrics.artworkMaxSize)
+                                    .aspectRatio(1f)
+                            }
+                        ) {
+                            ArtworkBox(
+                                isVideo = isVideo,
+                                metadata = metadata,
+                                viewModel = viewModel,
+                                videoPlayerCoordinator = videoPlayerCoordinator,
+                                renderVideoSurface = renderVideoSurface,
+                                videoFullscreen = videoFullscreen,
+                                onOpenVideoFullscreen = { videoFullscreen = true },
+                                onOpenLyrics = showLyricsSurface,
+                                edgeBlendEnabled = false,
+                                edgeBlendColor = playerThemeColors.backdropTintColor,
+                                videoBackdropColor = videoBackdropColor,
+                                artworkAlignment = coverPreviewAlignment,
+                                artworkCornerRadius = landscapeLayoutMetrics.artworkCornerRadius,
+                                dragPreviewEnabled = useDragPreview,
+                                dragPreviewState = coverDragPreviewState
+                            )
+                        }
+                    }
+
+                    key(item?.mediaId) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .weight(1f)
-                                .then(coverMotion),
-                            contentAlignment = Alignment.TopCenter
+                                .widthIn(max = landscapeLayoutMetrics.progressMaxWidth)
+                                .height(landscapeLayoutMetrics.progressHeight)
+                                .then(progressMotion),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Box(
-                                modifier = if (isVideo) {
-                                    Modifier.fitVideoPreviewAspectRatio(videoAspectRatio)
-                                } else {
-                                    Modifier.aspectRatio(1f)
-                                }
-                            ) {
-                                ArtworkBox(
-                                    isVideo = isVideo,
-                                    metadata = metadata,
-                                    viewModel = viewModel,
-                                    videoPlayerCoordinator = videoPlayerCoordinator,
-                                    renderVideoSurface = renderVideoSurface,
-                                    videoFullscreen = videoFullscreen,
-                                    onOpenVideoFullscreen = { videoFullscreen = true },
+                            PlaybackProgressContent(viewModel, isVideo) { progress ->
+                                PlayerProgress(
+                                    positionMs = progress.positionMs,
+                                    durationMs = progressDurationMs,
+                                    sliceUiState = sliceUiState,
+                                    onSeekTo = { viewModel.seekTo(it) },
+                                    onScrubbingChanged = { viewModel.setUserScrubbing(it) },
+                                    onSelectSlice = { viewModel.selectSlice(it) },
+                                    onLongPressSlice = {
+                                        viewModel.selectSlice(it)
+                                        showSliceSheet = true
+                                    },
+                                    onUpdateSliceRange = { sliceId, startMs, endMs ->
+                                        viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
+                                    },
+                                    activeColor = accentColor,
+                                    inactiveColor = accentColor.copy(alpha = 0.2f),
+                                    compactLayout = true
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Column(
+                    modifier = Modifier
+                        .weight(landscapeLayoutMetrics.contentWeight)
+                        .fillMaxHeight(),
+                    verticalArrangement = Arrangement.spacedBy(landscapeLayoutMetrics.sectionSpacing)
+                ) {
+                    LandscapePlayerIdentity(
+                        title = playerHeaderTitle,
+                        artist = metadata?.artist?.toString().orEmpty(),
+                        listenTogetherState = listenTogetherUiState,
+                        accentColor = accentColor,
+                        pageEntranceSettled = pageEntranceSettled,
+                        compactHeight = landscapeLayoutMetrics.compactHeight,
+                        tabletLayout = false,
+                        onArtistBottomChanged = { bottom ->
+                            if (!landscapeArtistBottom.isFinite() || abs(landscapeArtistBottom - bottom) > 0.5f) {
+                                landscapeArtistBottom = bottom
+                            }
+                        },
+                        modifier = Modifier
+                            .height(landscapeLayoutMetrics.identityHeight)
+                            .then(lyricsMotion)
+                    )
+
+                    if (!isVideo) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .then(lyricsMotion),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            PlaybackProgressContent(viewModel, isVideo) { progress ->
+                                NowPlayingLyricsPreview(
+                                    lyrics = lyricsState.lyrics,
+                                    currentPosition = progress.positionMs,
                                     onOpenLyrics = showLyricsSurface,
-                                    edgeBlendEnabled = false,
-                                    edgeBlendColor = if (playerArtworkBackdropEnabled) playerThemeColors.backdropTintColor else colorScheme.background,
-                                    videoBackdropColor = videoBackdropColor,
-                                    artworkAlignment = coverPreviewAlignment,
-                                    dragPreviewEnabled = useDragPreview,
-                                    dragPreviewState = coverDragPreviewState
-                                )
-                            }
-                        }
-
-                        key(item?.mediaId) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(NowPlayingLandscapeCoreRowHeight)
-                                    .then(progressMotion),
-                                contentAlignment = Alignment.TopCenter
-                            ) {
-                                Box(modifier = Modifier.padding(top = NowPlayingLandscapeProgressTopPadding)) {
-                                    PlaybackProgressContent(viewModel, isVideo) { progress ->
-                                        PlayerProgress(
-                                            positionMs = progress.positionMs,
-                                            durationMs = progressDurationMs,
-                                            sliceUiState = sliceUiState,
-                                            onSeekTo = { viewModel.seekTo(it) },
-                                            onCutPressed = { viewModel.onCutPressed(progressDurationMs) },
-                                            onScrubbingChanged = { viewModel.setUserScrubbing(it) },
-                                            onSelectSlice = { viewModel.selectSlice(it) },
-                                            onLongPressSlice = {
-                                                viewModel.selectSlice(it)
-                                                showSliceSheet = true
-                                            },
-                                            onUpdateSliceRange = { sliceId, startMs, endMs ->
-                                                viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
-                                            },
-                                            activeColor = accentColor,
-                                            inactiveColor = accentColor.copy(alpha = 0.2f)
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // 右侧：歌词 + 控制
-                    Column(
-                        modifier = Modifier.weight(0.6f),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        if (!isVideo) {
-                            Row(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxWidth()
-                                    .then(lyricsMotion),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                AndroidView(
-                                    modifier = Modifier
-                                        .fillMaxHeight()
-                                        .width(44.dp)
-                                        .graphicsLayer { clip = false },
-                                    factory = { context ->
-                                        ChannelSpectrumView(context).apply {
-                                            setChannel(ChannelSpectrumView.Channel.Left)
-                                            setRenderStyle(ChannelSpectrumView.RenderStyle.ThinLines)
-                                            setBarCount(56)
-                                            setBarColor(accentColor.toArgb())
+                                    colors = lyricColors,
+                                    interactionEnabled = !lyricsState.isLoading,
+                                    compactHeight = landscapeLayoutMetrics.compactHeight,
+                                    contentTopPadding = landscapeLayoutMetrics.lyricsTopPadding,
+                                    onCurrentLineAnchorChanged = { top ->
+                                        if (!landscapeCurrentLyricAnchorTop.isFinite() || abs(landscapeCurrentLyricAnchorTop - top) > 0.5f) {
+                                            landscapeCurrentLyricAnchorTop = top
                                         }
                                     },
-                                    update = { view ->
-                                        view.setBarColor(accentColor.toArgb())
-                                    }
-                                )
-
-                                Box(
-                                    modifier = Modifier
-                                        .weight(0.72f)
-                                        .fillMaxHeight()
-                                ) {
-                                    PlaybackProgressContent(viewModel, isVideo) { progress ->
-                                        AppleLyricsView(
-                                            lyrics = lyricsState.lyrics,
-                                            currentPosition = progress.positionMs,
-                                            onSeekTo = { viewModel.seekTo(it) },
-                                            onOpenLyrics = showLyricsSurface,
-                                            colors = lyricColors,
-                                            modifier = Modifier.fillMaxSize(),
-                                            isLandscape = true,
-                                            contentKey = lyricsState.contentKey,
-                                            contentVisible = !lyricsState.isLoading
-                                        )
-                                    }
-                                }
-
-                                AndroidView(
-                                    modifier = Modifier
-                                        .fillMaxHeight()
-                                        .width(44.dp)
-                                        .graphicsLayer { clip = false },
-                                    factory = { context ->
-                                        ChannelSpectrumView(context).apply {
-                                            setChannel(ChannelSpectrumView.Channel.Right)
-                                            setRenderStyle(ChannelSpectrumView.RenderStyle.ThinLines)
-                                            setBarCount(56)
-                                            setBarColor(accentColor.toArgb())
-                                        }
-                                    },
-                                    update = { view ->
-                                        view.setBarColor(accentColor.toArgb())
-                                    }
+                                    modifier = Modifier.fillMaxSize()
                                 )
                             }
-                        } else {
-                            Spacer(modifier = Modifier.weight(1f).then(lyricsMotion))
                         }
-
-                        PlaybackControls(
-                            playback = playback,
-                            isFavorite = isFavorite,
-                            viewModel = viewModel,
-                            onShowPlaylistPicker = {
-                                val current = playback.currentMediaItem ?: return@PlaybackControls
-                                onOpenPlaylistPicker(current)
-                            },
-                            onShowEqualizer = { showEqualizer = true },
-                            onManageTags = {
-                                val mediaId = item?.mediaId.orEmpty()
-                                val fallback = metadata?.title?.toString().orEmpty()
-                                tagViewModel.openForMediaId(mediaId, fallback)
-                            },
-                            sliceUiState = sliceUiState,
-                            modifier = Modifier.height(NowPlayingLandscapeCoreRowHeight),
-                            showActionRow = false,
-                            coreControlsModifier = controlsMotion,
-                            primaryColor = accentColor,
-                            onPrimaryColor = onAccentColor
-                        )
+                    } else {
+                        Spacer(modifier = Modifier.weight(1f).then(lyricsMotion))
                     }
+
+                    PlaybackControls(
+                        playback = playback,
+                        isFavorite = isFavorite,
+                        viewModel = viewModel,
+                        onShowPlaylistPicker = {
+                            val current = playback.currentMediaItem ?: return@PlaybackControls
+                            onOpenPlaylistPicker(current)
+                        },
+                        onShowEqualizer = { showEqualizer = true },
+                        onManageTags = {
+                            val mediaId = item?.mediaId.orEmpty()
+                            val fallback = metadata?.title?.toString().orEmpty()
+                            tagViewModel.openForMediaId(mediaId, fallback)
+                        },
+                        sliceUiState = sliceUiState,
+                        modifier = Modifier.height(landscapeLayoutMetrics.controlsHeight),
+                        showActionRow = false,
+                        landscapeControls = true,
+                        compactLayout = true,
+                        coreControlsModifier = controlsMotion,
+                        primaryColor = accentColor,
+                        onPrimaryColor = onAccentColor
+                    )
                 }
             }
         } else {
@@ -1879,7 +1998,6 @@ internal fun NowPlayingScreen(
             val portraitArtistMeta = remember(portraitArtistText) {
                 parseNowPlayingArtistMeta(portraitArtistText)
             }
-            var classicTitleLineCount by remember(playerHeaderTitle) { mutableIntStateOf(1) }
             val portraitScreenHeight = configuration.screenHeightDp.dp
             val portraitLayoutMetrics = remember(portraitScreenHeight, widthClass) {
                 nowPlayingPortraitLayoutMetrics(
@@ -1888,7 +2006,6 @@ internal fun NowPlayingScreen(
                 )
             }
             val classicTrackInfoTargetHeight = nowPlayingClassicTrackInfoHeight(
-                titleLineCount = classicTitleLineCount,
                 metrics = portraitLayoutMetrics
             )
             val homeLayoutSwipeHintAllowed = !nowPlayingHomeLayoutHintDismissed &&
@@ -2159,12 +2276,6 @@ internal fun NowPlayingScreen(
                             ClassicPlayerIdentity(
                                 title = playerHeaderTitle,
                                 artistMeta = portraitArtistMeta,
-                                accentColor = playerThemeColors.coverAccentColor,
-                                onTitleLineCountChanged = { lineCount ->
-                                    if (!expandedHomeLayout && classicTitleLineCount != lineCount) {
-                                        classicTitleLineCount = lineCount
-                                    }
-                                },
                                 compactLayout = portraitLayoutMetrics.compact,
                                 modifier = portraitContentWidthModifier
                                     .height(classicTrackInfoHeight)
@@ -2173,11 +2284,11 @@ internal fun NowPlayingScreen(
                             )
 
                             if (!isVideo) {
-                                Box(
+                                BoxWithConstraints(
                                     modifier = portraitContentWidthModifier
                                         .weight(1f)
                                         .then(lyricsMotion),
-                                    contentAlignment = Alignment.TopCenter
+                                    contentAlignment = Alignment.Center
                                 ) {
                                     if (expandedLyricsActive || expandedLyricsAlpha > 0.001f) {
                                         Box(
@@ -2214,24 +2325,30 @@ internal fun NowPlayingScreen(
                                         }
                                     }
                                     if (classicLyricsActive || classicLyricsAlpha > 0.001f) {
+                                        val upcomingCount = portraitClassicLyricsUpcomingCount(maxHeight)
                                         Box(
                                             modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(portraitLayoutMetrics.classicLyricsContainerHeight)
-                                                .align(Alignment.BottomCenter)
+                                                .fillMaxSize()
                                                 .padding(horizontal = portraitContentHorizontalPadding)
-                                                .padding(bottom = portraitLayoutMetrics.classicLyricsBottomPadding)
                                                 .graphicsLayer { alpha = classicLyricsAlpha },
                                             contentAlignment = Alignment.Center
                                         ) {
                                             PlaybackProgressContent(viewModel, isVideo) { progress ->
-                                                SingleLineLyrics(
+                                                NowPlayingLyricsPreview(
                                                     lyrics = lyricsState.lyrics,
                                                     currentPosition = progress.positionMs,
                                                     onOpenLyrics = showLyricsSurface,
                                                     colors = lyricColors,
                                                     interactionEnabled = lyricsClassicInteractionEnabled,
-                                                    compactLayout = portraitLayoutMetrics.compact,
+                                                    compactHeight = portraitLayoutMetrics.compact,
+                                                    largeTypography = widthClass != WindowWidthSizeClass.Compact,
+                                                    upcomingCount = upcomingCount,
+                                                    centered = true,
+                                                    currentFontWeight = FontWeight.ExtraBold,
+                                                    currentMaxLinesOverride = 1,
+                                                    upcomingMaxLinesOverride = 1,
+                                                    marqueeCurrentLine = true,
+                                                    emptyText = "暂无歌词",
                                                     modifier = Modifier.fillMaxWidth()
                                                 )
                                             }

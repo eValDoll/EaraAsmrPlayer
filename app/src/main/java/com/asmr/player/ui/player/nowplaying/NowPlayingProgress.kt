@@ -108,7 +108,7 @@ internal fun PlayerProgress(
     durationMs: Long,
     sliceUiState: SliceUiState,
     onSeekTo: (Long) -> Unit,
-    onCutPressed: () -> Unit,
+    onCutPressed: (() -> Unit)? = null,
     onScrubbingChanged: (Boolean) -> Unit,
     onSelectSlice: (Long?) -> Unit,
     onLongPressSlice: (Long) -> Unit,
@@ -191,17 +191,19 @@ internal fun PlayerProgress(
                     onScrubbingChanged(false)
                 }
             )
-            IconButton(
-                onClick = onCutPressed,
-                enabled = rangeDuration > 0L,
-                modifier = Modifier.size(if (compactLayout) 40.dp else 48.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.ContentCut,
-                    contentDescription = "Cut",
-                    tint = if (sliceUiState.tempStartMs != null) activeColor else colorScheme.onSurface.copy(alpha = 0.85f),
-                    modifier = Modifier.size(if (compactLayout) 20.dp else 22.dp)
-                )
+            if (onCutPressed != null) {
+                IconButton(
+                    onClick = onCutPressed,
+                    enabled = rangeDuration > 0L,
+                    modifier = Modifier.size(if (compactLayout) 40.dp else 48.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.ContentCut,
+                        contentDescription = "片段裁剪",
+                        tint = if (sliceUiState.tempStartMs != null) activeColor else colorScheme.onSurface.copy(alpha = 0.85f),
+                        modifier = Modifier.size(if (compactLayout) 20.dp else 22.dp)
+                    )
+                }
             }
         }
         Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp), verticalAlignment = Alignment.CenterVertically) {

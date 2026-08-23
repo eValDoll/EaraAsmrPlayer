@@ -38,4 +38,17 @@ class NowPlayingArtistMetaTest {
             )
         )
     }
+
+    @Test
+    fun formatsClassicSummaryAsOnePlainTextLine() {
+        assertEquals(
+            "社团 妄想研究所 / CV 一之瀬りと、みもりあいの",
+            formatClassicArtistSummary(
+                NowPlayingArtistMeta(
+                    circle = "妄想研究所",
+                    cvNames = listOf("一之瀬りと", "みもりあいの")
+                )
+            )
+        )
+    }
 }

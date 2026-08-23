@@ -5,6 +5,7 @@ import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -26,9 +27,6 @@ import android.content.res.Configuration
 import android.media.AudioManager
 import android.net.Uri
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
@@ -121,7 +119,6 @@ import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.theme.PrewarmDynamicHuePalette
 import com.asmr.player.ui.theme.PrewarmDynamicHuePaletteFromVideoFrame
 import androidx.compose.ui.draw.blur
-import android.os.Build
 import android.graphics.RenderEffect
 import android.graphics.Shader
 import androidx.compose.ui.graphics.asComposeRenderEffect
@@ -613,6 +610,11 @@ class MainActivity : ComponentActivity() {
                     val overlayConfiguration = LocalConfiguration.current
                     val activeOverlaySheet = overlaySheet
                     if (activeOverlaySheet != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.32f))
+                        )
                         val sheetMaxHeight = overlayConfiguration.screenHeightDp.dp * 3 / 4
                         key(
                             activeOverlaySheet,
@@ -625,6 +627,7 @@ class MainActivity : ComponentActivity() {
                                 sheetState = sheetState,
                                 containerColor = MaterialTheme.colorScheme.background,
                                 contentColor = MaterialTheme.colorScheme.onBackground,
+                                scrimColor = Color.Transparent,
                                 windowInsets = WindowInsets(0, 0, 0, 0)
                             ) {
                                 Box(

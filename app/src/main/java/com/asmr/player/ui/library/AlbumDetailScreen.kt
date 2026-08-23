@@ -122,6 +122,7 @@ import com.asmr.player.data.remote.scraper.storeSegment
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.playback.MediaItemFactory
+import com.asmr.player.ui.common.HorizontalStereoSpectrum
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
@@ -2131,7 +2132,7 @@ private fun AlbumDetailLandscapeArtworkBackdrop(
             }
         }
 
-        AlbumLandscapeSpectrum(
+        HorizontalStereoSpectrum(
             lineColor = colorScheme.primaryStrong,
             modifier = Modifier
                 .fillMaxWidth()

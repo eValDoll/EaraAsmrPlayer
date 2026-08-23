@@ -1,4 +1,4 @@
-package com.asmr.player.ui.library
+package com.asmr.player.ui.common
 
 import android.graphics.Paint
 import android.graphics.Path
@@ -6,10 +6,9 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
+import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -25,19 +24,37 @@ import kotlin.math.exp
 import kotlin.math.floor
 import kotlin.math.max
 import kotlin.math.pow
+import kotlin.math.roundToInt
 import kotlin.math.sin
 
-private const val AlbumLandscapeSpectrumPointCount = 56
-private const val AlbumLandscapeSpectrumIdleFrameIntervalNs = 33_000_000L
+private const val AudioSpectrumPointCount = 56
+private const val AudioSpectrumIdleFrameIntervalNs = 33_000_000L
 
 @Composable
 @UnstableApi
-internal fun AlbumLandscapeSpectrum(
+internal fun HorizontalStereoSpectrum(
     lineColor: Color,
+    intensity: Float = 1f,
     modifier: Modifier = Modifier
 ) {
-    val renderer = remember { AlbumLandscapeSpectrumRenderer() }
-    var frameNanos by remember { mutableLongStateOf(0L) }
+    val renderer = remember { HorizontalStereoSpectrumRenderer() }
+    val frameNanos = rememberAudioSpectrumFrameNanos()
+
+    Canvas(modifier = modifier) {
+        renderer.draw(
+            scope = this,
+            frameNanos = frameNanos.value,
+            playbackActive = StereoSpectrumBus.playbackActive,
+            lineColor = lineColor.toArgb(),
+            intensity = intensity
+        )
+    }
+}
+
+@Composable
+@UnstableApi
+private fun rememberAudioSpectrumFrameNanos(): State<Long> {
+    val frameNanos = remember { mutableLongStateOf(0L) }
 
     DisposableEffect(Unit) {
         StereoSpectrumBus.registerCaptureConsumer()
@@ -50,34 +67,27 @@ internal fun AlbumLandscapeSpectrum(
             withFrameNanos { currentFrameNanos ->
                 if (
                     StereoSpectrumBus.playbackActive ||
-                    currentFrameNanos - lastIdleFrameNanos >= AlbumLandscapeSpectrumIdleFrameIntervalNs
+                    currentFrameNanos - lastIdleFrameNanos >= AudioSpectrumIdleFrameIntervalNs
                 ) {
                     lastIdleFrameNanos = currentFrameNanos
-                    frameNanos = currentFrameNanos
+                    frameNanos.longValue = currentFrameNanos
                 }
             }
         }
     }
 
-    Canvas(modifier = modifier) {
-        renderer.draw(
-            scope = this,
-            frameNanos = frameNanos,
-            playbackActive = StereoSpectrumBus.playbackActive,
-            lineColor = lineColor.toArgb()
-        )
-    }
+    return frameNanos
 }
 
 @UnstableApi
-private class AlbumLandscapeSpectrumRenderer {
+private class HorizontalStereoSpectrumRenderer {
     private val sourceLeft = FloatArray(StereoSpectrumBus.DefaultBinCount)
     private val sourceRight = FloatArray(StereoSpectrumBus.DefaultBinCount)
-    private val spectrum = FloatArray(AlbumLandscapeSpectrumPointCount)
-    private val smoothedSpectrum = FloatArray(AlbumLandscapeSpectrumPointCount)
-    private val envelope = FloatArray(AlbumLandscapeSpectrumPointCount)
-    private val upperY = FloatArray(AlbumLandscapeSpectrumPointCount)
-    private val lowerY = FloatArray(AlbumLandscapeSpectrumPointCount)
+    private val spectrum = FloatArray(AudioSpectrumPointCount)
+    private val smoothedSpectrum = FloatArray(AudioSpectrumPointCount)
+    private val envelope = FloatArray(AudioSpectrumPointCount)
+    private val upperY = FloatArray(AudioSpectrumPointCount)
+    private val lowerY = FloatArray(AudioSpectrumPointCount)
     private val upperPath = Path()
     private val lowerPath = Path()
     private val linePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -94,7 +104,8 @@ private class AlbumLandscapeSpectrumRenderer {
         scope: DrawScope,
         frameNanos: Long,
         playbackActive: Boolean,
-        lineColor: Int
+        lineColor: Int,
+        intensity: Float
     ) {
         val previousFrame = lastFrameNanos
         val deltaSeconds = if (previousFrame == 0L || frameNanos == 0L) {
@@ -116,13 +127,14 @@ private class AlbumLandscapeSpectrumRenderer {
         )
 
         linePaint.color = lineColor
+        val resolvedIntensity = intensity.coerceIn(0f, 1f)
         scope.drawIntoCanvas { canvas ->
             linePaint.strokeWidth = scope.density * if (playbackActive) 1.35f else 0.90f
-            linePaint.alpha = if (playbackActive) 138 else 62
+            linePaint.alpha = ((if (playbackActive) 138 else 62) * resolvedIntensity).roundToInt()
             canvas.nativeCanvas.drawPath(upperPath, linePaint)
 
             linePaint.strokeWidth = scope.density * if (playbackActive) 0.82f else 0.62f
-            linePaint.alpha = if (playbackActive) 76 else 32
+            linePaint.alpha = ((if (playbackActive) 76 else 32) * resolvedIntensity).roundToInt()
             canvas.nativeCanvas.drawPath(lowerPath, linePaint)
         }
     }
@@ -196,8 +208,8 @@ private class AlbumLandscapeSpectrumRenderer {
         val centerY = heightPx * 0.52f
         val maximumAmplitude = heightPx * 0.36f
         val fullTurn = PI.toFloat() * 2f
-        for (index in 0 until AlbumLandscapeSpectrumPointCount) {
-            val progress = index.toFloat() / (AlbumLandscapeSpectrumPointCount - 1).toFloat()
+        for (index in 0 until AudioSpectrumPointCount) {
+            val progress = index.toFloat() / (AudioSpectrumPointCount - 1).toFloat()
             if (playbackActive) {
                 val energy = envelope[index].coerceIn(0f, 1f)
                 val drift = sin(phase + progress * fullTurn * 1.35f) * density * 0.45f

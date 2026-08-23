@@ -68,6 +68,7 @@ import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AudioOutputRouteIcon
+import com.asmr.player.ui.common.HorizontalStereoSpectrum
 import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
 import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
 import com.asmr.player.ui.common.AppVolumeSlider
@@ -102,6 +103,7 @@ internal fun PlayerSurfaceHeader(
     onManualBindLyrics: (() -> Unit)? = null,
     navigationEnabled: Boolean,
     showTitle: Boolean = true,
+    showDivider: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val colorScheme = AsmrTheme.colorScheme
@@ -175,13 +177,15 @@ internal fun PlayerSurfaceHeader(
             }
         }
         }
-        HorizontalDivider(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp),
-            thickness = 0.5.dp,
-            color = dividerColor
-        )
+        if (showDivider) {
+            HorizontalDivider(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                thickness = 0.5.dp,
+                color = dividerColor
+            )
+        }
     }
 }
 
@@ -212,11 +216,21 @@ internal fun NowPlayingLyricsSurface(
         label = "nowPlayingLyricsSurfaceAlpha"
     )
     val effectiveInteractionEnabled = interactionEnabled && contentVisible
-    Box(
+    BoxWithConstraints(
         modifier = modifier.graphicsLayer {
             alpha = surfaceAlpha
         }
     ) {
+        if (isLandscape) {
+            HorizontalStereoSpectrum(
+                lineColor = AsmrTheme.colorScheme.primaryStrong,
+                intensity = 0.72f,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(if (maxWidth >= 840.dp) 112.dp else 88.dp)
+                    .align(Alignment.Center)
+            )
+        }
         if (lyrics.isEmpty()) {
             Column(
                 modifier = Modifier
