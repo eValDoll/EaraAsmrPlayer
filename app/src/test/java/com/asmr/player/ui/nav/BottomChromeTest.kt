@@ -311,6 +311,60 @@ class BottomChromeTest {
     }
 
     @Test
+    fun navAndMiniPlayer_keepOuterEdgesAnchoredDuringModeChanges() {
+        val displayMode = mutableStateOf(MiniPlayerDisplayMode.CoverOnly)
+        composeRule.mainClock.autoAdvance = false
+        try {
+            composeRule.setContent {
+                AsmrPlayerTheme {
+                    BottomChrome(
+                        activeRoute = Routes.Library,
+                        miniPlayerVisible = true,
+                        miniPlayerDisplayMode = displayMode.value,
+                        onMiniPlayerDisplayModeChange = {},
+                        onOpenNowPlaying = {},
+                        onOpenQueue = {},
+                        onNavigate = {},
+                        modifier = Modifier.size(width = 360.dp, height = 120.dp),
+                        miniPlayerContent = { miniModifier ->
+                            Box(
+                                modifier = miniModifier.height(56.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("Mini")
+                            }
+                        }
+                    )
+                }
+            }
+
+            composeRule.waitForIdle()
+            val initialNavLeft = bottomNavLeft()
+            val initialMiniRight = miniPlayerRight()
+
+            composeRule.runOnIdle {
+                displayMode.value = MiniPlayerDisplayMode.Expanded
+            }
+            repeat(45) {
+                composeRule.mainClock.advanceTimeByFrame()
+                composeRule.waitForIdle()
+                assertOuterEdgesAnchored(initialNavLeft, initialMiniRight)
+            }
+
+            composeRule.runOnIdle {
+                displayMode.value = MiniPlayerDisplayMode.CoverOnly
+            }
+            repeat(45) {
+                composeRule.mainClock.advanceTimeByFrame()
+                composeRule.waitForIdle()
+                assertOuterEdgesAnchored(initialNavLeft, initialMiniRight)
+            }
+        } finally {
+            composeRule.mainClock.autoAdvance = true
+        }
+    }
+
+    @Test
     fun navBar_withoutMiniPlayer_staysCentered() {
         composeRule.setContent {
             AsmrPlayerTheme {
@@ -469,6 +523,29 @@ class BottomChromeTest {
         val bounds = composeRule.onNodeWithTag("bottomNavItem:$route")
             .getUnclippedBoundsInRoot()
         return ((bounds.left + bounds.right) / 2f).value
+    }
+
+    private fun bottomNavLeft(): Float = composeRule
+        .onNodeWithTag(BottomNavBarTag)
+        .getUnclippedBoundsInRoot()
+        .left
+        .value
+
+    private fun miniPlayerRight(): Float = composeRule
+        .onNodeWithTag(BottomChromeMiniPlayerTag)
+        .getUnclippedBoundsInRoot()
+        .right
+        .value
+
+    private fun assertOuterEdgesAnchored(expectedNavLeft: Float, expectedMiniRight: Float) {
+        assertTrue(
+            "Expected the nav bar left edge to remain anchored",
+            abs(bottomNavLeft() - expectedNavLeft) <= 0.5f
+        )
+        assertTrue(
+            "Expected the mini player right edge to remain anchored",
+            abs(miniPlayerRight() - expectedMiniRight) <= 0.5f
+        )
     }
 
     private fun assertNoHorizontalBacktrack(label: String, positions: List<Float>) {

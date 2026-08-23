@@ -618,13 +618,6 @@ fun BottomChrome(
         } else {
             expandedNavWidth
         }
-        val currentGroupWidth = if (miniPlayerVisible) {
-            navWidth + chromeSpacing + miniWidth
-        } else {
-            navWidth
-        }
-        val groupOffset = ((trackWidth - currentGroupWidth).coerceAtLeast(0.dp) / 2f)
-
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -657,14 +650,12 @@ fun BottomChrome(
                     onOverflowProtectedBoundsChange = onOverflowProtectedBoundsChange,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .offset(x = groupOffset)
                         .width(navWidth)
                 )
 
                 if (miniPlayerVisible) {
                     val miniPlayerModifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .offset(x = groupOffset + navWidth + chromeSpacing)
+                        .align(Alignment.BottomEnd)
                         .width(miniWidth.coerceAtLeast(miniCollapsedWidth))
                         .testTag(BottomChromeMiniPlayerTag)
                     if (miniPlayerContent != null) {

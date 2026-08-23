@@ -264,6 +264,7 @@ internal data class BatchPlaylistPickerRequest(
 private const val SecondaryPageEnterDurationMs = 440
 private const val SecondaryPageExitDurationMs = 420
 private const val SecondaryPageTouchBlockDurationMs = 320
+private const val AlbumDetailPresentedStateKey = "album_detail_presented"
 private const val PrimaryPagerSnapThreshold = 0.16f
 private val SecondaryPageSlideEasing = CubicBezierEasing(0.215f, 0.61f, 0.355f, 1f)
 private val PrimaryPageParallaxOffset = 120.dp
@@ -385,17 +386,24 @@ private fun AlbumDetailRouteFrame(
         ?.takeIf { isAlbumDetailRoute(it.destination.route) }
         ?.id
     val usesStackTransition = previousAlbumDetailEntryId != null
-    val skipEnterAnimation = usesStackTransition || stackPopTargetEntryId == backStackEntry.id
+    val alreadyPresented = backStackEntry.savedStateHandle
+        .get<Boolean>(AlbumDetailPresentedStateKey) == true
+    val skipEnterAnimation = alreadyPresented ||
+        usesStackTransition ||
+        stackPopTargetEntryId == backStackEntry.id
     val heroBlurGraphicsLayer = rememberGraphicsLayer()
     val heroBlurLayerCache = remember(heroBlurGraphicsLayer) {
         AlbumHeroBlurLayerCache(heroBlurGraphicsLayer)
     }
     val rootView = LocalView.current
-    val pageWidthPx = rootView.width.toFloat().coerceAtLeast(1f)
-    val pageOffsetX = remember(pageWidthPx, backStackEntry.id) {
-        Animatable(if (skipEnterAnimation) 0f else pageWidthPx)
+    val pageOffsetProgress = remember(backStackEntry.id) {
+        Animatable(if (skipEnterAnimation) 0f else 1f)
     }
-    val pageOffsetReader = remember(pageOffsetX) { { pageOffsetX.value } }
+    val pageOffsetReader = remember(pageOffsetProgress, rootView) {
+        {
+            pageOffsetProgress.value * rootView.width.toFloat().coerceAtLeast(1f)
+        }
+    }
     SideEffect {
         onPageOffsetReader(pageOffsetReader)
     }
@@ -418,18 +426,21 @@ private fun AlbumDetailRouteFrame(
     }
     BackHandler(enabled = !exitRequested, onBack = closeAlbumDetail)
 
-    LaunchedEffect(backStackEntry.id, pageWidthPx) {
+    LaunchedEffect(backStackEntry.id) {
+        // 方向切换可能让当前目的地短暂退出组合。把已展示状态保存在返回栈项中，
+        // 重建后直接恢复到屏内，避免重新执行一次入场并与随后的退出动画叠加。
+        backStackEntry.savedStateHandle[AlbumDetailPresentedStateKey] = true
         if (skipEnterAnimation) {
-            pageOffsetX.snapTo(0f)
+            pageOffsetProgress.snapTo(0f)
         } else {
-            pageOffsetX.snapTo(pageWidthPx)
+            pageOffsetProgress.snapTo(1f)
             // 详情页先在屏幕外完成一次组合与绘制，再启动可见位移。导航提前使用原本的第二个
             // 准备帧，因此不会改变用户看到的动画起点、时长或缓动。
             withFrameNanos { }
             UiFrameWorkCoordinator.markFrameCritical(
                 SecondaryPageEnterDurationMs.toLong()
             )
-            pageOffsetX.animateTo(
+            pageOffsetProgress.animateTo(
                 targetValue = 0f,
                 animationSpec = tween(
                     durationMillis = SecondaryPageEnterDurationMs,
@@ -449,8 +460,8 @@ private fun AlbumDetailRouteFrame(
         UiFrameWorkCoordinator.markFrameCritical(
             SecondaryPageExitDurationMs.toLong()
         )
-        pageOffsetX.animateTo(
-            targetValue = pageWidthPx,
+        pageOffsetProgress.animateTo(
+            targetValue = 1f,
             animationSpec = tween(
                 durationMillis = SecondaryPageExitDurationMs,
                 easing = SecondaryPageSlideEasing
@@ -472,7 +483,7 @@ private fun AlbumDetailRouteFrame(
             .fillMaxSize()
             .graphicsLayer {
                 val width = size.width.toFloat().coerceAtLeast(1f)
-                val offset = pageOffsetX.value.coerceIn(0f, width)
+                val offset = width * pageOffsetProgress.value.coerceIn(0f, 1f)
                 val visibleRight = if (offset >= width - 0.5f) {
                     // 保留屏外预绘制帧，避免动画起点改变。
                     width
