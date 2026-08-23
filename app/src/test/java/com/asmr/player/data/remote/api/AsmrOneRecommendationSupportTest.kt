@@ -5,6 +5,18 @@ import org.junit.Test
 
 class AsmrOneRecommendationSupportTest {
     @Test
+    fun backendTracksUrl_usesOnlyConfiguredBackupHost() {
+        val url = buildAsmrOneBackendTracksUrl(
+            baseUrl = "https://earaasmr.com/",
+            rj = " rj01580085 "
+        )
+
+        assertEquals("earaasmr.com", url.host)
+        assertEquals("/api/asmr-one/tracks", url.encodedPath)
+        assertEquals("RJ01580085", url.queryParameter("rj"))
+    }
+
+    @Test
     fun collectedSearchUrl_addsEnabledSubtitleAndAllAgesFilters() {
         val url = buildAsmrOneCollectedSearchUrl(
             baseUrl = "https://eara.example/",

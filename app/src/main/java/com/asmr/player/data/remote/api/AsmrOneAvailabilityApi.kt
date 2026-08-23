@@ -306,12 +306,7 @@ class AsmrOneAvailabilityApi @Inject constructor(
         val normalizedRj = DlsiteWorkNo.normalizeWorkNo(rj, minimumDigits = 6)
         if (normalizedRj.isBlank()) throw IOException("asmr.one tracks work number is invalid")
         return withContext(Dispatchers.IO) {
-            val url = resolveUrl("api/asmr-one/tracks")
-                .toHttpUrlOrNull()
-                ?.newBuilder()
-                ?.addQueryParameter("rj", normalizedRj)
-                ?.build()
-                ?: throw IOException("invalid asmr.one tracks backend url")
+            val url = buildAsmrOneBackendTracksUrl(backendBaseUrl, normalizedRj)
             val request = Request.Builder()
                 .url(url)
                 .header("User-Agent", userAgent)
@@ -400,6 +395,15 @@ internal fun buildAsmrOneCollectedSearchUrl(
         }
         ?.build()
         ?: throw IOException("invalid asmr.one backend url")
+}
+
+internal fun buildAsmrOneBackendTracksUrl(baseUrl: String, rj: String): HttpUrl {
+    return "${baseUrl.trimEnd('/')}/api/asmr-one/tracks"
+        .toHttpUrlOrNull()
+        ?.newBuilder()
+        ?.addQueryParameter("rj", rj.trim().uppercase())
+        ?.build()
+        ?: throw IOException("invalid asmr.one tracks backend url")
 }
 
 internal fun normalizeRecommendationRjs(values: List<String>, limit: Int): List<String> =

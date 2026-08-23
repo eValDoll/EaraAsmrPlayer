@@ -101,9 +101,9 @@ class AlbumDetailOneStateTest {
     }
 
     @Test
-    fun albumDetailOnlineLoadPlan_waitsForDlsiteTargetBeforeLoadingOne() {
+    fun albumDetailOnlineLoadPlan_loadsOneWithoutWaitingForDlsiteTarget() {
         assertEquals(
-            AlbumDetailOnlineLoadPlan(loadDlsite = true),
+            AlbumDetailOnlineLoadPlan(loadDlsite = true, loadAsmrOne = true),
             albumDetailOnlineLoadPlan(
                 selectedTab = 1,
                 hasResolvedInitialDlsiteTarget = false,

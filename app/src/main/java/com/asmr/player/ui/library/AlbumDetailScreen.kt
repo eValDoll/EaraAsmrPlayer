@@ -462,7 +462,7 @@ internal fun albumDetailOnlineLoadPlan(
         )
         1 -> AlbumDetailOnlineLoadPlan(
             loadDlsite = true,
-            loadAsmrOne = hasResolvedInitialDlsiteTarget
+            loadAsmrOne = true
         )
         2 -> AlbumDetailOnlineLoadPlan(
             loadDlsite = true,

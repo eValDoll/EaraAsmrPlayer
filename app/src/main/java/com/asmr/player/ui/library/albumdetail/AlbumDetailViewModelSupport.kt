@@ -257,6 +257,10 @@ internal fun albumDetailRequestKey(albumId: Long?, rjCode: String?): String {
     }
 }
 
+internal fun asmrOneTracksCacheKey(site: Int?, workId: String): String {
+    return "${site ?: "unknown"}:${workId.trim()}"
+}
+
 internal fun shouldReuseAlbumDetailModel(
     force: Boolean,
     hasCurrentModel: Boolean,
@@ -528,6 +532,14 @@ internal fun resolveInitialDlsiteLoadTarget(
         selectedLang = selectedLang,
         workno = clean
     )
+}
+
+internal fun shouldReloadAsmrOneForResolvedInitialTarget(
+    currentRj: String,
+    resolvedWorkno: String
+): Boolean {
+    val target = resolvedWorkno.trim().uppercase()
+    return target.isNotBlank() && !target.equals(currentRj.trim().uppercase(), ignoreCase = true)
 }
 
 internal fun asmrOneTrackRjCandidates(

@@ -19,6 +19,16 @@ class AlbumDetailViewModelSupportTest {
     }
 
     @Test
+    fun asmrOneTracksCacheKey_isolatesSelectedEndpoint() {
+        assertEquals("100:1580085", asmrOneTracksCacheKey(100, " 1580085 "))
+        assertEquals("-1:1580085", asmrOneTracksCacheKey(-1, "1580085"))
+        assertFalse(
+            asmrOneTracksCacheKey(100, "1580085") ==
+                asmrOneTracksCacheKey(-1, "1580085")
+        )
+    }
+
+    @Test
     fun shouldReuseAlbumDetailModel_reusesOnlyCompletedMatchingPage() {
         assertTrue(
             shouldReuseAlbumDetailModel(
