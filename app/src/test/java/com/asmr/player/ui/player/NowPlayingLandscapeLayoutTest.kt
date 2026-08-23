@@ -45,11 +45,13 @@ class NowPlayingLandscapeLayoutTest {
         assertEquals(24.dp, metrics.contentSpacing)
         assertEquals(0.40f, metrics.artworkWeight)
         assertEquals(0.60f, metrics.contentWeight)
+        assertEquals(76.dp, metrics.identityMinHeight)
         assertEquals(16.dp, metrics.artworkCornerRadius)
         assertEquals(56.dp, metrics.lyricsTopPadding)
         assertEquals(62.dp, metrics.progressHeight)
         assertEquals(72.dp, metrics.controlsHeight)
         assertEquals(292.dp, metrics.artworkMaxSize)
+        assertEquals(88.dp, metrics.spectrumHeight)
         assertEquals(1f, metrics.artworkWeight + metrics.contentWeight)
     }
 
@@ -66,11 +68,12 @@ class NowPlayingLandscapeLayoutTest {
         assertEquals(14.dp, metrics.bottomPadding)
         assertEquals(0.39f, metrics.artworkWeight)
         assertEquals(0.61f, metrics.contentWeight)
-        assertEquals(64.dp, metrics.identityHeight)
+        assertEquals(64.dp, metrics.identityMinHeight)
         assertEquals(48.dp, metrics.lyricsTopPadding)
         assertEquals(60.dp, metrics.progressHeight)
         assertEquals(72.dp, metrics.controlsHeight)
         assertEquals(260.dp, metrics.artworkMaxSize)
+        assertEquals(88.dp, metrics.spectrumHeight)
         assertEquals(1f, metrics.artworkWeight + metrics.contentWeight)
     }
 
@@ -89,10 +92,54 @@ class NowPlayingLandscapeLayoutTest {
         assertEquals(0.55f, metrics.contentWeight)
         assertEquals(336.dp, metrics.artworkMaxSize)
         assertEquals(380.dp, metrics.progressMaxWidth)
-        assertEquals(90.dp, metrics.identityHeight)
+        assertEquals(90.dp, metrics.identityMinHeight)
         assertEquals(76.dp, metrics.lyricsTopPadding)
         assertEquals(80.dp, metrics.controlsHeight)
+        assertEquals(112.dp, metrics.spectrumHeight)
         assertEquals(1f, metrics.artworkWeight + metrics.contentWeight)
+    }
+
+    @Test
+    fun landscapeIdentityUsesSmallerTitleAndSmallArtistInfo() {
+        val compact = nowPlayingLandscapeIdentityTypography(
+            compactHeight = true,
+            tabletLayout = false
+        )
+        val regular = nowPlayingLandscapeIdentityTypography(
+            compactHeight = false,
+            tabletLayout = false
+        )
+        val tablet = nowPlayingLandscapeIdentityTypography(
+            compactHeight = false,
+            tabletLayout = true
+        )
+
+        assertEquals(16, compact.titleFontSizeSp)
+        assertEquals(11, compact.artistInfoFontSizeSp)
+        assertEquals(18, regular.titleFontSizeSp)
+        assertEquals(12, regular.artistInfoFontSizeSp)
+        assertEquals(20, tablet.titleFontSizeSp)
+        assertEquals(13, tablet.artistInfoFontSizeSp)
+    }
+
+    @Test
+    fun spectrumCenterStaysHalfwayBetweenArtistInfoAndHighlightedLyric() {
+        assertEquals(
+            210f,
+            landscapeSpectrumCenterY(
+                artistInfoBottom = 160f,
+                currentLyricAnchorTop = 260f,
+                fallbackCenterY = 120f
+            )
+        )
+        assertEquals(
+            120f,
+            landscapeSpectrumCenterY(
+                artistInfoBottom = Float.NaN,
+                currentLyricAnchorTop = 260f,
+                fallbackCenterY = 120f
+            )
+        )
     }
 
     @Test

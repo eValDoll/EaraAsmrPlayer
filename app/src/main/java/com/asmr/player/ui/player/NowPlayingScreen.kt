@@ -169,13 +169,14 @@ internal data class NowPlayingLandscapeLayoutMetrics(
     val sectionSpacing: Dp,
     val artworkWeight: Float,
     val contentWeight: Float,
-    val identityHeight: Dp,
+    val identityMinHeight: Dp,
     val lyricsTopPadding: Dp,
     val progressHeight: Dp,
     val controlsHeight: Dp,
     val artworkCornerRadius: Dp,
     val artworkMaxSize: Dp,
-    val progressMaxWidth: Dp
+    val progressMaxWidth: Dp,
+    val spectrumHeight: Dp
 )
 
 internal fun nowPlayingLandscapeLayoutMetrics(
@@ -193,13 +194,14 @@ internal fun nowPlayingLandscapeLayoutMetrics(
             sectionSpacing = 12.dp,
             artworkWeight = 0.45f,
             contentWeight = 0.55f,
-            identityHeight = 90.dp,
+            identityMinHeight = 90.dp,
             lyricsTopPadding = 76.dp,
             progressHeight = 64.dp,
             controlsHeight = 80.dp,
             artworkCornerRadius = 18.dp,
             artworkMaxSize = 336.dp,
-            progressMaxWidth = 380.dp
+            progressMaxWidth = 380.dp,
+            spectrumHeight = 112.dp
         )
     }
     val compactHeight = screenHeight.isFiniteDp() &&
@@ -215,13 +217,14 @@ internal fun nowPlayingLandscapeLayoutMetrics(
             sectionSpacing = 2.dp,
             artworkWeight = 0.39f,
             contentWeight = 0.61f,
-            identityHeight = 64.dp,
+            identityMinHeight = 64.dp,
             lyricsTopPadding = 48.dp,
             progressHeight = 60.dp,
             controlsHeight = 72.dp,
             artworkCornerRadius = 14.dp,
             artworkMaxSize = 260.dp,
-            progressMaxWidth = 300.dp
+            progressMaxWidth = 300.dp,
+            spectrumHeight = 88.dp
         )
     } else {
         NowPlayingLandscapeLayoutMetrics(
@@ -234,14 +237,31 @@ internal fun nowPlayingLandscapeLayoutMetrics(
             sectionSpacing = 6.dp,
             artworkWeight = 0.40f,
             contentWeight = 0.60f,
-            identityHeight = 76.dp,
+            identityMinHeight = 76.dp,
             lyricsTopPadding = 56.dp,
             progressHeight = 62.dp,
             controlsHeight = 72.dp,
             artworkCornerRadius = 16.dp,
             artworkMaxSize = 292.dp,
-            progressMaxWidth = 340.dp
+            progressMaxWidth = 340.dp,
+            spectrumHeight = 88.dp
         )
+    }
+}
+
+internal fun landscapeSpectrumCenterY(
+    artistInfoBottom: Float,
+    currentLyricAnchorTop: Float,
+    fallbackCenterY: Float
+): Float {
+    return if (
+        artistInfoBottom.isFinite() &&
+        currentLyricAnchorTop.isFinite() &&
+        currentLyricAnchorTop > artistInfoBottom
+    ) {
+        (artistInfoBottom + currentLyricAnchorTop) / 2f
+    } else {
+        fallbackCenterY
     }
 }
 
@@ -742,7 +762,7 @@ private fun ListenTogetherAudienceLine(
 @Composable
 private fun LandscapePlayerIdentity(
     title: String,
-    artist: String,
+    artistMeta: NowPlayingArtistMeta,
     listenTogetherState: ListenTogetherUiState,
     accentColor: Color,
     pageEntranceSettled: Boolean,
@@ -752,6 +772,13 @@ private fun LandscapePlayerIdentity(
     modifier: Modifier = Modifier
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val typography = remember(compactHeight, tabletLayout) {
+        nowPlayingLandscapeIdentityTypography(
+            compactHeight = compactHeight,
+            tabletLayout = tabletLayout
+        )
+    }
+    val artistSummary = remember(artistMeta) { formatClassicArtistSummary(artistMeta) }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -770,16 +797,8 @@ private fun LandscapePlayerIdentity(
             text = title.ifBlank { "未播放" },
             modifier = Modifier.fillMaxWidth(),
             style = MaterialTheme.typography.titleLarge.copy(
-                fontSize = when {
-                    tabletLayout -> 24.sp
-                    compactHeight -> 18.sp
-                    else -> 20.sp
-                },
-                lineHeight = when {
-                    tabletLayout -> 28.sp
-                    compactHeight -> 20.sp
-                    else -> 23.sp
-                },
+                fontSize = typography.titleFontSizeSp.sp,
+                lineHeight = typography.titleLineHeightSp.sp,
                 fontWeight = FontWeight.SemiBold
             ),
             color = colorScheme.textPrimary,
@@ -787,27 +806,53 @@ private fun LandscapePlayerIdentity(
             overflow = TextOverflow.Ellipsis
         )
         Text(
-            text = artist,
+            text = artistSummary,
             modifier = Modifier
                 .fillMaxWidth()
                 .onGloballyPositioned { coordinates ->
                     onArtistBottomChanged(coordinates.boundsInRoot().bottom)
                 },
             style = MaterialTheme.typography.bodyMedium.copy(
-                fontSize = when {
-                    tabletLayout -> 15.sp
-                    compactHeight -> 12.sp
-                    else -> 13.sp
-                },
-                lineHeight = when {
-                    tabletLayout -> 19.sp
-                    compactHeight -> 14.sp
-                    else -> 16.sp
-                }
+                fontSize = typography.artistInfoFontSizeSp.sp,
+                lineHeight = typography.artistInfoLineHeightSp.sp,
+                fontWeight = FontWeight.Medium
             ),
             color = colorScheme.textSecondary,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
+        )
+    }
+}
+
+internal data class NowPlayingLandscapeIdentityTypography(
+    val titleFontSizeSp: Int,
+    val titleLineHeightSp: Int,
+    val artistInfoFontSizeSp: Int,
+    val artistInfoLineHeightSp: Int
+)
+
+internal fun nowPlayingLandscapeIdentityTypography(
+    compactHeight: Boolean,
+    tabletLayout: Boolean
+): NowPlayingLandscapeIdentityTypography {
+    return when {
+        tabletLayout -> NowPlayingLandscapeIdentityTypography(
+            titleFontSizeSp = 20,
+            titleLineHeightSp = 24,
+            artistInfoFontSizeSp = 13,
+            artistInfoLineHeightSp = 17
+        )
+        compactHeight -> NowPlayingLandscapeIdentityTypography(
+            titleFontSizeSp = 16,
+            titleLineHeightSp = 18,
+            artistInfoFontSizeSp = 11,
+            artistInfoLineHeightSp = 13
+        )
+        else -> NowPlayingLandscapeIdentityTypography(
+            titleFontSizeSp = 18,
+            titleLineHeightSp = 21,
+            artistInfoFontSizeSp = 12,
+            artistInfoLineHeightSp = 15
         )
     }
 }
@@ -1446,6 +1491,10 @@ internal fun NowPlayingScreen(
     val playerHeaderTitle = metadata?.title?.toString().orEmpty().ifBlank {
         lyricsState.title.ifBlank { "未播放" }
     }
+    val playerArtistText = metadata?.artist?.toString().orEmpty()
+    val playerArtistMeta = remember(playerArtistText) {
+        parseNowPlayingArtistMeta(playerArtistText)
+    }
     val lyricsHeaderTitle = lyricsState.title.ifBlank {
         metadata?.title?.toString().orEmpty().ifBlank { "歌词" }
     }
@@ -1534,21 +1583,17 @@ internal fun NowPlayingScreen(
                 currentMotionLayout,
                 NowPlayingMotionSlot.SPECTRUM
             )
-            val spectrumHeight = if (landscapeLayoutMetrics.tabletLayout) 112.dp else 88.dp
+            val spectrumHeight = landscapeLayoutMetrics.spectrumHeight
             val density = LocalDensity.current
             val fallbackCenterY = with(density) {
                 configuration.screenHeightDp.dp.toPx() *
                     if (landscapeLayoutMetrics.tabletLayout) 0.28f else 0.34f
             }
-            val spectrumCenterY = if (
-                landscapeArtistBottom.isFinite() &&
-                landscapeCurrentLyricAnchorTop.isFinite() &&
-                landscapeCurrentLyricAnchorTop > landscapeArtistBottom
-            ) {
-                (landscapeArtistBottom + landscapeCurrentLyricAnchorTop) / 2f
-            } else {
-                fallbackCenterY
-            }
+            val spectrumCenterY = landscapeSpectrumCenterY(
+                artistInfoBottom = landscapeArtistBottom,
+                currentLyricAnchorTop = landscapeCurrentLyricAnchorTop,
+                fallbackCenterY = fallbackCenterY
+            )
             HorizontalStereoSpectrum(
                 lineColor = colorScheme.primaryStrong,
                 intensity = if (landscapeLayoutMetrics.tabletLayout) 0.78f else 0.72f,
@@ -1740,7 +1785,7 @@ internal fun NowPlayingScreen(
                     ) {
                         LandscapePlayerIdentity(
                             title = playerHeaderTitle,
-                            artist = metadata?.artist?.toString().orEmpty(),
+                            artistMeta = playerArtistMeta,
                             listenTogetherState = listenTogetherUiState,
                             accentColor = accentColor,
                             pageEntranceSettled = pageEntranceSettled,
@@ -1752,7 +1797,8 @@ internal fun NowPlayingScreen(
                                 }
                             },
                             modifier = Modifier
-                                .height(landscapeLayoutMetrics.identityHeight)
+                                // 两行标题会超过基准高度，让身份区按实际文本高度增长，避免裁掉社团/CV。
+                                .heightIn(min = landscapeLayoutMetrics.identityMinHeight)
                                 .then(infoMotion)
                         )
 
@@ -1915,7 +1961,7 @@ internal fun NowPlayingScreen(
                 ) {
                     LandscapePlayerIdentity(
                         title = playerHeaderTitle,
-                        artist = metadata?.artist?.toString().orEmpty(),
+                        artistMeta = playerArtistMeta,
                         listenTogetherState = listenTogetherUiState,
                         accentColor = accentColor,
                         pageEntranceSettled = pageEntranceSettled,
@@ -1927,7 +1973,8 @@ internal fun NowPlayingScreen(
                             }
                         },
                         modifier = Modifier
-                            .height(landscapeLayoutMetrics.identityHeight)
+                            // 两行标题会超过基准高度，让身份区按实际文本高度增长，避免裁掉社团/CV。
+                            .heightIn(min = landscapeLayoutMetrics.identityMinHeight)
                             .then(lyricsMotion)
                     )
 
@@ -1994,10 +2041,6 @@ internal fun NowPlayingScreen(
             val controlsMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.CONTROLS)
             val volumeMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.VOLUME)
             val expandedHomeLayout = nowPlayingHomeLayoutMode == NowPlayingHomeLayoutMode.Expanded && !isVideo
-            val portraitArtistText = metadata?.artist?.toString().orEmpty()
-            val portraitArtistMeta = remember(portraitArtistText) {
-                parseNowPlayingArtistMeta(portraitArtistText)
-            }
             val portraitScreenHeight = configuration.screenHeightDp.dp
             val portraitLayoutMetrics = remember(portraitScreenHeight, widthClass) {
                 nowPlayingPortraitLayoutMetrics(
@@ -2262,7 +2305,7 @@ internal fun NowPlayingScreen(
                                         }
                                         ExpandedPlayerIdentityOverlay(
                                             title = playerHeaderTitle,
-                                            artistMeta = portraitArtistMeta,
+                                            artistMeta = playerArtistMeta,
                                             listenTogetherState = listenTogetherUiState,
                                             pageEntranceSettled = pageEntranceSettled,
                                             modifier = Modifier
@@ -2275,7 +2318,7 @@ internal fun NowPlayingScreen(
 
                             ClassicPlayerIdentity(
                                 title = playerHeaderTitle,
-                                artistMeta = portraitArtistMeta,
+                                artistMeta = playerArtistMeta,
                                 compactLayout = portraitLayoutMetrics.compact,
                                 modifier = portraitContentWidthModifier
                                     .height(classicTrackInfoHeight)
