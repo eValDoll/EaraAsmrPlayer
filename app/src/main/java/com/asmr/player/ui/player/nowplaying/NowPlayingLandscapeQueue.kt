@@ -53,6 +53,7 @@ internal fun TabletLandscapeQueuePanel(
     viewModel: PlayerViewModel,
     currentMediaId: String,
     isPlaying: Boolean,
+    activeColor: Color,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
     modifier: Modifier = Modifier
@@ -177,14 +178,14 @@ internal fun TabletLandscapeQueuePanel(
                                     .height(18.dp)
                                     .clip(RoundedCornerShape(percent = 50))
                                     .background(
-                                        if (selected) colorScheme.primaryStrong else Color.Transparent
+                                        if (selected) activeColor else Color.Transparent
                                     )
                             )
                             Text(
                                 text = (index + 1).toString().padStart(2, '0'),
                                 modifier = Modifier.width(30.dp),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (selected) colorScheme.primaryStrong else colorScheme.textTertiary
+                                color = if (selected) activeColor else colorScheme.textTertiary
                             )
                             Text(
                                 text = title,
@@ -192,7 +193,7 @@ internal fun TabletLandscapeQueuePanel(
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
                                 ),
-                                color = if (selected) colorScheme.primaryStrong else colorScheme.textSecondary,
+                                color = if (selected) activeColor else colorScheme.textSecondary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -201,7 +202,7 @@ internal fun TabletLandscapeQueuePanel(
                                     text = "播放中",
                                     modifier = Modifier.padding(start = 8.dp),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = colorScheme.primaryStrong
+                                    color = activeColor
                                 )
                             }
                         }

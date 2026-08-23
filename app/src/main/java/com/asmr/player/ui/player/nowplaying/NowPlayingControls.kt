@@ -124,11 +124,10 @@ internal fun PlaybackControls(
     onPrimaryColor: Color = AsmrTheme.colorScheme.onPrimary,
     compactLayout: Boolean = false
 ) {
-    val colorScheme = AsmrTheme.colorScheme
     val actionButtonSize = if (compactLayout) 40.dp else 48.dp
     val actionIconSize = if (compactLayout) 22.dp else 24.dp
     val coreButtonSize = when {
-        landscapeControls && compactLayout -> 48.dp
+        landscapeControls && compactLayout -> 40.dp
         landscapeControls -> 52.dp
         compactLayout -> 40.dp
         else -> 48.dp
@@ -178,217 +177,337 @@ internal fun PlaybackControls(
         }
     }
 
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(bottom = bottomPadding),
-        verticalArrangement = Arrangement.spacedBy(
-            if (showActionRow) {
-                if (compactLayout) 8.dp else 20.dp
-            } else {
-                12.dp
+    val controlsContainerModifier = modifier
+        .fillMaxWidth()
+        .padding(bottom = bottomPadding)
+    val landscapeActionSpacing = if (compactLayout) 2.dp else 4.dp
+    val landscapeCoreSpacing = if (compactLayout) 2.dp else 10.dp
+    val landscapeCoreEndPadding = if (compactLayout) 0.dp else 16.dp
+
+    if (landscapeControls && showActionRow) {
+        Row(
+            modifier = controlsContainerModifier,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Row(
+                modifier = Modifier.then(actionRowModifier),
+                horizontalArrangement = Arrangement.spacedBy(landscapeActionSpacing),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                PlaybackActionButtons(
+                    playback = playback,
+                    isFavorite = isFavorite,
+                    viewModel = viewModel,
+                    onShowPlaylistPicker = onShowPlaylistPicker,
+                    onShowEqualizer = onShowEqualizer,
+                    onManageTags = onManageTags,
+                    sliceUiState = sliceUiState,
+                    actionButtonSize = actionButtonSize,
+                    actionIconSize = actionIconSize,
+                    landscapeControls = true,
+                    primaryColor = primaryColor
+                )
             }
-        )
-    ) {
-        if (showActionRow) {
+            Spacer(modifier = Modifier.weight(1f))
+            Row(
+                modifier = Modifier
+                    .then(coreControlsModifier)
+                    .padding(end = landscapeCoreEndPadding),
+                horizontalArrangement = Arrangement.spacedBy(landscapeCoreSpacing),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                PlaybackCoreButtons(
+                    playback = playback,
+                    viewModel = viewModel,
+                    isPlaying = isPlayingEffective,
+                    onTogglePlay = {
+                        optimisticIsPlaying = !(optimisticIsPlaying ?: playback.playWhenReady)
+                        viewModel.togglePlayPause()
+                    },
+                    compactLayout = compactLayout,
+                    coreButtonSize = coreButtonSize,
+                    modeIconSize = modeIconSize,
+                    skipIconSize = skipIconSize,
+                    playButtonSize = playButtonSize,
+                    playIconSize = playIconSize,
+                    primaryColor = primaryColor,
+                    onPrimaryColor = onPrimaryColor
+                )
+            }
+        }
+    } else {
+        Column(
+            modifier = controlsContainerModifier,
+            verticalArrangement = Arrangement.spacedBy(
+                if (showActionRow) {
+                    if (compactLayout) 8.dp else 20.dp
+                } else {
+                    12.dp
+                }
+            )
+        ) {
+            if (showActionRow) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = if (compactLayout) 8.dp else 16.dp)
+                        .then(actionRowModifier),
+                    horizontalArrangement = Arrangement.SpaceAround,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    PlaybackActionButtons(
+                        playback = playback,
+                        isFavorite = isFavorite,
+                        viewModel = viewModel,
+                        onShowPlaylistPicker = onShowPlaylistPicker,
+                        onShowEqualizer = onShowEqualizer,
+                        onManageTags = onManageTags,
+                        sliceUiState = sliceUiState,
+                        actionButtonSize = actionButtonSize,
+                        actionIconSize = actionIconSize,
+                        landscapeControls = false,
+                        primaryColor = primaryColor
+                    )
+                }
+            }
+
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = if (compactLayout) 8.dp else 16.dp)
-                    .then(actionRowModifier),
-                horizontalArrangement = Arrangement.SpaceAround,
+                    .then(coreControlsModifier)
+                    .padding(end = if (landscapeControls) landscapeCoreEndPadding else 0.dp),
+                horizontalArrangement = when {
+                    landscapeControls -> Arrangement.spacedBy(
+                        space = landscapeCoreSpacing,
+                        alignment = Alignment.End
+                    )
+                    showActionRow -> Arrangement.SpaceBetween
+                    else -> Arrangement.spacedBy(25.dp, Alignment.CenterHorizontally)
+                },
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                IconButton(
-                    onClick = { viewModel.toggleFavorite() },
-                    modifier = Modifier.size(actionButtonSize)
-                ) {
-                    Icon(
-                        imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Outlined.FavoriteBorder,
-                        contentDescription = "喜欢",
-                        tint = if (isFavorite) Color.Red else colorScheme.onSurface.copy(alpha = 0.8f),
-                        modifier = Modifier.size(actionIconSize)
-                    )
-                }
-
-                IconButton(
-                    onClick = onShowPlaylistPicker,
-                    modifier = Modifier.size(actionButtonSize)
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Outlined.PlaylistAdd,
-                        contentDescription = "添加到播放列表",
-                        tint = colorScheme.onSurface.copy(alpha = 0.8f),
-                        modifier = Modifier.size(actionIconSize)
-                    )
-                }
-
-                val isOnlineMedia = playback.currentMediaItem.isOnlineMedia()
-                IconButton(
-                    onClick = {
-                        if (isOnlineMedia) viewModel.showOnlineTagManageUnsupported() else onManageTags()
+                PlaybackCoreButtons(
+                    playback = playback,
+                    viewModel = viewModel,
+                    isPlaying = isPlayingEffective,
+                    onTogglePlay = {
+                        optimisticIsPlaying = !(optimisticIsPlaying ?: playback.playWhenReady)
+                        viewModel.togglePlayPause()
                     },
-                    modifier = Modifier.size(actionButtonSize)
-                ) {
-                    Icon(
-                        imageVector = if (isOnlineMedia) Icons.AutoMirrored.Outlined.LabelOff else Icons.AutoMirrored.Rounded.Label,
-                        contentDescription = "标签管理",
-                        tint = colorScheme.onSurface.copy(alpha = if (isOnlineMedia) 0.38f else 0.8f),
-                        modifier = Modifier.size(actionIconSize)
-                    )
-                }
-
-                IconButton(
-                    onClick = onShowEqualizer,
-                    modifier = Modifier.size(actionButtonSize)
-                ) {
-                    Icon(
-                        imageVector = Icons.Rounded.Tune,
-                        contentDescription = "均衡器",
-                        tint = colorScheme.onSurface.copy(alpha = 0.8f),
-                        modifier = Modifier.size(actionIconSize)
-                    )
-                }
-
-                val sliceEnabled = sliceUiState.sliceModeEnabled
-                val baseTint = colorScheme.onSurface.copy(alpha = 0.8f)
-                val tint by animateColorAsState(
-                    targetValue = if (sliceEnabled) primaryColor else baseTint,
-                    animationSpec = tween(240, easing = FastOutSlowInEasing),
-                    label = "sliceModeTint"
+                    compactLayout = compactLayout,
+                    coreButtonSize = coreButtonSize,
+                    modeIconSize = modeIconSize,
+                    skipIconSize = skipIconSize,
+                    playButtonSize = playButtonSize,
+                    playIconSize = playIconSize,
+                    primaryColor = primaryColor,
+                    onPrimaryColor = onPrimaryColor
                 )
-                IconButton(
-                    onClick = { viewModel.toggleSliceMode() },
-                    modifier = Modifier.size(actionButtonSize)
-                ) {
-                    Icon(
-                        painter = painterResource(R.drawable.ic_segment),
-                        contentDescription = "切片播放",
-                        tint = tint,
-                        modifier = Modifier.size(actionIconSize)
-                    )
-                }
             }
         }
+    }
+}
 
-        // 第二行：核心控制按钮
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .then(coreControlsModifier)
-                .padding(end = if (landscapeControls) {
-                    if (compactLayout) 14.dp else 16.dp
-                } else {
-                    0.dp
-                }),
-            horizontalArrangement = when {
-                landscapeControls -> Arrangement.spacedBy(
-                    space = if (compactLayout) 8.dp else 10.dp,
-                    alignment = Alignment.End
-                )
-                showActionRow -> Arrangement.SpaceBetween
-                else -> Arrangement.spacedBy(25.dp, Alignment.CenterHorizontally)
+@Composable
+private fun PlaybackActionButtons(
+    playback: PlaybackSnapshot,
+    isFavorite: Boolean,
+    viewModel: PlayerViewModel,
+    onShowPlaylistPicker: () -> Unit,
+    onShowEqualizer: () -> Unit,
+    onManageTags: () -> Unit,
+    sliceUiState: SliceUiState,
+    actionButtonSize: Dp,
+    actionIconSize: Dp,
+    landscapeControls: Boolean,
+    primaryColor: Color
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    IconButton(
+        onClick = { viewModel.toggleFavorite() },
+        modifier = Modifier.size(actionButtonSize)
+    ) {
+        Icon(
+            imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Outlined.FavoriteBorder,
+            contentDescription = if (isFavorite) "取消收藏" else "收藏",
+            tint = if (isFavorite) Color.Red else colorScheme.onSurface.copy(alpha = 0.8f),
+            modifier = Modifier.size(actionIconSize)
+        )
+    }
+
+    IconButton(
+        onClick = onShowPlaylistPicker,
+        modifier = Modifier.size(actionButtonSize)
+    ) {
+        Icon(
+            Icons.AutoMirrored.Outlined.PlaylistAdd,
+            contentDescription = "添加到播放列表",
+            tint = colorScheme.onSurface.copy(alpha = 0.8f),
+            modifier = Modifier.size(actionIconSize)
+        )
+    }
+
+    if (!landscapeControls) {
+        val isOnlineMedia = playback.currentMediaItem.isOnlineMedia()
+        IconButton(
+            onClick = {
+                if (isOnlineMedia) viewModel.showOnlineTagManageUnsupported() else onManageTags()
             },
-            verticalAlignment = Alignment.CenterVertically
+            modifier = Modifier.size(actionButtonSize)
         ) {
-            IconButton(
-                onClick = { viewModel.cyclePlayMode() },
-                modifier = Modifier.size(coreButtonSize)
-            ) {
-                val icon = when {
-                    playback.shuffleEnabled -> Icons.Rounded.Shuffle
-                    playback.repeatMode == Player.REPEAT_MODE_ONE -> Icons.Rounded.RepeatOne
-                    else -> Icons.Rounded.Repeat
-                }
-                Icon(
-                    icon,
-                    contentDescription = "播放模式",
-                    tint = colorScheme.onSurface,
-                    modifier = Modifier.size(modeIconSize)
-                )
-            }
-
-            IconButton(
-                onClick = { viewModel.previous() },
-                modifier = Modifier.size(coreButtonSize)
-            ) {
-                Icon(
-                    Icons.Rounded.SkipPrevious,
-                    contentDescription = "上一首",
-                    tint = colorScheme.onSurface,
-                    modifier = Modifier.size(skipIconSize)
-                )
-            }
-
-            val playButtonCorner by animateDpAsState(
-                targetValue = if (isPlayingEffective) {
-                    if (compactLayout) 20.dp else 24.dp
-                } else {
-                    if (compactLayout) 30.dp else 36.dp
-                },
-                animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-                label = "playButtonCorner"
+            Icon(
+                imageVector = if (isOnlineMedia) Icons.AutoMirrored.Outlined.LabelOff else Icons.AutoMirrored.Rounded.Label,
+                contentDescription = "标签管理",
+                tint = colorScheme.onSurface.copy(alpha = if (isOnlineMedia) 0.38f else 0.8f),
+                modifier = Modifier.size(actionIconSize)
             )
-            val playButtonInteractionSource = remember { MutableInteractionSource() }
-            Surface(
-                modifier = Modifier.size(playButtonSize),
-                shape = RoundedCornerShape(playButtonCorner),
-                color = primaryColor,
-                contentColor = onPrimaryColor
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clickable(
-                            interactionSource = playButtonInteractionSource,
-                            indication = null
-                        ) {
-                            optimisticIsPlaying = !(optimisticIsPlaying ?: playback.playWhenReady)
-                            viewModel.togglePlayPause()
-                        },
-                    contentAlignment = Alignment.Center
-                ) {
-                    AnimatedContent(
-                        targetState = isPlayingEffective,
-                        transitionSpec = {
-                            (fadeIn(tween(durationMillis = 120)) + scaleIn(tween(durationMillis = 120), initialScale = 0.9f)) togetherWith
-                                (fadeOut(tween(durationMillis = 90)) + scaleOut(tween(durationMillis = 90), targetScale = 1.05f))
-                        },
-                        label = "play_pause_icon"
-                    ) { playing ->
-                        Icon(
-                            imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                            contentDescription = "播放/暂停",
-                            modifier = Modifier.size(playIconSize)
-                        )
-                    }
-                }
-            }
+        }
+    }
 
-            IconButton(
-                onClick = { viewModel.next() },
-                modifier = Modifier.size(coreButtonSize)
-            ) {
-                Icon(
-                    Icons.Rounded.SkipNext,
-                    contentDescription = "下一首",
-                    tint = colorScheme.onSurface,
-                    modifier = Modifier.size(skipIconSize)
-                )
-            }
+    IconButton(
+        onClick = onShowEqualizer,
+        modifier = Modifier.size(actionButtonSize)
+    ) {
+        Icon(
+            imageVector = Icons.Rounded.Tune,
+            contentDescription = "音效面板",
+            tint = colorScheme.onSurface.copy(alpha = 0.8f),
+            modifier = Modifier.size(actionIconSize)
+        )
+    }
 
-            IconButton(
-                onClick = { viewModel.seekForward10s() },
-                modifier = Modifier.size(coreButtonSize)
-            ) {
+    if (!landscapeControls) {
+        val sliceEnabled = sliceUiState.sliceModeEnabled
+        val baseTint = colorScheme.onSurface.copy(alpha = 0.8f)
+        val tint by animateColorAsState(
+            targetValue = if (sliceEnabled) primaryColor else baseTint,
+            animationSpec = tween(240, easing = FastOutSlowInEasing),
+            label = "sliceModeTint"
+        )
+        IconButton(
+            onClick = { viewModel.toggleSliceMode() },
+            modifier = Modifier.size(actionButtonSize)
+        ) {
+            Icon(
+                painter = painterResource(R.drawable.ic_segment),
+                contentDescription = "切片播放",
+                tint = tint,
+                modifier = Modifier.size(actionIconSize)
+            )
+        }
+    }
+}
+
+@Composable
+private fun PlaybackCoreButtons(
+    playback: PlaybackSnapshot,
+    viewModel: PlayerViewModel,
+    isPlaying: Boolean,
+    onTogglePlay: () -> Unit,
+    compactLayout: Boolean,
+    coreButtonSize: Dp,
+    modeIconSize: Dp,
+    skipIconSize: Dp,
+    playButtonSize: Dp,
+    playIconSize: Dp,
+    primaryColor: Color,
+    onPrimaryColor: Color
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    IconButton(
+        onClick = { viewModel.cyclePlayMode() },
+        modifier = Modifier.size(coreButtonSize)
+    ) {
+        val icon = when {
+            playback.shuffleEnabled -> Icons.Rounded.Shuffle
+            playback.repeatMode == Player.REPEAT_MODE_ONE -> Icons.Rounded.RepeatOne
+            else -> Icons.Rounded.Repeat
+        }
+        Icon(
+            icon,
+            contentDescription = "播放模式",
+            tint = colorScheme.onSurface,
+            modifier = Modifier.size(modeIconSize)
+        )
+    }
+
+    IconButton(
+        onClick = { viewModel.previous() },
+        modifier = Modifier.size(coreButtonSize)
+    ) {
+        Icon(
+            Icons.Rounded.SkipPrevious,
+            contentDescription = "上一首",
+            tint = colorScheme.onSurface,
+            modifier = Modifier.size(skipIconSize)
+        )
+    }
+
+    val playButtonCorner by animateDpAsState(
+        targetValue = if (isPlaying) {
+            if (compactLayout) 20.dp else 24.dp
+        } else {
+            if (compactLayout) 30.dp else 36.dp
+        },
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "playButtonCorner"
+    )
+    val playButtonInteractionSource = remember { MutableInteractionSource() }
+    Surface(
+        modifier = Modifier.size(playButtonSize),
+        shape = RoundedCornerShape(playButtonCorner),
+        color = primaryColor,
+        contentColor = onPrimaryColor
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable(
+                    interactionSource = playButtonInteractionSource,
+                    indication = null,
+                    onClick = onTogglePlay
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            AnimatedContent(
+                targetState = isPlaying,
+                transitionSpec = {
+                    (fadeIn(tween(durationMillis = 120)) + scaleIn(tween(durationMillis = 120), initialScale = 0.9f)) togetherWith
+                        (fadeOut(tween(durationMillis = 90)) + scaleOut(tween(durationMillis = 90), targetScale = 1.05f))
+                },
+                label = "play_pause_icon"
+            ) { playing ->
                 Icon(
-                    Icons.Rounded.FastForward,
-                    contentDescription = "快进10秒",
-                    tint = colorScheme.onSurface,
-                    modifier = Modifier.size(modeIconSize)
+                    imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                    contentDescription = "播放/暂停",
+                    modifier = Modifier.size(playIconSize)
                 )
             }
         }
+    }
+
+    IconButton(
+        onClick = { viewModel.next() },
+        modifier = Modifier.size(coreButtonSize)
+    ) {
+        Icon(
+            Icons.Rounded.SkipNext,
+            contentDescription = "下一首",
+            tint = colorScheme.onSurface,
+            modifier = Modifier.size(skipIconSize)
+        )
+    }
+
+    IconButton(
+        onClick = { viewModel.seekForward10s() },
+        modifier = Modifier.size(coreButtonSize)
+    ) {
+        Icon(
+            Icons.Rounded.FastForward,
+            contentDescription = "快进10秒",
+            tint = colorScheme.onSurface,
+            modifier = Modifier.size(modeIconSize)
+        )
     }
 }
 

@@ -240,7 +240,7 @@ internal fun nowPlayingLandscapeLayoutMetrics(
             identityMinHeight = 76.dp,
             lyricsTopPadding = 56.dp,
             progressHeight = 62.dp,
-            controlsHeight = 72.dp,
+            controlsHeight = 80.dp,
             artworkCornerRadius = 16.dp,
             artworkMaxSize = 292.dp,
             progressMaxWidth = 340.dp,
@@ -1232,8 +1232,13 @@ internal fun NowPlayingScreen(
         artworkBackdropEnabled = playerArtworkBackdropEnabled
     )
     val accentColor = playerThemeColors.accentColor
+    val playerPageAccentColor = playerThemeColors.coverAccentColor
     val lyricColors = rememberLyricReadableColors(
         accentColor = accentColor
+    )
+    val lyricsPageColors = rememberLyricReadableColors(
+        accentColor = accentColor,
+        useReadablePageInactiveText = true
     )
     val onAccentColor = playerThemeColors.onAccentColor
     val videoBackdropColor = if (isVideo) playerThemeColors.videoBackdropColor else Color.Transparent
@@ -1595,7 +1600,7 @@ internal fun NowPlayingScreen(
                 fallbackCenterY = fallbackCenterY
             )
             HorizontalStereoSpectrum(
-                lineColor = colorScheme.primaryStrong,
+                lineColor = playerPageAccentColor,
                 intensity = if (landscapeLayoutMetrics.tabletLayout) 0.78f else 0.72f,
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1736,6 +1741,7 @@ internal fun NowPlayingScreen(
                                 viewModel = viewModel,
                                 currentMediaId = item?.mediaId.orEmpty(),
                                 isPlaying = playback.isPlaying,
+                                activeColor = playerPageAccentColor,
                                 expanded = tabletQueueExpanded,
                                 onExpandedChange = { tabletQueueExpanded = it },
                                 modifier = Modifier
@@ -1848,8 +1854,9 @@ internal fun NowPlayingScreen(
                             },
                             sliceUiState = sliceUiState,
                             modifier = Modifier.height(landscapeLayoutMetrics.controlsHeight),
-                            showActionRow = false,
+                            showActionRow = !isVideo,
                             landscapeControls = true,
+                            actionRowModifier = controlsMotion,
                             coreControlsModifier = controlsMotion,
                             primaryColor = accentColor,
                             onPrimaryColor = onAccentColor
@@ -2024,9 +2031,10 @@ internal fun NowPlayingScreen(
                         },
                         sliceUiState = sliceUiState,
                         modifier = Modifier.height(landscapeLayoutMetrics.controlsHeight),
-                        showActionRow = false,
+                        showActionRow = !isVideo,
                         landscapeControls = true,
                         compactLayout = true,
+                        actionRowModifier = controlsMotion,
                         coreControlsModifier = controlsMotion,
                         primaryColor = accentColor,
                         onPrimaryColor = onAccentColor
@@ -2347,6 +2355,7 @@ internal fun NowPlayingScreen(
                                                     lyrics = lyricsState.lyrics,
                                                     lyricColors = lyricColors,
                                                     accentColor = accentColor,
+                                                    spectrumColor = playerPageAccentColor,
                                                     onAccentColor = onAccentColor,
                                                     lyricsPageSettings = expandedHomeLyricsSettings,
                                                     onSeekTo = { viewModel.seekTo(it) },
@@ -2491,8 +2500,9 @@ internal fun NowPlayingScreen(
                         isLandscape = isLandscape,
                         playbackPositionMs = progress.positionMs,
                         lyrics = lyricsState.lyrics,
-                        lyricColors = lyricColors,
+                        lyricColors = lyricsPageColors,
                         accentColor = accentColor,
+                        spectrumColor = playerPageAccentColor,
                         onAccentColor = onAccentColor,
                         lyricsPageSettings = lyricsPageSettings,
                         onSeekTo = { viewModel.seekTo(it) },

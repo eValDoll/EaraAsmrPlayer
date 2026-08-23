@@ -17,10 +17,11 @@ internal data class LyricReadableColors(
 
 @Composable
 internal fun rememberLyricReadableColors(
-    accentColor: Color
+    accentColor: Color,
+    useReadablePageInactiveText: Boolean = false
 ): LyricReadableColors {
     val colorScheme = AsmrTheme.colorScheme
-    return remember(accentColor, colorScheme) {
+    return remember(accentColor, colorScheme, useReadablePageInactiveText) {
         val emphasisAlpha = if (colorScheme.isDark) 0.82f else 0.68f
         val containerAlpha = if (colorScheme.isDark) 0.26f else 0.16f
         val containerBase = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.80f else 0.88f)
@@ -28,7 +29,10 @@ internal fun rememberLyricReadableColors(
 
         LyricReadableColors(
             activeText = activeText,
-            inactiveText = activeText.copy(alpha = 0.58f),
+            inactiveText = themedInactiveLyricTextColor(
+                isDark = colorScheme.isDark,
+                useReadablePageInactiveText = useReadablePageInactiveText
+            ),
             accentEmphasis = accentColor.copy(alpha = emphasisAlpha),
             activeContainer = accentColor.copy(alpha = containerAlpha).compositeOver(containerBase)
         )
@@ -37,3 +41,10 @@ internal fun rememberLyricReadableColors(
 
 internal fun themedLyricTextColor(isDark: Boolean): Color =
     if (isDark) Color.White else Color.Black
+
+internal fun themedInactiveLyricTextColor(
+    isDark: Boolean,
+    useReadablePageInactiveText: Boolean
+): Color = themedLyricTextColor(isDark).copy(
+    alpha = if (useReadablePageInactiveText) 1f else 0.58f
+)

@@ -49,7 +49,7 @@ class NowPlayingLandscapeLayoutTest {
         assertEquals(16.dp, metrics.artworkCornerRadius)
         assertEquals(56.dp, metrics.lyricsTopPadding)
         assertEquals(62.dp, metrics.progressHeight)
-        assertEquals(72.dp, metrics.controlsHeight)
+        assertEquals(80.dp, metrics.controlsHeight)
         assertEquals(292.dp, metrics.artworkMaxSize)
         assertEquals(88.dp, metrics.spectrumHeight)
         assertEquals(1f, metrics.artworkWeight + metrics.contentWeight)

@@ -167,6 +167,7 @@ internal fun PlayerProgress(
                 highlightedSliceId = highlightedSliceId,
                 selectedSliceId = sliceUiState.selectedSliceId,
                 compactLayout = compactLayout,
+                showThumb = isDragging,
                 onSelectSlice = onSelectSlice,
                 onLongPressSlice = onLongPressSlice,
                 onEditCommit = onUpdateSliceRange,
@@ -242,6 +243,7 @@ private fun SliceScrubbableSeekBar(
     onEditCommit: (sliceId: Long, startMs: Long, endMs: Long) -> Unit,
     onGestureActiveChanged: (Boolean) -> Unit,
     compactLayout: Boolean,
+    showThumb: Boolean,
     modifier: Modifier = Modifier,
     onScrubStart: (Float) -> Unit,
     onScrub: (Float) -> Unit,
@@ -249,6 +251,14 @@ private fun SliceScrubbableSeekBar(
 ) {
     val f = fraction.coerceIn(0f, 1f)
     var lastFraction by remember(f) { mutableFloatStateOf(f) }
+    val thumbAlpha by animateFloatAsState(
+        targetValue = if (showThumb) 1f else 0f,
+        animationSpec = tween(
+            durationMillis = if (showThumb) 120 else 180,
+            easing = FastOutSlowInEasing
+        ),
+        label = "progressThumbAlpha"
+    )
 
     val thumbRadius = 8.dp
     val trackHeight = 4.dp
@@ -491,16 +501,18 @@ private fun SliceScrubbableSeekBar(
             strokeWidth = trackHeightPx,
             cap = androidx.compose.ui.graphics.StrokeCap.Round
         )
-        drawCircle(
-            color = activeColor,
-            radius = thumbRadiusPx,
-            center = Offset(x, centerY)
-        )
-        drawCircle(
-            color = Color.White.copy(alpha = 0.85f),
-            radius = (thumbRadiusPx * 0.45f).coerceAtLeast(1f),
-            center = Offset(x, centerY)
-        )
+        if (thumbAlpha > 0.001f) {
+            drawCircle(
+                color = activeColor.copy(alpha = activeColor.alpha * thumbAlpha),
+                radius = thumbRadiusPx,
+                center = Offset(x, centerY)
+            )
+            drawCircle(
+                color = Color.White.copy(alpha = 0.85f * thumbAlpha),
+                radius = (thumbRadiusPx * 0.45f).coerceAtLeast(1f),
+                center = Offset(x, centerY)
+            )
+        }
 
         if (tooltipMs >= 0L) {
             val t = Formatting.formatTrackTime(tooltipMs)

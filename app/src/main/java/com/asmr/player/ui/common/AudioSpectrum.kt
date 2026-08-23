@@ -29,6 +29,21 @@ import kotlin.math.sin
 
 private const val AudioSpectrumPointCount = 56
 private const val AudioSpectrumIdleFrameIntervalNs = 33_000_000L
+private const val AudioSpectrumFadeInSeconds = 0.22f
+private const val AudioSpectrumFadeOutSeconds = 0.34f
+
+internal fun nextAudioSpectrumActivityLevel(
+    currentLevel: Float,
+    playbackActive: Boolean,
+    deltaSeconds: Float
+): Float {
+    val target = if (playbackActive) 1f else 0f
+    val timeConstant = if (playbackActive) AudioSpectrumFadeInSeconds else AudioSpectrumFadeOutSeconds
+    val elapsed = deltaSeconds.coerceIn(0f, 0.25f)
+    val response = 1f - exp((-elapsed / timeConstant).toDouble()).toFloat()
+    val current = currentLevel.coerceIn(0f, 1f)
+    return (current + (target - current) * response).coerceIn(0f, 1f)
+}
 
 @Composable
 @UnstableApi
@@ -99,6 +114,7 @@ private class HorizontalStereoSpectrumRenderer {
     private var lastFrameNanos = 0L
     private var phase = 0f
     private var adaptivePeak = 0.12f
+    private var activityLevel = 0f
 
     fun draw(
         scope: DrawScope,
@@ -115,7 +131,12 @@ private class HorizontalStereoSpectrumRenderer {
                 1_000_000_000f)
         }
         lastFrameNanos = frameNanos
-        phase = (phase + deltaSeconds * if (playbackActive) 0.48f else 0.16f) %
+        activityLevel = nextAudioSpectrumActivityLevel(
+            currentLevel = activityLevel,
+            playbackActive = playbackActive,
+            deltaSeconds = deltaSeconds
+        )
+        phase = (phase + deltaSeconds * lerpFloat(0.16f, 0.48f, activityLevel)) %
             (PI.toFloat() * 2f)
 
         updateEnvelope(playbackActive, deltaSeconds)
@@ -123,18 +144,18 @@ private class HorizontalStereoSpectrumRenderer {
             widthPx = scope.size.width,
             heightPx = scope.size.height,
             density = scope.density,
-            playbackActive = playbackActive
+            activityLevel = activityLevel
         )
 
         linePaint.color = lineColor
         val resolvedIntensity = intensity.coerceIn(0f, 1f)
         scope.drawIntoCanvas { canvas ->
-            linePaint.strokeWidth = scope.density * if (playbackActive) 1.35f else 0.90f
-            linePaint.alpha = ((if (playbackActive) 138 else 62) * resolvedIntensity).roundToInt()
+            linePaint.strokeWidth = scope.density * lerpFloat(0.90f, 1.35f, activityLevel)
+            linePaint.alpha = (lerpFloat(62f, 138f, activityLevel) * resolvedIntensity).roundToInt()
             canvas.nativeCanvas.drawPath(upperPath, linePaint)
 
-            linePaint.strokeWidth = scope.density * if (playbackActive) 0.82f else 0.62f
-            linePaint.alpha = ((if (playbackActive) 76 else 32) * resolvedIntensity).roundToInt()
+            linePaint.strokeWidth = scope.density * lerpFloat(0.62f, 0.82f, activityLevel)
+            linePaint.alpha = (lerpFloat(32f, 76f, activityLevel) * resolvedIntensity).roundToInt()
             canvas.nativeCanvas.drawPath(lowerPath, linePaint)
         }
     }
@@ -203,26 +224,25 @@ private class HorizontalStereoSpectrumRenderer {
         widthPx: Float,
         heightPx: Float,
         density: Float,
-        playbackActive: Boolean
+        activityLevel: Float
     ) {
         val centerY = heightPx * 0.52f
         val maximumAmplitude = heightPx * 0.36f
         val fullTurn = PI.toFloat() * 2f
         for (index in 0 until AudioSpectrumPointCount) {
             val progress = index.toFloat() / (AudioSpectrumPointCount - 1).toFloat()
-            if (playbackActive) {
-                val energy = envelope[index].coerceIn(0f, 1f)
-                val drift = sin(phase + progress * fullTurn * 1.35f) * density * 0.45f
-                val amplitude = density * 0.6f + energy * maximumAmplitude
-                upperY[index] = centerY - amplitude + drift
-                lowerY[index] = centerY + amplitude * 0.62f + drift * 0.55f
-            } else {
-                upperY[index] = centerY +
-                    sin(phase + progress * fullTurn * 1.08f) * density * 1.35f +
-                    sin(phase * 0.62f + progress * fullTurn * 2.10f) * density * 0.34f
-                lowerY[index] = centerY +
-                    sin(phase * 0.78f + 1.2f + progress * fullTurn * 0.92f) * density * 0.72f
-            }
+            val energy = envelope[index].coerceIn(0f, 1f)
+            val activeDrift = sin(phase + progress * fullTurn * 1.35f) * density * 0.45f
+            val activeAmplitude = density * 0.6f + energy * maximumAmplitude
+            val activeUpperY = centerY - activeAmplitude + activeDrift
+            val activeLowerY = centerY + activeAmplitude * 0.62f + activeDrift * 0.55f
+            val idleUpperY = centerY +
+                sin(phase + progress * fullTurn * 1.08f) * density * 1.35f +
+                sin(phase * 0.62f + progress * fullTurn * 2.10f) * density * 0.34f
+            val idleLowerY = centerY +
+                sin(phase * 0.78f + 1.2f + progress * fullTurn * 0.92f) * density * 0.72f
+            upperY[index] = lerpFloat(idleUpperY, activeUpperY, activityLevel)
+            lowerY[index] = lerpFloat(idleLowerY, activeLowerY, activityLevel)
         }
 
         buildSmoothPath(upperPath, upperY, widthPx)
@@ -256,5 +276,9 @@ private class HorizontalStereoSpectrumRenderer {
                 y2
             )
         }
+    }
+
+    private fun lerpFloat(start: Float, end: Float, fraction: Float): Float {
+        return start + (end - start) * fraction.coerceIn(0f, 1f)
     }
 }

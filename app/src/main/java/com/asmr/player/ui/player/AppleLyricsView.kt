@@ -553,7 +553,7 @@ internal fun AppleLyricsView(
                         label = "lyricScale"
                     )
                     val alpha by animateFloatAsState(
-                        targetValue = if (isActive) 1f else if (AsmrTheme.colorScheme.isDark) 0.76f else 0.72f,
+                        targetValue = if (isActive) 1f else inactiveLyricLineAlpha(AsmrTheme.colorScheme.isDark),
                         animationSpec = tween(400),
                         label = "lyricAlpha"
                     )
@@ -619,7 +619,7 @@ internal fun AppleLyricsView(
                             dispersionOffsetX = focusEffect.dispersionOffsetXDp.dp,
                             dispersionOffsetY = focusEffect.dispersionOffsetYDp.dp,
                             style = MaterialTheme.typography.titleLarge.copy(
-                                fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.Bold,
+                                fontWeight = if (isActive) FontWeight.ExtraBold else FontWeight.Medium,
                                 fontSize = fontSize,
                                 lineHeight = wrappedLineHeight,
                                 textAlign = textAlign,
@@ -660,6 +660,9 @@ internal fun AppleLyricsView(
         }
     }
 }
+
+internal fun inactiveLyricLineAlpha(isDark: Boolean): Float =
+    if (isDark) 0.76f else 0.72f
 
 private fun targetLyricsWindowRange(
     totalCount: Int,
