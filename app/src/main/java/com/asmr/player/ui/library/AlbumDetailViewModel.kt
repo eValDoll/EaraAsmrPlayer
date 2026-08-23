@@ -180,6 +180,8 @@ class AlbumDetailViewModel @Inject constructor(
         createRouteInitialUiState(savedStateHandle)
     )
     val uiState = _uiState.asStateFlow()
+    private val _similarWorksState = MutableStateFlow(AlbumDetailSimilarWorksState())
+    internal val similarWorksState: StateFlow<AlbumDetailSimilarWorksState> = _similarWorksState.asStateFlow()
     private val _cloudSyncSelectionDialogState = MutableStateFlow<CloudSyncSelectionDialogState?>(null)
     internal val cloudSyncSelectionDialogState: StateFlow<CloudSyncSelectionDialogState?> = _cloudSyncSelectionDialogState.asStateFlow()
     private var pendingCloudSyncSelection: CompletableDeferred<String?>? = null
@@ -212,6 +214,7 @@ class AlbumDetailViewModel @Inject constructor(
     private var dlsiteTrialLoadJob: Job? = null
     private var asmrOneLoadJob: Job? = null
     private var dlsitePlayLoadJob: Job? = null
+    private var similarWorksLoadJob: Job? = null
     private var localTracksObserveJob: Job? = null
     private val asmrOneAttemptedRj = linkedSetOf<String>()
     private val dlsitePlayAttemptedRj = linkedSetOf<String>()
@@ -492,7 +495,81 @@ class AlbumDetailViewModel @Inject constructor(
         albumLoadJob = null
         localTracksObserveJob?.cancel()
         localTracksObserveJob = null
+        similarWorksLoadJob?.cancel()
+        similarWorksLoadJob = null
         lastAlbumKey = null
+    }
+
+    fun ensureSimilarWorksLoaded(seedRjCode: String, force: Boolean = false) {
+        val normalizedSeed = DlsiteWorkNo.normalizeWorkNo(seedRjCode, minimumDigits = 6)
+        if (normalizedSeed.isBlank()) {
+            similarWorksLoadJob?.cancel()
+            similarWorksLoadJob = null
+            _similarWorksState.value = AlbumDetailSimilarWorksState(hasLoaded = true)
+            return
+        }
+
+        val current = _similarWorksState.value
+        val isSameSeed = current.seedRjCode.equals(normalizedSeed, ignoreCase = true)
+        if (!force && isSameSeed && (current.isLoading || current.hasLoaded)) return
+
+        similarWorksLoadJob?.cancel()
+        if (!asmrOneAvailabilityApi.isBackendConfigured) {
+            _similarWorksState.value = AlbumDetailSimilarWorksState(
+                seedRjCode = normalizedSeed,
+                hasLoaded = true
+            )
+            return
+        }
+
+        _similarWorksState.value = AlbumDetailSimilarWorksState(
+            seedRjCode = normalizedSeed,
+            works = current.works.takeIf { isSameSeed }.orEmpty(),
+            isLoading = true
+        )
+        similarWorksLoadJob = viewModelScope.launch {
+            try {
+                val response = asmrOneAvailabilityApi.getRecommendations(
+                    seedRjs = listOf(normalizedSeed),
+                    excludeRjs = listOf(normalizedSeed),
+                    limit = ALBUM_DETAIL_SIMILAR_WORK_LIMIT
+                )
+                if (!_similarWorksState.value.seedRjCode.equals(normalizedSeed, ignoreCase = true)) {
+                    return@launch
+                }
+                _similarWorksState.value = AlbumDetailSimilarWorksState(
+                    seedRjCode = normalizedSeed,
+                    works = buildAlbumDetailSimilarWorks(
+                        seedRjCode = normalizedSeed,
+                        items = response.items.orEmpty()
+                    ),
+                    hasLoaded = true
+                )
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Throwable) {
+                val latest = _similarWorksState.value
+                if (latest.seedRjCode.equals(normalizedSeed, ignoreCase = true)) {
+                    _similarWorksState.value = latest.copy(
+                        isLoading = false,
+                        hasLoaded = true,
+                        failed = true
+                    )
+                }
+            }
+        }
+    }
+
+    fun cancelSimilarWorksLoad() {
+        similarWorksLoadJob?.cancel()
+        similarWorksLoadJob = null
+        val current = _similarWorksState.value
+        if (current.isLoading) {
+            _similarWorksState.value = current.copy(
+                isLoading = false,
+                hasLoaded = false
+            )
+        }
     }
 
     fun cancelOnlineLoadsForExit() {
@@ -763,6 +840,11 @@ class AlbumDetailViewModel @Inject constructor(
         val isAlbumSwitch = lastAlbumKey != key
         if (!force && current != null && !isAlbumSwitch) return
         cancelPendingOnlineJobs(resetLoadingState = false)
+        if (force || isAlbumSwitch) {
+            similarWorksLoadJob?.cancel()
+            similarWorksLoadJob = null
+            _similarWorksState.value = AlbumDetailSimilarWorksState()
+        }
         albumLoadJob?.cancel()
         localTracksObserveJob?.cancel()
         localTracksObserveJob = null

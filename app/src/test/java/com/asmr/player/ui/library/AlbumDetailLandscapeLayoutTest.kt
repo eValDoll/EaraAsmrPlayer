@@ -80,21 +80,21 @@ class AlbumDetailLandscapeLayoutTest {
     }
 
     @Test
-    fun landscapeLyricsViewport_growsWithVisibleSurfaceDuringCollapse() {
+    fun landscapeLeftPaneViewport_growsWithVisibleSurfaceDuringCollapse() {
         val surfaceHeightPx = 680
         val collapseMaxPx = 108f
 
         assertEquals(
             572,
-            albumLandscapeLyricsViewportHeightPx(surfaceHeightPx, 0f, collapseMaxPx)
+            albumLandscapePaneViewportHeightPx(surfaceHeightPx, 0f, collapseMaxPx)
         )
         assertEquals(
             626,
-            albumLandscapeLyricsViewportHeightPx(surfaceHeightPx, 54f, collapseMaxPx)
+            albumLandscapePaneViewportHeightPx(surfaceHeightPx, 54f, collapseMaxPx)
         )
         assertEquals(
             680,
-            albumLandscapeLyricsViewportHeightPx(surfaceHeightPx, collapseMaxPx, collapseMaxPx)
+            albumLandscapePaneViewportHeightPx(surfaceHeightPx, collapseMaxPx, collapseMaxPx)
         )
     }
 

@@ -79,7 +79,7 @@ import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
 import com.asmr.player.data.remote.scraper.DlsiteRecommendations
-import com.asmr.player.data.remote.scraper.dlsiteOriginalCoverUrlForWorkNo
+import com.asmr.player.data.remote.scraper.resolveRecommendedWorkCoverUrl
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.util.DlsiteWorkNo
@@ -347,7 +347,7 @@ private fun DlsiteRecommendedWorkCard(
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val coverModel = remember(work.coverUrl, displayRj) {
-        work.coverUrl.takeIf { it.isNotBlank() } ?: dlsiteOriginalCoverUrlForWorkNo(displayRj)
+        resolveRecommendedWorkCoverUrl(displayRj, work.coverUrl)
     }
     val imageModel = remember(coverModel) {
         val s = coverModel.toString()

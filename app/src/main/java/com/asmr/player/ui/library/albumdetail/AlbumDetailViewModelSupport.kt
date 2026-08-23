@@ -19,6 +19,7 @@ import com.asmr.player.data.local.db.entities.TagEntity
 import com.asmr.player.data.local.db.entities.TagSource
 import com.asmr.player.data.local.db.entities.TrackTagEntity
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
+import com.asmr.player.data.remote.api.AsmrOneRecommendationItem
 import com.asmr.player.data.remote.api.WorkDetailsResponse
 import com.asmr.player.data.remote.crawler.AsmrOneCrawler
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
@@ -112,6 +113,60 @@ sealed class AlbumDetailUiState {
     object Loading : AlbumDetailUiState()
     data class Success(val model: AlbumDetailModel) : AlbumDetailUiState()
     data class Error(val message: String) : AlbumDetailUiState()
+}
+
+internal const val ALBUM_DETAIL_SIMILAR_WORK_LIMIT = 12
+
+@Immutable
+data class AlbumDetailSimilarWork(
+    val rjCode: String,
+    val title: String,
+    val cv: String,
+    val coverUrl: String
+)
+
+@Immutable
+data class AlbumDetailSimilarWorksState(
+    val seedRjCode: String = "",
+    val works: List<AlbumDetailSimilarWork> = emptyList(),
+    val isLoading: Boolean = false,
+    val hasLoaded: Boolean = false,
+    val failed: Boolean = false
+)
+
+internal fun buildAlbumDetailSimilarWorks(
+    seedRjCode: String,
+    items: List<AsmrOneRecommendationItem>,
+    limit: Int = ALBUM_DETAIL_SIMILAR_WORK_LIMIT
+): List<AlbumDetailSimilarWork> {
+    val normalizedSeed = DlsiteWorkNo.normalizeWorkNo(seedRjCode, minimumDigits = 6)
+    if (normalizedSeed.isBlank() || limit <= 0) return emptyList()
+
+    return items.asSequence()
+        .mapNotNull { item ->
+            val rjCode = sequenceOf(item.rj, item.originalWorkno)
+                .plus(item.matchedRjs.orEmpty().asSequence())
+                .map { DlsiteWorkNo.normalizeWorkNo(it, minimumDigits = 6) }
+                .firstOrNull { it.isNotBlank() }
+                .orEmpty()
+            if (rjCode.isBlank() || rjCode.equals(normalizedSeed, ignoreCase = true)) {
+                return@mapNotNull null
+            }
+            AlbumDetailSimilarWork(
+                rjCode = rjCode,
+                title = item.title.trim().ifBlank { rjCode },
+                cv = item.cvs.orEmpty()
+                    .asSequence()
+                    .map(String::trim)
+                    .filter(String::isNotBlank)
+                    .distinct()
+                    .joinToString(" / "),
+                coverUrl = item.mainCoverUrl.trim()
+            )
+        }
+        .distinctBy { it.rjCode.uppercase() }
+        .take(limit)
+        .toList()
 }
 
 internal fun requestRemoteFileSize(url: String, client: OkHttpClient? = null): Long? {

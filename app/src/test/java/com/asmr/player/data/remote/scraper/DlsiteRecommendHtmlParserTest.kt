@@ -24,6 +24,24 @@ class DlsiteRecommendHtmlParserTest {
     }
 
     @Test
+    fun resolveRecommendedWorkCoverUrl_prefersProvidedCoverAndFallsBackToDerivedUrl() {
+        assertEquals(
+            "https://api.example.com/recommendation-cover.jpg",
+            resolveRecommendedWorkCoverUrl(
+                rawWorkNo = "RJ01499589",
+                providedCoverUrl = "  https://api.example.com/recommendation-cover.jpg  "
+            )
+        )
+        assertEquals(
+            dlsiteOriginalCoverUrlForWorkNo("RJ01499589"),
+            resolveRecommendedWorkCoverUrl(
+                rawWorkNo = "RJ01499589",
+                providedCoverUrl = ""
+            )
+        )
+    }
+
+    @Test
     fun parse_imgWithFallbackCandidates_picksJpgAndNormalizesScheme() {
         val html = """
             <div class="recommend_work_item">

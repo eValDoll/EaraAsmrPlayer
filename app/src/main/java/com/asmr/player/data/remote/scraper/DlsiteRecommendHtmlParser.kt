@@ -21,6 +21,14 @@ internal fun dlsiteOriginalCoverUrlForWorkNo(rawWorkNo: String): String {
     return "https://img.dlsite.jp/modpub/images2/work/$category/$folder/${workNo}_img_main.jpg"
 }
 
+internal fun resolveRecommendedWorkCoverUrl(
+    rawWorkNo: String,
+    providedCoverUrl: String?
+): String {
+    return providedCoverUrl?.trim().orEmpty()
+        .ifBlank { dlsiteOriginalCoverUrlForWorkNo(rawWorkNo) }
+}
+
 internal object DlsiteRecommendHtmlParser {
     private fun normalizeUrl(src: String, baseUrl: String): String {
         val trimmed = src.trim()

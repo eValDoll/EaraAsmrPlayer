@@ -83,7 +83,7 @@ import com.asmr.player.ui.library.LibraryFilterScreen
 import com.asmr.player.ui.library.LibraryScreen
 import com.asmr.player.ui.library.LibraryViewModel
 import com.asmr.player.ui.library.BulkPhase
-import com.asmr.player.data.remote.scraper.dlsiteOriginalCoverUrlForWorkNo
+import com.asmr.player.data.remote.scraper.resolveRecommendedWorkCoverUrl
 import com.asmr.player.performance.UiFrameWorkCoordinator
 import com.asmr.player.ui.player.MiniPlayer
 import com.asmr.player.ui.player.NowPlayingMotionLayout
@@ -2543,8 +2543,7 @@ fun MainContainer(
                                     rjCode = targetRj,
                                     title = work?.title,
                                     circle = null,
-                                    coverUrl = dlsiteOriginalCoverUrlForWorkNo(targetRj)
-                                        .ifBlank { work?.coverUrl.orEmpty() }
+                                    coverUrl = resolveRecommendedWorkCoverUrl(targetRj, work?.coverUrl)
                                 )
                                 navigator.openAlbumDetailByRjStacked(targetRj)
                             },
@@ -2624,8 +2623,7 @@ fun MainContainer(
                                     rjCode = targetRj,
                                     title = work?.title,
                                     circle = null,
-                                    coverUrl = dlsiteOriginalCoverUrlForWorkNo(targetRj)
-                                        .ifBlank { work?.coverUrl.orEmpty() }
+                                    coverUrl = resolveRecommendedWorkCoverUrl(targetRj, work?.coverUrl)
                                 )
                                 navigator.openAlbumDetailByRjStacked(targetRj)
                             },
@@ -2690,8 +2688,7 @@ fun MainContainer(
                                     rjCode = targetRj,
                                     title = work?.title,
                                     circle = null,
-                                    coverUrl = dlsiteOriginalCoverUrlForWorkNo(targetRj)
-                                        .ifBlank { work?.coverUrl.orEmpty() }
+                                    coverUrl = resolveRecommendedWorkCoverUrl(targetRj, work?.coverUrl)
                                 )
                                 navigator.openAlbumDetailByRjStacked(targetRj)
                             },

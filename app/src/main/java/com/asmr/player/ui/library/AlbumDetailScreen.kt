@@ -169,10 +169,7 @@ import com.asmr.player.ui.groups.AlbumGroupsViewModel
 import com.asmr.player.ui.groups.AlbumGroupPickerScreen
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.playlists.PlaylistsViewModel
-import com.asmr.player.ui.player.LyricsViewModel
-import com.asmr.player.ui.player.NowPlayingLyricsSurface
 import com.asmr.player.ui.player.PlayerViewModel
-import com.asmr.player.ui.player.rememberLyricReadableColors
 import com.asmr.player.ui.settings.SettingsViewModel
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.thinScrollbar
@@ -306,7 +303,7 @@ internal fun albumLandscapeSurfaceHeight(contentViewportHeight: Dp, artworkSize:
     return contentViewportHeight + albumLandscapeCollapseDistance(artworkSize)
 }
 
-internal fun albumLandscapeLyricsViewportHeightPx(
+internal fun albumLandscapePaneViewportHeightPx(
     surfaceHeightPx: Int,
     collapsePx: Float,
     collapseMaxPx: Float
@@ -328,7 +325,7 @@ internal fun albumLandscapeSpectrumTranslationY(collapsePx: Float): Float {
     return -collapsePx.coerceAtLeast(0f) * AlbumLandscapeSpectrumCollapseFollowFraction
 }
 
-private fun Modifier.albumLandscapeLyricsViewportHeight(
+private fun Modifier.albumLandscapePaneViewportHeight(
     collapsePx: () -> Float,
     collapseMaxPx: Float
 ): Modifier = layout { measurable, constraints ->
@@ -338,7 +335,7 @@ private fun Modifier.albumLandscapeLyricsViewportHeight(
             placeable.placeRelative(0, 0)
         }
     } else {
-        val viewportHeight = albumLandscapeLyricsViewportHeightPx(
+        val viewportHeight = albumLandscapePaneViewportHeightPx(
             surfaceHeightPx = constraints.maxHeight,
             collapsePx = collapsePx(),
             collapseMaxPx = collapseMaxPx
@@ -1435,13 +1432,15 @@ fun AlbumDetailScreen(
                                 }
 
                                 if (useLandscapeArtworkTide) {
-                                    AlbumDetailLandscapeLyricsPane(
-                                        pageContainerColor = pageContainerColor,
-                                        settingsViewModel = settingsViewModel,
+                                    AlbumDetailLandscapeSimilarWorksPane(
+                                        seedRjCode = model.baseRjCode.ifBlank { model.rjCode },
+                                        isRouteReady = isInitialRouteReady,
+                                        onOpenAlbumByRj = onOpenAlbumByRj,
+                                        viewModel = viewModel,
                                         modifier = Modifier
                                             .align(Alignment.TopStart)
                                             .width(landscapeHeaderStart)
-                                            .albumLandscapeLyricsViewportHeight(
+                                            .albumLandscapePaneViewportHeight(
                                                 collapsePx = { heroMotion.collapsePx },
                                                 collapseMaxPx = heroCollapseMaxPx
                                             )
@@ -2228,50 +2227,38 @@ private fun AlbumDetailLandscapeIdentity(
 }
 
 @Composable
-private fun AlbumDetailLandscapeLyricsPane(
-    pageContainerColor: Color,
-    settingsViewModel: SettingsViewModel,
+private fun AlbumDetailLandscapeSimilarWorksPane(
+    seedRjCode: String,
+    isRouteReady: Boolean,
+    onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit,
+    viewModel: AlbumDetailViewModel,
     modifier: Modifier = Modifier,
-    lyricsViewModel: LyricsViewModel = hiltViewModel(),
-    playerViewModel: PlayerViewModel = hiltViewModel()
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val lyricsState by lyricsViewModel.uiState.collectAsStateWithLifecycle()
-    val playback by playerViewModel.playback.collectAsStateWithLifecycle()
-    val lyricsPageSettings by settingsViewModel.lyricsPageSettings.collectAsStateWithLifecycle()
-    val expandedLyricsSettings = remember(lyricsPageSettings) {
-        lyricsPageSettings.copy(displayAreaMode = 0)
+    val state by viewModel.similarWorksState.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(seedRjCode, isRouteReady, viewModel) {
+        if (isRouteReady) viewModel.ensureSimilarWorksLoaded(seedRjCode)
     }
-    val lyricColors = rememberLyricReadableColors(
-        accentColor = colorScheme.primaryStrong,
-        backdropTintColor = pageContainerColor,
-        coverBackgroundEnabled = false,
-        coverBackgroundClarity = 0f
-    )
-    val currentTitle = playback.currentMediaItem
-        ?.mediaMetadata
-        ?.title
-        ?.toString()
-        .orEmpty()
+    DisposableEffect(seedRjCode, viewModel) {
+        onDispose(viewModel::cancelSimilarWorksLoad)
+    }
 
     Column(
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
-            text = "正在播放",
-            style = MaterialTheme.typography.labelMedium,
-            color = colorScheme.primaryStrong
+            text = "相似作品",
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+            color = colorScheme.textPrimary
         )
-        if (currentTitle.isNotBlank()) {
-            Text(
-                text = currentTitle,
-                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
-                color = colorScheme.textPrimary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
+        Text(
+            text = "根据当前作品为你推荐",
+            style = MaterialTheme.typography.labelSmall,
+            color = colorScheme.textSecondary
+        )
 
         Box(
             modifier = Modifier
@@ -2279,21 +2266,7 @@ private fun AlbumDetailLandscapeLyricsPane(
                 .weight(1f)
         ) {
             when {
-                playback.currentMediaItem == null -> {
-                    Text(
-                        text = "尚未播放音频",
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .fillMaxWidth(),
-                        style = MaterialTheme.typography.titleSmall.copy(
-                            fontWeight = FontWeight.SemiBold
-                        ),
-                        color = colorScheme.textPrimary,
-                        textAlign = TextAlign.Center
-                    )
-                }
-
-                lyricsState.isLoading && lyricsState.lyrics.isEmpty() -> {
+                !isRouteReady || (state.isLoading && state.works.isEmpty()) -> {
                     CircularProgressIndicator(
                         modifier = Modifier
                             .align(Alignment.Center)
@@ -2303,42 +2276,122 @@ private fun AlbumDetailLandscapeLyricsPane(
                     )
                 }
 
-                lyricsState.lyrics.isEmpty() -> {
-                    Text(
-                        text = "当前音频暂无同步歌词",
+                state.works.isEmpty() -> {
+                    Column(
                         modifier = Modifier
                             .align(Alignment.Center)
                             .fillMaxWidth(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = colorScheme.textSecondary,
-                        textAlign = TextAlign.Center
-                    )
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = if (state.failed) "相似作品加载失败" else "暂时没有相似作品推荐",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colorScheme.textSecondary,
+                            textAlign = TextAlign.Center
+                        )
+                        if (state.failed) {
+                            TextButton(onClick = {
+                                viewModel.ensureSimilarWorksLoaded(seedRjCode, force = true)
+                            }) {
+                                Text("重试")
+                            }
+                        }
+                    }
                 }
 
                 else -> {
-                    NowPlayingLyricsSurface(
-                        isLandscape = false,
-                        playbackPositionMs = playback.positionMs,
-                        lyrics = lyricsState.lyrics,
-                        lyricColors = lyricColors,
-                        accentColor = colorScheme.primaryStrong,
-                        onAccentColor = colorScheme.onPrimary,
-                        lyricsPageSettings = expandedLyricsSettings,
-                        onSeekTo = playerViewModel::seekTo,
-                        onTimelinePlay = { targetMs ->
-                            playerViewModel.seekTo(targetMs)
-                            playerViewModel.play()
-                        },
-                        stableFocusAnchor = true,
-                        expandedHomeVisualEffects = true,
-                        lyricItemOuterHorizontalPadding = 6.dp,
-                        lyricItemInnerHorizontalPadding = 8.dp,
-                        contentKey = lyricsState.contentKey,
-                        contentVisible = !lyricsState.isLoading,
-                        modifier = Modifier.fillMaxSize()
-                    )
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .thinScrollbar(listState),
+                        contentPadding = PaddingValues(bottom = 12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(
+                            items = state.works,
+                            key = AlbumDetailSimilarWork::rjCode
+                        ) { work ->
+                            AlbumDetailSimilarWorkCard(
+                                work = work,
+                                onClick = {
+                                    onOpenAlbumByRj(
+                                        work.rjCode,
+                                        DlsiteRecommendedWork(
+                                            rjCode = work.rjCode,
+                                            title = work.title,
+                                            coverUrl = work.coverUrl
+                                        )
+                                    )
+                                }
+                            )
+                        }
+                    }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AlbumDetailSimilarWorkCard(
+    work: AlbumDetailSimilarWork,
+    onClick: () -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val shape = RoundedCornerShape(10.dp)
+    val imageModel = rememberAlbumCoverImageModel(work.coverUrl)
+    val containerColor = colorScheme.surface.copy(
+        alpha = if (colorScheme.isDark) 0.72f else 0.84f
+    ).compositeOver(colorScheme.background)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(76.dp)
+            .clip(shape)
+            .background(containerColor)
+            .border(
+                width = 0.5.dp,
+                color = colorScheme.primaryStrong.copy(
+                    alpha = if (colorScheme.isDark) 0.22f else 0.14f
+                ),
+                shape = shape
+            )
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsmrAsyncImage(
+            model = imageModel,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            placeholderCornerRadius = 0,
+            peekAnySizeForInitial = true,
+            modifier = Modifier
+                .size(76.dp)
+                .clip(RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp))
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                text = work.title,
+                style = MaterialTheme.typography.labelMedium,
+                color = colorScheme.textPrimary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = work.cv.ifBlank { work.rjCode },
+                style = MaterialTheme.typography.labelSmall,
+                color = colorScheme.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
