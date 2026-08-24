@@ -1,10 +1,36 @@
 package com.asmr.player.ui.library
 
 import com.asmr.player.data.remote.api.AsmrOneRecommendationItem
+import com.asmr.player.data.remote.api.AsmrOneRecommendationSeedFeatures
+import com.asmr.player.domain.model.Album
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class AlbumDetailSimilarWorksTest {
+    @Test
+    fun buildRecommendationSeedFeaturesUsesAlbumMetadataWithoutRecommendationBlocks() {
+        val features = buildAlbumDetailRecommendationSeedFeatures(
+            seedRjCode = "rj01000001",
+            album = Album(
+                title = "当前作品",
+                path = "",
+                circle = " 社团 A ",
+                cv = "声优甲, 声优乙，声优甲",
+                tags = listOf("耳かき", " 添い寝 ", "耳かき")
+            )
+        )
+
+        assertEquals(
+            AsmrOneRecommendationSeedFeatures(
+                rj = "RJ01000001",
+                circle = "社团 A",
+                cvs = listOf("声优甲", "声优乙"),
+                tags = listOf("耳かき", "添い寝")
+            ),
+            features
+        )
+    }
+
     @Test
     fun buildSimilarWorks_excludesSeedAndDeduplicatesAliases() {
         val works = buildAlbumDetailSimilarWorks(

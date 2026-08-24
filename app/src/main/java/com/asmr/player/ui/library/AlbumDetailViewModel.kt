@@ -36,6 +36,7 @@ import com.asmr.player.data.remote.ONLINE_DIRECTORY_REQUEST_TIMEOUT_MS
 import com.asmr.player.data.remote.api.AsmrOneAvailabilityApi
 import com.asmr.player.data.remote.api.AsmrOneEndpoint
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
+import com.asmr.player.data.remote.api.AsmrOneRecommendationSeedFeatures
 import com.asmr.player.data.remote.api.WorkDetailsResponse
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.remote.auth.buildDlsiteCookieHeader
@@ -223,6 +224,8 @@ class AlbumDetailViewModel @Inject constructor(
     private var asmrOneLoadJob: Job? = null
     private var dlsitePlayLoadJob: Job? = null
     private var similarWorksLoadJob: Job? = null
+    private var similarWorksRequestFeatures: AsmrOneRecommendationSeedFeatures? = null
+    private var similarWorksLoadToken: Int = 0
     private var localTracksObserveJob: Job? = null
     private val asmrOneAttemptedRj = linkedSetOf<String>()
     private val dlsitePlayAttemptedRj = linkedSetOf<String>()
@@ -528,20 +531,34 @@ class AlbumDetailViewModel @Inject constructor(
         initialIntroSettled = true
     }
 
-    fun ensureSimilarWorksLoaded(seedRjCode: String, force: Boolean = false) {
+    fun ensureSimilarWorksLoaded(
+        seedRjCode: String,
+        seedFeatures: AsmrOneRecommendationSeedFeatures? = null,
+        force: Boolean = false
+    ) {
         val normalizedSeed = DlsiteWorkNo.normalizeWorkNo(seedRjCode, minimumDigits = 6)
         if (normalizedSeed.isBlank()) {
+            similarWorksLoadToken++
             similarWorksLoadJob?.cancel()
             similarWorksLoadJob = null
+            similarWorksRequestFeatures = null
             _similarWorksState.value = AlbumDetailSimilarWorksState(hasLoaded = true)
             return
         }
 
+        val normalizedFeatures = seedFeatures?.takeIf {
+            DlsiteWorkNo.normalizeWorkNo(it.rj, minimumDigits = 6)
+                .equals(normalizedSeed, ignoreCase = true)
+        }?.copy(rj = normalizedSeed)
         val current = _similarWorksState.value
         val isSameSeed = current.seedRjCode.equals(normalizedSeed, ignoreCase = true)
-        if (!force && isSameSeed && (current.isLoading || current.hasLoaded)) return
+        val isSameRequest = isSameSeed && similarWorksRequestFeatures == normalizedFeatures
+        if (!force && isSameRequest && (current.isLoading || current.hasLoaded)) return
+        if (!force && isSameSeed && current.hasLoaded && current.works.isNotEmpty()) return
 
+        val token = ++similarWorksLoadToken
         similarWorksLoadJob?.cancel()
+        similarWorksRequestFeatures = normalizedFeatures
         if (!asmrOneAvailabilityApi.isBackendConfigured) {
             _similarWorksState.value = AlbumDetailSimilarWorksState(
                 seedRjCode = normalizedSeed,
@@ -559,10 +576,15 @@ class AlbumDetailViewModel @Inject constructor(
             try {
                 val response = asmrOneAvailabilityApi.getRecommendations(
                     seedRjs = listOf(normalizedSeed),
+                    seedFeatures = listOfNotNull(normalizedFeatures),
                     excludeRjs = listOf(normalizedSeed),
                     limit = ALBUM_DETAIL_SIMILAR_WORK_LIMIT
                 )
-                if (!_similarWorksState.value.seedRjCode.equals(normalizedSeed, ignoreCase = true)) {
+                if (
+                    token != similarWorksLoadToken ||
+                    !_similarWorksState.value.seedRjCode.equals(normalizedSeed, ignoreCase = true) ||
+                    similarWorksRequestFeatures != normalizedFeatures
+                ) {
                     return@launch
                 }
                 _similarWorksState.value = AlbumDetailSimilarWorksState(
@@ -577,7 +599,11 @@ class AlbumDetailViewModel @Inject constructor(
                 throw error
             } catch (_: Throwable) {
                 val latest = _similarWorksState.value
-                if (latest.seedRjCode.equals(normalizedSeed, ignoreCase = true)) {
+                if (
+                    token == similarWorksLoadToken &&
+                    latest.seedRjCode.equals(normalizedSeed, ignoreCase = true) &&
+                    similarWorksRequestFeatures == normalizedFeatures
+                ) {
                     _similarWorksState.value = latest.copy(
                         isLoading = false,
                         hasLoaded = true,
@@ -589,6 +615,7 @@ class AlbumDetailViewModel @Inject constructor(
     }
 
     fun cancelSimilarWorksLoad() {
+        similarWorksLoadToken++
         similarWorksLoadJob?.cancel()
         similarWorksLoadJob = null
         val current = _similarWorksState.value
@@ -881,6 +908,7 @@ class AlbumDetailViewModel @Inject constructor(
         cancelPendingOnlineJobs(resetLoadingState = false)
         if (force || isAlbumSwitch) {
             completedAlbumKey = null
+            similarWorksLoadToken++
             similarWorksLoadJob?.cancel()
             similarWorksLoadJob = null
             _similarWorksState.value = AlbumDetailSimilarWorksState()

@@ -78,6 +78,7 @@ data class AsmrOneCollectedSearchItem(
 
 data class AsmrOneRecommendationRequest(
     val seedRjs: List<String> = emptyList(),
+    val seedFeatures: List<AsmrOneRecommendationSeedFeatures> = emptyList(),
     val excludeRjs: List<String> = emptyList(),
     val limit: Int,
     val cursor: String = ""
@@ -86,11 +87,19 @@ data class AsmrOneRecommendationRequest(
 data class AsmrOneRecommendationResponse(
     val items: List<AsmrOneRecommendationItem>? = emptyList(),
     val matchedSeedRjs: List<String>? = emptyList(),
+    val featureSeedRjs: List<String>? = emptyList(),
     val unmatchedSeedRjs: List<String>? = emptyList(),
     val limit: Int = 0,
     val nextCursor: String = "",
     val hasMore: Boolean = false,
     val serverTimeEpochMs: Long = 0L
+)
+
+data class AsmrOneRecommendationSeedFeatures(
+    val rj: String = "",
+    val circle: String = "",
+    val cvs: List<String> = emptyList(),
+    val tags: List<String> = emptyList()
 )
 
 data class AsmrOneRecommendationItem(
@@ -244,6 +253,7 @@ class AsmrOneAvailabilityApi @Inject constructor(
 
     suspend fun getRecommendations(
         seedRjs: List<String>,
+        seedFeatures: List<AsmrOneRecommendationSeedFeatures> = emptyList(),
         excludeRjs: List<String>,
         limit: Int
     ): AsmrOneRecommendationResponse {
@@ -253,6 +263,10 @@ class AsmrOneAvailabilityApi @Inject constructor(
         return requestRecommendations(
             AsmrOneRecommendationRequest(
                 seedRjs = normalizedSeeds,
+                seedFeatures = normalizeRecommendationSeedFeatures(
+                    values = seedFeatures,
+                    seedRjs = normalizedSeeds
+                ),
                 excludeRjs = normalizeRecommendationRjs(excludeRjs, MAX_RECOMMENDATION_EXCLUDES),
                 limit = limit.coerceIn(1, MAX_RECOMMENDATION_LIMIT)
             )
@@ -413,6 +427,45 @@ internal fun normalizeRecommendationRjs(values: List<String>, limit: Int): List<
         .distinct()
         .take(limit.coerceAtLeast(0))
         .toList()
+
+internal fun normalizeRecommendationSeedFeatures(
+    values: List<AsmrOneRecommendationSeedFeatures>,
+    seedRjs: List<String>,
+    limit: Int = 20,
+    maxCvs: Int = 16,
+    maxTags: Int = 48
+): List<AsmrOneRecommendationSeedFeatures> {
+    if (limit <= 0 || seedRjs.isEmpty()) return emptyList()
+    val allowedRjs = seedRjs.toSet()
+    return values.asSequence()
+        .mapNotNull { value ->
+            val rj = DlsiteWorkNo.normalizeWorkNo(value.rj, minimumDigits = 6)
+            if (rj !in allowedRjs) return@mapNotNull null
+            val circle = value.circle.trim()
+            val cvs = value.cvs.cleanRecommendationFeatureValues(maxCvs)
+            val tags = value.tags.cleanRecommendationFeatureValues(maxTags)
+            if (circle.isBlank() && cvs.isEmpty() && tags.isEmpty()) return@mapNotNull null
+            AsmrOneRecommendationSeedFeatures(
+                rj = rj,
+                circle = circle,
+                cvs = cvs,
+                tags = tags
+            )
+        }
+        .distinctBy { it.rj }
+        .take(limit)
+        .toList()
+}
+
+private fun List<String>.cleanRecommendationFeatureValues(limit: Int): List<String> {
+    if (limit <= 0) return emptyList()
+    return asSequence()
+        .map(String::trim)
+        .filter(String::isNotBlank)
+        .distinctBy { it.lowercase() }
+        .take(limit)
+        .toList()
+}
 
 private fun AsmrOneAvailabilityItem.matchedRequestRjs(requested: Set<String>): List<String> {
     if (requested.isEmpty()) return emptyList()

@@ -20,6 +20,7 @@ import com.asmr.player.data.local.db.entities.TagSource
 import com.asmr.player.data.local.db.entities.TrackTagEntity
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.api.AsmrOneRecommendationItem
+import com.asmr.player.data.remote.api.AsmrOneRecommendationSeedFeatures
 import com.asmr.player.data.remote.api.WorkDetailsResponse
 import com.asmr.player.data.remote.crawler.AsmrOneCrawler
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
@@ -133,6 +134,35 @@ data class AlbumDetailSimilarWorksState(
     val hasLoaded: Boolean = false,
     val failed: Boolean = false
 )
+
+internal fun buildAlbumDetailRecommendationSeedFeatures(
+    seedRjCode: String,
+    album: Album?
+): AsmrOneRecommendationSeedFeatures? {
+    val rj = DlsiteWorkNo.normalizeWorkNo(seedRjCode, minimumDigits = 6)
+    if (rj.isBlank() || album == null) return null
+    val circle = album.circle.trim()
+    val cvs = album.cv
+        .split(Regex("""[,，、;；]+"""))
+        .asSequence()
+        .map(String::trim)
+        .filter(String::isNotBlank)
+        .distinctBy { it.lowercase() }
+        .toList()
+    val tags = album.tags
+        .asSequence()
+        .map(String::trim)
+        .filter(String::isNotBlank)
+        .distinctBy { it.lowercase() }
+        .toList()
+    if (circle.isBlank() && cvs.isEmpty() && tags.isEmpty()) return null
+    return AsmrOneRecommendationSeedFeatures(
+        rj = rj,
+        circle = circle,
+        cvs = cvs,
+        tags = tags
+    )
+}
 
 internal fun buildAlbumDetailSimilarWorks(
     seedRjCode: String,

@@ -1476,6 +1476,7 @@ fun AlbumDetailScreen(
                                 if (useLandscapeArtworkTide) {
                                     AlbumDetailLandscapeSimilarWorksPane(
                                         seedRjCode = model.baseRjCode.ifBlank { model.rjCode },
+                                        seedMetadata = model.dlsiteInfo ?: model.displayAlbum,
                                         isRouteReady = isInitialRouteReady,
                                         onOpenAlbumByRj = onOpenAlbumByRj,
                                         viewModel = viewModel,
@@ -2378,6 +2379,7 @@ private fun AlbumDetailLandscapeIdentity(
 @Composable
 private fun AlbumDetailLandscapeSimilarWorksPane(
     seedRjCode: String,
+    seedMetadata: Album,
     isRouteReady: Boolean,
     onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit,
     viewModel: AlbumDetailViewModel,
@@ -2386,9 +2388,22 @@ private fun AlbumDetailLandscapeSimilarWorksPane(
     val colorScheme = AsmrTheme.colorScheme
     val state by viewModel.similarWorksState.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
+    val seedFeatures = remember(
+        seedRjCode,
+        seedMetadata.circle,
+        seedMetadata.cv,
+        seedMetadata.tags
+    ) {
+        buildAlbumDetailRecommendationSeedFeatures(seedRjCode, seedMetadata)
+    }
 
-    LaunchedEffect(seedRjCode, isRouteReady, viewModel) {
-        if (isRouteReady) viewModel.ensureSimilarWorksLoaded(seedRjCode)
+    LaunchedEffect(seedRjCode, seedFeatures, isRouteReady, viewModel) {
+        if (isRouteReady) {
+            viewModel.ensureSimilarWorksLoaded(
+                seedRjCode = seedRjCode,
+                seedFeatures = seedFeatures
+            )
+        }
     }
     DisposableEffect(seedRjCode, viewModel) {
         onDispose(viewModel::cancelSimilarWorksLoad)
@@ -2436,7 +2451,11 @@ private fun AlbumDetailLandscapeSimilarWorksPane(
                         )
                         if (state.failed) {
                             TextButton(onClick = {
-                                viewModel.ensureSimilarWorksLoaded(seedRjCode, force = true)
+                                viewModel.ensureSimilarWorksLoaded(
+                                    seedRjCode = seedRjCode,
+                                    seedFeatures = seedFeatures,
+                                    force = true
+                                )
                             }) {
                                 Text("重试")
                             }

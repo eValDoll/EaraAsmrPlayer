@@ -74,4 +74,36 @@ class AsmrOneRecommendationSupportTest {
     fun normalizeRecommendationRjsReturnsEmptyForNonPositiveLimit() {
         assertEquals(emptyList<String>(), normalizeRecommendationRjs(listOf("RJ123456"), 0))
     }
+
+    @Test
+    fun normalizeRecommendationSeedFeaturesKeepsOnlyMatchingNonEmptySeeds() {
+        val result = normalizeRecommendationSeedFeatures(
+            values = listOf(
+                AsmrOneRecommendationSeedFeatures(
+                    rj = " rj123456 ",
+                    circle = " 社团 A ",
+                    cvs = listOf("声优 A", "声优 A", " "),
+                    tags = listOf("耳かき", "添い寝", "耳かき")
+                ),
+                AsmrOneRecommendationSeedFeatures(
+                    rj = "RJ999999",
+                    tags = listOf("不应发送")
+                ),
+                AsmrOneRecommendationSeedFeatures(rj = "RJ654321")
+            ),
+            seedRjs = listOf("RJ123456", "RJ654321")
+        )
+
+        assertEquals(
+            listOf(
+                AsmrOneRecommendationSeedFeatures(
+                    rj = "RJ123456",
+                    circle = "社团 A",
+                    cvs = listOf("声优 A"),
+                    tags = listOf("耳かき", "添い寝")
+                )
+            ),
+            result
+        )
+    }
 }
