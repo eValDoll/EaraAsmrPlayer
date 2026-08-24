@@ -185,54 +185,67 @@ internal fun PlaybackControls(
     val landscapeCoreEndPadding = if (compactLayout) 0.dp else 16.dp
 
     if (landscapeControls && showActionRow) {
-        Row(
-            modifier = controlsContainerModifier,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Row(
-                modifier = Modifier.then(actionRowModifier),
-                horizontalArrangement = Arrangement.spacedBy(landscapeActionSpacing),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                PlaybackActionButtons(
-                    playback = playback,
-                    isFavorite = isFavorite,
-                    viewModel = viewModel,
-                    onShowPlaylistPicker = onShowPlaylistPicker,
-                    onShowEqualizer = onShowEqualizer,
-                    onManageTags = onManageTags,
-                    sliceUiState = sliceUiState,
+        BoxWithConstraints(modifier = controlsContainerModifier) {
+            val adaptiveCoreSpacing = if (compactLayout) {
+                phoneLandscapeCoreButtonSpacing(
+                    availableWidth = maxWidth,
                     actionButtonSize = actionButtonSize,
-                    actionIconSize = actionIconSize,
-                    landscapeControls = true,
-                    primaryColor = primaryColor
+                    actionSpacing = landscapeActionSpacing,
+                    coreButtonSize = coreButtonSize,
+                    playButtonSize = playButtonSize
                 )
+            } else {
+                landscapeCoreSpacing
             }
-            Spacer(modifier = Modifier.weight(1f))
             Row(
-                modifier = Modifier
-                    .then(coreControlsModifier)
-                    .padding(end = landscapeCoreEndPadding),
-                horizontalArrangement = Arrangement.spacedBy(landscapeCoreSpacing),
+                modifier = Modifier.fillMaxSize(),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                PlaybackCoreButtons(
-                    playback = playback,
-                    viewModel = viewModel,
-                    isPlaying = isPlayingEffective,
-                    onTogglePlay = {
-                        optimisticIsPlaying = !(optimisticIsPlaying ?: playback.playWhenReady)
-                        viewModel.togglePlayPause()
-                    },
-                    compactLayout = compactLayout,
-                    coreButtonSize = coreButtonSize,
-                    modeIconSize = modeIconSize,
-                    skipIconSize = skipIconSize,
-                    playButtonSize = playButtonSize,
-                    playIconSize = playIconSize,
-                    primaryColor = primaryColor,
-                    onPrimaryColor = onPrimaryColor
-                )
+                Row(
+                    modifier = Modifier.then(actionRowModifier),
+                    horizontalArrangement = Arrangement.spacedBy(landscapeActionSpacing),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    PlaybackActionButtons(
+                        playback = playback,
+                        isFavorite = isFavorite,
+                        viewModel = viewModel,
+                        onShowPlaylistPicker = onShowPlaylistPicker,
+                        onShowEqualizer = onShowEqualizer,
+                        onManageTags = onManageTags,
+                        sliceUiState = sliceUiState,
+                        actionButtonSize = actionButtonSize,
+                        actionIconSize = actionIconSize,
+                        landscapeControls = true,
+                        primaryColor = primaryColor
+                    )
+                }
+                Spacer(modifier = Modifier.weight(1f))
+                Row(
+                    modifier = Modifier
+                        .then(coreControlsModifier)
+                        .padding(end = landscapeCoreEndPadding),
+                    horizontalArrangement = Arrangement.spacedBy(adaptiveCoreSpacing),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    PlaybackCoreButtons(
+                        playback = playback,
+                        viewModel = viewModel,
+                        isPlaying = isPlayingEffective,
+                        onTogglePlay = {
+                            optimisticIsPlaying = !(optimisticIsPlaying ?: playback.playWhenReady)
+                            viewModel.togglePlayPause()
+                        },
+                        compactLayout = compactLayout,
+                        coreButtonSize = coreButtonSize,
+                        modeIconSize = modeIconSize,
+                        skipIconSize = skipIconSize,
+                        playButtonSize = playButtonSize,
+                        playIconSize = playIconSize,
+                        primaryColor = primaryColor,
+                        onPrimaryColor = onPrimaryColor
+                    )
+                }
             }
         }
     } else {
@@ -306,6 +319,21 @@ internal fun PlaybackControls(
             }
         }
     }
+}
+
+internal fun phoneLandscapeCoreButtonSpacing(
+    availableWidth: Dp,
+    actionButtonSize: Dp,
+    actionSpacing: Dp,
+    coreButtonSize: Dp,
+    playButtonSize: Dp
+): Dp {
+    if (!availableWidth.value.isFinite()) return 2.dp
+
+    val actionButtonsWidth = actionButtonSize.value * 3f + actionSpacing.value * 2f
+    val coreButtonsWidth = coreButtonSize.value * 4f + playButtonSize.value
+    val freeWidth = availableWidth.value - actionButtonsWidth - coreButtonsWidth
+    return (freeWidth / 4f).coerceIn(2f, 18f).dp
 }
 
 @Composable

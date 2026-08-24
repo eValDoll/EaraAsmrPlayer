@@ -53,6 +53,7 @@ import com.asmr.player.data.repository.ListeningTrackContext
 import com.asmr.player.playback.AsmrRenderersFactory
 import com.asmr.player.playback.BalanceAudioProcessor
 import com.asmr.player.playback.ChannelModeAudioProcessor
+import com.asmr.player.playback.DefaultSpectrumAudioTrackBufferDurationMillis
 import com.asmr.player.playback.FadingPlayer
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.playback.AppVolumeBoostController
@@ -68,10 +69,13 @@ import com.asmr.player.playback.StereoOrbitAudioProcessor
 import com.asmr.player.playback.StereoPcmRingBuffer
 import com.asmr.player.playback.StereoSpectrumBus
 import com.asmr.player.playback.StereoSpectrumTapAudioProcessor
+import com.asmr.player.playback.SpectrumOutputBufferSizeProvider
+import com.asmr.player.playback.SpectrumPcmRingSlotCount
 import com.asmr.player.playback.VolumeThresholdAudioProcessor
 import com.asmr.player.playback.VolumeFader
 import com.asmr.player.playback.isRecoverableRemotePlaybackFailure
 import com.asmr.player.playback.capturePersistedPlaybackState
+import com.asmr.player.playback.spectrumVisualDelayMillis
 import com.asmr.player.util.EmbeddedMediaExtractor
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.SubtitleIndexFinder
@@ -115,7 +119,14 @@ class PlaybackService : MediaSessionService() {
     private val volumeThresholdAudioProcessor = VolumeThresholdAudioProcessor()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val volumeFader = VolumeFader(serviceScope)
-    private val spectrumPcmBuffer = StereoPcmRingBuffer(frameSize = 1024, slotCount = 8)
+    @Volatile private var spectrumAudioTrackBufferDurationMillis =
+        DefaultSpectrumAudioTrackBufferDurationMillis
+    @Volatile private var spectrumOutputSampleRate: Int? = null
+    @Volatile private var spectrumOutputFramesPerBuffer: Int? = null
+    private val spectrumPcmBuffer = StereoPcmRingBuffer(
+        frameSize = 1024,
+        slotCount = SpectrumPcmRingSlotCount
+    )
     private val spectrumAnalyzer = StereoFftAnalyzer(
         pcmBuffer = spectrumPcmBuffer,
         spectrumStore = StereoSpectrumBus.store,
@@ -125,6 +136,10 @@ class PlaybackService : MediaSessionService() {
     )
     private val spectrumTapAudioProcessor = StereoSpectrumTapAudioProcessor(spectrumPcmBuffer) { sr ->
         spectrumAnalyzer.setSampleRate(sr)
+    }
+    private val spectrumOutputBufferSizeProvider = SpectrumOutputBufferSizeProvider { durationMillis ->
+        spectrumAudioTrackBufferDurationMillis = durationMillis
+        updateSpectrumVisualDelay()
     }
     
     // Temporary settings for current session
@@ -238,6 +253,16 @@ class PlaybackService : MediaSessionService() {
     private var lastProgressPersistElapsedMs: Long = 0L
     private val pendingNetworkTrafficBytes = AtomicLong(0L)
 
+    private fun updateSpectrumVisualDelay() {
+        spectrumAnalyzer.setVisualDelayMs(
+            spectrumVisualDelayMillis(
+                audioTrackBufferDurationMillis = spectrumAudioTrackBufferDurationMillis,
+                outputSampleRate = spectrumOutputSampleRate,
+                outputFramesPerBuffer = spectrumOutputFramesPerBuffer
+            )
+        )
+    }
+
     @androidx.annotation.OptIn(UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
@@ -255,16 +280,14 @@ class PlaybackService : MediaSessionService() {
         }
         runCatching {
             val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
-            val sr = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull()
-            val fpb = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)?.toIntOrNull()
-            val bufferMs = if (sr != null && fpb != null && sr > 0 && fpb > 0) {
-                (fpb * 1000) / sr
-            } else {
-                20
-            }
-            val delayMs = (bufferMs * 3).coerceIn(0, 200)
-            spectrumAnalyzer.setVisualDelayMs(delayMs)
+            spectrumOutputSampleRate = audioManager
+                .getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)
+                ?.toIntOrNull()
+            spectrumOutputFramesPerBuffer = audioManager
+                .getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)
+                ?.toIntOrNull()
         }
+        updateSpectrumVisualDelay()
         val authStore = DlsiteAuthStore(applicationContext)
         val playbackHttpClient = okHttpClient.newBuilder()
             .connectTimeout(NETWORK_CONNECT_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
@@ -338,7 +361,8 @@ class PlaybackService : MediaSessionService() {
                     sceneEffectAudioProcessor,
                     channelModeAudioProcessor,
                     volumeThresholdAudioProcessor,
-                    spectrumTapAudioProcessor
+                    spectrumTapAudioProcessor,
+                    spectrumOutputBufferSizeProvider
                 )
             )
             .setMediaSourceFactory(mediaSourceFactory)

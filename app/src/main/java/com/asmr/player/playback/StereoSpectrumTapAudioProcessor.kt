@@ -49,7 +49,7 @@ class StereoSpectrumTapAudioProcessor(
     }
 
     override fun onFlush() {
-        pcmBuffer.resetWriteCursor()
+        pcmBuffer.reset()
     }
 
     override fun onReset() {

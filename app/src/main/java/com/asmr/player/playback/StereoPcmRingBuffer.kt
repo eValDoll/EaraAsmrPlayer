@@ -28,12 +28,6 @@ class StereoPcmRingBuffer(
         writePos = 0
     }
 
-    fun resetWriteCursor() {
-        writeSlot = publishedSlot + 1
-        if (writeSlot == leftSlots.size) writeSlot = 0
-        writePos = 0
-    }
-
     fun writeNormalized(left: Float, right: Float) {
         leftSlots[writeSlot][writePos] = left
         rightSlots[writeSlot][writePos] = right

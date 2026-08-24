@@ -95,6 +95,31 @@ class NowPlayingLandscapeLayoutTest {
     }
 
     @Test
+    fun phoneLandscapeCoreButtonsUseExtraHorizontalSpaceWithoutOverflowingNarrowPhones() {
+        assertEquals(
+            3.5f,
+            phoneLandscapeCoreButtonSpacing(
+                availableWidth = 366.dp,
+                actionButtonSize = 40.dp,
+                actionSpacing = 2.dp,
+                coreButtonSize = 40.dp,
+                playButtonSize = 68.dp
+            ).value,
+            0.01f
+        )
+        assertEquals(
+            18.dp,
+            phoneLandscapeCoreButtonSpacing(
+                availableWidth = 500.dp,
+                actionButtonSize = 40.dp,
+                actionSpacing = 2.dp,
+                coreButtonSize = 40.dp,
+                playButtonSize = 68.dp
+            )
+        )
+    }
+
+    @Test
     fun tabletLandscapeUsesLargerLyricsAndBoundedArtwork() {
         val metrics = nowPlayingLandscapeLayoutMetrics(
             screenHeight = 800.dp,

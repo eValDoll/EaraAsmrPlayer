@@ -52,7 +52,7 @@ class StereoFftAnalyzer(
     private var sampleRate: Int = 44100
 
     @Volatile
-    private var visualDelayMs: Int = 120
+    private var visualDelayMs: Int = DefaultSpectrumAudioTrackBufferDurationMillis
 
     private var job: Job? = null
 
