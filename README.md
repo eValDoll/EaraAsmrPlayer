@@ -8,41 +8,7 @@
 
 ## Overview
 
-**EaraAsmrPlayer** 是一款专为 ASMR 内容打造的现代 Android 音频播放器。基于 **Jetpack Compose** 和 **Media3** 构建，提供沉浸式的本地音频管理与在线资源发现体验，支持歌词同步、音频效果调节、A–B 循环切片等核心特性。
-
----
-
-## Sample Screens
-
-### 沉浸式播放
-
-| 沉浸式播放页面 | 字幕格式自动识别 |
-|:---:|:---:|
-| <img src="example_screen/沉浸式ASMR播放页面.png" width="50%"/> | <img src="example_screen/多种字幕格式自动识别.png" width="50%"/> |
-
-### 本地管理
-
-| 浅色主题 | 暗色主题 |
-|:---:|:---:|
-| <img src="example_screen/本地ASMR管理-浅.png" width="50%"/> | <img src="example_screen/本地ASMR管理-暗.png" width="50%"/> |
-
-### 在线搜索
-
-| 浅色主题 | 暗色主题 |
-|:---:|:---:|
-| <img src="example_screen/ASMR作品在线搜索-浅.png" width="50%"/> | <img src="example_screen/ASMR作品在线搜索-暗.png" width="50%"/> |
-
-### 在线播放
-
-| 浅色主题 | 暗色主题 |
-|:---:|:---:|
-| <img src="example_screen/ASMR音频在线播放-浅.png" width="50%"/> | <img src="example_screen/ASMR音频在线播放-暗.png" width="50%"/> |
-
-### 主题色自动取色（莫奈取色）
-
-| 浅色主题 | 暗色主题 |
-|:---:|:---:|
-| <img src="example_screen/主题色自动取色(莫奈取色)-浅.png" width="50%"/> | <img src="example_screen/主题色自动取色(莫奈取色)-暗.png" width="50%"/> |
+**EaraAsmrPlayer** 是一款专为 ASMR 内容打造的现代 Android 音频播放器。应用基于 **Jetpack Compose** 与 **Media3** 构建，将本地音频管理、在线作品发现、沉浸式播放、字幕处理和收听记录整合在统一体验中，并针对手机横屏与平板大屏进行了专门适配。
 
 ---
 
@@ -50,23 +16,48 @@
 
 - 基于 Media3 (ExoPlayer) 的高保真音频播放
 - Jetpack Compose + Material 3 构建的现代 UI
-- 本地音轨库管理：专辑/音轨视图、网格/列表切换、快速筛选与搜索
+- 响应式界面：适配手机竖屏、手机横屏与平板大屏布局
+- 本地音轨库管理：专辑/音轨视图、网格/列表切换、快速筛选与搜索、自定义下载目录
 - 播放列表与收藏夹，支持分组整理
-- 同步歌词（LRC/VTT/SRT），支持悬浮歌词覆盖层
+- 在线作品发现：支持 DLsite 与 asmr.one 搜索、收录筛选、排序和作品详情浏览
+- 个性化推荐：搜索页“猜你喜欢”支持连续换一批，专辑详情支持相似作品推荐
+- 同步歌词（LRC/VTT/SRT），支持独立字号调节与悬浮歌词覆盖层
+- 设备端日文字幕生成与 AI 翻译，支持字幕任务管理与错误恢复
 - 耳机音频效果：均衡器、混响、增益、虚拟环绕、左右声道平衡、空间化
 - 双声道频谱可视化，专为双耳音频内容优化
 - 切片标记与 A–B 循环：在进度条上标记片段，拖拽微调、预览切片
-- 后台下载与离线持久化
-- 内置在线源：DLsite（Play 曲库）、asmr.one
-- 搜索页“猜你喜欢”：根据本地最近播放生成匿名推荐序列，并通过游标连续换一批
+- 后台下载与离线持久化，支持合并已有本地作品
+- ASMR 收听面板：收听时长、活跃热力图、历史时间线与热门内容
+- 一起听在线人数与匿名收听统计
+- 封面自动取色与深浅主题联动，支持 OLED 防烧屏像素平移保护
 - 视频播放支持常见格式及 m3u8 流
-- 睡眠定时器与通知栏后台播放控制
+- 睡眠定时器、通知栏后台播放控制与应用内版本更新
 
 ---
 
 ## Downloads
 
-从 **GitHub Releases** 下载最新版本（tag `v*`，目前最新：`v1.1.0`）。
+从 [**GitHub Releases**](https://github.com/eValDoll/EaraAsmrPlayer/releases) 下载最新版本（tag `v*`，当前版本：`v1.2.2`）。
+
+---
+
+## Sample Screens
+
+### 手机界面
+
+| 在线作品列表 | 专辑详情 | 沉浸式播放主页 | ASMR 收听面板 |
+|:---:|:---:|:---:|:---:|
+| <img src="example_screen/作品列表.png" width="80%" alt="在线作品列表" /> | <img src="example_screen/专辑详情.png" width="80%" alt="专辑详情" /> | <img src="example_screen/播放主页.png" width="80%" alt="沉浸式播放主页" /> | <img src="example_screen/收听面板.png" width="80%" alt="ASMR 收听面板" /> |
+
+| 手机横屏播放 |
+|:---:|
+| <img src="example_screen/播放主页-手机横屏适配.png" width="50%" alt="手机横屏播放" /> |
+
+### 平板适配
+
+| 平板本地库 | 平板专辑详情 | 平板播放主页 |
+|:---:|:---:|:---:|
+| <img src="example_screen/本地库-平板适配.png" width="100%" alt="平板本地库" /> | <img src="example_screen/专辑详情-平板适配.png" width="100%" alt="平板专辑详情" /> | <img src="example_screen/播放主页-平板适配.png" width="100%" alt="平板播放主页" /> |
 
 ---
 
