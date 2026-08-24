@@ -32,6 +32,9 @@ interface TagDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertAlbumTags(refs: List<AlbumTagEntity>)
 
+    @Query("SELECT * FROM album_tag WHERE albumId = :albumId")
+    suspend fun getAlbumTagsOnce(albumId: Long): List<AlbumTagEntity>
+
     @Query("DELETE FROM album_tag WHERE albumId = :albumId")
     suspend fun deleteAlbumTagsByAlbumId(albumId: Long)
 

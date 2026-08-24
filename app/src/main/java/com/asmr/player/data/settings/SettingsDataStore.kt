@@ -22,6 +22,8 @@ object SettingsKeys {
     val HOT_LISTENING_VIEW_MODE = intPreferencesKey("hot_listening_view_mode")
     val HOT_LISTENING_SORT_MODE = stringPreferencesKey("hot_listening_sort_mode")
     val SEARCH_BLOCKED_KEYWORDS = stringPreferencesKey("search_blocked_keywords")
+    val DOWNLOAD_DIRECTORY_TREE_URI = stringPreferencesKey("download_directory_tree_uri")
+    val DOWNLOAD_DIRECTORY_LABEL = stringPreferencesKey("download_directory_label")
 
     val PLAY_MODE = intPreferencesKey("play_mode")
 

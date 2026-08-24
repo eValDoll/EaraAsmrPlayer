@@ -62,7 +62,6 @@ import com.asmr.player.ui.common.AsmrShimmerPlaceholder
 import com.asmr.player.ui.common.CvChipsSingleLine
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.util.DlsiteAntiHotlink
 import dagger.hilt.android.EntryPointAccessors
@@ -188,8 +187,7 @@ internal fun CloudSyncSelectionDialog(
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(CLOUD_SYNC_SELECTION_LIST_HEIGHT)
-                        .testTag(CLOUD_SYNC_SELECTION_LIST_TAG)
-                        .thinScrollbar(listState),
+                        .testTag(CLOUD_SYNC_SELECTION_LIST_TAG),
                     flingBehavior = rememberCalmScrollableFlingBehavior(),
                     verticalArrangement = Arrangement.spacedBy(CLOUD_SYNC_SELECTION_ROW_SPACING)
                 ) {

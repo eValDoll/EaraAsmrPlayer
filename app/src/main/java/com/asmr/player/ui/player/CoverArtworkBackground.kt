@@ -70,6 +70,8 @@ fun CoverArtworkBackground(
             contentScale = ContentScale.Crop,
             alignment = artworkAlignment,
             alpha = style.artworkAlpha,
+            placeholder = {},
+            empty = {},
             loading = {},
         )
     }

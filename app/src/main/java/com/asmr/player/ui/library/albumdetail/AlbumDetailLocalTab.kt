@@ -132,7 +132,6 @@ import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.util.Formatting
@@ -169,6 +168,7 @@ internal fun AlbumLocalBreadcrumbTabV2(
     onSubtitleGenerationError: (String) -> Unit,
     onSubtitleGenerationUnavailable: (String) -> Unit,
     onSubtitleGenerationQueued: (String) -> Unit,
+    onListStateAvailable: (LazyListState?) -> Unit = {},
 ) {
     var locallyDeletedTrackIds by remember(stateKey) { mutableStateOf(emptySet<Long>()) }
     var treeRevision by rememberSaveable(stateKey) { mutableIntStateOf(0) }
@@ -200,6 +200,10 @@ internal fun AlbumLocalBreadcrumbTabV2(
 
     val listState = rememberSaveable("scroll:$stateKey", saver = LazyListState.Saver) {
         LazyListState(initialScroll.first, initialScroll.second)
+    }
+    DisposableEffect(listState) {
+        onListStateAvailable(listState)
+        onDispose { onListStateAvailable(null) }
     }
     PersistAlbumDetailListScroll(
         listState = listState,
@@ -246,7 +250,8 @@ internal fun AlbumLocalBreadcrumbTabV2(
                 albumId = album.id,
                 albumPaths = allPaths,
                 tracks = queueTracks,
-                onlineSavedResources = onlineSavedResources
+                onlineSavedResources = onlineSavedResources,
+                sources = localTreeSourcesForAlbum(album),
             )
         }
     }
@@ -306,8 +311,7 @@ internal fun AlbumLocalBreadcrumbTabV2(
     }
     LazyColumn(
         modifier = Modifier
-            .fillMaxSize()
-            .thinScrollbar(listState),
+            .fillMaxSize(),
         state = listState,
         flingBehavior = rememberCalmScrollableFlingBehavior(),
         contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)

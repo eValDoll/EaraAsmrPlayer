@@ -142,7 +142,6 @@ import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.util.Formatting
@@ -828,6 +827,8 @@ private val DlsiteSectionPlacementTweenSpec = tween<IntOffset>(
     easing = FastOutSlowInEasing
 )
 
+private const val DirectoryTreeRevealFadeInMillis = 800
+
 private enum class DirectoryTreePanelState {
     Loading,
     Content,
@@ -847,13 +848,24 @@ private data class DlsiteContentPanel<T>(
 )
 
 @Stable
-private class DlsiteContentFadeState<T>(initialPanel: DlsiteContentPanel<T>) {
+private class DlsiteContentFadeState<T>(
+    initialPanel: DlsiteContentPanel<T>,
+    private val fadeInMillis: Int = 180
+) {
     var panel by mutableStateOf(initialPanel)
         private set
 
     val alpha = Animatable(1f)
 
-    suspend fun update(targetPanel: DlsiteContentPanel<T>) {
+    suspend fun update(
+        targetPanel: DlsiteContentPanel<T>,
+        showLoadingImmediately: Boolean = false
+    ) {
+        if (showLoadingImmediately && targetPanel.kind == DlsiteContentKind.Loading) {
+            panel = targetPanel
+            alpha.snapTo(1f)
+            return
+        }
         if (panel.kind != targetPanel.kind) {
             alpha.animateTo(
                 targetValue = 0f,
@@ -863,7 +875,7 @@ private class DlsiteContentFadeState<T>(initialPanel: DlsiteContentPanel<T>) {
         panel = targetPanel
         alpha.animateTo(
             targetValue = 1f,
-            animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing)
+            animationSpec = tween(durationMillis = fadeInMillis, easing = FastOutSlowInEasing)
         )
     }
 }
@@ -871,11 +883,16 @@ private class DlsiteContentFadeState<T>(initialPanel: DlsiteContentPanel<T>) {
 @Composable
 private fun <T> rememberDlsiteContentFadeState(
     targetPanel: DlsiteContentPanel<T>,
-    stateKey: Any
+    stateKey: Any,
+    fadeInMillis: Int = 180,
+    showLoadingImmediately: Boolean = false
 ): DlsiteContentFadeState<T> {
-    val state = remember(stateKey) { DlsiteContentFadeState(targetPanel) }
-    LaunchedEffect(state, targetPanel) {
-        state.update(targetPanel)
+    val state = remember(stateKey) { DlsiteContentFadeState(targetPanel, fadeInMillis) }
+    LaunchedEffect(state, targetPanel, showLoadingImmediately) {
+        state.update(
+            targetPanel = targetPanel,
+            showLoadingImmediately = showLoadingImmediately
+        )
     }
     return state
 }
@@ -916,14 +933,24 @@ private fun StableOneDirectoryTreeContent(
         },
         value = targetState
     )
-    val fadeState = rememberDlsiteContentFadeState(targetPanel, stateKey)
+    val fadeState = rememberDlsiteContentFadeState(
+        targetPanel = targetPanel,
+        stateKey = stateKey,
+        fadeInMillis = DirectoryTreeRevealFadeInMillis,
+        showLoadingImmediately = true
+    )
+    val displayedState = if (targetState == DirectoryTreePanelState.Loading) {
+        DirectoryTreePanelState.Loading
+    } else {
+        fadeState.panel.value ?: targetState
+    }
     Box(
         modifier = modifier
             .height(rememberStableOneDirectoryContainerHeight())
             .clipToBounds()
             .dlsiteContentFade(fadeState)
     ) {
-        content(fadeState.panel.value ?: targetState)
+        content(displayedState)
     }
 }
 
@@ -939,7 +966,7 @@ private fun DirectoryTreeAnimatedContent(
         modifier = modifier,
         transitionSpec = {
             (
-                fadeIn(animationSpec = tween(durationMillis = 180, delayMillis = 60)) +
+                fadeIn(animationSpec = tween(durationMillis = DirectoryTreeRevealFadeInMillis, delayMillis = 60)) +
                     slideInVertically(
                         animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
                         initialOffsetY = { height -> (height * 0.06f).toInt() }
@@ -1023,7 +1050,8 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     onPersistScroll: (Int, Int) -> Unit,
     dlsiteRecommendations: DlsiteRecommendations,
     onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit,
-    loadRemoteFileSize: suspend (String) -> Long?
+    loadRemoteFileSize: suspend (String) -> Long?,
+    onListStateAvailable: (LazyListState?) -> Unit = {}
 ) {
     val scope = rememberCoroutineScope()
     val colorScheme = AsmrTheme.colorScheme
@@ -1054,6 +1082,10 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     }
     val listState = rememberSaveable("scroll:$treeStateKey", saver = LazyListState.Saver) {
         LazyListState(initialScroll.first, initialScroll.second)
+    }
+    DisposableEffect(listState) {
+        onListStateAvailable(listState)
+        onDispose { onListStateAvailable(null) }
     }
     PersistAlbumDetailListScroll(
         listState = listState,
@@ -1093,8 +1125,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
 
     LazyColumn(
         modifier = Modifier
-            .fillMaxSize()
-            .thinScrollbar(listState),
+            .fillMaxSize(),
         state = listState,
         flingBehavior = rememberCalmScrollableFlingBehavior(),
         contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)
@@ -1104,7 +1135,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             AlbumDetailSectionHeading(
                 title = if (asmrOneTree.isNotEmpty()) "ONE（已收录）" else "ONE",
                 modifier = dlsiteAnimatedSectionModifier(
-                    Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
+                    Modifier.fillMaxWidth().padding(start = AlbumDetailHorizontalPadding, end = AlbumDetailHorizontalPadding, top = 8.dp, bottom = 0.dp),
                     animateIntro = animateIntro
                 ),
                 actions = {
@@ -1486,7 +1517,8 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
     initialScroll: Pair<Int, Int>,
     onPersistScroll: (Int, Int) -> Unit,
     loadRemoteFileSize: suspend (String) -> Long?,
-    prepareImagePreview: suspend (String, String?, Boolean, Int?, Int?) -> String?
+    prepareImagePreview: suspend (String, String?, Boolean, Int?, Int?) -> String?,
+    onListStateAvailable: (LazyListState?) -> Unit = {}
 ) {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -1527,6 +1559,10 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
     val restoredIndex = if (initialScroll.first <= 0) 0 else initialScroll.first + headerItemCount
     val listState = rememberSaveable("scroll:$treeStateKey", saver = LazyListState.Saver) {
         LazyListState(restoredIndex, initialScroll.second)
+    }
+    DisposableEffect(listState) {
+        onListStateAvailable(listState)
+        onDispose { onListStateAvailable(null) }
     }
     PersistAlbumDetailListScroll(
         listState = listState,
@@ -1570,8 +1606,7 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
 
     LazyColumn(
         modifier = Modifier
-            .fillMaxSize()
-            .thinScrollbar(listState),
+            .fillMaxSize(),
         state = listState,
         flingBehavior = rememberCalmScrollableFlingBehavior(),
         contentPadding = PaddingValues(top = topContentPadding, bottom = LocalBottomOverlayPadding.current)

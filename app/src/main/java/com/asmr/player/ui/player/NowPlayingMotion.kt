@@ -22,6 +22,8 @@ internal enum class NowPlayingMotionLayout {
 internal enum class NowPlayingMotionSlot {
     HEADER,
     COVER,
+    QUEUE,
+    SPECTRUM,
     LYRICS,
     PROGRESS,
     ACTION_ROW,
@@ -81,8 +83,9 @@ internal object NowPlayingMotionSpec {
         layout: NowPlayingMotionLayout,
         slot: NowPlayingMotionSlot
     ): Int {
-        val index = slotIndex(layout, slot)
-        return when (slot) {
+        val stagedSlot = stagedSlot(layout, slot)
+        val index = slotIndex(layout, stagedSlot)
+        return when (stagedSlot) {
             NowPlayingMotionSlot.HEADER,
             NowPlayingMotionSlot.COVER -> 0
             else -> (index - 1).coerceAtLeast(0) * EnterStepDelayMs
@@ -93,12 +96,13 @@ internal object NowPlayingMotionSpec {
         layout: NowPlayingMotionLayout,
         slot: NowPlayingMotionSlot
     ): Int {
+        val stagedSlot = stagedSlot(layout, slot)
         val contentSlots = orderedSlots(layout).filterNot { it == NowPlayingMotionSlot.HEADER }
-        return when (slot) {
+        return when (stagedSlot) {
             NowPlayingMotionSlot.HEADER -> contentSlots.size * ExitStepDelayMs
             else -> contentSlots
                 .asReversed()
-                .indexOf(slot)
+                .indexOf(stagedSlot)
                 .let { index ->
                     require(index >= 0) {
                         "Slot $slot is not part of $layout now playing motion exit order"
@@ -117,6 +121,24 @@ internal object NowPlayingMotionSpec {
 
     fun totalExitDurationMs(layout: NowPlayingMotionLayout): Int =
         exitDelayMs(layout, NowPlayingMotionSlot.HEADER) + ExitDurationMs
+
+    private fun stagedSlot(
+        layout: NowPlayingMotionLayout,
+        slot: NowPlayingMotionSlot
+    ): NowPlayingMotionSlot = when (slot) {
+        NowPlayingMotionSlot.QUEUE -> {
+            require(layout == NowPlayingMotionLayout.SPLIT_LANDSCAPE) {
+                "播放队列动效只属于平板横屏布局"
+            }
+            NowPlayingMotionSlot.PROGRESS
+        }
+        NowPlayingMotionSlot.SPECTRUM -> when (layout) {
+            NowPlayingMotionLayout.PHONE_LANDSCAPE -> NowPlayingMotionSlot.LYRICS
+            NowPlayingMotionLayout.SPLIT_LANDSCAPE -> NowPlayingMotionSlot.INFO_PANEL
+            NowPlayingMotionLayout.PORTRAIT -> error("音频频谱动效只属于横屏布局")
+        }
+        else -> slot
+    }
 
     private fun slotIndex(
         layout: NowPlayingMotionLayout,

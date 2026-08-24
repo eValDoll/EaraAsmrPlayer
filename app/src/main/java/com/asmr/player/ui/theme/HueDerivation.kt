@@ -11,9 +11,9 @@ import com.google.android.material.color.utilities.SchemeMonochrome
 import com.google.android.material.color.utilities.SchemeTonalSpot
 
 private const val MONOCHROME_CHROMA_THRESHOLD = 5.0
-private const val MONET_PRIMARY_STRONG_CHROMA_SCALE = 0.82
-private const val MONET_PRIMARY_SOFT_CHROMA_SCALE = 0.68
-private const val MONET_SECONDARY_CHROMA_SCALE = 0.76
+private const val MONET_PRIMARY_STRONG_CHROMA_SCALE = 0.90
+private const val MONET_PRIMARY_SOFT_CHROMA_SCALE = 0.80
+private const val MONET_SECONDARY_CHROMA_SCALE = 0.85
 
 internal fun deriveHuePalette(
     primary: Color,

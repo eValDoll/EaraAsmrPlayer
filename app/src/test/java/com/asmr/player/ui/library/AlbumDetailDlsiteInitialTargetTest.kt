@@ -2,6 +2,8 @@ package com.asmr.player.ui.library
 
 import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AlbumDetailDlsiteInitialTargetTest {
@@ -79,5 +81,21 @@ class AlbumDetailDlsiteInitialTargetTest {
 
         assertEquals("JPN", result.selectedLang)
         assertEquals("RJ000099", result.workno)
+    }
+
+    @Test
+    fun resolvedInitialLanguage_doesNotReloadOneWhenWorkNumberIsUnchanged() {
+        assertFalse(
+            shouldReloadAsmrOneForResolvedInitialTarget(
+                currentRj = "RJ436159",
+                resolvedWorkno = "rj436159"
+            )
+        )
+        assertTrue(
+            shouldReloadAsmrOneForResolvedInitialTarget(
+                currentRj = "RJ436159",
+                resolvedWorkno = "RJ000001"
+            )
+        )
     }
 }

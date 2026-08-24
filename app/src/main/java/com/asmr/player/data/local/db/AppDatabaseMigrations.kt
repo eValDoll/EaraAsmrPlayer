@@ -563,6 +563,22 @@ object AppDatabaseMigrations {
         }
     }
 
+    val MIGRATION_30_31: Migration = object : Migration(30, 31) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE download_tasks ADD COLUMN `logicalTaskKey` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE download_tasks ADD COLUMN `destinationRoot` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("ALTER TABLE download_tasks ADD COLUMN `albumRootDir` TEXT NOT NULL DEFAULT ''")
+            db.execSQL("UPDATE download_tasks SET logicalTaskKey = taskKey WHERE logicalTaskKey = ''")
+            db.execSQL(
+                "UPDATE download_tasks SET destinationRoot = CASE " +
+                    "WHEN instr(rootDir, '/albums/') > 0 " +
+                    "THEN substr(rootDir, 1, instr(rootDir, '/albums/') + 6) " +
+                    "ELSE rootDir END WHERE destinationRoot = ''"
+            )
+            db.execSQL("UPDATE download_tasks SET albumRootDir = rootDir WHERE albumRootDir = ''")
+        }
+    }
+
     private fun createItemChildTable(
         db: SupportSQLiteDatabase,
         table: String,

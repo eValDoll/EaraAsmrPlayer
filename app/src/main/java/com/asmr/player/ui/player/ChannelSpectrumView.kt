@@ -36,6 +36,11 @@ class ChannelSpectrumView @JvmOverloads constructor(
         Right
     }
 
+    enum class RenderStyle {
+        Bars,
+        ThinLines
+    }
+
     private data class Particle(
         var x: Float,
         var y: Float,
@@ -65,6 +70,10 @@ class ChannelSpectrumView @JvmOverloads constructor(
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val glowPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     private val particlePaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val thinLinePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeCap = Paint.Cap.ROUND
+    }
     private val debugPaint = Paint(Paint.ANTI_ALIAS_FLAG)
     
     private var baseColor: Int = 0xFFFFFFFF.toInt()
@@ -74,6 +83,7 @@ class ChannelSpectrumView @JvmOverloads constructor(
     private val particleDensity = resources.displayMetrics.density
 
     private var channel: Channel = Channel.Left // 当前视图显示哪个声道（Left/Right）
+    private var renderStyle: RenderStyle = RenderStyle.Bars
     private var running: Boolean = false // 是否在用 Choreographer 驱动重绘
     private var lastFrameNs: Long = 0L // 上一帧绘制时间（ns），用于估算 dt
     private var frameDtNs: Long = 16_666_667L // 帧间隔（ns），用于把“每秒参数”转换成“每帧参数”
@@ -143,6 +153,13 @@ class ChannelSpectrumView @JvmOverloads constructor(
 
     fun setChannel(channel: Channel) {
         this.channel = channel
+    }
+
+    fun setRenderStyle(style: RenderStyle) {
+        if (renderStyle == style) return
+        renderStyle = style
+        if (style == RenderStyle.ThinLines) particles.clear()
+        invalidate()
     }
 
     fun setBarColor(argb: Int) {
@@ -367,8 +384,7 @@ class ChannelSpectrumView @JvmOverloads constructor(
         val dtSec = (frameDtNs.toDouble() / 1_000_000_000.0).coerceIn(0.0, 0.05)
         val dt = dtSec.toFloat().coerceAtLeast(0.001f)
         
-        // Update particles
-        updateParticles(dt)
+        if (renderStyle == RenderStyle.Bars) updateParticles(dt)
         
         val alphaAttack = (1.0 - exp((-dt / attackTauSeconds).toDouble())).toFloat().coerceIn(0f, 1f)
         val alphaRelease = (1.0 - exp((-dt / releaseTauSeconds).toDouble())).toFloat().coerceIn(0f, 1f)
@@ -407,59 +423,14 @@ class ChannelSpectrumView @JvmOverloads constructor(
         val h = height.toFloat()
         val barCount = envBins.size
 
-        val gap = h * 0.06f / barCount.toFloat()
-        val barHeight = (h - gap * (barCount - 1)) / barCount.toFloat()
-
         val isLeft = channel == Channel.Left
-        
-        // --- DRAWING ---
-        
-        // Pass 1: Draw Glow (behind bars)
-        for (i in 0 until barCount) {
-            val v = envBins[i].coerceIn(0f, 1f)
-            if (v < 0.01f) continue
-            
-            val bw = v * w * widthMargin
-            val y = h - (i + 1) * barHeight - i * gap
-            var x0 = if (isLeft) w - bw else 0f
-            var x1 = if (isLeft) w else bw
-            val radius = barHeight * 0.5f
-            if (isLeft) x1 += radius else x0 -= radius
-            
-            canvas.drawRoundRect(x0, y, x1, y + barHeight, radius, radius, glowPaint)
-        }
 
-        // Pass 2: Draw Core Bars & Spawn Particles
-        for (i in 0 until barCount) {
-            val v = envBins[i].coerceIn(0f, 1f)
-            val bw = v * w * widthMargin
-
-            val y = h - (i + 1) * barHeight - i * gap
-            var x0 = if (isLeft) w - bw else 0f
-            var x1 = if (isLeft) w else bw
-            
-            val radius = barHeight * 0.5f
-            if (isLeft) {
-                x1 += radius
-            } else {
-                x0 -= radius
-            }
-            canvas.drawRoundRect(x0, y, x1, y + barHeight, radius, radius, paint)
-            
-            // Spawn particles logic
-            if (v > 0.5f && !silenceActive) {
-                // Higher energy -> higher chance
-                val chance = (v - 0.5f) * 0.2f // max 0.1 per frame per bar
-                if (random.nextFloat() < chance) {
-                     val px = if (isLeft) x0 else x1 // Tip of the bar
-                     val py = y + barHeight * 0.5f
-                     spawnParticle(px, py, v)
-                }
-            }
+        if (renderStyle == RenderStyle.ThinLines) {
+            drawThinLines(canvas, w, h, barCount, isLeft)
+        } else {
+            drawBars(canvas, w, h, barCount, isLeft)
+            drawParticles(canvas)
         }
-        
-        // Pass 3: Draw Particles
-        drawParticles(canvas)
 
         if (debugOverlayEnabled) {
             val lines = arrayOf(
@@ -474,6 +445,75 @@ class ChannelSpectrumView @JvmOverloads constructor(
             for (line in lines) {
                 canvas.drawText(line, x, y, debugPaint)
                 y += dy
+            }
+        }
+    }
+
+    private fun drawThinLines(
+        canvas: Canvas,
+        width: Float,
+        height: Float,
+        count: Int,
+        isLeft: Boolean
+    ) {
+        val playbackActive = StereoSpectrumBus.playbackActive
+        val strokeWidth = particleDensity * if (playbackActive) 1.35f else 0.90f
+        val halfStroke = strokeWidth * 0.5f
+        val drawableHeight = (height - strokeWidth).coerceAtLeast(0f)
+        val gap = drawableHeight / (count - 1).coerceAtLeast(1).toFloat()
+        thinLinePaint.color = baseColor
+        thinLinePaint.alpha = if (playbackActive) 138 else 62
+        thinLinePaint.strokeWidth = strokeWidth
+
+        for (index in 0 until count) {
+            val value = envBins[index].coerceIn(0f, 1f)
+            if (value < 0.01f) continue
+            val lineWidth = value * width * widthMargin
+            val y = height - halfStroke - index * gap
+            val startX = if (isLeft) width - lineWidth else 0f
+            val endX = if (isLeft) width else lineWidth
+            canvas.drawLine(startX, y, endX, y, thinLinePaint)
+        }
+    }
+
+    private fun drawBars(
+        canvas: Canvas,
+        width: Float,
+        height: Float,
+        count: Int,
+        isLeft: Boolean
+    ) {
+        val gap = height * 0.06f / count.toFloat()
+        val barHeight = (height - gap * (count - 1)) / count.toFloat()
+
+        for (index in 0 until count) {
+            val value = envBins[index].coerceIn(0f, 1f)
+            if (value < 0.01f) continue
+            val barWidth = value * width * widthMargin
+            val y = height - (index + 1) * barHeight - index * gap
+            var startX = if (isLeft) width - barWidth else 0f
+            var endX = if (isLeft) width else barWidth
+            val radius = barHeight * 0.5f
+            if (isLeft) endX += radius else startX -= radius
+            canvas.drawRoundRect(startX, y, endX, y + barHeight, radius, radius, glowPaint)
+        }
+
+        for (index in 0 until count) {
+            val value = envBins[index].coerceIn(0f, 1f)
+            val barWidth = value * width * widthMargin
+            val y = height - (index + 1) * barHeight - index * gap
+            var startX = if (isLeft) width - barWidth else 0f
+            var endX = if (isLeft) width else barWidth
+            val radius = barHeight * 0.5f
+            if (isLeft) endX += radius else startX -= radius
+            canvas.drawRoundRect(startX, y, endX, y + barHeight, radius, radius, paint)
+
+            if (value > 0.5f && !silenceActive) {
+                val chance = (value - 0.5f) * 0.2f
+                if (random.nextFloat() < chance) {
+                    val particleX = if (isLeft) startX else endX
+                    spawnParticle(particleX, y + barHeight * 0.5f, value)
+                }
             }
         }
     }

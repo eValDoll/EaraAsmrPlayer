@@ -20,7 +20,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -62,7 +62,6 @@ import com.asmr.player.ui.common.NoImageLoadingIndicator
 import com.asmr.player.ui.common.FlatActionDialog
 import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
-import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
 import com.asmr.player.ui.common.lightweightVerticalStretchOverscroll
 import com.asmr.player.ui.common.rememberAudioMeta
@@ -179,8 +178,8 @@ import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.collectAsStateWhileActive
+import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.playback.MediaItemFactory
 
 internal const val LIBRARY_CHROME_TAG = "library_chrome"
@@ -398,7 +397,7 @@ fun LibraryScreen(
     }
 
     Scaffold(
-        contentWindowInsets = StableWindowInsets.navigationBars,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground,
         // TopAppBar is now handled by MainActivity for better consistency
@@ -608,8 +607,7 @@ fun LibraryScreen(
                                                 isAtEnd = { !listState.canScrollForward },
                                             )
                                             .clearFocusOnTapOutside()
-                                            .nestedScroll(chromeState.nestedScrollConnection)
-                                            .thinScrollbar(listState),
+                                            .nestedScroll(chromeState.nestedScrollConnection),
                                         flingBehavior = rememberCalmScrollableFlingBehavior(),
                                         contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
@@ -824,8 +822,7 @@ fun LibraryScreen(
                                                 isAtEnd = { !gridState.canScrollForward },
                                             )
                                             .clearFocusOnTapOutside()
-                                            .nestedScroll(chromeState.nestedScrollConnection)
-                                            .thinScrollbar(gridState),
+                                            .nestedScroll(chromeState.nestedScrollConnection),
                                         flingBehavior = rememberCalmScrollableFlingBehavior(),
                                         contentPadding = PaddingValues(top = topPadding, start = LibraryPageHorizontalPadding, end = LibraryPageHorizontalPadding, bottom = 16.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current),
@@ -849,12 +846,9 @@ fun LibraryScreen(
                                                     actionAlbum = mergedAlbum
                                                     showAlbumActions = true
                                                 },
-                                                onRjClick = { copyMeta("作品编号", it) },
-                                                onCircleClick = { copyMeta("社团", it) },
+                                                onRjLongClick = ::openMetaActions,
                                                 onCircleLongClick = ::openMetaActions,
-                                                onCvClick = { copyMeta("声优", it) },
                                                 onCvLongClick = ::openMetaActions,
-                                                onTagClick = { copyMeta("标签", it) },
                                                 onTagLongClick = ::openMetaActions,
                                                 coverFadeInState = coverFadeInState,
                                                 showCollectedIndicator = false,
@@ -904,8 +898,7 @@ fun LibraryScreen(
                                                 isAtEnd = { !listState.canScrollForward },
                                             )
                                             .clearFocusOnTapOutside()
-                                            .nestedScroll(chromeState.nestedScrollConnection)
-                                            .thinScrollbar(listState),
+                                            .nestedScroll(chromeState.nestedScrollConnection),
                                         flingBehavior = rememberCalmScrollableFlingBehavior(),
                                         contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
                                             .withAddedBottomPadding(LocalBottomOverlayPadding.current)
@@ -927,12 +920,9 @@ fun LibraryScreen(
                                                     actionAlbum = mergedAlbum
                                                     showAlbumActions = true
                                                 },
-                                                onRjClick = { copyMeta("作品编号", it) },
-                                                onCircleClick = { copyMeta("社团", it) },
+                                                onRjLongClick = ::openMetaActions,
                                                 onCircleLongClick = ::openMetaActions,
-                                                onCvClick = { copyMeta("声优", it) },
                                                 onCvLongClick = ::openMetaActions,
-                                                onTagClick = { copyMeta("标签", it) },
                                                 onTagLongClick = ::openMetaActions,
                                                 coverFadeInState = coverFadeInState,
                                                 showCollectedIndicator = false,
@@ -1005,9 +995,15 @@ fun LibraryScreen(
         val album = actionAlbum
         ModalBottomSheet(
             onDismissRequest = { showAlbumActions = false },
-            sheetState = sheetState
+            sheetState = sheetState,
+            windowInsets = WindowInsets(0, 0, 0, 0)
         ) {
-            if (album != null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .windowInsetsPadding(StableWindowInsets.navigationBars)
+            ) {
+                if (album != null) {
                 val syncStatus = (uiState as? LibraryUiState.Success)?.syncingAlbums?.get(album.id) ?: SyncStatus.Idle
                 val isSyncing = syncStatus is SyncStatus.Syncing
                 val hasLocalPaths = remember(album) { album.getAllLocalPaths().isNotEmpty() }
@@ -1087,8 +1083,9 @@ fun LibraryScreen(
                     )
                 }
                 Spacer(modifier = Modifier.height(18.dp))
-            } else {
-                Spacer(modifier = Modifier.height(24.dp))
+                } else {
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
             }
         }
     }
@@ -1155,6 +1152,7 @@ fun LibraryScreen(
             onCreatePlaylist = playlistsViewModel::createPlaylist,
             onCreateGroup = albumGroupsViewModel::createGroup,
             onAddBlockedKeyword = ::addMetaBlockedKeyword,
+            onCopy = { copyMeta("内容", it) },
         )
     }
 

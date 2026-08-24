@@ -1,9 +1,11 @@
 package com.asmr.player
 
+import android.content.pm.ActivityInfo
 import android.net.Uri
 import android.os.Bundle
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import com.asmr.player.data.local.db.entities.PlaylistItemEntity
 import com.asmr.player.ui.nav.bottomChromeNavItems
 import com.asmr.player.ui.nav.isPrimaryRoute
 import com.asmr.player.ui.nav.resolvePrimaryRoute
@@ -14,6 +16,117 @@ import org.robolectric.RobolectricTestRunner
 
 @RunWith(RobolectricTestRunner::class)
 class MainNavigationSupportTest {
+
+    @Test
+    fun resolveMainRequestedOrientation_locksOnlyFullscreenPlayerToLandscape() {
+        assertEquals(
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
+            resolveMainRequestedOrientation(
+                isPhone = true,
+                nowPlayingVisible = true,
+                videoFullscreen = true,
+                portraitExitPending = false
+            )
+        )
+        assertEquals(
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
+            resolveMainRequestedOrientation(
+                isPhone = false,
+                nowPlayingVisible = true,
+                videoFullscreen = true,
+                portraitExitPending = false
+            )
+        )
+    }
+
+    @Test
+    fun resolveMainRequestedOrientation_preservesNormalPlayerAndPagePolicies() {
+        assertEquals(
+            ActivityInfo.SCREEN_ORIENTATION_FULL_USER,
+            resolveMainRequestedOrientation(
+                isPhone = true,
+                nowPlayingVisible = true,
+                videoFullscreen = false,
+                portraitExitPending = false
+            )
+        )
+        assertEquals(
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
+            resolveMainRequestedOrientation(
+                isPhone = true,
+                nowPlayingVisible = false,
+                videoFullscreen = true,
+                portraitExitPending = false
+            )
+        )
+        assertEquals(
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR,
+            resolveMainRequestedOrientation(
+                isPhone = false,
+                nowPlayingVisible = false,
+                videoFullscreen = false,
+                portraitExitPending = false
+            )
+        )
+    }
+
+    @Test
+    fun resolveMainRequestedOrientation_rotatesPhoneBeforeRevealingUnderlyingPage() {
+        assertEquals(
+            ActivityInfo.SCREEN_ORIENTATION_PORTRAIT,
+            resolveMainRequestedOrientation(
+                isPhone = true,
+                nowPlayingVisible = true,
+                videoFullscreen = false,
+                portraitExitPending = true
+            )
+        )
+        assertEquals(
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR,
+            resolveMainRequestedOrientation(
+                isPhone = false,
+                nowPlayingVisible = true,
+                videoFullscreen = false,
+                portraitExitPending = true
+            )
+        )
+    }
+
+    @Test
+    fun shouldKeepVideoOutputEnabled_keepsDecoderWarmWhilePlaybackUiOwnsVideo() {
+        assertEquals(
+            true,
+            shouldKeepVideoOutputEnabled(
+                currentItemIsVideo = true,
+                miniPlayerEnabled = true,
+                nowPlayingVisible = false
+            )
+        )
+        assertEquals(
+            true,
+            shouldKeepVideoOutputEnabled(
+                currentItemIsVideo = true,
+                miniPlayerEnabled = false,
+                nowPlayingVisible = true
+            )
+        )
+        assertEquals(
+            false,
+            shouldKeepVideoOutputEnabled(
+                currentItemIsVideo = true,
+                miniPlayerEnabled = false,
+                nowPlayingVisible = false
+            )
+        )
+        assertEquals(
+            false,
+            shouldKeepVideoOutputEnabled(
+                currentItemIsVideo = false,
+                miniPlayerEnabled = true,
+                nowPlayingVisible = false
+            )
+        )
+    }
 
     @Test
     fun computePrimaryNavSelectionProgresses_blendsCurrentAndNeighborPages() {
@@ -264,5 +377,27 @@ class MainNavigationSupportTest {
 
         assertEquals(null, result.artworkUri)
         assertEquals(false, result.isVideo)
+    }
+
+    @Test
+    fun isVideoPlaybackItem_distinguishesAudioAndVideoSources() {
+        val audio = MediaItem.Builder()
+            .setUri("file:///sample.flac")
+            .setMimeType("audio/flac")
+            .build()
+        val video = MediaItem.Builder()
+            .setUri("file:///sample.mp4")
+            .setMimeType("video/mp4")
+            .build()
+        val playlistVideo = PlaylistItemEntity(
+            playlistId = 1L,
+            mediaId = "video",
+            title = "视频",
+            uri = "file:///sample.mkv"
+        )
+
+        assertEquals(false, audio.isVideoPlaybackItem())
+        assertEquals(true, video.isVideoPlaybackItem())
+        assertEquals(true, playlistVideo.isVideoPlaybackItem())
     }
 }

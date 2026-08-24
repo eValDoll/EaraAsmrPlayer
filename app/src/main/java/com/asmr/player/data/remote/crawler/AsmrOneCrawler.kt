@@ -48,9 +48,11 @@ class AsmrOneCrawler @Inject constructor(
     suspend fun searchWithTrace(
         keyword: String,
         page: Int = 1,
+        hasSubtitle: Boolean = false,
+        allAges: Boolean = false,
         throwOnFailure: Boolean = false
     ): AsmrOneSearchResult {
-        val normalized = keyword.trim()
+        val normalized = appendAsmrOneSearchFilters(keyword, allAges)
         val selected = selectedMetadataApi()
         if (normalized.isBlank()) {
             return emptySearchResult(normalized, page, selected.site)
@@ -61,6 +63,7 @@ class AsmrOneCrawler @Inject constructor(
                 selected.api.search(
                     keyword = normalized,
                     page = page,
+                    subtitle = if (hasSubtitle) 1 else 0,
                     silentIoError = NetworkHeaders.SILENT_IO_ERROR_ON
                 )
             }
@@ -173,6 +176,7 @@ private interface AsmrSelectedApi {
     suspend fun search(
         keyword: String,
         page: Int = 1,
+        subtitle: Int = 0,
         silentIoError: String? = null
     ): SearchResponse
 
@@ -188,8 +192,13 @@ private interface AsmrSelectedApi {
 }
 
 private fun AsmrOneApi.asSelected(): AsmrSelectedApi = object : AsmrSelectedApi {
-    override suspend fun search(keyword: String, page: Int, silentIoError: String?) =
-        this@asSelected.search(keyword = keyword, page = page, silentIoError = silentIoError)
+    override suspend fun search(keyword: String, page: Int, subtitle: Int, silentIoError: String?) =
+        this@asSelected.search(
+            keyword = keyword,
+            page = page,
+            subtitle = subtitle,
+            silentIoError = silentIoError
+        )
 
     override suspend fun getWorkDetails(workId: String, silentIoError: String?) =
         this@asSelected.getWorkDetails(workId, silentIoError = silentIoError)
@@ -199,9 +208,14 @@ private fun AsmrOneApi.asSelected(): AsmrSelectedApi = object : AsmrSelectedApi 
 }
 
 private fun Asmr100Api.asSelected(): AsmrSelectedApi = object : AsmrSelectedApi {
-    override suspend fun search(keyword: String, page: Int, silentIoError: String?) =
+    override suspend fun search(keyword: String, page: Int, subtitle: Int, silentIoError: String?) =
         mapMirrorSearchResponse(
-            response = this@asSelected.search(keyword = keyword, page = page, silentIoError = silentIoError),
+            response = this@asSelected.search(
+                keyword = keyword,
+                page = page,
+                subtitle = subtitle,
+                silentIoError = silentIoError
+            ),
             keyword = keyword,
             page = page
         )
@@ -214,9 +228,14 @@ private fun Asmr100Api.asSelected(): AsmrSelectedApi = object : AsmrSelectedApi 
 }
 
 private fun Asmr200Api.asSelected(): AsmrSelectedApi = object : AsmrSelectedApi {
-    override suspend fun search(keyword: String, page: Int, silentIoError: String?) =
+    override suspend fun search(keyword: String, page: Int, subtitle: Int, silentIoError: String?) =
         mapMirrorSearchResponse(
-            response = this@asSelected.search(keyword = keyword, page = page, silentIoError = silentIoError),
+            response = this@asSelected.search(
+                keyword = keyword,
+                page = page,
+                subtitle = subtitle,
+                silentIoError = silentIoError
+            ),
             keyword = keyword,
             page = page
         )
@@ -229,9 +248,14 @@ private fun Asmr200Api.asSelected(): AsmrSelectedApi = object : AsmrSelectedApi 
 }
 
 private fun Asmr300Api.asSelected(): AsmrSelectedApi = object : AsmrSelectedApi {
-    override suspend fun search(keyword: String, page: Int, silentIoError: String?) =
+    override suspend fun search(keyword: String, page: Int, subtitle: Int, silentIoError: String?) =
         mapMirrorSearchResponse(
-            response = this@asSelected.search(keyword = keyword, page = page, silentIoError = silentIoError),
+            response = this@asSelected.search(
+                keyword = keyword,
+                page = page,
+                subtitle = subtitle,
+                silentIoError = silentIoError
+            ),
             keyword = keyword,
             page = page
         )
@@ -289,20 +313,11 @@ private fun mapBackupWorks(
 ): List<WorkDetailsResponse> {
     return works.mapNotNull { work ->
         if (work.id <= 0) return@mapNotNull null
-        val mappedSourceId = run {
-            val hasMatchingEdition = normalizedRj.isNotBlank() && work.language_editions.orEmpty().any { edition ->
-                edition.workno?.trim()?.equals(normalizedRj, ignoreCase = true) == true
-            }
-            if (hasMatchingEdition) {
-                normalizedRj
-            } else {
-                work.source_id.orEmpty().ifBlank { normalizedRj }
-            }
-        }
         WorkDetailsResponse(
             id = work.id,
-            source_id = mappedSourceId,
+            source_id = work.source_id.orEmpty().ifBlank { normalizedRj },
             original_workno = work.original_workno,
+            translation_info = work.translation_info,
             language_editions = work.language_editions?.map { edition ->
                 AsmrOneLanguageEdition(
                     lang = edition.lang,
@@ -310,6 +325,7 @@ private fun mapBackupWorks(
                     workno = edition.workno
                 )
             },
+            other_language_editions_in_db = work.other_language_editions_in_db,
             title = work.title.orEmpty(),
             circle = work.circle ?: work.name?.takeIf { it.isNotBlank() }?.let(::Circle),
             vas = work.vas,
@@ -330,4 +346,63 @@ fun asmrOneWorkMatchesRj(work: WorkDetailsResponse, rj: String): Boolean {
     return work.language_editions.orEmpty().any { edition ->
         edition.workno.orEmpty().trim().uppercase() == normalized
     }
+}
+
+internal fun appendAsmrOneSearchFilters(keyword: String, allAges: Boolean): String {
+    val normalized = keyword.trim()
+    if (!allAges) return normalized
+    return listOf(ASMR_ONE_NON_ADULT_FILTER, normalized)
+        .filter(String::isNotBlank)
+        .joinToString(separator = " ")
+}
+
+private const val ASMR_ONE_NON_ADULT_FILTER = "$-age:adult$"
+
+internal fun selectAsmrOneWorkForRj(
+    works: List<WorkDetailsResponse>,
+    rj: String
+): WorkDetailsResponse? {
+    val normalized = rj.trim().uppercase()
+    if (normalized.isBlank()) return null
+    return works
+        .asSequence()
+        .map { work -> work to asmrOneWorkMatchPriority(work, normalized) }
+        .filter { (_, priority) -> priority > 0 }
+        .maxWithOrNull(compareBy<Pair<WorkDetailsResponse, Int>> { it.second }.thenBy { it.first.id })
+        ?.first
+}
+
+private fun asmrOneWorkMatchPriority(work: WorkDetailsResponse, normalizedRj: String): Int {
+    if (work.source_id.trim().uppercase() == normalizedRj) return 100
+
+    val requestedLanguage = work.language_editions.orEmpty()
+        .firstOrNull { edition -> edition.workno.orEmpty().trim().uppercase() == normalizedRj }
+        ?.lang
+        .orEmpty()
+        .trim()
+        .uppercase()
+    val currentLanguage = asmrOneWorkLanguage(work)
+    if (requestedLanguage.isNotBlank() && requestedLanguage == currentLanguage) return 80
+
+    if (work.language_editions.orEmpty().any { edition ->
+            edition.workno.orEmpty().trim().uppercase() == normalizedRj
+        }
+    ) return 40
+    if (work.original_workno.orEmpty().trim().uppercase() == normalizedRj) return 20
+    return 0
+}
+
+private fun asmrOneWorkLanguage(work: WorkDetailsResponse): String {
+    val translationInfo = work.translation_info
+    val explicit = translationInfo?.lang.orEmpty().trim().uppercase()
+    if (explicit.isNotBlank()) return explicit
+    if (translationInfo?.is_original == true || work.original_workno.orEmpty().isBlank()) return "JPN"
+    return work.language_editions.orEmpty()
+        .firstOrNull { edition ->
+            edition.workno.orEmpty().trim().equals(work.source_id.trim(), ignoreCase = true)
+        }
+        ?.lang
+        .orEmpty()
+        .trim()
+        .uppercase()
 }

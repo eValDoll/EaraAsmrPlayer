@@ -14,7 +14,6 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material.icons.rounded.AccessTime
@@ -28,9 +27,6 @@ import android.content.res.Configuration
 import android.media.AudioManager
 import android.net.Uri
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
 import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
@@ -123,7 +119,6 @@ import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.theme.PrewarmDynamicHuePalette
 import com.asmr.player.ui.theme.PrewarmDynamicHuePaletteFromVideoFrame
 import androidx.compose.ui.draw.blur
-import android.os.Build
 import android.graphics.RenderEffect
 import android.graphics.Shader
 import androidx.compose.ui.graphics.asComposeRenderEffect
@@ -157,6 +152,7 @@ import com.asmr.player.data.local.datastore.ThemeBootstrapPreferences
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
+import com.asmr.player.data.settings.NowPlayingLyricsSettings
 import com.asmr.player.util.MessageManager
 import com.asmr.player.ui.common.NonTouchableAppMessageOverlay
 import com.asmr.player.ui.common.StableWindowInsets
@@ -187,6 +183,7 @@ import com.asmr.player.ui.common.rememberCurrentAudioOutputRouteKind
 import com.asmr.player.ui.common.rememberProtectedAppVolumeChangeState
 import com.asmr.player.ui.common.AudioOutputRouteIcon
 import com.asmr.player.ui.common.calmVerticalFling
+import com.asmr.player.ui.common.OledBurnInProtectionBox
 import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
 import com.asmr.player.service.AudioOutputRouteKind
 import javax.inject.Inject
@@ -301,6 +298,9 @@ class MainActivity : ComponentActivity() {
             val nowPlayingHomeLayoutHintDismissed by produceState(initialValue = false, settingsDataStore) {
                 value = settingsDataStore.nowPlayingHomeLayoutHintDismissed.first()
             }
+            val nowPlayingLyricsSettings by settingsDataStore.nowPlayingLyricsSettings.collectAsStateWithLifecycle(
+                initialValue = NowPlayingLyricsSettings()
+            )
             val lyricsPageSettings by settingsDataStore.lyricsPageSettings.collectAsStateWithLifecycle(initialValue = LyricsPageSettings())
             val showMiniPlayerBar by settingsRepository.showMiniPlayerBar.collectAsStateWithLifecycle(initialValue = true)
             val neutral = remember(mode) { neutralPaletteForMode(mode) }
@@ -573,7 +573,8 @@ class MainActivity : ComponentActivity() {
             AsmrPlayerTheme(mode = mode, hue = globalHue) {
                 var showSplash by rememberSaveable { mutableStateOf(true) }
                 var contentReady by remember { mutableStateOf(false) }
-                Box(
+                OledBurnInProtectionBox(
+                    backgroundColor = AsmrTheme.colorScheme.background,
                     modifier = Modifier
                         .fillMaxSize()
                         .calmVerticalFling()
@@ -597,6 +598,7 @@ class MainActivity : ComponentActivity() {
                         coverPreviewMode = coverPreviewMode,
                         nowPlayingHomeLayoutMode = nowPlayingHomeLayoutMode,
                         nowPlayingHomeLayoutHintDismissed = nowPlayingHomeLayoutHintDismissed,
+                        nowPlayingLyricsSettings = nowPlayingLyricsSettings,
                         lyricsPageSettings = lyricsPageSettings,
                         forceImmersive = showSplash,
                         volumeKeyEventTick = volumeKeyTick
@@ -613,6 +615,11 @@ class MainActivity : ComponentActivity() {
                     val overlayConfiguration = LocalConfiguration.current
                     val activeOverlaySheet = overlaySheet
                     if (activeOverlaySheet != null) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.32f))
+                        )
                         val sheetMaxHeight = overlayConfiguration.screenHeightDp.dp * 3 / 4
                         key(
                             activeOverlaySheet,
@@ -624,12 +631,15 @@ class MainActivity : ComponentActivity() {
                                 onDismissRequest = { overlaySheet = null },
                                 sheetState = sheetState,
                                 containerColor = MaterialTheme.colorScheme.background,
-                                contentColor = MaterialTheme.colorScheme.onBackground
+                                contentColor = MaterialTheme.colorScheme.onBackground,
+                                scrimColor = Color.Transparent,
+                                windowInsets = WindowInsets(0, 0, 0, 0)
                             ) {
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .heightIn(max = sheetMaxHeight)
+                                        .windowInsetsPadding(StableWindowInsets.navigationBars)
                                 ) {
                                     when (activeOverlaySheet) {
                                         OverlaySheet.Queue -> QueueSheetContent(

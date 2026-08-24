@@ -3,7 +3,7 @@ package com.asmr.player.data.remote.scraper
 import android.content.Context
 import android.util.Log
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
-import com.asmr.player.data.remote.auth.adultCheckedCookie
+import com.asmr.player.data.remote.auth.buildDlsiteCookieHeader
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
@@ -28,18 +28,12 @@ import javax.inject.Singleton
 
 internal fun storeSegment(): String = String.format("%s%s", "ma", "niax")
 
-private fun sexCategoryMaleSegment(): String = String.format("%s%s%s", "s", "ex_category%5B0%5D/", "male")
-
 internal const val DLSITE_DOMAIN = "https://www.dlsite.com/"
 
-internal fun languageSegmentForLocale(locale: String?): String {
-    val normalized = locale?.trim().orEmpty()
-    return when {
-        normalized.startsWith("zh_CN", ignoreCase = true) -> "cn"
-        normalized.startsWith("zh_TW", ignoreCase = true) -> "tw"
-        normalized.startsWith("ja", ignoreCase = true) -> "jp"
-        else -> "cn"
-    }
+private fun appendLocaleQuery(url: String, locale: String?): String {
+    val normalizedLocale = locale?.trim().takeIf { !it.isNullOrBlank() } ?: "ja_JP"
+    val separator = if ('?' in url) '&' else '?'
+    return "$url$separator" + "locale=${URLEncoder.encode(normalizedLocale, "UTF-8")}"
 }
 
 internal fun buildDlsiteSearchUrls(
@@ -48,7 +42,9 @@ internal fun buildDlsiteSearchUrls(
     order: String,
     locale: String? = null,
     presaleOnly: Boolean = false,
-    chineseTranslatedOnly: Boolean = false
+    chineseTranslatedOnly: Boolean = false,
+    hasSubtitle: Boolean = false,
+    allAges: Boolean = false
 ): List<String> {
     val normalizedKeyword = keyword.trim()
     val encodedKeyword = URLEncoder.encode(normalizedKeyword, "UTF-8")
@@ -57,58 +53,72 @@ internal fun buildDlsiteSearchUrls(
     val safePage = page.coerceAtLeast(1)
 
     if (chineseTranslatedOnly) {
-        val translationBase =
-            "$DLSITE_DOMAIN${storeSegment()}/works/translation?langs%5B0%5D=CHI_HANS&work_type%5B0%5D=SOU&order=$encodedOrder"
-        val translation = buildString {
-            append(translationBase)
+        val chineseWorksBase =
+            "$DLSITE_DOMAIN${storeSegment()}/fsr/=/work_category%5B0%5D/doujin/order/$encodedOrder/" +
+                "work_type_category%5B0%5D/audio/options%5B0%5D/CHI/options%5B1%5D/CHI_HANS/options%5B2%5D/CHI_HANT"
+        val chineseWorks = buildString {
+            append(chineseWorksBase)
             if (normalizedKeyword.isNotBlank()) {
-                append("&keyword=")
+                append("/keyword/")
                 append(encodedKeyword)
             }
             if (safePage > 1) {
-                append("&page=")
+                append("/page/")
                 append(safePage)
             }
+            append('/')
         }
-        return listOf(translation)
+        return listOf(appendLocaleQuery(chineseWorks, "zh_CN"))
     }
 
     if (presaleOnly) {
-        val primaryBase =
-            "$DLSITE_DOMAIN${storeSegment()}/fsr/=/ana_flg/on/order/$encodedOrder/work_type_category%5B0%5D/audio"
-        val primary = if (normalizedKeyword.isBlank()) {
-            "$primaryBase/page/$safePage"
-        } else {
-            "$primaryBase/keyword/$encodedKeyword/page/$safePage"
+        val presaleUrl = buildString {
+            append(DLSITE_DOMAIN)
+            append(storeSegment())
+            append("/fsr/=/ana_flg/on/work_type%5B0%5D/SOU")
+            if (normalizedKeyword.isNotBlank()) {
+                append("/keyword/")
+                append(encodedKeyword)
+            }
+            if (safePage > 1) {
+                append("/page/")
+                append(safePage)
+            }
+            append('/')
         }
-
-        val language = languageSegmentForLocale(locale)
-        val fallbackBase =
-            "$DLSITE_DOMAIN${storeSegment()}/fsr/=/language/$language/${sexCategoryMaleSegment()}/work_category%5B0%5D/doujin/" +
-                "ana_flg/on/order%5B0%5D/$encodedOrder/work_type_category%5B0%5D/audio/per_page/30/show_type/3"
-        val fallback = if (normalizedKeyword.isBlank()) {
-            "$fallbackBase/page/$safePage"
-        } else {
-            "$fallbackBase/keyword/$encodedKeyword/page/$safePage"
-        }
-        return listOf(primary, fallback).distinct()
+        return listOf(appendLocaleQuery(presaleUrl, locale))
     }
 
-    val language = languageSegmentForLocale(locale)
-    val modernBase =
-        "$DLSITE_DOMAIN${storeSegment()}/fsr/=/language/$language/${sexCategoryMaleSegment()}/work_category%5B0%5D/doujin/" +
-            "order%5B0%5D/$encodedOrder/work_type_category%5B0%5D/audio/per_page/30/show_type/3/from/fsr.again"
-    val modern = if (normalizedKeyword.isBlank()) {
-        "$modernBase/page/$safePage"
+    val ageFilterSegment = if (allAges) {
+        "age_category%5B0%5D/general/age_category%5B1%5D/r15/"
     } else {
-        "$modernBase/keyword/$encodedKeyword/page/$safePage"
+        ""
     }
-    val legacy = if (normalizedKeyword.isBlank()) {
-        "$DLSITE_DOMAIN${storeSegment()}/fsr/=/language/$language/${sexCategoryMaleSegment()}/work_category%5B0%5D/doujin/work_type_category%5B0%5D/audio/per_page/30/show_type/1/page/$safePage/without_order/1/order/$encodedOrder"
+    val subtitleFilterSegment = if (hasSubtitle) {
+        "/options%5B0%5D/CHI/options%5B1%5D/CHI_HANS/options%5B2%5D/CHI_HANT"
     } else {
-        "$DLSITE_DOMAIN${storeSegment()}/fsr/=/language/$language/${sexCategoryMaleSegment()}/work_category%5B0%5D/doujin/work_type_category%5B0%5D/audio/per_page/30/show_type/1/keyword/$encodedKeyword/page/$safePage/without_order/1/order/$encodedOrder"
+        ""
     }
-    return listOf(modern, legacy)
+    val searchUrl = buildString {
+        append(DLSITE_DOMAIN)
+        append(storeSegment())
+        append("/fsr/=/")
+        append(ageFilterSegment)
+        append("work_category%5B0%5D/doujin/order/")
+        append(encodedOrder)
+        append("/work_type%5B0%5D/SOU")
+        append(subtitleFilterSegment)
+        if (normalizedKeyword.isNotBlank()) {
+            append("/keyword/")
+            append(encodedKeyword)
+        }
+        if (safePage > 1) {
+            append("/page/")
+            append(safePage)
+        }
+        append("/from/left_pain.work_type/")
+    }
+    return listOf(appendLocaleQuery(searchUrl, locale))
 }
 
 data class DlsiteWorkInfo(
@@ -187,17 +197,7 @@ class DLSiteScraper @Inject constructor(
     }
 
     private fun cookieHeader(locale: String? = null): String {
-        val base = authStore.getDlsiteCookie().trim()
-        val normalizedLocale = locale?.trim().takeIf { !it.isNullOrBlank() } ?: "ja_JP"
-        val extras = listOf("locale=$normalizedLocale", adultCheckedCookie())
-        return buildString {
-            if (base.isNotBlank()) append(base.trim().trimEnd(';'))
-            extras.forEach { kv ->
-                if (contains(kv)) return@forEach
-                if (isNotEmpty()) append("; ")
-                append(kv)
-            }
-        }
+        return buildDlsiteCookieHeader(authStore.getDlsiteCookie(), locale)
     }
 
     private fun acceptLanguageForLocale(locale: String?): String {
@@ -336,7 +336,9 @@ class DLSiteScraper @Inject constructor(
         order: String = "trend",
         locale: String? = null,
         presaleOnly: Boolean = false,
-        chineseTranslatedOnly: Boolean = false
+        chineseTranslatedOnly: Boolean = false,
+        hasSubtitle: Boolean = false,
+        allAges: Boolean = false
     ): DlsiteSearchResult = withContext(Dispatchers.IO) {
         fun parseItems(items: List<Element>, doc: Document): List<Album> {
             val results = mutableListOf<Album>()
@@ -442,7 +444,7 @@ class DLSiteScraper @Inject constructor(
                     return lastIndex < total
                 }
             }
-            return itemCount >= if (chineseTranslatedOnly) 100 else 30
+            return itemCount >= 30
         }
 
         fun parseDoc(doc: Document): DlsiteSearchResult {
@@ -475,7 +477,9 @@ class DLSiteScraper @Inject constructor(
             order = order,
             locale = locale,
             presaleOnly = presaleOnly,
-            chineseTranslatedOnly = chineseTranslatedOnly
+            chineseTranslatedOnly = chineseTranslatedOnly,
+            hasSubtitle = hasSubtitle,
+            allAges = allAges
         )
         var lastEmpty = DlsiteSearchResult(items = emptyList(), canGoNext = false)
         for (u in urls) {
@@ -496,11 +500,19 @@ class DLSiteScraper @Inject constructor(
         getWorkInfo(workId, locale = locale)?.album
     }
 
-    suspend fun getWorkInfo(workId: String, locale: String? = null): DlsiteWorkInfo? = withContext(Dispatchers.IO) {
+    suspend fun getWorkInfo(
+        workId: String,
+        locale: String? = null,
+        allowJapaneseCvFallback: Boolean = true
+    ): DlsiteWorkInfo? = withContext(Dispatchers.IO) {
         val clean = workId.trim().uppercase()
         val doc = fetchWorkDocument(clean, locale = locale) ?: return@withContext null
         val parsed = parseWorkInfo(clean, doc) ?: return@withContext null
-        withJapaneseCvFallback(clean, locale, parsed)
+        if (allowJapaneseCvFallback) {
+            withJapaneseCvFallback(clean, locale, parsed)
+        } else {
+            parsed
+        }
     }
 
     private suspend fun withJapaneseCvFallback(

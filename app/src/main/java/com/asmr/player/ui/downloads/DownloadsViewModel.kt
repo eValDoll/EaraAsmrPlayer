@@ -14,7 +14,11 @@ import com.asmr.player.data.local.db.dao.DownloadDao
 import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.remote.download.DOWNLOAD_STATE_QUEUED
 import com.asmr.player.data.remote.download.DownloadQueueCoordinator
+import com.asmr.player.data.remote.download.DownloadDestination
+import com.asmr.player.data.remote.download.DownloadDestinationStore
+import com.asmr.player.data.remote.download.DownloadStorageGateway
 import com.asmr.player.data.remote.download.FinalizeDownloadTaskWorker
+import com.asmr.player.data.remote.download.downloadStagingFile
 import com.asmr.player.data.remote.download.dlsitePlayImagePartFile
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -107,10 +111,19 @@ class DownloadsViewModel @Inject constructor(
     private val downloadDao: DownloadDao,
     private val trackDao: TrackDao,
     private val albumDao: AlbumDao,
-    private val messageManager: MessageManager
+    private val messageManager: MessageManager,
+    private val downloadStorage: DownloadStorageGateway,
+    private val downloadDestinationStore: DownloadDestinationStore,
 ) : ViewModel() {
     private val workManager by lazy { WorkManager.getInstance(context) }
     private val subtitleTaskRepository = SubtitleTaskRepository.get(context)
+
+    val downloadDestination: StateFlow<DownloadDestination> = downloadDestinationStore.destination
+        .stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5_000),
+            downloadDestinationStore.defaultDestination(),
+        )
 
     val tasks: StateFlow<List<DownloadTaskUi>> =
         combine(
@@ -244,9 +257,14 @@ class DownloadsViewModel @Inject constructor(
             .flowOn(Dispatchers.Default)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    internal val subtitleTasks: StateFlow<List<SubtitleTaskUi>> = subtitleTaskRepository.tasks
+    // 字幕任务列表与顶栏常驻的 activeSubtitleTaskCount 共享同一份 stateIn 缓存：
+    // 顶栏在主页面上已持续收集该流，进入「任务管理」时 subtitleTasks 直接命中缓存，
+    // 不再在转场中途发起重复的 Room 查询并触发整页重组。
+    private val subtitleTaskList: StateFlow<List<SubtitleTaskUi>> = subtitleTaskRepository.tasks
         .flowOn(Dispatchers.IO)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    internal val subtitleTasks: StateFlow<List<SubtitleTaskUi>> = subtitleTaskList
 
     /** 正在执行作品级最终润色的作品 rjCode 集合。 */
     internal val polishingRjCodes: StateFlow<Set<String>> = subtitleTaskRepository.polishingRjCodes
@@ -272,7 +290,7 @@ class DownloadsViewModel @Inject constructor(
         }
     }
 
-    val activeSubtitleTaskCount: StateFlow<Int> = subtitleTaskRepository.tasks
+    val activeSubtitleTaskCount: StateFlow<Int> = subtitleTaskList
         .map { tasks ->
             tasks.sumOf { task ->
                 task.items.count { item ->
@@ -379,7 +397,17 @@ class DownloadsViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val item = downloadDao.getItemByWorkId(workId) ?: return@launch
             val existingBytes = runCatching {
-                File(item.filePath.ifBlank { File(item.targetDir, item.fileName).absolutePath }).length()
+                if (downloadStorage.isDocumentReference(item.targetDir)) {
+                    val staging = downloadStagingFile(context, item)
+                    val scrambled = dlsitePlayImagePartFile(staging)
+                    when {
+                        scrambled.exists() -> scrambled.length()
+                        staging.exists() -> staging.length()
+                        else -> downloadStorage.size(item.filePath)
+                    }
+                } else {
+                    File(item.filePath.ifBlank { File(item.targetDir, item.fileName).absolutePath }).length()
+                }
             }.getOrDefault(0L)
             val updatedAt = System.currentTimeMillis()
             downloadDao.updateItemProgress(
@@ -497,15 +525,26 @@ class DownloadsViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val task = downloadDao.getTaskById(taskId) ?: return@launch
             runCatching { workManager.cancelAllWorkByTag(task.taskKey) }
+            val items = downloadDao.getItemsForTask(taskId)
             val deleted = deletePathSafely(task.rootDir)
             if (!deleted) {
-                val items = downloadDao.getItemsForTask(taskId)
-                items.forEach { it ->
-                    val outputFile = File(it.filePath.ifBlank { File(it.targetDir, it.fileName).absolutePath })
-                    deletePathSafely(outputFile.absolutePath)
-                    deletePathSafely(dlsitePlayImagePartFile(outputFile).absolutePath)
+                items.forEach { item ->
+                    val primary = item.filePath.ifBlank {
+                        if (downloadStorage.isDocumentReference(item.targetDir)) ""
+                        else File(item.targetDir, item.fileName).absolutePath
+                    }
+                    deletePathSafely(primary)
+                    if (!downloadStorage.isDocumentReference(primary)) {
+                        val outputFile = File(primary)
+                        deletePathSafely(dlsitePlayImagePartFile(outputFile).absolutePath)
+                    }
                 }
                 deletePathSafely(task.rootDir)
+            }
+            items.forEach { item ->
+                val staging = downloadStagingFile(context, item)
+                deletePathSafely(staging.absolutePath)
+                deletePathSafely(dlsitePlayImagePartFile(staging).absolutePath)
             }
             syncLibraryAfterDownloadRootDeleted(task.rootDir)
             downloadDao.deleteItemsForTask(taskId)
@@ -520,10 +559,18 @@ class DownloadsViewModel @Inject constructor(
             val item = downloadDao.getItemByWorkId(workId) ?: return@launch
             val task = downloadDao.getTaskById(item.taskId)
             runCatching { workManager.cancelWorkById(java.util.UUID.fromString(workId)) }
-            val primary = item.filePath.ifBlank { File(item.targetDir, item.fileName).absolutePath }
+            val primary = item.filePath.ifBlank {
+                if (downloadStorage.isDocumentReference(item.targetDir)) ""
+                else File(item.targetDir, item.fileName).absolutePath
+            }
             val deleted = deletePathSafely(primary)
-            deletePathSafely(dlsitePlayImagePartFile(File(primary)).absolutePath)
-            if (!deleted && item.targetDir.isNotBlank() && item.fileName.isNotBlank()) {
+            if (!downloadStorage.isDocumentReference(primary)) {
+                deletePathSafely(dlsitePlayImagePartFile(File(primary)).absolutePath)
+            }
+            val staging = downloadStagingFile(context, item)
+            deletePathSafely(staging.absolutePath)
+            deletePathSafely(dlsitePlayImagePartFile(staging).absolutePath)
+            if (!deleted && !downloadStorage.isDocumentReference(item.targetDir) && item.targetDir.isNotBlank() && item.fileName.isNotBlank()) {
                 deletePathSafely(File(item.targetDir, item.fileName).absolutePath)
             }
             downloadDao.deleteItemByWorkId(workId)
@@ -535,7 +582,8 @@ class DownloadsViewModel @Inject constructor(
                         "taskKey" to task.taskKey,
                         "taskTitle" to task.title,
                         "taskSubtitle" to task.subtitle,
-                        "taskRootDir" to task.rootDir
+                        "taskRootDir" to task.rootDir,
+                        "albumRootDir" to task.albumRootDir,
                     )
                     val request = OneTimeWorkRequestBuilder<FinalizeDownloadTaskWorker>()
                         .setInputData(finalizeInput)
@@ -697,7 +745,7 @@ class DownloadsViewModel @Inject constructor(
         val trackDao = db.trackDao()
         val trackTagDao = db.trackTagDao()
         val tracks = runCatching { trackDao.getTracksForAlbumOnce(albumId) }.getOrDefault(emptyList())
-        val toDelete = tracks.filter { it.path.startsWith(rootDir) }.map { it.id }
+        val toDelete = tracks.filter { downloadStorage.isSameOrDescendant(it.path, rootDir) }.map { it.id }
         if (toDelete.isEmpty()) return
         runCatching { trackDao.deleteSubtitlesForTracks(toDelete) }
         toDelete.forEach { id -> runCatching { trackTagDao.deleteTrackTagsByTrackId(id) } }
@@ -718,7 +766,9 @@ class DownloadsViewModel @Inject constructor(
         val remainingTracks = runCatching { trackDao.getTracksForAlbumOnce(albumId) }.getOrDefault(emptyList())
         val localPath = album.localPath.orEmpty()
         val hasLocal = localPath.isNotBlank()
-        val clearedCoverPath = if (deletedRootDir.isNotBlank() && album.coverPath.startsWith(deletedRootDir)) "" else album.coverPath
+        val clearedCoverPath = if (
+            deletedRootDir.isNotBlank() && downloadStorage.isSameOrDescendant(album.coverPath, deletedRootDir)
+        ) "" else album.coverPath
 
         if (remainingTracks.isEmpty()) {
             if (hasLocal) {
@@ -744,6 +794,9 @@ class DownloadsViewModel @Inject constructor(
 
     private fun deletePathSafely(path: String): Boolean {
         if (path.isBlank()) return false
+        if (downloadStorage.isDocumentReference(path)) {
+            return downloadStorage.delete(path)
+        }
 
         val externalBase = context.getExternalFilesDir(null)
         val allowedRoots = listOfNotNull(

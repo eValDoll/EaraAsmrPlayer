@@ -1,4 +1,4 @@
-﻿package com.asmr.player.ui.common
+package com.asmr.player.ui.common
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -88,7 +88,7 @@ fun AppSnackbar(
 
     Box(
         modifier = modifier
-            .widthIn(max = 288.dp)
+            .widthIn(max = 320.dp)
             .clip(shape)
             .background(containerColor, shape)
             .drawWithContent {
@@ -120,35 +120,35 @@ fun AppSnackbar(
             .border(1.dp, borderColor, shape)
     ) {
         Row(
-            modifier = Modifier.padding(start = 10.dp, end = 10.dp, top = 8.dp, bottom = 7.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 9.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(9.dp)
         ) {
             Icon(
                 imageVector = icon,
                 contentDescription = null,
                 tint = iconTint,
-                modifier = Modifier.size(16.dp)
+                modifier = Modifier.size(18.dp)
             )
             androidx.compose.material3.Text(
                 text = message,
                 style = MaterialTheme.typography.bodySmall.copy(
                     fontWeight = FontWeight.Medium,
-                    fontSize = 13.sp,
-                    lineHeight = 17.sp,
+                    fontSize = 15.sp,
+                    lineHeight = 20.sp,
                     letterSpacing = 0.1.sp
                 ),
                 color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 3,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.widthIn(max = 228.dp)
+                modifier = Modifier.widthIn(max = 236.dp)
             )
             if (count > 1) {
                 androidx.compose.material3.Text(
                     text = "x$count",
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 10.sp,
+                        fontSize = 11.sp,
                         letterSpacing = 0.sp
                     ),
                     color = countTextColor

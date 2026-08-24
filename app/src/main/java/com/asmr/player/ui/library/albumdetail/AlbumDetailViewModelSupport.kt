@@ -19,6 +19,8 @@ import com.asmr.player.data.local.db.entities.TagEntity
 import com.asmr.player.data.local.db.entities.TagSource
 import com.asmr.player.data.local.db.entities.TrackTagEntity
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
+import com.asmr.player.data.remote.api.AsmrOneRecommendationItem
+import com.asmr.player.data.remote.api.AsmrOneRecommendationSeedFeatures
 import com.asmr.player.data.remote.api.WorkDetailsResponse
 import com.asmr.player.data.remote.crawler.AsmrOneCrawler
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
@@ -114,6 +116,89 @@ sealed class AlbumDetailUiState {
     data class Error(val message: String) : AlbumDetailUiState()
 }
 
+internal const val ALBUM_DETAIL_SIMILAR_WORK_LIMIT = 12
+
+@Immutable
+data class AlbumDetailSimilarWork(
+    val rjCode: String,
+    val title: String,
+    val cv: String,
+    val coverUrl: String
+)
+
+@Immutable
+data class AlbumDetailSimilarWorksState(
+    val seedRjCode: String = "",
+    val works: List<AlbumDetailSimilarWork> = emptyList(),
+    val isLoading: Boolean = false,
+    val hasLoaded: Boolean = false,
+    val failed: Boolean = false
+)
+
+internal fun buildAlbumDetailRecommendationSeedFeatures(
+    seedRjCode: String,
+    album: Album?
+): AsmrOneRecommendationSeedFeatures? {
+    val rj = DlsiteWorkNo.normalizeWorkNo(seedRjCode, minimumDigits = 6)
+    if (rj.isBlank() || album == null) return null
+    val circle = album.circle.trim()
+    val cvs = album.cv
+        .split(Regex("""[,，、;；]+"""))
+        .asSequence()
+        .map(String::trim)
+        .filter(String::isNotBlank)
+        .distinctBy { it.lowercase() }
+        .toList()
+    val tags = album.tags
+        .asSequence()
+        .map(String::trim)
+        .filter(String::isNotBlank)
+        .distinctBy { it.lowercase() }
+        .toList()
+    if (circle.isBlank() && cvs.isEmpty() && tags.isEmpty()) return null
+    return AsmrOneRecommendationSeedFeatures(
+        rj = rj,
+        circle = circle,
+        cvs = cvs,
+        tags = tags
+    )
+}
+
+internal fun buildAlbumDetailSimilarWorks(
+    seedRjCode: String,
+    items: List<AsmrOneRecommendationItem>,
+    limit: Int = ALBUM_DETAIL_SIMILAR_WORK_LIMIT
+): List<AlbumDetailSimilarWork> {
+    val normalizedSeed = DlsiteWorkNo.normalizeWorkNo(seedRjCode, minimumDigits = 6)
+    if (normalizedSeed.isBlank() || limit <= 0) return emptyList()
+
+    return items.asSequence()
+        .mapNotNull { item ->
+            val rjCode = sequenceOf(item.rj, item.originalWorkno)
+                .plus(item.matchedRjs.orEmpty().asSequence())
+                .map { DlsiteWorkNo.normalizeWorkNo(it, minimumDigits = 6) }
+                .firstOrNull { it.isNotBlank() }
+                .orEmpty()
+            if (rjCode.isBlank() || rjCode.equals(normalizedSeed, ignoreCase = true)) {
+                return@mapNotNull null
+            }
+            AlbumDetailSimilarWork(
+                rjCode = rjCode,
+                title = item.title.trim().ifBlank { rjCode },
+                cv = item.cvs.orEmpty()
+                    .asSequence()
+                    .map(String::trim)
+                    .filter(String::isNotBlank)
+                    .distinct()
+                    .joinToString(" / "),
+                coverUrl = item.mainCoverUrl.trim()
+            )
+        }
+        .distinctBy { it.rjCode.uppercase() }
+        .take(limit)
+        .toList()
+}
+
 internal fun requestRemoteFileSize(url: String, client: OkHttpClient? = null): Long? {
     if (client == null) return null
     fun execute(request: Request): Long? {
@@ -191,6 +276,32 @@ internal fun resolveAlbumDetailRj(routeRj: String?, localAlbum: Album?): String 
         .map(DlsiteWorkNo::extractWorkNo)
         .firstOrNull { it.isNotBlank() }
         .orEmpty()
+}
+
+internal fun albumDetailRequestKey(albumId: Long?, rjCode: String?): String {
+    val normalizedRj = rjCode?.trim().orEmpty().uppercase()
+    return if (normalizedRj.isNotBlank()) {
+        "rj:$normalizedRj"
+    } else {
+        "id:${albumId ?: 0L}"
+    }
+}
+
+internal fun asmrOneTracksCacheKey(site: Int?, workId: String): String {
+    return "${site ?: "unknown"}:${workId.trim()}"
+}
+
+internal fun shouldReuseAlbumDetailModel(
+    force: Boolean,
+    hasCurrentModel: Boolean,
+    requestKey: String,
+    activeRequestKey: String?,
+    completedRequestKey: String?
+): Boolean {
+    return !force &&
+        hasCurrentModel &&
+        activeRequestKey == requestKey &&
+        completedRequestKey == requestKey
 }
 
 internal fun AlbumDetailModel.listenTogetherSummaryRj(): String {
@@ -453,6 +564,14 @@ internal fun resolveInitialDlsiteLoadTarget(
     )
 }
 
+internal fun shouldReloadAsmrOneForResolvedInitialTarget(
+    currentRj: String,
+    resolvedWorkno: String
+): Boolean {
+    val target = resolvedWorkno.trim().uppercase()
+    return target.isNotBlank() && !target.equals(currentRj.trim().uppercase(), ignoreCase = true)
+}
+
 internal fun asmrOneTrackRjCandidates(
     baseRj: String,
     currentRj: String,
@@ -484,15 +603,23 @@ internal fun resolveAsmrOneTrackWorkId(
 ): String? {
     val normalizedWorkId = resolvedWorkId.trim().ifBlank { return null }
     val normalizedLang = selectedLang.trim().uppercase().ifBlank { "JPN" }
-    if (normalizedLang == "JPN") return normalizedWorkId
 
     val exactRjs = selectedRjs
         .map { DlsiteWorkNo.normalizeWorkNo(it, minimumDigits = 6) }
         .filter { it.isNotBlank() }
         .toSet()
-    val details = resolvedDetails ?: return null
+    val details = resolvedDetails
+        ?: return normalizedWorkId.takeIf { normalizedLang == "JPN" }
     val resolvedSourceRj = details.source_id.trim().uppercase()
     if (resolvedSourceRj in exactRjs) return normalizedWorkId
+
+    val currentLanguage = details.translation_info?.lang.orEmpty().trim()
+    val currentIsOriginal = details.translation_info?.is_original == true ||
+        (details.original_workno.orEmpty().isBlank() && currentLanguage.isBlank())
+    if (
+        asmrOneEditionMatchesLanguage(currentLanguage, normalizedLang) ||
+        (normalizedLang == "JPN" && currentIsOriginal)
+    ) return normalizedWorkId
 
     val otherEditions = details.other_language_editions_in_db.orEmpty()
     val exactEdition = otherEditions.firstOrNull { edition ->
@@ -507,6 +634,10 @@ internal fun resolveAsmrOneTrackWorkId(
 private fun asmrOneEditionMatchesLanguage(languageLabel: String, selectedLang: String): Boolean {
     val normalizedLabel = languageLabel.trim().uppercase()
     return when (selectedLang) {
+        "JPN" -> normalizedLabel.contains("JPN") ||
+            normalizedLabel.contains("日本語") ||
+            normalizedLabel.contains("日文")
+
         "CHI_HANS" -> normalizedLabel.contains("CHI_HANS") ||
             normalizedLabel.contains("简体") ||
             normalizedLabel.contains("簡体") ||

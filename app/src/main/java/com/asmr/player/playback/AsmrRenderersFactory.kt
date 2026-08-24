@@ -15,7 +15,8 @@ class AsmrRenderersFactory(
     private val sceneEffectAudioProcessor: SceneEffectAudioProcessor,
     private val channelModeAudioProcessor: ChannelModeAudioProcessor,
     private val volumeThresholdAudioProcessor: VolumeThresholdAudioProcessor,
-    private val spectrumTapAudioProcessor: StereoSpectrumTapAudioProcessor
+    private val spectrumTapAudioProcessor: StereoSpectrumTapAudioProcessor,
+    private val spectrumOutputBufferSizeProvider: DefaultAudioSink.AudioTrackBufferSizeProvider
 ) : DefaultRenderersFactory(context) {
     override fun buildAudioSink(
         context: Context,
@@ -38,6 +39,7 @@ class AsmrRenderersFactory(
                     )
                 )
             )
+            .setAudioTrackBufferSizeProvider(spectrumOutputBufferSizeProvider)
             .setEnableFloatOutput(enableFloatOutput)
             .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
             .build()

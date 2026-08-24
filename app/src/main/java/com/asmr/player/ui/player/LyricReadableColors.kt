@@ -5,9 +5,6 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.toArgb
-import androidx.core.graphics.ColorUtils
 import com.asmr.player.ui.theme.AsmrTheme
 
 @Immutable
@@ -21,92 +18,33 @@ internal data class LyricReadableColors(
 @Composable
 internal fun rememberLyricReadableColors(
     accentColor: Color,
-    backdropTintColor: Color,
-    coverBackgroundEnabled: Boolean,
-    coverBackgroundClarity: Float
+    useReadablePageInactiveText: Boolean = false
 ): LyricReadableColors {
     val colorScheme = AsmrTheme.colorScheme
-    return remember(accentColor, backdropTintColor, coverBackgroundEnabled, coverBackgroundClarity, colorScheme) {
+    return remember(accentColor, colorScheme, useReadablePageInactiveText) {
         val emphasisAlpha = if (colorScheme.isDark) 0.82f else 0.68f
         val containerAlpha = if (colorScheme.isDark) 0.26f else 0.16f
         val containerBase = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.80f else 0.88f)
-        val backdropEstimate = estimateLyricBackdropColor(
-            backdropTintColor = backdropTintColor,
-            backgroundColor = colorScheme.background,
-            coverBackgroundEnabled = coverBackgroundEnabled,
-            coverBackgroundClarity = coverBackgroundClarity,
-            isDark = colorScheme.isDark
-        )
-
-        val activeText = if (coverBackgroundEnabled) {
-            pickReadableLyricTextColor(
-                backdrop = backdropEstimate,
-                fallback = colorScheme.textPrimary
-            )
-        } else {
-            colorScheme.textPrimary
-        }
-        val inactiveText = inactiveLyricTextColor(
-            activeText = activeText,
-            fallback = colorScheme.textSecondary
-        )
+        val activeText = themedLyricTextColor(colorScheme.isDark)
 
         LyricReadableColors(
             activeText = activeText,
-            inactiveText = inactiveText,
+            inactiveText = themedInactiveLyricTextColor(
+                isDark = colorScheme.isDark,
+                useReadablePageInactiveText = useReadablePageInactiveText
+            ),
             accentEmphasis = accentColor.copy(alpha = emphasisAlpha),
             activeContainer = accentColor.copy(alpha = containerAlpha).compositeOver(containerBase)
         )
     }
 }
 
-private fun inactiveLyricTextColor(
-    activeText: Color,
-    fallback: Color
-): Color {
-    val lightGrayCandidate = Color(0xFFD7DCE4)
-    val darkGrayCandidate = Color(0xFF3E4651)
-    return if (activeText.luminance() > 0.5f) {
-        lightGrayCandidate
-    } else if (activeText.luminance() < 0.2f) {
-        darkGrayCandidate
-    } else {
-        fallback
-    }
-}
+internal fun themedLyricTextColor(isDark: Boolean): Color =
+    if (isDark) Color.White else Color.Black
 
-private fun estimateLyricBackdropColor(
-    backdropTintColor: Color,
-    backgroundColor: Color,
-    coverBackgroundEnabled: Boolean,
-    coverBackgroundClarity: Float,
-    isDark: Boolean
-): Color {
-    if (!coverBackgroundEnabled) return backgroundColor
-
-    val style = coverArtworkBackdropStyle(
-        clarity = coverBackgroundClarity,
-        isDark = isDark
-    )
-    var estimated = backdropTintColor
-    estimated = backgroundColor.copy(alpha = style.overlayAlpha).compositeOver(estimated)
-    estimated = backdropTintColor.copy(alpha = style.tintAlpha).compositeOver(estimated)
-    if (style.scrimAlpha > 0f) {
-        estimated = Color.Black.copy(alpha = style.scrimAlpha).compositeOver(estimated)
-    }
-    return estimated
-}
-
-private fun pickReadableLyricTextColor(
-    backdrop: Color,
-    fallback: Color
-): Color {
-    val lightCandidate = Color(0xFFF7FAFC)
-    val darkCandidate = Color(0xFF111418)
-    val backdropArgb = backdrop.toArgb()
-    val lightContrast = ColorUtils.calculateContrast(lightCandidate.toArgb(), backdropArgb)
-    val darkContrast = ColorUtils.calculateContrast(darkCandidate.toArgb(), backdropArgb)
-    val best = if (lightContrast >= darkContrast) lightCandidate else darkCandidate
-    val bestContrast = maxOf(lightContrast, darkContrast)
-    return if (bestContrast >= 4.5) best else fallback
-}
+internal fun themedInactiveLyricTextColor(
+    isDark: Boolean,
+    useReadablePageInactiveText: Boolean
+): Color = themedLyricTextColor(isDark).copy(
+    alpha = if (useReadablePageInactiveText) 1f else 0.58f
+)

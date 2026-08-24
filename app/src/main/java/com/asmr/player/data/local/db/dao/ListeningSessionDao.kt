@@ -46,6 +46,9 @@ interface ListeningSessionDao {
     @Query("SELECT * FROM listening_sessions WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): ListeningSessionEntity?
 
+    @Query("UPDATE listening_sessions SET albumId = :toAlbumId WHERE albumId = :fromAlbumId")
+    suspend fun moveToAlbum(fromAlbumId: Long, toAlbumId: Long)
+
     /** 某收听日的全部会话，按开始时间降序（用于顶部最新、底部最旧的垂直时间线）。 */
     @Query(
         "SELECT ls.id AS id, ls.albumId AS albumId, ls.rjCode AS rjCode, " +

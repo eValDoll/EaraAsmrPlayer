@@ -72,7 +72,6 @@ import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.clearFocusOnTapOutside
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.util.DlsiteAntiHotlink
@@ -153,6 +152,12 @@ internal fun SearchAssistContent(
     var collectedOnly by rememberSaveable(initialRequest.collectedOnly) {
         mutableStateOf(initialRequest.collectedOnly)
     }
+    var hasSubtitle by rememberSaveable(initialRequest.hasSubtitle) {
+        mutableStateOf(initialRequest.hasSubtitle)
+    }
+    var allAges by rememberSaveable(initialRequest.allAges) {
+        mutableStateOf(initialRequest.allAges)
+    }
     var selectedLocale by rememberSaveable(initialRequest.locale) { mutableStateOf(initialRequest.locale) }
     var selectedOrderName by rememberSaveable(initialRequest.orderName) {
         mutableStateOf(initialRequest.orderName)
@@ -167,14 +172,12 @@ internal fun SearchAssistContent(
         SearchCollectedSortOption.fromName(selectedCollectedSortName)
     }
     val selectedFilter = remember(
-        selectedOrderName,
         purchasedOnly,
         presaleOnly,
         chineseTranslatedOnly,
         collectedOnly
     ) {
         SearchFilterOption.fromState(
-            order = selectedOrder,
             purchasedOnly = purchasedOnly,
             presaleOnly = presaleOnly,
             chineseTranslatedOnly = chineseTranslatedOnly,
@@ -213,6 +216,8 @@ internal fun SearchAssistContent(
         presaleOnlyValue: Boolean = presaleOnly,
         chineseTranslatedOnlyValue: Boolean = chineseTranslatedOnly,
         collectedOnlyValue: Boolean = collectedOnly,
+        hasSubtitleValue: Boolean = hasSubtitle,
+        allAgesValue: Boolean = allAges,
         collectedSort: SearchCollectedSortOption = selectedCollectedSort,
         locale: String = selectedLocale
     ) = SearchAssistSearchRequest(
@@ -222,6 +227,8 @@ internal fun SearchAssistContent(
         presaleOnly = presaleOnlyValue,
         chineseTranslatedOnly = chineseTranslatedOnlyValue,
         collectedOnly = collectedOnlyValue,
+        hasSubtitle = hasSubtitleValue,
+        allAges = allAgesValue,
         collectedSortName = collectedSort.name,
         locale = locale
     )
@@ -233,36 +240,6 @@ internal fun SearchAssistContent(
         keyword = normalized
         keyboardController?.hide()
         onSubmitSearch(buildRequest(requestKeyword = normalized))
-    }
-
-    fun submitFilter(option: SearchFilterOption) {
-        val nextOrder = option.sortOption ?: selectedOrder
-        val nextKeyword = keyword.trim()
-        val nextPurchasedOnly = option.isPurchasedOnly
-        val nextPresaleOnly = option.isPresaleOnly
-        val nextChineseTranslatedOnly = option.isChineseTranslated
-        val nextCollectedOnly = option.isCollectedOnly
-
-        keyword = nextKeyword
-        selectedOrderName = nextOrder.name
-        purchasedOnly = nextPurchasedOnly
-        presaleOnly = nextPresaleOnly
-        chineseTranslatedOnly = nextChineseTranslatedOnly
-        collectedOnly = nextCollectedOnly
-        if (nextCollectedOnly) {
-            selectedCollectedSortName = selectedCollectedSort.name
-        }
-        keyboardController?.hide()
-        onSubmitSearch(
-            buildRequest(
-                requestKeyword = nextKeyword,
-                order = nextOrder,
-                purchasedOnlyValue = nextPurchasedOnly,
-                presaleOnlyValue = nextPresaleOnly,
-                chineseTranslatedOnlyValue = nextChineseTranslatedOnly,
-                collectedOnlyValue = nextCollectedOnly
-            )
-        )
     }
 
     LaunchedEffect(listState) {
@@ -287,8 +264,7 @@ internal fun SearchAssistContent(
             modifier = Modifier
                 .fillMaxSize()
                 .clearFocusOnTapOutside()
-                .nestedScroll(chromeState.nestedScrollConnection)
-                .thinScrollbar(listState),
+                .nestedScroll(chromeState.nestedScrollConnection),
             flingBehavior = rememberCalmScrollableFlingBehavior(),
             contentPadding = PaddingValues(
                 top = topPadding,
@@ -449,7 +425,10 @@ internal fun SearchAssistContent(
             onKeywordChange = { keyword = it },
             placeholder = hotKeywordCarouselItem.placeholder,
             selectedFilter = selectedFilter,
+            selectedOrder = selectedOrder,
             selectedCollectedSort = selectedCollectedSort,
+            hasSubtitle = hasSubtitle,
+            allAges = allAges,
             selectedLocale = selectedLocale,
             filterControlsLocked = false,
             searchSubmitLocked = false,
@@ -468,9 +447,38 @@ internal fun SearchAssistContent(
             inputFocusRequester = inputFocusRequester,
             onMeasured = { size -> chromeState.updateHeight(size.height.toFloat()) },
             onSearchSubmit = { submit() },
-            onFilterSelected = ::submitFilter,
-            onLocaleSelected = { locale -> selectedLocale = locale },
-            onCollectedSortSelected = { sort -> selectedCollectedSortName = sort.name },
+            onOptionsChanged = { options ->
+                val option = options.scope
+                val scopeChanged = option != selectedFilter
+                purchasedOnly = option.isPurchasedOnly
+                presaleOnly = option.isPresaleOnly
+                chineseTranslatedOnly = option.isChineseTranslated
+                collectedOnly = option.isCollectedOnly
+                selectedOrderName = options.order.name
+                selectedCollectedSortName = options.collectedSort.name
+                hasSubtitle = options.hasSubtitle
+                allAges = options.allAges
+                selectedLocale = options.locale
+                if (scopeChanged) {
+                    val nextKeyword = keyword.trim()
+                    keyword = nextKeyword
+                    keyboardController?.hide()
+                    onSubmitSearch(
+                        buildRequest(
+                            requestKeyword = nextKeyword,
+                            order = options.order,
+                            purchasedOnlyValue = option.isPurchasedOnly,
+                            presaleOnlyValue = option.isPresaleOnly,
+                            chineseTranslatedOnlyValue = option.isChineseTranslated,
+                            collectedOnlyValue = option.isCollectedOnly,
+                            hasSubtitleValue = options.hasSubtitle,
+                            allAgesValue = options.allAges,
+                            collectedSort = options.collectedSort,
+                            locale = options.locale
+                        )
+                    )
+                }
+            },
             onFirstPage = {},
             onPrev = {},
             onNext = {}

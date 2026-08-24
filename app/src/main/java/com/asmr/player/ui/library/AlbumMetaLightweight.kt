@@ -48,6 +48,7 @@ import com.asmr.player.ui.theme.AsmrTheme
 internal fun AlbumHeroPrimaryMetaLightweight(
     rjCode: String,
     circle: String,
+    emphasized: Boolean = false,
     modifier: Modifier = Modifier,
     rjOnClick: (() -> Unit)? = null,
     circleOnClick: (() -> Unit)? = null,
@@ -104,7 +105,7 @@ internal fun AlbumHeroPrimaryMetaLightweight(
             Spacer(
                 modifier = Modifier
                     .width(0.5.dp)
-                    .height(12.dp)
+                    .height(if (emphasized) 14.dp else 12.dp)
                     .background(secondaryContentColor.copy(alpha = 0.46f))
             )
         }
@@ -126,12 +127,12 @@ internal fun AlbumHeroPrimaryMetaLightweight(
                     painter = painterResource(id = R.drawable.ic_album_meta_club),
                     contentDescription = null,
                     tint = secondaryContentColor,
-                    modifier = Modifier.size(13.dp),
+                    modifier = Modifier.size(if (emphasized) 14.dp else 13.dp),
                 )
                 Text(
                     text = normalizedCircle,
                     style = MaterialTheme.typography.labelMedium.copy(
-                        fontSize = 13.sp,
+                        fontSize = if (emphasized) 12.sp else 13.sp,
                         shadow = textShadow,
                     ),
                     color = contentColor,
@@ -149,8 +150,8 @@ internal fun AlbumItemPrimaryMetaLightweight(
     rjCode: String,
     circle: String,
     modifier: Modifier = Modifier,
-    rjOnClick: (() -> Unit)? = null,
-    circleOnClick: (() -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
+    rjOnLongClick: (() -> Unit)? = null,
     circleOnLongClick: (() -> Unit)? = null,
 ) {
     val normalizedRj = remember(rjCode) { rjCode.trim() }
@@ -191,6 +192,7 @@ internal fun AlbumItemPrimaryMetaLightweight(
                     text = normalizedCircle,
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
                     ),
                     color = creatorTextColor,
                     maxLines = 1,
@@ -198,9 +200,9 @@ internal fun AlbumItemPrimaryMetaLightweight(
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
                         .then(
-                            if (circleOnClick != null || circleOnLongClick != null) {
+                            if (onClick != null || circleOnLongClick != null) {
                                 Modifier.combinedClickable(
-                                    onClick = { circleOnClick?.invoke() },
+                                    onClick = { onClick?.invoke() },
                                     onLongClick = circleOnLongClick,
                                 )
                             } else {
@@ -218,7 +220,7 @@ internal fun AlbumItemPrimaryMetaLightweight(
             Text(
                 text = normalizedRj,
                 style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = 12.sp,
+                    fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
                 ),
                 color = colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.92f else 0.82f),
@@ -227,8 +229,11 @@ internal fun AlbumItemPrimaryMetaLightweight(
                 modifier = Modifier
                     .clip(RoundedCornerShape(4.dp))
                     .then(
-                        if (rjOnClick != null) {
-                            Modifier.combinedClickable(onClick = rjOnClick)
+                        if (onClick != null || rjOnLongClick != null) {
+                            Modifier.combinedClickable(
+                                onClick = { onClick?.invoke() },
+                                onLongClick = rjOnLongClick,
+                            )
                         } else {
                             Modifier
                         }
@@ -244,7 +249,7 @@ internal fun AlbumItemCvLightweight(
     cvText: String,
     modifier: Modifier = Modifier,
     layout: AlbumInlineValuesLayout = AlbumInlineValuesLayout.Scrollable,
-    onCvClick: ((String) -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
     onCvLongClick: ((String) -> Unit)? = null,
 ) {
     val cvs = remember(cvText) { parseAlbumCvNames(cvText) }
@@ -254,7 +259,7 @@ internal fun AlbumItemCvLightweight(
         layout = layout,
         prominent = true,
         modifier = modifier,
-        onValueClick = onCvClick,
+        onClick = onClick,
         onValueLongClick = onCvLongClick,
     )
 }
@@ -264,7 +269,7 @@ internal fun AlbumItemTagsLightweight(
     tags: List<String>,
     modifier: Modifier = Modifier,
     layout: AlbumInlineValuesLayout = AlbumInlineValuesLayout.Scrollable,
-    onTagClick: ((String) -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
     onTagLongClick: ((String) -> Unit)? = null,
 ) {
     val normalizedTags = remember(tags) { normalizeAlbumTags(tags) }
@@ -274,7 +279,7 @@ internal fun AlbumItemTagsLightweight(
         layout = layout,
         modifier = modifier,
         valuePrefix = "#",
-        onValueClick = onTagClick,
+        onClick = onClick,
         onValueLongClick = onTagLongClick,
     )
 }
@@ -293,7 +298,7 @@ private fun AlbumItemInlineValuesLightweight(
     modifier: Modifier = Modifier,
     valuePrefix: String = "",
     prominent: Boolean = false,
-    onValueClick: ((String) -> Unit)? = null,
+    onClick: (() -> Unit)? = null,
     onValueLongClick: ((String) -> Unit)? = null,
 ) {
     if (values.isEmpty()) return
@@ -340,7 +345,8 @@ private fun AlbumItemInlineValuesLightweight(
                         values = values,
                         valuePrefix = valuePrefix,
                         valueColor = valueColor,
-                        onValueClick = onValueClick,
+                        prominent = prominent,
+                        onClick = onClick,
                         onValueLongClick = onValueLongClick,
                     )
                 }
@@ -356,7 +362,8 @@ private fun AlbumItemInlineValuesLightweight(
                     values = values,
                     valuePrefix = valuePrefix,
                     valueColor = valueColor,
-                    onValueClick = onValueClick,
+                    prominent = prominent,
+                    onClick = onClick,
                     onValueLongClick = onValueLongClick,
                 )
             }
@@ -370,23 +377,27 @@ private fun AlbumItemInlineValueItems(
     values: List<String>,
     valuePrefix: String,
     valueColor: Color,
-    onValueClick: ((String) -> Unit)?,
+    prominent: Boolean,
+    onClick: (() -> Unit)?,
     onValueLongClick: ((String) -> Unit)?,
 ) {
     values.forEach { value ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = valuePrefix + value.removePrefix(valuePrefix),
-                style = MaterialTheme.typography.labelSmall.copy(fontSize = 12.sp),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontSize = if (prominent) 13.sp else 12.sp,
+                    fontWeight = if (prominent) FontWeight.SemiBold else FontWeight.Medium,
+                ),
                 color = valueColor,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier
                     .clip(RoundedCornerShape(4.dp))
                     .then(
-                        if (onValueClick != null || onValueLongClick != null) {
+                        if (onClick != null || onValueLongClick != null) {
                             Modifier.combinedClickable(
-                                onClick = { onValueClick?.invoke(value) },
+                                onClick = { onClick?.invoke() },
                                 onLongClick = onValueLongClick?.let { longClick ->
                                     { longClick(value) }
                                 },
@@ -449,6 +460,7 @@ private fun Modifier.horizontalScrollEdgeFade(scrollState: ScrollState): Modifie
 @Composable
 internal fun AlbumHeaderCvLightweight(
     cvText: String,
+    emphasized: Boolean = false,
     modifier: Modifier = Modifier,
     onCvClick: ((String) -> Unit)? = null,
     onCvLongClick: ((String) -> Unit)? = null,
@@ -471,7 +483,7 @@ internal fun AlbumHeaderCvLightweight(
             painter = painterResource(id = R.drawable.ic_album_meta_cv),
             contentDescription = null,
             tint = colorScheme.textSecondary,
-            modifier = Modifier.size(14.dp)
+            modifier = Modifier.size(if (emphasized) 15.dp else 14.dp)
         )
 
         // 声优列表 - 可横向滚动
@@ -486,7 +498,9 @@ internal fun AlbumHeaderCvLightweight(
             cvs.forEach { cv ->
                 Text(
                     text = cv,
-                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp),
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontSize = if (emphasized) 12.sp else 13.sp
+                    ),
                     color = colorScheme.textPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -515,6 +529,7 @@ internal fun AlbumHeaderCvLightweight(
 @Composable
 internal fun AlbumHeaderTagsLightweight(
     tags: List<String>,
+    emphasized: Boolean = false,
     modifier: Modifier = Modifier,
     onTagClick: ((String) -> Unit)? = null,
     onTagLongClick: ((String) -> Unit)? = null,
@@ -537,7 +552,7 @@ internal fun AlbumHeaderTagsLightweight(
             painter = painterResource(id = R.drawable.ic_album_meta_tags),
             contentDescription = null,
             tint = colorScheme.textSecondary,
-            modifier = Modifier.size(14.dp)
+            modifier = Modifier.size(if (emphasized) 15.dp else 14.dp)
         )
 
         // 标签列表 - 可横向滚动
@@ -552,7 +567,9 @@ internal fun AlbumHeaderTagsLightweight(
             normalizedTags.forEach { tag ->
                 Text(
                     text = if (tag.startsWith("#")) tag else "#$tag",
-                    style = MaterialTheme.typography.labelMedium.copy(fontSize = 13.sp),
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontSize = if (emphasized) 12.sp else 13.sp
+                    ),
                     color = colorScheme.textSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,

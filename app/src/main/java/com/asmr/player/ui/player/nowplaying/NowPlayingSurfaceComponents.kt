@@ -1,13 +1,8 @@
 package com.asmr.player.ui.player
 
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
-import android.content.pm.ActivityInfo
-import android.content.res.Configuration
-import android.os.SystemClock
 import android.view.LayoutInflater
-import androidx.activity.compose.BackHandler
+import android.view.SurfaceHolder
+import android.view.SurfaceView
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
@@ -29,7 +24,6 @@ import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
@@ -48,7 +42,6 @@ import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
@@ -56,8 +49,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
@@ -68,8 +59,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.Player
 import androidx.media3.common.VideoSize
@@ -79,13 +68,12 @@ import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AudioOutputRouteIcon
-import com.asmr.player.ui.common.thinScrollbar
+import com.asmr.player.ui.common.HorizontalStereoSpectrum
 import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
 import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
 import com.asmr.player.ui.common.AppVolumeSlider
 import com.asmr.player.ui.common.AppVolumeWarningSessionState
 import com.asmr.player.ui.common.AsmrImageLoadingPlaceholder
-import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.ui.common.EqualizerPanel
@@ -115,6 +103,7 @@ internal fun PlayerSurfaceHeader(
     onManualBindLyrics: (() -> Unit)? = null,
     navigationEnabled: Boolean,
     showTitle: Boolean = true,
+    showDivider: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     val colorScheme = AsmrTheme.colorScheme
@@ -188,13 +177,15 @@ internal fun PlayerSurfaceHeader(
             }
         }
         }
-        HorizontalDivider(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp),
-            thickness = 0.5.dp,
-            color = dividerColor
-        )
+        if (showDivider) {
+            HorizontalDivider(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                thickness = 0.5.dp,
+                color = dividerColor
+            )
+        }
     }
 }
 
@@ -205,6 +196,7 @@ internal fun NowPlayingLyricsSurface(
     lyrics: List<SubtitleEntry>,
     lyricColors: LyricReadableColors,
     accentColor: Color,
+    spectrumColor: Color,
     onAccentColor: Color,
     lyricsPageSettings: LyricsPageSettings,
     onSeekTo: (Long) -> Unit,
@@ -225,11 +217,21 @@ internal fun NowPlayingLyricsSurface(
         label = "nowPlayingLyricsSurfaceAlpha"
     )
     val effectiveInteractionEnabled = interactionEnabled && contentVisible
-    Box(
+    BoxWithConstraints(
         modifier = modifier.graphicsLayer {
             alpha = surfaceAlpha
         }
     ) {
+        if (isLandscape) {
+            HorizontalStereoSpectrum(
+                lineColor = spectrumColor,
+                intensity = 0.72f,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(if (maxWidth >= 840.dp) 112.dp else 88.dp)
+                    .align(Alignment.Center)
+            )
+        }
         if (lyrics.isEmpty()) {
             Column(
                 modifier = Modifier
@@ -285,6 +287,10 @@ internal fun ArtworkBox(
     isVideo: Boolean,
     metadata: androidx.media3.common.MediaMetadata?,
     viewModel: PlayerViewModel,
+    videoPlayerCoordinator: NowPlayingVideoPlayerCoordinator,
+    renderVideoSurface: Boolean,
+    videoFullscreen: Boolean,
+    onOpenVideoFullscreen: () -> Unit,
     onOpenLyrics: () -> Unit,
     edgeBlendEnabled: Boolean,
     edgeBlendColor: Color,
@@ -299,12 +305,6 @@ internal fun ArtworkBox(
 ) {
     val shape = RoundedCornerShape(artworkCornerRadius)
     val placeholderCornerRadius = artworkCornerRadius.value.roundToInt()
-    val videoSurfaceHandle = remember(viewModel) {
-        VideoSurfaceVisibilityHandle { visible -> viewModel.setVideoSurfaceVisible(visible) }
-    }
-    DisposableEffect(videoSurfaceHandle) {
-        onDispose { videoSurfaceHandle.releaseAll() }
-    }
     Box(
         modifier = modifier
             .fillMaxSize()
@@ -316,16 +316,13 @@ internal fun ArtworkBox(
         contentAlignment = Alignment.Center
     ) {
         if (isVideo) {
-            var fullscreen by rememberSaveable { mutableStateOf(false) }
             val player = viewModel.playerOrNull()
-            if (!fullscreen) {
+            if (!videoFullscreen && renderVideoSurface) {
                 NowPlayingVideoPlayer(
                     player = player,
-                    onSurfaceVisible = videoSurfaceHandle::acquire,
-                    onSurfaceHidden = videoSurfaceHandle::release,
+                    coordinator = videoPlayerCoordinator,
                     fullscreen = false,
-                    onToggleFullscreen = { fullscreen = true },
-                    viewKey = "inline",
+                    onToggleFullscreen = onOpenVideoFullscreen,
                     backdropColor = videoBackdropColor,
                     modifier = Modifier
                         .fillMaxSize()
@@ -335,24 +332,6 @@ internal fun ArtworkBox(
                 )
             } else {
                 Box(modifier = Modifier.fillMaxSize().background(videoBackdropColor))
-            }
-            if (fullscreen) {
-                BackHandler { fullscreen = false }
-                Dialog(
-                    onDismissRequest = { fullscreen = false },
-                    properties = DialogProperties(usePlatformDefaultWidth = false)
-                ) {
-                    NowPlayingVideoPlayer(
-                        player = player,
-                        onSurfaceVisible = videoSurfaceHandle::acquire,
-                        onSurfaceHidden = videoSurfaceHandle::release,
-                        fullscreen = true,
-                        onToggleFullscreen = { fullscreen = false },
-                        viewKey = "fullscreen",
-                        backdropColor = videoBackdropColor,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
             }
         } else {
             if (edgeBlendEnabled) {
@@ -402,26 +381,103 @@ internal fun ArtworkBox(
     }
 }
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
+internal class NowPlayingVideoPlayerCoordinator {
+    private var currentView: PlayerView? = null
+    private var currentPlayer: Player? = null
+
+    fun attach(view: PlayerView, player: Player?) {
+        if (currentView === view && currentPlayer === player) return
+
+        val previousView = currentView
+        val previousPlayer = currentPlayer
+        if (previousPlayer !== player) {
+            if (previousPlayer != null && previousView != null) {
+                PlayerView.switchTargetView(previousPlayer, previousView, null)
+            } else {
+                previousView?.player = null
+            }
+            currentView = null
+            currentPlayer = player
+        }
+
+        if (player != null) {
+            PlayerView.switchTargetView(player, currentView, view)
+        } else {
+            view.player = null
+        }
+        currentView = view
+    }
+
+    fun detach(view: PlayerView) {
+        if (currentView !== view) return
+        val player = currentPlayer
+        if (player != null) {
+            PlayerView.switchTargetView(player, view, null)
+        } else {
+            view.player = null
+        }
+        currentView = null
+    }
+
+    fun rebindCurrentSurface(view: PlayerView, player: Player?) {
+        if (player == null || currentView !== view || currentPlayer !== player) return
+
+        // PlayerView 可能在 Surface 尚未创建时就完成首次绑定。横竖屏布局切换后，
+        // 等新 Surface 真正可用再重绑一次，只迁移视频输出，不改变播放状态。
+        view.player = null
+        view.player = player
+    }
+
+    fun release() {
+        currentView?.let(::detach)
+        currentPlayer = null
+    }
+}
+
+@Composable
+internal fun NowPlayingFullscreenVideo(
+    player: Player?,
+    coordinator: NowPlayingVideoPlayerCoordinator,
+    onDismiss: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    NowPlayingVideoPlayer(
+        player = player,
+        coordinator = coordinator,
+        fullscreen = true,
+        onToggleFullscreen = onDismiss,
+        backdropColor = Color.Black,
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color.Black)
+    )
+}
+
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 @Composable
 private fun NowPlayingVideoPlayer(
     player: Player?,
-    onSurfaceVisible: () -> Unit,
-    onSurfaceHidden: () -> Unit,
+    coordinator: NowPlayingVideoPlayerCoordinator,
     fullscreen: Boolean,
     onToggleFullscreen: () -> Unit,
-    viewKey: String,
     backdropColor: Color,
     modifier: Modifier = Modifier
 ) {
-    var playerView by remember { mutableStateOf<PlayerView?>(null) }
-    DisposableEffect(viewKey, player) {
-        if (player != null) onSurfaceVisible()
+    val playerViewHolder = remember { arrayOfNulls<PlayerView>(1) }
+    val surfaceCallbackHolder = remember { arrayOfNulls<SurfaceHolder.Callback>(1) }
+    val latestPlayer by rememberUpdatedState(player)
+    DisposableEffect(coordinator) {
         onDispose {
-            playerView?.player = null
-            playerView = null
-            if (player != null) onSurfaceHidden()
+            playerViewHolder[0]?.let { view ->
+                (view.videoSurfaceView as? SurfaceView)?.holder?.let { holder ->
+                    surfaceCallbackHolder[0]?.let(holder::removeCallback)
+                }
+                coordinator.detach(view)
+            }
+            surfaceCallbackHolder[0] = null
+            playerViewHolder[0] = null
         }
     }
 
@@ -429,28 +485,50 @@ private fun NowPlayingVideoPlayer(
         modifier = modifier
             .background(if (fullscreen) backdropColor else Color.Transparent)
     ) {
-        key(viewKey) {
-            AndroidView(
-                modifier = Modifier.fillMaxSize(),
-                factory = { context ->
-                    val pv = LayoutInflater.from(context)
-                        .inflate(R.layout.view_now_playing_video_player, null, false) as PlayerView
-                    pv.also {
-                        pv.useController = false
-                        pv.player = player
-                        pv.resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
-                        pv.setBackgroundColor(backdropColor.toArgb())
-                        pv.setShutterBackgroundColor(backdropColor.toArgb())
-                        playerView = pv
-                    }
-                },
-                update = { view ->
-                    if (view.player !== player) view.player = player
-                    view.setBackgroundColor(backdropColor.toArgb())
-                    view.setShutterBackgroundColor(backdropColor.toArgb())
+        AndroidView(
+            modifier = Modifier.fillMaxSize(),
+            factory = { context ->
+                val view = LayoutInflater.from(context)
+                    .inflate(R.layout.view_now_playing_video_player, null, false) as PlayerView
+                view.apply {
+                    useController = false
+                    resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+                    setKeepContentOnPlayerReset(true)
+                    setBackgroundColor(backdropColor.toArgb())
+                    setShutterBackgroundColor(backdropColor.toArgb())
                 }
-            )
-        }
+                playerViewHolder[0] = view
+                coordinator.attach(view, player)
+                (view.videoSurfaceView as? SurfaceView)?.holder?.let { holder ->
+                    var initialSurfaceCreated = false
+                    val callback = object : SurfaceHolder.Callback {
+                        override fun surfaceCreated(holder: SurfaceHolder) {
+                            if (initialSurfaceCreated) return
+                            initialSurfaceCreated = true
+                            coordinator.rebindCurrentSurface(view, latestPlayer)
+                        }
+
+                        override fun surfaceChanged(
+                            holder: SurfaceHolder,
+                            format: Int,
+                            width: Int,
+                            height: Int
+                        ) = Unit
+
+                        override fun surfaceDestroyed(holder: SurfaceHolder) = Unit
+                    }
+                    surfaceCallbackHolder[0] = callback
+                    holder.addCallback(callback)
+                }
+                view
+            },
+            update = { view ->
+                view.resizeMode = androidx.media3.ui.AspectRatioFrameLayout.RESIZE_MODE_FIT
+                view.setBackgroundColor(backdropColor.toArgb())
+                view.setShutterBackgroundColor(backdropColor.toArgb())
+                coordinator.attach(view, player)
+            }
+        )
 
         IconButton(
             onClick = onToggleFullscreen,
@@ -465,29 +543,6 @@ private fun NowPlayingVideoPlayer(
                 tint = Color.White
             )
         }
-    }
-}
-
-private class VideoSurfaceVisibilityHandle(
-    private val onVisibleChanged: (Boolean) -> Unit
-) {
-    private var visibleCount = 0
-
-    fun acquire() {
-        visibleCount += 1
-        if (visibleCount == 1) onVisibleChanged(true)
-    }
-
-    fun release() {
-        if (visibleCount <= 0) return
-        visibleCount -= 1
-        if (visibleCount == 0) onVisibleChanged(false)
-    }
-
-    fun releaseAll() {
-        if (visibleCount == 0) return
-        visibleCount = 0
-        onVisibleChanged(false)
     }
 }
 
@@ -518,13 +573,5 @@ internal fun rememberPlayerVideoAspectRatio(player: Player?, default: Float = 16
     }
 
     return ratio
-}
-
-private tailrec fun Context.findActivity(): Activity? {
-    return when (this) {
-        is Activity -> this
-        is ContextWrapper -> baseContext.findActivity()
-        else -> null
-    }
 }
 

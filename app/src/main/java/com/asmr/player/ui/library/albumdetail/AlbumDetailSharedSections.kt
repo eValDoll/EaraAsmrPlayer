@@ -79,7 +79,7 @@ import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
 import com.asmr.player.data.remote.scraper.DlsiteRecommendations
-import com.asmr.player.data.remote.scraper.dlsiteOriginalCoverUrlForWorkNo
+import com.asmr.player.data.remote.scraper.resolveRecommendedWorkCoverUrl
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.util.DlsiteWorkNo
@@ -127,7 +127,6 @@ import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.util.Formatting
@@ -347,7 +346,7 @@ private fun DlsiteRecommendedWorkCard(
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val coverModel = remember(work.coverUrl, displayRj) {
-        work.coverUrl.takeIf { it.isNotBlank() } ?: dlsiteOriginalCoverUrlForWorkNo(displayRj)
+        resolveRecommendedWorkCoverUrl(displayRj, work.coverUrl)
     }
     val imageModel = remember(coverModel) {
         val s = coverModel.toString()
@@ -469,7 +468,7 @@ internal fun AlbumTracks(album: Album, onTrackClick: (Track) -> Unit) {
     } else {
         LazyColumn(
             state = listState,
-            modifier = Modifier.fillMaxSize().thinScrollbar(listState),
+            modifier = Modifier.fillMaxSize(),
             flingBehavior = rememberCalmScrollableFlingBehavior(),
             contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
         ) {

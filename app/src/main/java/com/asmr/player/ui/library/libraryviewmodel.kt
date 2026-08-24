@@ -37,6 +37,7 @@ import com.asmr.player.data.local.db.entities.TagSource
 import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.data.local.db.entities.TrackTagEntity
 import com.asmr.player.data.local.db.entities.titleForDisplay
+import com.asmr.player.data.local.library.LocalAlbumMergeService
 import com.asmr.player.data.remote.api.AsmrOneApi
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncResolveResult
@@ -45,6 +46,8 @@ import com.asmr.player.data.remote.dlsite.resolveCloudSyncWorkId
 import com.asmr.player.data.remote.dlsite.resolveDlsiteCloudSync
 import com.asmr.player.data.remote.dlsite.resolveSelectedDlsiteCloudSync
 import com.asmr.player.data.remote.scraper.DLSiteScraper
+import com.asmr.player.data.remote.download.DownloadDestination
+import com.asmr.player.data.remote.download.DownloadDestinationStore
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
@@ -61,6 +64,7 @@ import com.asmr.player.util.SyncCoordinator
 import com.asmr.player.util.TagNormalizer
 import com.asmr.player.util.TrackKeyNormalizer
 import com.asmr.player.util.isOnlineTrackPath
+import com.asmr.player.util.isScannableLocalDirectoryName
 import com.asmr.player.util.isVirtualAlbumPath
 import com.asmr.player.util.EmbeddedMediaExtractor
 import com.asmr.player.work.AlbumCoverThumbWorker
@@ -131,6 +135,8 @@ class LibraryViewModel @Inject constructor(
     private val dlsiteProductInfoClient: DlsiteProductInfoClient,
     private val asmrOneApi: AsmrOneApi,
     private val settingsRepository: SettingsRepository,
+    private val downloadDestinationStore: DownloadDestinationStore,
+    private val localAlbumMergeService: LocalAlbumMergeService,
     private val syncCoordinator: SyncCoordinator,
     @Named("image") private val imageOkHttpClient: OkHttpClient,
     val messageManager: MessageManager,
@@ -249,10 +255,17 @@ class LibraryViewModel @Inject constructor(
                 if (hasAnyAlbum) return@withContext false
                 val hasRoots = runCatching { scanRootsStore.getRoots().isNotEmpty() }.getOrDefault(false)
                 val hasDownloaded = runCatching {
-                    val baseDir = File(context.getExternalFilesDir(null), "albums")
-                    baseDir.exists() &&
-                        baseDir.isDirectory &&
-                        (baseDir.listFiles()?.any { it.isDirectory && File(it, ".download_complete").exists() } == true)
+                    when (val destination = downloadDestinationStore.current()) {
+                        is DownloadDestination.Default -> {
+                            val baseDir = File(destination.root)
+                            baseDir.exists() && baseDir.isDirectory &&
+                                (baseDir.listFiles()?.any {
+                                    it.isDirectory && isScannableLocalDirectoryName(it.name) &&
+                                        File(it, ".download_complete").exists()
+                                } == true)
+                        }
+                        is DownloadDestination.DocumentTree -> true
+                    }
                 }.getOrDefault(false)
                 hasRoots || hasDownloaded
             }
@@ -752,7 +765,9 @@ class LibraryViewModel @Inject constructor(
 
         var best: File? = null
         var bestSize = 0L
-        albumDir.walkTopDown().forEach { f ->
+        albumDir.walkTopDown()
+            .onEnter { directory -> directory == albumDir || isScannableLocalDirectoryName(directory.name) }
+            .forEach { f ->
             if (!f.isFile) return@forEach
             if (!isImageName(f.name)) return@forEach
             val size = runCatching { f.length() }.getOrDefault(0L)
@@ -1010,18 +1025,36 @@ class LibraryViewModel @Inject constructor(
                             scanMutex.withLock {
                                 currentCoroutineContext().ensureActive()
                                 val roots = scanRootsStore.getRoots().toList()
-                                val downloadedDirs = runCatching {
-                                    val baseDir = File(context.getExternalFilesDir(null), "albums")
-                                baseDir.listFiles()?.filter { it.isDirectory && File(it, ".download_complete").exists() }.orEmpty()
-                                }.getOrDefault(emptyList())
+                                val downloadedAlbumCount = runCatching {
+                                    when (val destination = downloadDestinationStore.current()) {
+                                        is DownloadDestination.Default -> File(destination.root).listFiles()
+                                            ?.count {
+                                                it.isDirectory && isScannableLocalDirectoryName(it.name) &&
+                                                    File(it, ".download_complete").exists()
+                                            }
+                                            ?: 0
+                                        is DownloadDestination.DocumentTree -> {
+                                            val uri = Uri.parse(destination.root)
+                                            val treeId = DocumentsContract.getTreeDocumentId(uri)
+                                            queryChildren(uri, treeId).count { child ->
+                                                child.mimeType == DocumentsContract.Document.MIME_TYPE_DIR &&
+                                                    isScannableLocalDirectoryName(child.displayName) &&
+                                                    queryChildren(uri, child.documentId).any { it.displayName == ".download_complete" }
+                                            }
+                                        }
+                                    }
+                                }.getOrDefault(0)
 
-                                var totalAlbums = downloadedDirs.size
+                                var totalAlbums = downloadedAlbumCount
                                 roots.forEach { root ->
                                     currentCoroutineContext().ensureActive()
                                     val uri = runCatching { Uri.parse(root) }.getOrNull()
                                     val treeDocId = uri?.let { runCatching { DocumentsContract.getTreeDocumentId(it) }.getOrNull() }
                                     if (uri != null && !treeDocId.isNullOrBlank()) {
-                                        totalAlbums += queryChildren(uri, treeDocId).count { it.mimeType == DocumentsContract.Document.MIME_TYPE_DIR }
+                                        totalAlbums += queryChildren(uri, treeDocId).count {
+                                            it.mimeType == DocumentsContract.Document.MIME_TYPE_DIR &&
+                                                isScannableLocalDirectoryName(it.displayName)
+                                        }
                                     }
                                 }
                                 startBulkProgress(phase = BulkPhase.ScanningLocal, total = totalAlbums)
@@ -1060,6 +1093,62 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
+    fun scanCurrentDownloadDestinationAsImport() {
+        viewModelScope.launch {
+            val token = syncCoordinator.tryBegin() ?: run {
+                showSyncBusy("扫描目标下载目录")
+                return@launch
+            }
+            try {
+                bulkStartMutex.withLock {
+                    bulkJob = currentCoroutineContext()[Job]
+                    try {
+                        withContext(Dispatchers.IO) {
+                            scanMutex.withLock {
+                                currentCoroutineContext().ensureActive()
+                                val destination = downloadDestinationStore.current()
+                                val totalAlbums = when (destination) {
+                                    is DownloadDestination.Default -> File(destination.root).listFiles()
+                                        ?.count { it.isDirectory && isScannableLocalDirectoryName(it.name) }
+                                        ?: 0
+
+                                    is DownloadDestination.DocumentTree -> {
+                                        val uri = Uri.parse(destination.root)
+                                        val treeId = DocumentsContract.getTreeDocumentId(uri)
+                                        queryChildren(uri, treeId).count {
+                                            it.mimeType == DocumentsContract.Document.MIME_TYPE_DIR &&
+                                                isScannableLocalDirectoryName(it.displayName)
+                                        }
+                                    }
+                                }
+                                startBulkProgress(phase = BulkPhase.ScanningLocal, total = totalAlbums)
+                                var current = 0
+                                scanFromDownloadedDir(
+                                    onAlbumScanned = { title ->
+                                        current += 1
+                                        updateBulkAlbumProgress(current = current, currentAlbumTitle = title)
+                                    },
+                                    importAll = true,
+                                )
+                            }
+                        }
+                        messageManager.showSuccess("目标下载目录扫描完成")
+                    } catch (error: CancellationException) {
+                        messageManager.showInfo("已取消目标目录扫描")
+                    } catch (error: Exception) {
+                        Log.e(TAG, "scanCurrentDownloadDestinationAsImport failed", error)
+                        messageManager.showError("目标目录扫描失败：${error.message}")
+                    } finally {
+                        finishBulkProgress()
+                        if (bulkJob == currentCoroutineContext()[Job]) bulkJob = null
+                    }
+                }
+            } finally {
+                syncCoordinator.end(token)
+            }
+        }
+    }
+
     fun scanSingleRoot(uriString: String) {
         if (uriString.isBlank()) return
         viewModelScope.launch {
@@ -1077,7 +1166,10 @@ class LibraryViewModel @Inject constructor(
                                 val uri = runCatching { Uri.parse(uriString) }.getOrNull()
                                 val treeDocId = uri?.let { runCatching { DocumentsContract.getTreeDocumentId(it) }.getOrNull() }
                                 val totalAlbums = if (uri != null && !treeDocId.isNullOrBlank()) {
-                                    queryChildren(uri, treeDocId).count { it.mimeType == DocumentsContract.Document.MIME_TYPE_DIR }
+                                    queryChildren(uri, treeDocId).count {
+                                        it.mimeType == DocumentsContract.Document.MIME_TYPE_DIR &&
+                                            isScannableLocalDirectoryName(it.displayName)
+                                    }
                                 } else {
                                     0
                                 }
@@ -2077,12 +2169,28 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    private suspend fun scanFromDownloadedDir(onAlbumScanned: ((String) -> Unit)? = null) {
-        val baseDir = File(context.getExternalFilesDir(null), "albums")
+    private suspend fun scanFromDownloadedDir(
+        importAll: Boolean = false,
+        onAlbumScanned: ((String) -> Unit)? = null,
+    ) {
+        val destination = downloadDestinationStore.current()
+        if (destination is DownloadDestination.DocumentTree) {
+            scanFromDocumentTree(
+                uriString = destination.root,
+                asDownloadRoot = !importAll,
+                requireCompletionMarker = !importAll,
+                onAlbumScanned = onAlbumScanned,
+            )
+            return
+        }
+        val baseDir = File(destination.root)
         if (!baseDir.exists() || !baseDir.isDirectory) return
         val foundDownloadPaths = LinkedHashSet<String>()
         baseDir.listFiles()
-            ?.filter { it.isDirectory && File(it, ".download_complete").exists() }
+            ?.filter { albumDir ->
+                albumDir.isDirectory && isScannableLocalDirectoryName(albumDir.name) &&
+                    (importAll || File(albumDir, ".download_complete").exists())
+            }
             ?.forEach { albumDir ->
             currentCoroutineContext().ensureActive()
             foundDownloadPaths.add(albumDir.absolutePath)
@@ -2095,10 +2203,11 @@ class LibraryViewModel @Inject constructor(
                 rj = rj,
                 fallbackPath = albumDir.absolutePath,
                 fallbackTitle = title,
-                localPath = null,
-                downloadPath = albumDir.absolutePath
+                localPath = albumDir.absolutePath.takeIf { importAll },
+                downloadPath = albumDir.absolutePath.takeUnless { importAll },
             )
             val aggregateTracks = albumDir.walkTopDown()
+                .onEnter { directory -> directory == albumDir || isScannableLocalDirectoryName(directory.name) }
                 .filter { it.isFile && setOf("mp3", "flac", "wav", "m4a", "ogg", "aac", "opus").contains(it.extension.lowercase()) }
                 .map { file -> TrackEntity(albumId = 0L, title = file.nameWithoutExtension, path = file.absolutePath, duration = 0.0, group = "") }
                 .toList()
@@ -2107,8 +2216,8 @@ class LibraryViewModel @Inject constructor(
                 id = existing?.id ?: 0L,
                 title = existing?.title?.takeIf { it.isNotBlank() && it != title } ?: title,
                 path = existing?.path?.takeIf { it.isNotBlank() } ?: albumDir.absolutePath,
-                localPath = existing?.localPath,
-                downloadPath = albumDir.absolutePath,
+                localPath = if (importAll) albumDir.absolutePath else existing?.localPath,
+                downloadPath = if (importAll) existing?.downloadPath else albumDir.absolutePath,
                 circle = existing?.circle ?: "",
                 cv = existing?.cv ?: "",
                 tags = existing?.tags ?: "",
@@ -2127,6 +2236,7 @@ class LibraryViewModel @Inject constructor(
             upsertAlbumTagsFromCsv(albumId, entity.tags, TagSource.SCAN)
             if (entity.coverPath.isBlank()) {
                 val audio = albumDir.walkTopDown()
+                    .onEnter { directory -> directory == albumDir || isScannableLocalDirectoryName(directory.name) }
                     .firstOrNull { it.isFile && setOf("mp3","flac","wav","m4a","ogg","aac","opus").contains(it.extension.lowercase()) }
                 if (audio != null) {
                     val bmp = EmbeddedMediaExtractor.extractArtwork(context, audio.absolutePath)
@@ -2142,7 +2252,9 @@ class LibraryViewModel @Inject constructor(
             enqueueAlbumCoverThumbWork(albumId)
             scanTracksAndSubtitlesFromFileAlbum(albumId, albumDir)
         }
-        pruneMissingDownloadedAlbums(baseDir = baseDir, foundDownloadPaths = foundDownloadPaths)
+        if (!importAll) {
+            pruneMissingDownloadedAlbums(baseDir = baseDir, foundDownloadPaths = foundDownloadPaths)
+        }
     }
 
     private suspend fun pruneMissingDownloadedAlbums(
@@ -2156,7 +2268,7 @@ class LibraryViewModel @Inject constructor(
             dl.isNotBlank() &&
                 dl.startsWith(basePrefix) &&
                 !foundDownloadPaths.contains(dl) &&
-                !File(dl).exists()
+                (!File(dl).exists() || !isScannableLocalDirectoryName(File(dl).name))
         }
         if (missing.isEmpty()) return
 
@@ -2213,7 +2325,9 @@ class LibraryViewModel @Inject constructor(
         val audioFiles = mutableListOf<File>()
         val subtitleFiles = mutableListOf<File>()
         val cacheLeaves = mutableListOf<CacheLeafEntry>()
-        albumDir.walkTopDown().forEach { f ->
+        albumDir.walkTopDown()
+            .onEnter { directory -> directory == albumDir || isScannableLocalDirectoryName(directory.name) }
+            .forEach { f ->
             currentCoroutineContext().ensureActive()
             if (!f.isFile) return@forEach
             val ext = f.extension.lowercase()
@@ -2255,7 +2369,8 @@ class LibraryViewModel @Inject constructor(
         }
 
         val seenPaths = linkedSetOf<String>()
-        val tracksToUpsert = ArrayList<TrackEntity>(audioFiles.size)
+        val tracksToInsert = ArrayList<TrackEntity>(audioFiles.size)
+        val tracksToUpdate = ArrayList<TrackEntity>(audioFiles.size)
         val subtitleEntriesByAudioPath = linkedMapOf<String, List<SubtitleEntry>>()
         val subtitleEntriesByExistingTrackId = linkedMapOf<Long, List<SubtitleEntry>>()
 
@@ -2275,16 +2390,19 @@ class LibraryViewModel @Inject constructor(
                 subtitleEntriesByAudioPath[audioPath] = parsed
             }
 
-            tracksToUpsert.add(
+            val existingTrack = existingTracks[audioPath]
+            val scannedTrack = if (existingTrack == null) {
                 TrackEntity(
-                    id = existingTracks[audioPath]?.id ?: 0L,
                     albumId = albumId,
                     title = trackTitle,
                     path = audioPath,
                     duration = 0.0,
                     group = group
                 )
-            )
+            } else {
+                existingTrack.copy(title = trackTitle, group = group)
+            }
+            if (existingTrack == null) tracksToInsert.add(scannedTrack) else tracksToUpdate.add(scannedTrack)
         }
 
         val removedIds = existingTracks.values
@@ -2297,9 +2415,16 @@ class LibraryViewModel @Inject constructor(
             val subtitlesByTrackId = linkedMapOf<Long, List<SubtitleEntry>>()
             subtitlesByTrackId.putAll(subtitleEntriesByExistingTrackId.filterKeys { it > 0L })
 
-            if (tracksToUpsert.isNotEmpty()) {
-                val insertedTrackIds = trackDao.insertTracks(tracksToUpsert)
-                insertedTrackIds.zip(tracksToUpsert).forEach { (trackId, trackEntity) ->
+            if (tracksToUpdate.isNotEmpty()) trackDao.updateTracks(tracksToUpdate)
+            tracksToUpdate.forEach { trackEntity ->
+                val entriesForTrack = subtitleEntriesByAudioPath[trackEntity.path].orEmpty()
+                if (trackEntity.id > 0L && entriesForTrack.isNotEmpty()) {
+                    subtitlesByTrackId[trackEntity.id] = entriesForTrack
+                }
+            }
+            if (tracksToInsert.isNotEmpty()) {
+                val insertedTrackIds = trackDao.insertTracks(tracksToInsert)
+                insertedTrackIds.zip(tracksToInsert).forEach { (trackId, trackEntity) ->
                     val entriesForTrack = subtitleEntriesByAudioPath[trackEntity.path].orEmpty()
                     if (trackId > 0L && entriesForTrack.isNotEmpty()) {
                         subtitlesByTrackId[trackId] = entriesForTrack
@@ -2325,6 +2450,8 @@ class LibraryViewModel @Inject constructor(
 
             if (removedIds.isNotEmpty()) {
                 trackDao.deleteSubtitlesForTracks(removedIds)
+                database.remoteSubtitleSourceDao().deleteByTrackIds(removedIds)
+                database.trackTagDao().deleteTrackTagsByTrackIds(removedIds)
                 trackDao.deleteTracksByIds(removedIds)
             }
         }
@@ -2343,10 +2470,19 @@ class LibraryViewModel @Inject constructor(
         enqueueTrackDurationWork(albumId)
     }
 
-    private suspend fun scanFromDocumentTree(uriString: String, onAlbumScanned: ((String) -> Unit)? = null) {
+    private suspend fun scanFromDocumentTree(
+        uriString: String,
+        asDownloadRoot: Boolean = false,
+        requireCompletionMarker: Boolean = asDownloadRoot,
+        onAlbumScanned: ((String) -> Unit)? = null,
+    ) {
         val uri = runCatching { Uri.parse(uriString) }.getOrNull() ?: return
         val treeDocId = runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull() ?: return
-        val children = queryChildren(uri, treeDocId).filter { it.mimeType == DocumentsContract.Document.MIME_TYPE_DIR }
+        val children = queryChildren(uri, treeDocId).filter { child ->
+            child.mimeType == DocumentsContract.Document.MIME_TYPE_DIR &&
+                isScannableLocalDirectoryName(child.displayName) &&
+                (!requireCompletionMarker || queryChildren(uri, child.documentId).any { it.displayName == ".download_complete" })
+        }
         val audioExtensions = setOf("mp3", "flac", "wav", "m4a", "ogg", "aac", "opus")
         val subtitleExtensions = setOf("lrc", "srt", "vtt")
         val foundAlbumPaths = LinkedHashSet<String>()
@@ -2366,8 +2502,8 @@ class LibraryViewModel @Inject constructor(
                 rj = rj,
                 fallbackPath = albumPath,
                 fallbackTitle = title,
-                localPath = albumPath,
-                downloadPath = null
+                localPath = if (asDownloadRoot) null else albumPath,
+                downloadPath = if (asDownloadRoot) albumPath else null,
             )
 
             val all = walkTree(uri, albumDir.documentId).filter { it.mimeType != DocumentsContract.Document.MIME_TYPE_DIR }
@@ -2419,8 +2555,8 @@ class LibraryViewModel @Inject constructor(
                     id = existing?.id ?: 0L,
                     title = existing?.title?.takeIf { it.isNotBlank() && it != title } ?: title,
                     path = existing?.path?.takeIf { it.isNotBlank() } ?: albumPath,
-                    localPath = albumPath,
-                    downloadPath = existing?.downloadPath,
+                    localPath = if (asDownloadRoot) existing?.localPath else albumPath,
+                    downloadPath = if (asDownloadRoot) albumPath else existing?.downloadPath,
                     circle = existing?.circle ?: "",
                     cv = existing?.cv ?: "",
                     tags = existing?.tags ?: "",
@@ -2436,28 +2572,60 @@ class LibraryViewModel @Inject constructor(
                 upsertAlbumTagsFromCsv(insertedAlbumId, entity.tags, TagSource.SCAN)
 
                 val allExistingTracks = trackDao.getTracksForAlbumOnce(insertedAlbumId)
-                val toDelete = allExistingTracks.filter { it.path.startsWith(albumPath) }.map { it.id }
+                val existingUnderRoot = allExistingTracks
+                    .filter { it.path.startsWith(albumPath) }
+                    .associateBy { it.path }
+                val scannedPaths = trackSpecs.map { it.path }.toSet()
+                val toDelete = existingUnderRoot.values.filter { it.path !in scannedPaths }.map { it.id }
                 if (toDelete.isNotEmpty()) {
                     trackDao.deleteSubtitlesForTracks(toDelete)
+                    database.remoteSubtitleSourceDao().deleteByTrackIds(toDelete)
+                    database.trackTagDao().deleteTrackTagsByTrackIds(toDelete)
                     trackDao.deleteTracksByIds(toDelete)
                 }
 
                 val filteredTrackSpecs = trackSpecs
-
-                val tracksToInsert = filteredTrackSpecs.map { spec ->
-                    TrackEntity(
-                        albumId = insertedAlbumId,
-                        title = spec.title,
-                        path = spec.path,
-                        duration = 0.0,
-                        group = spec.group
-                    )
+                val tracksToInsert = mutableListOf<Pair<TrackEntity, TrackSpec>>()
+                val tracksToUpdate = mutableListOf<Pair<TrackEntity, TrackSpec>>()
+                filteredTrackSpecs.forEach { spec ->
+                    val existingTrack = existingUnderRoot[spec.path]
+                    if (existingTrack == null) {
+                        tracksToInsert += TrackEntity(
+                            albumId = insertedAlbumId,
+                            title = spec.title,
+                            path = spec.path,
+                            duration = 0.0,
+                            group = spec.group,
+                        ) to spec
+                    } else {
+                        tracksToUpdate += existingTrack.copy(title = spec.title, group = spec.group) to spec
+                    }
                 }
 
+                if (tracksToUpdate.isNotEmpty()) {
+                    trackDao.updateTracks(tracksToUpdate.map { it.first })
+                    tracksToUpdate.forEach { (track, spec) ->
+                        val entries = subtitlesByAudioPath[spec.path].orEmpty()
+                        if (entries.isNotEmpty()) {
+                            trackDao.deleteSubtitlesForTrack(track.id)
+                            trackDao.insertSubtitles(
+                                entries.map { entry ->
+                                    SubtitleEntity(
+                                        trackId = track.id,
+                                        startMs = entry.startMs,
+                                        endMs = entry.endMs,
+                                        text = entry.text,
+                                    )
+                                },
+                            )
+                            wroteAnySubtitles = true
+                        }
+                    }
+                }
                 if (tracksToInsert.isNotEmpty()) {
-                    val insertedTrackIds = trackDao.insertTracks(tracksToInsert)
+                    val insertedTrackIds = trackDao.insertTracks(tracksToInsert.map { it.first })
                     val subtitlesToInsert = ArrayList<SubtitleEntity>()
-                    insertedTrackIds.zip(filteredTrackSpecs).forEach { (trackId, spec) ->
+                    insertedTrackIds.zip(tracksToInsert.map { it.second }).forEach { (trackId, spec) ->
                         val entries = subtitlesByAudioPath[spec.path].orEmpty()
                         entries.forEach { e ->
                             subtitlesToInsert.add(
@@ -2542,7 +2710,33 @@ class LibraryViewModel @Inject constructor(
             enqueueAlbumCoverThumbWork(insertedAlbumId)
             enqueueTrackDurationWork(insertedAlbumId)
         }
-        pruneMissingDocumentAlbums(rootUriString = uriString, foundAlbumPaths = foundAlbumPaths)
+        if (asDownloadRoot) {
+            pruneMissingDocumentDownloadAlbums(rootUriString = uriString, foundAlbumPaths = foundAlbumPaths)
+        } else {
+            pruneMissingDocumentAlbums(rootUriString = uriString, foundAlbumPaths = foundAlbumPaths)
+        }
+    }
+
+    private suspend fun pruneMissingDocumentDownloadAlbums(
+        rootUriString: String,
+        foundAlbumPaths: Set<String>,
+    ) {
+        val albums = albumDao.getAllAlbumsOnce()
+        albums.filter { entity ->
+            val download = entity.downloadPath?.trim().orEmpty()
+            download.isNotBlank() && download.startsWith(rootUriString) && !foundAlbumPaths.contains(download)
+        }.forEach { entity ->
+            val tracks = trackDao.getTracksForAlbumOnce(entity.id)
+            val removedIds = tracks.filter { it.path.startsWith(rootUriString) }.map { it.id }
+            if (removedIds.isNotEmpty()) {
+                trackDao.deleteSubtitlesForTracks(removedIds)
+                database.remoteSubtitleSourceDao().deleteByTrackIds(removedIds)
+                database.trackTagDao().deleteTrackTagsByTrackIds(removedIds)
+                trackDao.deleteTracksByIds(removedIds)
+            }
+            albumDao.updateAlbum(entity.copy(downloadPath = null))
+            database.localTreeCacheDao().deleteByAlbum(entity.id)
+        }
     }
 
     private suspend fun pruneMissingDocumentAlbums(
@@ -2870,36 +3064,13 @@ class LibraryViewModel @Inject constructor(
         fallbackTitle: String,
         localPath: String?,
         downloadPath: String?
-    ): AlbumEntity? {
-        if (rj.isNotBlank()) {
-            val matches = albumDao.getAlbumsByWorkIdOnce(rj)
-            if (matches.isNotEmpty()) {
-                val canonical = matches.firstOrNull { !it.localPath.isNullOrBlank() } ?: matches.first()
-                matches.filter { it.id != canonical.id }.forEach { other ->
-                    trackDao.moveTracksToAlbum(other.id, canonical.id)
-                    database.onlineSavedResourceDao().moveToAlbum(other.id, canonical.id)
-                    deleteAlbumEntity(other)
-                }
-                val merged = canonical.copy(
-                    title = canonical.title.ifBlank { fallbackTitle },
-                    path = canonical.path.ifBlank { fallbackPath },
-                    localPath = canonical.localPath ?: localPath,
-                    downloadPath = canonical.downloadPath ?: downloadPath,
-                    workId = canonical.workId.ifBlank { rj },
-                    rjCode = canonical.rjCode.ifBlank { rj }
-                )
-                albumDao.updateAlbum(merged)
-                upsertAlbumFtsIndex(merged.id, merged)
-                return merged
-            }
-        }
-        val byPath = albumDao.getAlbumByPathOnce(fallbackPath)
-        if (byPath != null) return byPath
-        if (fallbackTitle.isNotBlank() && fallbackTitle != "album") {
-            return albumDao.getAllAlbumsOnce().firstOrNull { it.title == fallbackTitle }
-        }
-        return null
-    }
+    ): AlbumEntity? = localAlbumMergeService.resolveAndMerge(
+        rj = rj,
+        fallbackPath = fallbackPath,
+        fallbackTitle = fallbackTitle,
+        localPath = localPath,
+        downloadPath = downloadPath,
+    )
 
     private suspend fun deleteAlbumEntity(entity: AlbumEntity) {
         database.onlineSavedResourceDao().deleteByAlbumId(entity.id)
@@ -2957,12 +3128,22 @@ class LibraryViewModel @Inject constructor(
     private fun walkTree(treeUri: Uri, rootDocumentId: String): List<DocNode> {
         val result = mutableListOf<DocNode>()
         val queue = ArrayDeque<DocNode>()
-        queryChildren(treeUri, rootDocumentId).forEach { queue.add(it) }
+        queryChildren(treeUri, rootDocumentId)
+            .filterNot { node ->
+                node.mimeType == DocumentsContract.Document.MIME_TYPE_DIR &&
+                    !isScannableLocalDirectoryName(node.displayName)
+            }
+            .forEach { queue.add(it) }
         while (queue.isNotEmpty()) {
             val node = queue.removeFirst()
             result.add(node)
             if (node.mimeType == DocumentsContract.Document.MIME_TYPE_DIR) {
-                queryChildren(treeUri, node.documentId, node.relativePath).forEach { queue.add(it) }
+                queryChildren(treeUri, node.documentId, node.relativePath)
+                    .filterNot { child ->
+                        child.mimeType == DocumentsContract.Document.MIME_TYPE_DIR &&
+                            !isScannableLocalDirectoryName(child.displayName)
+                    }
+                    .forEach { queue.add(it) }
             }
         }
         return result

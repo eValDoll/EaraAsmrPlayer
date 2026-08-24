@@ -32,7 +32,6 @@ import androidx.compose.material.icons.rounded.CloudDownload
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
-import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import android.net.Uri
 import androidx.compose.ui.platform.LocalConfiguration
@@ -84,7 +83,7 @@ import com.asmr.player.ui.library.LibraryFilterScreen
 import com.asmr.player.ui.library.LibraryScreen
 import com.asmr.player.ui.library.LibraryViewModel
 import com.asmr.player.ui.library.BulkPhase
-import com.asmr.player.data.remote.scraper.dlsiteOriginalCoverUrlForWorkNo
+import com.asmr.player.data.remote.scraper.resolveRecommendedWorkCoverUrl
 import com.asmr.player.performance.UiFrameWorkCoordinator
 import com.asmr.player.ui.player.MiniPlayer
 import com.asmr.player.ui.player.NowPlayingMotionLayout
@@ -112,6 +111,8 @@ import com.asmr.player.ui.playlists.SystemPlaylistScreen
 import com.asmr.player.ui.search.SEARCH_ASSIST_RESULT_CHINESE_TRANSLATED_ONLY_KEY
 import com.asmr.player.ui.search.SEARCH_ASSIST_RESULT_COLLECTED_ONLY_KEY
 import com.asmr.player.ui.search.SEARCH_ASSIST_RESULT_COLLECTED_SORT_KEY
+import com.asmr.player.ui.search.SEARCH_ASSIST_RESULT_HAS_SUBTITLE_KEY
+import com.asmr.player.ui.search.SEARCH_ASSIST_RESULT_ALL_AGES_KEY
 import com.asmr.player.ui.search.SEARCH_ASSIST_RESULT_KEY
 import com.asmr.player.ui.search.SEARCH_ASSIST_RESULT_LOCALE_KEY
 import com.asmr.player.ui.search.SEARCH_ASSIST_RESULT_ORDER_KEY
@@ -131,7 +132,9 @@ import com.asmr.player.ui.common.FlatActionDialog
 import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.FlatTextFieldDialog
+import com.asmr.player.ui.common.EdgeToEdgeFullHeightSheet
 import com.asmr.player.ui.common.EaraTopBarContainer
+import com.asmr.player.ui.common.EaraMainTopBarHeight
 import com.asmr.player.ui.common.EaraTopBarIconButton
 import com.asmr.player.ui.common.resolveMainPageBackgroundColor
 import com.asmr.player.ui.common.glassMenu
@@ -201,6 +204,7 @@ import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
+import com.asmr.player.data.settings.NowPlayingLyricsSettings
 import com.asmr.player.util.MessageManager
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.theme.HuePalette
@@ -225,6 +229,7 @@ import com.asmr.player.ui.common.rememberProtectedAppVolumeChangeState
 import com.asmr.player.ui.common.AudioOutputRouteIcon
 import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
 import com.asmr.player.service.AudioOutputRouteKind
+import com.asmr.player.service.PlaybackService
 import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -246,8 +251,6 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.ui.common.AppVolumeVerticalSlider
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
@@ -262,6 +265,7 @@ internal data class BatchPlaylistPickerRequest(
 private const val SecondaryPageEnterDurationMs = 440
 private const val SecondaryPageExitDurationMs = 420
 private const val SecondaryPageTouchBlockDurationMs = 320
+private const val AlbumDetailPresentedStateKey = "album_detail_presented"
 private const val PrimaryPagerSnapThreshold = 0.16f
 private val SecondaryPageSlideEasing = CubicBezierEasing(0.215f, 0.61f, 0.355f, 1f)
 private val PrimaryPageParallaxOffset = 120.dp
@@ -383,17 +387,24 @@ private fun AlbumDetailRouteFrame(
         ?.takeIf { isAlbumDetailRoute(it.destination.route) }
         ?.id
     val usesStackTransition = previousAlbumDetailEntryId != null
-    val skipEnterAnimation = usesStackTransition || stackPopTargetEntryId == backStackEntry.id
+    val alreadyPresented = backStackEntry.savedStateHandle
+        .get<Boolean>(AlbumDetailPresentedStateKey) == true
+    val skipEnterAnimation = alreadyPresented ||
+        usesStackTransition ||
+        stackPopTargetEntryId == backStackEntry.id
     val heroBlurGraphicsLayer = rememberGraphicsLayer()
     val heroBlurLayerCache = remember(heroBlurGraphicsLayer) {
         AlbumHeroBlurLayerCache(heroBlurGraphicsLayer)
     }
     val rootView = LocalView.current
-    val pageWidthPx = rootView.width.toFloat().coerceAtLeast(1f)
-    val pageOffsetX = remember(pageWidthPx, backStackEntry.id) {
-        Animatable(if (skipEnterAnimation) 0f else pageWidthPx)
+    val pageOffsetProgress = remember(backStackEntry.id) {
+        Animatable(if (skipEnterAnimation) 0f else 1f)
     }
-    val pageOffsetReader = remember(pageOffsetX) { { pageOffsetX.value } }
+    val pageOffsetReader = remember(pageOffsetProgress, rootView) {
+        {
+            pageOffsetProgress.value * rootView.width.toFloat().coerceAtLeast(1f)
+        }
+    }
     SideEffect {
         onPageOffsetReader(pageOffsetReader)
     }
@@ -416,18 +427,21 @@ private fun AlbumDetailRouteFrame(
     }
     BackHandler(enabled = !exitRequested, onBack = closeAlbumDetail)
 
-    LaunchedEffect(backStackEntry.id, pageWidthPx) {
+    LaunchedEffect(backStackEntry.id) {
+        // 方向切换可能让当前目的地短暂退出组合。把已展示状态保存在返回栈项中，
+        // 重建后直接恢复到屏内，避免重新执行一次入场并与随后的退出动画叠加。
+        backStackEntry.savedStateHandle[AlbumDetailPresentedStateKey] = true
         if (skipEnterAnimation) {
-            pageOffsetX.snapTo(0f)
+            pageOffsetProgress.snapTo(0f)
         } else {
-            pageOffsetX.snapTo(pageWidthPx)
+            pageOffsetProgress.snapTo(1f)
             // 详情页先在屏幕外完成一次组合与绘制，再启动可见位移。导航提前使用原本的第二个
             // 准备帧，因此不会改变用户看到的动画起点、时长或缓动。
             withFrameNanos { }
             UiFrameWorkCoordinator.markFrameCritical(
                 SecondaryPageEnterDurationMs.toLong()
             )
-            pageOffsetX.animateTo(
+            pageOffsetProgress.animateTo(
                 targetValue = 0f,
                 animationSpec = tween(
                     durationMillis = SecondaryPageEnterDurationMs,
@@ -447,8 +461,8 @@ private fun AlbumDetailRouteFrame(
         UiFrameWorkCoordinator.markFrameCritical(
             SecondaryPageExitDurationMs.toLong()
         )
-        pageOffsetX.animateTo(
-            targetValue = pageWidthPx,
+        pageOffsetProgress.animateTo(
+            targetValue = 1f,
             animationSpec = tween(
                 durationMillis = SecondaryPageExitDurationMs,
                 easing = SecondaryPageSlideEasing
@@ -470,7 +484,7 @@ private fun AlbumDetailRouteFrame(
             .fillMaxSize()
             .graphicsLayer {
                 val width = size.width.toFloat().coerceAtLeast(1f)
-                val offset = pageOffsetX.value.coerceIn(0f, width)
+                val offset = width * pageOffsetProgress.value.coerceIn(0f, 1f)
                 val visibleRight = if (offset >= width - 0.5f) {
                     // 保留屏外预绘制帧，避免动画起点改变。
                     width
@@ -788,6 +802,7 @@ fun MainContainer(
     coverPreviewMode: CoverPreviewMode,
     nowPlayingHomeLayoutMode: NowPlayingHomeLayoutMode,
     nowPlayingHomeLayoutHintDismissed: Boolean,
+    nowPlayingLyricsSettings: NowPlayingLyricsSettings,
     lyricsPageSettings: LyricsPageSettings,
     forceImmersive: Boolean,
     volumeKeyEventTick: Long
@@ -967,6 +982,8 @@ fun MainContainer(
         mutableStateOf(SearchAssistSearchRequest().chineseTranslatedOnly)
     }
     var submittedSearchCollectedOnly by rememberSaveable { mutableStateOf(SearchAssistSearchRequest().collectedOnly) }
+    var submittedSearchHasSubtitle by rememberSaveable { mutableStateOf(SearchAssistSearchRequest().hasSubtitle) }
+    var submittedSearchAllAges by rememberSaveable { mutableStateOf(SearchAssistSearchRequest().allAges) }
     var submittedSearchCollectedSortName by rememberSaveable {
         mutableStateOf(SearchAssistSearchRequest().collectedSortName)
     }
@@ -994,9 +1011,12 @@ fun MainContainer(
     var automaticUpdateInstallRequested by rememberSaveable { mutableStateOf(false) }
     var pendingAutomaticInstallPath by rememberSaveable { mutableStateOf<String?>(null) }
     var nowPlayingVisible by rememberSaveable { mutableStateOf(false) }
+    var nowPlayingVideoFullscreen by remember { mutableStateOf(false) }
     var nowPlayingUsesInlineVolumeControl by remember { mutableStateOf(false) }
     var nowPlayingEqualizerVisible by remember { mutableStateOf(false) }
     var nowPlayingBackdropActive by rememberSaveable { mutableStateOf(false) }
+    var nowPlayingPortraitExitPending by remember { mutableStateOf(false) }
+    var nowPlayingRouteExitFinished by remember { mutableStateOf(false) }
     var nowPlayingBackdropExitDurationMs by rememberSaveable {
         mutableIntStateOf(NowPlayingMotionSpec.totalExitDurationMs(NowPlayingMotionLayout.PORTRAIT))
     }
@@ -1010,27 +1030,58 @@ fun MainContainer(
     )
     val openNowPlaying = openNowPlaying@{
         if (nowPlayingVisible) return@openNowPlaying
+        nowPlayingPortraitExitPending = false
+        nowPlayingRouteExitFinished = false
         nowPlayingBackdropActive = true
         nowPlayingVisible = true
     }
-    val closeNowPlaying: () -> Unit = {
+    val finalizeNowPlayingClose: () -> Unit = {
         nowPlayingPlaylistPickerRequest = null
         albumBatchPlaylistPickerRequest = null
         nowPlayingBackdropActive = false
+        nowPlayingPortraitExitPending = false
+        nowPlayingRouteExitFinished = false
+        nowPlayingVideoFullscreen = false
         nowPlayingUsesInlineVolumeControl = false
+        nowPlayingEqualizerVisible = false
         nowPlayingVisible = false
     }
+    val closeNowPlaying: () -> Unit = {
+        nowPlayingRouteExitFinished = true
+        if (isPhone && isLandscape) {
+            nowPlayingPortraitExitPending = true
+            nowPlayingBackdropActive = true
+        } else {
+            finalizeNowPlayingClose()
+        }
+    }
+    LaunchedEffect(
+        nowPlayingPortraitExitPending,
+        nowPlayingRouteExitFinished,
+        isPhone,
+        isLandscape
+    ) {
+        if (
+            nowPlayingPortraitExitPending &&
+            nowPlayingRouteExitFinished &&
+            (!isPhone || !isLandscape)
+        ) {
+            finalizeNowPlayingClose()
+        }
+    }
     val playerBackdropVisible = nowPlayingVisible
-    val sharedPlayerUriText = sharedPlayerItem?.localConfiguration?.uri?.toString().orEmpty()
-    val sharedPlayerMimeType = sharedPlayerItem?.localConfiguration?.mimeType.orEmpty()
-    val sharedPlayerExt = sharedPlayerUriText
-        .substringBefore('#')
-        .substringBefore('?')
-        .substringAfterLast('.', "")
-        .lowercase()
-    val sharedPlayerIsVideo = sharedPlayerItem?.mediaMetadata?.extras?.getBoolean("is_video") == true ||
-        sharedPlayerMimeType.startsWith("video/") ||
-        sharedPlayerExt in setOf("mp4", "m4v", "webm", "mkv", "mov")
+    val sharedPlayerIsVideo = sharedPlayerItem.isVideoPlaybackItem()
+    val videoOutputEnabled = shouldKeepVideoOutputEnabled(
+        currentItemIsVideo = sharedPlayerIsVideo,
+        miniPlayerEnabled = showMiniPlayerBar,
+        nowPlayingVisible = nowPlayingVisible
+    )
+    DisposableEffect(playerViewModel, videoOutputEnabled) {
+        playerViewModel.setVideoOutputEnabled(videoOutputEnabled)
+        onDispose {
+            if (videoOutputEnabled) playerViewModel.setVideoOutputEnabled(false)
+        }
+    }
     val sharedUseDragPreview = playerBackdropVisible &&
         coverBackgroundEnabled &&
         coverPreviewMode == CoverPreviewMode.Drag &&
@@ -1162,6 +1213,8 @@ fun MainContainer(
             request.chineseTranslatedOnly
         )
         targetEntry?.savedStateHandle?.set(SEARCH_ASSIST_RESULT_COLLECTED_ONLY_KEY, request.collectedOnly)
+        targetEntry?.savedStateHandle?.set(SEARCH_ASSIST_RESULT_HAS_SUBTITLE_KEY, request.hasSubtitle)
+        targetEntry?.savedStateHandle?.set(SEARCH_ASSIST_RESULT_ALL_AGES_KEY, request.allAges)
         targetEntry?.savedStateHandle?.set(SEARCH_ASSIST_RESULT_COLLECTED_SORT_KEY, request.collectedSortName)
         targetEntry?.savedStateHandle?.set(SEARCH_ASSIST_RESULT_LOCALE_KEY, request.locale)
         targetEntry?.savedStateHandle?.set(
@@ -1181,6 +1234,8 @@ fun MainContainer(
         submittedSearchPresaleOnly = request.presaleOnly
         submittedSearchChineseTranslatedOnly = request.chineseTranslatedOnly
         submittedSearchCollectedOnly = request.collectedOnly
+        submittedSearchHasSubtitle = request.hasSubtitle
+        submittedSearchAllAges = request.allAges
         submittedSearchCollectedSortName = request.collectedSortName
         submittedSearchLocale = request.locale
         submittedSearchSignal = System.currentTimeMillis()
@@ -1439,21 +1494,20 @@ fun MainContainer(
         onDispose { }
     }
 
-    // 屏幕旋转管理逻辑
-    LaunchedEffect(nowPlayingVisible, isPhone) {
+    // 普通播放页保持原方向策略，仅视频全屏时锁定横屏。
+    LaunchedEffect(
+        nowPlayingVisible,
+        isPhone,
+        nowPlayingVideoFullscreen,
+        nowPlayingPortraitExitPending
+    ) {
         activity?.let { act ->
-            if (isPhone) {
-                if (nowPlayingVisible) {
-                    // 手机端在播放页和歌词页允许横屏（遵守系统自动旋转/旋转锁定设置）
-                    act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_FULL_USER
-                } else {
-                    // 手机端其他页面强制锁定竖屏
-                    act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-                }
-            } else {
-                // 平板端始终允许旋转
-                act.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR
-            }
+            act.requestedOrientation = resolveMainRequestedOrientation(
+                isPhone = isPhone,
+                nowPlayingVisible = nowPlayingVisible,
+                videoFullscreen = nowPlayingVideoFullscreen,
+                portraitExitPending = nowPlayingPortraitExitPending
+            )
         }
     }
     LaunchedEffect(appVolumePercent) {
@@ -1509,7 +1563,10 @@ fun MainContainer(
     ) {
         val now = android.os.SystemClock.elapsedRealtime()
         if (now - lastLibraryBackPressElapsedRealtime <= 2_000L) {
-            activity?.finish()
+            activity?.let { currentActivity ->
+                PlaybackService.requestShutdownForAppExit(currentActivity)
+                currentActivity.finishAndRemoveTask()
+            }
         } else {
             lastLibraryBackPressElapsedRealtime = now
             messageManager.showInfo("再按一次返回退出应用")
@@ -1715,7 +1772,7 @@ fun MainContainer(
                                     Column {
                                         Spacer(modifier = Modifier.windowInsetsTopHeight(StableWindowInsets.statusBars))
                                         CenterAlignedTopAppBar(
-                                            modifier = Modifier.height(48.dp),
+                                            modifier = Modifier.height(EaraMainTopBarHeight),
                                             title = {
                                                 val entry = navBackStackEntry
                                                 val resolvedTitleRoute = if (currentScreenIsPrimary || albumDetailTransitionActive) {
@@ -2062,9 +2119,7 @@ fun MainContainer(
                                                 },
                                                 onPlayTracks = { album, tracks, startTrack ->
                                                     scope.launch {
-                                                        if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                                            openNowPlaying()
-                                                        }
+                                                        playerViewModel.playTracksPrepared(album, tracks, startTrack)
                                                     }
                                                 },
                                                 onOpenPlaylistPicker = { item ->
@@ -2092,6 +2147,8 @@ fun MainContainer(
                                                 submittedSearchPresaleOnly = submittedSearchPresaleOnly,
                                                 submittedSearchChineseTranslatedOnly = submittedSearchChineseTranslatedOnly,
                                                 submittedSearchCollectedOnly = submittedSearchCollectedOnly,
+                                                submittedSearchHasSubtitle = submittedSearchHasSubtitle,
+                                                submittedSearchAllAges = submittedSearchAllAges,
                                                 submittedSearchCollectedSortName = submittedSearchCollectedSortName,
                                                 submittedSearchLocale = submittedSearchLocale,
                                                 submittedSearchSignal = submittedSearchSignal,
@@ -2173,7 +2230,7 @@ fun MainContainer(
                                                 scrollToTopSignal = favoritesScrollToTopSignal,
                                                 onPlayAll = { items, startItem ->
                                                     playerViewModel.playPlaylistItems(items, startItem)
-                                                    openNowPlaying()
+                                                    if (startItem.isVideoPlaybackItem()) openNowPlaying()
                                                 },
                                                 viewModel = playlistsViewModel
                                             )
@@ -2330,6 +2387,12 @@ fun MainContainer(
                     val submittedCollectedOnly by backStackEntry.savedStateHandle
                         .getStateFlow(SEARCH_ASSIST_RESULT_COLLECTED_ONLY_KEY, SearchAssistSearchRequest().collectedOnly)
                         .collectAsStateWithLifecycle()
+                    val submittedHasSubtitle by backStackEntry.savedStateHandle
+                        .getStateFlow(SEARCH_ASSIST_RESULT_HAS_SUBTITLE_KEY, SearchAssistSearchRequest().hasSubtitle)
+                        .collectAsStateWithLifecycle()
+                    val submittedAllAges by backStackEntry.savedStateHandle
+                        .getStateFlow(SEARCH_ASSIST_RESULT_ALL_AGES_KEY, SearchAssistSearchRequest().allAges)
+                        .collectAsStateWithLifecycle()
                     val submittedCollectedSortName by backStackEntry.savedStateHandle
                         .getStateFlow(
                             SEARCH_ASSIST_RESULT_COLLECTED_SORT_KEY,
@@ -2351,6 +2414,8 @@ fun MainContainer(
                         submittedPresaleOnly,
                         submittedChineseTranslatedOnly,
                         submittedCollectedOnly,
+                        submittedHasSubtitle,
+                        submittedAllAges,
                         submittedCollectedSortName,
                         submittedLocale
                     ) {
@@ -2361,6 +2426,8 @@ fun MainContainer(
                         submittedSearchPresaleOnly = submittedPresaleOnly
                         submittedSearchChineseTranslatedOnly = submittedChineseTranslatedOnly
                         submittedSearchCollectedOnly = submittedCollectedOnly
+                        submittedSearchHasSubtitle = submittedHasSubtitle
+                        submittedSearchAllAges = submittedAllAges
                         submittedSearchCollectedSortName = submittedCollectedSortName
                         submittedSearchLocale = submittedLocale
                         submittedSearchSignal = submittedSignal
@@ -2375,6 +2442,10 @@ fun MainContainer(
                             SearchAssistSearchRequest().chineseTranslatedOnly
                         backStackEntry.savedStateHandle[SEARCH_ASSIST_RESULT_COLLECTED_ONLY_KEY] =
                             SearchAssistSearchRequest().collectedOnly
+                        backStackEntry.savedStateHandle[SEARCH_ASSIST_RESULT_HAS_SUBTITLE_KEY] =
+                            SearchAssistSearchRequest().hasSubtitle
+                        backStackEntry.savedStateHandle[SEARCH_ASSIST_RESULT_ALL_AGES_KEY] =
+                            SearchAssistSearchRequest().allAges
                         backStackEntry.savedStateHandle[SEARCH_ASSIST_RESULT_COLLECTED_SORT_KEY] =
                             SearchAssistSearchRequest().collectedSortName
                         backStackEntry.savedStateHandle[SEARCH_ASSIST_RESULT_LOCALE_KEY] =
@@ -2459,14 +2530,12 @@ fun MainContainer(
                                 .toAlbumDetailInitialTab(),
                             onPlayTracks = { album, tracks, startTrack ->
                                 scope.launch {
-                                    if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                        openNowPlaying()
-                                    }
+                                    playerViewModel.playTracksPrepared(album, tracks, startTrack)
                                 }
                             },
                             onPlayMediaItems = { items, startIndex ->
                                 playerViewModel.playMediaItems(items, startIndex)
-                                openNowPlaying()
+                                if (items.getOrNull(startIndex).isVideoPlaybackItem()) openNowPlaying()
                             },
                             onAddToQueue = { album, track ->
                                 playerViewModel.addTrackToQueue(album, track)
@@ -2487,8 +2556,7 @@ fun MainContainer(
                                     rjCode = targetRj,
                                     title = work?.title,
                                     circle = null,
-                                    coverUrl = dlsiteOriginalCoverUrlForWorkNo(targetRj)
-                                        .ifBlank { work?.coverUrl.orEmpty() }
+                                    coverUrl = resolveRecommendedWorkCoverUrl(targetRj, work?.coverUrl)
                                 )
                                 navigator.openAlbumDetailByRjStacked(targetRj)
                             },
@@ -2542,14 +2610,12 @@ fun MainContainer(
                                 .toAlbumDetailInitialTab(),
                             onPlayTracks = { album, tracks, startTrack ->
                                 scope.launch {
-                                    if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                        openNowPlaying()
-                                    }
+                                    playerViewModel.playTracksPrepared(album, tracks, startTrack)
                                 }
                             },
                             onPlayMediaItems = { items, startIndex ->
                                 playerViewModel.playMediaItems(items, startIndex)
-                                openNowPlaying()
+                                if (items.getOrNull(startIndex).isVideoPlaybackItem()) openNowPlaying()
                             },
                             onAddToQueue = { album, track ->
                                 playerViewModel.addTrackToQueue(album, track)
@@ -2570,8 +2636,7 @@ fun MainContainer(
                                     rjCode = targetRj,
                                     title = work?.title,
                                     circle = null,
-                                    coverUrl = dlsiteOriginalCoverUrlForWorkNo(targetRj)
-                                        .ifBlank { work?.coverUrl.orEmpty() }
+                                    coverUrl = resolveRecommendedWorkCoverUrl(targetRj, work?.coverUrl)
                                 )
                                 navigator.openAlbumDetailByRjStacked(targetRj)
                             },
@@ -2616,14 +2681,12 @@ fun MainContainer(
                             rjCode = rj,
                             onPlayTracks = { album, tracks, startTrack ->
                                 scope.launch {
-                                    if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
-                                        openNowPlaying()
-                                    }
+                                    playerViewModel.playTracksPrepared(album, tracks, startTrack)
                                 }
                             },
                             onPlayMediaItems = { items, startIndex ->
                                 playerViewModel.playMediaItems(items, startIndex)
-                                openNowPlaying()
+                                if (items.getOrNull(startIndex).isVideoPlaybackItem()) openNowPlaying()
                             },
                             onAddToQueue = { album, track ->
                                 playerViewModel.addTrackToQueue(album, track)
@@ -2638,8 +2701,7 @@ fun MainContainer(
                                     rjCode = targetRj,
                                     title = work?.title,
                                     circle = null,
-                                    coverUrl = dlsiteOriginalCoverUrlForWorkNo(targetRj)
-                                        .ifBlank { work?.coverUrl.orEmpty() }
+                                    coverUrl = resolveRecommendedWorkCoverUrl(targetRj, work?.coverUrl)
                                 )
                                 navigator.openAlbumDetailByRjStacked(targetRj)
                             },
@@ -2694,7 +2756,7 @@ fun MainContainer(
                             title = groupName,
                             onPlayMediaItems = { items, startIndex ->
                                 playerViewModel.playMediaItems(items, startIndex)
-                                openNowPlaying()
+                                if (items.getOrNull(startIndex).isVideoPlaybackItem()) openNowPlaying()
                             }
                         )
                     }
@@ -2732,7 +2794,7 @@ fun MainContainer(
                             title = playlistName,
                             onPlayAll = { items, startItem ->
                                 playerViewModel.playPlaylistItems(items, startItem)
-                                openNowPlaying()
+                                if (startItem.isVideoPlaybackItem()) openNowPlaying()
                             }
                         )
                     }
@@ -2748,7 +2810,7 @@ fun MainContainer(
                                 windowSizeClass = windowSizeClass,
                                 onPlayAll = { items, startItem ->
                                     playerViewModel.playPlaylistItems(items, startItem)
-                                    openNowPlaying()
+                                    if (startItem.isVideoPlaybackItem()) openNowPlaying()
                                 },
                                 viewModel = playlistsViewModel
                             )
@@ -2955,10 +3017,16 @@ fun MainContainer(
                     hardwareVolumeEventTick = nowPlayingVolumeEventTick,
                     onInlineVolumeControlVisibilityChanged = { nowPlayingUsesInlineVolumeControl = it },
                     onEqualizerVisibilityChanged = { nowPlayingEqualizerVisible = it },
+                    onVideoFullscreenChanged = { nowPlayingVideoFullscreen = it },
                     onBack = closeNowPlaying,
                     onRouteExitStarted = { exitDurationMs ->
                         nowPlayingBackdropExitDurationMs = exitDurationMs
-                        nowPlayingBackdropActive = false
+                        if (isPhone && isLandscape) {
+                            nowPlayingPortraitExitPending = true
+                            nowPlayingBackdropActive = true
+                        } else {
+                            nowPlayingBackdropActive = false
+                        }
                     },
                     onShowQueue = onShowQueue,
                     onShowSleepTimer = onShowSleepTimer,
@@ -2976,6 +3044,7 @@ fun MainContainer(
                             settingsDataStore.setNowPlayingHomeLayoutMode(mode, dismissHint = true)
                         }
                     },
+                    nowPlayingLyricsSettings = nowPlayingLyricsSettings,
                     lyricsPageSettings = lyricsPageSettings,
                     audioOutputRouteKind = audioOutputRouteKind,
                     warningSessionState = appVolumeWarningSessionState,
@@ -2985,73 +3054,32 @@ fun MainContainer(
                 )
                 nowPlayingPlaylistPickerRequest?.let { request ->
                     val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
-                    Dialog(
+                    EdgeToEdgeFullHeightSheet(
                         onDismissRequest = { nowPlayingPlaylistPickerRequest = null },
-                        properties = DialogProperties(usePlatformDefaultWidth = false)
+                        containerColor = colorScheme.background.copy(alpha = 0.96f),
+                        contentColor = colorScheme.onBackground
                     ) {
-                        Surface(
-                            modifier = Modifier.fillMaxSize(),
-                            color = colorScheme.background.copy(alpha = 0.96f),
-                            contentColor = colorScheme.onBackground
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .windowInsetsPadding(StableWindowInsets.statusBars)
+                                .windowInsetsPadding(StableWindowInsets.navigationBars)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .windowInsetsPadding(StableWindowInsets.statusBars)
-                                    .windowInsetsPadding(StableWindowInsets.navigationBars)
-                            ) {
-                                PlaylistPickerScreen(
-                                    windowSizeClass = windowSizeClass,
-                                    items = request.items,
-                                    onBack = { nowPlayingPlaylistPickerRequest = null },
-                                    embeddedInDialog = true,
-                                    viewModel = playlistsViewModel
-                                )
-                            }
+                            PlaylistPickerScreen(
+                                windowSizeClass = windowSizeClass,
+                                items = request.items,
+                                onBack = { nowPlayingPlaylistPickerRequest = null },
+                                embeddedInDialog = true,
+                                viewModel = playlistsViewModel
+                            )
                         }
                     }
                 }
                 albumBatchPlaylistPickerRequest?.let { request ->
                     val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
-                    Dialog(
+                    EdgeToEdgeFullHeightSheet(
                         onDismissRequest = { albumBatchPlaylistPickerRequest = null },
-                        properties = DialogProperties(usePlatformDefaultWidth = false)
-                    ) {
-                        Surface(
-                            modifier = Modifier.fillMaxSize(),
-                            color = colorScheme.background.copy(alpha = 0.96f),
-                            contentColor = colorScheme.onBackground
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .windowInsetsPadding(StableWindowInsets.statusBars)
-                                    .windowInsetsPadding(StableWindowInsets.navigationBars)
-                            ) {
-                                PlaylistPickerScreen(
-                                    windowSizeClass = windowSizeClass,
-                                    items = request.items,
-                                    onBack = { albumBatchPlaylistPickerRequest = null },
-                                    embeddedInDialog = true,
-                                    viewModel = playlistsViewModel
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (!nowPlayingVisible) {
-            albumBatchPlaylistPickerRequest?.let { request ->
-                val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
-                Dialog(
-                    onDismissRequest = { albumBatchPlaylistPickerRequest = null },
-                    properties = DialogProperties(usePlatformDefaultWidth = false)
-                ) {
-                    Surface(
-                        modifier = Modifier.fillMaxSize(),
-                        color = colorScheme.background.copy(alpha = 0.96f),
+                        containerColor = colorScheme.background.copy(alpha = 0.96f),
                         contentColor = colorScheme.onBackground
                     ) {
                         Box(
@@ -3068,6 +3096,32 @@ fun MainContainer(
                                 viewModel = playlistsViewModel
                             )
                         }
+                    }
+                }
+            }
+        }
+
+        if (!nowPlayingVisible) {
+            albumBatchPlaylistPickerRequest?.let { request ->
+                val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
+                EdgeToEdgeFullHeightSheet(
+                    onDismissRequest = { albumBatchPlaylistPickerRequest = null },
+                    containerColor = colorScheme.background.copy(alpha = 0.96f),
+                    contentColor = colorScheme.onBackground
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .windowInsetsPadding(StableWindowInsets.statusBars)
+                            .windowInsetsPadding(StableWindowInsets.navigationBars)
+                    ) {
+                        PlaylistPickerScreen(
+                            windowSizeClass = windowSizeClass,
+                            items = request.items,
+                            onBack = { albumBatchPlaylistPickerRequest = null },
+                            embeddedInDialog = true,
+                            viewModel = playlistsViewModel
+                        )
                     }
                 }
             }

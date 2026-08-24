@@ -86,7 +86,6 @@ internal fun rememberPlayerThemeColors(
         transitionDurationMs = transitionDurationMs,
         cachedTransitionDurationMs = cachedTransitionDurationMs
     )
-
     return remember(dynamicHue, colorScheme, coverBackgroundEnabled, artworkBackdropEnabled) {
         resolvePlayerThemeColors(
             dynamicHue = dynamicHue,

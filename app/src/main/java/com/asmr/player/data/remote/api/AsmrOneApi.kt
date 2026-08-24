@@ -14,6 +14,7 @@ interface AsmrOneApi {
         @Query("page") page: Int = 1,
         @Query("order") order: String = "release",
         @Query("sort") sort: String = "desc",
+        @Query("subtitle") subtitle: Int = 0,
         @Header(NetworkHeaders.HEADER_SILENT_IO_ERROR) silentIoError: String? = null
     ): SearchResponse
 
@@ -44,6 +45,7 @@ data class WorkDetailsResponse(
     val id: Int,
     val source_id: String,
     val original_workno: String? = null,
+    val translation_info: AsmrOneTranslationInfo? = null,
     val language_editions: List<AsmrOneLanguageEdition>? = null,
     @SerializedName("other_language_editions_in_db")
     val other_language_editions_in_db: List<AsmrOneOtherLanguageEditionInDb>? = null,
@@ -55,6 +57,13 @@ data class WorkDetailsResponse(
     val mainCoverUrl: String,
     val dl_count: Int,
     val price: Int
+)
+
+data class AsmrOneTranslationInfo(
+    val lang: String? = null,
+    val is_original: Boolean? = null,
+    val parent_workno: String? = null,
+    val original_workno: String? = null
 )
 
 data class AsmrOneLanguageEdition(

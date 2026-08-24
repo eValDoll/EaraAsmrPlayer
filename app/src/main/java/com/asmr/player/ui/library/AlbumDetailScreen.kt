@@ -1,30 +1,35 @@
 package com.asmr.player.ui.library
 
 import android.content.Intent
+import android.graphics.PathMeasure as AndroidPathMeasure
 import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.FastOutLinearInEasing
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.expandHorizontally
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.ui.input.nestedscroll.nestedScroll
@@ -40,6 +45,7 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -58,8 +64,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -69,12 +79,14 @@ import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.CompositingStrategy as LayerCompositingStrategy
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.painter.BitmapPainter
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.semantics
@@ -82,13 +94,13 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
@@ -110,6 +122,7 @@ import com.asmr.player.data.remote.scraper.storeSegment
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.playback.MediaItemFactory
+import com.asmr.player.ui.common.HorizontalStereoSpectrum
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
@@ -135,10 +148,13 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
@@ -152,15 +168,15 @@ import com.asmr.player.ui.common.AsmrImageLoadingPlaceholder
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.ImagePreviewDialog
 import com.asmr.player.ui.common.ImagePreviewRequest
+import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.consumeTapThrough
 import com.asmr.player.ui.groups.AlbumGroupsViewModel
 import com.asmr.player.ui.groups.AlbumGroupPickerScreen
 import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.playlists.PlaylistsViewModel
+import com.asmr.player.ui.player.PlayerViewModel
 import com.asmr.player.ui.settings.SettingsViewModel
 import com.asmr.player.ui.theme.AsmrTheme
-import com.asmr.player.ui.common.LocalBottomOverlayPadding
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.util.Formatting
@@ -237,12 +253,138 @@ private const val AlbumDetailHeroFlingOvershootPortion = 0.24f
 private const val AlbumDetailHeroFlingOvershootMaxPortion = 0.14f
 private const val AlbumDetailHeroFlingApproachMillis = 560
 private const val AlbumDetailHeroFlingSettleMillis = 980
-private const val AlbumDetailRevealSettleMs = 420L
-private const val AlbumDetailCvRevealDelayMs = 220
-private const val AlbumDetailTagsRevealDelayMs = 360
+private const val AlbumDetailCvRevealDelayMs = 0
+private const val AlbumDetailTagsRevealDelayMs = 90
+private const val AlbumHeaderActionStateTransitionMillis = 800
 internal val AlbumDetailHorizontalPadding = 8.dp
+private val AlbumLandscapeArtworkStartPadding = 68.dp
+private val AlbumLandscapeArtworkTopPadding = 36.dp
+private val AlbumLandscapeSpectrumTopPadding = 12.dp
+private val AlbumLandscapeHeaderEndPadding = 32.dp
+private val AlbumLandscapeHeaderLift = 52.dp
+private const val AlbumLandscapeCoverShadowStartAlpha = 0.16f
+private val AlbumLandscapeArtworkContentGap = 12.dp
+private val AlbumLandscapeSurfaceBorderWidth = 0.5.dp
+private val AlbumLandscapeCollapsedArtworkShiftX = 24.dp
+private val AlbumLandscapeCollapsedArtworkShiftY = 18.dp
+private const val AlbumLandscapeSpectrumArtworkOffsetFraction = 0.15f
+private const val AlbumLandscapeSpectrumCollapseFollowFraction = 0.82f
 
-private class AlbumDetailIntroState(var settled: Boolean)
+internal fun shouldUseAlbumDetailLandscapeLayout(
+    compactWidth: Boolean,
+    screenWidthDp: Int,
+    screenHeightDp: Int
+): Boolean {
+    return !compactWidth && screenWidthDp > screenHeightDp
+}
+
+internal fun albumLandscapeHeaderStart(artworkSize: Dp): Dp {
+    return AlbumLandscapeArtworkStartPadding + artworkSize + AlbumLandscapeArtworkContentGap
+}
+
+internal fun albumLandscapeArtworkRight(artworkSize: Dp): Dp {
+    return AlbumLandscapeArtworkStartPadding + artworkSize
+}
+
+internal fun albumLandscapeCollapseDistance(artworkSize: Dp): Dp {
+    return (artworkSize * 0.28f).coerceAtMost(128.dp)
+}
+
+internal fun albumLandscapeCoverScale(collapsePx: Float, collapseMaxPx: Float): Float {
+    val progress = albumLandscapeCollapseProgress(collapsePx, collapseMaxPx)
+    return 1f - progress * 0.30f
+}
+
+internal fun albumLandscapeCollapseProgress(collapsePx: Float, collapseMaxPx: Float): Float {
+    if (collapseMaxPx <= 0f) return 0f
+    return (collapsePx / collapseMaxPx).coerceIn(0f, 1f)
+}
+
+internal fun albumLandscapePlaybackProgress(positionMs: Long, durationMs: Long): Float {
+    if (durationMs <= 0L) return 0f
+    return (positionMs.toDouble() / durationMs.toDouble()).toFloat().coerceIn(0f, 1f)
+}
+
+internal fun albumLandscapePulseSweepFraction(phase: Float): Float {
+    val clamped = phase.coerceIn(0f, 1f)
+    val remaining = 1f - clamped
+    return 1f - remaining * remaining
+}
+
+internal fun albumLandscapeCoverShadowAlpha(imageAlpha: Float): Float {
+    val normalizedImageAlpha = imageAlpha.coerceIn(0f, 1f)
+    return (
+        (normalizedImageAlpha - AlbumLandscapeCoverShadowStartAlpha) /
+            (1f - AlbumLandscapeCoverShadowStartAlpha)
+        ).coerceIn(0f, normalizedImageAlpha)
+}
+
+internal fun albumLandscapeDirectoryTop(
+    headerHeight: Dp,
+    headerLift: Dp
+): Dp {
+    return (headerHeight - headerLift + 4.dp).coerceAtLeast(0.dp)
+}
+
+internal fun albumLandscapePulseEnabled(
+    isPlaying: Boolean,
+    progress: Float
+): Boolean {
+    return isPlaying && progress > 0f
+}
+
+internal fun albumLandscapeSurfaceHeight(contentViewportHeight: Dp, artworkSize: Dp): Dp {
+    return contentViewportHeight + albumLandscapeCollapseDistance(artworkSize)
+}
+
+internal fun albumLandscapePaneViewportHeightPx(
+    surfaceHeightPx: Int,
+    collapsePx: Float,
+    collapseMaxPx: Float
+): Int {
+    if (surfaceHeightPx <= 0) return 0
+    val safeCollapseMaxPx = collapseMaxPx.coerceAtLeast(0f)
+    val hiddenBottomPx = (
+        safeCollapseMaxPx - collapsePx.coerceIn(0f, safeCollapseMaxPx)
+        ).roundToInt()
+    return (surfaceHeightPx - hiddenBottomPx).coerceIn(0, surfaceHeightPx)
+}
+
+internal fun albumLandscapeSpectrumOffsetY(artworkSize: Dp): Dp {
+    return AlbumLandscapeSpectrumTopPadding +
+        artworkSize * AlbumLandscapeSpectrumArtworkOffsetFraction
+}
+
+internal fun albumLandscapeSpectrumTranslationY(collapsePx: Float): Float {
+    return -collapsePx.coerceAtLeast(0f) * AlbumLandscapeSpectrumCollapseFollowFraction
+}
+
+private fun Modifier.albumLandscapePaneViewportHeight(
+    collapsePx: () -> Float,
+    collapseMaxPx: Float
+): Modifier = layout { measurable, constraints ->
+    if (!constraints.hasBoundedHeight) {
+        val placeable = measurable.measure(constraints)
+        layout(placeable.width, placeable.height) {
+            placeable.placeRelative(0, 0)
+        }
+    } else {
+        val viewportHeight = albumLandscapePaneViewportHeightPx(
+            surfaceHeightPx = constraints.maxHeight,
+            collapsePx = collapsePx(),
+            collapseMaxPx = collapseMaxPx
+        ).coerceAtLeast(constraints.minHeight)
+        val placeable = measurable.measure(
+            constraints.copy(
+                minHeight = viewportHeight,
+                maxHeight = viewportHeight
+            )
+        )
+        layout(placeable.width, viewportHeight) {
+            placeable.placeRelative(0, 0)
+        }
+    }
+}
 
 private val AlbumDetailHeroBounceBackSpec = spring<Float>(
     dampingRatio = Spring.DampingRatioNoBouncy,
@@ -286,10 +428,12 @@ internal fun dlsiteSectionRevealModifier(
     }
 }
 
-internal fun shouldExpandAlbumHeaderMetaReveal(
-    presentInitially: Boolean
+internal fun shouldAnimateAlbumHeaderMetaReveal(
+    presentInitially: Boolean,
+    hasContent: Boolean,
+    animationsEnabled: Boolean
 ): Boolean {
-    return !presentInitially
+    return animationsEnabled && !presentInitially && hasContent
 }
 
 internal data class AlbumDetailOnlineLoadPlan(
@@ -316,7 +460,10 @@ internal fun albumDetailOnlineLoadPlan(
                 !hasAsmrOneTree &&
                 hasDlsitePlayCredentials
         )
-        1 -> AlbumDetailOnlineLoadPlan(loadDlsite = true, loadAsmrOne = true)
+        1 -> AlbumDetailOnlineLoadPlan(
+            loadDlsite = true,
+            loadAsmrOne = true
+        )
         2 -> AlbumDetailOnlineLoadPlan(
             loadDlsite = true,
             loadDlsitePlay = hasResolvedInitialDlsiteTarget
@@ -330,6 +477,15 @@ internal fun canUseAsmrOneOnlineTreeActions(
     hasAsmrOneTree: Boolean
 ): Boolean {
     return selectedTab == 1 && hasAsmrOneTree
+}
+
+internal fun asmrOneDirectoryTreeStateKey(
+    currentRj: String,
+    baseRj: String
+): String {
+    val targetRj = currentRj.trim().uppercase()
+        .ifBlank { baseRj.trim().uppercase() }
+    return "tree:asmrOne:$targetRj"
 }
 
 internal fun albumHeaderDownloadEnabled(
@@ -393,8 +549,9 @@ fun AlbumDetailScreen(
     val selectedTab = remember(albumId, initialTab) {
         initialTab?.coerceIn(0, 2) ?: if (albumId != null && albumId > 0) 0 else 1
     }
-    var isInitialRouteReady by remember(screenKey) { mutableStateOf(false) }
-    val initialIntroState = remember(screenKey) { AlbumDetailIntroState(settled = false) }
+    var isInitialRouteReady by remember(screenKey) {
+        mutableStateOf(viewModel.hasCachedAlbum(albumId, rjCode))
+    }
     var showAsmrDownloadDialog by remember { mutableStateOf(false) }
     var showOnlineSaveDialog by remember { mutableStateOf(false) }
     var pendingOnlineSaveSelection by remember { mutableStateOf<PendingOnlineSaveSelection?>(null) }
@@ -446,8 +603,9 @@ fun AlbumDetailScreen(
         viewModel.setListenTogetherRjSummaryPollingEnabled(true)
     }
     LaunchedEffect(albumId, rjCode) {
-        isInitialRouteReady = false
-        withFrameNanos { }
+        val hasCachedAlbum = viewModel.hasCachedAlbum(albumId, rjCode)
+        isInitialRouteReady = hasCachedAlbum
+        if (!hasCachedAlbum) withFrameNanos { }
         viewModel.loadAlbumAndAwait(albumId, rjCode, force = false)
         isInitialRouteReady = true
     }
@@ -471,16 +629,20 @@ fun AlbumDetailScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(AsmrTheme.colorScheme.background),
-        contentAlignment = Alignment.TopCenter // 仅用于平板适配：居中显示内容
+        contentAlignment = Alignment.TopCenter
     ) {
         val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
-        
+        val configuration = LocalConfiguration.current
+        val useLandscapeArtworkTide = shouldUseAlbumDetailLandscapeLayout(
+            compactWidth = isCompact,
+            screenWidthDp = configuration.screenWidthDp,
+            screenHeightDp = configuration.screenHeightDp
+        )
+
         Column(
-            modifier = if (isCompact) {
-                Modifier.fillMaxSize()
-            } else {
-                // 仅用于平板适配：限制内容区域最大宽度并填充可用空间
-                Modifier
+            modifier = when {
+                isCompact || useLandscapeArtworkTide -> Modifier.fillMaxSize()
+                else -> Modifier
                     .fillMaxHeight()
                     .widthIn(max = 800.dp)
                     .fillMaxWidth()
@@ -494,11 +656,11 @@ fun AlbumDetailScreen(
                 }
                 is AlbumDetailUiState.Success -> {
                     LaunchedEffect(screenKey) {
-                        if (initialIntroState.settled) return@LaunchedEffect
+                        if (viewModel.isInitialIntroSettled()) return@LaunchedEffect
                         delay(AlbumDetailInitialIntroDurationMs)
                         // 这只是供之后新到数据判断是否还需入场动画的生命周期标记。
                         // 已经在树上的动画会自行完整收尾，计时结束时无需强制整页重组。
-                        initialIntroState.settled = true
+                        viewModel.markInitialIntroSettled()
                     }
                     val model = state.model
                     val album = model.displayAlbum
@@ -552,15 +714,54 @@ fun AlbumDetailScreen(
                     val trialDownloadTree = remember(model.dlsiteTrialTracks) {
                         buildDlsiteTrialDownloadTree(model.dlsiteTrialTracks)
                     }
-                    val shouldPlayInitialAnimations = !initialIntroState.settled
+                    val shouldPlayInitialAnimations = !viewModel.isInitialIntroSettled()
                     val shouldAnimateHeaderIntro = true
                     var showTagManager by remember { mutableStateOf(false) }
                     var tagManageTrack by remember { mutableStateOf<Track?>(null) }
                     var localPreviewFile by remember { mutableStateOf<LocalTreeUiEntry.File?>(null) }
                     var onlinePreviewFile by remember { mutableStateOf<AsmrTreeUiEntry.File?>(null) }
                     var imagePreviewRequest by remember { mutableStateOf<ImagePreviewRequest?>(null) }
-                    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    var landscapeActiveListState by remember(screenKey, useLandscapeArtworkTide) {
+                        mutableStateOf<LazyListState?>(null)
+                    }
+                    var landscapeFixedHeaderHeightPx by remember(screenKey, useLandscapeArtworkTide) {
+                        mutableIntStateOf(0)
+                    }
+                    // 横竖屏使用的详情组合树差异很大。按布局模式隔离整个子树，旋转时先
+                    // 完整移除旧树再插入新树，避免复用旧 SlotTable 位置造成结构错位。
+                    key(useLandscapeArtworkTide) {
+                        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                        val heroDensity = LocalDensity.current
+                        val landscapePageWidth = maxWidth
                         val pageContainerColor = dynamicPageContainerColor(colorScheme)
+                        val landscapeArtworkSize = minOf(
+                            maxWidth * 0.30f,
+                            maxHeight * 0.56f
+                        ).coerceIn(300.dp, 460.dp)
+                        val landscapeContentTop = AlbumLandscapeArtworkTopPadding +
+                            landscapeArtworkSize * 0.50f
+                        val landscapeContentWaveDepth = (landscapeArtworkSize * 0.50f)
+                            .coerceIn(166.dp, 220.dp)
+                        val landscapeHeaderFallbackHeight = (landscapeContentWaveDepth + 36.dp)
+                            .coerceIn(202.dp, 256.dp)
+                        val landscapeHeaderMeasuredHeight = with(heroDensity) {
+                            landscapeFixedHeaderHeightPx.toDp()
+                        }
+                        val landscapeDirectoryTop = if (landscapeFixedHeaderHeightPx > 0) {
+                            albumLandscapeDirectoryTop(
+                                headerHeight = landscapeHeaderMeasuredHeight,
+                                headerLift = AlbumLandscapeHeaderLift
+                            )
+                        } else {
+                            albumLandscapeDirectoryTop(
+                                headerHeight = landscapeHeaderFallbackHeight,
+                                headerLift = AlbumLandscapeHeaderLift
+                            )
+                        }
+                        val landscapeHeaderStart = albumLandscapeHeaderStart(landscapeArtworkSize)
+                        val landscapeHeaderAvailableWidth = (
+                            maxWidth - landscapeHeaderStart - AlbumLandscapeHeaderEndPadding
+                            ).coerceAtLeast(320.dp)
                         val heroHeightLimit = if (isCompact) {
                             maxHeight * 0.62f
                         } else {
@@ -572,19 +773,34 @@ fun AlbumDetailScreen(
                         } else {
                             maxWidth * 0.78f
                         }
-                        val heroHeight = heroPreferredHeight
-                            .coerceAtLeast(heroMinHeight)
-                            .coerceAtMost(heroHeightLimit.coerceAtLeast(heroMinHeight))
-                        val contentViewportTop = heroHeight + AlbumDetailHeroContentGap
+                        val heroHeight = if (useLandscapeArtworkTide) {
+                            maxHeight
+                        } else {
+                            heroPreferredHeight
+                                .coerceAtLeast(heroMinHeight)
+                                .coerceAtMost(heroHeightLimit.coerceAtLeast(heroMinHeight))
+                        }
+                        val contentViewportTop = if (useLandscapeArtworkTide) {
+                            landscapeContentTop
+                        } else {
+                            heroHeight + AlbumDetailHeroContentGap
+                        }
                         val contentViewportHeight = (maxHeight - contentViewportTop).coerceAtLeast(0.dp)
                         val contentFadeStartY = 0.dp
                         val contentFadeEndY = AlbumDetailScrolledContentFadeSpan
 
                         // 随滑动自适应缩放 hero：布局边界仍是 0%~50% 折叠。
                         // 只有展开端允许封面图继续放大，松手后缓慢回落；折叠端到 50% 后直接交给列表滚动。
-                        val heroDensity = LocalDensity.current
-                        val heroCollapseMaxPx = with(heroDensity) { (heroHeight * 0.5f).toPx() }
-                        val heroVisualOvershootMaxPx = with(heroDensity) { (heroHeight * 0.10f).toPx() }
+                        val heroCollapseMaxPx = with(heroDensity) {
+                            if (useLandscapeArtworkTide) {
+                                albumLandscapeCollapseDistance(landscapeArtworkSize).toPx()
+                            } else {
+                                (heroHeight * 0.5f).toPx()
+                            }
+                        }
+                        val heroVisualOvershootMaxPx = with(heroDensity) {
+                            if (useLandscapeArtworkTide) 0f else (heroHeight * 0.10f).toPx()
+                        }
                         val contentViewportTopPx = with(heroDensity) { contentViewportTop.toPx() }
                         val heroMotion = remember(screenKey) { AlbumDetailHeroMotionState() }
                         val scope = rememberCoroutineScope()
@@ -656,7 +872,7 @@ fun AlbumDetailScreen(
                                         }
                                     }
 
-                                    if (remaining < 0f) {
+                                    if (remaining < 0f && heroVisualOvershootMaxPx > 0f) {
                                         val visualDelta = dragOvershootDelta(remaining)
                                         val visualTarget = (heroMotion.visualOvershootPx + visualDelta)
                                             .coerceIn(-heroVisualOvershootMaxPx, 0f)
@@ -856,11 +1072,41 @@ fun AlbumDetailScreen(
                                 onOpenGroupPicker = { id -> groupPickerAlbumId = id },
                                 introSessionKey = introSessionKey,
                                 animateIntro = shouldAnimateHeaderIntro,
-                                availableWidth = (maxWidth - AlbumDetailHorizontalPadding * 2)
-                                    .coerceAtLeast(0.dp),
+                                availableWidth = if (useLandscapeArtworkTide) {
+                                    landscapeHeaderAvailableWidth
+                                } else {
+                                    (maxWidth - AlbumDetailHorizontalPadding * 2).coerceAtLeast(0.dp)
+                                },
                                 messageManager = viewModel.messageManager,
-                                onMetaLongClick = ::openMetaActions
+                                onMetaLongClick = ::openMetaActions,
+                                landscapeFloatingActions = useLandscapeArtworkTide
                             )
+                        }
+
+                        val listHeaderContent: @Composable (Int) -> Unit = { tab ->
+                            if (!useLandscapeArtworkTide) {
+                                headerContent(tab)
+                            }
+                        }
+
+                        val landscapeFixedHeaderContent: @Composable () -> Unit = {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 4.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                AlbumDetailLandscapeIdentity(
+                                    album = headerAlbumForTab(selectedTab),
+                                    introSessionKey = introSessionKey,
+                                    animateIntro = shouldPlayInitialAnimations,
+                                    pageContainerColor = pageContainerColor,
+                                    listenTogetherRjListenerCount = model.listenTogetherRjListenerCount,
+                                    messageManager = viewModel.messageManager,
+                                    onMetaLongClick = ::openMetaActions
+                                )
+                                headerContent(selectedTab)
+                            }
                         }
 
                         Box(
@@ -876,24 +1122,50 @@ fun AlbumDetailScreen(
                                     .consumeTapThrough()
                             )
 
-                            AlbumDetailHeroBackground(
-                                album = activeHeroAlbum,
-                                coverSessionKey = screenKey,
-                                introSessionKey = introSessionKey,
-                                animateIntro = shouldAnimateHeaderIntro,
-                                height = heroHeight,
-                                pageContainerColor = pageContainerColor,
-                                listenTogetherRjListenerCount = model.listenTogetherRjListenerCount,
-                                showCoverLoadingState = showHeroCoverLoadingState,
-                                messageManager = viewModel.messageManager,
-                                onMetaLongClick = ::openMetaActions,
-                                blurLayerCache = heroBlurLayerCache,
-                                collapsePx = { heroMotion.collapsePx },
-                                collapseMaxPx = heroCollapseMaxPx,
-                                visualOvershootPx = { heroMotion.visualOvershootPx },
-                                visualOvershootMaxPx = heroVisualOvershootMaxPx,
-                                modifier = Modifier.align(Alignment.TopCenter)
-                            )
+                            if (useLandscapeArtworkTide) {
+                                AlbumDetailLandscapeArtworkBackdrop(
+                                    album = activeHeroAlbum,
+                                    coverSessionKey = screenKey,
+                                    artworkSize = landscapeArtworkSize,
+                                    pageContainerColor = pageContainerColor,
+                                    collapsePx = { heroMotion.collapsePx },
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .zIndex(0f)
+                                )
+                                AlbumDetailLandscapeArtworkCover(
+                                    album = activeHeroAlbum,
+                                    coverSessionKey = screenKey,
+                                    introSessionKey = introSessionKey,
+                                    animateIntro = shouldAnimateHeaderIntro,
+                                    artworkSize = landscapeArtworkSize,
+                                    showCoverLoadingState = showHeroCoverLoadingState,
+                                    collapsePx = { heroMotion.collapsePx },
+                                    collapseMaxPx = heroCollapseMaxPx,
+                                    modifier = Modifier
+                                        .matchParentSize()
+                                        .zIndex(1f)
+                                )
+                            } else {
+                                AlbumDetailHeroBackground(
+                                    album = activeHeroAlbum,
+                                    coverSessionKey = screenKey,
+                                    introSessionKey = introSessionKey,
+                                    animateIntro = shouldAnimateHeaderIntro,
+                                    height = heroHeight,
+                                    pageContainerColor = pageContainerColor,
+                                    listenTogetherRjListenerCount = model.listenTogetherRjListenerCount,
+                                    showCoverLoadingState = showHeroCoverLoadingState,
+                                    messageManager = viewModel.messageManager,
+                                    onMetaLongClick = ::openMetaActions,
+                                    blurLayerCache = heroBlurLayerCache,
+                                    collapsePx = { heroMotion.collapsePx },
+                                    collapseMaxPx = heroCollapseMaxPx,
+                                    visualOvershootPx = { heroMotion.visualOvershootPx },
+                                    visualOvershootMaxPx = heroVisualOvershootMaxPx,
+                                    modifier = Modifier.align(Alignment.TopCenter)
+                                )
+                            }
 
                             LaunchedEffect(
                                 selectedTab,
@@ -927,21 +1199,37 @@ fun AlbumDetailScreen(
                                 }
                             }
 
-                            val asmrOneTreeStableRj = model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()
-                            val asmrOneTreeStateKey = "tree:asmrOne:$asmrOneTreeStableRj"
+                            val asmrOneTreeStateKey = asmrOneDirectoryTreeStateKey(
+                                currentRj = model.rjCode,
+                                baseRj = model.baseRjCode
+                            )
                             val asmrOneScrollStateKey = "scroll:$asmrOneTreeStateKey"
-
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopCenter)
-                                    .fillMaxWidth()
-                                    .height(contentViewportHeight + heroHeight * 0.5f)
-                                    .offset {
-                                        IntOffset(
-                                            0,
-                                            (contentViewportTopPx - heroMotion.collapsePx).roundToInt()
+                            val landscapeContentShape = rememberAlbumLandscapeContentShape(
+                                waveDepth = landscapeContentWaveDepth
+                            )
+                            val contentSurfaceModifier = if (useLandscapeArtworkTide) {
+                                Modifier
+                                    .nestedScroll(heroNestedScroll)
+                                    .shadow(
+                                        elevation = if (colorScheme.isDark) 3.dp else 8.dp,
+                                        shape = landscapeContentShape,
+                                        clip = false
+                                    )
+                                    .clip(landscapeContentShape)
+                                    .background(
+                                        colorScheme.surface.copy(
+                                            alpha = if (colorScheme.isDark) 0.92f else 0.94f
                                         )
-                                    }
+                                    )
+                                    .border(
+                                        width = AlbumLandscapeSurfaceBorderWidth,
+                                        color = colorScheme.primary.copy(
+                                            alpha = if (colorScheme.isDark) 0.20f else 0.12f
+                                        ),
+                                        shape = landscapeContentShape
+                                    )
+                            } else {
+                                Modifier
                                     .nestedScroll(heroNestedScroll)
                                     .clipToBounds()
                                     .background(pageContainerColor)
@@ -950,8 +1238,55 @@ fun AlbumDetailScreen(
                                         fadeEndY = contentFadeEndY,
                                         fadeColor = pageContainerColor
                                     )
+                            }
+
+                            Box(
+                                modifier = Modifier
+                                    .align(Alignment.TopCenter)
+                                    .fillMaxWidth()
+                                    .height(
+                                        if (useLandscapeArtworkTide) {
+                                            albumLandscapeSurfaceHeight(
+                                                contentViewportHeight = contentViewportHeight,
+                                                artworkSize = landscapeArtworkSize
+                                            )
+                                        } else {
+                                            contentViewportHeight + heroHeight * 0.5f
+                                        }
+                                    )
+                                    .offset {
+                                        IntOffset(
+                                            0,
+                                            (contentViewportTopPx - heroMotion.collapsePx).roundToInt()
+                                        )
+                                    }
+                                    .then(contentSurfaceModifier)
+                                    .zIndex(if (useLandscapeArtworkTide) 2f else 0f)
                             ) {
-                                when (selectedTab) {
+                                if (useLandscapeArtworkTide) {
+                                    AlbumLandscapeCurvePlaybackProgress(
+                                        waveDepth = landscapeContentWaveDepth,
+                                        modifier = Modifier
+                                            .matchParentSize()
+                                            .zIndex(1f)
+                                    )
+                                }
+
+                                Box(
+                                    modifier = if (useLandscapeArtworkTide) {
+                                        Modifier
+                                            .align(Alignment.TopEnd)
+                                            .fillMaxHeight()
+                                            .width(
+                                                (landscapePageWidth - landscapeHeaderStart)
+                                                    .coerceAtLeast(320.dp)
+                                            )
+                                            .padding(top = landscapeDirectoryTop)
+                                    } else {
+                                        Modifier.fillMaxSize()
+                                    }
+                                ) {
+                                    when (selectedTab) {
                                     0 -> {
                                         val local = model.localAlbum
                                         if (local != null) {
@@ -976,7 +1311,7 @@ fun AlbumDetailScreen(
                                                 },
                                                 topContentPadding = 0.dp,
                                                 album = local,
-                                                header = { headerContent(0) },
+                                                header = { listHeaderContent(0) },
                                                 onPlayMediaItems = onPlayMediaItems,
                                                 onAddToQueue = { track ->
                                                     onAddToQueue(local, track)
@@ -1021,6 +1356,7 @@ fun AlbumDetailScreen(
                                                 onSubtitleGenerationError = viewModel.messageManager::showError,
                                                 onSubtitleGenerationUnavailable = viewModel.messageManager::showWarning,
                                                 onSubtitleGenerationQueued = viewModel.messageManager::showInfo,
+                                                onListStateAvailable = { landscapeActiveListState = it },
                                                 animateIntro = shouldPlayInitialAnimations
                                             )
                                         } else {
@@ -1039,7 +1375,7 @@ fun AlbumDetailScreen(
                                     }
                                     1 -> AlbumDlsiteInfoBreadcrumbTabV2(
                                         album = album,
-                                        header = { headerContent(1) },
+                                        header = { listHeaderContent(1) },
                                         galleryUrls = model.dlsiteGalleryUrls,
                                         trialTracks = model.dlsiteTrialTracks,
                                         trialDownloadEnabled = trialDownloadTree.isNotEmpty(),
@@ -1090,12 +1426,13 @@ fun AlbumDetailScreen(
                                         onPersistScroll = { index, offset ->
                                             viewModel.persistListScrollPosition(asmrOneScrollStateKey, index, offset)
                                         },
+                                        onListStateAvailable = { landscapeActiveListState = it },
                                         dlsiteRecommendations = model.dlsiteRecommendations,
                                         onOpenAlbumByRj = onOpenAlbumByRj,
                                         loadRemoteFileSize = { viewModel.loadRemoteFileSize(it) }
                                     )
                                     else -> AlbumDlsitePlayBreadcrumbTabV2(
-                                        header = { headerContent(2) },
+                                        header = { listHeaderContent(2) },
                                         album = album,
                                         rjCode = model.rjCode,
                                         tree = model.dlsitePlayTree,
@@ -1130,10 +1467,112 @@ fun AlbumDetailScreen(
                                         onPersistScroll = { index, offset ->
                                             viewModel.persistListScrollPosition("scroll:tree:dlsitePlay:${model.baseRjCode.ifBlank { model.rjCode }.trim().uppercase()}", index, offset)
                                         },
+                                        onListStateAvailable = { landscapeActiveListState = it },
                                         loadRemoteFileSize = { viewModel.loadRemoteFileSize(it) }
                                     )
+                                    }
+                                }
+
+                                if (useLandscapeArtworkTide) {
+                                    AlbumDetailLandscapeSimilarWorksPane(
+                                        seedRjCode = model.baseRjCode.ifBlank { model.rjCode },
+                                        seedMetadata = model.dlsiteInfo ?: model.displayAlbum,
+                                        isRouteReady = isInitialRouteReady,
+                                        onOpenAlbumByRj = onOpenAlbumByRj,
+                                        viewModel = viewModel,
+                                        modifier = Modifier
+                                            .align(Alignment.TopStart)
+                                            .width(landscapeHeaderStart)
+                                            .albumLandscapePaneViewportHeight(
+                                                collapsePx = { heroMotion.collapsePx },
+                                                collapseMaxPx = heroCollapseMaxPx
+                                            )
+                                            .padding(
+                                                start = 20.dp,
+                                                end = 12.dp,
+                                                top = landscapeContentWaveDepth * 1.10f
+                                            )
+                                    )
+
                                 }
                             }
+
+                            if (useLandscapeArtworkTide) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopEnd)
+                                        .width(
+                                            (landscapePageWidth - landscapeHeaderStart)
+                                                .coerceAtLeast(320.dp)
+                                        )
+                                        .wrapContentHeight()
+                                        .offset {
+                                            IntOffset(
+                                                0,
+                                                (
+                                                    contentViewportTopPx -
+                                                        AlbumLandscapeHeaderLift.toPx() -
+                                                        heroMotion.collapsePx
+                                                    ).roundToInt()
+                                            )
+                                        }
+                                        .padding(end = AlbumLandscapeHeaderEndPadding)
+                                        .onSizeChanged { size ->
+                                            landscapeFixedHeaderHeightPx = size.height
+                                        }
+                                        .pointerInput(
+                                            heroCollapseMaxPx,
+                                            landscapeActiveListState
+                                        ) {
+                                            detectVerticalDragGestures { change, dragAmount ->
+                                                val requestedScroll = -dragAmount
+                                                var consumedScroll = 0f
+
+                                                if (requestedScroll > 0f) {
+                                                    val currentCollapse = heroMotion.collapsePx
+                                                    val targetCollapse = (currentCollapse + requestedScroll)
+                                                        .coerceIn(0f, heroCollapseMaxPx)
+                                                    val appliedCollapse = targetCollapse - currentCollapse
+                                                    if (appliedCollapse != 0f) {
+                                                        heroMotion.cancelVisualOvershootAnimation()
+                                                        heroMotion.collapsePx = targetCollapse
+                                                        consumedScroll += appliedCollapse
+                                                    }
+                                                    val listDelta = requestedScroll - appliedCollapse
+                                                    if (listDelta > 0f) {
+                                                        consumedScroll += landscapeActiveListState
+                                                            ?.dispatchRawDelta(listDelta)
+                                                            ?: 0f
+                                                    }
+                                                } else if (requestedScroll < 0f) {
+                                                    val listConsumed = landscapeActiveListState
+                                                        ?.dispatchRawDelta(requestedScroll)
+                                                        ?: 0f
+                                                    consumedScroll += listConsumed
+                                                    val collapseDelta = requestedScroll - listConsumed
+                                                    if (collapseDelta < 0f) {
+                                                        val currentCollapse = heroMotion.collapsePx
+                                                        val targetCollapse = (currentCollapse + collapseDelta)
+                                                            .coerceIn(0f, heroCollapseMaxPx)
+                                                        val appliedCollapse = targetCollapse - currentCollapse
+                                                        if (appliedCollapse != 0f) {
+                                                            heroMotion.cancelVisualOvershootAnimation()
+                                                            heroMotion.collapsePx = targetCollapse
+                                                            consumedScroll += appliedCollapse
+                                                        }
+                                                    }
+                                                }
+
+                                                if (consumedScroll != 0f) change.consume()
+                                            }
+                                        }
+                                        .zIndex(3f)
+                                ) {
+                                    landscapeFixedHeaderContent()
+                                }
+                            }
+
+                        }
                     }
                 }
 
@@ -1188,46 +1627,37 @@ fun AlbumDetailScreen(
                 }
 
                 groupPickerAlbumId?.let { targetAlbumId ->
-                    Dialog(
+                    AlbumDetailPickerSheet(
                         onDismissRequest = { groupPickerAlbumId = null },
-                        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+                        color = MaterialTheme.colorScheme.background,
+                        contentColor = colorScheme.textPrimary
                     ) {
-                        AlbumDetailPickerSheetSurface(
-                            color = MaterialTheme.colorScheme.background,
-                            contentColor = colorScheme.textPrimary
-                        ) {
-                            AlbumGroupPickerScreen(
-                                windowSizeClass = windowSizeClass,
-                                albumId = targetAlbumId,
-                                onBack = { groupPickerAlbumId = null },
-                                embeddedInDialog = true
-                            )
-                        }
+                        AlbumGroupPickerScreen(
+                            windowSizeClass = windowSizeClass,
+                            albumId = targetAlbumId,
+                            onBack = { groupPickerAlbumId = null },
+                            embeddedInDialog = true
+                        )
                     }
                 }
 
                 batchPlaylistItems?.let { items ->
-                    Dialog(
+                    AlbumDetailPickerSheet(
                         onDismissRequest = { batchPlaylistItems = null },
-                        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+                        color = colorScheme.background.copy(alpha = 0.96f),
+                        contentColor = colorScheme.textPrimary
                     ) {
-                        Surface(
-                            modifier = Modifier.fillMaxSize(),
-                            color = colorScheme.background.copy(alpha = 0.96f),
-                            contentColor = colorScheme.textPrimary
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(horizontal = 12.dp)
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(horizontal = 12.dp)
-                            ) {
-                                PlaylistPickerScreen(
-                                    windowSizeClass = windowSizeClass,
-                                    items = items,
-                                    onBack = { batchPlaylistItems = null },
-                                    embeddedInDialog = true
-                                )
-                            }
+                            PlaylistPickerScreen(
+                                windowSizeClass = windowSizeClass,
+                                items = items,
+                                onBack = { batchPlaylistItems = null },
+                                embeddedInDialog = true
+                            )
                         }
                     }
                 }
@@ -1373,6 +1803,760 @@ class AlbumHeroBlurLayerCache(
         this.contentKey = contentKey
         this.layerSize = layerSize
         this.fullHeroSize = fullHeroSize
+    }
+}
+
+@Composable
+private fun rememberAlbumLandscapeContentShape(
+    waveDepth: Dp
+): Shape {
+    val density = LocalDensity.current
+    val waveDepthPx = with(density) { waveDepth.toPx() }
+    return remember(waveDepthPx) {
+        GenericShape { size, _ ->
+            val depth = waveDepthPx.coerceIn(0f, size.height * 0.40f)
+            addAlbumLandscapeTopCurve(size = size, depth = depth)
+            lineTo(size.width, size.height)
+            lineTo(0f, size.height)
+            close()
+        }
+    }
+}
+
+private fun Path.addAlbumLandscapeTopCurve(size: Size, depth: Float) {
+    addCatmullRomSpline(
+        points = listOf(
+            Offset(0f, depth * 1.06f),
+            Offset(size.width * 0.14f, depth * 1.08f),
+            Offset(size.width * 0.25f, depth * 0.98f),
+            Offset(size.width * 0.34f, depth * 0.62f),
+            Offset(size.width * 0.44f, depth * 0.28f),
+            Offset(size.width * 0.60f, depth * 0.12f),
+            Offset(size.width * 0.80f, depth * 0.13f),
+            Offset(size.width, depth * 0.18f)
+        ),
+        smoothness = 0.84f
+    )
+}
+
+@Composable
+private fun AlbumLandscapeCurvePlaybackProgress(
+    waveDepth: Dp,
+    modifier: Modifier = Modifier,
+    playerViewModel: PlayerViewModel = hiltViewModel()
+) {
+    val playbackIndicator by remember(playerViewModel) {
+        playerViewModel.playback
+            .map { playback ->
+                AlbumLandscapePlaybackIndicator(
+                    progress = albumLandscapePlaybackProgress(
+                        playback.positionMs,
+                        playback.durationMs
+                    ),
+                    isPlaying = playback.isPlaying
+                )
+            }
+            .distinctUntilChanged()
+    }.collectAsStateWithLifecycle(initialValue = AlbumLandscapePlaybackIndicator())
+    val progressState = rememberUpdatedState(playbackIndicator.progress)
+    val pulseEnabled = albumLandscapePulseEnabled(
+        isPlaying = playbackIndicator.isPlaying,
+        progress = playbackIndicator.progress
+    )
+    val pulseEnabledState = rememberUpdatedState(pulseEnabled)
+    val pulsePhase = remember { Animatable(0f) }
+    LaunchedEffect(pulseEnabled) {
+        if (!pulseEnabled) {
+            pulsePhase.snapTo(0f)
+            return@LaunchedEffect
+        }
+        while (true) {
+            pulsePhase.snapTo(0f)
+            pulsePhase.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(durationMillis = 3_200, easing = LinearEasing)
+            )
+            delay(260L)
+        }
+    }
+    val colorScheme = AsmrTheme.colorScheme
+    val trackColor = colorScheme.primary.copy(
+        alpha = if (colorScheme.isDark) 0.24f else 0.18f
+    )
+    val activeColor = colorScheme.primaryStrong.copy(alpha = 0.92f)
+    val pulseColor = colorScheme.primaryStrong
+
+    Box(
+        modifier = modifier.drawWithCache {
+            val depth = waveDepth.toPx().coerceIn(0f, size.height * 0.40f)
+            val curvePath = Path().apply {
+                addAlbumLandscapeTopCurve(size = size, depth = depth)
+            }
+            val pathMeasure = AndroidPathMeasure(curvePath.asAndroidPath(), false)
+            val activePath = Path()
+            val pulsePath = Path()
+            val pulsePosition = FloatArray(2)
+            val trackStroke = Stroke(width = 0.75.dp.toPx(), cap = StrokeCap.Round)
+            val activeStroke = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
+            val pulseGlowStroke = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
+            val pulseCoreStroke = Stroke(width = 2.2.dp.toPx(), cap = StrokeCap.Round)
+            val maximumPulseLength = 58.dp.toPx()
+
+            onDrawBehind {
+                drawPath(path = curvePath, color = trackColor, style = trackStroke)
+                val fraction = progressState.value.coerceIn(0f, 1f)
+                if (fraction > 0f && pathMeasure.length > 0f) {
+                    activePath.reset()
+                    pathMeasure.getSegment(
+                        0f,
+                        pathMeasure.length * fraction,
+                        activePath.asAndroidPath(),
+                        true
+                    )
+                    drawPath(path = activePath, color = activeColor, style = activeStroke)
+
+                    if (pulseEnabledState.value) {
+                        val activeLength = pathMeasure.length * fraction
+                        val rawPulsePhase = pulsePhase.value.coerceIn(0f, 1f)
+                        val pulseEnd = activeLength *
+                            albumLandscapePulseSweepFraction(rawPulsePhase)
+                        val pulseLength = minOf(maximumPulseLength, activeLength * 0.24f)
+                        val pulseStart = (pulseEnd - pulseLength).coerceAtLeast(0f)
+                        val pulseEnvelope = kotlin.math.sin(Math.PI * rawPulsePhase)
+                            .toFloat()
+                            .coerceIn(0f, 1f)
+                        if (pulseEnvelope > 0f && pulseEnd > pulseStart) {
+                            pulsePath.reset()
+                            pathMeasure.getSegment(
+                                pulseStart,
+                                pulseEnd,
+                                pulsePath.asAndroidPath(),
+                                true
+                            )
+                            drawPath(
+                                path = pulsePath,
+                                color = pulseColor.copy(alpha = 0.20f * pulseEnvelope),
+                                style = pulseGlowStroke
+                            )
+                            drawPath(
+                                path = pulsePath,
+                                color = pulseColor.copy(alpha = 0.96f * pulseEnvelope),
+                                style = pulseCoreStroke
+                            )
+                            if (pathMeasure.getPosTan(pulseEnd, pulsePosition, null)) {
+                                drawCircle(
+                                    color = pulseColor.copy(alpha = 0.88f * pulseEnvelope),
+                                    radius = 2.8.dp.toPx(),
+                                    center = Offset(pulsePosition[0], pulsePosition[1])
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    )
+}
+
+private data class AlbumLandscapePlaybackIndicator(
+    val progress: Float = 0f,
+    val isPlaying: Boolean = false
+)
+
+private fun Path.addCatmullRomSpline(
+    points: List<Offset>,
+    smoothness: Float
+) {
+    if (points.isEmpty()) return
+    moveTo(points.first().x, points.first().y)
+    if (points.size == 1) return
+
+    val tangentScale = smoothness.coerceIn(0f, 1f) / 6f
+    for (index in 0 until points.lastIndex) {
+        val p0 = points[(index - 1).coerceAtLeast(0)]
+        val p1 = points[index]
+        val p2 = points[index + 1]
+        val p3 = points[(index + 2).coerceAtMost(points.lastIndex)]
+        cubicTo(
+            p1.x + (p2.x - p0.x) * tangentScale,
+            p1.y + (p2.y - p0.y) * tangentScale,
+            p2.x - (p3.x - p1.x) * tangentScale,
+            p2.y - (p3.y - p1.y) * tangentScale,
+            p2.x,
+            p2.y
+        )
+    }
+}
+
+private val AlbumLandscapeArtworkRibbonShape = GenericShape { size, _ ->
+    moveTo(0f, 0f)
+    lineTo(size.width, 0f)
+    lineTo(size.width, size.height * 0.88f)
+    cubicTo(
+        size.width * 0.82f,
+        size.height * 0.98f,
+        size.width * 0.66f,
+        size.height * 0.84f,
+        size.width * 0.48f,
+        size.height * 0.94f
+    )
+    cubicTo(
+        size.width * 0.30f,
+        size.height,
+        size.width * 0.14f,
+        size.height * 0.88f,
+        0f,
+        size.height * 0.92f
+    )
+    close()
+}
+
+@Composable
+private fun rememberAlbumLandscapeArtworkRibbonCoreShape(edgeInset: Dp): Shape {
+    val density = LocalDensity.current
+    val edgeInsetPx = with(density) { edgeInset.toPx() }
+    return remember(edgeInsetPx) {
+        GenericShape { size, _ ->
+            val inset = edgeInsetPx.coerceAtMost(size.height * 0.08f)
+            moveTo(0f, 0f)
+            lineTo(size.width, 0f)
+            lineTo(size.width, size.height * 0.88f - inset)
+            cubicTo(
+                size.width * 0.82f,
+                size.height * 0.98f - inset,
+                size.width * 0.66f,
+                size.height * 0.84f - inset,
+                size.width * 0.48f,
+                size.height * 0.94f - inset
+            )
+            cubicTo(
+                size.width * 0.30f,
+                size.height - inset,
+                size.width * 0.14f,
+                size.height * 0.88f - inset,
+                0f,
+                size.height * 0.92f - inset
+            )
+            close()
+        }
+    }
+}
+
+@Composable
+private fun AlbumDetailLandscapeArtworkBackdrop(
+    album: Album,
+    coverSessionKey: String,
+    artworkSize: Dp,
+    pageContainerColor: Color,
+    collapsePx: () -> Float,
+    modifier: Modifier = Modifier
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val coverSource = rememberStableAlbumHeroCoverSource(album, coverSessionKey)
+    val imageModel = rememberAlbumCoverImageModel(coverSource)
+    val clearRibbonShape = rememberAlbumLandscapeArtworkRibbonCoreShape(edgeInset = 10.dp)
+
+    val ribbonHeight = (AlbumLandscapeArtworkTopPadding + artworkSize * 0.92f)
+        .coerceAtLeast(340.dp)
+
+    Box(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(ribbonHeight)
+        ) {
+            // 先对裁剪后的副本做模糊，让模糊只从曲线边缘向外扩散。
+            AsmrAsyncImage(
+                model = imageModel,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                alignment = Alignment.Center,
+                alpha = if (colorScheme.isDark) 0.30f else 0.22f,
+                peekAnySizeForInitial = true,
+                loadAtOriginalSize = true,
+                fadeInMillis = AlbumDetailHeroIntroDurationMs,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .blur(
+                        radius = 18.dp,
+                        edgeTreatment = BlurredEdgeTreatment.Unbounded
+                    )
+                    .clip(AlbumLandscapeArtworkRibbonShape),
+                placeholder = { _ -> },
+                loading = { _ -> },
+                empty = { _ -> }
+            )
+
+            // 清晰副本覆盖在模糊副本中央，保留封面内容细节。
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(clearRibbonShape)
+            ) {
+                AsmrAsyncImage(
+                    model = imageModel,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.Center,
+                    alpha = if (colorScheme.isDark) 0.30f else 0.22f,
+                    peekAnySizeForInitial = true,
+                    loadAtOriginalSize = true,
+                    fadeInMillis = AlbumDetailHeroIntroDurationMs,
+                    modifier = Modifier.fillMaxSize(),
+                    placeholder = { _ -> },
+                    loading = { _ -> },
+                    empty = { _ -> }
+                )
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(
+                            Brush.horizontalGradient(
+                                colorStops = arrayOf(
+                                    0f to pageContainerColor.copy(alpha = 0.36f),
+                                    0.16f to Color.Transparent,
+                                    0.72f to pageContainerColor.copy(alpha = 0.16f),
+                                    1f to pageContainerColor.copy(alpha = 0.70f)
+                                )
+                            )
+                        )
+                )
+            }
+        }
+
+        HorizontalStereoSpectrum(
+            lineColor = colorScheme.primaryStrong,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(94.dp)
+                .offset(y = albumLandscapeSpectrumOffsetY(artworkSize))
+                .graphicsLayer {
+                    translationY = albumLandscapeSpectrumTranslationY(collapsePx())
+                }
+        )
+    }
+}
+
+@Composable
+private fun AlbumDetailLandscapeArtworkCover(
+    album: Album,
+    coverSessionKey: String,
+    introSessionKey: String,
+    animateIntro: Boolean,
+    artworkSize: Dp,
+    showCoverLoadingState: Boolean,
+    collapsePx: () -> Float,
+    collapseMaxPx: Float,
+    modifier: Modifier = Modifier
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val coverSource = rememberStableAlbumHeroCoverSource(album, coverSessionKey)
+    val imageModel = rememberAlbumCoverImageModel(coverSource)
+    val heroIntroProgress = remember(introSessionKey) {
+        Animatable(if (animateIntro) 0f else 1f)
+    }
+    var coverPainterAlphaState by remember(imageModel, coverSessionKey) {
+        mutableStateOf<State<Float>?>(null)
+    }
+    var shouldRenderCoverShadow by remember(imageModel, coverSessionKey) {
+        mutableStateOf(coverSource.isBlank())
+    }
+    LaunchedEffect(coverSource, coverPainterAlphaState) {
+        if (coverSource.isBlank()) {
+            shouldRenderCoverShadow = true
+            return@LaunchedEffect
+        }
+        shouldRenderCoverShadow = false
+        val painterAlphaState = coverPainterAlphaState ?: return@LaunchedEffect
+        snapshotFlow { painterAlphaState.value }
+            .first { imageAlpha ->
+                imageAlpha > AlbumLandscapeCoverShadowStartAlpha
+            }
+        // 至少让已经开始渐入的图片先完整绘制一帧，再把阴影节点插入组合树。
+        withFrameNanos { }
+        shouldRenderCoverShadow = true
+    }
+    LaunchedEffect(introSessionKey, animateIntro) {
+        if (!animateIntro) {
+            heroIntroProgress.snapTo(1f)
+            return@LaunchedEffect
+        }
+        heroIntroProgress.snapTo(0f)
+        withFrameNanos { }
+        heroIntroProgress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(
+                durationMillis = AlbumDetailHeroIntroDurationMs,
+                easing = FastOutSlowInEasing
+            )
+        )
+    }
+
+    val artworkShape = RoundedCornerShape(26.dp)
+
+    Box(
+        modifier = modifier.graphicsLayer {
+            alpha = heroIntroProgress.value.coerceIn(0f, 1f)
+            compositingStrategy = CompositingStrategy.ModulateAlpha
+        }
+    ) {
+        Box(
+            modifier = Modifier
+                .offset(
+                    x = AlbumLandscapeArtworkStartPadding,
+                    y = AlbumLandscapeArtworkTopPadding
+                )
+                .size(artworkSize)
+                .graphicsLayer {
+                    val currentCollapsePx = collapsePx()
+                    val collapseProgress = albumLandscapeCollapseProgress(
+                        collapsePx = currentCollapsePx,
+                        collapseMaxPx = collapseMaxPx
+                    )
+                    val scale = albumLandscapeCoverScale(
+                        collapsePx = currentCollapsePx,
+                        collapseMaxPx = collapseMaxPx
+                    )
+                    scaleX = scale
+                    scaleY = scale
+                    translationX = AlbumLandscapeCollapsedArtworkShiftX.toPx() * collapseProgress
+                    translationY = AlbumLandscapeCollapsedArtworkShiftY.toPx() * collapseProgress
+                    transformOrigin = TransformOrigin(0f, 0f)
+                }
+                .graphicsLayer {
+                    val intro = heroIntroProgress.value.coerceIn(0f, 1f)
+                    val scale = 0.96f + intro * 0.04f
+                    scaleX = scale
+                    scaleY = scale
+                    transformOrigin = TransformOrigin.Center
+                }
+        ) {
+            if (shouldRenderCoverShadow) {
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .graphicsLayer {
+                            val imageAlpha = coverPainterAlphaState?.value ?: 1f
+                            alpha = albumLandscapeCoverShadowAlpha(imageAlpha)
+                            compositingStrategy = CompositingStrategy.ModulateAlpha
+                        }
+                        .shadow(
+                            elevation = if (colorScheme.isDark) 6.dp else 14.dp,
+                            shape = artworkShape,
+                            clip = false
+                        )
+                        .background(colorScheme.surfaceVariant, artworkShape)
+                )
+            }
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .clip(artworkShape)
+            ) {
+                AsmrAsyncImage(
+                    model = imageModel,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    alignment = Alignment.Center,
+                    placeholderCornerRadius = 26,
+                    peekAnySizeForInitial = true,
+                    loadAtOriginalSize = true,
+                    fadeInMillis = AlbumDetailHeroIntroDurationMs,
+                    onBitmapPainterState = { painter, alphaState ->
+                        coverPainterAlphaState = if (painter != null) alphaState else null
+                    },
+                    modifier = Modifier.fillMaxSize(),
+                    placeholder = { m -> DiscPlaceholder(modifier = m, cornerRadius = 26) },
+                    // 加载阶段保持封面槽为空，避免占位底色被误认为先出现的黑框。
+                    loading = { _ -> },
+                    empty = { m ->
+                        if (showCoverLoadingState) {
+                            AsmrImageLoadingPlaceholder(
+                                modifier = m,
+                                cornerRadius = 26,
+                                indicatorSize = 34.dp
+                            )
+                        } else {
+                            DiscPlaceholder(modifier = m, cornerRadius = 26)
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlbumDetailLandscapeIdentity(
+    album: Album,
+    introSessionKey: String,
+    animateIntro: Boolean,
+    pageContainerColor: Color,
+    listenTogetherRjListenerCount: Int?,
+    messageManager: MessageManager,
+    onMetaLongClick: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val identity = rememberStableAlbumHeroIdentity(album, introSessionKey)
+    val copyMeta = rememberAlbumMetaCopyAction(messageManager)
+    val introProgress = remember(introSessionKey) {
+        Animatable(if (animateIntro) 0f else 1f)
+    }
+    LaunchedEffect(introSessionKey, animateIntro) {
+        if (!animateIntro) {
+            introProgress.snapTo(1f)
+            return@LaunchedEffect
+        }
+        introProgress.snapTo(0f)
+        withFrameNanos { }
+        introProgress.animateTo(
+            targetValue = 1f,
+            animationSpec = tween(
+                durationMillis = AlbumDetailHeroIntroDurationMs,
+                easing = FastOutSlowInEasing
+            )
+        )
+    }
+
+    val titleShadow = Shadow(
+        color = if (colorScheme.isDark) {
+            Color.Black.copy(alpha = 0.48f)
+        } else {
+            pageContainerColor.copy(alpha = 0.92f)
+        },
+        offset = Offset(0f, 2f),
+        blurRadius = 11f
+    )
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .graphicsLayer {
+                alpha = introProgress.value.coerceIn(0f, 1f)
+                compositingStrategy = CompositingStrategy.ModulateAlpha
+            }
+            .padding(horizontal = AlbumDetailHorizontalPadding),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text(
+            text = identity.title,
+            modifier = Modifier.clickable { copyMeta("标题", identity.title) },
+            style = MaterialTheme.typography.headlineMedium.copy(
+                fontWeight = FontWeight.Bold,
+                fontSize = 24.sp,
+                lineHeight = 30.sp,
+                shadow = titleShadow
+            ),
+            color = colorScheme.textPrimary,
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            AlbumHeroPrimaryMetaLightweight(
+                rjCode = identity.rj,
+                circle = identity.circle,
+                emphasized = true,
+                modifier = Modifier.weight(1f),
+                rjOnClick = { copyMeta("作品编号", identity.rj) },
+                circleOnClick = { copyMeta("社团", identity.circle) },
+                circleOnLongClick = { onMetaLongClick(identity.circle) }
+            )
+            AlbumOnlineListenerInfo(
+                listenerCount = listenTogetherRjListenerCount,
+                visible = identity.rj.isNotBlank(),
+                emphasized = true,
+                modifier = Modifier.padding(start = 8.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun AlbumDetailLandscapeSimilarWorksPane(
+    seedRjCode: String,
+    seedMetadata: Album,
+    isRouteReady: Boolean,
+    onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit,
+    viewModel: AlbumDetailViewModel,
+    modifier: Modifier = Modifier,
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val state by viewModel.similarWorksState.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
+    val seedFeatures = remember(
+        seedRjCode,
+        seedMetadata.circle,
+        seedMetadata.cv,
+        seedMetadata.tags
+    ) {
+        buildAlbumDetailRecommendationSeedFeatures(seedRjCode, seedMetadata)
+    }
+
+    LaunchedEffect(seedRjCode, seedFeatures, isRouteReady, viewModel) {
+        if (isRouteReady) {
+            viewModel.ensureSimilarWorksLoaded(
+                seedRjCode = seedRjCode,
+                seedFeatures = seedFeatures
+            )
+        }
+    }
+    DisposableEffect(seedRjCode, viewModel) {
+        onDispose(viewModel::cancelSimilarWorksLoad)
+    }
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "相似作品",
+            style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.SemiBold),
+            color = colorScheme.textPrimary
+        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .weight(1f)
+        ) {
+            when {
+                (!isRouteReady && state.works.isEmpty()) ||
+                    (state.isLoading && state.works.isEmpty()) -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(22.dp),
+                        color = colorScheme.primaryStrong,
+                        strokeWidth = 2.dp
+                    )
+                }
+
+                state.works.isEmpty() -> {
+                    Column(
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = if (state.failed) "相似作品加载失败" else "暂时没有相似作品推荐",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = colorScheme.textSecondary,
+                            textAlign = TextAlign.Center
+                        )
+                        if (state.failed) {
+                            TextButton(onClick = {
+                                viewModel.ensureSimilarWorksLoaded(
+                                    seedRjCode = seedRjCode,
+                                    seedFeatures = seedFeatures,
+                                    force = true
+                                )
+                            }) {
+                                Text("重试")
+                            }
+                        }
+                    }
+                }
+
+                else -> {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .fillMaxSize(),
+                        contentPadding = PaddingValues(
+                            bottom = LocalBottomOverlayPadding.current + 12.dp
+                        ),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(
+                            items = state.works,
+                            key = AlbumDetailSimilarWork::rjCode
+                        ) { work ->
+                            AlbumDetailSimilarWorkCard(
+                                work = work,
+                                onClick = {
+                                    onOpenAlbumByRj(
+                                        work.rjCode,
+                                        DlsiteRecommendedWork(
+                                            rjCode = work.rjCode,
+                                            title = work.title,
+                                            coverUrl = work.coverUrl
+                                        )
+                                    )
+                                }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlbumDetailSimilarWorkCard(
+    work: AlbumDetailSimilarWork,
+    onClick: () -> Unit
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val shape = RoundedCornerShape(10.dp)
+    val imageModel = rememberAlbumCoverImageModel(work.coverUrl)
+    val containerColor = colorScheme.surface.copy(
+        alpha = if (colorScheme.isDark) 0.72f else 0.84f
+    ).compositeOver(colorScheme.background)
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(76.dp)
+            .clip(shape)
+            .background(containerColor)
+            .border(
+                width = 0.5.dp,
+                color = colorScheme.primaryStrong.copy(
+                    alpha = if (colorScheme.isDark) 0.22f else 0.14f
+                ),
+                shape = shape
+            )
+            .clickable(onClick = onClick),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        AsmrAsyncImage(
+            model = imageModel,
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            placeholderCornerRadius = 0,
+            peekAnySizeForInitial = true,
+            modifier = Modifier
+                .size(76.dp)
+                .clip(RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp))
+        )
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .padding(horizontal = 10.dp, vertical = 7.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp)
+        ) {
+            Text(
+                text = work.title,
+                style = MaterialTheme.typography.labelMedium,
+                color = colorScheme.textPrimary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                text = work.cv.ifBlank { work.rjCode },
+                style = MaterialTheme.typography.labelSmall,
+                color = colorScheme.textSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
     }
 }
 
@@ -1764,6 +2948,7 @@ private fun AlbumHeroIdentityOverlay(
 private fun AlbumOnlineListenerInfo(
     listenerCount: Int?,
     visible: Boolean,
+    emphasized: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val count = listenerCount?.coerceAtLeast(0)
@@ -1800,11 +2985,14 @@ private fun AlbumOnlineListenerInfo(
                     painter = painterResource(id = com.asmr.player.R.drawable.ic_users_round),
                     contentDescription = null,
                     tint = contentColor,
-                    modifier = Modifier.size(12.dp)
+                    modifier = Modifier.size(if (emphasized) 14.dp else 12.dp)
                 )
                 Text(
                     text = "$count 人正在听",
-                    style = MaterialTheme.typography.labelSmall.copy(shadow = textShadow),
+                    style = MaterialTheme.typography.labelSmall.copy(
+                        fontSize = if (emphasized) 12.sp else MaterialTheme.typography.labelSmall.fontSize,
+                        shadow = textShadow
+                    ),
                     color = contentColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1944,63 +3132,62 @@ private fun AlbumHeader(
     animateIntro: Boolean,
     availableWidth: Dp,
     messageManager: MessageManager,
-    onMetaLongClick: (String) -> Unit
+    onMetaLongClick: (String) -> Unit,
+    landscapeFloatingActions: Boolean = false
 ) {
     val copyMeta = rememberAlbumMetaCopyAction(messageManager)
 
     val headerAnimationScopeKey = remember(introSessionKey) { "albumHeader:$introSessionKey" }
 
-    // 记录"首帧时各信息块是否已存在"：本地库专辑进入时 cv/tags 已就绪，应直接显示，不做渐入或撑开；
-    // 列表 hint 已经提供的信息首帧直接占住最终高度，只有网络到达后才新增的信息才纵向展开。
+    // 首帧已有的信息直接显示；网络到达后新增的声优与标签分别向下滑入并展开，
+    // 避免把整列元信息一次性替换而造成突跳。
     val cvPresentInitially = remember(headerAnimationScopeKey) { album.cv.isNotBlank() }
     val tagsPresentInitially = remember(headerAnimationScopeKey) { album.tags.isNotEmpty() }
-    val cvExpandLayout = shouldExpandAlbumHeaderMetaReveal(cvPresentInitially)
-    val tagsExpandLayout = shouldExpandAlbumHeaderMetaReveal(tagsPresentInitially)
     val headerContainerModifier = Modifier
         .fillMaxWidth()
         .padding(horizontal = AlbumDetailHorizontalPadding)
     Column(
-        modifier = headerContainerModifier.padding(top = 4.dp, bottom = 12.dp)
+        modifier = headerContainerModifier.padding(
+            top = 4.dp,
+            bottom = if (landscapeFloatingActions) 2.dp else 12.dp
+        )
         // 不用 spacedBy 控制信息行之间的间距：cv/tags 行在网络数据到达后会以 0 高度组合、再通过
         // AnimatedVisibility 纵向展开，而 spacedBy 的固定间距会在"0 高度的折叠内容刚组合"的那一帧
         // 立即出现，把下方按钮行瞬间下推一截，造成展开前的下沉抖动。改为把行间距/与按钮行的间距作为
         // 每个信息行自身的底部 padding 放进 reveal 内部——这样间距属于被 expandVertically 裁剪的高度，
         // 会随展开动画一起从 0 平滑增长，按钮行始终被平滑下移而非瞬间跳变。
     ) {
-        // 使用新的轻量级信息组件替换原有的胶囊样式
         val metaRevealKey = headerAnimationScopeKey + ":meta"
         AlbumHeaderLateMetaReveal(
-            revealKey = metaRevealKey,
+            revealKey = "$metaRevealKey:cv",
+            hasContent = album.cv.isNotBlank(),
+            presentInitially = cvPresentInitially,
             delayMillis = AlbumDetailCvRevealDelayMs,
-            enabled = animateIntro,
-            lateArrival = cvExpandLayout || tagsExpandLayout
+            animationsEnabled = animateIntro
         ) {
             Box(modifier = Modifier.padding(bottom = 8.dp)) {
-                val labelCv = "声优"
-                val labelTag = "标签"
-                // 只显示声优和标签，作品编号和社团已经在 Hero 封面底部显示
-                Column(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // 声优
-                    if (album.cv.isNotBlank()) {
-                        AlbumHeaderCvLightweight(
-                            cvText = album.cv,
-                            onCvClick = { cv -> copyMeta(labelCv, cv) },
-                            onCvLongClick = onMetaLongClick
-                        )
-                    }
-
-                    // 标签
-                    if (album.tags.isNotEmpty()) {
-                        AlbumHeaderTagsLightweight(
-                            tags = album.tags,
-                            onTagClick = { tag -> copyMeta(labelTag, tag) },
-                            onTagLongClick = onMetaLongClick
-                        )
-                    }
-                }
+                AlbumHeaderCvLightweight(
+                    cvText = album.cv,
+                    emphasized = landscapeFloatingActions,
+                    onCvClick = { cv -> copyMeta("声优", cv) },
+                    onCvLongClick = onMetaLongClick
+                )
+            }
+        }
+        AlbumHeaderLateMetaReveal(
+            revealKey = "$metaRevealKey:tags",
+            hasContent = album.tags.isNotEmpty(),
+            presentInitially = tagsPresentInitially,
+            delayMillis = AlbumDetailTagsRevealDelayMs,
+            animationsEnabled = animateIntro
+        ) {
+            Box(modifier = Modifier.padding(bottom = 8.dp)) {
+                AlbumHeaderTagsLightweight(
+                    tags = album.tags,
+                    emphasized = landscapeFloatingActions,
+                    onTagClick = { tag -> copyMeta("标签", tag) },
+                    onTagLongClick = onMetaLongClick
+                )
             }
         }
 
@@ -2028,6 +3215,7 @@ private fun AlbumHeader(
             dlsiteUrl = dlsiteUrl,
             asmrOneUrl = asmrOneUrl,
             availableWidth = availableWidth,
+            floating = landscapeFloatingActions,
         )
     }
 }
@@ -2050,6 +3238,7 @@ private fun AlbumHeaderActionBar(
     dlsiteUrl: String,
     asmrOneUrl: String,
     availableWidth: Dp,
+    floating: Boolean = false,
 ) {
     val context = LocalContext.current
     val colorScheme = AsmrTheme.colorScheme
@@ -2092,6 +3281,196 @@ private fun AlbumHeaderActionBar(
         bottomEnd = 11.dp,
         bottomStart = 0.dp,
     )
+
+    if (floating) {
+        val floatingShape = RoundedCornerShape(10.dp)
+        val floatingInnerStartShape = if (hasSecondaryAction) {
+            RoundedCornerShape(topStart = 8.dp, bottomStart = 8.dp)
+        } else {
+            RoundedCornerShape(8.dp)
+        }
+        val floatingInnerEndShape = RoundedCornerShape(topEnd = 8.dp, bottomEnd = 8.dp)
+        val floatingSegmentShape = RoundedCornerShape(6.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(36.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Surface(
+                modifier = Modifier
+                    .weight(1f, fill = false)
+                    .widthIn(min = 160.dp, max = 220.dp)
+                    .fillMaxHeight(),
+                shape = floatingShape,
+                color = containerColor,
+                contentColor = colorScheme.textPrimary,
+                border = androidx.compose.foundation.BorderStroke(0.5.dp, borderColor),
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    AlbumHeaderBarAction(
+                        label = "下载",
+                        icon = Icons.Rounded.Download,
+                        showLabel = true,
+                        enabled = downloadEnabled,
+                        style = AlbumHeaderActionStyle.Primary,
+                        shape = floatingInnerStartShape,
+                        onClick = onDownloadClick,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                    )
+                    secondaryAction?.let { (label, icon, enabled) ->
+                        AlbumHeaderBarAction(
+                            label = label,
+                            icon = icon,
+                            showLabel = true,
+                            enabled = enabled,
+                            style = AlbumHeaderActionStyle.Secondary,
+                            shape = floatingInnerEndShape,
+                            onClick = when (groupState) {
+                                AlbumHeaderButtonGroupState.Save -> onSaveClick
+                                AlbumHeaderButtonGroupState.Lossless -> onLosslessDownloadClick
+                                AlbumHeaderButtonGroupState.DownloadOnly -> ({})
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            Surface(
+                modifier = Modifier
+                    .wrapContentWidth()
+                    .fillMaxHeight(),
+                shape = floatingShape,
+                color = containerColor,
+                contentColor = colorScheme.textPrimary,
+                border = androidx.compose.foundation.BorderStroke(0.5.dp, borderColor),
+                tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxHeight()
+                        .padding(2.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (showGroupAction) {
+                        AlbumHeaderBarAction(
+                            label = "分组",
+                            icon = Icons.Rounded.CreateNewFolder,
+                            showLabel = true,
+                            enabled = groupEnabled,
+                            onClick = onGroupClick,
+                            shape = floatingSegmentShape,
+                            modifier = Modifier
+                                .widthIn(min = 82.dp)
+                                .fillMaxHeight(),
+                        )
+                    }
+
+                    if (langCandidates.isNotEmpty()) {
+                        if (showGroupAction) {
+                            VerticalDivider(
+                                modifier = Modifier.height(16.dp),
+                                thickness = 0.5.dp,
+                                color = borderColor,
+                            )
+                        }
+                        val languageSelectable = langCandidates.size > 1
+                        Box(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                        ) {
+                            AlbumHeaderBarAction(
+                                label = selectedLangLabel,
+                                icon = Icons.Rounded.Translate,
+                                showLabel = true,
+                                enabled = languageSelectable,
+                                onClick = { languageMenuExpanded = true },
+                                shape = floatingSegmentShape,
+                                modifier = Modifier
+                                    .widthIn(min = 88.dp)
+                                    .fillMaxHeight(),
+                            )
+                            AlbumHeaderLanguageDropdownMenu(
+                                expanded = languageMenuExpanded,
+                                candidates = langCandidates,
+                                selectedLang = dlsiteSelectedLang,
+                                onDismiss = { languageMenuExpanded = false },
+                                onSelect = { lang ->
+                                    languageMenuExpanded = false
+                                    onDlsiteLangSelected(lang)
+                                }
+                            )
+                        }
+                    }
+
+                    if (showGroupAction || langCandidates.isNotEmpty()) {
+                        VerticalDivider(
+                            modifier = Modifier.height(16.dp),
+                            thickness = 0.5.dp,
+                            color = borderColor,
+                        )
+                    }
+                    AlbumHeaderBarAction(
+                        label = "DLsite",
+                        showLabel = true,
+                        enabled = dlsiteUrl.isNotBlank(),
+                        onClick = {
+                            if (dlsiteUrl.isNotBlank()) {
+                                context.startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse(dlsiteUrl))
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                )
+                            }
+                        },
+                        shape = floatingSegmentShape,
+                        modifier = Modifier
+                            .widthIn(min = 78.dp)
+                            .fillMaxHeight(),
+                    )
+
+                    VerticalDivider(
+                        modifier = Modifier.height(16.dp),
+                        thickness = 0.5.dp,
+                        color = borderColor,
+                    )
+                    AlbumHeaderBarAction(
+                        label = "ONE",
+                        showLabel = true,
+                        enabled = asmrOneUrl.isNotBlank(),
+                        onClick = {
+                            if (asmrOneUrl.isNotBlank()) {
+                                context.startActivity(
+                                    Intent(Intent.ACTION_VIEW, Uri.parse(asmrOneUrl))
+                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                )
+                            }
+                        },
+                        shape = floatingSegmentShape,
+                        modifier = Modifier
+                            .widthIn(min = 66.dp)
+                            .fillMaxHeight(),
+                    )
+                }
+            }
+        }
+        return
+    }
 
     Surface(
         modifier = Modifier
@@ -2242,12 +3621,12 @@ private fun AlbumHeaderBarAction(
     shape: RoundedCornerShape = RoundedCornerShape(11.dp),
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val contentColor = when {
+    val targetContentColor = when {
         !enabled -> colorScheme.textTertiary.copy(alpha = 0.72f)
         style == AlbumHeaderActionStyle.Primary -> colorScheme.onPrimary
         else -> colorScheme.primaryStrong
     }
-    val containerColor = when {
+    val targetContainerColor = when {
         !enabled -> Color.Transparent
         style == AlbumHeaderActionStyle.Primary -> colorScheme.primaryStrong
         style == AlbumHeaderActionStyle.Secondary -> colorScheme.primary.copy(
@@ -2255,6 +3634,17 @@ private fun AlbumHeaderBarAction(
         )
         else -> Color.Transparent
     }
+    // 网络数据到达后，下载/保存按钮从禁用态切到可用态时用约 800ms 渐入，避免状态瞬间“刷新”出来。
+    val contentColor by animateColorAsState(
+        targetValue = targetContentColor,
+        animationSpec = tween(durationMillis = AlbumHeaderActionStateTransitionMillis),
+        label = "albumHeaderBarActionContent"
+    )
+    val containerColor by animateColorAsState(
+        targetValue = targetContainerColor,
+        animationSpec = tween(durationMillis = AlbumHeaderActionStateTransitionMillis),
+        label = "albumHeaderBarActionContainer"
+    )
 
     CompositionLocalProvider(LocalContentColor provides contentColor) {
         Row(
@@ -2395,47 +3785,40 @@ private fun AlbumHeaderLanguageDropdownMenu(
 @Composable
 private fun AlbumHeaderLateMetaReveal(
     revealKey: String,
+    hasContent: Boolean,
+    presentInitially: Boolean,
     delayMillis: Int,
-    enabled: Boolean,
-    lateArrival: Boolean,
+    animationsEnabled: Boolean,
     content: @Composable () -> Unit
 ) {
-    if (!lateArrival) {
-        content()
-        return
+    val shouldAnimate = shouldAnimateAlbumHeaderMetaReveal(
+        presentInitially = presentInitially,
+        hasContent = hasContent,
+        animationsEnabled = animationsEnabled
+    )
+    var visible by remember(revealKey) {
+        mutableStateOf(presentInitially && hasContent)
     }
-    var hasPlayed by rememberSaveable(revealKey) { mutableStateOf(false) }
-    LaunchedEffect(revealKey, enabled) {
-        if (!enabled && !hasPlayed) {
-            hasPlayed = true
+    LaunchedEffect(revealKey, hasContent, shouldAnimate) {
+        when {
+            !hasContent -> visible = false
+            !shouldAnimate -> visible = true
+            else -> {
+                visible = false
+                if (delayMillis > 0) delay(delayMillis.toLong())
+                withFrameNanos { }
+                visible = true
+            }
         }
     }
-    if (!enabled) {
-        content()
-        return
-    }
-    var visible by remember(revealKey) { mutableStateOf(false) }
-    LaunchedEffect(revealKey, enabled) {
-        visible = false
-        if (delayMillis > 0) {
-            delay(delayMillis.toLong())
-        }
-        withFrameNanos { }
-        visible = true
-        delay(AlbumDetailRevealSettleMs)
-        hasPlayed = true
-    }
-    if (hasPlayed) {
-        content()
-        return
-    }
-    // 网络数据到达后才出现的内容（在线 cv/tags）：保留原有的纵向展开，
-    // 但避免再叠加父级 animateContentSize，减少同一尺寸变化被双重动画驱动。
     AnimatedVisibility(
-        visible = visible,
+        visible = visible && hasContent,
         enter = fadeIn(animationSpec = AlbumHeaderEnterTweenSpec) + expandVertically(
             animationSpec = AlbumHeaderExpandTweenSpec,
             expandFrom = Alignment.Top
+        ) + slideInVertically(
+            animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
+            initialOffsetY = { fullHeight -> -(fullHeight * 0.55f).roundToInt() }
         ),
         exit = fadeOut(animationSpec = tween(durationMillis = 120)) + shrinkVertically(
             animationSpec = tween(durationMillis = 160, easing = FastOutLinearInEasing),

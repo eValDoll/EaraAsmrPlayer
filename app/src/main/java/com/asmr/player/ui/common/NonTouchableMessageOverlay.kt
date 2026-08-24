@@ -11,15 +11,15 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 
+internal val AppMessageOverlayAlignment: Alignment = Alignment.TopCenter
+internal val AppMessageOverlayTopPadding = EaraMainTopBarHeight + 8.dp
+
 @Composable
 fun NonTouchableAppMessageOverlay(
-    messages: List<VisibleAppMessage>,
-    startPadding: Dp = 16.dp,
-    bottomPadding: Dp = 80.dp
+    messages: List<VisibleAppMessage>
 ) {
     if (messages.isEmpty()) return
 
@@ -27,19 +27,21 @@ fun NonTouchableAppMessageOverlay(
         modifier = Modifier
             .fillMaxSize()
             .zIndex(100f),
-        contentAlignment = Alignment.BottomStart
+        contentAlignment = AppMessageOverlayAlignment
     ) {
         AppMessageOverlay(
             messages = messages,
             modifier = Modifier
                 .windowInsetsPadding(
                     WindowInsets.safeDrawing.only(
-                        WindowInsetsSides.Start + WindowInsetsSides.Bottom
+                        WindowInsetsSides.Horizontal + WindowInsetsSides.Top
                     )
                 )
                 .padding(
-                    start = startPadding,
-                    bottom = bottomPadding + LocalBottomOverlayPadding.current
+                    start = 16.dp,
+                    top = AppMessageOverlayTopPadding,
+                    end = 16.dp,
+                    bottom = 0.dp
                 )
         )
     }

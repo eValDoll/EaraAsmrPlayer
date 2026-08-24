@@ -53,12 +53,15 @@ import com.asmr.player.data.repository.ListeningTrackContext
 import com.asmr.player.playback.AsmrRenderersFactory
 import com.asmr.player.playback.BalanceAudioProcessor
 import com.asmr.player.playback.ChannelModeAudioProcessor
+import com.asmr.player.playback.DefaultSpectrumAudioTrackBufferDurationMillis
 import com.asmr.player.playback.FadingPlayer
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.playback.AppVolumeBoostController
 import com.asmr.player.playback.GraphicEqualizerAudioProcessor
 import com.asmr.player.playback.PlaybackMediaCache
+import com.asmr.player.playback.PlaybackConnectionLifecycle
 import com.asmr.player.playback.PlaybackRecoveryPolicy
+import com.asmr.player.playback.PlaybackStateStore
 import com.asmr.player.playback.RoutingPlaybackDataSource
 import com.asmr.player.playback.SceneEffectAudioProcessor
 import com.asmr.player.playback.StereoFftAnalyzer
@@ -66,9 +69,13 @@ import com.asmr.player.playback.StereoOrbitAudioProcessor
 import com.asmr.player.playback.StereoPcmRingBuffer
 import com.asmr.player.playback.StereoSpectrumBus
 import com.asmr.player.playback.StereoSpectrumTapAudioProcessor
+import com.asmr.player.playback.SpectrumOutputBufferSizeProvider
+import com.asmr.player.playback.SpectrumPcmRingSlotCount
 import com.asmr.player.playback.VolumeThresholdAudioProcessor
 import com.asmr.player.playback.VolumeFader
 import com.asmr.player.playback.isRecoverableRemotePlaybackFailure
+import com.asmr.player.playback.capturePersistedPlaybackState
+import com.asmr.player.playback.spectrumVisualDelayMillis
 import com.asmr.player.util.EmbeddedMediaExtractor
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.SubtitleIndexFinder
@@ -112,7 +119,14 @@ class PlaybackService : MediaSessionService() {
     private val volumeThresholdAudioProcessor = VolumeThresholdAudioProcessor()
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val volumeFader = VolumeFader(serviceScope)
-    private val spectrumPcmBuffer = StereoPcmRingBuffer(frameSize = 1024, slotCount = 8)
+    @Volatile private var spectrumAudioTrackBufferDurationMillis =
+        DefaultSpectrumAudioTrackBufferDurationMillis
+    @Volatile private var spectrumOutputSampleRate: Int? = null
+    @Volatile private var spectrumOutputFramesPerBuffer: Int? = null
+    private val spectrumPcmBuffer = StereoPcmRingBuffer(
+        frameSize = 1024,
+        slotCount = SpectrumPcmRingSlotCount
+    )
     private val spectrumAnalyzer = StereoFftAnalyzer(
         pcmBuffer = spectrumPcmBuffer,
         spectrumStore = StereoSpectrumBus.store,
@@ -122,6 +136,10 @@ class PlaybackService : MediaSessionService() {
     )
     private val spectrumTapAudioProcessor = StereoSpectrumTapAudioProcessor(spectrumPcmBuffer) { sr ->
         spectrumAnalyzer.setSampleRate(sr)
+    }
+    private val spectrumOutputBufferSizeProvider = SpectrumOutputBufferSizeProvider { durationMillis ->
+        spectrumAudioTrackBufferDurationMillis = durationMillis
+        updateSpectrumVisualDelay()
     }
     
     // Temporary settings for current session
@@ -145,7 +163,7 @@ class PlaybackService : MediaSessionService() {
     private var hasAudioFocus: Boolean = false
     private var notificationProvider: LyricMediaNotificationProvider? = null
     private var sfwHideSystemControlsEnabled: Boolean = false
-    private var videoSurfaceVisible: Boolean = false
+    private var videoOutputEnabled: Boolean = false
 
     private val audioFocusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
         when (focusChange) {
@@ -219,17 +237,31 @@ class PlaybackService : MediaSessionService() {
     @Inject
     lateinit var okHttpClient: OkHttpClient
 
+    @Inject
+    lateinit var playbackStateStore: PlaybackStateStore
+
     private var lastMarkedMediaId: String? = null
     private var lastMarkedElapsedMs: Long = 0L
 
     private var statsJob: Job? = null
     private var playbackRecoveryJob: Job? = null
+    private var appExitJob: Job? = null
     private val playbackRecoveryPolicy = PlaybackRecoveryPolicy()
     private var currentTrackListenedMs: Long = 0L
     private var isCurrentTrackCounted: Boolean = false
     private var currentMediaId: String? = null
     private var lastProgressPersistElapsedMs: Long = 0L
     private val pendingNetworkTrafficBytes = AtomicLong(0L)
+
+    private fun updateSpectrumVisualDelay() {
+        spectrumAnalyzer.setVisualDelayMs(
+            spectrumVisualDelayMillis(
+                audioTrackBufferDurationMillis = spectrumAudioTrackBufferDurationMillis,
+                outputSampleRate = spectrumOutputSampleRate,
+                outputFramesPerBuffer = spectrumOutputFramesPerBuffer
+            )
+        )
+    }
 
     @androidx.annotation.OptIn(UnstableApi::class)
     override fun onCreate() {
@@ -248,16 +280,14 @@ class PlaybackService : MediaSessionService() {
         }
         runCatching {
             val audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
-            val sr = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)?.toIntOrNull()
-            val fpb = audioManager.getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)?.toIntOrNull()
-            val bufferMs = if (sr != null && fpb != null && sr > 0 && fpb > 0) {
-                (fpb * 1000) / sr
-            } else {
-                20
-            }
-            val delayMs = (bufferMs * 3).coerceIn(0, 200)
-            spectrumAnalyzer.setVisualDelayMs(delayMs)
+            spectrumOutputSampleRate = audioManager
+                .getProperty(AudioManager.PROPERTY_OUTPUT_SAMPLE_RATE)
+                ?.toIntOrNull()
+            spectrumOutputFramesPerBuffer = audioManager
+                .getProperty(AudioManager.PROPERTY_OUTPUT_FRAMES_PER_BUFFER)
+                ?.toIntOrNull()
         }
+        updateSpectrumVisualDelay()
         val authStore = DlsiteAuthStore(applicationContext)
         val playbackHttpClient = okHttpClient.newBuilder()
             .connectTimeout(NETWORK_CONNECT_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
@@ -331,7 +361,8 @@ class PlaybackService : MediaSessionService() {
                     sceneEffectAudioProcessor,
                     channelModeAudioProcessor,
                     volumeThresholdAudioProcessor,
-                    spectrumTapAudioProcessor
+                    spectrumTapAudioProcessor,
+                    spectrumOutputBufferSizeProvider
                 )
             )
             .setMediaSourceFactory(mediaSourceFactory)
@@ -344,7 +375,7 @@ class PlaybackService : MediaSessionService() {
             )
             .setHandleAudioBecomingNoisy(true)
             .build()
-        applyVideoSurfaceVisibility()
+        applyVideoOutputEnabled()
 
         spectrumAnalyzer.start()
 
@@ -394,7 +425,7 @@ class PlaybackService : MediaSessionService() {
                 cancelPlaybackRecovery(resetPolicy = true)
                 serviceScope.launch { updateArtworkForCurrentMedia() }
                 serviceScope.launch { loadLyricsForCurrentMedia() }
-                applyVideoSurfaceVisibility()
+                applyVideoOutputEnabled()
                 if (exoPlayer.isPlaying) {
                     markCurrentAlbumPlayed()
                 }
@@ -968,7 +999,7 @@ class PlaybackService : MediaSessionService() {
                             .add(androidx.media3.session.SessionCommand("GET_AUDIO_SESSION_ID", android.os.Bundle.EMPTY))
                             .add(androidx.media3.session.SessionCommand("UPDATE_SESSION_EQ", android.os.Bundle.EMPTY))
                             .add(androidx.media3.session.SessionCommand("RELOAD_LYRICS", android.os.Bundle.EMPTY))
-                            .add(androidx.media3.session.SessionCommand("SET_VIDEO_SURFACE_VISIBLE", android.os.Bundle.EMPTY))
+                            .add(androidx.media3.session.SessionCommand("SET_VIDEO_OUTPUT_ENABLED", android.os.Bundle.EMPTY))
                             .build()
                     }
                     val playerCommands = if (
@@ -1073,8 +1104,8 @@ class PlaybackService : MediaSessionService() {
                             )
                         }
 
-                        "SET_VIDEO_SURFACE_VISIBLE" -> {
-                            setVideoSurfaceVisible(args.getBoolean("visible", false))
+                        "SET_VIDEO_OUTPUT_ENABLED" -> {
+                            setVideoOutputEnabled(args.getBoolean("enabled", false))
                             return com.google.common.util.concurrent.Futures.immediateFuture(
                                 androidx.media3.session.SessionResult(androidx.media3.session.SessionResult.RESULT_SUCCESS, android.os.Bundle.EMPTY)
                             )
@@ -1086,15 +1117,15 @@ class PlaybackService : MediaSessionService() {
             .build()
     }
 
-    private fun setVideoSurfaceVisible(visible: Boolean) {
-        if (videoSurfaceVisible == visible) return
-        videoSurfaceVisible = visible
-        applyVideoSurfaceVisibility()
+    private fun setVideoOutputEnabled(enabled: Boolean) {
+        if (videoOutputEnabled == enabled) return
+        videoOutputEnabled = enabled
+        applyVideoOutputEnabled()
     }
 
-    private fun applyVideoSurfaceVisibility() {
+    private fun applyVideoOutputEnabled() {
         val item = exoPlayer.currentMediaItem
-        val videoActive = videoSurfaceVisible && item.isVideoMediaItem()
+        val videoActive = videoOutputEnabled && item.isVideoMediaItem()
         val params = exoPlayer.trackSelectionParameters
         val updated = params.buildUpon()
             .setTrackTypeDisabled(C.TRACK_TYPE_VIDEO, !videoActive)
@@ -1303,6 +1334,14 @@ class PlaybackService : MediaSessionService() {
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent?.action == ACTION_STOP_FOR_APP_EXIT) {
+            shutdownForExplicitAppExit()
+            return START_NOT_STICKY
+        }
+        return super.onStartCommand(intent, flags, startId)
+    }
+
     private fun createContentIntent(): PendingIntent {
         val intent = Intent(this, MainActivity::class.java)
         return TaskStackBuilder.create(this)
@@ -1329,24 +1368,54 @@ class PlaybackService : MediaSessionService() {
         abandonPlaybackAudioFocus()
         appVolumeBoostController.release()
         spectrumAnalyzer.stop()
-        mediaSession?.run {
-            player.release()
-            release()
-            mediaSession = null
-        }
+        releaseMediaSession()
         notificationProvider = null
         runCatching { PlaybackMediaCache.release() }
         super.onDestroy()
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        val player = mediaSession?.player
-        if (player == null || !player.playWhenReady || player.mediaItemCount == 0) {
+        shutdownForExplicitAppExit()
+    }
+
+    private fun shutdownForExplicitAppExit() {
+        if (appExitJob?.isActive == true) return
+        // 先阻止控制器重连，再保存暂停后的状态；释放会话只移除系统媒体组件，不清空队列。
+        PlaybackConnectionLifecycle.markAppExit()
+        val state = mediaSession?.player?.let { player ->
+            player.playWhenReady = false
+            capturePersistedPlaybackState(player)
+        }
+        appExitJob = serviceScope.launch {
+            if (state != null) {
+                runCatching { playbackStateStore.save(state) }
+                    .onFailure { error ->
+                        Log.e("PlaybackService", "保存退出时播放状态失败", error)
+                    }
+            }
+            releaseMediaSession()
+            stopForeground(STOP_FOREGROUND_REMOVE)
             stopSelf()
         }
     }
 
-    private companion object {
+    private fun releaseMediaSession() {
+        val session = mediaSession ?: return
+        mediaSession = null
+        session.player.release()
+        session.release()
+    }
+
+    companion object {
+        private const val ACTION_STOP_FOR_APP_EXIT =
+            "com.asmr.player.action.STOP_PLAYBACK_FOR_APP_EXIT"
+
+        internal fun requestShutdownForAppExit(context: Context) {
+            context.startService(
+                Intent(context, PlaybackService::class.java).setAction(ACTION_STOP_FOR_APP_EXIT)
+            )
+        }
+
         private const val DLSITE_UA =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         private const val LYRICS_CHANNEL_ID = "playback"

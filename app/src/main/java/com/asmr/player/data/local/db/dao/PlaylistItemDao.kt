@@ -83,6 +83,18 @@ interface PlaylistItemDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertItems(items: List<PlaylistItemEntity>)
 
+    @Query("UPDATE playlist_items SET albumId = :toAlbumId WHERE albumId = :fromAlbumId")
+    suspend fun moveToAlbum(fromAlbumId: Long, toAlbumId: Long)
+
+    @Query("UPDATE playlist_items SET trackId = :toTrackId, albumId = :albumId WHERE trackId = :fromTrackId")
+    suspend fun moveToTrack(fromTrackId: Long, toTrackId: Long, albumId: Long)
+
+    @Query("DELETE FROM playlist_items WHERE trackId IN (:trackIds)")
+    suspend fun deleteByTrackIds(trackIds: List<Long>)
+
+    @Query("DELETE FROM playlist_items WHERE albumId = :albumId")
+    suspend fun deleteByAlbumId(albumId: Long)
+
     @Query("DELETE FROM playlist_items WHERE playlistId = :playlistId AND mediaId = :mediaId")
     suspend fun deleteItem(playlistId: Long, mediaId: String)
 

@@ -60,6 +60,8 @@ data class SearchPendingRequest(
     val targetPage: Int
 )
 
+private const val DLSITE_CANONICAL_SEARCH_LOCALE = "ja_JP"
+
 @HiltViewModel
 class SearchViewModel @Inject constructor(
     private val dlsiteScraper: DLSiteScraper,
@@ -78,11 +80,13 @@ class SearchViewModel @Inject constructor(
     private var presaleOnly: Boolean = false
     private var chineseTranslatedOnly: Boolean = false
     private var collectedOnly: Boolean = true
+    private var hasSubtitle: Boolean = false
+    private var allAges: Boolean = false
     private var enrichJob: Job? = null
     private var asmrOneJob: Job? = null
     private var collectedWorkNoJob: Job? = null
     private var cacheWriteJob: Job? = null
-    private val dlsiteDetailCache = BoundedLruCache<String, Album>(maxEntries = 180)
+    private val dlsiteDetailCache = BoundedLruCache<DlsiteDetailCacheKey, Album>(maxEntries = 180)
     private val enrichDispatcher = Dispatchers.IO
     private val asmrOneAvailabilityCache =
         BoundedLruCache<String, CachedAsmrOneAvailability>(maxEntries = 1_000)
@@ -132,7 +136,9 @@ class SearchViewModel @Inject constructor(
         initialPurchasedOnly: Boolean,
         initialLocale: String?,
         initialCollectedOnly: Boolean = true,
-        initialCollectedSort: SearchCollectedSortOption = SearchCollectedSortOption.ReleaseNew
+        initialCollectedSort: SearchCollectedSortOption = SearchCollectedSortOption.ReleaseNew,
+        initialHasSubtitle: Boolean = false,
+        initialAllAges: Boolean = false
     ) {
         if (!bootstrapped.compareAndSet(false, true)) return
         viewModelScope.launch {
@@ -141,10 +147,18 @@ class SearchViewModel @Inject constructor(
                 applyCachedState(cached)
                 lastRequestedKeyword = cached.keyword
             } else {
-                purchasedOnly = initialPurchasedOnly
-                presaleOnly = false
-                chineseTranslatedOnly = false
-                collectedOnly = initialCollectedOnly
+                val initialFilters = normalizeSearchFilters(
+                    purchasedOnly = initialPurchasedOnly,
+                    presaleOnly = false,
+                    chineseTranslatedOnly = false,
+                    collectedOnly = initialCollectedOnly
+                )
+                purchasedOnly = initialFilters.purchasedOnly
+                presaleOnly = initialFilters.presaleOnly
+                chineseTranslatedOnly = initialFilters.chineseTranslatedOnly
+                collectedOnly = initialFilters.collectedOnly
+                hasSubtitle = initialHasSubtitle
+                allAges = initialAllAges
                 currentCollectedSort = initialCollectedSort
                 currentLocale = initialLocale
                 lastRequestedKeyword = initialKeyword.trim()
@@ -160,6 +174,7 @@ class SearchViewModel @Inject constructor(
             cur.copy(
                 isEnriching = false,
                 enrichingRjCodes = emptySet(),
+                isRefreshingLocalizedText = false,
                 resolvingCollectedWorkIds = emptySet(),
                 isAsmrOneChecking = false,
                 asmrOneChecked = 0,
@@ -177,6 +192,8 @@ class SearchViewModel @Inject constructor(
             presaleOnly = presaleOnly,
             chineseTranslatedOnly = chineseTranslatedOnly,
             collectedOnly = collectedOnly,
+            hasSubtitle = hasSubtitle,
+            allAges = allAges,
             locale = currentLocale
         )
     }
@@ -189,6 +206,8 @@ class SearchViewModel @Inject constructor(
         presaleOnly: Boolean,
         chineseTranslatedOnly: Boolean,
         collectedOnly: Boolean,
+        hasSubtitle: Boolean,
+        allAges: Boolean,
         locale: String?
     ): Boolean {
         if (_uiState.value is SearchUiState.Loading) return false
@@ -212,6 +231,8 @@ class SearchViewModel @Inject constructor(
         this.presaleOnly = nextFilters.presaleOnly
         this.chineseTranslatedOnly = nextFilters.chineseTranslatedOnly
         this.collectedOnly = nextFilters.collectedOnly
+        this.hasSubtitle = hasSubtitle
+        this.allAges = allAges
         currentLocale = locale
         lastRequestedKeyword = normalizedKeyword
         requestPage(normalizedKeyword, 1, SearchPendingRequestKind.Search)
@@ -241,6 +262,8 @@ class SearchViewModel @Inject constructor(
         presaleOnly: Boolean = this.presaleOnly,
         chineseTranslatedOnly: Boolean = this.chineseTranslatedOnly,
         collectedOnly: Boolean = this.collectedOnly,
+        hasSubtitle: Boolean = this.hasSubtitle,
+        allAges: Boolean = this.allAges,
         locale: String? = currentLocale
     ): Boolean {
         val nextFilters = normalizeSearchFilters(
@@ -255,24 +278,67 @@ class SearchViewModel @Inject constructor(
             messageManager.showWarning("请先登录 DLsite 后再使用\"已购\"搜索")
             return false
         }
-        if (
-            currentOrder == order &&
-            currentCollectedSort == collectedSort &&
-            this.purchasedOnly == nextFilters.purchasedOnly &&
-            this.presaleOnly == nextFilters.presaleOnly &&
-            this.chineseTranslatedOnly == nextFilters.chineseTranslatedOnly &&
-            this.collectedOnly == nextFilters.collectedOnly &&
-            currentLocale == locale
-        ) return true
+        val searchRequestChanged =
+            currentOrder != order ||
+                currentCollectedSort != collectedSort ||
+                this.purchasedOnly != nextFilters.purchasedOnly ||
+                this.presaleOnly != nextFilters.presaleOnly ||
+                this.chineseTranslatedOnly != nextFilters.chineseTranslatedOnly ||
+                this.collectedOnly != nextFilters.collectedOnly ||
+                this.hasSubtitle != hasSubtitle ||
+                this.allAges != allAges
+        val localeChanged = currentLocale != locale
+        if (!searchRequestChanged && !localeChanged) return true
         currentOrder = order
         currentCollectedSort = collectedSort
         this.purchasedOnly = nextFilters.purchasedOnly
         this.presaleOnly = nextFilters.presaleOnly
         this.chineseTranslatedOnly = nextFilters.chineseTranslatedOnly
         this.collectedOnly = nextFilters.collectedOnly
+        this.hasSubtitle = hasSubtitle
+        this.allAges = allAges
         currentLocale = locale
+        // locale 只控制页面文本语言；切换时保留列表，仅刷新当前作品的标签。
+        if (!searchRequestChanged) {
+            refreshCurrentResultLocale(current, locale)
+            return true
+        }
         requestPage(current.keyword, 1, SearchPendingRequestKind.Search)
         return true
+    }
+
+    private fun refreshCurrentResultLocale(current: SearchUiState.Success, locale: String?) {
+        enrichJob?.cancel()
+        val detailLocale = resolveSearchDetailLocale(
+            selectedLocale = locale,
+            chineseTranslatedOnly = current.chineseTranslatedOnly
+        )
+        Log.d(
+            "SearchViewModel",
+            "Refreshing result tags locale=$detailLocale without reloading the result list"
+        )
+        val updated = current.copy(
+            locale = locale,
+            isEnriching = false,
+            enrichingRjCodes = emptySet(),
+            isRefreshingLocalizedText = true,
+            enrichedDetailRjCodes = emptySet()
+        )
+        _uiState.value = updated
+        if (updated.purchasedOnly || updated.collectedOnly || updated.results.isEmpty()) {
+            _uiState.value = updated.copy(isRefreshingLocalizedText = false)
+            scheduleCacheWrite()
+            return
+        }
+        startEnrichDlsiteDetails(
+            keyword = updated.keyword,
+            page = updated.page,
+            baseItems = updated.results,
+            resultRevision = updated.resultRevision,
+            detailLocale = detailLocale,
+            replaceTagsFromDetail = true,
+            localizedTextOnlyFromDetail = true
+        )
     }
 
     fun nextPage() {
@@ -316,6 +382,7 @@ class SearchViewModel @Inject constructor(
                 pendingRequest = SearchPendingRequest(kind = requestKind, targetPage = page),
                 isEnriching = false,
                 enrichingRjCodes = emptySet(),
+                isRefreshingLocalizedText = false,
                 resolvingCollectedWorkIds = emptySet(),
                 isAsmrOneChecking = false,
                 asmrOneChecked = 0,
@@ -331,7 +398,9 @@ class SearchViewModel @Inject constructor(
                     purchasedOnly = purchasedOnly,
                     presaleOnly = presaleOnly,
                     chineseTranslatedOnly = chineseTranslatedOnly,
-                    collectedOnly = collectedOnly
+                    collectedOnly = collectedOnly,
+                    hasSubtitle = hasSubtitle,
+                    allAges = allAges
                 )
                 val resultRevision = ++searchResultRevision
                 _uiState.value = SearchUiState.Success(
@@ -344,6 +413,8 @@ class SearchViewModel @Inject constructor(
                     presaleOnly = presaleOnly,
                     chineseTranslatedOnly = chineseTranslatedOnly,
                     collectedOnly = collectedOnly,
+                    hasSubtitle = hasSubtitle,
+                    allAges = allAges,
                     locale = currentLocale,
                     canGoPrev = page > 1,
                     canGoNext = pageResult.canGoNext,
@@ -371,6 +442,10 @@ class SearchViewModel @Inject constructor(
                         page = page,
                         baseItems = pageResult.items,
                         resultRevision = resultRevision,
+                        detailLocale = resolveSearchDetailLocale(
+                            selectedLocale = currentLocale,
+                            chineseTranslatedOnly = chineseTranslatedOnly
+                        )
                     )
                     startMarkAsmrOneAvailability(
                         keyword = normalizedKeyword,
@@ -407,6 +482,8 @@ class SearchViewModel @Inject constructor(
                     presaleOnly = previousSuccess.presaleOnly
                     chineseTranslatedOnly = previousSuccess.chineseTranslatedOnly
                     collectedOnly = previousSuccess.collectedOnly
+                    hasSubtitle = previousSuccess.hasSubtitle
+                    allAges = previousSuccess.allAges
                     currentLocale = previousSuccess.locale
                     _uiState.value = previousSuccess.copy(
                         pendingRequest = null,
@@ -456,8 +533,18 @@ class SearchViewModel @Inject constructor(
         purchasedOnly: Boolean,
         presaleOnly: Boolean,
         chineseTranslatedOnly: Boolean,
-        collectedOnly: Boolean
+        collectedOnly: Boolean,
+        hasSubtitle: Boolean,
+        allAges: Boolean
     ): SearchPageResult {
+        val selectedFilter = SearchFilterOption.fromState(
+            purchasedOnly = purchasedOnly,
+            presaleOnly = presaleOnly,
+            chineseTranslatedOnly = chineseTranslatedOnly,
+            collectedOnly = collectedOnly
+        )
+        val appliedHasSubtitle = hasSubtitle && selectedFilter.supportsWorkFilters
+        val appliedAllAges = allAges && selectedFilter.supportsWorkFilters
         if (purchasedOnly) {
             val resp = dlsitePlayLibraryClient.searchPurchased(keyword, page, pageSize)
             return SearchPageResult(items = resp.items, canGoNext = resp.canGoNext)
@@ -468,7 +555,14 @@ class SearchViewModel @Inject constructor(
         )
         if (collectedOnly) {
             val offset = (page.coerceAtLeast(1) - 1) * pageSize
-            val resp = asmrOneAvailabilityApi.search(keywordWithBlockedTerms, pageSize, offset, collectedSort.backendSort)
+            val resp = asmrOneAvailabilityApi.search(
+                keyword = keywordWithBlockedTerms,
+                limit = pageSize,
+                offset = offset,
+                sort = collectedSort.backendSort,
+                hasSubtitle = appliedHasSubtitle,
+                allAges = appliedAllAges
+            )
             val collectedItems = resp.items.orEmpty()
             val mappedItems = withContext(Dispatchers.Default) {
                 collectedItems.map { it.toCollectedAlbum() }
@@ -503,6 +597,8 @@ class SearchViewModel @Inject constructor(
             keywordWithBlockedTerms == normalizedKeyword &&
             !presaleOnly &&
             !chineseTranslatedOnly &&
+            !appliedHasSubtitle &&
+            !appliedAllAges &&
             page == 1 &&
             normalizedWorkNo.isNotBlank()
         ) {
@@ -534,9 +630,11 @@ class SearchViewModel @Inject constructor(
             keyword = keywordWithBlockedTerms,
             page = page,
             order = order.dlsiteOrder,
-            locale = currentLocale,
+            locale = resolveSearchRequestLocale(currentLocale, chineseTranslatedOnly),
             presaleOnly = presaleOnly,
-            chineseTranslatedOnly = chineseTranslatedOnly
+            chineseTranslatedOnly = chineseTranslatedOnly,
+            hasSubtitle = appliedHasSubtitle,
+            allAges = appliedAllAges
         )
         return SearchPageResult(items = result.items, canGoNext = result.canGoNext)
     }
@@ -546,6 +644,9 @@ class SearchViewModel @Inject constructor(
         page: Int,
         baseItems: List<Album>,
         resultRevision: Long,
+        detailLocale: String,
+        replaceTagsFromDetail: Boolean = detailLocale != DLSITE_CANONICAL_SEARCH_LOCALE,
+        localizedTextOnlyFromDetail: Boolean = false,
     ) {
         enrichJob?.cancel()
         enrichJob = viewModelScope.launch {
@@ -553,7 +654,13 @@ class SearchViewModel @Inject constructor(
                 .mapNotNull { it.rjCode.ifBlank { it.workId }.trim().uppercase().takeIf(String::isNotBlank) }
                 .distinct()
                 .toSet()
-            if (enrichTargets.isEmpty()) return@launch
+            if (enrichTargets.isEmpty()) {
+                _uiState.update { state ->
+                    val current = state as? SearchUiState.Success ?: return@update state
+                    current.copy(isRefreshingLocalizedText = false)
+                }
+                return@launch
+            }
             var started = false
             _uiState.update { state ->
                 val current = state as? SearchUiState.Success ?: return@update state
@@ -561,6 +668,7 @@ class SearchViewModel @Inject constructor(
                     current.keyword != keyword ||
                     current.page != page ||
                     current.resultRevision != resultRevision ||
+                    resolveSearchDetailLocale(current.locale, current.chineseTranslatedOnly) != detailLocale ||
                     current.purchasedOnly ||
                     current.collectedOnly
                 ) {
@@ -570,6 +678,7 @@ class SearchViewModel @Inject constructor(
                 current.copy(
                     isEnriching = true,
                     enrichingRjCodes = enrichTargets,
+                    isRefreshingLocalizedText = localizedTextOnlyFromDetail,
                 )
             }
             if (!started) return@launch
@@ -581,15 +690,20 @@ class SearchViewModel @Inject constructor(
                     if (rj.isBlank() || rj !in enrichTargets) return@mapIndexedNotNull null
                     async(enrichDispatcher) {
                         sem.withPermit {
-                            val cached = dlsiteDetailCache[rj]
+                            val cacheKey = DlsiteDetailCacheKey(rjCode = rj, locale = detailLocale)
+                            val cached = dlsiteDetailCache[cacheKey]
                             val detail = cached ?: try {
-                                dlsiteScraper.getWorkInfo(rj)?.album
+                                dlsiteScraper.getWorkInfo(
+                                    workId = rj,
+                                    locale = detailLocale,
+                                    allowJapaneseCvFallback = false
+                                )?.album
                             } catch (error: CancellationException) {
                                 throw error
                             } catch (_: Throwable) {
                                 null
                             }
-                            if (detail != null) dlsiteDetailCache[rj] = detail
+                            if (detail != null) dlsiteDetailCache[cacheKey] = detail
                             Triple(index, rj, detail)
                         }
                     }
@@ -614,6 +728,7 @@ class SearchViewModel @Inject constructor(
                             cur.keyword != keyword ||
                             cur.page != page ||
                             cur.resultRevision != resultRevision ||
+                            resolveSearchDetailLocale(cur.locale, cur.chineseTranslatedOnly) != detailLocale ||
                             cur.purchasedOnly ||
                             cur.collectedOnly
                         ) {
@@ -624,7 +739,12 @@ class SearchViewModel @Inject constructor(
                         results.forEach { (idx, rj, detail) ->
                             completedRjs += rj
                             if (detail != null && idx in list.indices) {
-                                val merged = mergeSearchAlbumDetail(list[idx], detail)
+                                val merged = mergeSearchAlbumDetail(
+                                    base = list[idx],
+                                    detail = detail,
+                                    preferDetailTags = replaceTagsFromDetail,
+                                    localizedTextOnly = localizedTextOnlyFromDetail
+                                )
                                 if (merged != list[idx]) {
                                     list[idx] = merged
                                     resultsChanged = true
@@ -650,6 +770,7 @@ class SearchViewModel @Inject constructor(
                     current.keyword != keyword ||
                     current.page != page ||
                     current.resultRevision != resultRevision ||
+                    resolveSearchDetailLocale(current.locale, current.chineseTranslatedOnly) != detailLocale ||
                     current.purchasedOnly ||
                     current.collectedOnly
                 ) {
@@ -658,7 +779,8 @@ class SearchViewModel @Inject constructor(
                 completed = true
                 current.copy(
                     isEnriching = false,
-                    enrichingRjCodes = emptySet()
+                    enrichingRjCodes = emptySet(),
+                    isRefreshingLocalizedText = false
                 )
             }
             if (completed) {
@@ -698,6 +820,8 @@ class SearchViewModel @Inject constructor(
         presaleOnly = filters.presaleOnly
         chineseTranslatedOnly = filters.chineseTranslatedOnly
         collectedOnly = filters.collectedOnly
+        hasSubtitle = cached.hasSubtitle
+        allAges = cached.allAges
         currentLocale = cached.locale
         _uiState.value = SearchUiState.Success(
             results = cached.results,
@@ -709,6 +833,8 @@ class SearchViewModel @Inject constructor(
             presaleOnly = filters.presaleOnly,
             chineseTranslatedOnly = filters.chineseTranslatedOnly,
             collectedOnly = filters.collectedOnly,
+            hasSubtitle = cached.hasSubtitle,
+            allAges = cached.allAges,
             locale = cached.locale,
             canGoPrev = page > 1,
             canGoNext = cached.canGoNext,
@@ -758,6 +884,8 @@ class SearchViewModel @Inject constructor(
                         presaleOnly = latest.presaleOnly,
                         chineseTranslatedOnly = latest.chineseTranslatedOnly,
                         collectedOnly = latest.collectedOnly,
+                        hasSubtitle = latest.hasSubtitle,
+                        allAges = latest.allAges,
                         locale = latest.locale,
                         page = latest.page,
                         canGoNext = latest.canGoNext,
@@ -1197,12 +1325,27 @@ private data class SearchPageResult(
     val resolvedDetailRjCodes: Set<String> = emptySet()
 )
 
-internal fun mergeSearchAlbumDetail(base: Album, detail: Album): Album {
+internal fun mergeSearchAlbumDetail(
+    base: Album,
+    detail: Album,
+    preferDetailTags: Boolean = false,
+    localizedTextOnly: Boolean = false
+): Album {
+    if (localizedTextOnly) {
+        return base.copy(
+            title = detail.title.ifBlank { base.title },
+            tags = detail.tags.ifEmpty { base.tags }
+        )
+    }
     return base.copy(
         title = base.title.ifBlank { detail.title },
         circle = base.circle.ifBlank { detail.circle },
         cv = detail.cv.ifBlank { base.cv },
-        tags = if (base.tags.isEmpty()) detail.tags else base.tags,
+        tags = when {
+            preferDetailTags && detail.tags.isNotEmpty() -> detail.tags
+            base.tags.isNotEmpty() -> base.tags
+            else -> detail.tags
+        },
         coverUrl = base.coverUrl.ifBlank { detail.coverUrl },
         ratingValue = detail.ratingValue ?: base.ratingValue,
         ratingCount = maxOf(base.ratingCount, detail.ratingCount),
@@ -1211,6 +1354,31 @@ internal fun mergeSearchAlbumDetail(base: Album, detail: Album): Album {
         priceJpy = if (base.priceJpy > 0) base.priceJpy else detail.priceJpy
     )
 }
+
+internal fun resolveSearchDetailLocale(
+    selectedLocale: String?,
+    chineseTranslatedOnly: Boolean
+): String {
+    if (chineseTranslatedOnly) return "zh_CN"
+    val normalized = selectedLocale?.trim().orEmpty()
+    return when {
+        normalized.startsWith("zh_CN", ignoreCase = true) -> "zh_CN"
+        normalized.startsWith("zh_TW", ignoreCase = true) -> "zh_TW"
+        else -> DLSITE_CANONICAL_SEARCH_LOCALE
+    }
+}
+
+internal fun resolveSearchRequestLocale(
+    selectedLocale: String?,
+    chineseTranslatedOnly: Boolean
+): String {
+    return resolveSearchDetailLocale(selectedLocale, chineseTranslatedOnly)
+}
+
+private data class DlsiteDetailCacheKey(
+    val rjCode: String,
+    val locale: String
+)
 
 internal fun appendBlockedKeywordsForOnlineSearch(
     keyword: String,
@@ -1248,6 +1416,8 @@ sealed class SearchUiState {
         val presaleOnly: Boolean,
         val chineseTranslatedOnly: Boolean,
         val collectedOnly: Boolean,
+        val hasSubtitle: Boolean = false,
+        val allAges: Boolean = false,
         val locale: String?,
         val canGoPrev: Boolean,
         val canGoNext: Boolean,
@@ -1255,6 +1425,7 @@ sealed class SearchUiState {
         val visitedPages: List<Int> = listOf(page),
         val isEnriching: Boolean = false,
         val enrichingRjCodes: Set<String> = emptySet(),
+        val isRefreshingLocalizedText: Boolean = false,
         val resolvingCollectedWorkIds: Set<Int> = emptySet(),
         val enrichedDetailRjCodes: Set<String> = emptySet(),
         val isAsmrOneChecking: Boolean = false,

@@ -86,11 +86,13 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.BuildConfig
 import com.asmr.player.cache.AppCacheLimits
 import com.asmr.player.cache.AppCacheState
+import com.asmr.player.data.remote.download.DownloadDestination
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.DeepSeekReasoningEffort
 import com.asmr.player.data.settings.DeepSeekTranslationSettings
 import com.asmr.player.data.settings.FloatingLyricsSettings
 import com.asmr.player.data.settings.LyricsPageSettings
+import com.asmr.player.data.settings.NowPlayingLyricsSettings
 import com.asmr.player.subtitle.SubtitleDeviceCapability
 import com.asmr.player.subtitle.SubtitleModelDownloadSource
 import com.asmr.player.subtitle.SubtitleModelInstallationState
@@ -104,6 +106,7 @@ import com.asmr.player.subtitle.formatDeepSeekBalances
 import com.asmr.player.subtitle.formatDeepSeekTokenTotal
 import com.asmr.player.ui.library.BulkPhase
 import com.asmr.player.ui.library.LibraryViewModel
+import com.asmr.player.util.documentTreeDisplayPath
 import com.asmr.player.ui.common.AppSupportStatusSection
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.FlatActionDialog
@@ -112,13 +115,12 @@ import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
-import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.smoothScrollToTop
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.update.launchDownloadedApkInstall
 import com.asmr.player.util.Formatting
+import java.io.File
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -196,6 +198,7 @@ fun SettingsScreen(
     }
     val floatingLyricsEnabled by viewModel.floatingLyricsEnabled.collectAsStateWhileActive(lyricsDataActive)
     val floatingSettings by viewModel.floatingLyricsSettings.collectAsStateWhileActive(lyricsDataActive)
+    val nowPlayingLyricsSettings by viewModel.nowPlayingLyricsSettings.collectAsStateWhileActive(lyricsDataActive)
     val lyricsPageSettings by viewModel.lyricsPageSettings.collectAsStateWhileActive(lyricsDataActive)
     val dynamicPlayerHueEnabled by viewModel.dynamicPlayerHueEnabled.collectAsStateWhileActive(appearanceDataActive)
     val themeMode by viewModel.themeMode.collectAsStateWhileActive(appearanceDataActive)
@@ -221,6 +224,7 @@ fun SettingsScreen(
     val updateState by viewModel.updateState.collectAsStateWhileActive(aboutDataActive)
     val autoUpdateCheckEnabled by viewModel.autoUpdateCheckEnabled.collectAsStateWhileActive(aboutDataActive)
     val scanRoots by libraryViewModel.scanRoots.collectAsStateWhileActive(localLibraryDataActive)
+    val downloadDestination by viewModel.downloadDestination.collectAsStateWhileActive(localLibraryDataActive)
     val bulkProgress by libraryViewModel.bulkProgress.collectAsStateWhileActive(localLibraryDataActive)
     val isGlobalSyncRunning by libraryViewModel.isGlobalSyncRunning.collectAsStateWhileActive(localLibraryDataActive)
     val context = LocalContext.current
@@ -285,6 +289,27 @@ fun SettingsScreen(
             }
         }
     )
+    var pendingDownloadDestination by remember { mutableStateOf<DownloadDestination?>(null) }
+    val pickDownloadRootLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree(),
+        onResult = { uri ->
+            if (uri != null) {
+                val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                val granted = runCatching {
+                    context.contentResolver.takePersistableUriPermission(uri, flags)
+                    true
+                }.getOrDefault(false)
+                if (granted) {
+                    pendingDownloadDestination = DownloadDestination.DocumentTree(
+                        root = uri.toString(),
+                        label = formatTreeRootLabel(uri.toString()),
+                    )
+                } else {
+                    libraryViewModel.messageManager.showError("无法获取下载目录读写权限")
+                }
+            }
+        },
+    )
     var pendingRemoveRoot by remember { mutableStateOf<String?>(null) }
 
     // 屏幕尺寸判断
@@ -293,7 +318,7 @@ fun SettingsScreen(
         selectedSection = null
     }
     Scaffold(
-        contentWindowInsets = StableWindowInsets.navigationBars,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground
     ) { padding ->
@@ -329,7 +354,7 @@ fun SettingsScreen(
             }
             LazyColumn(
                 state = rootListState,
-                modifier = contentModifier.thinScrollbar(rootListState),
+                modifier = contentModifier,
                 flingBehavior = rememberCalmScrollableFlingBehavior(),
                 contentPadding = PaddingValues(horizontal = SettingsPageHorizontalPadding, vertical = 10.dp)
                     .withAddedBottomPadding(LocalBottomOverlayPadding.current),
@@ -360,8 +385,7 @@ fun SettingsScreen(
                     state = detailListState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(colorScheme.background)
-                        .thinScrollbar(detailListState),
+                        .background(colorScheme.background),
                     flingBehavior = rememberCalmScrollableFlingBehavior(),
                     contentPadding = PaddingValues(horizontal = SettingsPageHorizontalPadding, vertical = 10.dp)
                         .withAddedBottomPadding(LocalBottomOverlayPadding.current),
@@ -382,6 +406,58 @@ fun SettingsScreen(
                     containerColor = colorScheme.primarySoft,
                     contentColor = if (isDark) colorScheme.onPrimaryContainer else colorScheme.primaryStrong
                 )
+
+                Text("下载目录", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = colorScheme.surface.copy(alpha = 0.35f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text(downloadDestination.label, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            text = downloadDestination.displayPath,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colorScheme.textSecondary,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            FilledTonalButton(
+                                onClick = {
+                                    viewModel.requestDownloadDirectoryChange {
+                                        pickDownloadRootLauncher.launch(null)
+                                    }
+                                },
+                                modifier = Modifier.weight(1f),
+                                colors = buttonColors,
+                                enabled = !isGlobalSyncRunning,
+                            ) {
+                                Icon(Icons.Rounded.FolderOpen, contentDescription = null, tint = buttonColors.contentColor)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("选择目录")
+                            }
+                            TextButton(
+                                onClick = {
+                                    viewModel.requestDownloadDirectoryChange {
+                                        pendingDownloadDestination = DownloadDestination.Default(
+                                            root = File(context.getExternalFilesDir(null), "albums").absolutePath,
+                                        )
+                                    }
+                                },
+                                enabled = downloadDestination is DownloadDestination.DocumentTree && !isGlobalSyncRunning,
+                            ) {
+                                Text("重置默认")
+                            }
+                        }
+                    }
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -488,7 +564,13 @@ fun SettingsScreen(
                             ) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(label, style = MaterialTheme.typography.bodyMedium)
-                                    Text(root, style = MaterialTheme.typography.bodySmall, color = colorScheme.textSecondary, maxLines = 1)
+                                    Text(
+                                        documentTreeDisplayPath(context, root),
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = colorScheme.textSecondary,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
                                 }
                                 IconButton(onClick = { libraryViewModel.scanSingleRoot(root) }, enabled = !isGlobalSyncRunning) {
                                     Icon(Icons.Rounded.Refresh, contentDescription = null, tint = colorScheme.onSurface)
@@ -751,7 +833,7 @@ fun SettingsScreen(
                 }
                 }
 
-                // 悬浮歌词
+                // 歌词
                 if (currentSection == SettingsSection.Lyrics) {
                     item(key = "group:lyrics") {
                         SettingsDetailCard {
@@ -761,12 +843,20 @@ fun SettingsScreen(
                                 onCheckedChange = { viewModel.setFloatingLyricsEnabled(it) }
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
-                        LyricsPageSettingsSection(
-                            settings = lyricsPageSettings,
-                            segmentedButtonColors = segmentedButtonColors,
-                            onSettingsChange = { next -> viewModel.updateLyricsPageSettings(next) },
-                            onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
-                        )
+                            NowPlayingLyricsSettingsSection(
+                                settings = nowPlayingLyricsSettings,
+                                onSettingsChange = viewModel::updateNowPlayingLyricsSettings,
+                                onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
+                            )
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+
+                            LyricsPageSettingsSection(
+                                settings = lyricsPageSettings,
+                                segmentedButtonColors = segmentedButtonColors,
+                                onSettingsChange = { next -> viewModel.updateLyricsPageSettings(next) },
+                                onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
+                            )
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
                         Text("悬浮歌词细节", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
@@ -1095,6 +1185,26 @@ fun SettingsScreen(
             )
         )
     }
+    val nextDownloadDestination = pendingDownloadDestination
+    if (nextDownloadDestination != null) {
+        FlatActionDialog(
+            onDismissRequest = { pendingDownloadDestination = null },
+            message = "切换后将清理旧目录中由 App 下载的本地库、下载任务和字幕翻译任务记录，但不会删除或移动物理文件；同一目录内手动导入的其他作品会保留。切换成功后会自动扫描新的目标目录。是否继续？",
+            actions = listOf(
+                FlatDialogAction("取消", onClick = { pendingDownloadDestination = null }),
+                FlatDialogAction(
+                    text = if (nextDownloadDestination is DownloadDestination.Default) "重置" else "切换",
+                    tone = FlatDialogActionTone.Danger,
+                    onClick = {
+                        pendingDownloadDestination = null
+                        viewModel.changeDownloadDirectory(nextDownloadDestination) {
+                            libraryViewModel.scanCurrentDownloadDestinationAsImport()
+                        }
+                    },
+                ),
+            ),
+        )
+    }
     if (showClearAppCacheConfirmation) {
         FlatActionDialog(
             onDismissRequest = { showClearAppCacheConfirmation = false },
@@ -1130,6 +1240,23 @@ fun SettingsScreen(
             )
         )
     }
+}
+
+@Composable
+private fun NowPlayingLyricsSettingsSection(
+    settings: NowPlayingLyricsSettings,
+    onSettingsChange: (NowPlayingLyricsSettings) -> Unit,
+    onHorizontalControlInteractionChanged: (Boolean) -> Unit = {}
+) {
+    Text("播放页歌词", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+    SettingsSliderRow(
+        text = "高亮字体大小: ${settings.highlightFontSizeSp.toInt()}sp",
+        value = settings.highlightFontSizeSp,
+        range = 18f..36f,
+        stepSize = 1f,
+        onValueChange = { onSettingsChange(settings.copy(highlightFontSizeSp = it)) },
+        onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

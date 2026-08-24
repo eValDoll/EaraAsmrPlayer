@@ -3,17 +3,19 @@ package com.asmr.player.ui.theme
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
-import androidx.compose.animation.core.AnimationVector4D
+import androidx.compose.animation.core.AnimationVector1D
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.TwoWayConverter
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.platform.LocalContext
@@ -161,30 +163,33 @@ fun rememberDynamicHuePalette(
     val baseKey = if (rawBaseKey.isNotBlank()) rawBaseKey else lastNonBlankBaseKeyState.value
     val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
     val seedKey = "hue:cw:$regionKey:$baseKey"
-    
-    val animatable = remember(seedKey) {
-        Animatable(DynamicHueCache.get(seedKey) ?: fallbackHue.primary, ColorVectorConverter)
-    }
 
+    // Rebuilding a full Material tonal scheme from the interpolated seed on every animation
+    // frame is the main-thread hotspot during the cover color transition. Instead we keep the
+    // previous and target seed colors, derive each palette once, and only lerp the 16 palette
+    // colors per frame. The transition animation itself is unchanged.
+    val progress = remember { Animatable(1f) }
+    var fromSeed by remember { mutableStateOf(DynamicHueCache.get(seedKey) ?: fallbackHue.primary) }
+    var toSeed by remember { mutableStateOf(DynamicHueCache.get(seedKey) ?: fallbackHue.primary) }
 
     LaunchedEffect(seedKey) {
         if (baseKey.isBlank()) {
             return@LaunchedEffect
         }
-        
-        // If we have it in cache, snap immediately to avoid animation if we are just scrolling/recomposing?
-        DynamicHueCache.get(seedKey)?.let {
-            if (cachedTransitionDurationMs <= 0) animatable.snapTo(it)
-            else animatable.animateTo(it, animationSpec = tween(cachedTransitionDurationMs))
+
+        DynamicHueCache.get(seedKey)?.let { cached ->
+            fromSeed = toSeed
+            toSeed = cached
+            animateHuePaletteProgress(progress, cachedTransitionDurationMs)
             return@LaunchedEffect
         }
-        
+
         var constrainedPrimary: Color? = null
         var attempt = 0
         // Retry logic for color extraction failure (e.g. Coil loading issue)
         while (constrainedPrimary == null && attempt < 3) {
             if (attempt > 0) kotlinx.coroutines.delay(300)
-            
+
             constrainedPrimary = DynamicHueCache.getOrCompute(seedKey) {
                 withContext(Dispatchers.Default) {
                     val m = artworkModel ?: return@withContext null
@@ -196,7 +201,7 @@ fun rememberDynamicHuePalette(
                         )
                     }.getOrNull() ?: return@withContext null
                     val bitmap = img.asAndroidBitmap()
-                        
+
                     if (bitmap.width < 10 || bitmap.height < 10) return@withContext null
 
                     monetSeedColorFromBitmap(
@@ -211,25 +216,26 @@ fun rememberDynamicHuePalette(
 
         if (constrainedPrimary == null) {
             // If failed after retries, stick to fallback
-            if (cachedTransitionDurationMs <= 0) animatable.snapTo(fallbackHue.primary)
-            else animatable.animateTo(
-                fallbackHue.primary,
-                animationSpec = tween(durationMillis = cachedTransitionDurationMs, easing = FastOutSlowInEasing)
-            )
+            fromSeed = toSeed
+            toSeed = fallbackHue.primary
+            animateHuePaletteProgress(progress, cachedTransitionDurationMs)
             return@LaunchedEffect
         }
 
-        if (transitionDurationMs <= 0) animatable.snapTo(constrainedPrimary)
-        else animatable.animateTo(
-            constrainedPrimary,
-            animationSpec = tween(durationMillis = transitionDurationMs, easing = FastOutSlowInEasing)
-        )
+        fromSeed = toSeed
+        toSeed = constrainedPrimary
+        animateHuePaletteProgress(progress, transitionDurationMs)
     }
 
-    return remember(mode, neutral, fallbackHue, animatable) {
-        derivedStateOf {
-            deriveHuePalette(animatable.value, mode, neutral, fallbackHue.onPrimary)
-        }
+    val fromPalette = remember(fromSeed, mode, neutral, fallbackHue) {
+        deriveHuePalette(fromSeed, mode, neutral, fallbackHue.onPrimary)
+    }
+    val toPalette = remember(toSeed, mode, neutral, fallbackHue) {
+        deriveHuePalette(toSeed, mode, neutral, fallbackHue.onPrimary)
+    }
+
+    return remember(fromPalette, toPalette) {
+        derivedStateOf { lerpHuePalette(fromPalette, toPalette, progress.value) }
     }
 }
 
@@ -255,16 +261,17 @@ fun rememberDynamicHuePaletteFromVideoFrame(
     val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
     val seedKey = "hue:vf:cw:$regionKey:$baseKey"
 
-    val animatable = remember(seedKey) {
-        Animatable(DynamicHueCache.get(seedKey) ?: fallbackHue.primary, ColorVectorConverter)
-    }
+    val progress = remember { Animatable(1f) }
+    var fromSeed by remember { mutableStateOf(DynamicHueCache.get(seedKey) ?: fallbackHue.primary) }
+    var toSeed by remember { mutableStateOf(DynamicHueCache.get(seedKey) ?: fallbackHue.primary) }
 
     LaunchedEffect(seedKey) {
         if (baseKey.isBlank() || videoUri == null) return@LaunchedEffect
 
-        DynamicHueCache.get(seedKey)?.let {
-            if (cachedTransitionDurationMs <= 0) animatable.snapTo(it)
-            else animatable.animateTo(it, animationSpec = tween(cachedTransitionDurationMs))
+        DynamicHueCache.get(seedKey)?.let { cached ->
+            fromSeed = toSeed
+            toSeed = cached
+            animateHuePaletteProgress(progress, cachedTransitionDurationMs)
             return@LaunchedEffect
         }
 
@@ -282,25 +289,26 @@ fun rememberDynamicHuePaletteFromVideoFrame(
         }
 
         if (constrainedPrimary == null) {
-            if (cachedTransitionDurationMs <= 0) animatable.snapTo(fallbackHue.primary)
-            else animatable.animateTo(
-                fallbackHue.primary,
-                animationSpec = tween(durationMillis = cachedTransitionDurationMs, easing = FastOutSlowInEasing)
-            )
+            fromSeed = toSeed
+            toSeed = fallbackHue.primary
+            animateHuePaletteProgress(progress, cachedTransitionDurationMs)
             return@LaunchedEffect
         }
 
-        if (transitionDurationMs <= 0) animatable.snapTo(constrainedPrimary)
-        else animatable.animateTo(
-            constrainedPrimary,
-            animationSpec = tween(durationMillis = transitionDurationMs, easing = FastOutSlowInEasing)
-        )
+        fromSeed = toSeed
+        toSeed = constrainedPrimary
+        animateHuePaletteProgress(progress, transitionDurationMs)
     }
 
-    return remember(mode, neutral, fallbackHue, animatable) {
-        derivedStateOf {
-            deriveHuePalette(animatable.value, mode, neutral, fallbackHue.onPrimary)
-        }
+    val fromPalette = remember(fromSeed, mode, neutral, fallbackHue) {
+        deriveHuePalette(fromSeed, mode, neutral, fallbackHue.onPrimary)
+    }
+    val toPalette = remember(toSeed, mode, neutral, fallbackHue) {
+        deriveHuePalette(toSeed, mode, neutral, fallbackHue.onPrimary)
+    }
+
+    return remember(fromPalette, toPalette) {
+        derivedStateOf { lerpHuePalette(fromPalette, toPalette, progress.value) }
     }
 }
 
@@ -441,11 +449,44 @@ private object DynamicHueCache {
     }
 }
 
-private val ColorVectorConverter = TwoWayConverter<Color, AnimationVector4D>(
-    convertToVector = { color ->
-        AnimationVector4D(color.red, color.green, color.blue, color.alpha)
-    },
-    convertFromVector = { vector ->
-        Color(vector.v1, vector.v2, vector.v3, vector.v4)
+private fun lerpHuePalette(from: HuePalette, to: HuePalette, fraction: Float): HuePalette {
+    val t = fraction.coerceIn(0f, 1f)
+    if (t <= 0f) return from
+    if (t >= 1f) return to
+    return HuePalette(
+        primary = lerpColor(from.primary, to.primary, t),
+        primarySoft = lerpColor(from.primarySoft, to.primarySoft, t),
+        primaryStrong = lerpColor(from.primaryStrong, to.primaryStrong, t),
+        onPrimary = lerpColor(from.onPrimary, to.onPrimary, t),
+        secondary = lerpColor(from.secondary, to.secondary, t),
+        onPrimaryContainer = lerpColor(from.onPrimaryContainer, to.onPrimaryContainer, t),
+        onSecondary = lerpColor(from.onSecondary, to.onSecondary, t),
+        background = lerpColor(from.background, to.background, t),
+        onBackground = lerpColor(from.onBackground, to.onBackground, t),
+        surface = lerpColor(from.surface, to.surface, t),
+        onSurface = lerpColor(from.onSurface, to.onSurface, t),
+        surfaceVariant = lerpColor(from.surfaceVariant, to.surfaceVariant, t),
+        onSurfaceVariant = lerpColor(from.onSurfaceVariant, to.onSurfaceVariant, t),
+        textPrimary = lerpColor(from.textPrimary, to.textPrimary, t),
+        textSecondary = lerpColor(from.textSecondary, to.textSecondary, t),
+        textTertiary = lerpColor(from.textTertiary, to.textTertiary, t)
+    )
+}
+
+private fun lerpColor(start: Color, stop: Color, fraction: Float): Color {
+    return Color(
+        red = start.red + (stop.red - start.red) * fraction,
+        green = start.green + (stop.green - start.green) * fraction,
+        blue = start.blue + (stop.blue - start.blue) * fraction,
+        alpha = start.alpha + (stop.alpha - start.alpha) * fraction
+    )
+}
+
+private suspend fun animateHuePaletteProgress(progress: Animatable<Float, AnimationVector1D>, durationMs: Int) {
+    if (durationMs <= 0) {
+        progress.snapTo(1f)
+    } else {
+        progress.snapTo(0f)
+        progress.animateTo(1f, animationSpec = tween(durationMillis = durationMs, easing = FastOutSlowInEasing))
     }
-)
+}

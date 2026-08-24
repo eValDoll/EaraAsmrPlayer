@@ -12,6 +12,9 @@ interface TrackTagDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertTrackTags(refs: List<TrackTagEntity>)
 
+    @Query("SELECT * FROM track_tag WHERE trackId = :trackId")
+    suspend fun getTrackTagsForTrack(trackId: Long): List<TrackTagEntity>
+
     @Query("DELETE FROM track_tag WHERE trackId = :trackId")
     suspend fun deleteTrackTagsByTrackId(trackId: Long)
 

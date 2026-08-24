@@ -3,7 +3,6 @@ package com.asmr.player.ui.library
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -47,7 +46,6 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -115,8 +113,8 @@ private val AlbumOnlineDetailResizeSpring = spring<IntSize>(
     stiffness = Spring.StiffnessMediumLow
 )
 private const val AlbumOnlineDetailExitSettleMillis = 320L
-private const val AlbumCoverDepthFadeMillis = 320
 private const val AlbumCollectedRibbonFadeMillis = 240
+private const val AlbumCoverFadeInMillis = 800
 private const val AlbumStatsSeparator = "  "
 internal const val ALBUM_ITEM_CARD_TAG = "album_item_card"
 internal const val ALBUM_ITEM_STATS_TAG = "album_item_stats"
@@ -180,16 +178,15 @@ fun AlbumItem(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
-    onRjClick: ((String) -> Unit)? = null,
-    onCircleClick: ((String) -> Unit)? = null,
+    onRjLongClick: ((String) -> Unit)? = null,
     onCircleLongClick: ((String) -> Unit)? = null,
-    onCvClick: ((String) -> Unit)? = null,
     onCvLongClick: ((String) -> Unit)? = null,
-    onTagClick: ((String) -> Unit)? = null,
     onTagLongClick: ((String) -> Unit)? = null,
     coverBadge: AlbumCoverBadge? = null,
     onlineDetailLoading: Boolean = false,
+    onlineTitleLoading: Boolean = false,
     onlineCvLoading: Boolean = onlineDetailLoading,
+    onlineTagsLoading: Boolean = onlineDetailLoading,
     animateOnlineDetails: Boolean = true,
     coverFadeIn: Boolean = true,
     coverFadeInState: State<Boolean>? = null,
@@ -217,13 +214,7 @@ fun AlbumItem(
         mutableStateOf<State<Float>?>(null)
     }
     val isCoverFadeComplete = (coverPainterAlphaState?.value ?: 0f) >= 1f
-    val coverDepthProgress by key(imageModel, coverReloadKey) {
-        animateFloatAsState(
-            targetValue = if (isCoverFadeComplete) 1f else 0f,
-            animationSpec = tween(durationMillis = AlbumCoverDepthFadeMillis),
-            label = "albumListCoverDepth",
-        )
-    }
+    val coverDepthProgress = coverPainterAlphaState?.value ?: 0f
     val dividerColor = colorScheme.onSurfaceVariant.copy(
         alpha = if (colorScheme.isDark) 0.28f else 0.18f
     )
@@ -297,6 +288,7 @@ fun AlbumItem(
                             placeholderCornerRadius = 0,
                             fadeIn = coverFadeIn,
                             fadeInState = coverFadeInState,
+                            fadeInMillis = AlbumCoverFadeInMillis,
                             reloadKey = coverReloadKey,
                             retainPainterDuringReload = coverRetainPainterDuringReload,
                             peekAnySizeForInitial = true,
@@ -359,24 +351,28 @@ fun AlbumItem(
                     maxGap = 10.dp,
                 ) {
                     val rj = album.rjCode.ifBlank { album.workId }
-                    Text(
-                        text = album.title,
-                        style = MaterialTheme.typography.titleSmall.copy(
-                            fontSize = 16.sp,
-                            lineHeight = 22.sp,
-                            fontWeight = FontWeight.SemiBold,
-                        ),
-                        color = colorScheme.textPrimary,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    if (onlineTitleLoading) {
+                        AlbumDetailSkeletonLine(widthFraction = 0.94f)
+                    } else {
+                        Text(
+                            text = album.title,
+                            style = MaterialTheme.typography.titleSmall.copy(
+                                fontSize = 16.sp,
+                                lineHeight = 22.sp,
+                                fontWeight = FontWeight.SemiBold,
+                            ),
+                            color = colorScheme.textPrimary,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
 
                     AlbumItemPrimaryMetaLightweight(
                         rjCode = rj,
                         circle = album.circle,
                         modifier = Modifier.fillMaxWidth(),
-                        rjOnClick = onRjClick?.let { click -> { click(rj) } },
-                        circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
+                        onClick = onClick,
+                        rjOnLongClick = onRjLongClick?.let { longClick -> { longClick(rj) } },
                         circleOnLongClick = onCircleLongClick?.let { longClick -> { longClick(album.circle) } },
                     )
 
@@ -388,13 +384,13 @@ fun AlbumItem(
                         AlbumItemCvLightweight(
                             cvText = album.cv,
                             modifier = Modifier.fillMaxWidth(),
-                            onCvClick = onCvClick,
+                            onClick = onClick,
                             onCvLongClick = onCvLongClick,
                         )
                     }
                     AlbumOnlineDetailAnimatedLine(
-                        content = tagsStateContent,
-                        loading = onlineDetailLoading,
+                        content = if (onlineTagsLoading) "" else tagsStateContent,
+                        loading = onlineTagsLoading,
                         animated = animateOnlineDetails,
                         loadingContent = {
                             AlbumDetailSkeletonLine(widthFraction = 0.86f)
@@ -405,7 +401,7 @@ fun AlbumItem(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag(ALBUM_ITEM_TAGS_TAG),
-                            onTagClick = onTagClick,
+                            onClick = onClick,
                             onTagLongClick = onTagLongClick,
                         )
                     }
@@ -493,16 +489,15 @@ fun AlbumGridItem(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
-    onRjClick: ((String) -> Unit)? = null,
-    onCircleClick: ((String) -> Unit)? = null,
+    onRjLongClick: ((String) -> Unit)? = null,
     onCircleLongClick: ((String) -> Unit)? = null,
-    onCvClick: ((String) -> Unit)? = null,
     onCvLongClick: ((String) -> Unit)? = null,
-    onTagClick: ((String) -> Unit)? = null,
     onTagLongClick: ((String) -> Unit)? = null,
     coverBadge: AlbumCoverBadge? = null,
     onlineDetailLoading: Boolean = false,
+    onlineTitleLoading: Boolean = false,
     onlineCvLoading: Boolean = onlineDetailLoading,
+    onlineTagsLoading: Boolean = onlineDetailLoading,
     animateOnlineDetails: Boolean = true,
     coverFadeIn: Boolean = true,
     coverFadeInState: State<Boolean>? = null,
@@ -521,13 +516,7 @@ fun AlbumGridItem(
         mutableStateOf<State<Float>?>(null)
     }
     val isCoverFadeComplete = (coverPainterAlphaState?.value ?: 0f) >= 1f
-    val coverDepthProgress by key(imageModel, coverReloadKey) {
-        animateFloatAsState(
-            targetValue = if (isCoverFadeComplete) 1f else 0f,
-            animationSpec = tween(durationMillis = AlbumCoverDepthFadeMillis),
-            label = "albumGridCoverDepth",
-        )
-    }
+    val coverDepthProgress = coverPainterAlphaState?.value ?: 0f
     Column(
         modifier = modifier
             .combinedClickable(
@@ -559,6 +548,7 @@ fun AlbumGridItem(
                     placeholderCornerRadius = 0,
                     fadeIn = coverFadeIn,
                     fadeInState = coverFadeInState,
+                    fadeInMillis = AlbumCoverFadeInMillis,
                     reloadKey = coverReloadKey,
                     retainPainterDuringReload = coverRetainPainterDuringReload,
                     peekAnySizeForInitial = true,
@@ -602,25 +592,32 @@ fun AlbumGridItem(
                 .padding(horizontal = AlbumGridInfoHorizontalPadding, vertical = AlbumGridInfoVerticalPadding),
             verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
-            Text(
-                text = album.title,
-                style = MaterialTheme.typography.titleSmall.copy(
-                    fontSize = 16.sp,
-                    lineHeight = 22.sp,
-                    fontWeight = FontWeight.SemiBold,
-                ),
-                color = colorScheme.textPrimary,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-            )
+            if (onlineTitleLoading) {
+                Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    AlbumDetailSkeletonLine(widthFraction = 0.96f)
+                    AlbumDetailSkeletonLine(widthFraction = 0.68f)
+                }
+            } else {
+                Text(
+                    text = album.title,
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontSize = 16.sp,
+                        lineHeight = 22.sp,
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                    color = colorScheme.textPrimary,
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
 
             val rj = album.rjCode.ifBlank { album.workId }
             AlbumItemPrimaryMetaLightweight(
                 rjCode = rj,
                 circle = album.circle,
                 modifier = Modifier.fillMaxWidth(),
-                rjOnClick = onRjClick?.let { click -> { click(rj) } },
-                circleOnClick = onCircleClick?.let { click -> { click(album.circle) } },
+                onClick = onClick,
+                rjOnLongClick = onRjLongClick?.let { longClick -> { longClick(rj) } },
                 circleOnLongClick = onCircleLongClick?.let { longClick -> { longClick(album.circle) } },
             )
 
@@ -636,7 +633,7 @@ fun AlbumGridItem(
                     cvText = album.cv,
                     modifier = Modifier.fillMaxWidth(),
                     layout = AlbumInlineValuesLayout.Flow,
-                    onCvClick = onCvClick,
+                    onClick = onClick,
                     onCvLongClick = onCvLongClick,
                 )
             }
@@ -658,8 +655,8 @@ fun AlbumGridItem(
             }
 
             AlbumOnlineDetailAnimatedLine(
-                content = tagsStateContent,
-                loading = onlineDetailLoading,
+                content = if (onlineTagsLoading) "" else tagsStateContent,
+                loading = onlineTagsLoading,
                 animated = animateOnlineDetails,
                 loadingContent = {
                     AlbumDetailSkeletonLine(widthFraction = 0.92f)
@@ -669,7 +666,7 @@ fun AlbumGridItem(
                     tags = album.tags,
                     modifier = Modifier.fillMaxWidth(),
                     layout = AlbumInlineValuesLayout.Flow,
-                    onTagClick = onTagClick,
+                    onClick = onClick,
                     onTagLongClick = onTagLongClick,
                 )
             }

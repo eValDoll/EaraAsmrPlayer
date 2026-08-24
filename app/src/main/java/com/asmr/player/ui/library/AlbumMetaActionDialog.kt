@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Block
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.CreateNewFolder
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Icon
@@ -38,6 +39,7 @@ internal fun AlbumMetaActionDialog(
     onCreatePlaylist: (String) -> Unit,
     onCreateGroup: (String) -> Unit,
     onAddBlockedKeyword: (String) -> Unit,
+    onCopy: ((String) -> Unit)? = null,
 ) {
     val normalizedKeyword = remember(keyword) { keyword.trim() }
     if (normalizedKeyword.isBlank()) return
@@ -68,6 +70,13 @@ internal fun AlbumMetaActionDialog(
                     .fillMaxWidth()
                     .padding(horizontal = 8.dp, vertical = 6.dp),
             )
+            onCopy?.let { copy ->
+                AlbumMetaActionRow(
+                    icon = Icons.Rounded.ContentCopy,
+                    text = "复制到粘贴板",
+                    onClick = { runAction(copy) },
+                )
+            }
             AlbumMetaActionRow(
                 icon = Icons.Rounded.Search,
                 text = "作为关键词进行搜索",

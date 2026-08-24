@@ -138,8 +138,29 @@ private val BottomNavGlowCollapsedSize = 46.dp
 private val BottomNavGlowCollapsedSizeLarge = 52.dp
 private const val BottomNavPageToggleGroupSize = BottomNavExpandedSlotCount - 1
 private const val BottomChromeMinCompactScale = 0.72f
+internal val BottomChromeMaxGroupWidthCompact = 560.dp
+internal val BottomChromeMaxGroupWidthLarge = 680.dp
 private const val QuarterArcKappa = 0.55228475f
 private const val BottomNavOverflowOutlineCollapseTailFraction = 0.18f
+
+internal fun bottomChromeWidthLimit(availableWidth: Dp, largeLayout: Boolean): Dp {
+    val maximumWidth = if (largeLayout) {
+        BottomChromeMaxGroupWidthLarge
+    } else {
+        BottomChromeMaxGroupWidthCompact
+    }
+    return availableWidth.coerceAtMost(maximumWidth)
+}
+
+internal fun bottomChromeMiniPlayerExpandedWidth(
+    chromeWidthLimit: Dp,
+    collapsedNavWidth: Dp,
+    chromeSpacing: Dp,
+    minimumWidth: Dp,
+    expandedNavWidth: Dp
+): Dp = (chromeWidthLimit - collapsedNavWidth - chromeSpacing)
+    .coerceAtLeast(minimumWidth)
+    .coerceAtMost(expandedNavWidth)
 
 data class BottomChromeNavItem(
     val icon: ImageVector,
@@ -524,8 +545,9 @@ fun BottomChrome(
         val navExpanded = !miniPlayerVisible || miniPlayerDisplayMode == MiniPlayerDisplayMode.CoverOnly
         val baseMiniCollapsedWidth = if (largeLayout) 84.dp else 72.dp
         val baseChromeSpacing = if (largeLayout) 8.dp else 6.dp
+        val chromeWidthLimit = bottomChromeWidthLimit(maxWidth, largeLayout)
         val compactScaleTarget = remember(
-            maxWidth,
+            chromeWidthLimit,
             miniPlayerVisible,
             baseMetrics,
             baseMiniCollapsedWidth,
@@ -533,7 +555,7 @@ fun BottomChrome(
         ) {
             val requiredWidth = baseMetrics.preferredExpandedWidth +
                 if (miniPlayerVisible) baseMiniCollapsedWidth + baseChromeSpacing else 0.dp
-            (maxWidth.value / requiredWidth.value)
+            (chromeWidthLimit.value / requiredWidth.value)
                 .coerceIn(BottomChromeMinCompactScale, 1f)
         }
         val compactScale by animateFloatAsState(
@@ -548,16 +570,15 @@ fun BottomChrome(
         val miniCollapsedWidth = baseMiniCollapsedWidth * compactScale
         val miniExpandedMinWidth = (if (largeLayout) 244.dp else 204.dp) * compactScale
         val chromeSpacing = baseChromeSpacing * compactScale
-        val expandedNavWidthLimit = maxWidth.coerceAtMost(metrics.preferredExpandedWidth)
-        val miniExpandedWidth = (maxWidth - metrics.collapsedWidth - chromeSpacing)
-            .coerceAtLeast(miniExpandedMinWidth)
-        val expandedNavWidth = if (!miniPlayerVisible) {
-            expandedNavWidthLimit
-        } else {
-            (maxWidth - miniCollapsedWidth - chromeSpacing)
-                .coerceAtLeast(metrics.preferredExpandedWidth)
-                .coerceAtMost(expandedNavWidthLimit)
-        }
+        val expandedNavWidthLimit = chromeWidthLimit.coerceAtMost(metrics.preferredExpandedWidth)
+        val expandedNavWidth = expandedNavWidthLimit
+        val miniExpandedWidth = bottomChromeMiniPlayerExpandedWidth(
+            chromeWidthLimit = chromeWidthLimit,
+            collapsedNavWidth = metrics.collapsedWidth,
+            chromeSpacing = chromeSpacing,
+            minimumWidth = miniExpandedMinWidth,
+            expandedNavWidth = expandedNavWidth
+        )
         val expansionProgress by animateFloatAsState(
             targetValue = if (miniPlayerVisible && miniPlayerDisplayMode == MiniPlayerDisplayMode.Expanded) 1f else 0f,
             animationSpec = spring(
@@ -593,17 +614,10 @@ fun BottomChrome(
             expandedNavWidth
         }
         val trackWidth = if (miniPlayerVisible) {
-            maxOf(coverOnlyGroupWidth, expandedGroupWidth).coerceAtMost(maxWidth)
+            maxOf(coverOnlyGroupWidth, expandedGroupWidth).coerceAtMost(chromeWidthLimit)
         } else {
             expandedNavWidth
         }
-        val currentGroupWidth = if (miniPlayerVisible) {
-            navWidth + chromeSpacing + miniWidth
-        } else {
-            navWidth
-        }
-        val groupOffset = ((trackWidth - currentGroupWidth).coerceAtLeast(0.dp) / 2f)
-
         Box(
             modifier = Modifier
                 .fillMaxWidth()
@@ -636,14 +650,12 @@ fun BottomChrome(
                     onOverflowProtectedBoundsChange = onOverflowProtectedBoundsChange,
                     modifier = Modifier
                         .align(Alignment.BottomStart)
-                        .offset(x = groupOffset)
                         .width(navWidth)
                 )
 
                 if (miniPlayerVisible) {
                     val miniPlayerModifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .offset(x = groupOffset + navWidth + chromeSpacing)
+                        .align(Alignment.BottomEnd)
                         .width(miniWidth.coerceAtLeast(miniCollapsedWidth))
                         .testTag(BottomChromeMiniPlayerTag)
                     if (miniPlayerContent != null) {

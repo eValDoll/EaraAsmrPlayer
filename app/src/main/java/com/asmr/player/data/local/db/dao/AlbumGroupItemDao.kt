@@ -78,6 +78,9 @@ interface AlbumGroupItemDao {
     @Query("DELETE FROM album_group_items WHERE groupId = :groupId")
     suspend fun clearGroup(groupId: Long)
 
+    @Query("DELETE FROM album_group_items WHERE mediaId IN (:mediaIds)")
+    suspend fun deleteByMediaIds(mediaIds: List<String>)
+
     @Query(
         """
         DELETE FROM album_group_items

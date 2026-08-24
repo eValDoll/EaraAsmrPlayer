@@ -24,7 +24,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -146,7 +145,6 @@ import com.asmr.player.ui.playlists.PlaylistPickerScreen
 import com.asmr.player.ui.theme.AsmrColorScheme
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.util.Formatting
@@ -180,9 +178,8 @@ internal sealed class AsmrTreeUiEntry {
 }
 
 private val DirectoryBrowserPanelCornerRadius = 22.dp
-private val DirectoryFolderRowCornerRadius = 14.dp
 private val DirectoryFileRowCornerRadius = 12.dp
-private val DirectoryBrowserPanelVerticalPadding = 8.dp
+private val DirectoryBrowserPanelVerticalPadding = 4.dp
 
 internal fun directoryBrowserHeaderBackground(colorScheme: AsmrColorScheme): Color {
     return colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.72f else 0.9f)
@@ -193,34 +190,6 @@ internal enum class DirectoryFolderPosition {
     First,
     Middle,
     Last,
-}
-
-private fun directoryFolderPosition(index: Int, total: Int): DirectoryFolderPosition {
-    return when {
-        total <= 1 -> DirectoryFolderPosition.Single
-        index == 0 -> DirectoryFolderPosition.First
-        index == total - 1 -> DirectoryFolderPosition.Last
-        else -> DirectoryFolderPosition.Middle
-    }
-}
-
-private fun directoryFolderShape(position: DirectoryFolderPosition): RoundedCornerShape {
-    return when (position) {
-        DirectoryFolderPosition.Single -> RoundedCornerShape(DirectoryFolderRowCornerRadius)
-        DirectoryFolderPosition.First -> RoundedCornerShape(
-            topStart = DirectoryFolderRowCornerRadius,
-            topEnd = DirectoryFolderRowCornerRadius,
-            bottomStart = 0.dp,
-            bottomEnd = 0.dp,
-        )
-        DirectoryFolderPosition.Middle -> RoundedCornerShape(0.dp)
-        DirectoryFolderPosition.Last -> RoundedCornerShape(
-            topStart = 0.dp,
-            topEnd = 0.dp,
-            bottomStart = DirectoryFolderRowCornerRadius,
-            bottomEnd = DirectoryFolderRowCornerRadius,
-        )
-    }
 }
 
 internal fun directorySelectedItemPosition(
@@ -690,7 +659,20 @@ internal fun resolveExistingRemoteSelectionPaths(
         val canonicalUrl: String,
         val fileName: String,
         val trackKey: String,
-        val trackKeyWithoutGroup: String
+        val trackKeyWithoutGroup: String,
+        val extension: String,
+        val fileType: TreeFileType
+    )
+
+    data class RemoteCandidate(
+        val file: RemoteSelectionFileRef,
+        val normalizedRelativePath: String,
+        val canonicalUrl: String,
+        val fileName: String,
+        val trackKey: String,
+        val trackKeyWithoutGroup: String,
+        val extension: String,
+        val fileType: TreeFileType
     )
 
     fun normalizeRelativePath(path: String): String {
@@ -714,6 +696,16 @@ internal fun resolveExistingRemoteSelectionPaths(
         return TrackKeyNormalizer.buildKey(title, group, null)
     }
 
+    fun resolvedExtension(relativePath: String, sourcePath: String): String {
+        return fileExtensionFromName(relativePath)
+            .ifBlank { fileExtensionFromName(sourcePath) }
+    }
+
+    fun resolvedFileType(relativePath: String, sourcePath: String): TreeFileType {
+        return treeFileTypeForName(relativePath).takeIf { it != TreeFileType.Other }
+            ?: treeFileTypeForName(sourcePath)
+    }
+
     val candidates = localFiles.asSequence()
         .filter { local ->
             includeOnlineFiles || !isOnlineTrackPath(local.track?.path.orEmpty().ifBlank { local.absolutePath })
@@ -721,26 +713,42 @@ internal fun resolveExistingRemoteSelectionPaths(
         .map { local ->
             val track = local.track
             val fallbackGroup = local.relativePath.replace('\\', '/').substringBeforeLast('/', "")
+            val sourcePath = track?.path.orEmpty().ifBlank { local.absolutePath }
             MatchCandidate(
                 normalizedRelativePath = normalizeRelativePath(local.relativePath),
-                canonicalUrl = canonicalUrl(track?.path.orEmpty().ifBlank { local.absolutePath }),
+                canonicalUrl = canonicalUrl(sourcePath),
                 fileName = fileName(local.relativePath),
                 trackKey = track?.let {
                     TrackKeyNormalizer.buildKey(it.title, it.group.ifBlank { fallbackGroup }, null)
                 }.orEmpty(),
                 trackKeyWithoutGroup = track?.let {
                     TrackKeyNormalizer.buildKey(it.title, "", null)
-                }.orEmpty()
+                }.orEmpty(),
+                extension = resolvedExtension(local.relativePath, sourcePath),
+                fileType = resolvedFileType(local.relativePath, sourcePath)
             )
         }
-        .toMutableList()
+        .toList()
 
-    fun buildCandidateIndex(key: (MatchCandidate) -> String): Map<String, ArrayDeque<Int>> {
-        val index = linkedMapOf<String, ArrayDeque<Int>>()
+    val remotes = remoteFiles.map { remote ->
+        RemoteCandidate(
+            file = remote,
+            normalizedRelativePath = normalizeRelativePath(remote.relativePath),
+            canonicalUrl = canonicalUrl(remote.url),
+            fileName = fileName(remote.relativePath),
+            trackKey = remoteTrackKey(remote.relativePath, includeGroup = true),
+            trackKeyWithoutGroup = remoteTrackKey(remote.relativePath, includeGroup = false),
+            extension = resolvedExtension(remote.relativePath, remote.url),
+            fileType = treeFileTypeForNode(remote.relativePath, remote.url)
+        )
+    }
+
+    fun buildCandidateIndex(key: (MatchCandidate) -> String): Map<String, List<Int>> {
+        val index = linkedMapOf<String, MutableList<Int>>()
         candidates.forEachIndexed { candidateIndex, candidate ->
             val value = key(candidate)
             if (value.isNotBlank()) {
-                index.getOrPut(value) { ArrayDeque() }.addLast(candidateIndex)
+                index.getOrPut(value) { mutableListOf() }.add(candidateIndex)
             }
         }
         return index
@@ -752,37 +760,60 @@ internal fun resolveExistingRemoteSelectionPaths(
     val fileNameIndex = buildCandidateIndex(MatchCandidate::fileName)
     val trackKeyWithoutGroupIndex = buildCandidateIndex(MatchCandidate::trackKeyWithoutGroup)
     val available = BooleanArray(candidates.size) { true }
+    val unmatchedRemotes = BooleanArray(remotes.size) { true }
+    val matched = linkedSetOf<String>()
 
-    fun consume(index: Map<String, ArrayDeque<Int>>, key: String): Boolean {
-        if (key.isBlank()) return false
-        val candidateIndexes = index[key] ?: return false
-        while (candidateIndexes.isNotEmpty()) {
-            val candidateIndex = candidateIndexes.removeFirst()
-            if (available[candidateIndex]) {
-                available[candidateIndex] = false
-                return true
+    fun consume(
+        remoteIndex: Int,
+        index: Map<String, List<Int>>,
+        key: String,
+        isCompatible: (MatchCandidate) -> Boolean = { true }
+    ) {
+        if (!unmatchedRemotes[remoteIndex] || key.isBlank()) return
+        val candidateIndex = index[key]
+            ?.firstOrNull { available[it] && isCompatible(candidates[it]) }
+            ?: return
+        available[candidateIndex] = false
+        unmatchedRemotes[remoteIndex] = false
+        matched += remotes[remoteIndex].file.relativePath
+    }
+
+    fun consumePass(
+        index: Map<String, List<Int>>,
+        key: (RemoteCandidate) -> String,
+        isCompatible: (RemoteCandidate, MatchCandidate) -> Boolean = { _, _ -> true }
+    ) {
+        remotes.forEachIndexed { remoteIndex, remote ->
+            consume(remoteIndex, index, key(remote)) { local ->
+                isCompatible(remote, local)
             }
         }
-        return false
     }
 
-    val matched = linkedSetOf<String>()
-    remoteFiles.forEach { remote ->
-        val normalizedPath = normalizeRelativePath(remote.relativePath)
-        val remoteUrl = canonicalUrl(remote.url)
-        val remoteFileName = fileName(remote.relativePath)
-        val remoteKey = remoteTrackKey(remote.relativePath, includeGroup = true)
-        val remoteKeyWithoutGroup = remoteTrackKey(remote.relativePath, includeGroup = false)
-
-        val hasMatch = consume(relativePathIndex, normalizedPath) ||
-            consume(canonicalUrlIndex, remoteUrl) ||
-            consume(trackKeyIndex, remoteKey) ||
-            consume(fileNameIndex, remoteFileName) ||
-            consume(trackKeyWithoutGroupIndex, remoteKeyWithoutGroup)
-        if (hasMatch) {
-            matched += remote.relativePath
+    fun hasCompatibleFormat(remote: RemoteCandidate, local: MatchCandidate): Boolean {
+        if (remote.extension.isNotBlank() && local.extension.isNotBlank()) {
+            return remote.extension == local.extension
         }
+        return remote.fileType != TreeFileType.Other && remote.fileType == local.fileType
     }
+
+    // 先让所有远端条目完成强身份匹配，避免前面的模糊命中占用后续条目的精确候选。
+    consumePass(relativePathIndex, RemoteCandidate::normalizedRelativePath)
+    consumePass(canonicalUrlIndex, RemoteCandidate::canonicalUrl)
+
+    // 目录与标题仍一致时优先匹配，同时要求具体扩展名兼容。
+    consumePass(trackKeyIndex, RemoteCandidate::trackKey, ::hasCompatibleFormat)
+
+    // 完整文件名包含扩展名，可用于目录结构变化后的精确格式兜底。
+    consumePass(fileNameIndex, RemoteCandidate::fileName)
+
+    // 忽略目录的标题匹配最宽松，最后执行且同样不得跨格式占用候选。
+    consumePass(
+        trackKeyWithoutGroupIndex,
+        RemoteCandidate::trackKeyWithoutGroup,
+        ::hasCompatibleFormat
+    )
+
     return matched
 }
 
@@ -1246,15 +1277,59 @@ internal data class LocalTreeIndexBuildResult(
     val leaves: List<LocalTreeLeafCacheEntry>
 )
 
+internal enum class LocalTreeSourceKind {
+    Imported,
+    Downloaded,
+}
+
+internal data class LocalTreeSource(
+    val path: String,
+    val kind: LocalTreeSourceKind,
+)
+
+internal fun localTreeSourcesForAlbum(album: Album): List<LocalTreeSource> {
+    val imported = buildList {
+        val path = album.path.trim()
+        if (path.isNotBlank() && !path.startsWith("http", ignoreCase = true) && !path.startsWith("web://", ignoreCase = true)) {
+            add(path)
+        }
+        album.localPath?.trim()?.takeIf { it.isNotBlank() }?.let(::add)
+    }.distinctBy(::localTreeSourceIdentity)
+    val downloaded = listOfNotNull(album.downloadPath?.trim()?.takeIf { it.isNotBlank() })
+    val importedIdentities = imported.map(::localTreeSourceIdentity).toSet()
+    return buildList {
+        imported.forEach { add(LocalTreeSource(it, LocalTreeSourceKind.Imported)) }
+        downloaded.filterNot { localTreeSourceIdentity(it) in importedIdentities }
+            .forEach { add(LocalTreeSource(it, LocalTreeSourceKind.Downloaded)) }
+    }.distinctBy { localTreeSourceIdentity(it.path) }
+}
+
+private fun localTreeSourceIdentity(path: String): String {
+    val trimmed = path.trim()
+    if (!trimmed.startsWith("content://", ignoreCase = true)) {
+        return runCatching { File(trimmed).canonicalPath }.getOrDefault(File(trimmed).absolutePath)
+    }
+    val uri = runCatching { Uri.parse(trimmed) }.getOrNull() ?: return trimmed
+    val documentId = runCatching { DocumentsContract.getDocumentId(uri) }.getOrNull()
+        ?: runCatching { DocumentsContract.getTreeDocumentId(uri) }.getOrNull()
+        ?: return trimmed
+    return "${uri.authority.orEmpty()}:${documentId.replace('\\', '/').trimEnd('/')}"
+}
+
 internal suspend fun loadOrBuildLocalTreeIndex(
     context: android.content.Context,
     albumId: Long,
     albumPaths: List<String>,
     tracks: List<Track>,
-    onlineSavedResources: List<OnlineSavedResourceEntity> = emptyList()
+    onlineSavedResources: List<OnlineSavedResourceEntity> = emptyList(),
+    sources: List<LocalTreeSource> = albumPaths.map { LocalTreeSource(it, LocalTreeSourceKind.Imported) },
 ): LocalTreeIndex {
     val gson = Gson()
-    val cacheKey = albumPaths.map { it.trim() }.filter { it.isNotBlank() }.sorted().joinToString("|")
+    val normalizedSources = sources.filter { it.path.isNotBlank() }.distinctBy { localTreeSourceIdentity(it.path) }
+    val cacheKey = normalizedSources
+        .map { "${it.kind.name}:${it.path.trim()}" }
+        .sorted()
+        .joinToString("|")
     val stamp = computeLocalTreeCacheStamp(context, albumPaths, tracks)
     val dao = AppDatabaseProvider.get(context).localTreeCacheDao()
     val onlineTracks = tracks.filter { it.path.trim().startsWith("http", ignoreCase = true) }
@@ -1362,7 +1437,11 @@ internal suspend fun loadOrBuildLocalTreeIndex(
         }
     }
 
-    val built = buildLocalTreeIndexByScanning(context = context, albumPaths = albumPaths, tracks = tracks)
+    val built = buildLocalTreeIndexByScanningSources(
+        context = context,
+        sources = normalizedSources,
+        tracks = tracks,
+    )
     val merged = mergeLeaves(
         localLeaves = built.leaves,
         onlineLeaves = onlineLeaves,
@@ -1378,6 +1457,42 @@ internal suspend fun loadOrBuildLocalTreeIndex(
         )
     )
     return buildLocalTreeIndexFromLeaves(leaves = merged, tracks = tracks)
+}
+
+private fun buildLocalTreeIndexByScanningSources(
+    context: android.content.Context,
+    sources: List<LocalTreeSource>,
+    tracks: List<Track>,
+): LocalTreeIndexBuildResult {
+    val hasImported = sources.any { it.kind == LocalTreeSourceKind.Imported }
+    val hasDownloaded = sources.any { it.kind == LocalTreeSourceKind.Downloaded }
+    val separateSources = hasImported && hasDownloaded &&
+        sources.map { localTreeSourceIdentity(it.path) }.distinct().size > 1
+    if (!separateSources) {
+        return buildLocalTreeIndexByScanning(
+            context = context,
+            albumPaths = sources.map { it.path },
+            tracks = tracks,
+        )
+    }
+
+    val leaves = sources.flatMap { source ->
+        val prefix = when (source.kind) {
+            LocalTreeSourceKind.Imported -> "导入内容"
+            LocalTreeSourceKind.Downloaded -> "下载内容"
+        }
+        buildLocalTreeIndexByScanning(
+            context = context,
+            albumPaths = listOf(source.path),
+            tracks = tracks,
+        ).leaves.map { leaf ->
+            leaf.copy(relativePath = "$prefix/${leaf.relativePath}")
+        }
+    }
+    return LocalTreeIndexBuildResult(
+        index = buildLocalTreeIndexFromLeaves(leaves, tracks),
+        leaves = leaves,
+    )
 }
 
 internal fun computeAlbumPathsStamp(context: android.content.Context, albumPaths: List<String>): Long {
@@ -2110,17 +2225,10 @@ internal fun CompactBreadcrumbNode(
     onClick: () -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val containerColor = if (selected) {
-        colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.2f else 0.11f)
-    } else {
-        Color.Transparent
-    }
     Row(
         modifier = Modifier
-            .clip(RoundedCornerShape(9.dp))
-            .background(containerColor)
             .clickable(onClick = onClick)
-            .padding(horizontal = if (selected) 8.dp else 3.dp, vertical = 5.dp),
+            .padding(horizontal = 4.dp, vertical = 5.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
@@ -2283,8 +2391,7 @@ internal fun DirectoryBrowserPanel(
                 state = browserListState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = maxHeight)
-                    .thinScrollbar(browserListState),
+                    .heightIn(max = maxHeight),
                 flingBehavior = rememberCalmScrollableFlingBehavior(),
                 contentPadding = PaddingValues(vertical = 6.dp)
             ) {
@@ -2512,7 +2619,7 @@ internal fun DirectoryActionGroupButton(
     onDisabledClick: (() -> Unit)? = null
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    FilledTonalButton(
+    TextButton(
         onClick = {
             if (enabled) onClick() else onDisabledClick?.invoke()
         },
@@ -2520,10 +2627,8 @@ internal fun DirectoryActionGroupButton(
         modifier = modifier.height(32.dp),
         shape = RoundedCornerShape(10.dp),
         contentPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp),
-        colors = ButtonDefaults.filledTonalButtonColors(
-            containerColor = colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.18f else 0.1f),
+        colors = ButtonDefaults.textButtonColors(
             contentColor = colorScheme.primary,
-            disabledContainerColor = colorScheme.surfaceVariant.copy(alpha = 0.48f),
             disabledContentColor = colorScheme.textTertiary
         )
     ) {
@@ -2695,8 +2800,7 @@ internal fun DirectoryBrowserPanelV2(
                 state = browserListState,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(max = maxHeight)
-                    .thinScrollbar(browserListState),
+                    .heightIn(max = maxHeight),
                 flingBehavior = rememberCalmScrollableFlingBehavior(),
                 contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
             ) {
@@ -2866,110 +2970,87 @@ internal fun CompactDirectoryBreadcrumbContentV3(
 internal fun DirectoryFolderRowV3(
     title: String,
     onClick: () -> Unit,
-    position: DirectoryFolderPosition = DirectoryFolderPosition.Single,
     onDelete: (() -> Unit)? = null,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val materialColorScheme = MaterialTheme.colorScheme
     val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
-    val rowContainerColor = colorScheme.surfaceVariant.copy(
-        alpha = if (colorScheme.isDark) 0.42f else 0.58f
-    )
-    Column(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(directoryFolderShape(position))
-            .background(rowContainerColor)
+            .defaultMinSize(minHeight = 52.dp)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 12.dp, vertical = 7.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .defaultMinSize(minHeight = 52.dp)
-                .clickable(onClick = onClick)
-                .padding(horizontal = 12.dp, vertical = 7.dp),
-            verticalAlignment = Alignment.CenterVertically
+        Box(
+            modifier = Modifier.size(32.dp),
+            contentAlignment = Alignment.Center
         ) {
-            Box(
-                modifier = Modifier
-                    .size(32.dp)
-                    .clip(RoundedCornerShape(9.dp))
-                    .background(
-                        colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.2f else 0.12f)
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Rounded.Folder,
-                    contentDescription = null,
-                    tint = colorScheme.primary,
-                    modifier = Modifier.size(18.dp)
-                )
-            }
-            Spacer(modifier = Modifier.width(11.dp))
-            Text(
-                text = title,
-                modifier = Modifier.weight(1f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                color = colorScheme.textPrimary
-            )
             Icon(
-                imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                imageVector = Icons.Rounded.Folder,
                 contentDescription = null,
-                tint = colorScheme.textTertiary,
-                modifier = Modifier.size(17.dp)
+                tint = colorScheme.primary,
+                modifier = Modifier.size(22.dp)
             )
-            if (onDelete != null) {
-                var showMenuExpanded by rememberSaveable(title) { mutableStateOf(false) }
-                Box {
-                    IconButton(
-                        onClick = { showMenuExpanded = true },
-                        modifier = Modifier.size(AudioItemMenuButtonSize)
+        }
+        Spacer(modifier = Modifier.width(11.dp))
+        Text(
+            text = title,
+            modifier = Modifier.weight(1f),
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+            color = colorScheme.textPrimary
+        )
+        Icon(
+            imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+            contentDescription = null,
+            tint = colorScheme.textTertiary,
+            modifier = Modifier.size(17.dp)
+        )
+        if (onDelete != null) {
+            var showMenuExpanded by rememberSaveable(title) { mutableStateOf(false) }
+            Box {
+                IconButton(
+                    onClick = { showMenuExpanded = true },
+                    modifier = Modifier.size(AudioItemMenuButtonSize)
+                ) {
+                    Icon(
+                        imageVector = Icons.Rounded.MoreVert,
+                        contentDescription = "目录操作",
+                        tint = colorScheme.textSecondary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                }
+                MaterialTheme(
+                    colorScheme = materialColorScheme.copy(
+                        surface = dynamicContainerColor,
+                        surfaceContainer = dynamicContainerColor
+                    )
+                ) {
+                    DropdownMenu(
+                        expanded = showMenuExpanded,
+                        onDismissRequest = { showMenuExpanded = false },
+                        modifier = Modifier.background(dynamicContainerColor)
                     ) {
-                        Icon(
-                            imageVector = Icons.Rounded.MoreVert,
-                            contentDescription = "目录操作",
-                            tint = colorScheme.textSecondary,
-                            modifier = Modifier.size(20.dp)
+                        DropdownMenuItem(
+                            text = { Text("删除目录", color = materialColorScheme.error) },
+                            onClick = {
+                                showMenuExpanded = false
+                                onDelete()
+                            },
+                            leadingIcon = {
+                                Icon(
+                                    Icons.Rounded.Delete,
+                                    contentDescription = null,
+                                    tint = materialColorScheme.error
+                                )
+                            }
                         )
-                    }
-                    MaterialTheme(
-                        colorScheme = materialColorScheme.copy(
-                            surface = dynamicContainerColor,
-                            surfaceContainer = dynamicContainerColor
-                        )
-                    ) {
-                        DropdownMenu(
-                            expanded = showMenuExpanded,
-                            onDismissRequest = { showMenuExpanded = false },
-                            modifier = Modifier.background(dynamicContainerColor)
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("删除目录", color = materialColorScheme.error) },
-                                onClick = {
-                                    showMenuExpanded = false
-                                    onDelete()
-                                },
-                                leadingIcon = {
-                                    Icon(
-                                        Icons.Rounded.Delete,
-                                        contentDescription = null,
-                                        tint = materialColorScheme.error
-                                    )
-                                }
-                            )
-                        }
                     }
                 }
             }
-        }
-        if (position != DirectoryFolderPosition.Single && position != DirectoryFolderPosition.Last) {
-            HorizontalDivider(
-                modifier = Modifier.padding(start = 55.dp, end = 12.dp),
-                thickness = 0.5.dp,
-                color = colorScheme.textTertiary.copy(alpha = if (colorScheme.isDark) 0.2f else 0.13f)
-            )
         }
     }
 }
@@ -3250,16 +3331,7 @@ internal fun DirectoryBrowserPanelV4(
         (screenHeight * 0.48f).coerceIn(240.dp, 460.dp)
     }
     val colorScheme = AsmrTheme.colorScheme
-    val containerColor = dynamicPageContainerColor(colorScheme)
-    val headerSectionColor = directoryBrowserHeaderBackground(colorScheme)
-    val actionSectionColor = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.56f else 0.78f)
-    val listSectionColor = colorScheme.surface.copy(alpha = if (colorScheme.isDark) 0.42f else 0.66f)
-    val sectionDividerColor = colorScheme.textTertiary.copy(alpha = if (colorScheme.isDark) 0.18f else 0.11f)
-    val panelBorderColor = if (colorScheme.isDark) {
-        Color.White.copy(alpha = 0.1f)
-    } else {
-        colorScheme.textPrimary.copy(alpha = 0.08f)
-    }
+    val sectionDividerColor = colorScheme.textTertiary.copy(alpha = if (colorScheme.isDark) 0.14f else 0.09f)
 
     LaunchedEffect(panelKey, currentPath) {
         browserListState.scrollToItem(0)
@@ -3269,27 +3341,19 @@ internal fun DirectoryBrowserPanelV4(
         shape = RoundedCornerShape(DirectoryBrowserPanelCornerRadius),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        color = containerColor,
-        border = BorderStroke(
-            width = 0.5.dp,
-            color = panelBorderColor
-        ),
+        color = Color.Transparent,
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = AlbumDetailHorizontalPadding, vertical = DirectoryBrowserPanelVerticalPadding)
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(listSectionColor)
+            modifier = Modifier.fillMaxWidth()
         ) {
             CompactDirectoryBreadcrumbContentV3(
                 currentPath = currentPath,
                 breadcrumbs = breadcrumbs,
                 onNavigate = onNavigate,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(headerSectionColor)
+                modifier = Modifier.fillMaxWidth()
             )
             HorizontalDivider(
                 thickness = 0.5.dp,
@@ -3299,7 +3363,6 @@ internal fun DirectoryBrowserPanelV4(
                 modifier = dlsiteSectionRevealModifier(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(actionSectionColor)
                         .padding(horizontal = 12.dp, vertical = 8.dp),
                     enabled = animateIntro
                 ),
@@ -3326,19 +3389,13 @@ internal fun DirectoryBrowserPanelV4(
                 if (onTogglePreferredPath != null && !selectionMode) {
                     val preferredIcon = if (isPreferredPath) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder
                     val preferredTextColor = if (isPreferredPath) colorScheme.primary else colorScheme.textSecondary
-                    val preferredContainerColor = colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.22f else 0.12f)
-                    FilledTonalButton(
+                    TextButton(
                         onClick = {
                             val enable = !isPreferredPath
                             preferredPathState = if (enable) normalizedCurrentPath else ""
                             onTogglePreferredPath(enable)
                         },
-                        colors = ButtonDefaults.filledTonalButtonColors(
-                            containerColor = if (isPreferredPath) {
-                                preferredContainerColor
-                            } else {
-                                colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.5f else 0.72f)
-                            },
+                        colors = ButtonDefaults.textButtonColors(
                             contentColor = preferredTextColor
                         ),
                         shape = RoundedCornerShape(10.dp),
@@ -3369,8 +3426,7 @@ internal fun DirectoryBrowserPanelV4(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(fixedHeight)
-                    .nestedScroll(listNestedScrollConnection)
-                    .thinScrollbar(browserListState),
+                    .nestedScroll(listNestedScrollConnection),
                 flingBehavior = rememberCalmScrollableFlingBehavior(),
                 contentPadding = PaddingValues(horizontal = 10.dp, vertical = 9.dp)
             ) {
@@ -3418,18 +3474,22 @@ internal fun DirectoryBrowserPanelV4(
                             key = { _, folder -> "$folderKeyPrefix:${folder.path}" },
                             contentType = { _, _ -> "folder" }
                         ) { index, folder ->
-                            val position = directoryFolderPosition(
-                                index = index,
-                                total = folders.size,
-                            )
-                            DirectoryFolderRowV3(
-                                title = folder.title,
-                                onClick = { onNavigate(folder.path) },
-                                position = position,
-                                onDelete = onDeleteFolder?.let { deleteFolder ->
-                                    { deleteFolder(folder) }
-                                },
-                            )
+                            Column {
+                                DirectoryFolderRowV3(
+                                    title = folder.title,
+                                    onClick = { onNavigate(folder.path) },
+                                    onDelete = onDeleteFolder?.let { deleteFolder ->
+                                        { deleteFolder(folder) }
+                                    },
+                                )
+                                if (index < folders.lastIndex) {
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(start = 55.dp, end = 12.dp),
+                                        thickness = 0.5.dp,
+                                        color = sectionDividerColor
+                                    )
+                                }
+                            }
                         }
                         itemsIndexed(
                             items = files,
@@ -3442,31 +3502,40 @@ internal fun DirectoryBrowserPanelV4(
                                 previousSelected = index > 0 && selectedPathSet.contains(files[index - 1].path),
                                 nextSelected = index < files.lastIndex && selectedPathSet.contains(files[index + 1].path),
                             )
-                            fileContent(
-                                file,
-                                selectionMode,
-                                isSelected,
-                                selectedPosition,
-                                {
-                                    selectionMode = true
-                                    if (!selectedPaths.contains(file.path)) {
-                                        selectedPaths.add(file.path)
-                                    }
-                                },
-                                { checked ->
-                                    if (checked) {
+                            Column {
+                                fileContent(
+                                    file,
+                                    selectionMode,
+                                    isSelected,
+                                    selectedPosition,
+                                    {
+                                        selectionMode = true
                                         if (!selectedPaths.contains(file.path)) {
                                             selectedPaths.add(file.path)
                                         }
-                                        selectionMode = true
-                                    } else {
-                                        selectedPaths.remove(file.path)
-                                        if (selectedPaths.isEmpty()) {
-                                            selectionMode = false
+                                    },
+                                    { checked ->
+                                        if (checked) {
+                                            if (!selectedPaths.contains(file.path)) {
+                                                selectedPaths.add(file.path)
+                                            }
+                                            selectionMode = true
+                                        } else {
+                                            selectedPaths.remove(file.path)
+                                            if (selectedPaths.isEmpty()) {
+                                                selectionMode = false
+                                            }
                                         }
                                     }
+                                )
+                                if (index < files.lastIndex) {
+                                    HorizontalDivider(
+                                        modifier = Modifier.padding(start = 50.dp, end = 12.dp),
+                                        thickness = 0.5.dp,
+                                        color = sectionDividerColor
+                                    )
                                 }
-                            )
+                            }
                         }
                     }
                 }
@@ -3573,19 +3642,14 @@ internal fun DirectoryFileRow(
                     )
                 } else {
                     Box(
-                        modifier = Modifier
-                            .size(32.dp)
-                            .clip(RoundedCornerShape(9.dp))
-                            .background(
-                                iconTint.copy(alpha = if (colorScheme.isDark) 0.17f else 0.09f)
-                            ),
+                        modifier = Modifier.size(32.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(
                             imageVector = icon,
                             contentDescription = null,
                             tint = iconTint,
-                            modifier = Modifier.size(18.dp)
+                            modifier = Modifier.size(22.dp)
                         )
                     }
                 }

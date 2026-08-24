@@ -54,14 +54,13 @@ class SearchScreenChromeTest {
                 SearchToolbar(
                     keyword = keyword,
                     onKeywordChange = { keyword = it },
-                    selectedFilter = SearchFilterOption.Trend,
+                    selectedFilter = SearchFilterOption.Standard,
                     selectedLocale = "ja_JP",
                     filterControlsLocked = false,
                     searchSubmitLocked = false,
                     showSearchSpinner = false,
                     onSearchSubmit = { submitCount += 1 },
-                    onFilterSelected = {},
-                    onLocaleSelected = {}
+                    onOptionsChanged = {}
                 )
             }
         }
@@ -90,14 +89,13 @@ class SearchScreenChromeTest {
                     onKeywordChange = {},
                     searchFieldReadOnly = true,
                     onSearchFieldClick = { assistOpenCount += 1 },
-                    selectedFilter = SearchFilterOption.Trend,
+                    selectedFilter = SearchFilterOption.Standard,
                     selectedLocale = "ja_JP",
                     filterControlsLocked = false,
                     searchSubmitLocked = false,
                     showSearchSpinner = false,
                     onSearchSubmit = { submitCount += 1 },
-                    onFilterSelected = {},
-                    onLocaleSelected = {}
+                    onOptionsChanged = {}
                 )
             }
         }
@@ -119,14 +117,13 @@ class SearchScreenChromeTest {
                     keyword = "",
                     onKeywordChange = {},
                     placeholder = "CV A",
-                    selectedFilter = SearchFilterOption.Trend,
+                    selectedFilter = SearchFilterOption.Standard,
                     selectedLocale = "ja_JP",
                     filterControlsLocked = false,
                     searchSubmitLocked = false,
                     showSearchSpinner = false,
                     onSearchSubmit = {},
-                    onFilterSelected = {},
-                    onLocaleSelected = {}
+                    onOptionsChanged = {}
                 )
             }
         }
@@ -142,14 +139,13 @@ class SearchScreenChromeTest {
                     SearchToolbar(
                         keyword = "test",
                         onKeywordChange = {},
-                        selectedFilter = SearchFilterOption.Trend,
+                        selectedFilter = SearchFilterOption.Standard,
                         selectedLocale = "ja_JP",
                         filterControlsLocked = true,
                         searchSubmitLocked = true,
                         showSearchSpinner = true,
                         onSearchSubmit = {},
-                        onFilterSelected = {},
-                        onLocaleSelected = {}
+                        onOptionsChanged = {}
                     )
                     SearchPaginationHeader(
                         page = 1,
@@ -165,8 +161,8 @@ class SearchScreenChromeTest {
         }
 
         composeRule.onNodeWithTag(SEARCH_SCOPE_BUTTON_TAG).assertIsNotEnabled()
+        composeRule.onNodeWithTag(SEARCH_SORT_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_CLEAR_BUTTON_TAG).assertIsNotEnabled()
-        composeRule.onNodeWithTag(SEARCH_LANGUAGE_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_SUBMIT_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_SUBMIT_SPINNER_TAG, useUnmergedTree = true).assert(
             SemanticsMatcher.expectValue(SemanticsProperties.TestTag, SEARCH_SUBMIT_SPINNER_TAG)
@@ -174,7 +170,7 @@ class SearchScreenChromeTest {
     }
 
     @Test
-    fun scopeMenu_displaysIconsAndUpdatedFilterOptions() {
+    fun filterMenu_hidesWorkFiltersForUnsupportedScope() {
         val filterOptions = SearchFilterOption.values()
         assertEquals(SearchFilterOption.Collected, filterOptions.first())
         assertEquals(SearchFilterOption.Presale, filterOptions[filterOptions.lastIndex - 1])
@@ -191,8 +187,7 @@ class SearchScreenChromeTest {
                     searchSubmitLocked = false,
                     showSearchSpinner = false,
                     onSearchSubmit = {},
-                    onFilterSelected = {},
-                    onLocaleSelected = {}
+                    onOptionsChanged = {}
                 )
             }
         }
@@ -204,16 +199,46 @@ class SearchScreenChromeTest {
         composeRule.onNodeWithText("已购").assertExists()
         composeRule.onNodeWithText("预售").assertExists()
         composeRule.onNodeWithText("已收录").assertExists()
-        composeRule.onNodeWithText("人气顺序").assertExists()
+        composeRule.onNodeWithText("全部作品").assertExists()
         composeRule.onNodeWithTag(
-            "${SEARCH_SCOPE_OPTION_TAG_PREFIX}_${SearchFilterOption.ReleaseNew.name}"
+            "${SEARCH_SCOPE_OPTION_TAG_PREFIX}_${SearchFilterOption.Standard.name}"
         ).assertExists()
-        composeRule.onNodeWithText("销量最高").assertExists()
-        composeRule.onNodeWithText("价格最高").assertExists()
+        composeRule.onAllNodesWithTag(SEARCH_HAS_SUBTITLE_OPTION_TAG).assertCountEquals(0)
+        composeRule.onAllNodesWithTag(SEARCH_ALL_AGES_OPTION_TAG).assertCountEquals(0)
     }
 
     @Test
-    fun collectedFilter_usesSortMenuInsteadOfLanguageMenu() {
+    fun sortMenu_appliesStandardSortImmediately() {
+        var selectedOrder = SearchSortOption.Trend
+
+        composeRule.setContent {
+            AsmrPlayerTheme {
+                SearchToolbar(
+                    keyword = "",
+                    onKeywordChange = {},
+                    selectedFilter = SearchFilterOption.Standard,
+                    selectedOrder = selectedOrder,
+                    selectedLocale = "ja_JP",
+                    filterControlsLocked = false,
+                    searchSubmitLocked = false,
+                    showSearchSpinner = false,
+                    onSearchSubmit = {},
+                    onOptionsChanged = { selectedOrder = it.order }
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(SEARCH_SORT_BUTTON_TAG).performClick()
+        composeRule.onNodeWithTag(
+            "${SEARCH_SORT_OPTION_TAG_PREFIX}_${SearchSortOption.DLCount.name}"
+        ).performClick()
+        composeRule.runOnIdle {
+            assertEquals(SearchSortOption.DLCount, selectedOrder)
+        }
+    }
+
+    @Test
+    fun collectedSortMenu_showsCollectedSortOptions() {
         var selectedSort = SearchCollectedSortOption.ReleaseNew
 
         composeRule.setContent {
@@ -228,14 +253,12 @@ class SearchScreenChromeTest {
                     searchSubmitLocked = false,
                     showSearchSpinner = false,
                     onSearchSubmit = {},
-                    onFilterSelected = {},
-                    onLocaleSelected = {},
-                    onCollectedSortSelected = { selectedSort = it }
+                    onOptionsChanged = { selectedSort = it.collectedSort }
                 )
             }
         }
 
-        composeRule.onNodeWithTag(SEARCH_COLLECTED_SORT_BUTTON_TAG).performClick()
+        composeRule.onNodeWithTag(SEARCH_SORT_BUTTON_TAG).performClick()
         composeRule.onNodeWithTag(
             "${SEARCH_COLLECTED_SORT_OPTION_TAG_PREFIX}_${SearchCollectedSortOption.ReleaseNew.name}"
         ).assertExists()
@@ -256,25 +279,117 @@ class SearchScreenChromeTest {
     }
 
     @Test
-    fun languageMenu_marksCurrentLocaleSelected() {
+    fun filterMenu_appliesSubtitleAndAllAgesForDirectSearch() {
+        var hasSubtitle by mutableStateOf(false)
+        var allAges by mutableStateOf(false)
+
         composeRule.setContent {
             AsmrPlayerTheme {
                 SearchToolbar(
                     keyword = "",
                     onKeywordChange = {},
-                    selectedFilter = SearchFilterOption.Trend,
+                    selectedFilter = SearchFilterOption.Standard,
+                    hasSubtitle = hasSubtitle,
+                    allAges = allAges,
+                    selectedLocale = "ja_JP",
+                    filterControlsLocked = false,
+                    searchSubmitLocked = false,
+                    showSearchSpinner = false,
+                    onSearchSubmit = {},
+                    onOptionsChanged = {
+                        hasSubtitle = it.hasSubtitle
+                        allAges = it.allAges
+                    }
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(SEARCH_SCOPE_BUTTON_TAG).performClick()
+        composeRule.onNodeWithText("有字幕").assertExists()
+        composeRule.onNodeWithText("全年龄").assertExists()
+        composeRule.onAllNodesWithText("带字幕作品").assertCountEquals(0)
+        composeRule.onAllNodesWithText("全年龄（含 R15）").assertCountEquals(0)
+        composeRule.onNodeWithTag(SEARCH_HAS_SUBTITLE_OPTION_TAG).performClick()
+        composeRule.onNodeWithTag(SEARCH_ALL_AGES_OPTION_TAG).performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(true, hasSubtitle)
+            assertEquals(true, allAges)
+        }
+    }
+
+    @Test
+    fun changingToUnsupportedScope_preservesHiddenWorkFilters() {
+        var selectedFilter by mutableStateOf(SearchFilterOption.Standard)
+        var hasSubtitle by mutableStateOf(true)
+        var allAges by mutableStateOf(true)
+
+        composeRule.setContent {
+            AsmrPlayerTheme {
+                SearchToolbar(
+                    keyword = "",
+                    onKeywordChange = {},
+                    selectedFilter = selectedFilter,
+                    hasSubtitle = hasSubtitle,
+                    allAges = allAges,
+                    selectedLocale = "ja_JP",
+                    filterControlsLocked = false,
+                    searchSubmitLocked = false,
+                    showSearchSpinner = false,
+                    onSearchSubmit = {},
+                    onOptionsChanged = {
+                        selectedFilter = it.scope
+                        hasSubtitle = it.hasSubtitle
+                        allAges = it.allAges
+                    }
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag(SEARCH_SCOPE_BUTTON_TAG).performClick()
+        composeRule.onNodeWithTag(
+            "${SEARCH_SCOPE_OPTION_TAG_PREFIX}_${SearchFilterOption.ChineseTranslated.name}"
+        ).performClick()
+
+        composeRule.runOnIdle {
+            assertEquals(SearchFilterOption.ChineseTranslated, selectedFilter)
+            assertEquals(true, hasSubtitle)
+            assertEquals(true, allAges)
+        }
+        composeRule.onNodeWithTag(SEARCH_SCOPE_BUTTON_TAG).performClick()
+        composeRule.onAllNodesWithTag(SEARCH_HAS_SUBTITLE_OPTION_TAG).assertCountEquals(0)
+        composeRule.onAllNodesWithTag(SEARCH_ALL_AGES_OPTION_TAG).assertCountEquals(0)
+        composeRule.onNodeWithTag(
+            "${SEARCH_SCOPE_OPTION_TAG_PREFIX}_${SearchFilterOption.Standard.name}"
+        ).performClick()
+        composeRule.onNodeWithTag(SEARCH_SCOPE_BUTTON_TAG).performClick()
+        composeRule.onNodeWithTag(SEARCH_HAS_SUBTITLE_OPTION_TAG).assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)
+        )
+        composeRule.onNodeWithTag(SEARCH_ALL_AGES_OPTION_TAG).assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)
+        )
+    }
+
+    @Test
+    fun sortMenu_marksCurrentLocaleSelected() {
+        composeRule.setContent {
+            AsmrPlayerTheme {
+                SearchToolbar(
+                    keyword = "",
+                    onKeywordChange = {},
+                    selectedFilter = SearchFilterOption.Standard,
                     selectedLocale = "zh_CN",
                     filterControlsLocked = false,
                     searchSubmitLocked = false,
                     showSearchSpinner = false,
                     onSearchSubmit = {},
-                    onFilterSelected = {},
-                    onLocaleSelected = {}
+                    onOptionsChanged = {}
                 )
             }
         }
 
-        composeRule.onNodeWithTag(SEARCH_LANGUAGE_BUTTON_TAG).performClick()
+        composeRule.onNodeWithTag(SEARCH_SORT_BUTTON_TAG).performClick()
         composeRule.onNodeWithTag("${SEARCH_LANGUAGE_OPTION_TAG_PREFIX}_zh_CN").assert(
             SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)
         )
@@ -291,14 +406,13 @@ class SearchScreenChromeTest {
                     SearchToolbar(
                         keyword = "test",
                         onKeywordChange = {},
-                        selectedFilter = SearchFilterOption.Trend,
+                        selectedFilter = SearchFilterOption.Standard,
                         selectedLocale = "ja_JP",
                         filterControlsLocked = true,
                         searchSubmitLocked = true,
                         showSearchSpinner = false,
                         onSearchSubmit = {},
-                        onFilterSelected = {},
-                        onLocaleSelected = {}
+                        onOptionsChanged = {}
                     )
                     SearchPaginationHeader(
                         page = 2,
@@ -314,7 +428,7 @@ class SearchScreenChromeTest {
         }
 
         composeRule.onNodeWithTag(SEARCH_SCOPE_BUTTON_TAG).assertIsNotEnabled()
-        composeRule.onNodeWithTag(SEARCH_LANGUAGE_BUTTON_TAG).assertIsNotEnabled()
+        composeRule.onNodeWithTag(SEARCH_SORT_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_SUBMIT_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_PREV_BUTTON_TAG).assertIsNotEnabled()
         composeRule.onNodeWithTag(SEARCH_NEXT_BUTTON_TAG).assertIsNotEnabled()
@@ -397,14 +511,13 @@ class SearchScreenChromeTest {
                 SearchToolbar(
                     keyword = keyword,
                     onKeywordChange = { keyword = it },
-                    selectedFilter = SearchFilterOption.Trend,
+                    selectedFilter = SearchFilterOption.Standard,
                     selectedLocale = "ja_JP",
                     filterControlsLocked = false,
                     searchSubmitLocked = false,
                     showSearchSpinner = false,
                     onSearchSubmit = { submitCount += 1 },
-                    onFilterSelected = {},
-                    onLocaleSelected = {}
+                    onOptionsChanged = {}
                 )
             }
         }
@@ -434,7 +547,7 @@ class SearchScreenChromeTest {
                         valueChangeCount += 1
                         keyword = it
                     },
-                    selectedFilter = SearchFilterOption.Trend,
+                    selectedFilter = SearchFilterOption.Standard,
                     selectedLocale = "ja_JP",
                     filterControlsLocked = false,
                     searchSubmitLocked = false,
@@ -444,8 +557,7 @@ class SearchScreenChromeTest {
                         keyword = ""
                         clearSearchCount += 1
                     },
-                    onFilterSelected = {},
-                    onLocaleSelected = {}
+                    onOptionsChanged = {}
                 )
             }
         }
@@ -471,7 +583,7 @@ class SearchScreenChromeTest {
                     modifier = Modifier,
                     keyword = "RJ123456",
                     onKeywordChange = {},
-                    selectedFilter = SearchFilterOption.Trend,
+                    selectedFilter = SearchFilterOption.Standard,
                     selectedLocale = "ja_JP",
                     filterControlsLocked = false,
                     searchSubmitLocked = false,
@@ -485,8 +597,7 @@ class SearchScreenChromeTest {
                     chromeState = chromeState,
                     onMeasured = { chromeState.updateHeight(it.height.toFloat()) },
                     onSearchSubmit = {},
-                    onFilterSelected = {},
-                    onLocaleSelected = {},
+                    onOptionsChanged = {},
                     onFirstPage = {},
                     onPrev = {},
                     onNext = {}
@@ -546,7 +657,7 @@ class SearchScreenChromeTest {
                     SearchChrome(
                         keyword = "RJ123456",
                         onKeywordChange = {},
-                        selectedFilter = SearchFilterOption.Trend,
+                        selectedFilter = SearchFilterOption.Standard,
                         selectedLocale = "ja_JP",
                         filterControlsLocked = false,
                         searchSubmitLocked = false,
@@ -560,8 +671,7 @@ class SearchScreenChromeTest {
                         chromeState = chromeState,
                         onMeasured = { chromeState.updateHeight(it.height.toFloat()) },
                         onSearchSubmit = {},
-                        onFilterSelected = {},
-                        onLocaleSelected = {},
+                        onOptionsChanged = {},
                         onFirstPage = {},
                         onPrev = {},
                         onNext = {}

@@ -120,8 +120,14 @@ interface SubtitleTaskDao {
     @Query("DELETE FROM subtitle_task_items WHERE id = :itemId")
     suspend fun deleteItem(itemId: String)
 
+    @Query("DELETE FROM subtitle_task_items WHERE trackId IN (:trackIds)")
+    suspend fun deleteItemsForTracks(trackIds: List<Long>)
+
     @Query("DELETE FROM subtitle_tasks WHERE id = :taskId")
     suspend fun deleteTask(taskId: String)
+
+    @Query("DELETE FROM subtitle_tasks WHERE id NOT IN (SELECT DISTINCT taskId FROM subtitle_task_items)")
+    suspend fun deleteTasksWithoutItems()
 
     @Query("SELECT COUNT(*) FROM subtitle_task_items WHERE taskId = :taskId")
     suspend fun countItems(taskId: String): Int

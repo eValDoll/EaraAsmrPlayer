@@ -83,12 +83,38 @@ class AlbumDetailOneStateTest {
     }
 
     @Test
+    fun asmrOneDirectoryTreeStateKey_isolatesSelectedLanguageDirectoryState() {
+        assertEquals(
+            "tree:asmrOne:RJ01569011",
+            asmrOneDirectoryTreeStateKey(
+                currentRj = "RJ01569011",
+                baseRj = "RJ01569011"
+            )
+        )
+        assertEquals(
+            "tree:asmrOne:RJ01557280",
+            asmrOneDirectoryTreeStateKey(
+                currentRj = "rj01557280",
+                baseRj = "RJ01569011"
+            )
+        )
+    }
+
+    @Test
     fun albumDetailOnlineLoadPlan_loadsOneWithoutWaitingForDlsiteTarget() {
         assertEquals(
             AlbumDetailOnlineLoadPlan(loadDlsite = true, loadAsmrOne = true),
             albumDetailOnlineLoadPlan(
                 selectedTab = 1,
                 hasResolvedInitialDlsiteTarget = false,
+                isInitialRouteReady = true
+            )
+        )
+        assertEquals(
+            AlbumDetailOnlineLoadPlan(loadDlsite = true, loadAsmrOne = true),
+            albumDetailOnlineLoadPlan(
+                selectedTab = 1,
+                hasResolvedInitialDlsiteTarget = true,
                 isInitialRouteReady = true
             )
         )

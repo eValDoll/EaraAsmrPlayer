@@ -12,7 +12,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -57,10 +56,8 @@ import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.FlatTextFieldDialog
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
-import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.EaraBrandedEmptyState
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.common.collectAsStateWhileActive
 
@@ -87,7 +84,7 @@ fun PlaylistsScreen(
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
 
     Scaffold(
-        contentWindowInsets = StableWindowInsets.navigationBars,
+        contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = Color.Transparent,
         contentColor = colorScheme.onBackground
     ) { padding ->
@@ -125,7 +122,7 @@ fun PlaylistsScreen(
                 } else {
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.fillMaxSize().thinScrollbar(listState),
+                        modifier = Modifier.fillMaxSize(),
                         flingBehavior = rememberCalmScrollableFlingBehavior(),
                         contentPadding = PaddingValues(horizontal = PlaylistsPageHorizontalPadding, vertical = 8.dp)
                             .withAddedBottomPadding(LocalBottomOverlayPadding.current + 72.dp),

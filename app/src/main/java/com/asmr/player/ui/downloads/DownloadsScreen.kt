@@ -103,7 +103,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -126,7 +125,6 @@ import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.smoothScrollToTop
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.util.DlsiteWorkNo
@@ -160,13 +158,12 @@ fun DownloadsScreen(
     viewModel: DownloadsViewModel = hiltViewModel()
 ) {
     val tasks by viewModel.tasks.collectAsStateWithLifecycle()
-    val translationSubtitleGroups by viewModel.translationSubtitleGroups.collectAsStateWithLifecycle()
     val subtitleTasks by viewModel.subtitleTasks.collectAsStateWithLifecycle()
+    val downloadDestination by viewModel.downloadDestination.collectAsStateWithLifecycle()
     val polishingRjCodes by viewModel.polishingRjCodes.collectAsStateWithLifecycle()
     val activeDownloadFileCount = remember(tasks) { countActiveDownloadFiles(tasks) }
     val activeTranslationTaskCount = remember(subtitleTasks) { countActiveSubtitleTaskItems(subtitleTasks) }
     val expandedTasks = remember { mutableStateListOf<Long>() }
-    val context = LocalContext.current
     var rjQuery by rememberSaveable { mutableStateOf("") }
     var managementMode by rememberSaveable { mutableStateOf(DownloadManagementMode.Downloads) }
     var pendingDelete by remember { mutableStateOf<PendingDeleteAction?>(null) }
@@ -175,9 +172,6 @@ fun DownloadsScreen(
     var revealedTaskBoundsInRoot by remember { mutableStateOf<Rect?>(null) }
     var pagePositionInRoot by remember { mutableStateOf(Offset.Zero) }
     val swipeRevealCloseController = remember { SwipeRevealCloseController() }
-    val downloadRoot = remember {
-        File(context.getExternalFilesDir(null), "albums").absolutePath
-    }
     val listState = rememberLazyListState()
 
     LaunchedEffect(scrollToTopSignal) {
@@ -276,7 +270,6 @@ fun DownloadsScreen(
 
                     LazyColumn(
                         state = listState,
-                        modifier = Modifier.thinScrollbar(listState),
                         flingBehavior = rememberCalmScrollableFlingBehavior(),
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                         contentPadding = PaddingValues(
@@ -378,7 +371,7 @@ fun DownloadsScreen(
                         }
                         item(key = "download_root") {
                             Text(
-                                text = "下载目录：$downloadRoot",
+                                text = "下载目录：${downloadDestination.label} · ${downloadDestination.displayPath}",
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(horizontal = 2.dp, vertical = 4.dp),
@@ -392,6 +385,9 @@ fun DownloadsScreen(
                 }
 
                 DownloadManagementMode.Translations -> {
+                    // 「翻译任务」数据只在切到该 Tab 时才订阅：进入页面默认落在
+                    // 「下载任务」，避免转场期间再触发一次 Room 查询并整页重组。
+                    val translationSubtitleGroups by viewModel.translationSubtitleGroups.collectAsStateWithLifecycle()
                     TranslationManagementContent(
                         normalizedQuery = normalizedQuery,
                         listState = listState,
@@ -705,7 +701,6 @@ private fun TranslationManagementContent(
 
     LazyColumn(
         state = listState,
-        modifier = Modifier.thinScrollbar(listState),
         flingBehavior = rememberCalmScrollableFlingBehavior(),
         verticalArrangement = Arrangement.spacedBy(6.dp),
         contentPadding = PaddingValues(

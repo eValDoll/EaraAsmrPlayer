@@ -19,7 +19,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.Alignment
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
-import com.asmr.player.ui.common.StableWindowInsets
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -49,8 +48,7 @@ fun DlsiteLoginScreen(
 
     Box(
         modifier = Modifier
-            .fillMaxSize()
-            .windowInsetsPadding(StableWindowInsets.navigationBars.only(WindowInsetsSides.Bottom)),
+            .fillMaxSize(),
         contentAlignment = Alignment.TopCenter // 仅用于平板适配：居中显示内容
     ) {
         Column(

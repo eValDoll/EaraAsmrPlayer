@@ -238,6 +238,7 @@ class PlayerViewModel @Inject constructor(
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), SliceUiState())
 
     init {
+        playerConnection.resumeAfterAppOpen()
         viewModelScope.launch {
             _sessionEqualizer
                 .filterNotNull()
@@ -791,8 +792,8 @@ class PlayerViewModel @Inject constructor(
 
     fun playerOrNull(): Player? = playerConnection.getControllerOrNull()
 
-    fun setVideoSurfaceVisible(visible: Boolean) {
-        playerConnection.setVideoSurfaceVisible(visible)
+    fun setVideoOutputEnabled(enabled: Boolean) {
+        playerConnection.setVideoOutputEnabled(enabled)
     }
 
     override fun onCleared() {

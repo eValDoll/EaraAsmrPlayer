@@ -40,7 +40,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
-import com.asmr.player.ui.common.thinScrollbar
 import com.asmr.player.ui.theme.AsmrTheme
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.map
@@ -86,8 +85,7 @@ fun QueueSheetContent(
             state = listState,
             modifier = Modifier
                 .fillMaxWidth()
-                .weight(1f, fill = true)
-                .thinScrollbar(listState),
+                .weight(1f, fill = true),
             flingBehavior = rememberCalmScrollableFlingBehavior(),
             contentPadding = PaddingValues(bottom = 24.dp)
         ) {

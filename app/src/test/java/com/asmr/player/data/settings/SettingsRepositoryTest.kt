@@ -61,6 +61,13 @@ class SettingsRepositoryTest {
     }
 
     @Test
+    fun setAsmrOneSite_persistsBackupSelection() = runBlocking {
+        repository.setAsmrOneSite(-1)
+
+        assertEquals(-1, repository.asmrOneSite.first())
+    }
+
+    @Test
     fun setAppVolumePercent_storesClampedPercent() = runBlocking {
         repository.setAppVolumePercent(47)
 

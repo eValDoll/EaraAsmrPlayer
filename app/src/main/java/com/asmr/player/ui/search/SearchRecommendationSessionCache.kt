@@ -70,6 +70,7 @@ private fun recommendationSessionKey(
 private fun AsmrOneRecommendationResponse.snapshot(): AsmrOneRecommendationResponse = copy(
     items = items?.toList(),
     matchedSeedRjs = matchedSeedRjs?.toList(),
+    featureSeedRjs = featureSeedRjs?.toList(),
     unmatchedSeedRjs = unmatchedSeedRjs?.toList()
 )
 
