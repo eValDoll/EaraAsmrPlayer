@@ -92,6 +92,7 @@ import com.asmr.player.data.settings.DeepSeekReasoningEffort
 import com.asmr.player.data.settings.DeepSeekTranslationSettings
 import com.asmr.player.data.settings.FloatingLyricsSettings
 import com.asmr.player.data.settings.LyricsPageSettings
+import com.asmr.player.data.settings.NowPlayingLyricsSettings
 import com.asmr.player.subtitle.SubtitleDeviceCapability
 import com.asmr.player.subtitle.SubtitleModelDownloadSource
 import com.asmr.player.subtitle.SubtitleModelInstallationState
@@ -197,6 +198,7 @@ fun SettingsScreen(
     }
     val floatingLyricsEnabled by viewModel.floatingLyricsEnabled.collectAsStateWhileActive(lyricsDataActive)
     val floatingSettings by viewModel.floatingLyricsSettings.collectAsStateWhileActive(lyricsDataActive)
+    val nowPlayingLyricsSettings by viewModel.nowPlayingLyricsSettings.collectAsStateWhileActive(lyricsDataActive)
     val lyricsPageSettings by viewModel.lyricsPageSettings.collectAsStateWhileActive(lyricsDataActive)
     val dynamicPlayerHueEnabled by viewModel.dynamicPlayerHueEnabled.collectAsStateWhileActive(appearanceDataActive)
     val themeMode by viewModel.themeMode.collectAsStateWhileActive(appearanceDataActive)
@@ -831,7 +833,7 @@ fun SettingsScreen(
                 }
                 }
 
-                // 悬浮歌词
+                // 歌词
                 if (currentSection == SettingsSection.Lyrics) {
                     item(key = "group:lyrics") {
                         SettingsDetailCard {
@@ -841,12 +843,20 @@ fun SettingsScreen(
                                 onCheckedChange = { viewModel.setFloatingLyricsEnabled(it) }
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
-                        LyricsPageSettingsSection(
-                            settings = lyricsPageSettings,
-                            segmentedButtonColors = segmentedButtonColors,
-                            onSettingsChange = { next -> viewModel.updateLyricsPageSettings(next) },
-                            onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
-                        )
+                            NowPlayingLyricsSettingsSection(
+                                settings = nowPlayingLyricsSettings,
+                                onSettingsChange = viewModel::updateNowPlayingLyricsSettings,
+                                onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
+                            )
+
+                            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
+
+                            LyricsPageSettingsSection(
+                                settings = lyricsPageSettings,
+                                segmentedButtonColors = segmentedButtonColors,
+                                onSettingsChange = { next -> viewModel.updateLyricsPageSettings(next) },
+                                onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
+                            )
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
                         Text("悬浮歌词细节", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
@@ -1230,6 +1240,23 @@ fun SettingsScreen(
             )
         )
     }
+}
+
+@Composable
+private fun NowPlayingLyricsSettingsSection(
+    settings: NowPlayingLyricsSettings,
+    onSettingsChange: (NowPlayingLyricsSettings) -> Unit,
+    onHorizontalControlInteractionChanged: (Boolean) -> Unit = {}
+) {
+    Text("播放页歌词", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+    SettingsSliderRow(
+        text = "高亮字体大小: ${settings.highlightFontSizeSp.toInt()}sp",
+        value = settings.highlightFontSizeSp,
+        range = 18f..36f,
+        stepSize = 1f,
+        onValueChange = { onSettingsChange(settings.copy(highlightFontSizeSp = it)) },
+        onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

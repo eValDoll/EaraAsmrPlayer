@@ -204,6 +204,7 @@ import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
+import com.asmr.player.data.settings.NowPlayingLyricsSettings
 import com.asmr.player.util.MessageManager
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.ui.theme.HuePalette
@@ -801,6 +802,7 @@ fun MainContainer(
     coverPreviewMode: CoverPreviewMode,
     nowPlayingHomeLayoutMode: NowPlayingHomeLayoutMode,
     nowPlayingHomeLayoutHintDismissed: Boolean,
+    nowPlayingLyricsSettings: NowPlayingLyricsSettings,
     lyricsPageSettings: LyricsPageSettings,
     forceImmersive: Boolean,
     volumeKeyEventTick: Long
@@ -3042,6 +3044,7 @@ fun MainContainer(
                             settingsDataStore.setNowPlayingHomeLayoutMode(mode, dismissHint = true)
                         }
                     },
+                    nowPlayingLyricsSettings = nowPlayingLyricsSettings,
                     lyricsPageSettings = lyricsPageSettings,
                     audioOutputRouteKind = audioOutputRouteKind,
                     warningSessionState = appVolumeWarningSessionState,

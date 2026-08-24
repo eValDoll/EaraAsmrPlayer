@@ -23,6 +23,23 @@ class NowPlayingLandscapeLayoutTest {
     }
 
     @Test
+    fun lyricTypographyAppliesIndependentHighlightSize() {
+        val phone = nowPlayingLyricTypographyMetrics(
+            largeTypography = false,
+            highlightFontSizeSp = 30f
+        )
+        val tablet = nowPlayingLyricTypographyMetrics(
+            largeTypography = true,
+            highlightFontSizeSp = 30f
+        )
+
+        assertEquals(30, phone.currentFontSizeSp)
+        assertEquals(37, phone.currentLineHeightSp)
+        assertEquals(34, tablet.currentFontSizeSp)
+        assertEquals(42, tablet.currentLineHeightSp)
+    }
+
+    @Test
     fun lyricTrackOnlyAnimatesSequentialForwardAdvance() {
         assertTrue(shouldAnimateLyricTrackAdvance(previousIndex = 8, nextIndex = 9))
         assertFalse(shouldAnimateLyricTrackAdvance(previousIndex = 8, nextIndex = 8))

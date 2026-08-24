@@ -23,6 +23,7 @@ import com.asmr.player.data.settings.AppProxyMode
 import com.asmr.player.data.settings.FloatingLyricsSettings
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.NetworkRouteSettings
+import com.asmr.player.data.settings.NowPlayingLyricsSettings
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.subtitle.SubtitleModelDownloadSource
 import com.asmr.player.subtitle.SubtitleModelRepository
@@ -155,6 +156,9 @@ class SettingsViewModel @Inject constructor(
     val lyricsPageSettings: StateFlow<LyricsPageSettings> = settingsDataStore.lyricsPageSettings
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LyricsPageSettings())
 
+    val nowPlayingLyricsSettings: StateFlow<NowPlayingLyricsSettings> = settingsDataStore.nowPlayingLyricsSettings
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), NowPlayingLyricsSettings())
+
     val dynamicPlayerHueEnabled: StateFlow<Boolean> = settingsDataStore.dynamicPlayerHueEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
@@ -253,6 +257,10 @@ class SettingsViewModel @Inject constructor(
 
     fun updateLyricsPageSettings(settings: LyricsPageSettings) {
         viewModelScope.launch { settingsDataStore.setLyricsPageSettings(settings) }
+    }
+
+    fun updateNowPlayingLyricsSettings(settings: NowPlayingLyricsSettings) {
+        viewModelScope.launch { settingsDataStore.setNowPlayingLyricsSettings(settings) }
     }
 
     fun setDynamicPlayerHueEnabled(enabled: Boolean) {

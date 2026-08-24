@@ -553,18 +553,19 @@ internal data class NowPlayingLyricTypographyMetrics(
 )
 
 internal fun nowPlayingLyricTypographyMetrics(
-    largeTypography: Boolean
+    largeTypography: Boolean,
+    highlightFontSizeSp: Float = 24f
 ): NowPlayingLyricTypographyMetrics = if (largeTypography) {
     NowPlayingLyricTypographyMetrics(
-        currentFontSizeSp = 28,
-        currentLineHeightSp = 36,
+        currentFontSizeSp = highlightFontSizeSp.roundToInt() + 4,
+        currentLineHeightSp = highlightFontSizeSp.roundToInt() + 12,
         upcomingFontSizeSp = 20,
         upcomingLineHeightSp = 27
     )
 } else {
     NowPlayingLyricTypographyMetrics(
-        currentFontSizeSp = 24,
-        currentLineHeightSp = 31,
+        currentFontSizeSp = highlightFontSizeSp.roundToInt(),
+        currentLineHeightSp = highlightFontSizeSp.roundToInt() + 7,
         upcomingFontSizeSp = 16,
         upcomingLineHeightSp = 23
     )
@@ -604,6 +605,7 @@ internal fun NowPlayingLyricsPreview(
     onOpenLyrics: () -> Unit,
     colors: LyricReadableColors,
     interactionEnabled: Boolean = true,
+    highlightFontSizeSp: Float = 24f,
     compactHeight: Boolean = false,
     tabletLayout: Boolean = false,
     largeTypography: Boolean = tabletLayout,
@@ -664,8 +666,8 @@ internal fun NowPlayingLyricsPreview(
             upcoming = upcoming
         )
     }
-    val typographyMetrics = remember(largeTypography) {
-        nowPlayingLyricTypographyMetrics(largeTypography)
+    val typographyMetrics = remember(largeTypography, highlightFontSizeSp) {
+        nowPlayingLyricTypographyMetrics(largeTypography, highlightFontSizeSp)
     }
     val currentFontSize = typographyMetrics.currentFontSizeSp.sp
     val currentLineHeight = typographyMetrics.currentLineHeightSp.sp

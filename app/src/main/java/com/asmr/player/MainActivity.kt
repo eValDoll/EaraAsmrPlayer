@@ -152,6 +152,7 @@ import com.asmr.player.data.local.datastore.ThemeBootstrapPreferences
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
+import com.asmr.player.data.settings.NowPlayingLyricsSettings
 import com.asmr.player.util.MessageManager
 import com.asmr.player.ui.common.NonTouchableAppMessageOverlay
 import com.asmr.player.ui.common.StableWindowInsets
@@ -297,6 +298,9 @@ class MainActivity : ComponentActivity() {
             val nowPlayingHomeLayoutHintDismissed by produceState(initialValue = false, settingsDataStore) {
                 value = settingsDataStore.nowPlayingHomeLayoutHintDismissed.first()
             }
+            val nowPlayingLyricsSettings by settingsDataStore.nowPlayingLyricsSettings.collectAsStateWithLifecycle(
+                initialValue = NowPlayingLyricsSettings()
+            )
             val lyricsPageSettings by settingsDataStore.lyricsPageSettings.collectAsStateWithLifecycle(initialValue = LyricsPageSettings())
             val showMiniPlayerBar by settingsRepository.showMiniPlayerBar.collectAsStateWithLifecycle(initialValue = true)
             val neutral = remember(mode) { neutralPaletteForMode(mode) }
@@ -594,6 +598,7 @@ class MainActivity : ComponentActivity() {
                         coverPreviewMode = coverPreviewMode,
                         nowPlayingHomeLayoutMode = nowPlayingHomeLayoutMode,
                         nowPlayingHomeLayoutHintDismissed = nowPlayingHomeLayoutHintDismissed,
+                        nowPlayingLyricsSettings = nowPlayingLyricsSettings,
                         lyricsPageSettings = lyricsPageSettings,
                         forceImmersive = showSplash,
                         volumeKeyEventTick = volumeKeyTick

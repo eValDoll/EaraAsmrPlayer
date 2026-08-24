@@ -88,6 +88,7 @@ import com.asmr.player.data.lyrics.lyricsTargetContextFromMediaItem
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
+import com.asmr.player.data.settings.NowPlayingLyricsSettings
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AudioOutputRouteIcon
 import com.asmr.player.ui.common.HorizontalStereoSpectrum
@@ -1185,6 +1186,7 @@ internal fun NowPlayingScreen(
     nowPlayingHomeLayoutMode: NowPlayingHomeLayoutMode,
     nowPlayingHomeLayoutHintDismissed: Boolean,
     onNowPlayingHomeLayoutModeChange: (NowPlayingHomeLayoutMode) -> Unit,
+    nowPlayingLyricsSettings: NowPlayingLyricsSettings,
     lyricsPageSettings: LyricsPageSettings,
     audioOutputRouteKind: AudioOutputRouteKind,
     warningSessionState: AppVolumeWarningSessionState,
@@ -1823,6 +1825,7 @@ internal fun NowPlayingScreen(
                                         onOpenLyrics = showLyricsSurface,
                                         colors = lyricColors,
                                         interactionEnabled = !lyricsState.isLoading,
+                                        highlightFontSizeSp = nowPlayingLyricsSettings.highlightFontSizeSp,
                                         tabletLayout = true,
                                         contentTopPadding = landscapeLayoutMetrics.lyricsTopPadding,
                                         onCurrentLineAnchorChanged = { top ->
@@ -2000,6 +2003,7 @@ internal fun NowPlayingScreen(
                                     onOpenLyrics = showLyricsSurface,
                                     colors = lyricColors,
                                     interactionEnabled = !lyricsState.isLoading,
+                                    highlightFontSizeSp = nowPlayingLyricsSettings.highlightFontSizeSp,
                                     compactHeight = landscapeLayoutMetrics.compactHeight,
                                     contentTopPadding = landscapeLayoutMetrics.lyricsTopPadding,
                                     onCurrentLineAnchorChanged = { top ->
@@ -2392,6 +2396,7 @@ internal fun NowPlayingScreen(
                                                     onOpenLyrics = showLyricsSurface,
                                                     colors = lyricColors,
                                                     interactionEnabled = lyricsClassicInteractionEnabled,
+                                                    highlightFontSizeSp = nowPlayingLyricsSettings.highlightFontSizeSp,
                                                     compactHeight = portraitLayoutMetrics.compact,
                                                     largeTypography = widthClass != WindowWidthSizeClass.Compact,
                                                     upcomingCount = upcomingCount,

@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.*
 import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
+import com.asmr.player.data.settings.NowPlayingLyricsSettings
 import com.asmr.player.data.settings.settingsDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +42,7 @@ class SettingsDataStore @Inject constructor(
     private val coverPreviewModeKey = stringPreferencesKey("cover_preview_mode")
     private val nowPlayingHomeLayoutModeKey = stringPreferencesKey("now_playing_home_layout_mode")
     private val nowPlayingHomeLayoutHintDismissedKey = booleanPreferencesKey("now_playing_home_layout_hint_dismissed")
+    private val nowPlayingLyricsHighlightFontSizeKey = floatPreferencesKey("now_playing_lyrics_highlight_font_size")
     private val lyricsPageFontSizeKey = floatPreferencesKey("lyrics_page_font_size")
     private val lyricsPageStrokeWidthKey = floatPreferencesKey("lyrics_page_stroke_width")
     private val lyricsPageLineHeightMultiplierKey = floatPreferencesKey("lyrics_page_line_height_multiplier")
@@ -94,6 +96,11 @@ class SettingsDataStore @Inject constructor(
     }
     val nowPlayingHomeLayoutHintDismissed: Flow<Boolean> = context.settingsDataStore.data.map {
         it[nowPlayingHomeLayoutHintDismissedKey] ?: false
+    }
+    val nowPlayingLyricsSettings: Flow<NowPlayingLyricsSettings> = context.settingsDataStore.data.map { prefs ->
+        NowPlayingLyricsSettings(
+            highlightFontSizeSp = prefs[nowPlayingLyricsHighlightFontSizeKey] ?: 24f
+        )
     }
     val lyricsPageSettings: Flow<LyricsPageSettings> = context.settingsDataStore.data.map { prefs ->
         LyricsPageSettings(
@@ -196,6 +203,12 @@ class SettingsDataStore @Inject constructor(
             it[lyricsPageLineHeightMultiplierKey] = settings.lineHeightMultiplier
             it[lyricsPageAlignKey] = settings.align
             it[lyricsPageDisplayAreaModeKey] = settings.displayAreaMode
+        }
+    }
+
+    suspend fun setNowPlayingLyricsSettings(settings: NowPlayingLyricsSettings) {
+        context.settingsDataStore.edit {
+            it[nowPlayingLyricsHighlightFontSizeKey] = settings.highlightFontSizeSp
         }
     }
 
