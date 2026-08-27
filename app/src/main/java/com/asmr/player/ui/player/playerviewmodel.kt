@@ -412,6 +412,8 @@ class PlayerViewModel @Inject constructor(
     fun previous() = playerConnection.skipToPrevious()
     fun playQueueIndex(index: Int) = playerConnection.seekToQueueIndex(index)
     fun removeFromQueue(index: Int) = playerConnection.removeMediaItem(index)
+    fun removeAlbumFromQueue(albumId: Long, mediaIds: Set<String>) =
+        playerConnection.removeMediaItemsForAlbum(albumId, mediaIds)
     fun setPlaybackSpeed(speed: Float) = playerConnection.setPlaybackSpeed(speed)
     fun setPlaybackPitch(pitch: Float) = playerConnection.setPlaybackPitch(pitch)
     fun setPlaybackParameters(speed: Float, pitch: Float) = playerConnection.setPlaybackParameters(speed, pitch)

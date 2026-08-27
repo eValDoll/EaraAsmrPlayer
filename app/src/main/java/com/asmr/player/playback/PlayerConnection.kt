@@ -101,6 +101,8 @@ class PlayerConnection @Inject constructor(
     private val connectMutex = Mutex()
     private val mainHandler = Handler(Looper.getMainLooper())
     private var videoOutputEnabled: Boolean = false
+    private val removedAlbumIds = linkedSetOf<Long>()
+    private val removedMediaIds = linkedSetOf<String>()
     @Volatile private var reconnecting = false
 
     val appVolumePercent: StateFlow<Int> = settingsRepository.appVolumePercent
@@ -309,6 +311,7 @@ class PlayerConnection @Inject constructor(
                 applyPlayModeToController(c, mode)
             }
             updateQueue()
+            pruneRemovedMediaItems(c)
             _snapshot.value = c.toSnapshot(
                 isConnected = true,
                 audioSessionId = _snapshot.value.audioSessionId,
@@ -393,9 +396,15 @@ class PlayerConnection @Inject constructor(
                     remoteSubtitleSources = remoteSubtitleSources
                 )
             }
-        if (persisted.isEmpty()) return false
+        if (persisted.isEmpty()) {
+            playbackStateStore.clear()
+            return false
+        }
         val items = buildMediaItemsFromPersistedItems(persisted)
-        if (items.isEmpty()) return false
+        if (items.isEmpty()) {
+            playbackStateStore.clear()
+            return false
+        }
 
         val index = saved.currentIndex.coerceIn(0, items.lastIndex)
         val pos = saved.positionMs.coerceAtLeast(0L)
@@ -423,6 +432,16 @@ class PlayerConnection @Inject constructor(
             val id = persisted.mediaId.trim()
             if (id.isBlank()) return@mapNotNull null
             val track = runCatching { trackDao.getTrackByPathOnce(id) }.getOrNull()
+            if (track == null && persisted.trackId?.let { it > 0L } == true) {
+                return@mapNotNull null
+            }
+            val persistedAlbumId = persisted.albumId
+            if (track == null && persistedAlbumId != null && persistedAlbumId > 0L) {
+                val albumExists = runCatching {
+                    albumDao.getAlbumById(persistedAlbumId) != null
+                }.getOrDefault(true)
+                if (!albumExists) return@mapNotNull null
+            }
             if (track != null) {
                 val albumEntity = runCatching { albumDao.getAlbumById(track.albumId) }.getOrNull()
                 val album = Album(
@@ -670,6 +689,39 @@ class PlayerConnection @Inject constructor(
 
     fun removeMediaItem(index: Int) {
         controller?.removeMediaItem(index)
+    }
+
+    fun removeMediaItemsForAlbum(albumId: Long, mediaIds: Set<String>) {
+        if (albumId <= 0L && mediaIds.isEmpty()) return
+        scope.launch {
+            if (albumId > 0L) removedAlbumIds += albumId
+            removedMediaIds += mediaIds.map(String::trim).filter(String::isNotBlank)
+            controller?.let(::pruneRemovedMediaItems)
+        }
+    }
+
+    private fun pruneRemovedMediaItems(controller: MediaController) {
+        var removedAny = false
+        for (index in controller.mediaItemCount - 1 downTo 0) {
+            if (
+                shouldRemovePlaybackItem(
+                    item = controller.getMediaItemAt(index),
+                    removedAlbumIds = removedAlbumIds,
+                    removedMediaIds = removedMediaIds,
+                )
+            ) {
+                controller.removeMediaItem(index)
+                removedAny = true
+            }
+        }
+        if (!removedAny) return
+        if (controller.mediaItemCount == 0) controller.pause()
+        updateQueue()
+        _snapshot.value = controller.toSnapshot(
+            isConnected = true,
+            audioSessionId = _snapshot.value.audioSessionId,
+            startupRestoreResolved = restoreAttemptResolved,
+        )
     }
 
     fun sendCustomCommand(action: String, args: android.os.Bundle) {

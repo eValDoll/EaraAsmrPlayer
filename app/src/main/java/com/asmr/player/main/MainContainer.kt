@@ -379,6 +379,7 @@ private fun AlbumDetailRouteFrame(
     onPopBackStack: (String?) -> Unit,
     onPageOffsetReader: (() -> Float) -> Unit,
     onExitStateChanged: (Boolean) -> Unit,
+    onLocalAlbumRemoved: (AlbumDetailUiState.Removed) -> Unit = {},
     onEditRj: (String) -> Unit,
     content: @Composable (AlbumDetailViewModel, AlbumHeroBlurLayerCache) -> Unit
 ) {
@@ -411,6 +412,7 @@ private fun AlbumDetailRouteFrame(
     var exitRequested by remember(backStackEntry.id) { mutableStateOf(false) }
     val currentPopBackStack by rememberUpdatedState(onPopBackStack)
     val currentExitStateChanged by rememberUpdatedState(onExitStateChanged)
+    val currentLocalAlbumRemoved by rememberUpdatedState(onLocalAlbumRemoved)
     val closeAlbumDetail = {
         if (!exitRequested) {
             UiFrameWorkCoordinator.markFrameCritical(
@@ -424,6 +426,13 @@ private fun AlbumDetailRouteFrame(
             viewModel.cancelOnlineLoadsForExit()
             exitRequested = true
         }
+    }
+    LaunchedEffect(viewModel) {
+        val removed = viewModel.uiState
+            .filter { it is AlbumDetailUiState.Removed }
+            .first() as AlbumDetailUiState.Removed
+        currentLocalAlbumRemoved(removed)
+        closeAlbumDetail()
     }
     BackHandler(enabled = !exitRequested, onBack = closeAlbumDetail)
 
@@ -2596,6 +2605,9 @@ fun MainContainer(
                             }
                         },
                         onExitStateChanged = { albumDetailExitInProgress = it },
+                        onLocalAlbumRemoved = { removed ->
+                            playerViewModel.removeAlbumFromQueue(removed.albumId, removed.mediaIds)
+                        },
                         onEditRj = { currentRj ->
                             manualRjInput = currentRj
                             showManualRjDialog = true

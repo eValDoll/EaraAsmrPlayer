@@ -3,7 +3,9 @@ package com.asmr.player.ui.library
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.Uri
 import android.os.SystemClock
+import android.provider.DocumentsContract
 import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -933,7 +935,10 @@ class AlbumDetailViewModel @Inject constructor(
         albumLoadJob = viewModelScope.launch {
             try {
                 val localAlbum = if (albumId != null && albumId > 0) {
-                    loadLocalAlbumById(albumId)
+                    when (val result = loadLocalAlbumByIdWithAvailabilityCheck(albumId)) {
+                        is LocalAlbumLoadResult.Available -> result.album
+                        LocalAlbumLoadResult.Removed -> return@launch
+                    }
                 } else if (!rjCode.isNullOrBlank()) {
                     loadLocalAlbumByRj(rjCode)
                 } else {
@@ -2087,9 +2092,97 @@ class AlbumDetailViewModel @Inject constructor(
         )
     }
 
-    private suspend fun loadLocalAlbumById(albumId: Long): Album? {
-        val entity = albumDao.getAlbumById(albumId) ?: return null
-        return entityToDomain(entity)
+    private sealed interface LocalAlbumLoadResult {
+        data class Available(val album: Album) : LocalAlbumLoadResult
+        data object Removed : LocalAlbumLoadResult
+    }
+
+    private suspend fun loadLocalAlbumByIdWithAvailabilityCheck(albumId: Long): LocalAlbumLoadResult {
+        val entity = albumDao.getAlbumById(albumId)
+        if (entity == null) {
+            notifyLocalAlbumRemoved(albumId, emptySet())
+            return LocalAlbumLoadResult.Removed
+        }
+        val tracks = trackDao.getTracksForAlbumOnce(albumId)
+        val isMissing = withContext(Dispatchers.IO) {
+            shouldRemoveMissingLocalAlbum(entity, tracks, ::queryLocalSourceAvailability)
+        }
+        if (!isMissing) {
+            return LocalAlbumLoadResult.Available(entityToDomain(entity, tracks))
+        }
+
+        var removedMediaIds: Set<String> = emptySet()
+        withContext(Dispatchers.IO) {
+            database.withTransaction {
+                val latest = albumDao.getAlbumById(albumId) ?: return@withTransaction
+                val latestTracks = trackDao.getTracksForAlbumOnce(albumId)
+                if (!shouldRemoveMissingLocalAlbum(latest, latestTracks, ::queryLocalSourceAvailability)) {
+                    return@withTransaction
+                }
+                val trackIds = latestTracks.map { it.id }
+                removedMediaIds = latestTracks.map { it.path }.filter(String::isNotBlank).toSet()
+                if (trackIds.isNotEmpty()) {
+                    database.subtitleTaskDao().deleteItemsForTracks(trackIds)
+                    database.remoteSubtitleSourceDao().deleteByTrackIds(trackIds)
+                    database.trackTagDao().deleteTrackTagsByTrackIds(trackIds)
+                }
+                trackDao.deleteSubtitlesForAlbum(albumId)
+                trackDao.deleteTracksForAlbum(albumId)
+                database.trackPlaybackProgressDao().deleteByAlbumId(albumId)
+                database.localTreeCacheDao().deleteByAlbum(albumId)
+                database.onlineSavedResourceDao().deleteByAlbumId(albumId)
+                database.tagDao().deleteAlbumTagsByAlbumId(albumId)
+                database.albumFtsDao().deleteByAlbumId(albumId)
+                database.playStatDao().deleteByAlbumId(albumId)
+                albumDao.deleteAlbum(latest)
+            }
+        }
+        val remaining = albumDao.getAlbumById(albumId)
+        if (remaining != null) {
+            return LocalAlbumLoadResult.Available(entityToDomain(remaining))
+        }
+        notifyLocalAlbumRemoved(albumId, removedMediaIds)
+        return LocalAlbumLoadResult.Removed
+    }
+
+    private fun notifyLocalAlbumRemoved(albumId: Long, mediaIds: Set<String>) {
+        _uiState.value = AlbumDetailUiState.Removed(albumId = albumId, mediaIds = mediaIds)
+        messageManager.showInfo("作品已被删除")
+    }
+
+    private fun queryLocalSourceAvailability(pathOrUri: String): LocalSourceAvailability {
+        val source = pathOrUri.trim()
+        if (source.isBlank()) return LocalSourceAvailability.Unknown
+        if (!source.startsWith("content://", ignoreCase = true)) {
+            val file = if (source.startsWith("file://", ignoreCase = true)) {
+                runCatching { Uri.parse(source).path.orEmpty() }.getOrNull()?.let(::File)
+                    ?: return LocalSourceAvailability.Unknown
+            } else {
+                File(source)
+            }
+            return if (file.exists()) LocalSourceAvailability.Available else LocalSourceAvailability.Missing
+        }
+
+        val uri = runCatching { Uri.parse(source) }.getOrNull() ?: return LocalSourceAvailability.Unknown
+        val documentUri = runCatching {
+            val documentId = runCatching { DocumentsContract.getDocumentId(uri) }.getOrNull()
+                ?: DocumentsContract.getTreeDocumentId(uri)
+            DocumentsContract.buildDocumentUriUsingTree(uri, documentId)
+        }.getOrElse { return LocalSourceAvailability.Unknown }
+        return try {
+            val projection = arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+            context.contentResolver.query(documentUri, projection, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) LocalSourceAvailability.Available else LocalSourceAvailability.Missing
+            } ?: LocalSourceAvailability.Unknown
+        } catch (_: SecurityException) {
+            LocalSourceAvailability.Unknown
+        } catch (error: Exception) {
+            if (isMissingLocalDocumentFailure(error)) {
+                LocalSourceAvailability.Missing
+            } else {
+                LocalSourceAvailability.Unknown
+            }
+        }
     }
 
     private suspend fun loadLocalAlbumByRj(rjCode: String): Album? {
@@ -2100,8 +2193,11 @@ class AlbumDetailViewModel @Inject constructor(
         return entityToDomain(entity)
     }
 
-    private suspend fun entityToDomain(entity: AlbumEntity): Album {
-        val tracks = loadLocalTracks(entity)
+    private suspend fun entityToDomain(
+        entity: AlbumEntity,
+        trackEntities: List<TrackEntity>? = null,
+    ): Album {
+        val tracks = trackEntities?.map { it.toDomain() } ?: loadLocalTracks(entity)
         return Album(
             id = entity.id,
             title = entity.titleForDisplay,
