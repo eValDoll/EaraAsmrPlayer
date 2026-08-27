@@ -11,6 +11,7 @@ import coil.request.ImageRequest
 import coil.request.ErrorResult
 import coil.request.SuccessResult
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -23,7 +24,9 @@ class ImageLoaderFacade(
     private val imageLoader: ImageLoader = ImageLoader.Builder(context)
         .okHttpClient { okHttpClient }
         .interceptorDispatcher(imageDispatcher)
-        .fetcherDispatcher(imageDispatcher)
+        // 网络抓取可能长时间阻塞；放到 IO 调度器，避免占满图片解码线程后连本地
+        // 文件的读取与解码也无法开始。
+        .fetcherDispatcher(Dispatchers.IO)
         .decoderDispatcher(imageDispatcher)
         .transformationDispatcher(imageDispatcher)
         .memoryCache(null)
