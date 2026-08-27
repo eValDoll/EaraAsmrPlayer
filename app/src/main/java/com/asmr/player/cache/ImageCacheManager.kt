@@ -76,7 +76,12 @@ class ImageCacheManager(
 
     private val scope = CoroutineScope(SupervisorJob() + decodeDispatcher)
     private val inFlight = ConcurrentHashMap<InFlightKey, InFlightLoad>()
-    private val loadSemaphore = Semaphore(config.loadParallelism)
+    // 远程推荐封面在直连较慢时会长时间占用加载许可。独立的本地通道保证文件图片
+    // 不会被网络请求饿死，横屏同时展示推荐列表时也能立即开始读取。
+    private val loadGate = ImageLoadGate(
+        remotePermits = config.loadParallelism,
+        localPermits = config.loadParallelism,
+    )
     private val preloadSemaphore = Semaphore(config.preloadParallelism)
     private val diskWriteSemaphore = Semaphore(1)
     private val memoryStateLock = Any()
@@ -185,7 +190,7 @@ class ImageCacheManager(
                             if (diskBitmap != null) {
                                 Result.success(diskBitmap)
                             } else {
-                                Result.success(loadSemaphore.withPermit {
+                                Result.success(loadGate.withPermit(model) {
                                     stats.onNetworkFetch()
                                     Trace.beginSection("img.net")
                                     val bmp = try {
