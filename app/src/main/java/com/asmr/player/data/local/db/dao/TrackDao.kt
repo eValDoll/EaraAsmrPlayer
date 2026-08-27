@@ -100,6 +100,9 @@ interface TrackDao {
     @Query("SELECT DISTINCT trackId FROM subtitles WHERE trackId IN (:trackIds)")
     suspend fun getTrackIdsWithSubtitles(trackIds: List<Long>): List<Long>
 
+    @Query("SELECT DISTINCT trackId FROM subtitles WHERE TRIM(japaneseText) != '' ORDER BY trackId ASC")
+    suspend fun getTrackIdsWithGeneratedSubtitles(): List<Long>
+
     @Query("SELECT DISTINCT trackId FROM subtitles WHERE trackId IN (:trackIds)")
     fun observeTrackIdsWithSubtitles(trackIds: List<Long>): Flow<List<Long>>
 

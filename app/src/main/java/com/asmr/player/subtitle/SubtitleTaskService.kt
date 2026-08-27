@@ -92,6 +92,7 @@ internal class SubtitleTaskService : Service() {
     private lateinit var settingsRepository: SettingsRepository
     private lateinit var messageManager: MessageManager
     private lateinit var deepSeekAccountRepository: DeepSeekAccountRepository
+    private lateinit var generatedSubtitleFileExporter: GeneratedSubtitleFileExporter
     private var transcriptionJob: Job? = null
     private var transcriptionItemId: String? = null
     private val translationJobs = ConcurrentHashMap<String, Job>()
@@ -125,6 +126,7 @@ internal class SubtitleTaskService : Service() {
         settingsRepository = entryPoint.settingsRepository()
         messageManager = entryPoint.messageManager()
         deepSeekAccountRepository = entryPoint.deepSeekAccountRepository()
+        generatedSubtitleFileExporter = GeneratedSubtitleFileExporter(applicationContext, database)
         createNotificationChannel()
         startAsForeground(buildNotification(emptyList()))
         wakeLock = getSystemService(PowerManager::class.java)
@@ -619,7 +621,30 @@ internal class SubtitleTaskService : Service() {
         } finally {
             requestBalanceRefresh()
         }
+        exportGeneratedSubtitleFile(itemId)
         repository.finishSucceeded(itemId)
+    }
+
+    private suspend fun exportGeneratedSubtitleFile(itemId: String) {
+        val item = database.subtitleTaskDao().getItem(itemId) ?: return
+        if (item.mode != SubtitleTaskMode.GENERATED) return
+        runCatching { generatedSubtitleFileExporter.export(item.trackId) }
+            .onSuccess { result ->
+                when (result) {
+                    is GeneratedSubtitleExportResult.Exported -> {
+                        Log.i(TAG, "自动生成字幕已导出 trackId=${item.trackId} reference=${result.reference}")
+                    }
+                    is GeneratedSubtitleExportResult.ExistingFilePreserved -> Unit
+                    GeneratedSubtitleExportResult.UnsupportedTrackLocation -> {
+                        Log.w(TAG, "音频位置不支持同目录字幕导出 trackId=${item.trackId}")
+                        messageManager.showWarning("字幕已生成，但当前音频位置不支持导出 LRC 文件")
+                    }
+                }
+            }
+            .onFailure { error ->
+                Log.w(TAG, "自动生成字幕导出失败 trackId=${item.trackId}", error)
+                messageManager.showWarning("字幕已生成，但写入音频目录失败：${error.message ?: "未知错误"}")
+            }
     }
 
     /**

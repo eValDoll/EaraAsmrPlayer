@@ -11,7 +11,9 @@ import com.asmr.player.cache.ImageCacheManager
 import com.asmr.player.data.remote.download.DownloadQueueCoordinator
 import com.asmr.player.data.remote.download.DownloadRuntimeConfig
 import com.asmr.player.data.settings.SettingsRepository
+import com.asmr.player.subtitle.GeneratedSubtitleFileBackfill
 import com.asmr.player.subtitle.SubtitleTaskRepository
+import com.asmr.player.util.MessageManager
 import com.tom_roush.pdfbox.android.PDFBoxResourceLoader
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
@@ -36,6 +38,9 @@ class AsmrApp : Application(), ImageLoaderFactory, Configuration.Provider {
     @Inject
     lateinit var appCacheManager: AppCacheManager
 
+    @Inject
+    lateinit var messageManager: MessageManager
+
     override fun onCreate() {
         super.onCreate()
         appCacheManager.start()
@@ -50,6 +55,32 @@ class AsmrApp : Application(), ImageLoaderFactory, Configuration.Provider {
             if (runCatching { database.downloadDao().countRecoverableItems() > 0 }.getOrDefault(false)) {
                 runCatching { DownloadQueueCoordinator.recoverDownloadsOnAppLaunch(applicationContext) }
             }
+            runCatching { GeneratedSubtitleFileBackfill(applicationContext, database).runOnce() }
+                .getOrNull()
+                ?.let { summary ->
+                    when {
+                        summary.unavailableCount > 0 -> messageManager.showWarning(
+                            "已为旧版字幕补导出 ${summary.exportedCount} 个 LRC，" +
+                                "另有 ${summary.unavailableCount} 个因目录不可写未导出" +
+                                if (summary.preservedCount > 0) {
+                                    "，并保留 ${summary.preservedCount} 个已有同名文件"
+                                } else {
+                                    ""
+                                }
+                        )
+                        summary.exportedCount > 0 -> messageManager.showSuccess(
+                            "已为旧版生成字幕补导出 ${summary.exportedCount} 个 LRC 文件" +
+                                if (summary.preservedCount > 0) {
+                                    "，并保留 ${summary.preservedCount} 个已有同名文件"
+                                } else {
+                                    ""
+                                }
+                        )
+                        summary.preservedCount > 0 -> messageManager.showInfo(
+                            "检测到 ${summary.preservedCount} 个已有同名 LRC，补导出时未覆盖"
+                        )
+                    }
+                }
         }
     }
 
