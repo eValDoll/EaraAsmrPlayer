@@ -52,15 +52,17 @@ object EmbeddedMediaExtractor {
     }
 
     fun extractEmbeddedLyricsEntries(context: Context, pathOrUri: String): List<SubtitleEntry> {
-        val text = readEmbeddedLyricsText(context, pathOrUri) ?: return emptyList()
-        val hasLrcTs = text.contains('[') && text.contains(']')
-        return if (hasLrcTs) {
-            SubtitleParser.parseText("lrc", text)
-        } else {
-            val durationMs = readDurationMs(context, pathOrUri)
-            val end = if (durationMs > 0L) durationMs else 60_000L
-            listOf(SubtitleEntry(0, end, text))
-        }
+        return runCatching {
+            val text = readEmbeddedLyricsText(context, pathOrUri) ?: return@runCatching emptyList()
+            val hasLrcTs = text.contains('[') && text.contains(']')
+            if (hasLrcTs) {
+                SubtitleParser.parseText("lrc", text)
+            } else {
+                val durationMs = readDurationMs(context, pathOrUri)
+                val end = if (durationMs > 0L) durationMs else 60_000L
+                listOf(SubtitleEntry(0, end, text))
+            }
+        }.getOrDefault(emptyList())
     }
 
     private fun readDurationMs(context: Context, pathOrUri: String): Long {

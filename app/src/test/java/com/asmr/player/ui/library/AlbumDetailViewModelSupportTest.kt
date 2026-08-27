@@ -4,14 +4,71 @@ import com.asmr.player.data.remote.api.Artist
 import com.asmr.player.data.remote.api.Circle
 import com.asmr.player.data.remote.api.Tag
 import com.asmr.player.data.remote.api.WorkDetailsResponse
+import com.asmr.player.data.local.db.entities.AlbumEntity
+import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.domain.model.Album
 import com.asmr.player.ui.nav.AlbumCoverHint
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertFalse
 import org.junit.Test
+import java.io.FileNotFoundException
 
 class AlbumDetailViewModelSupportTest {
+    @Test
+    fun shouldRemoveMissingLocalAlbum_removesOnlyConfirmedMissingPhysicalWork() {
+        val album = AlbumEntity(
+            id = 7L,
+            title = "已删除作品",
+            path = "content://library/tree/root/document/root%2Fwork",
+            localPath = "content://library/tree/root/document/root%2Fwork",
+        )
+        val tracks = listOf(
+            TrackEntity(id = 11L, albumId = 7L, title = "01", path = "content://library/track/01")
+        )
+
+        assertTrue(
+            shouldRemoveMissingLocalAlbum(album, tracks) { LocalSourceAvailability.Missing }
+        )
+        assertFalse(
+            shouldRemoveMissingLocalAlbum(album, tracks) { LocalSourceAvailability.Unknown }
+        )
+    }
+
+    @Test
+    fun shouldRemoveMissingLocalAlbum_preservesHybridOnlineWork() {
+        val album = AlbumEntity(
+            id = 7L,
+            title = "混合作品",
+            path = "content://library/tree/root/document/root%2Fwork",
+            localPath = "content://library/tree/root/document/root%2Fwork",
+        )
+        val tracks = listOf(
+            TrackEntity(id = 11L, albumId = 7L, title = "在线轨道", path = "https://example.com/01.mp3")
+        )
+
+        assertFalse(
+            shouldRemoveMissingLocalAlbum(album, tracks) { LocalSourceAvailability.Missing }
+        )
+    }
+
+    @Test
+    fun isMissingLocalDocumentFailure_recognizesWrappedProviderFailure() {
+        assertTrue(
+            isMissingLocalDocumentFailure(
+                IllegalArgumentException(
+                    "Failed to determine child: java.io.FileNotFoundException: Missing file for root/work"
+                )
+            )
+        )
+        assertTrue(
+            isMissingLocalDocumentFailure(
+                IllegalStateException("provider failure", FileNotFoundException("deleted"))
+            )
+        )
+        assertFalse(isMissingLocalDocumentFailure(SecurityException("permission denied")))
+    }
+
     @Test
     fun albumDetailRequestKey_normalizesRjAndFallsBackToLocalId() {
         assertEquals("rj:RJ01554925", albumDetailRequestKey(42L, " rj01554925 "))

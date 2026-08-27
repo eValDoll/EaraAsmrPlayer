@@ -654,6 +654,7 @@ fun AlbumDetailScreen(
                         EaraLogoLoadingIndicator(tint = AsmrTheme.colorScheme.primary)
                     }
                 }
+                is AlbumDetailUiState.Removed -> Unit
                 is AlbumDetailUiState.Success -> {
                     LaunchedEffect(screenKey) {
                         if (viewModel.isInitialIntroSettled()) return@LaunchedEffect

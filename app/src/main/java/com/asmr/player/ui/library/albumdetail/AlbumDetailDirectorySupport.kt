@@ -1643,7 +1643,7 @@ internal fun buildLocalTreeIndexByScanning(
                 }
             }
             if (rootDocId.isNotBlank()) {
-                query(rootDocId, "")
+                runCatching { query(rootDocId, "") }
             }
         } else {
             val rootDir = java.io.File(albumPath)

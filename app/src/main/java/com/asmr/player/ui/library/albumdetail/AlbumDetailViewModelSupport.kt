@@ -112,6 +112,10 @@ internal fun centerCropSquare(src: Bitmap, size: Int): Bitmap {
 @Immutable
 sealed class AlbumDetailUiState {
     object Loading : AlbumDetailUiState()
+    data class Removed(
+        val albumId: Long,
+        val mediaIds: Set<String>,
+    ) : AlbumDetailUiState()
     data class Success(val model: AlbumDetailModel) : AlbumDetailUiState()
     data class Error(val message: String) : AlbumDetailUiState()
 }
