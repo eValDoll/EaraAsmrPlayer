@@ -297,7 +297,7 @@ internal fun ArtworkBox(
     videoBackdropColor: Color,
     artworkAlignment: Alignment = Alignment.Center,
     artworkContentScale: ContentScale = ContentScale.Crop,
-    artworkCornerRadius: Dp = 28.dp,
+    artworkCornerRadius: Dp = NowPlayingPortraitArtworkCornerRadius,
     artworkLoadAtOriginalSize: Boolean = false,
     dragPreviewEnabled: Boolean = false,
     dragPreviewState: CoverDragPreviewState? = null,

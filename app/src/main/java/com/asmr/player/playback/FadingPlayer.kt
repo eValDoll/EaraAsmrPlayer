@@ -17,6 +17,7 @@ class FadingPlayer(
 ) : ForwardingPlayer(delegate) {
 
     private var pendingSwitchFadeIn: Boolean = false
+    private var playbackRequestVersion: Long = 0L
     private var baseVolume: Float = 1f
     private var fadeVolume: Float = 1f
     @Volatile private var playFadeDurationMs: Long = playFadeMs.coerceAtLeast(0L)
@@ -47,6 +48,7 @@ class FadingPlayer(
 
     override fun play() {
         if (onPlayRequested?.invoke() == false) return
+        playbackRequestVersion++
         pendingSwitchFadeIn = false
         volumeFader.cancel()
         volume = 0f
@@ -62,13 +64,16 @@ class FadingPlayer(
     }
 
     override fun pause() {
+        val requestVersion = ++playbackRequestVersion
         pendingSwitchFadeIn = false
         if (!delegate.isPlaying) {
             delegate.pause()
             return
         }
         volumeFader.fadeTo(this, 0f, pauseFadeDurationMs) {
-            delegate.pause()
+            if (requestVersion == playbackRequestVersion) {
+                delegate.pause()
+            }
         }
     }
 

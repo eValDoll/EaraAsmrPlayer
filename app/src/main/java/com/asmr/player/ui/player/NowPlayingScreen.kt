@@ -143,6 +143,10 @@ private val NowPlayingHomeRegularMinCoverWidth = 240.dp
 private val NowPlayingHomeClassicRegularMaxCoverWidth = 360.dp
 private val NowPlayingPortraitIdentityMaxWidth = 320.dp
 private val NowPlayingPhoneLandscapeCompactHeight = 360.dp
+internal val NowPlayingPortraitArtworkCornerRadius = 16.dp
+internal val NowPlayingCompactLandscapeArtworkCornerRadius = 10.dp
+internal val NowPlayingPhoneLandscapeArtworkCornerRadius = 12.dp
+internal val NowPlayingTabletLandscapeArtworkCornerRadius = 14.dp
 private const val NowPlayingHomeClassicCompactCoverScale = 0.92f
 
 internal data class NowPlayingPortraitLayoutMetrics(
@@ -199,7 +203,7 @@ internal fun nowPlayingLandscapeLayoutMetrics(
             lyricsTopPadding = 76.dp,
             progressHeight = 64.dp,
             controlsHeight = 80.dp,
-            artworkCornerRadius = 18.dp,
+            artworkCornerRadius = NowPlayingTabletLandscapeArtworkCornerRadius,
             artworkMaxSize = 336.dp,
             progressMaxWidth = 380.dp,
             spectrumHeight = 112.dp
@@ -222,7 +226,7 @@ internal fun nowPlayingLandscapeLayoutMetrics(
             lyricsTopPadding = 48.dp,
             progressHeight = 60.dp,
             controlsHeight = 72.dp,
-            artworkCornerRadius = 14.dp,
+            artworkCornerRadius = NowPlayingCompactLandscapeArtworkCornerRadius,
             artworkMaxSize = 260.dp,
             progressMaxWidth = 300.dp,
             spectrumHeight = 88.dp
@@ -242,7 +246,7 @@ internal fun nowPlayingLandscapeLayoutMetrics(
             lyricsTopPadding = 56.dp,
             progressHeight = 62.dp,
             controlsHeight = 80.dp,
-            artworkCornerRadius = 16.dp,
+            artworkCornerRadius = NowPlayingPhoneLandscapeArtworkCornerRadius,
             artworkMaxSize = 292.dp,
             progressMaxWidth = 340.dp,
             spectrumHeight = 88.dp
@@ -2157,7 +2161,7 @@ internal fun NowPlayingScreen(
                 },
                 label = "nowPlayingHomeCoverCornerRadius"
             ) { expanded ->
-                if (expanded) 0.dp else 28.dp
+                if (expanded) 0.dp else NowPlayingPortraitArtworkCornerRadius
             }
             val homeLayoutSettled = homeLayoutTransition.currentState == homeLayoutTransition.targetState
             LaunchedEffect(expandedHomeLayout) {
