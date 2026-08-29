@@ -267,7 +267,10 @@ private const val SecondaryPageExitDurationMs = 420
 private const val SecondaryPageTouchBlockDurationMs = 320
 private const val AlbumDetailPresentedStateKey = "album_detail_presented"
 private const val PrimaryPagerSnapThreshold = 0.16f
+private const val PrimaryPageSwitchDurationMs = 320
+private const val PrimaryPageSwitchQuietTailMs = 120L
 private val SecondaryPageSlideEasing = CubicBezierEasing(0.215f, 0.61f, 0.355f, 1f)
+private val PrimaryPageSwitchEasing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f)
 private val PrimaryPageParallaxOffset = 120.dp
 private val AlbumDetailTopBarButtonShape = CircleShape
 private val AlbumDetailBackTouchPassThroughWidth = 88.dp
@@ -1152,10 +1155,16 @@ fun MainContainer(
         val requestId = primaryNavigationRequestId
         if (targetPage >= 0 && currentPrimaryRoute != null) {
             pendingPrimaryNavigationRoute = route
+            UiFrameWorkCoordinator.markFrameCritical(
+                PrimaryPageSwitchDurationMs + PrimaryPageSwitchQuietTailMs
+            )
             primaryNavigationJob = scope.launch {
                 var completed = false
                 try {
                     primaryPagerState.stopScroll(MutatePriority.PreventUserInput)
+                    // 相邻页已由 Pager 保留在屏外。先提交 active/data-active 状态，让它在
+                    // 可见动画前完成一次状态恢复，避免数据订阅与动画首帧争抢主线程。
+                    withFrameNanos { }
                     val currentPage = primaryPagerState.currentPage
                     resolvePrimaryPagerApproachPage(
                         currentPage = currentPage,
@@ -1163,7 +1172,16 @@ fun MainContainer(
                     )?.let { approachPage ->
                         primaryPagerState.scrollToPage(approachPage)
                     }
-                    primaryPagerState.animateScrollToPage(targetPage)
+                    UiFrameWorkCoordinator.markFrameCritical(
+                        PrimaryPageSwitchDurationMs + PrimaryPageSwitchQuietTailMs
+                    )
+                    primaryPagerState.animateScrollToPage(
+                        page = targetPage,
+                        animationSpec = tween(
+                            durationMillis = PrimaryPageSwitchDurationMs,
+                            easing = PrimaryPageSwitchEasing
+                        )
+                    )
                     if (currentPrimaryRouteState.value != route) {
                         navController.navigatePrimaryRoute(route)
                     }
@@ -2111,8 +2129,15 @@ fun MainContainer(
                                     val primaryRouteDataActiveState = rememberUpdatedState(
                                         primaryRouteDataActive
                                     )
-                                    primaryContentStateHolder.SaveableStateProvider("primary_route:$route") {
-                                        when (route) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            // 页面内容使用独立 RenderNode 保留 display list；Pager 滚动时
+                                            // 只更新图层位置，避免逐帧重录复杂列表和设置页的绘制命令。
+                                            .graphicsLayer { clip = false }
+                                    ) {
+                                        primaryContentStateHolder.SaveableStateProvider("primary_route:$route") {
+                                            when (route) {
                                         Routes.Library -> {
                                             LibraryScreen(
                                                 windowSizeClass = windowSizeClass,
@@ -2323,6 +2348,7 @@ fun MainContainer(
                                             )
                                         }
 
+                                        }
                                     }
                                 }
                             }

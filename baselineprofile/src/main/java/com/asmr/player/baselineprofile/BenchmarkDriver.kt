@@ -181,6 +181,17 @@ internal fun UiDevice.performPrimaryNavigationProfile() {
     waitForPrimaryNavigation()
 }
 
+internal fun UiDevice.performPrimaryNavigationClickProfile() {
+    repeat(3) {
+        navigateBottomBarToSlot(1)
+        waitForPrimaryNavigation()
+        navigateBottomBarToSlot(2)
+        waitForPrimaryNavigation()
+        navigateBottomBarToSlot(0)
+        waitForPrimaryNavigation()
+    }
+}
+
 internal fun UiDevice.performSecondaryNavigationTransitionsProfile() {
     openFirstLibraryAlbum()
     performLongListScrollProfile()
