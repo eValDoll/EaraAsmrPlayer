@@ -49,6 +49,22 @@ class LongListPerformanceBenchmark {
     }
 
     @Test
+    fun primaryNavigationClickTransitionsFrameTiming() {
+        benchmarkRule.measureRepeated(
+            packageName = PackageName,
+            metrics = listOf(FrameTimingGfxInfoMetric()),
+            compilationMode = CompilationMode.Partial(BaselineProfileMode.Require),
+            startupMode = null,
+            iterations = FrameTimingIterations,
+            setupBlock = {
+                startMainActivity()
+            }
+        ) {
+            device.performPrimaryNavigationClickProfile()
+        }
+    }
+
+    @Test
     fun secondaryNavigationTransitionsFrameTiming() {
         benchmarkRule.measureRepeated(
             packageName = PackageName,
