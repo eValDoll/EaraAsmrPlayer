@@ -233,8 +233,12 @@ internal fun PlaybackControls(
                         viewModel = viewModel,
                         isPlaying = isPlayingEffective,
                         onTogglePlay = {
-                            optimisticIsPlaying = !(optimisticIsPlaying ?: playback.playWhenReady)
-                            viewModel.togglePlayPause()
+                            val shouldPlay = nextPlaybackRequest(
+                                optimisticIsPlaying = optimisticIsPlaying,
+                                playWhenReady = playback.playWhenReady
+                            )
+                            optimisticIsPlaying = shouldPlay
+                            if (shouldPlay) viewModel.play() else viewModel.pause()
                         },
                         compactLayout = compactLayout,
                         coreButtonSize = coreButtonSize,
@@ -304,8 +308,12 @@ internal fun PlaybackControls(
                     viewModel = viewModel,
                     isPlaying = isPlayingEffective,
                     onTogglePlay = {
-                        optimisticIsPlaying = !(optimisticIsPlaying ?: playback.playWhenReady)
-                        viewModel.togglePlayPause()
+                        val shouldPlay = nextPlaybackRequest(
+                            optimisticIsPlaying = optimisticIsPlaying,
+                            playWhenReady = playback.playWhenReady
+                        )
+                        optimisticIsPlaying = shouldPlay
+                        if (shouldPlay) viewModel.play() else viewModel.pause()
                     },
                     compactLayout = compactLayout,
                     coreButtonSize = coreButtonSize,
@@ -425,6 +433,11 @@ private fun PlaybackActionButtons(
         }
     }
 }
+
+internal fun nextPlaybackRequest(
+    optimisticIsPlaying: Boolean?,
+    playWhenReady: Boolean
+): Boolean = !(optimisticIsPlaying ?: playWhenReady)
 
 @Composable
 private fun PlaybackCoreButtons(

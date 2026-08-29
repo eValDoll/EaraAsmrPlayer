@@ -313,8 +313,6 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    fun togglePlayPause() = playerConnection.togglePlayPause()
-
     fun setAppVolumePercent(percent: Int) {
         playerConnection.setAppVolumePercent(percent)
     }

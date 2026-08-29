@@ -576,11 +576,6 @@ class PlayerConnection @Inject constructor(
         controller?.pause()
     }
 
-    fun togglePlayPause() {
-        val c = controller ?: return
-        if (c.isPlaying) c.pause() else c.play()
-    }
-
     fun seekTo(positionMs: Long) {
         controller?.seekTo(positionMs.coerceAtLeast(0L))
     }

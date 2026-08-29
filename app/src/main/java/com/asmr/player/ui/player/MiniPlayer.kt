@@ -323,8 +323,12 @@ fun MiniPlayer(
                                 }
                                     IconButton(
                                         onClick = {
-                                            optimisticIsPlaying = !(optimisticIsPlaying ?: playWhenReady)
-                                            viewModel.togglePlayPause()
+                                            val shouldPlay = nextPlaybackRequest(
+                                                optimisticIsPlaying = optimisticIsPlaying,
+                                                playWhenReady = playWhenReady
+                                            )
+                                            optimisticIsPlaying = shouldPlay
+                                            if (shouldPlay) viewModel.play() else viewModel.pause()
                                         },
                                         modifier = Modifier.size(controlsButtonSize)
                                     ) {
