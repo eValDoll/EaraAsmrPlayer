@@ -100,6 +100,7 @@ import com.asmr.player.ui.common.AppVolumeWarningSessionState
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.ui.common.EqualizerPanel
+import com.asmr.player.ui.common.PlayerModalSheet
 import com.asmr.player.ui.common.rememberProtectedAppVolumeChangeState
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.smoothScrollToIndex
@@ -2551,19 +2552,11 @@ internal fun NowPlayingScreen(
         }
 
         if (showSliceSheet) {
-            val sheetMinHeight = (configuration.screenHeightDp.dp * 0.66f).coerceAtLeast(320.dp)
-            ModalBottomSheet(
-                onDismissRequest = dismissSliceSheet,
-                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-                containerColor = colorScheme.surface,
-                contentColor = colorScheme.onSurface,
-                windowInsets = WindowInsets(0, 0, 0, 0)
-            ) {
+            PlayerModalSheet(onDismissRequest = dismissSliceSheet) { sheetMaxHeight ->
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .heightIn(min = sheetMinHeight)
-                        .windowInsetsPadding(WindowInsets.navigationBars)
+                        .heightIn(max = sheetMaxHeight)
                         .padding(horizontal = 16.dp, vertical = 12.dp)
                 ) {
                     Row(
@@ -2750,18 +2743,12 @@ internal fun NowPlayingScreen(
                     equalizerVolumeOverlayBounds = null
                 }
             }
-            ModalBottomSheet(
-                onDismissRequest = { showEqualizer = false },
-                sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
-                containerColor = colorScheme.surface,
-                contentColor = colorScheme.onSurface,
-                windowInsets = WindowInsets(0, 0, 0, 0)
-            ) {
+            PlayerModalSheet(onDismissRequest = { showEqualizer = false }) { sheetMaxHeight ->
                 val scrollState = rememberScrollState()
                 Box(
                     modifier = Modifier
-                        .fillMaxHeight()
-                        .windowInsetsPadding(WindowInsets.navigationBars)
+                        .fillMaxWidth()
+                        .heightIn(max = sheetMaxHeight)
                         .focusRequester(equalizerFocusRequester)
                         .focusable()
                         .onPreviewKeyEvent { event ->

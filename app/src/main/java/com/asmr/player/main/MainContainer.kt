@@ -133,6 +133,7 @@ import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.FlatTextFieldDialog
 import com.asmr.player.ui.common.EdgeToEdgeFullHeightSheet
+import com.asmr.player.ui.common.PlayerModalSheet
 import com.asmr.player.ui.common.EaraTopBarContainer
 import com.asmr.player.ui.common.EaraMainTopBarHeight
 import com.asmr.player.ui.common.EaraTopBarIconButton
@@ -3092,17 +3093,8 @@ fun MainContainer(
                 )
                 nowPlayingPlaylistPickerRequest?.let { request ->
                     val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
-                    EdgeToEdgeFullHeightSheet(
-                        onDismissRequest = { nowPlayingPlaylistPickerRequest = null },
-                        containerColor = colorScheme.background.copy(alpha = 0.96f),
-                        contentColor = colorScheme.onBackground
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .windowInsetsPadding(StableWindowInsets.statusBars)
-                                .windowInsetsPadding(StableWindowInsets.navigationBars)
-                        ) {
+                    PlayerModalSheet(onDismissRequest = { nowPlayingPlaylistPickerRequest = null }) { sheetMaxHeight ->
+                        Box(modifier = Modifier.fillMaxWidth().heightIn(max = sheetMaxHeight)) {
                             PlaylistPickerScreen(
                                 windowSizeClass = windowSizeClass,
                                 items = request.items,

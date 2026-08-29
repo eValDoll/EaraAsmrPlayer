@@ -155,7 +155,7 @@ import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
 import com.asmr.player.data.settings.NowPlayingLyricsSettings
 import com.asmr.player.util.MessageManager
 import com.asmr.player.ui.common.NonTouchableAppMessageOverlay
-import com.asmr.player.ui.common.StableWindowInsets
+import com.asmr.player.ui.common.PlayerModalSheet
 import com.asmr.player.ui.common.VisibleAppMessage
 import com.asmr.player.ui.theme.HuePalette
 import com.asmr.player.ui.theme.PlayerTheme
@@ -612,52 +612,26 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                     
-                    val overlayConfiguration = LocalConfiguration.current
                     val activeOverlaySheet = overlaySheet
                     if (activeOverlaySheet != null) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(Color.Black.copy(alpha = 0.32f))
-                        )
-                        val sheetMaxHeight = overlayConfiguration.screenHeightDp.dp * 3 / 4
-                        key(
-                            activeOverlaySheet,
-                            overlayConfiguration.screenWidthDp,
-                            overlayConfiguration.screenHeightDp
-                        ) {
-                            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-                            ModalBottomSheet(
-                                onDismissRequest = { overlaySheet = null },
-                                sheetState = sheetState,
-                                containerColor = MaterialTheme.colorScheme.background,
-                                contentColor = MaterialTheme.colorScheme.onBackground,
-                                scrimColor = Color.Transparent,
-                                windowInsets = WindowInsets(0, 0, 0, 0)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(max = sheetMaxHeight)
-                                        .windowInsetsPadding(StableWindowInsets.navigationBars)
-                                ) {
-                                    when (activeOverlaySheet) {
-                                        OverlaySheet.Queue -> QueueSheetContent(
-                                            viewModel = playerViewModel,
-                                            onDismiss = { overlaySheet = null },
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .heightIn(max = sheetMaxHeight)
-                                        )
+                        key(activeOverlaySheet) {
+                            PlayerModalSheet(onDismissRequest = { overlaySheet = null }) { sheetMaxHeight ->
+                                when (activeOverlaySheet) {
+                                    OverlaySheet.Queue -> QueueSheetContent(
+                                        viewModel = playerViewModel,
+                                        onDismiss = { overlaySheet = null },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(max = sheetMaxHeight)
+                                    )
 
-                                        OverlaySheet.SleepTimer -> SleepTimerSheetContent(
-                                            viewModel = playerViewModel,
-                                            onDismiss = { overlaySheet = null },
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .heightIn(max = sheetMaxHeight)
-                                        )
-                                    }
+                                    OverlaySheet.SleepTimer -> SleepTimerSheetContent(
+                                        viewModel = playerViewModel,
+                                        onDismiss = { overlaySheet = null },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(max = sheetMaxHeight)
+                                    )
                                 }
                             }
                         }
