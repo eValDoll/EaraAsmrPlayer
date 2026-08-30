@@ -133,6 +133,7 @@ import com.asmr.player.ui.common.AudioItemSubtitleStampSpacing
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
+import com.asmr.player.ui.common.NoImageLoadingIndicator
 import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.ImagePreviewItem
@@ -3638,7 +3639,8 @@ internal fun DirectoryFileRow(
                             .size(42.dp)
                             .clip(RoundedCornerShape(8.dp)),
                         contentScale = ContentScale.Crop,
-                        placeholderCornerRadius = 8
+                        placeholderCornerRadius = 8,
+                        loading = NoImageLoadingIndicator
                     )
                 } else {
                     Box(
@@ -3976,6 +3978,7 @@ internal fun TreeFileRow(
                                 .clip(RoundedCornerShape(6.dp)),
                             contentScale = ContentScale.Crop,
                             placeholderCornerRadius = 6,
+                            loading = NoImageLoadingIndicator,
                         )
                     } else {
                         Icon(

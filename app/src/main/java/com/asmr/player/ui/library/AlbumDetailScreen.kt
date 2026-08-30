@@ -166,6 +166,7 @@ import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AsmrImageLoadingPlaceholder
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
+import com.asmr.player.ui.common.NoImageLoadingIndicator
 import com.asmr.player.ui.common.ImagePreviewDialog
 import com.asmr.player.ui.common.ImagePreviewRequest
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
@@ -2533,6 +2534,7 @@ private fun AlbumDetailSimilarWorkCard(
             contentScale = ContentScale.Crop,
             placeholderCornerRadius = 0,
             peekAnySizeForInitial = true,
+            loading = NoImageLoadingIndicator,
             modifier = Modifier
                 .size(76.dp)
                 .clip(RoundedCornerShape(topStart = 10.dp, bottomStart = 10.dp))
