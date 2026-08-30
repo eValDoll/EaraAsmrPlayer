@@ -754,6 +754,7 @@ private fun PrimaryBottomChrome(
     lockedRoute: String?,
     miniPlayerVisible: Boolean,
     miniPlayerDisplayMode: MiniPlayerDisplayMode,
+    miniPlayerPlayFeedbackSignal: Long,
     onMiniPlayerDisplayModeChange: (MiniPlayerDisplayMode) -> Unit,
     onOpenNowPlaying: () -> Unit,
     onOpenQueue: () -> Unit,
@@ -784,6 +785,7 @@ private fun PrimaryBottomChrome(
         selectionProgresses = selectionProgresses,
         miniPlayerVisible = miniPlayerVisible,
         miniPlayerDisplayMode = miniPlayerDisplayMode,
+        miniPlayerPlayFeedbackSignal = miniPlayerPlayFeedbackSignal,
         onMiniPlayerDisplayModeChange = onMiniPlayerDisplayModeChange,
         onOpenNowPlaying = onOpenNowPlaying,
         onOpenQueue = onOpenQueue,
@@ -889,6 +891,10 @@ fun MainContainer(
         initialValue = MiniPlayerDisplayMode.CoverOnly.name
     )
     var miniPlayerDisplayMode by rememberSaveable { mutableStateOf(MiniPlayerDisplayMode.CoverOnly) }
+    var miniPlayerPlayFeedbackSignal by remember { mutableLongStateOf(0L) }
+    fun requestMiniPlayerPlayFeedback() {
+        miniPlayerPlayFeedbackSignal += 1L
+    }
     val primaryPagerRoutes = remember(bottomNavItems) { bottomNavItems.map { it.route } }
     val primaryPagerBeyondBoundsPageCount = remember(primaryPagerRoutes) {
         resolvePrimaryPagerBeyondBoundsPageCount(primaryPagerRoutes.size)
@@ -2154,7 +2160,9 @@ fun MainContainer(
                                                 },
                                                 onPlayTracks = { album, tracks, startTrack ->
                                                     scope.launch {
-                                                        playerViewModel.playTracksPrepared(album, tracks, startTrack)
+                                                        if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
+                                                            requestMiniPlayerPlayFeedback()
+                                                        }
                                                     }
                                                 },
                                                 onOpenPlaylistPicker = { item ->
@@ -2265,7 +2273,11 @@ fun MainContainer(
                                                 scrollToTopSignal = favoritesScrollToTopSignal,
                                                 onPlayAll = { items, startItem ->
                                                     playerViewModel.playPlaylistItems(items, startItem)
-                                                    if (startItem.isVideoPlaybackItem()) openNowPlaying()
+                                                    if (startItem.isVideoPlaybackItem()) {
+                                                        openNowPlaying()
+                                                    } else {
+                                                        requestMiniPlayerPlayFeedback()
+                                                    }
                                                 },
                                                 viewModel = playlistsViewModel
                                             )
@@ -2566,12 +2578,19 @@ fun MainContainer(
                                 .toAlbumDetailInitialTab(),
                             onPlayTracks = { album, tracks, startTrack ->
                                 scope.launch {
-                                    playerViewModel.playTracksPrepared(album, tracks, startTrack)
+                                    if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
+                                        requestMiniPlayerPlayFeedback()
+                                    }
                                 }
                             },
                             onPlayMediaItems = { items, startIndex ->
                                 playerViewModel.playMediaItems(items, startIndex)
-                                if (items.getOrNull(startIndex).isVideoPlaybackItem()) openNowPlaying()
+                                val startItem = items.getOrNull(startIndex)
+                                if (startItem.isVideoPlaybackItem()) {
+                                    openNowPlaying()
+                                } else if (startItem != null) {
+                                    requestMiniPlayerPlayFeedback()
+                                }
                             },
                             onAddToQueue = { album, track ->
                                 playerViewModel.addTrackToQueue(album, track)
@@ -2649,12 +2668,19 @@ fun MainContainer(
                                 .toAlbumDetailInitialTab(),
                             onPlayTracks = { album, tracks, startTrack ->
                                 scope.launch {
-                                    playerViewModel.playTracksPrepared(album, tracks, startTrack)
+                                    if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
+                                        requestMiniPlayerPlayFeedback()
+                                    }
                                 }
                             },
                             onPlayMediaItems = { items, startIndex ->
                                 playerViewModel.playMediaItems(items, startIndex)
-                                if (items.getOrNull(startIndex).isVideoPlaybackItem()) openNowPlaying()
+                                val startItem = items.getOrNull(startIndex)
+                                if (startItem.isVideoPlaybackItem()) {
+                                    openNowPlaying()
+                                } else if (startItem != null) {
+                                    requestMiniPlayerPlayFeedback()
+                                }
                             },
                             onAddToQueue = { album, track ->
                                 playerViewModel.addTrackToQueue(album, track)
@@ -2720,12 +2746,19 @@ fun MainContainer(
                             rjCode = rj,
                             onPlayTracks = { album, tracks, startTrack ->
                                 scope.launch {
-                                    playerViewModel.playTracksPrepared(album, tracks, startTrack)
+                                    if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {
+                                        requestMiniPlayerPlayFeedback()
+                                    }
                                 }
                             },
                             onPlayMediaItems = { items, startIndex ->
                                 playerViewModel.playMediaItems(items, startIndex)
-                                if (items.getOrNull(startIndex).isVideoPlaybackItem()) openNowPlaying()
+                                val startItem = items.getOrNull(startIndex)
+                                if (startItem.isVideoPlaybackItem()) {
+                                    openNowPlaying()
+                                } else if (startItem != null) {
+                                    requestMiniPlayerPlayFeedback()
+                                }
                             },
                             onAddToQueue = { album, track ->
                                 playerViewModel.addTrackToQueue(album, track)
@@ -2795,7 +2828,12 @@ fun MainContainer(
                             title = groupName,
                             onPlayMediaItems = { items, startIndex ->
                                 playerViewModel.playMediaItems(items, startIndex)
-                                if (items.getOrNull(startIndex).isVideoPlaybackItem()) openNowPlaying()
+                                val startItem = items.getOrNull(startIndex)
+                                if (startItem.isVideoPlaybackItem()) {
+                                    openNowPlaying()
+                                } else if (startItem != null) {
+                                    requestMiniPlayerPlayFeedback()
+                                }
                             }
                         )
                     }
@@ -2833,7 +2871,11 @@ fun MainContainer(
                             title = playlistName,
                             onPlayAll = { items, startItem ->
                                 playerViewModel.playPlaylistItems(items, startItem)
-                                if (startItem.isVideoPlaybackItem()) openNowPlaying()
+                                if (startItem.isVideoPlaybackItem()) {
+                                    openNowPlaying()
+                                } else {
+                                    requestMiniPlayerPlayFeedback()
+                                }
                             }
                         )
                     }
@@ -2849,7 +2891,11 @@ fun MainContainer(
                                 windowSizeClass = windowSizeClass,
                                 onPlayAll = { items, startItem ->
                                     playerViewModel.playPlaylistItems(items, startItem)
-                                    if (startItem.isVideoPlaybackItem()) openNowPlaying()
+                                    if (startItem.isVideoPlaybackItem()) {
+                                        openNowPlaying()
+                                    } else {
+                                        requestMiniPlayerPlayFeedback()
+                                    }
                                 },
                                 viewModel = playlistsViewModel
                             )
@@ -2983,6 +3029,7 @@ fun MainContainer(
                         lockedRoute = pendingPrimaryNavigationRoute,
                         miniPlayerVisible = miniPlayerVisible,
                         miniPlayerDisplayMode = miniPlayerDisplayMode,
+                        miniPlayerPlayFeedbackSignal = miniPlayerPlayFeedbackSignal,
                         largeLayout = useLargeBottomChrome,
                         navItems = bottomNavItems,
                         onMiniPlayerDisplayModeChange = { nextMode ->
