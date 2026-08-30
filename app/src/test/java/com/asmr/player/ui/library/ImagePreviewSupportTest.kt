@@ -64,16 +64,15 @@ class ImagePreviewSupportTest {
         )
 
         val result = buildGalleryImagePreviewRequest(
-            galleryUrls = urls,
-            clickedUrl = "https://img.example/2.jpg",
-            toPreviewItem = { url ->
+            galleryItems = urls.map { url ->
                 ImagePreviewItem(
                     key = url,
                     title = url.substringAfterLast('/'),
                     imageModel = url,
                     openPathOrUrl = url
                 )
-            }
+            },
+            clickedKey = "https://img.example/2.jpg"
         )
 
         requireNotNull(result)

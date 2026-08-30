@@ -73,6 +73,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
@@ -154,22 +155,106 @@ private val DlsiteGalleryThumbGap = 10.dp
 private val DlsiteGallerySectionHeight = 120.dp
 private const val DlsiteGalleryThumbCornerRadius = 12
 
+private enum class DlsiteGalleryImageSource {
+    Dlsite,
+    Directory
+}
+
+private data class DlsiteGalleryImage(
+    val key: String,
+    val title: String,
+    val url: String,
+    val source: DlsiteGalleryImageSource
+) {
+    fun imageModel(): Any {
+        if (source == DlsiteGalleryImageSource.Directory) return url
+        val headers = DlsiteAntiHotlink.headersForImageUrl(url)
+        return if (headers.isEmpty()) url else CacheImageModel(data = url, headers = headers, keyTag = "dlsite")
+    }
+
+    fun toPreviewItem(): ImagePreviewItem {
+        return ImagePreviewItem(
+            key = key,
+            title = title,
+            imageModel = imageModel(),
+            openPathOrUrl = url
+        )
+    }
+}
+
+private data class DlsiteInfoRemoteTreeData(
+    val index: RemoteTreeIndex,
+    val imageFiles: List<DirectoryFileItem>
+)
+
+private fun buildDlsiteGalleryImages(
+    galleryUrls: List<String>,
+    directoryImages: List<DirectoryFileItem>
+): List<DlsiteGalleryImage> {
+    val seenUrls = hashSetOf<String>()
+    return buildList {
+        galleryUrls.forEach { rawUrl ->
+            val url = rawUrl.trim()
+            if (url.isBlank() || !seenUrls.add(url)) return@forEach
+            add(
+                DlsiteGalleryImage(
+                    key = "dlsite:$url",
+                    title = url.substringBefore('?').substringAfterLast('/').ifBlank { "Gallery" },
+                    url = url,
+                    source = DlsiteGalleryImageSource.Dlsite
+                )
+            )
+        }
+        directoryImages.forEach { file ->
+            val url = file.url.trim()
+            if (url.isBlank() || !seenUrls.add(url)) return@forEach
+            add(
+                DlsiteGalleryImage(
+                    key = "directory:${file.path}",
+                    title = file.title.ifBlank { file.path.substringAfterLast('/') },
+                    url = url,
+                    source = DlsiteGalleryImageSource.Directory
+                )
+            )
+        }
+    }
+}
+
 @Composable
-private fun DlsiteGalleryLoadingRow() {
-    val placeholders = remember { listOf(0, 1, 2, 3) }
-    LazyRow(
+private fun DlsiteGalleryAwaitingPreview(
+    galleryCount: Int?
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .height(DlsiteGallerySectionHeight)
-            .padding(horizontal = AlbumDetailHorizontalPadding),
-        horizontalArrangement = Arrangement.spacedBy(DlsiteGalleryThumbGap),
-        contentPadding = PaddingValues(vertical = 10.dp)
+            .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 10.dp),
+        shape = RoundedCornerShape(DlsiteGalleryThumbCornerRadius.dp),
+        color = colorScheme.surfaceVariant.copy(alpha = if (colorScheme.isDark) 0.24f else 0.48f),
+        border = BorderStroke(1.dp, colorScheme.primary.copy(alpha = 0.24f))
     ) {
-        items(placeholders, key = { it }, contentType = { "galleryLoadingThumb" }) {
-            AsmrShimmerPlaceholder(
-                modifier = Modifier.size(width = DlsiteGalleryThumbWidth, height = DlsiteGalleryThumbHeight),
-                cornerRadius = DlsiteGalleryThumbCornerRadius,
-                animateHighlight = false,
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 20.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = "样图未加载",
+                style = MaterialTheme.typography.titleSmall,
+                color = colorScheme.textPrimary,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = galleryCount
+                    ?.let { count -> "共 $count 张 · 点击右上角“预览”后加载到本地" }
+                    ?: "获取到样图链接后，可点击右上角“预览”加载",
+                modifier = Modifier.padding(top = 6.dp),
+                style = MaterialTheme.typography.bodySmall,
+                color = colorScheme.textSecondary,
+                textAlign = TextAlign.Center
             )
         }
     }
@@ -1059,6 +1144,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         contentColor = colorScheme.textPrimary,
         disabledContentColor = colorScheme.textTertiary.copy(alpha = 0.7f)
     )
+    var isGalleryPreviewRequested by rememberSaveable(treeStateKey) { mutableStateOf(false) }
     var currentPath by rememberSaveable(treeStateKey) { mutableStateOf(initialCurrentPath.trim().trim('/')) }
     val asmrLeafTracks by produceState(initialValue = emptyList<AsmrOneLeafUi>(), key1 = asmrOneTree) {
         value = withContext(Dispatchers.Default) { flattenAsmrOneTracksForUi(asmrOneTree) }
@@ -1066,15 +1152,22 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     val asmrLeafByRelPath by produceState(initialValue = emptyMap<String, AsmrOneLeafUi>(), key1 = asmrLeafTracks) {
         value = withContext(Dispatchers.Default) { asmrLeafTracks.associateBy { it.relativePath } }
     }
-    val remoteIndex by produceState<RemoteTreeIndex?>(
+    val remoteTreeData by produceState<DlsiteInfoRemoteTreeData?>(
         initialValue = null,
         asmrOneTree,
         album.id,
         album.coverPath,
         album.coverUrl,
     ) {
-        value = withContext(Dispatchers.Default) { buildRemoteTreeIndex(asmrOneTree, album) }
+        value = withContext(Dispatchers.Default) {
+            val index = buildRemoteTreeIndex(asmrOneTree, album)
+            DlsiteInfoRemoteTreeData(
+                index = index,
+                imageFiles = collectRemoteTreeImageFiles(index)
+            )
+        }
     }
+    val remoteIndex = remoteTreeData?.index
     val browser by produceState<DirectoryBrowserResult?>(initialValue = null, key1 = remoteIndex, key2 = currentPath) {
         value = remoteIndex?.let { index ->
             withContext(Dispatchers.Default) { buildRemoteDirectoryBrowser(index, currentPath) }
@@ -1103,10 +1196,13 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         hasAsmrOneTree = asmrOneTree.isNotEmpty(),
         hasDirectoryBrowser = browser != null
     )
-    val galleryPanelTarget: DlsiteContentPanel<List<String>> = when {
-        galleryUrls.isEmpty() && isInitialDlsiteLoading -> DlsiteContentPanel(DlsiteContentKind.Loading)
-        galleryUrls.isEmpty() -> DlsiteContentPanel(DlsiteContentKind.Empty)
-        else -> DlsiteContentPanel(DlsiteContentKind.Content, galleryUrls)
+    val galleryImages = remember(galleryUrls, remoteTreeData) {
+        buildDlsiteGalleryImages(galleryUrls, remoteTreeData?.imageFiles.orEmpty())
+    }
+    val galleryPanelTarget: DlsiteContentPanel<List<DlsiteGalleryImage>> = when {
+        galleryImages.isNotEmpty() -> DlsiteContentPanel(DlsiteContentKind.Content, galleryImages)
+        isInitialDlsiteLoading || isAsmrOnePending -> DlsiteContentPanel(DlsiteContentKind.Loading)
+        else -> DlsiteContentPanel(DlsiteContentKind.Empty)
     }
     val galleryFadeState = rememberDlsiteContentFadeState(galleryPanelTarget, treeStateKey)
     val trialPanelTarget: DlsiteContentPanel<List<Track>> = when {
@@ -1296,7 +1392,30 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
             Column(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
                 AlbumDetailSectionHeading(
                     title = "Gallery",
-                    modifier = Modifier.padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp)
+                    modifier = Modifier.padding(horizontal = AlbumDetailHorizontalPadding, vertical = 8.dp),
+                    actions = {
+                        OutlinedButton(
+                            onClick = { isGalleryPreviewRequested = true },
+                            enabled = galleryFadeState.panel.kind == DlsiteContentKind.Content &&
+                                galleryFadeState.panel.value.orEmpty().isNotEmpty() &&
+                                !isGalleryPreviewRequested,
+                            colors = ButtonDefaults.outlinedButtonColors(
+                                contentColor = colorScheme.primary,
+                                disabledContentColor = colorScheme.textTertiary.copy(alpha = 0.72f)
+                            ),
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = if (galleryFadeState.panel.kind == DlsiteContentKind.Content && !isGalleryPreviewRequested) {
+                                    colorScheme.primary.copy(alpha = 0.52f)
+                                } else {
+                                    colorScheme.textTertiary.copy(alpha = 0.22f)
+                                }
+                            ),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                        ) {
+                            Text("预览")
+                        }
+                    }
                 )
                 Box(
                     modifier = Modifier
@@ -1306,7 +1425,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                     contentAlignment = Alignment.Center
                 ) {
                     when (galleryFadeState.panel.kind) {
-                        DlsiteContentKind.Loading -> DlsiteGalleryLoadingRow()
+                        DlsiteContentKind.Loading -> DlsiteGalleryAwaitingPreview(galleryCount = null)
                         DlsiteContentKind.Empty -> {
                             DlsiteSectionEmptyState(
                                 text = "暂无样图",
@@ -1315,49 +1434,38 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                             )
                         }
                         DlsiteContentKind.Content -> {
-                            val displayedGalleryUrls = galleryFadeState.panel.value.orEmpty()
-                            LazyRow(
-                                modifier = Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding),
-                                horizontalArrangement = Arrangement.spacedBy(DlsiteGalleryThumbGap),
-                                contentPadding = PaddingValues(vertical = 10.dp)
-                            ) {
-                                items(items = displayedGalleryUrls, key = { it }, contentType = { "galleryThumb" }) { url ->
-                                    val model = remember(url) {
-                                        val headers = DlsiteAntiHotlink.headersForImageUrl(url)
-                                        if (headers.isEmpty()) url else CacheImageModel(data = url, headers = headers, keyTag = "dlsite")
-                                    }
-                                    Card(
-                                        modifier = Modifier.size(width = DlsiteGalleryThumbWidth, height = DlsiteGalleryThumbHeight).clickable {
-                                            buildGalleryImagePreviewRequest(
-                                                galleryUrls = displayedGalleryUrls,
-                                                clickedUrl = url,
-                                                toPreviewItem = { galleryUrl ->
-                                                    val headers = DlsiteAntiHotlink.headersForImageUrl(galleryUrl)
-                                                    val previewModel: Any = if (headers.isEmpty()) {
-                                                        galleryUrl
-                                                    } else {
-                                                        CacheImageModel(data = galleryUrl, headers = headers, keyTag = "dlsite")
-                                                    }
-                                                    ImagePreviewItem(
-                                                        key = galleryUrl,
-                                                        title = galleryUrl.substringBefore('?').substringAfterLast('/').ifBlank { "Gallery" },
-                                                        imageModel = previewModel,
-                                                        openPathOrUrl = galleryUrl
-                                                    )
-                                                }
-                                            )?.let(onPreviewImages)
-                                        },
-                                        shape = RoundedCornerShape(10.dp),
-                                        colors = CardDefaults.cardColors(containerColor = Color.Transparent)
-                                    ) {
-                                        AsmrAsyncImage(
-                                            model = model,
-                                            contentDescription = null,
-                                            contentScale = ContentScale.Crop,
-                                            placeholderCornerRadius = DlsiteGalleryThumbCornerRadius,
-                                            loading = NoImageLoadingIndicator,
-                                            modifier = Modifier.fillMaxSize()
-                                        )
+                            val displayedGalleryImages = galleryFadeState.panel.value.orEmpty()
+                            if (!isGalleryPreviewRequested) {
+                                DlsiteGalleryAwaitingPreview(galleryCount = displayedGalleryImages.size)
+                            } else {
+                                val galleryPreviewItems = remember(displayedGalleryImages) {
+                                    displayedGalleryImages.map(DlsiteGalleryImage::toPreviewItem)
+                                }
+                                LazyRow(
+                                    modifier = Modifier.fillMaxWidth().padding(horizontal = AlbumDetailHorizontalPadding),
+                                    horizontalArrangement = Arrangement.spacedBy(DlsiteGalleryThumbGap),
+                                    contentPadding = PaddingValues(vertical = 10.dp)
+                                ) {
+                                    items(items = galleryPreviewItems, key = { it.key }, contentType = { "galleryThumb" }) { image ->
+                                        Card(
+                                            modifier = Modifier.size(width = DlsiteGalleryThumbWidth, height = DlsiteGalleryThumbHeight).clickable {
+                                                buildGalleryImagePreviewRequest(
+                                                    galleryItems = galleryPreviewItems,
+                                                    clickedKey = image.key
+                                                )?.let(onPreviewImages)
+                                            },
+                                            shape = RoundedCornerShape(10.dp),
+                                            colors = CardDefaults.cardColors(containerColor = Color.Transparent)
+                                        ) {
+                                            AsmrAsyncImage(
+                                                model = image.imageModel,
+                                                contentDescription = null,
+                                                contentScale = ContentScale.Crop,
+                                                placeholderCornerRadius = DlsiteGalleryThumbCornerRadius,
+                                                loading = NoImageLoadingIndicator,
+                                                modifier = Modifier.fillMaxSize()
+                                            )
+                                        }
                                     }
                                 }
                             }

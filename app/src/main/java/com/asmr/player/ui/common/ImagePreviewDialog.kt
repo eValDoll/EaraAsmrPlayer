@@ -1,47 +1,55 @@
 package com.asmr.player.ui.common
 
+import android.Manifest
+import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.Intent
-import android.net.Uri
-import android.webkit.MimeTypeMap
+import android.content.pm.PackageManager
+import android.graphics.drawable.ColorDrawable
+import android.os.Build
+import android.view.Window
+import android.view.WindowManager
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.ChevronLeft
 import androidx.compose.material.icons.rounded.ChevronRight
+import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ImageNotSupported
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material.icons.rounded.SaveAlt
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -54,41 +62,58 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import androidx.core.content.FileProvider
+import androidx.compose.ui.window.DialogWindowProvider
+import androidx.core.content.ContextCompat
+import androidx.core.view.WindowCompat
+import com.asmr.player.AsmrApp
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.util.MessageManager
-import java.io.File
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 internal const val IMAGE_PREVIEW_DIALOG_TAG = "image_preview_dialog"
 internal const val IMAGE_PREVIEW_CLOSE_TAG = "image_preview_close"
-internal const val IMAGE_PREVIEW_OUTSIDE_TAG = "image_preview_outside"
 internal const val IMAGE_PREVIEW_PAGER_TAG = "image_preview_pager"
 internal const val IMAGE_PREVIEW_COUNT_TAG = "image_preview_count"
 internal const val IMAGE_PREVIEW_PREV_TAG = "image_preview_prev"
 internal const val IMAGE_PREVIEW_NEXT_TAG = "image_preview_next"
 internal const val IMAGE_PREVIEW_OPEN_EXTERNAL_TAG = "image_preview_open_external"
+internal const val IMAGE_PREVIEW_SAVE_TO_GALLERY_TAG = "image_preview_save_to_gallery"
+internal val ImagePreviewOverlayColor = Color(0xFF202124)
 
 internal data class ImagePreviewLayoutSpec(
-    val widthFraction: Float = 0.92f,
-    val maxWidthDp: Int = 760,
-    val heightFraction: Float = 0.66f,
-    val minHeightDp: Int = 260,
-    val maxHeightDp: Int = 680,
     val imageViewportPaddingDp: Int = 6,
     val toolbarVerticalPaddingDp: Int = 8,
     val footerVerticalPaddingDp: Int = 8
 )
 
 internal val DefaultImagePreviewLayoutSpec = ImagePreviewLayoutSpec()
+
+@Suppress("DEPRECATION")
+private fun Window.applyImagePreviewSystemBarStyle() {
+    val overlayColor = ImagePreviewOverlayColor.toArgb()
+    setLayout(WindowManager.LayoutParams.MATCH_PARENT, WindowManager.LayoutParams.MATCH_PARENT)
+    setBackgroundDrawable(ColorDrawable(overlayColor))
+    decorView.setBackgroundColor(overlayColor)
+    statusBarColor = overlayColor
+    navigationBarColor = overlayColor
+    WindowCompat.setDecorFitsSystemWindows(this, false)
+    WindowCompat.getInsetsController(this, decorView).apply {
+        isAppearanceLightStatusBars = false
+        isAppearanceLightNavigationBars = false
+    }
+}
 
 internal data class ImagePreviewItem(
     val key: String,
@@ -134,56 +159,134 @@ internal fun ImagePreviewDialog(
     val normalizedRequest = remember(request) { request.normalized() } ?: return
     val items = normalizedRequest.items
     val context = LocalContext.current
-    val colorScheme = AsmrTheme.colorScheme
     val layoutSpec = DefaultImagePreviewLayoutSpec
     val scope = rememberCoroutineScope()
+    val actionColors = IconButtonDefaults.iconButtonColors(
+        containerColor = Color.White.copy(alpha = 0.10f),
+        contentColor = Color.White,
+        disabledContainerColor = Color.White.copy(alpha = 0.05f),
+        disabledContentColor = Color.White.copy(alpha = 0.38f)
+    )
     val pagerState = rememberPagerState(
         initialPage = normalizedRequest.initialIndex,
         pageCount = { items.size }
     )
     val pageTransforms = remember(items) { mutableStateMapOf<String, ImagePreviewTransformState>() }
     val resolvedItems = remember(items) { mutableStateMapOf<String, ImagePreviewPreparedItem>() }
+    var openingExternalImageKey by remember { mutableStateOf<String?>(null) }
+    var savingImageKey by remember { mutableStateOf<String?>(null) }
+    var savedImageKey by remember { mutableStateOf<String?>(null) }
+    var pendingSavePermissionRequest by remember { mutableStateOf<PreviewImageSaveRequest?>(null) }
     val currentItem = items.getOrElse(pagerState.currentPage) { items.first() }
+    val currentPreparedItem = resolvedItems[currentItem.key]
     val currentTransform = pageTransforms.getOrPut(currentItem.key) { ImagePreviewTransformState() }
     val canNavigate = items.size > 1
     val allowPaging = currentTransform.isAtRest
+    val isCurrentImagePreparing = currentPreparedItem == null &&
+        currentItem.imageModel == null &&
+        currentItem.prepareImage != null
+
+    fun currentImageRequest(): PreviewImageSaveRequest {
+        val prepared = resolvedItems[currentItem.key]
+        return PreviewImageSaveRequest(
+            key = currentItem.key,
+            title = currentItem.title,
+            imageModel = prepared?.imageModel ?: currentItem.imageModel,
+            openPathOrUrl = prepared?.openPathOrUrl ?: currentItem.openPathOrUrl
+        )
+    }
+
+    fun saveImage(request: PreviewImageSaveRequest) {
+        if (savingImageKey != null) return
+        savingImageKey = request.key
+        scope.launch {
+            try {
+                val app = context.applicationContext as? AsmrApp
+                    ?: error("Image client is unavailable")
+                savePreviewImageToGallery(
+                    context = context.applicationContext,
+                    request = request,
+                    httpClient = app.imageOkHttpClient
+                )
+                savingImageKey = null
+                savedImageKey = request.key
+                messageManager.showSuccess("已保存到相册")
+                delay(1_500)
+                if (savedImageKey == request.key) savedImageKey = null
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: Exception) {
+                messageManager.showError("保存到相册失败")
+            } finally {
+                savingImageKey = null
+            }
+        }
+    }
+
+    val savePermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val pendingRequest = pendingSavePermissionRequest
+        pendingSavePermissionRequest = null
+        if (granted && pendingRequest != null) {
+            saveImage(pendingRequest)
+        } else if (!granted) {
+            messageManager.showWarning("需要存储权限才能保存到相册")
+        }
+    }
+
+    fun saveCurrentToGallery() {
+        val saveRequest = currentImageRequest()
+        val needsLegacyPermission = Build.VERSION.SDK_INT <= Build.VERSION_CODES.P &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.WRITE_EXTERNAL_STORAGE
+            ) != PackageManager.PERMISSION_GRANTED
+        if (needsLegacyPermission) {
+            pendingSavePermissionRequest = saveRequest
+            savePermissionLauncher.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+        } else {
+            saveImage(saveRequest)
+        }
+    }
 
     fun openCurrentWithOtherApp() {
-        val path = (resolvedItems[currentItem.key]?.openPathOrUrl ?: currentItem.openPathOrUrl).trim()
-        if (path.isBlank()) {
+        if (openingExternalImageKey != null) return
+        val openRequest = currentImageRequest()
+        if (resolvePreviewImageSaveSource(openRequest).location.isBlank()) {
             messageManager.showError("无法打开：路径为空")
             return
         }
 
-        runCatching {
-            val uri = when {
-                path.startsWith("content://", ignoreCase = true) -> Uri.parse(path)
-                path.startsWith("http://", ignoreCase = true) || path.startsWith("https://", ignoreCase = true) -> Uri.parse(path)
-                else -> {
-                    val file = File(path)
-                    if (!file.exists()) throw java.io.FileNotFoundException(path)
-                    FileProvider.getUriForFile(
-                        context,
-                        "${context.packageName}.fileprovider",
-                        file
-                    )
+        openingExternalImageKey = openRequest.key
+        scope.launch {
+            try {
+                val app = context.applicationContext as? AsmrApp
+                    ?: error("Image client is unavailable")
+                val prepared = preparePreviewImageForExternalOpen(
+                    context = context.applicationContext,
+                    request = openRequest,
+                    httpClient = app.imageOkHttpClient
+                )
+                val viewIntent = Intent(Intent.ACTION_VIEW).apply {
+                    setDataAndType(prepared.uri, prepared.mimeType)
+                    clipData = ClipData.newRawUri("image", prepared.uri)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-            }
-            val mimeType = runCatching { context.contentResolver.getType(uri) }.getOrNull()
-                ?: path.substringAfterLast('.', "").lowercase().takeIf { it.isNotBlank() }?.let { ext ->
-                    MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext)
+                val chooser = Intent.createChooser(viewIntent, "打开图片").apply {
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
                 }
-                ?: "image/*"
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, mimeType)
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            context.startActivity(Intent.createChooser(intent, "打开图片"))
-        }.onFailure { throwable ->
-            when (throwable) {
-                is android.content.ActivityNotFoundException -> messageManager.showInfo("未找到可打开的应用")
-                is java.io.FileNotFoundException -> messageManager.showError("文件不存在")
-                else -> messageManager.showError("无法打开该图片")
+                context.startActivity(chooser)
+            } catch (cancellation: CancellationException) {
+                throw cancellation
+            } catch (_: ActivityNotFoundException) {
+                messageManager.showInfo("未找到可打开的应用")
+            } catch (_: java.io.FileNotFoundException) {
+                messageManager.showError("文件不存在")
+            } catch (_: Exception) {
+                messageManager.showError("无法打开该图片")
+            } finally {
+                openingExternalImageKey = null
             }
         }
     }
@@ -199,144 +302,165 @@ internal fun ImagePreviewDialog(
 
     Dialog(
         onDismissRequest = onDismiss,
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            decorFitsSystemWindows = false
+        )
     ) {
+        val dialogView = LocalView.current
+        DisposableEffect(dialogView) {
+            (dialogView.parent as? DialogWindowProvider)?.window?.applyImagePreviewSystemBarStyle()
+            onDispose {}
+        }
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .testTag(IMAGE_PREVIEW_OUTSIDE_TAG)
-                .background(Color.Black.copy(alpha = 0.74f))
-                .clickable(onClick = onDismiss),
-            contentAlignment = Alignment.Center
+                .background(ImagePreviewOverlayColor)
+                .testTag(IMAGE_PREVIEW_DIALOG_TAG)
         ) {
-            Card(
+            Column(
                 modifier = Modifier
-                    .fillMaxWidth(layoutSpec.widthFraction)
-                    .widthIn(max = layoutSpec.maxWidthDp.dp)
-                    .fillMaxHeight(layoutSpec.heightFraction)
-                    .heightIn(min = layoutSpec.minHeightDp.dp, max = layoutSpec.maxHeightDp.dp)
-                    .testTag(IMAGE_PREVIEW_DIALOG_TAG),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = colorScheme.surface)
+                    .fillMaxSize()
+                    .windowInsetsPadding(WindowInsets.safeDrawing)
             ) {
-                Column(
+                Row(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() },
-                            onClick = {}
-                        )
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = layoutSpec.toolbarVerticalPaddingDp.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = layoutSpec.toolbarVerticalPaddingDp.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Text(
+                        text = currentItem.title.ifBlank { currentItem.openPathOrUrl.substringAfterLast('/').substringAfterLast('\\') },
+                        modifier = Modifier.weight(1f),
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    IconButton(
+                        onClick = ::openCurrentWithOtherApp,
+                        enabled = openingExternalImageKey == null &&
+                            savingImageKey == null &&
+                            !isCurrentImagePreparing,
+                        colors = actionColors,
+                        modifier = Modifier.testTag(IMAGE_PREVIEW_OPEN_EXTERNAL_TAG)
                     ) {
-                        Text(
-                            text = currentItem.title.ifBlank { currentItem.openPathOrUrl.substringAfterLast('/').substringAfterLast('\\') },
-                            modifier = Modifier.weight(1f),
-                            style = MaterialTheme.typography.titleMedium,
-                            color = colorScheme.textPrimary,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                        IconButton(
-                            onClick = ::openCurrentWithOtherApp,
-                            modifier = Modifier.testTag(IMAGE_PREVIEW_OPEN_EXTERNAL_TAG)
-                        ) {
-                            Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = "打开")
-                        }
-                        IconButton(
-                            onClick = onDismiss,
-                            modifier = Modifier.testTag(IMAGE_PREVIEW_CLOSE_TAG)
-                        ) {
-                            Icon(Icons.Rounded.Close, contentDescription = "关闭")
+                        if (openingExternalImageKey != null) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            Icon(Icons.AutoMirrored.Rounded.OpenInNew, contentDescription = "使用其他应用打开")
                         }
                     }
+                    IconButton(
+                        onClick = ::saveCurrentToGallery,
+                        enabled = savingImageKey == null &&
+                            openingExternalImageKey == null &&
+                            savedImageKey != currentItem.key &&
+                            !isCurrentImagePreparing,
+                        colors = actionColors,
+                        modifier = Modifier.testTag(IMAGE_PREVIEW_SAVE_TO_GALLERY_TAG)
+                    ) {
+                        if (savingImageKey != null) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                        } else if (savedImageKey == currentItem.key) {
+                            Icon(Icons.Rounded.Check, contentDescription = "已保存到相册")
+                        } else {
+                            Icon(Icons.Rounded.SaveAlt, contentDescription = "保存到相册")
+                        }
+                    }
+                    IconButton(
+                        onClick = onDismiss,
+                        colors = actionColors,
+                        modifier = Modifier.testTag(IMAGE_PREVIEW_CLOSE_TAG)
+                    ) {
+                        Icon(Icons.Rounded.Close, contentDescription = "关闭")
+                    }
+                }
 
-                    HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-
-                    Box(
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .clipToBounds(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    HorizontalPager(
+                        state = pagerState,
                         modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth()
+                            .fillMaxSize()
                             .clipToBounds()
-                            .background(Color(0xFF13161A)),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        HorizontalPager(
-                            state = pagerState,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clipToBounds()
-                                .testTag(IMAGE_PREVIEW_PAGER_TAG),
-                            beyondViewportPageCount = 0,
-                            userScrollEnabled = canNavigate && allowPaging,
-                            key = { index -> items[index].key }
-                        ) { page ->
-                            val item = items[page]
-                            val transformState = pageTransforms.getOrPut(item.key) { ImagePreviewTransformState() }
-                            ImagePreviewPageHost(
-                                item = item,
-                                cachedPrepared = resolvedItems[item.key],
-                                onPrepared = { prepared -> resolvedItems[item.key] = prepared },
-                                state = transformState,
-                                onStateChange = { pageTransforms[item.key] = it },
-                                pageContent = pageContent
-                            )
-                        }
-
-                        if (canNavigate && allowPaging) {
-                            PreviewNavButton(
-                                modifier = Modifier
-                                    .align(Alignment.CenterStart)
-                                    .padding(start = 12.dp)
-                                    .testTag(IMAGE_PREVIEW_PREV_TAG),
-                                onClick = {
-                                    if (pagerState.currentPage > 0) {
-                                        pageTransforms[currentItem.key] = ImagePreviewTransformState()
-                                        scope.launch {
-                                            pagerState.animateScrollToPage(pagerState.currentPage - 1)
-                                        }
-                                    }
-                                },
-                                icon = Icons.Rounded.ChevronLeft,
-                                enabled = pagerState.currentPage > 0
-                            )
-                            PreviewNavButton(
-                                modifier = Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .padding(end = 12.dp)
-                                    .testTag(IMAGE_PREVIEW_NEXT_TAG),
-                                onClick = {
-                                    if (pagerState.currentPage < items.lastIndex) {
-                                        pageTransforms[currentItem.key] = ImagePreviewTransformState()
-                                        scope.launch {
-                                            pagerState.animateScrollToPage(pagerState.currentPage + 1)
-                                        }
-                                    }
-                                },
-                                icon = Icons.Rounded.ChevronRight,
-                                enabled = pagerState.currentPage < items.lastIndex
-                            )
-                        }
-                    }
-
-                    if (canNavigate) {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
-                        Text(
-                            text = "${pagerState.currentPage + 1} / ${items.size}",
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = layoutSpec.footerVerticalPaddingDp.dp)
-                                .testTag(IMAGE_PREVIEW_COUNT_TAG),
-                            style = MaterialTheme.typography.labelLarge,
-                            color = colorScheme.textSecondary
+                            .testTag(IMAGE_PREVIEW_PAGER_TAG),
+                        beyondViewportPageCount = 0,
+                        userScrollEnabled = canNavigate && allowPaging,
+                        key = { index -> items[index].key }
+                    ) { page ->
+                        val item = items[page]
+                        val transformState = pageTransforms.getOrPut(item.key) { ImagePreviewTransformState() }
+                        ImagePreviewPageHost(
+                            item = item,
+                            cachedPrepared = resolvedItems[item.key],
+                            onPrepared = { prepared -> resolvedItems[item.key] = prepared },
+                            state = transformState,
+                            onStateChange = { pageTransforms[item.key] = it },
+                            pageContent = pageContent
                         )
                     }
+
+                    if (canNavigate && allowPaging) {
+                        PreviewNavButton(
+                            modifier = Modifier
+                                .align(Alignment.CenterStart)
+                                .padding(start = 12.dp)
+                                .testTag(IMAGE_PREVIEW_PREV_TAG),
+                            onClick = {
+                                if (pagerState.currentPage > 0) {
+                                    pageTransforms[currentItem.key] = ImagePreviewTransformState()
+                                    scope.launch {
+                                        pagerState.animateScrollToPage(pagerState.currentPage - 1)
+                                    }
+                                }
+                            },
+                            icon = Icons.Rounded.ChevronLeft,
+                            enabled = pagerState.currentPage > 0
+                        )
+                        PreviewNavButton(
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(end = 12.dp)
+                                .testTag(IMAGE_PREVIEW_NEXT_TAG),
+                            onClick = {
+                                if (pagerState.currentPage < items.lastIndex) {
+                                    pageTransforms[currentItem.key] = ImagePreviewTransformState()
+                                    scope.launch {
+                                        pagerState.animateScrollToPage(pagerState.currentPage + 1)
+                                    }
+                                }
+                            },
+                            icon = Icons.Rounded.ChevronRight,
+                            enabled = pagerState.currentPage < items.lastIndex
+                        )
+                    }
+                }
+
+                if (canNavigate) {
+                    Text(
+                        text = "${pagerState.currentPage + 1} / ${items.size}",
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = layoutSpec.footerVerticalPaddingDp.dp)
+                            .testTag(IMAGE_PREVIEW_COUNT_TAG),
+                        style = MaterialTheme.typography.labelLarge,
+                        color = Color.White.copy(alpha = 0.72f)
+                    )
                 }
             }
         }
