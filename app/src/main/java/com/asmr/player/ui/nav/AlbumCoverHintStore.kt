@@ -6,8 +6,9 @@ import com.asmr.player.domain.model.Album
  * 轻量内存存储：在列表点击进入专辑详情时，记录列表已知的首屏信息，
  * 供详情页在网络解析完成前先种入标题、作品编号、社团、CV、标签、评分与封面。
  *
- * 这样 hero 封面与列表卡片使用完全相同的图片 model（同一 coverUrl + 同一 keyTag），
- * 跨尺寸缓存复用（peekAnySize）即可命中，避免重复发起网络请求。
+ * 这样 hero 可以立即使用调用方提供的封面；当封面 model 与列表一致时，
+ * 跨尺寸缓存复用（peekAnySize）仍可命中。推荐缩略图入口应先升级为原图 URL，
+ * 避免详情页将低分辨率图片固定为稳定 hero 封面。
  */
 object AlbumCoverHintStore {
     private const val MAX_ENTRIES = 64
