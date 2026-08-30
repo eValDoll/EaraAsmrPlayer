@@ -322,6 +322,47 @@ class AlbumDetailDirectorySupportTest {
     }
 
     @Test
+    fun collectRemoteTreeImageFiles_includesImagesFromEveryDirectory() {
+        val album = Album(
+            id = 8L,
+            title = "Album",
+            path = "web://rj/RJ000001",
+            rjCode = "RJ000001"
+        )
+        val tree = listOf(
+            AsmrOneTrackNodeResponse(
+                title = "booklet",
+                children = listOf(
+                    AsmrOneTrackNodeResponse(
+                        title = "page02.png",
+                        mediaDownloadUrl = "https://example.com/booklet/page02.png"
+                    ),
+                    AsmrOneTrackNodeResponse(
+                        title = "page01.webp",
+                        mediaDownloadUrl = "https://example.com/booklet/page01.webp"
+                    ),
+                    AsmrOneTrackNodeResponse(
+                        title = "track.mp3",
+                        mediaDownloadUrl = "https://example.com/booklet/track.mp3"
+                    )
+                )
+            ),
+            AsmrOneTrackNodeResponse(
+                title = "cover.jpg",
+                mediaDownloadUrl = "https://example.com/cover.jpg"
+            )
+        )
+
+        val images = collectRemoteTreeImageFiles(buildRemoteTreeIndex(tree, album))
+
+        assertEquals(
+            listOf("booklet/page01.webp", "booklet/page02.png", "cover.jpg"),
+            images.map { it.path }
+        )
+        assertTrue(images.all { it.fileType == TreeFileType.Image && it.isOnline })
+    }
+
+    @Test
     fun buildDlsiteTrialDownloadTree_keepsOnlyPlayableMediaWithStableNames() {
         val tree = buildDlsiteTrialDownloadTree(
             listOf(

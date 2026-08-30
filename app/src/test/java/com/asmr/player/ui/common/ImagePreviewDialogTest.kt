@@ -8,16 +8,15 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertCountEquals
-import androidx.compose.ui.test.click
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
-import androidx.compose.ui.test.performTouchInput
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.util.MessageManager
 import org.junit.Assert.assertEquals
@@ -33,7 +32,7 @@ class ImagePreviewDialogTest {
     val composeRule = createComposeRule()
 
     @Test
-    fun singleImage_hidesNavigationAndClosesFromButtonsAndOverlay() {
+    fun singleImage_hidesNavigationAndClosesFromTopRight() {
         var dismissCount = 0
 
         composeRule.setContent {
@@ -54,12 +53,16 @@ class ImagePreviewDialogTest {
         composeRule.onAllNodesWithTag(IMAGE_PREVIEW_COUNT_TAG).assertCountEquals(0)
         composeRule.onAllNodesWithTag(IMAGE_PREVIEW_PREV_TAG).assertCountEquals(0)
         composeRule.onAllNodesWithTag(IMAGE_PREVIEW_NEXT_TAG).assertCountEquals(0)
+        composeRule.onNodeWithTag(IMAGE_PREVIEW_OPEN_EXTERNAL_TAG, useUnmergedTree = true).assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.TestTag, IMAGE_PREVIEW_OPEN_EXTERNAL_TAG)
+        )
+        composeRule.onNodeWithTag(IMAGE_PREVIEW_SAVE_TO_GALLERY_TAG, useUnmergedTree = true).assert(
+            SemanticsMatcher.expectValue(SemanticsProperties.TestTag, IMAGE_PREVIEW_SAVE_TO_GALLERY_TAG)
+        )
 
         composeRule.onNodeWithTag(IMAGE_PREVIEW_CLOSE_TAG, useUnmergedTree = true).performClick()
-        composeRule.onNodeWithTag(IMAGE_PREVIEW_OUTSIDE_TAG, useUnmergedTree = true)
-            .performTouchInput { click(Offset(1f, 1f)) }
 
-        assertEquals(2, dismissCount)
+        assertEquals(1, dismissCount)
     }
 
     @Test
@@ -92,12 +95,11 @@ class ImagePreviewDialogTest {
     }
 
     @Test
-    fun layoutSpec_matchesPlannedBounds() {
-        assertEquals(0.92f, DefaultImagePreviewLayoutSpec.widthFraction)
-        assertEquals(760, DefaultImagePreviewLayoutSpec.maxWidthDp)
-        assertEquals(0.66f, DefaultImagePreviewLayoutSpec.heightFraction)
-        assertEquals(260, DefaultImagePreviewLayoutSpec.minHeightDp)
-        assertEquals(680, DefaultImagePreviewLayoutSpec.maxHeightDp)
+    fun fullscreenLayout_usesDeepGrayOverlayAndStableSpacing() {
+        assertEquals(Color(0xFF202124), ImagePreviewOverlayColor)
+        assertEquals(6, DefaultImagePreviewLayoutSpec.imageViewportPaddingDp)
+        assertEquals(8, DefaultImagePreviewLayoutSpec.toolbarVerticalPaddingDp)
+        assertEquals(8, DefaultImagePreviewLayoutSpec.footerVerticalPaddingDp)
     }
 
     @Test

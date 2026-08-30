@@ -511,15 +511,13 @@ internal fun buildDirectoryImagePreviewRequest(
 }
 
 internal fun buildGalleryImagePreviewRequest(
-    galleryUrls: List<String>,
-    clickedUrl: String,
-    toPreviewItem: (String) -> ImagePreviewItem?
+    galleryItems: List<ImagePreviewItem>,
+    clickedKey: String
 ): ImagePreviewRequest? {
-    val items = galleryUrls.mapNotNull(toPreviewItem)
-    if (items.isEmpty()) return null
-    val initialIndex = galleryUrls.indexOfFirst { it == clickedUrl }
+    if (galleryItems.isEmpty()) return null
+    val initialIndex = galleryItems.indexOfFirst { it.key == clickedKey }
     if (initialIndex < 0) return null
-    return ImagePreviewRequest(items = items, initialIndex = initialIndex)
+    return ImagePreviewRequest(items = galleryItems, initialIndex = initialIndex)
 }
 
 internal fun buildBreadcrumbSegments(currentPath: String): List<DirectoryBreadcrumbSegment> {
@@ -1200,6 +1198,50 @@ internal fun buildRemoteTreeIndex(
     return RemoteTreeIndex(root = root)
 }
 
+private fun RemoteTreeNode.toDirectoryFileItem(): DirectoryFileItem {
+    return DirectoryFileItem(
+        path = path,
+        title = name.substringBeforeLast('.'),
+        fileType = fileType,
+        isPlayable = fileType == TreeFileType.Audio || fileType == TreeFileType.Video,
+        isOnline = true,
+        durationSeconds = durationSeconds,
+        sizeSource = if (url.isNotBlank()) FileSizeSource.Remote(url) else FileSizeSource.None,
+        absolutePath = url,
+        url = url,
+        playlistTarget = playlistTarget,
+        subtitleSources = subtitleSources,
+        showSubtitleStamp = subtitleSources.isNotEmpty(),
+        dlsitePlayImageCrypt = dlsitePlayImageCrypt,
+        dlsitePlayImageWidth = dlsitePlayImageWidth,
+        dlsitePlayImageHeight = dlsitePlayImageHeight,
+        dlsitePlayOptimizedName = dlsitePlayOptimizedName
+    )
+}
+
+internal fun collectRemoteTreeImageFiles(index: RemoteTreeIndex): List<DirectoryFileItem> {
+    val images = mutableListOf<DirectoryFileItem>()
+
+    fun collect(node: RemoteTreeNode) {
+        val children = node.children.values
+        children.asSequence()
+            .filter { it.children.isNotEmpty() }
+            .sortedBy { SmartSortKey.of(it.name) }
+            .forEach(::collect)
+        children.asSequence()
+            .filter { child ->
+                child.children.isEmpty() &&
+                    child.fileType == TreeFileType.Image &&
+                    child.url.isNotBlank()
+            }
+            .sortedBy { SmartSortKey.of(it.name) }
+            .mapTo(images) { it.toDirectoryFileItem() }
+    }
+
+    collect(index.root)
+    return images
+}
+
 internal fun buildRemoteDirectoryBrowser(
     index: RemoteTreeIndex,
     currentPath: String
@@ -1221,26 +1263,7 @@ internal fun buildRemoteDirectoryBrowser(
         .asSequence()
         .filter { it.children.isEmpty() && it.url.isNotBlank() && it.fileType != TreeFileType.Subtitle && it.fileType != TreeFileType.Other }
         .sortedBy { SmartSortKey.of(it.name) }
-        .map { child ->
-            DirectoryFileItem(
-                path = child.path,
-                title = child.name.substringBeforeLast('.'),
-                fileType = child.fileType,
-                isPlayable = child.fileType == TreeFileType.Audio || child.fileType == TreeFileType.Video,
-                isOnline = true,
-                durationSeconds = child.durationSeconds,
-                sizeSource = if (child.url.isNotBlank()) FileSizeSource.Remote(child.url) else FileSizeSource.None,
-                absolutePath = child.url,
-                url = child.url,
-                playlistTarget = child.playlistTarget,
-                subtitleSources = child.subtitleSources,
-                showSubtitleStamp = child.subtitleSources.isNotEmpty(),
-                dlsitePlayImageCrypt = child.dlsitePlayImageCrypt,
-                dlsitePlayImageWidth = child.dlsitePlayImageWidth,
-                dlsitePlayImageHeight = child.dlsitePlayImageHeight,
-                dlsitePlayOptimizedName = child.dlsitePlayOptimizedName
-            )
-        }
+        .map(RemoteTreeNode::toDirectoryFileItem)
         .toList()
     return DirectoryBrowserResult(
         currentPath = normalizedPath,
