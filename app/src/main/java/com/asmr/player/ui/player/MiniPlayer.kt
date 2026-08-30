@@ -76,6 +76,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.MediaItem
 import com.asmr.player.ui.common.AsmrAsyncImage
+import com.asmr.player.ui.common.NoImageLoadingIndicator
 import com.asmr.player.ui.theme.AsmrTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -261,6 +262,7 @@ fun MiniPlayer(
                                         contentDescription = null,
                                         contentScale = ContentScale.Crop,
                                         placeholderCornerRadius = (52 * resolvedCompactScale).roundToInt(),
+                                        loading = NoImageLoadingIndicator,
                                         modifier = Modifier.fillMaxSize()
                                     )
                                 }
@@ -474,6 +476,7 @@ private fun MiniPlayerCoverOnly(
                 contentDescription = null,
                 contentScale = ContentScale.Crop,
                 placeholderCornerRadius = placeholderCornerRadius,
+                loading = NoImageLoadingIndicator,
                 modifier = Modifier.fillMaxSize()
             )
             MiniPlayerActivityBars(
