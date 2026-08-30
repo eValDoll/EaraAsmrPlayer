@@ -339,7 +339,7 @@ private fun DlsiteRecommendationsBlock(
 }
 
 @Composable
-private fun DlsiteRecommendedWorkCard(
+internal fun DlsiteRecommendedWorkCard(
     work: DlsiteRecommendedWork,
     displayRj: String,
     onClick: () -> Unit

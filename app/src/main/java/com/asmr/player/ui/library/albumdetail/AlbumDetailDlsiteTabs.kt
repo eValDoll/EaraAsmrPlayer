@@ -872,34 +872,44 @@ private fun DlsiteRecommendationsLoadingBlocks() {
                     },
                     height = 18.dp
                 )
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    items(listOf(0, 1, 2, 3), key = { it }, contentType = { "dlsiteRecommendationLoadingCard" }) {
-                        Surface(
-                            shape = RoundedCornerShape(12.dp),
-                            tonalElevation = 1.dp,
-                            color = AsmrTheme.colorScheme.surface.copy(alpha = 0.35f),
-                            modifier = Modifier.width(132.dp)
-                        ) {
-                            Column(
-                                modifier = Modifier.padding(bottom = 10.dp),
-                                verticalArrangement = Arrangement.spacedBy(10.dp)
-                            ) {
-                                AsmrShimmerPlaceholder(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .aspectRatio(1f),
-                                    cornerRadius = 14,
-                                    animateHighlight = false,
-                                )
-                                Column(
-                                    modifier = Modifier.padding(horizontal = 10.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    DlsiteStaticPlaceholderLine(widthFraction = 0.88f, height = 12.dp)
-                                    DlsiteStaticPlaceholderLine(widthFraction = 0.46f, height = 10.dp)
-                                }
-                            }
-                        }
+                DlsiteRecommendationLoadingCards()
+            }
+        }
+    }
+}
+
+@Composable
+internal fun DlsiteRecommendationLoadingCards() {
+    val placeholders = remember { listOf(0, 1, 2, 3) }
+    LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        items(
+            items = placeholders,
+            key = { it },
+            contentType = { "dlsiteRecommendationLoadingCard" }
+        ) {
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                tonalElevation = 1.dp,
+                color = AsmrTheme.colorScheme.surface.copy(alpha = 0.35f),
+                modifier = Modifier.width(132.dp)
+            ) {
+                Column(
+                    modifier = Modifier.padding(bottom = 10.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    AsmrShimmerPlaceholder(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .aspectRatio(1f),
+                        cornerRadius = 14,
+                        animateHighlight = false,
+                    )
+                    Column(
+                        modifier = Modifier.padding(horizontal = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        DlsiteStaticPlaceholderLine(widthFraction = 0.88f, height = 12.dp)
+                        DlsiteStaticPlaceholderLine(widthFraction = 0.46f, height = 10.dp)
                     }
                 }
             }
@@ -1133,6 +1143,8 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     onPersistCurrentPath: (String) -> Unit,
     initialScroll: Pair<Int, Int>,
     onPersistScroll: (Int, Int) -> Unit,
+    showPortraitSimilarWorks: Boolean,
+    portraitSimilarWorksContent: @Composable () -> Unit,
     dlsiteRecommendations: DlsiteRecommendations,
     onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit,
     loadRemoteFileSize: suspend (String) -> Long?,
@@ -1578,6 +1590,13 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                             onAddToPlaylist = { onAddToPlaylist(track) }
                         )
                     }
+                }
+            }
+        }
+        if (showPortraitSimilarWorks) {
+            item(key = "portrait-similar-works") {
+                Box(modifier = dlsiteAnimatedSectionModifier(Modifier.fillMaxWidth(), animateIntro)) {
+                    portraitSimilarWorksContent()
                 }
             }
         }

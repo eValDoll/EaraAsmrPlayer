@@ -1429,6 +1429,16 @@ fun AlbumDetailScreen(
                                             viewModel.persistListScrollPosition(asmrOneScrollStateKey, index, offset)
                                         },
                                         onListStateAvailable = { landscapeActiveListState = it },
+                                        showPortraitSimilarWorks = !useLandscapeArtworkTide,
+                                        portraitSimilarWorksContent = {
+                                            AlbumDetailPortraitSimilarWorksRow(
+                                                seedRjCode = model.baseRjCode.ifBlank { model.rjCode },
+                                                seedMetadata = model.dlsiteInfo ?: model.displayAlbum,
+                                                isRouteReady = isInitialRouteReady,
+                                                onOpenAlbumByRj = onOpenAlbumByRj,
+                                                viewModel = viewModel
+                                            )
+                                        },
                                         dlsiteRecommendations = model.dlsiteRecommendations,
                                         onOpenAlbumByRj = onOpenAlbumByRj,
                                         loadRemoteFileSize = { viewModel.loadRemoteFileSize(it) }
@@ -2493,6 +2503,112 @@ private fun AlbumDetailLandscapeSimilarWorksPane(
                                 }
                             )
                         }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlbumDetailPortraitSimilarWorksRow(
+    seedRjCode: String,
+    seedMetadata: Album,
+    isRouteReady: Boolean,
+    onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit,
+    viewModel: AlbumDetailViewModel,
+    modifier: Modifier = Modifier,
+) {
+    val colorScheme = AsmrTheme.colorScheme
+    val state by viewModel.similarWorksState.collectAsStateWithLifecycle()
+    val seedFeatures = remember(
+        seedRjCode,
+        seedMetadata.circle,
+        seedMetadata.cv,
+        seedMetadata.tags
+    ) {
+        buildAlbumDetailRecommendationSeedFeatures(seedRjCode, seedMetadata)
+    }
+
+    LaunchedEffect(seedRjCode, seedFeatures, isRouteReady, viewModel) {
+        if (isRouteReady) {
+            viewModel.ensureSimilarWorksLoaded(
+                seedRjCode = seedRjCode,
+                seedFeatures = seedFeatures
+            )
+        }
+    }
+    DisposableEffect(seedRjCode, viewModel) {
+        onDispose(viewModel::cancelSimilarWorksLoad)
+    }
+
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = AlbumDetailHorizontalPadding, vertical = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        AlbumDetailSectionHeading(title = "相似作品推荐")
+        when {
+            (!isRouteReady && state.works.isEmpty()) ||
+                (state.isLoading && state.works.isEmpty()) -> {
+                DlsiteRecommendationLoadingCards()
+            }
+
+            state.works.isEmpty() -> {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(min = 76.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = if (state.failed) "相似作品加载失败" else "暂时没有相似作品推荐",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = colorScheme.textSecondary,
+                        textAlign = TextAlign.Center
+                    )
+                    if (state.failed) {
+                        TextButton(
+                            onClick = {
+                                viewModel.ensureSimilarWorksLoaded(
+                                    seedRjCode = seedRjCode,
+                                    seedFeatures = seedFeatures,
+                                    force = true
+                                )
+                            }
+                        ) {
+                            Text("重试")
+                        }
+                    }
+                }
+            }
+
+            else -> {
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    items(
+                        items = state.works,
+                        key = AlbumDetailSimilarWork::rjCode
+                    ) { work ->
+                        val recommendedWork = DlsiteRecommendedWork(
+                            rjCode = work.rjCode,
+                            title = work.title,
+                            coverUrl = work.coverUrl
+                        )
+                        DlsiteRecommendedWorkCard(
+                            work = recommendedWork,
+                            displayRj = work.rjCode,
+                            onClick = {
+                                onOpenAlbumByRj(
+                                    work.rjCode,
+                                    recommendedWork
+                                )
+                            }
+                        )
                     }
                 }
             }

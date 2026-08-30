@@ -5,6 +5,11 @@ import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
 
+private val DlsiteResizedMainCoverPathRegex = Regex(
+    pattern = """^/resize/(images2/work/.+)_img_main_\d+x\d+\.(?:jpe?g|png|webp)$""",
+    option = RegexOption.IGNORE_CASE
+)
+
 internal fun dlsiteOriginalCoverUrlForWorkNo(rawWorkNo: String): String {
     val workNo = DlsiteWorkNo.extractWorkNo(rawWorkNo)
     val prefix = workNo.take(2)
@@ -27,6 +32,22 @@ internal fun resolveRecommendedWorkCoverUrl(
 ): String {
     return providedCoverUrl?.trim().orEmpty()
         .ifBlank { dlsiteOriginalCoverUrlForWorkNo(rawWorkNo) }
+}
+
+internal fun resolveRecommendedWorkHeroCoverUrl(
+    rawWorkNo: String,
+    providedCoverUrl: String?
+): String {
+    val provided = providedCoverUrl?.trim().orEmpty()
+    if (provided.isBlank()) return dlsiteOriginalCoverUrlForWorkNo(rawWorkNo)
+
+    val normalized = if (provided.startsWith("//")) "https:$provided" else provided
+    val uri = runCatching { URI(normalized) }.getOrNull() ?: return normalized
+    if (!uri.host.equals("img.dlsite.jp", ignoreCase = true)) return normalized
+
+    val resizedMainCover = DlsiteResizedMainCoverPathRegex
+        .matchEntire(uri.path.orEmpty()) ?: return normalized
+    return "https://img.dlsite.jp/modpub/${resizedMainCover.groupValues[1]}_img_main.jpg"
 }
 
 internal object DlsiteRecommendHtmlParser {
