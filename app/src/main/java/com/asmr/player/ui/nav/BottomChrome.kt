@@ -532,6 +532,7 @@ fun BottomChrome(
     onOpenNowPlaying: () -> Unit,
     onOpenQueue: () -> Unit,
     onNavigate: (String) -> Unit,
+    miniPlayerPlayFeedbackSignal: Long = 0L,
     largeLayout: Boolean = false,
     modifier: Modifier = Modifier,
     navItems: List<BottomChromeNavItem> = bottomChromeNavItems(),
@@ -666,6 +667,7 @@ fun BottomChrome(
                             onDisplayModeChange = onMiniPlayerDisplayModeChange,
                             onOpenNowPlaying = onOpenNowPlaying,
                             onOpenQueue = onOpenQueue,
+                            playFeedbackSignal = miniPlayerPlayFeedbackSignal,
                             largeLayout = largeLayout,
                             compactScale = compactScale,
                             modifier = miniPlayerModifier

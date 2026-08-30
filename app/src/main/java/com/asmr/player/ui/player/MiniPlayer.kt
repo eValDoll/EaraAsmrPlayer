@@ -2,6 +2,7 @@ package com.asmr.player.ui.player
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
@@ -66,6 +67,7 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.progressBarRangeInfo
@@ -82,7 +84,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.map
+import kotlin.math.PI
 import kotlin.math.roundToInt
+import kotlin.math.sin
 
 enum class MiniPlayerDisplayMode {
     CoverOnly,
@@ -111,6 +115,11 @@ private fun sameMiniPlayerMediaItem(old: MediaItem?, new: MediaItem?): Boolean {
         old.mediaMetadata.artist?.toString() == new.mediaMetadata.artist?.toString()
 }
 
+internal fun miniPlayerPlayFeedbackEmphasis(progress: Float): Float {
+    val normalizedProgress = progress.coerceIn(0f, 1f)
+    return sin(normalizedProgress.toDouble() * PI).toFloat().coerceAtLeast(0f)
+}
+
 @Composable
 @OptIn(ExperimentalFoundationApi::class)
 fun MiniPlayer(
@@ -118,6 +127,7 @@ fun MiniPlayer(
     onDisplayModeChange: (MiniPlayerDisplayMode) -> Unit,
     onOpenNowPlaying: () -> Unit,
     onOpenQueue: () -> Unit,
+    playFeedbackSignal: Long = 0L,
     largeLayout: Boolean = false,
     compactScale: Float = 1f,
     modifier: Modifier = Modifier,
@@ -156,6 +166,20 @@ fun MiniPlayer(
         Color.White.copy(alpha = 0.14f)
     } else {
         colorScheme.primaryStrong.copy(alpha = 0.14f)
+    }
+    val playFeedbackProgress = remember { Animatable(1f) }
+
+    LaunchedEffect(playFeedbackSignal) {
+        if (playFeedbackSignal > 0L) {
+            playFeedbackProgress.snapTo(0f)
+            playFeedbackProgress.animateTo(
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = 720,
+                    easing = FastOutSlowInEasing
+                )
+            )
+        }
     }
 
     var optimisticIsPlaying by remember { mutableStateOf<Boolean?>(null) }
@@ -199,6 +223,7 @@ fun MiniPlayer(
                 MiniPlayerCoverOnly(
                     artworkModel = metadata.artworkUri,
                     isPlaying = isPlayingEffective,
+                    playFeedbackProgress = { playFeedbackProgress.value },
                     onExpand = { onDisplayModeChange(MiniPlayerDisplayMode.Expanded) },
                     largeLayout = largeLayout,
                     compactScale = resolvedCompactScale
@@ -235,6 +260,42 @@ fun MiniPlayer(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(barHeight)
+                            .graphicsLayer {
+                                val emphasis = miniPlayerPlayFeedbackEmphasis(playFeedbackProgress.value)
+                                val scale = 1f + emphasis * 0.018f
+                                scaleX = scale
+                                scaleY = scale
+                            }
+                            .drawWithCache {
+                                val feedbackOutline = expandedShape.createOutline(
+                                    size = size,
+                                    layoutDirection = layoutDirection,
+                                    density = this
+                                )
+                                val feedbackPath = when (feedbackOutline) {
+                                    is Outline.Rectangle -> Path().apply { addRect(feedbackOutline.rect) }
+                                    is Outline.Rounded -> Path().apply { addRoundRect(feedbackOutline.roundRect) }
+                                    is Outline.Generic -> feedbackOutline.path
+                                }
+                                onDrawWithContent {
+                                    val progress = playFeedbackProgress.value.coerceIn(0f, 1f)
+                                    val fade = 1f - progress
+                                    if (fade > 0f) {
+                                        drawPath(
+                                            path = feedbackPath,
+                                            color = colorScheme.primary.copy(alpha = 0.14f * fade)
+                                        )
+                                    }
+                                    drawContent()
+                                    if (fade > 0f) {
+                                        drawPath(
+                                            path = feedbackPath,
+                                            color = colorScheme.primary.copy(alpha = 0.78f * fade),
+                                            style = Stroke(width = (2.5.dp + 1.5.dp * fade).toPx())
+                                        )
+                                    }
+                                }
+                            }
                     ) {
                         Box(
                             modifier = Modifier
@@ -439,6 +500,7 @@ fun MiniPlayer(
 private fun MiniPlayerCoverOnly(
     artworkModel: Any?,
     isPlaying: Boolean,
+    playFeedbackProgress: () -> Float,
     onExpand: () -> Unit,
     largeLayout: Boolean,
     compactScale: Float,
@@ -465,6 +527,35 @@ private fun MiniPlayerCoverOnly(
         Box(
             modifier = Modifier
                 .size(coverSize)
+                .graphicsLayer {
+                    val emphasis = miniPlayerPlayFeedbackEmphasis(playFeedbackProgress())
+                    val scale = 1f + emphasis * 0.045f
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .drawWithCache {
+                    val baseRadius = size.minDimension / 2f
+                    val minimumExpansion = 2.dp.toPx()
+                    val maximumExpansion = 12.dp.toPx()
+                    val baseStrokeWidth = 2.5.dp.toPx()
+                    onDrawWithContent {
+                        val progress = playFeedbackProgress().coerceIn(0f, 1f)
+                        val fade = 1f - progress
+                        drawContent()
+                        if (fade > 0f) {
+                            drawCircle(
+                                color = colorScheme.primary.copy(alpha = 0.82f * fade),
+                                radius = baseRadius + minimumExpansion + maximumExpansion * progress,
+                                style = Stroke(width = baseStrokeWidth + 1.5.dp.toPx() * fade)
+                            )
+                            drawCircle(
+                                color = colorScheme.primary.copy(alpha = 0.72f * fade),
+                                radius = baseRadius - 1.dp.toPx(),
+                                style = Stroke(width = 2.dp.toPx())
+                            )
+                        }
+                    }
+                }
                 .clip(CircleShape)
                 .background(colorScheme.surface)
                 .border(width = 1.dp, color = miniPlayerBorderColor, shape = CircleShape)
