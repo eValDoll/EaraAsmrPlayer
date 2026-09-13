@@ -6,6 +6,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.res.Configuration
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.media.AudioDeviceCallback
@@ -38,6 +39,7 @@ import androidx.media3.session.SessionCommands
 import androidx.media3.datasource.cache.CacheDataSource
 import com.asmr.player.MainActivity
 import com.asmr.player.data.local.db.AppDatabase
+import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.data.local.db.entities.TrackPlaybackProgressEntity
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.remote.auth.buildDlsiteCookieHeader
@@ -224,6 +226,9 @@ class PlaybackService : MediaSessionService() {
 
     @Inject
     lateinit var settingsRepository: SettingsRepository
+
+    @Inject
+    lateinit var settingsDataStore: SettingsDataStore
 
     @Inject
     lateinit var database: AppDatabase
@@ -523,9 +528,14 @@ class PlaybackService : MediaSessionService() {
             }
         }
         serviceScope.launch {
-            settingsRepository.floatingLyricsSettings.collect { settings ->
-                overlay?.applySettings(settings)
-            }
+            combine(
+                settingsRepository.floatingLyricsSettings.distinctUntilChanged(),
+                settingsDataStore.nowPlayingLyricsSettings.distinctUntilChanged()
+            ) { settings, lyrics -> settings to lyrics.multilineEnabled }
+                .distinctUntilChanged()
+                .collect { (settings, multilineEnabled) ->
+                    overlay?.applySettings(settings, multilineEnabled)
+                }
         }
         serviceScope.launch {
             settingsRepository.pauseOnOutputDisconnect.collectLatest { enabled ->
@@ -1264,7 +1274,7 @@ class PlaybackService : MediaSessionService() {
 
             val current = lyrics.getOrNull(idx)?.text.orEmpty().ifBlank { " " }
             withContext(Dispatchers.Main.immediate) {
-                if (overlayNeeded) overlay?.updateLine(current)
+                if (overlayNeeded) overlay?.updateLine(current, lyrics.getOrNull(idx))
             }
         }
 
@@ -1353,6 +1363,11 @@ class PlaybackService : MediaSessionService() {
                 intent,
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        overlay?.onConfigurationChanged()
     }
 
     override fun onDestroy() {

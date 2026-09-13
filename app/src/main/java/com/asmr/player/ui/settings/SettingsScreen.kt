@@ -887,14 +887,6 @@ fun SettingsScreen(
                             )
 
                             SettingsSliderRow(
-                                text = "背景透明度: ${(floatingSettings.opacity * 100).toInt()}%",
-                                value = floatingSettings.opacity,
-                                range = 0f..1f,
-                                onValueChange = { viewModel.updateFloatingLyricsSettings(floatingSettings.copy(opacity = it)) },
-                                onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
-                            )
-
-                            SettingsSliderRow(
                                 text = "垂直位置 (Y轴)",
                                 value = floatingSettings.yOffset.toFloat(),
                                 range = 0f..2000f,
@@ -1255,7 +1247,7 @@ private fun NowPlayingLyricsSettingsSection(
         onCheckedChange = { onSettingsChange(settings.copy(multilineEnabled = it)) }
     )
     Text(
-        text = "仅用于竖屏经典布局：字幕自动换行，固定区域不随字幕长短变化。超长字幕可在区域内上下滑动阅读。",
+        text = "同时用于竖屏经典布局和悬浮歌词：字幕自动换行，区域大小固定。超长字幕可上下滑动阅读；悬浮歌词可拖动字幕区域边缘调整位置，开启点击穿透后无法滑动。",
         style = MaterialTheme.typography.bodySmall,
         color = AsmrTheme.colorScheme.textSecondary
     )

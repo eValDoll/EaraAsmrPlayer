@@ -20,8 +20,10 @@ class MultilineLyricsBenchmark {
 
     @Test fun changingCues() = measure(compact = false)
     @Test fun changingCuesInCompactViewport() = measure(compact = true)
+    @Test fun changingFloatingCues() = measure(compact = false, floating = true)
+    @Test fun changingFloatingCuesInCompactViewport() = measure(compact = true, floating = true)
 
-    private fun measure(compact: Boolean) {
+    private fun measure(compact: Boolean, floating: Boolean = false) {
         benchmarkRule.measureRepeated(
             packageName = PackageName,
             metrics = listOf(FrameTimingGfxInfoMetric()),
@@ -32,7 +34,7 @@ class MultilineLyricsBenchmark {
                 startActivityAndWait(Intent().apply {
                     setClassName(PackageName, "com.asmr.player.benchmark.BenchmarkHarnessActivity")
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                    putExtra("benchmark_scenario", "multiline_lyrics")
+                    putExtra("benchmark_scenario", if (floating) "floating_multiline_lyrics" else "multiline_lyrics")
                 })
                 check(device.wait(Until.hasObject(By.text("开始切句")), 10_000))
                 if (compact) device.findObject(By.text("紧凑高度")).click()

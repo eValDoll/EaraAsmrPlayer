@@ -6,17 +6,20 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import com.asmr.player.ui.player.NowPlayingLyricsPreview
 import com.asmr.player.ui.player.rememberLyricReadableColors
 import com.asmr.player.ui.theme.AsmrTheme
+import com.asmr.player.data.settings.FloatingLyricsSettings
+import com.asmr.player.service.FloatingLyricsView
 import com.asmr.player.util.SubtitleEntry
 import kotlinx.coroutines.delay
 
 @Composable
-internal fun MultilineLyricsBenchmarkScreen() {
+internal fun MultilineLyricsBenchmarkScreen(floating: Boolean = false) {
     val lyrics = remember {
         listOf(
             "短字幕。",
@@ -38,7 +41,7 @@ internal fun MultilineLyricsBenchmarkScreen() {
     }
     val theme = AsmrTheme.colorScheme
     Column(Modifier.fillMaxSize().padding(24.dp)) {
-        Text("多行字幕基准场景", style = MaterialTheme.typography.titleLarge)
+        Text(if (floating) "悬浮多行字幕基准场景" else "多行字幕基准场景", style = MaterialTheme.typography.titleLarge)
         Row {
             TextButton(
                 onClick = { running = !running },
@@ -51,16 +54,30 @@ internal fun MultilineLyricsBenchmarkScreen() {
         }
         Spacer(Modifier.height(24.dp))
         Box(Modifier.fillMaxWidth().height(if (compact) 72.dp else 220.dp)) {
-            NowPlayingLyricsPreview(
-                lyrics = lyrics,
-                currentPosition = lyrics[cue].startMs,
-                onOpenLyrics = {},
-                colors = rememberLyricReadableColors(theme.primaryStrong),
-                multilineEnabled = true,
-                highlightFontSizeSp = if (compact) 36f else 24f,
-                centered = true,
-                modifier = Modifier.fillMaxSize()
-            )
+            if (floating) {
+                key(compact) {
+                    AndroidView(
+                        factory = { context ->
+                            FloatingLyricsView(context).apply {
+                                applySettings(FloatingLyricsSettings(size = if (compact) 32f else 16f), multiline = true)
+                            }
+                        },
+                        update = { it.updateLine(lyrics[cue].text, lyrics[cue]) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            } else {
+                NowPlayingLyricsPreview(
+                    lyrics = lyrics,
+                    currentPosition = lyrics[cue].startMs,
+                    onOpenLyrics = {},
+                    colors = rememberLyricReadableColors(theme.primaryStrong),
+                    multilineEnabled = true,
+                    highlightFontSizeSp = if (compact) 36f else 24f,
+                    centered = true,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
         Spacer(Modifier.height(16.dp))
         Text("固定播放控件", Modifier.fillMaxWidth().height(64.dp).background(theme.primarySoft))

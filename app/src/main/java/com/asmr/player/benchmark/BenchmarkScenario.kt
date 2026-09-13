@@ -20,6 +20,7 @@ enum class BenchmarkScenario(
     Queue("queue"),
     PerformancePlayback("performance_playback"),
     MultilineLyrics("multiline_lyrics"),
+    FloatingMultilineLyrics("floating_multiline_lyrics"),
     Settings("settings");
 
     companion object {

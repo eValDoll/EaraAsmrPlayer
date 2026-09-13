@@ -51822,7 +51822,6 @@ SPLcom/asmr/player/data/settings/SettingsKeys;->getEQ_VIRTUALIZER_STRENGTH()Land
 SPLcom/asmr/player/data/settings/SettingsKeys;->getFLOATING_LYRICS_ALIGN()Landroidx/datastore/preferences/core/Preferences$Key;
 SPLcom/asmr/player/data/settings/SettingsKeys;->getFLOATING_LYRICS_COLOR()Landroidx/datastore/preferences/core/Preferences$Key;
 SPLcom/asmr/player/data/settings/SettingsKeys;->getFLOATING_LYRICS_ENABLED()Landroidx/datastore/preferences/core/Preferences$Key;
-SPLcom/asmr/player/data/settings/SettingsKeys;->getFLOATING_LYRICS_OPACITY()Landroidx/datastore/preferences/core/Preferences$Key;
 SPLcom/asmr/player/data/settings/SettingsKeys;->getFLOATING_LYRICS_SIZE()Landroidx/datastore/preferences/core/Preferences$Key;
 SPLcom/asmr/player/data/settings/SettingsKeys;->getFLOATING_LYRICS_TOUCHABLE()Landroidx/datastore/preferences/core/Preferences$Key;
 SPLcom/asmr/player/data/settings/SettingsKeys;->getFLOATING_LYRICS_Y()Landroidx/datastore/preferences/core/Preferences$Key;
