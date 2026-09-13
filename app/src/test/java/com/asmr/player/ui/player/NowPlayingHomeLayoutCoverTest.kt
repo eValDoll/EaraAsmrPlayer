@@ -7,6 +7,33 @@ import org.junit.Test
 
 class NowPlayingHomeLayoutCoverTest {
     @Test
+    fun multilineReserveBalancesReadingSpaceAndSmallScreens() {
+        assertEquals(137.dp, multilineLyricsReserveHeight(600.dp, 31.dp))
+        assertEquals(90.dp, multilineLyricsReserveHeight(200.dp, 49.dp))
+        assertEquals(0.dp, multilineLyricsReserveHeight(0.dp, 31.dp))
+    }
+
+    @Test
+    fun multilineModeCanShrinkCoverToPreserveReadingSpaceOnShortScreens() {
+        val metrics = nowPlayingPortraitLayoutMetrics(568.dp, WindowWidthSizeClass.Compact)
+        val reserve = multilineLyricsReserveHeight(260.dp, 31.dp)
+        val cover = nowPlayingHomeCoverWidth(
+            expanded = false,
+            availableWidth = 320.dp,
+            availableHeight = 260.dp,
+            widthClass = WindowWidthSizeClass.Compact,
+            contentHorizontalPadding = metrics.contentHorizontalPadding,
+            topPadding = metrics.topPadding,
+            coverVerticalPadding = metrics.coverVerticalPadding,
+            identityHeight = metrics.audienceHeight + metrics.trackInfoSingleLineHeight,
+            lyricsReserveHeight = reserve,
+            minimumCoverWidth = 1.dp
+        )
+        assertEquals(46.dp, cover)
+        assertEquals(117.dp, reserve)
+    }
+
+    @Test
     fun classicTrackInfoHeightStaysSingleLine() {
         assertEquals(88.dp, nowPlayingClassicTrackInfoHeight())
     }

@@ -130,7 +130,6 @@ class SettingsRepository private constructor(
         FloatingLyricsSettings(
             color = prefs[SettingsKeys.FLOATING_LYRICS_COLOR] ?: 0xFFFFFFFF.toInt(),
             size = prefs[SettingsKeys.FLOATING_LYRICS_SIZE] ?: 16f,
-            opacity = prefs[SettingsKeys.FLOATING_LYRICS_OPACITY] ?: 0.7f,
             xOffset = prefs[SettingsKeys.FLOATING_LYRICS_X] ?: 0,
             yOffset = prefs[SettingsKeys.FLOATING_LYRICS_Y] ?: 120,
             align = prefs[SettingsKeys.FLOATING_LYRICS_ALIGN] ?: 1, // 0:Left, 1:Center, 2:Right
@@ -374,7 +373,6 @@ class SettingsRepository private constructor(
             context.settingsDataStore.edit {
                 it[SettingsKeys.FLOATING_LYRICS_COLOR] = settings.color
                 it[SettingsKeys.FLOATING_LYRICS_SIZE] = settings.size
-                it[SettingsKeys.FLOATING_LYRICS_OPACITY] = settings.opacity
                 it[SettingsKeys.FLOATING_LYRICS_X] = settings.xOffset
                 it[SettingsKeys.FLOATING_LYRICS_Y] = settings.yOffset
                 it[SettingsKeys.FLOATING_LYRICS_ALIGN] = settings.align

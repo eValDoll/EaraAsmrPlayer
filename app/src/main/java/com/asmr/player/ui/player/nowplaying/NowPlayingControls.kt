@@ -647,6 +647,7 @@ internal fun NowPlayingLyricsPreview(
     colors: LyricReadableColors,
     interactionEnabled: Boolean = true,
     highlightFontSizeSp: Float = 24f,
+    multilineEnabled: Boolean = false,
     compactHeight: Boolean = false,
     tabletLayout: Boolean = false,
     largeTypography: Boolean = tabletLayout,
@@ -676,7 +677,7 @@ internal fun NowPlayingLyricsPreview(
             indexFinder.findActiveIndex(currentPosition).coerceAtLeast(0)
         }
     }
-    val candidateLimit = upcomingCount?.coerceAtLeast(0) ?: if (tabletLayout) 8 else 6
+    val candidateLimit = if (multilineEnabled) 0 else upcomingCount?.coerceAtLeast(0) ?: if (tabletLayout) 8 else 6
     val sourceContent = remember(sortedLyrics, activeIndex, emptyText, candidateLimit) {
         val currentEntry = sortedLyrics.getOrNull(activeIndex)
         val current = currentEntry
@@ -725,6 +726,23 @@ internal fun NowPlayingLyricsPreview(
         lineHeight = currentLineHeight,
         fontWeight = currentFontWeight
     )
+    if (multilineEnabled) {
+        NowPlayingMultilineLyrics(
+            text = sourceContent.current,
+            cueKey = sortedLyrics.getOrNull(activeIndex),
+            style = currentStyle,
+            colors = colors,
+            centered = centered,
+            interactionEnabled = interactionEnabled,
+            onOpenLyrics = onOpenLyrics,
+            modifier = modifier.then(
+                if (onCurrentLineAnchorChanged != null) {
+                    Modifier.onGloballyPositioned { onCurrentLineAnchorChanged(it.boundsInRoot().top) }
+                } else Modifier
+            )
+        )
+        return
+    }
     val upcomingStyle = MaterialTheme.typography.bodyLarge.copy(
         fontSize = typographyMetrics.upcomingFontSizeSp.sp,
         lineHeight = typographyMetrics.upcomingLineHeightSp.sp,
