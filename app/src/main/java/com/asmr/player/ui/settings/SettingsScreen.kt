@@ -1249,6 +1249,16 @@ private fun NowPlayingLyricsSettingsSection(
     onHorizontalControlInteractionChanged: (Boolean) -> Unit = {}
 ) {
     Text("播放页歌词", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+    SettingsToggleRow(
+        text = "多行完整显示",
+        checked = settings.multilineEnabled,
+        onCheckedChange = { onSettingsChange(settings.copy(multilineEnabled = it)) }
+    )
+    Text(
+        text = "仅用于竖屏经典布局：字幕自动换行，固定区域不随字幕长短变化。超长字幕可在区域内上下滑动阅读。",
+        style = MaterialTheme.typography.bodySmall,
+        color = AsmrTheme.colorScheme.textSecondary
+    )
     SettingsSliderRow(
         text = "高亮字体大小: ${settings.highlightFontSizeSp.toInt()}sp",
         value = settings.highlightFontSizeSp,

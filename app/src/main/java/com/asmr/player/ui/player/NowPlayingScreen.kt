@@ -2211,6 +2211,7 @@ internal fun NowPlayingScreen(
                             .clipToBounds()
                     ) {
                         val portraitTopContentMaxHeight = maxHeight
+                        val portraitDensity = LocalDensity.current
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
@@ -2274,9 +2275,21 @@ internal fun NowPlayingScreen(
                                             lyricsReserveHeight = if (expanded) {
                                                 portraitLayoutMetrics.expandedLyricsReserveHeight
                                             } else {
-                                                portraitLayoutMetrics.classicLyricsReserveHeight
+                                                if (nowPlayingLyricsSettings.multilineEnabled && !isVideo) {
+                                                    multilineLyricsReserveHeight(
+                                                        availableHeight = portraitTopContentMaxHeight,
+                                                        lineHeight = with(portraitDensity) {
+                                                            nowPlayingLyricTypographyMetrics(
+                                                                largeTypography = widthClass != WindowWidthSizeClass.Compact,
+                                                                highlightFontSizeSp = nowPlayingLyricsSettings.highlightFontSizeSp
+                                                            ).currentLineHeightSp.sp.toDp()
+                                                        }
+                                                    )
+                                                } else portraitLayoutMetrics.classicLyricsReserveHeight
                                             },
-                                            minimumCoverWidth = portraitLayoutMetrics.minimumCoverWidth
+                                            minimumCoverWidth = if (!expanded && nowPlayingLyricsSettings.multilineEnabled && !isVideo) {
+                                                1.dp
+                                            } else portraitLayoutMetrics.minimumCoverWidth
                                         )
                                     }
                                     Box(
@@ -2402,6 +2415,7 @@ internal fun NowPlayingScreen(
                                                     colors = lyricColors,
                                                     interactionEnabled = lyricsClassicInteractionEnabled,
                                                     highlightFontSizeSp = nowPlayingLyricsSettings.highlightFontSizeSp,
+                                                    multilineEnabled = nowPlayingLyricsSettings.multilineEnabled,
                                                     compactHeight = portraitLayoutMetrics.compact,
                                                     largeTypography = widthClass != WindowWidthSizeClass.Compact,
                                                     upcomingCount = upcomingCount,

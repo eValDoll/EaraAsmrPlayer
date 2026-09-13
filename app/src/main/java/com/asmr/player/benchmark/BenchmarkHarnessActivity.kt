@@ -84,6 +84,12 @@ class BenchmarkHarnessActivity : ComponentActivity() {
             }
         }
 
+        if (scenario == BenchmarkScenario.MultilineLyrics) {
+            window.attributes = window.attributes.apply { preferredRefreshRate = 120f }
+            uiState = BenchmarkHarnessUiState.Ready(BenchmarkSeedSummary())
+            return
+        }
+
         lifecycleScope.launch {
             withContext(Dispatchers.IO) {
                 DiscPlaceholderBitmapCache.preload(
@@ -155,6 +161,8 @@ private fun BenchmarkScenarioScreen(
     albumGroupRepository: AlbumGroupRepository
 ) {
     when (scenario) {
+        BenchmarkScenario.MultilineLyrics -> MultilineLyricsBenchmarkScreen()
+
         BenchmarkScenario.LibraryAlbums,
         BenchmarkScenario.LibraryTracks,
         BenchmarkScenario.PerformancePlayback -> {

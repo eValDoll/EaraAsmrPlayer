@@ -43,6 +43,7 @@ class SettingsDataStore @Inject constructor(
     private val nowPlayingHomeLayoutModeKey = stringPreferencesKey("now_playing_home_layout_mode")
     private val nowPlayingHomeLayoutHintDismissedKey = booleanPreferencesKey("now_playing_home_layout_hint_dismissed")
     private val nowPlayingLyricsHighlightFontSizeKey = floatPreferencesKey("now_playing_lyrics_highlight_font_size")
+    private val nowPlayingLyricsMultilineEnabledKey = booleanPreferencesKey("now_playing_lyrics_multiline_enabled")
     private val lyricsPageFontSizeKey = floatPreferencesKey("lyrics_page_font_size")
     private val lyricsPageStrokeWidthKey = floatPreferencesKey("lyrics_page_stroke_width")
     private val lyricsPageLineHeightMultiplierKey = floatPreferencesKey("lyrics_page_line_height_multiplier")
@@ -99,7 +100,8 @@ class SettingsDataStore @Inject constructor(
     }
     val nowPlayingLyricsSettings: Flow<NowPlayingLyricsSettings> = context.settingsDataStore.data.map { prefs ->
         NowPlayingLyricsSettings(
-            highlightFontSizeSp = prefs[nowPlayingLyricsHighlightFontSizeKey] ?: 24f
+            highlightFontSizeSp = prefs[nowPlayingLyricsHighlightFontSizeKey] ?: 24f,
+            multilineEnabled = prefs[nowPlayingLyricsMultilineEnabledKey] ?: false
         )
     }
     val lyricsPageSettings: Flow<LyricsPageSettings> = context.settingsDataStore.data.map { prefs ->
@@ -209,6 +211,7 @@ class SettingsDataStore @Inject constructor(
     suspend fun setNowPlayingLyricsSettings(settings: NowPlayingLyricsSettings) {
         context.settingsDataStore.edit {
             it[nowPlayingLyricsHighlightFontSizeKey] = settings.highlightFontSizeSp
+            it[nowPlayingLyricsMultilineEnabledKey] = settings.multilineEnabled
         }
     }
 
