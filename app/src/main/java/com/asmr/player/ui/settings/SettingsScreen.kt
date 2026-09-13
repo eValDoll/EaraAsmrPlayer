@@ -1247,7 +1247,7 @@ private fun NowPlayingLyricsSettingsSection(
         onCheckedChange = { onSettingsChange(settings.copy(multilineEnabled = it)) }
     )
     Text(
-        text = "同时用于竖屏经典布局和悬浮歌词：字幕自动换行，区域大小固定。超长字幕可上下滑动阅读；悬浮歌词可拖动字幕区域边缘调整位置，开启点击穿透后无法滑动。",
+        text = "竖屏经典布局使用固定字幕区，悬浮歌词按实际行数调整高度。超长字幕可上下滑动阅读；悬浮歌词可拖动字幕区域边缘调整位置，开启点击穿透后无法滑动。",
         style = MaterialTheme.typography.bodySmall,
         color = AsmrTheme.colorScheme.textSecondary
     )

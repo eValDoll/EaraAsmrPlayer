@@ -75,6 +75,19 @@ class FloatingLyricsOverlay(
             y = currentSettings.yOffset
         }
         constrainMultilinePosition(layout, p)
+        layout.addOnLayoutChangeListener { _, _, top, _, bottom, _, oldTop, _, oldBottom ->
+            if (multilineEnabled && bottom - top != oldBottom - oldTop) {
+                val previousX = p.x
+                val previousY = p.y
+                // 按实际窗口高度限制位置，短句恢复到用户设置的位置，不保存切句时的临时调整。
+                p.x = currentSettings.xOffset
+                p.y = currentSettings.yOffset
+                constrainMultilinePosition(layout, p)
+                if (p.x != previousX || p.y != previousY) {
+                    runCatching { windowManager.updateViewLayout(layout, p) }
+                }
+            }
+        }
         layout.setOnTouchListener { _, event ->
             if (!currentSettings.touchable) return@setOnTouchListener false
             when (event.actionMasked) {
@@ -111,7 +124,8 @@ class FloatingLyricsOverlay(
         if (!multilineEnabled) return
         // 多行字幕占满可用宽度，限制位置以免整行或底部被拖出屏幕。
         p.x = 0
-        p.y = p.y.coerceIn(0, (context.resources.displayMetrics.heightPixels - view.multilineHeight).coerceAtLeast(0))
+        val height = view.height.takeIf { it > 0 } ?: view.maxMultilineHeight
+        p.y = p.y.coerceIn(0, (context.resources.displayMetrics.heightPixels - height).coerceAtLeast(0))
     }
 
     fun hide() {

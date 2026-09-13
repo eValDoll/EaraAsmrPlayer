@@ -23,14 +23,20 @@ class FloatingLyricsViewTest {
     private val longCue = SubtitleEntry(0, 1000, "这是一条需要完整阅读的悬浮字幕，自动换行后不应隐藏任何文字。".repeat(30))
 
     @Test
-    fun longCueWrapsCompletelyWithoutResizingWindow() = onMain {
+    fun heightFollowsLineCountAndCapsLongCuesWithoutTruncatingText() = onMain {
         val view = createView()
         view.updateLine("短句")
         measure(view)
-        val height = view.height
+        val singleLineHeight = view.height
+        assertEquals(view.textView.height + view.paddingTop + view.paddingBottom, singleLineHeight)
+        view.updateLine("第一行\n第二行")
+        measure(view)
+        assertEquals(2, view.textView.lineCount)
+        assertTrue(view.height > singleLineHeight)
+        assertEquals(view.textView.height + view.paddingTop + view.paddingBottom, view.height)
         view.updateLine(longCue.text, longCue)
         measure(view)
-        assertEquals(height, view.height)
+        assertEquals(view.maxMultilineHeight.coerceAtMost(1000), view.height)
         val layout = view.textView.layout
         assertTrue(layout.lineCount > 3)
         assertEquals(longCue.text.length, layout.getLineEnd(layout.lineCount - 1))
@@ -38,6 +44,22 @@ class FloatingLyricsViewTest {
         assertTrue(view.scrollView.canScrollVertically(1))
         assertNull(view.textView.ellipsize)
         assertFalse(view.textView.isSelected)
+        view.updateLine("短句")
+        measure(view)
+        assertEquals(singleLineHeight, view.height)
+        assertFalse(view.scrollView.canScrollVertically(1))
+    }
+
+    @Test
+    fun changingWidthRecalculatesWrappedHeightForTheSameCue() = onMain {
+        val view = createView()
+        view.updateLine("宽度变化时，悬浮歌词需要根据实际换行重新计算高度。".repeat(2))
+        measure(view, width = 640)
+        val wideHeight = view.height
+        measure(view, width = 360)
+        assertTrue(view.height > wideHeight)
+        measure(view, width = 640)
+        assertEquals(wideHeight, view.height)
     }
 
     @Test
@@ -107,6 +129,7 @@ class FloatingLyricsViewTest {
             .find(shell("appops get $packageName SYSTEM_ALERT_WINDOW"))?.groupValues?.get(1) ?: "default"
         var overlay: FloatingLyricsOverlay? = null
         lateinit var view: FloatingLyricsView
+        var expandedHeight = 0
         try {
             shell("appops set $packageName SYSTEM_ALERT_WINDOW allow")
             onMain {
@@ -128,11 +151,21 @@ class FloatingLyricsViewTest {
             onMain {
                 assertTrue(view.isAttachedToWindow)
                 assertTrue(view.textView.lineCount > 3)
-                assertEquals(view.multilineHeight, view.height)
+                assertEquals(view.maxMultilineHeight, view.height)
+                expandedHeight = view.height
                 val location = IntArray(2)
                 view.getLocationOnScreen(location)
                 assertTrue(location[1] >= 0)
                 assertTrue(location[1] + view.height <= view.resources.displayMetrics.heightPixels)
+                overlay!!.updateLine("短句")
+            }
+            instrumentation.waitForIdleSync()
+            onMain {
+                assertTrue(view.height < expandedHeight)
+                assertEquals(view.textView.height + view.paddingTop + view.paddingBottom, view.height)
+                val location = IntArray(2)
+                view.getLocationOnScreen(location)
+                assertEquals((view.resources.displayMetrics.heightPixels - view.height).coerceAtMost(2000), location[1])
                 overlay!!.applySettings(FloatingLyricsSettings(touchable = false), multilineEnabled = true)
                 val params = view.layoutParams as WindowManager.LayoutParams
                 assertTrue(params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE != 0)
@@ -154,8 +187,8 @@ class FloatingLyricsViewTest {
         applySettings(FloatingLyricsSettings(), multiline = true)
     }
 
-    private fun measure(view: View, maxHeight: Int = 1000) {
-        view.measure(View.MeasureSpec.makeMeasureSpec(640, View.MeasureSpec.EXACTLY),
+    private fun measure(view: View, maxHeight: Int = 1000, width: Int = 640) {
+        view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(maxHeight, View.MeasureSpec.AT_MOST))
         view.layout(0, 0, view.measuredWidth, view.measuredHeight)
     }

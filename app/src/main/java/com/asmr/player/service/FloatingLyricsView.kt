@@ -36,7 +36,6 @@ internal class FloatingLyricsView(context: Context) : FrameLayout(context) {
     }.apply {
         isVerticalScrollBarEnabled = false
         overScrollMode = OVER_SCROLL_NEVER
-        isFillViewport = true
         addView(textView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
         setOnScrollChangeListener { _, _, _, _, _ -> this@FloatingLyricsView.invalidate() }
     }
@@ -44,17 +43,11 @@ internal class FloatingLyricsView(context: Context) : FrameLayout(context) {
     init {
         background = null
         setPadding(dp(14), dp(10), dp(14), dp(10))
-        addView(scrollView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
+        addView(scrollView, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
     }
 
-    internal val multilineHeight: Int
-        get() {
-            val metrics = textView.paint.fontMetricsInt
-            val fontPadding = (metrics.bottom - metrics.top - textView.lineHeight).coerceAtLeast(0)
-            val desired = textView.lineHeight * 3 + fontPadding + paddingTop + paddingBottom
-            return desired.coerceAtMost((resources.displayMetrics.heightPixels * 0.45f).roundToInt())
-                .coerceAtLeast(1)
-        }
+    internal val maxMultilineHeight: Int
+        get() = (resources.displayMetrics.heightPixels * 0.45f).roundToInt().coerceAtLeast(1)
 
     fun applySettings(settings: FloatingLyricsSettings, multiline: Boolean) {
         val modeChanged = multilineEnabled != multiline
@@ -88,7 +81,6 @@ internal class FloatingLyricsView(context: Context) : FrameLayout(context) {
         scrollbarPaint.color = textView.currentTextColor
         scrollbarPaint.alpha = 140
         scrollView.setPadding(0, 0, if (multiline) dp(6) else 0, 0)
-        scrollView.layoutParams.height = if (multiline) LayoutParams.MATCH_PARENT else LayoutParams.WRAP_CONTENT
         if (modeChanged) resetScroll()
         requestLayout()
         invalidate()
@@ -109,8 +101,14 @@ internal class FloatingLyricsView(context: Context) : FrameLayout(context) {
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        val heightSpec = if (multilineEnabled) {
-            MeasureSpec.makeMeasureSpec(resolveSize(multilineHeight, heightMeasureSpec), MeasureSpec.EXACTLY)
+        val heightSpec = if (multilineEnabled && MeasureSpec.getMode(heightMeasureSpec) != MeasureSpec.EXACTLY) {
+            val limit = if (MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED) {
+                maxMultilineHeight
+            } else {
+                maxMultilineHeight.coerceAtMost(MeasureSpec.getSize(heightMeasureSpec))
+            }
+            // 只限制上限，实际高度由换行后的文字和内边距决定。
+            MeasureSpec.makeMeasureSpec(limit, MeasureSpec.AT_MOST)
         } else {
             heightMeasureSpec
         }
