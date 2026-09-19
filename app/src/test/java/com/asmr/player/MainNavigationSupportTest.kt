@@ -60,11 +60,33 @@ class MainNavigationSupportTest {
             )
         )
         assertEquals(
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR,
+            ActivityInfo.SCREEN_ORIENTATION_USER,
             resolveMainRequestedOrientation(
                 isPhone = false,
                 nowPlayingVisible = false,
                 videoFullscreen = false,
+                portraitExitPending = false
+            )
+        )
+    }
+
+    @Test
+    fun resolveMainRequestedOrientation_tabletPlayerRestoresSystemRotationPolicyAfterFullscreen() {
+        assertEquals(
+            ActivityInfo.SCREEN_ORIENTATION_USER,
+            resolveMainRequestedOrientation(
+                isPhone = false,
+                nowPlayingVisible = true,
+                videoFullscreen = false,
+                portraitExitPending = false
+            )
+        )
+        assertEquals(
+            ActivityInfo.SCREEN_ORIENTATION_USER,
+            resolveMainRequestedOrientation(
+                isPhone = false,
+                nowPlayingVisible = false,
+                videoFullscreen = true,
                 portraitExitPending = false
             )
         )
@@ -82,7 +104,7 @@ class MainNavigationSupportTest {
             )
         )
         assertEquals(
-            ActivityInfo.SCREEN_ORIENTATION_SENSOR,
+            ActivityInfo.SCREEN_ORIENTATION_USER,
             resolveMainRequestedOrientation(
                 isPhone = false,
                 nowPlayingVisible = true,

@@ -481,7 +481,8 @@ internal fun resolveMainRequestedOrientation(
     nowPlayingVisible && videoFullscreen -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
     isPhone && nowPlayingVisible -> ActivityInfo.SCREEN_ORIENTATION_FULL_USER
     isPhone -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
-    else -> ActivityInfo.SCREEN_ORIENTATION_SENSOR
+    // 平板跟随系统旋转偏好；SENSOR 会绕过用户的旋转锁定。
+    else -> ActivityInfo.SCREEN_ORIENTATION_USER
 }
 
 internal fun shouldKeepVideoOutputEnabled(
