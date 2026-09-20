@@ -7,6 +7,10 @@
 # Release instrumentation 会直接调用目标应用中的挂起接口。
 -keep class kotlinx.coroutines.** { *; }
 
+# 页面翻译配置回归测试需要在 Release 进程中创建和重新打开独立 DataStore。
+-keep class androidx.datastore.** { *; }
+-keep class com.asmr.player.translation.** { *; }
+
 # 设备端播放回归测试需要通过公开 Media3 API 连接 Release 播放服务。
 -keep class androidx.media3.** { *; }
 -keep class com.google.common.util.concurrent.** { *; }

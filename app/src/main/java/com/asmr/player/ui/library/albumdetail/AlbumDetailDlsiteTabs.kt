@@ -1,5 +1,7 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.translation.translatedPageText
+
 import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -575,7 +577,7 @@ private fun DlsiteTrialAudioItem(
             verticalArrangement = Arrangement.spacedBy(1.dp)
         ) {
             Text(
-                text = track.title,
+                text = translatedPageText(track.title, fileName = true),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
@@ -1564,7 +1566,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                         )
                     ) {
                         Text(
-                            text = track.title,
+                            text = translatedPageText(track.title, fileName = true),
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,

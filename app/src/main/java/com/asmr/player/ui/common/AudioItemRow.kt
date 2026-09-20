@@ -1,4 +1,6 @@
-﻿package com.asmr.player.ui.common
+package com.asmr.player.ui.common
+
+import com.asmr.player.translation.translatedPageText
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -119,7 +121,7 @@ internal fun AudioItemRow(
                 verticalArrangement = Arrangement.spacedBy(1.dp)
             ) {
                 Text(
-                    text = title,
+                    text = translatedPageText(title, fileName = true),
                     maxLines = titleMaxLines,
                     overflow = TextOverflow.Ellipsis,
                     style = resolvedTitleStyle,
@@ -148,7 +150,7 @@ internal fun AudioItemRow(
     ListItem(
         headlineContent = {
             Text(
-                text = title,
+                text = translatedPageText(title, fileName = true),
                 maxLines = titleMaxLines,
                 overflow = TextOverflow.Ellipsis,
                 style = resolvedTitleStyle,

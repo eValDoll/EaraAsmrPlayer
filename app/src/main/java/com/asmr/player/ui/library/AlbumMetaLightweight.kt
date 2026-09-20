@@ -1,5 +1,7 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.translation.translatedPageText
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
@@ -130,7 +132,7 @@ internal fun AlbumHeroPrimaryMetaLightweight(
                     modifier = Modifier.size(if (emphasized) 14.dp else 13.dp),
                 )
                 Text(
-                    text = normalizedCircle,
+                    text = translatedPageText(normalizedCircle),
                     style = MaterialTheme.typography.labelMedium.copy(
                         fontSize = if (emphasized) 12.sp else 13.sp,
                         shadow = textShadow,
@@ -189,7 +191,7 @@ internal fun AlbumItemPrimaryMetaLightweight(
                         .size(13.dp)
                 )
                 Text(
-                    text = normalizedCircle,
+                    text = translatedPageText(normalizedCircle),
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontSize = 13.sp,
                         fontWeight = FontWeight.SemiBold,
@@ -384,7 +386,7 @@ private fun AlbumItemInlineValueItems(
     values.forEach { value ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
-                text = valuePrefix + value.removePrefix(valuePrefix),
+                text = valuePrefix + if (valuePrefix == "#") translatedPageText(value.removePrefix(valuePrefix)) else value,
                 style = MaterialTheme.typography.labelSmall.copy(
                     fontSize = if (prominent) 13.sp else 12.sp,
                     fontWeight = if (prominent) FontWeight.SemiBold else FontWeight.Medium,
@@ -566,7 +568,7 @@ internal fun AlbumHeaderTagsLightweight(
         ) {
             normalizedTags.forEach { tag ->
                 Text(
-                    text = if (tag.startsWith("#")) tag else "#$tag",
+                    text = "#" + translatedPageText(tag.removePrefix("#")),
                     style = MaterialTheme.typography.labelMedium.copy(
                         fontSize = if (emphasized) 12.sp else 13.sp
                     ),

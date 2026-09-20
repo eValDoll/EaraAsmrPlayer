@@ -1,5 +1,7 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.translation.translatedPageText
+
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
@@ -232,7 +234,7 @@ internal fun AlbumTagsSingleLine(
         }
         normalizedTags.forEach { tag ->
             AlbumMetaBadge(
-                text = if (tag.startsWith("#")) tag else "#$tag",
+                text = "#" + translatedPageText(tag.removePrefix("#")),
                 tone = AlbumMetaTone.Tag,
                 shape = AlbumMetaTagShape,
                 maxWidth = 220.dp,
@@ -272,7 +274,7 @@ internal fun AlbumTagsFlow(
         }
         normalizedTags.forEach { tag ->
             AlbumMetaBadge(
-                text = if (tag.startsWith("#")) tag else "#$tag",
+                text = "#" + translatedPageText(tag.removePrefix("#")),
                 tone = AlbumMetaTone.Tag,
                 shape = AlbumMetaTagShape,
                 maxWidth = 220.dp,
@@ -345,7 +347,7 @@ internal fun AlbumHeaderTagsFlow(
     ) { index ->
         val tag = normalizedTags[index]
         AlbumMetaBadge(
-            text = if (tag.startsWith("#")) tag else "#$tag",
+            text = "#" + translatedPageText(tag.removePrefix("#")),
             tone = AlbumMetaTone.Tag,
             shape = AlbumMetaTagShape,
             maxWidth = 220.dp,

@@ -1,5 +1,8 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.translation.PageTranslationHost
+import com.asmr.player.translation.translatedPageText
+
 import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
@@ -246,6 +249,38 @@ private fun LibraryActionItem(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun LibraryScreen(
+    windowSizeClass: WindowSizeClass,
+    isActive: Boolean = true,
+    isDataActive: Boolean = isActive,
+    onAlbumClick: (Album) -> Unit,
+    onPlayTracks: (Album, List<Track>, Track) -> Unit,
+    onOpenPlaylistPicker: (MediaItem) -> Unit = {},
+    onOpenGroupPicker: (albumId: Long) -> Unit = { _ -> },
+    onOpenFilterScreen: () -> Unit = {},
+    onSearchKeyword: (String) -> Unit = {},
+    scrollToTopSignal: Long = 0L,
+    viewModel: LibraryViewModel = hiltViewModel()
+) {
+    PageTranslationHost(active = isActive && isDataActive, headerKey = "library") {
+        LibraryScreenContent(
+            windowSizeClass = windowSizeClass,
+            isActive = isActive,
+            isDataActive = isDataActive,
+            onAlbumClick = onAlbumClick,
+            onPlayTracks = onPlayTracks,
+            onOpenPlaylistPicker = onOpenPlaylistPicker,
+            onOpenGroupPicker = onOpenGroupPicker,
+            onOpenFilterScreen = onOpenFilterScreen,
+            onSearchKeyword = onSearchKeyword,
+            scrollToTopSignal = scrollToTopSignal,
+            viewModel = viewModel,
+        )
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+private fun LibraryScreenContent(
     windowSizeClass: WindowSizeClass,
     isActive: Boolean = true,
     isDataActive: Boolean = isActive,
@@ -1384,7 +1419,7 @@ private fun TrackAlbumHeader(
         Spacer(modifier = Modifier.width(10.dp))
         Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
             Text(
-                text = albumTitle.ifBlank { rjCode.ifBlank { "专辑" } },
+                text = translatedPageText(albumTitle).ifBlank { rjCode.ifBlank { "专辑" } },
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = colorScheme.textPrimary,
                 maxLines = 2,
