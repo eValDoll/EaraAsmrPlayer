@@ -1,5 +1,7 @@
 package com.asmr.player.ui.search
 
+import com.asmr.player.translation.PageTranslationHost
+
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.snap
@@ -315,6 +317,54 @@ private fun SearchFilterIconView(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun SearchScreen(
+    windowSizeClass: WindowSizeClass,
+    isActive: Boolean = true,
+    isDataActive: Boolean = isActive,
+    onAlbumClick: (Album, Boolean, Boolean) -> Unit,
+    onOpenSearchAssist: (SearchAssistSearchRequest) -> Unit = {},
+    submittedSearchKeyword: String = "",
+    submittedSearchOrderName: String = SearchSortOption.Trend.name,
+    submittedSearchPurchasedOnly: Boolean = false,
+    submittedSearchPresaleOnly: Boolean = false,
+    submittedSearchChineseTranslatedOnly: Boolean = false,
+    submittedSearchCollectedOnly: Boolean = true,
+    submittedSearchHasSubtitle: Boolean = false,
+    submittedSearchAllAges: Boolean = false,
+    submittedSearchCollectedSortName: String = SearchCollectedSortOption.ReleaseNew.name,
+    submittedSearchLocale: String = "ja_JP",
+    submittedSearchSignal: Long = 0L,
+    scrollToTopSignal: Long = 0L,
+    onHorizontalPagerScrollLockChanged: (Boolean) -> Unit = {},
+    viewModel: SearchViewModel = hiltViewModel()
+) {
+    PageTranslationHost(active = isActive && isDataActive, headerKey = "search") {
+        SearchScreenContent(
+            windowSizeClass = windowSizeClass,
+            isActive = isActive,
+            isDataActive = isDataActive,
+            onAlbumClick = onAlbumClick,
+            onOpenSearchAssist = onOpenSearchAssist,
+            submittedSearchKeyword = submittedSearchKeyword,
+            submittedSearchOrderName = submittedSearchOrderName,
+            submittedSearchPurchasedOnly = submittedSearchPurchasedOnly,
+            submittedSearchPresaleOnly = submittedSearchPresaleOnly,
+            submittedSearchChineseTranslatedOnly = submittedSearchChineseTranslatedOnly,
+            submittedSearchCollectedOnly = submittedSearchCollectedOnly,
+            submittedSearchHasSubtitle = submittedSearchHasSubtitle,
+            submittedSearchAllAges = submittedSearchAllAges,
+            submittedSearchCollectedSortName = submittedSearchCollectedSortName,
+            submittedSearchLocale = submittedSearchLocale,
+            submittedSearchSignal = submittedSearchSignal,
+            scrollToTopSignal = scrollToTopSignal,
+            onHorizontalPagerScrollLockChanged = onHorizontalPagerScrollLockChanged,
+            viewModel = viewModel,
+        )
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+private fun SearchScreenContent(
     windowSizeClass: WindowSizeClass,
     isActive: Boolean = true,
     isDataActive: Boolean = isActive,

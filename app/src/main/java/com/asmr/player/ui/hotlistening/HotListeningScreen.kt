@@ -1,5 +1,7 @@
 package com.asmr.player.ui.hotlistening
 
+import com.asmr.player.translation.PageTranslationHost
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.MutatePriority
@@ -143,6 +145,30 @@ private fun HotListeningPeriodTab(
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HotListeningScreen(
+    windowSizeClass: WindowSizeClass,
+    isActive: Boolean = true,
+    isDataActive: State<Boolean>,
+    onAlbumClick: (Album) -> Unit,
+    onSearchKeyword: (String) -> Unit = {},
+    scrollToTopSignal: Long = 0L,
+    viewModel: HotListeningViewModel = hiltViewModel()
+) {
+    PageTranslationHost(active = isActive && isDataActive.value, headerKey = "hot_listening") {
+        HotListeningScreenContent(
+            windowSizeClass = windowSizeClass,
+            isActive = isActive,
+            isDataActive = isDataActive,
+            onAlbumClick = onAlbumClick,
+            onSearchKeyword = onSearchKeyword,
+            scrollToTopSignal = scrollToTopSignal,
+            viewModel = viewModel,
+        )
+    }
+}
+
+@Composable
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
+private fun HotListeningScreenContent(
     windowSizeClass: WindowSizeClass,
     isActive: Boolean = true,
     isDataActive: State<Boolean>,

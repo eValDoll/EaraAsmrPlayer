@@ -1,5 +1,7 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.translation.translatedPageText
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Spring
@@ -355,7 +357,7 @@ fun AlbumItem(
                         AlbumDetailSkeletonLine(widthFraction = 0.94f)
                     } else {
                         Text(
-                            text = album.title,
+                            text = translatedPageText(album.title),
                             style = MaterialTheme.typography.titleSmall.copy(
                                 fontSize = 16.sp,
                                 lineHeight = 22.sp,
@@ -599,7 +601,7 @@ fun AlbumGridItem(
                 }
             } else {
                 Text(
-                    text = album.title,
+                    text = translatedPageText(album.title),
                     style = MaterialTheme.typography.titleSmall.copy(
                         fontSize = 16.sp,
                         lineHeight = 22.sp,

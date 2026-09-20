@@ -1,5 +1,10 @@
 package com.asmr.player
 
+import com.asmr.player.translation.LocalPageTranslationHeader
+import com.asmr.player.translation.PageTranslationAction
+import com.asmr.player.translation.PageTranslationHeaderAction
+import com.asmr.player.translation.PageTranslationHeaderState
+import com.asmr.player.translation.PageTranslationHost
 import android.os.Bundle
 import android.view.KeyEvent
 import android.view.Choreographer
@@ -492,33 +497,35 @@ private fun AlbumDetailRouteFrame(
         }
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .graphicsLayer {
-                val width = size.width.toFloat().coerceAtLeast(1f)
-                val offset = width * pageOffsetProgress.value.coerceIn(0f, 1f)
-                val visibleRight = if (offset >= width - 0.5f) {
-                    // 保留屏外预绘制帧，避免动画起点改变。
-                    width
-                } else {
-                    (width - offset).coerceIn(0f, width)
-                }
-                // 位移和裁剪都只更新 RenderNode 属性，避免逐帧重新录制整张详情页。
-                translationX = offset
-                shape = HorizontalRectClipShape(0f, visibleRight)
-                clip = true
-            }
-    ) {
-        content(viewModel, heroBlurLayerCache)
-        AlbumDetailRouteTopBar(
-            viewModel = viewModel,
-            onBack = closeAlbumDetail,
-            onEditRj = onEditRj,
+    PageTranslationHost(active = !exitRequested) {
+        Box(
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .zIndex(2f)
-        )
+                .fillMaxSize()
+                .graphicsLayer {
+                    val width = size.width.toFloat().coerceAtLeast(1f)
+                    val offset = width * pageOffsetProgress.value.coerceIn(0f, 1f)
+                    val visibleRight = if (offset >= width - 0.5f) {
+                        // 保留屏外预绘制帧，避免动画起点改变。
+                        width
+                    } else {
+                        (width - offset).coerceIn(0f, width)
+                    }
+                    // 位移和裁剪都只更新 RenderNode 属性，避免逐帧重新录制整张详情页。
+                    translationX = offset
+                    shape = HorizontalRectClipShape(0f, visibleRight)
+                    clip = true
+                }
+        ) {
+            content(viewModel, heroBlurLayerCache)
+            AlbumDetailRouteTopBar(
+                viewModel = viewModel,
+                onBack = closeAlbumDetail,
+                onEditRj = onEditRj,
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .zIndex(2f)
+            )
+        }
     }
 }
 
@@ -560,6 +567,13 @@ private fun AlbumDetailRouteTopBar(
                 }
             },
             actions = {
+                PageTranslationAction(
+                    modifier = Modifier
+                        .padding(end = 8.dp)
+                        .albumDetailTopBarButtonSurface(true),
+                    contentColor = Color.White,
+                    activeContentColor = Color.White,
+                )
                 if (showManualBind) {
                     EaraTopBarIconButton(
                         onClick = {
@@ -1771,9 +1785,11 @@ fun MainContainer(
         val bottomChromeBottomPadding = 24.dp + navigationBarBottomPadding
         val bottomOverlayPadding = bottomChromeOverlayHeight(useLargeBottomChrome) + navigationBarBottomPadding
         var secondaryPageTopPadding by remember { mutableStateOf(0.dp) }
+        val pageTranslationHeader = remember { PageTranslationHeaderState() }
         CompositionLocalProvider(
             LocalBottomOverlayPadding provides bottomOverlayPadding,
-            LocalRightPanelExpandedState provides rightPanelExpandedState
+            LocalRightPanelExpandedState provides rightPanelExpandedState,
+            LocalPageTranslationHeader provides pageTranslationHeader,
         ) {
             Box(
                 modifier = Modifier
@@ -1931,6 +1947,7 @@ fun MainContainer(
                                                             }
                                                         }
                                                         val activeTaskCount = activeDownloadCount + activeSubtitleTaskCount
+                                                        PageTranslationHeaderAction(headerActionRoute, Modifier.padding(end = 4.dp))
                                                         Box {
                                                             EaraTopBarIconButton(
                                                                 onClick = { navController.navigate("downloads") },

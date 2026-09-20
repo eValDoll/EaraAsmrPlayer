@@ -1,5 +1,7 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.translation.translatedPageText
+
 import android.content.Intent
 import android.graphics.PathMeasure as AndroidPathMeasure
 import android.graphics.RenderEffect
@@ -2352,7 +2354,7 @@ private fun AlbumDetailLandscapeIdentity(
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Text(
-            text = identity.title,
+            text = translatedPageText(identity.title),
             modifier = Modifier.clickable { copyMeta("标题", identity.title) },
             style = MaterialTheme.typography.headlineMedium.copy(
                 fontWeight = FontWeight.Bold,
@@ -2662,7 +2664,7 @@ private fun AlbumDetailSimilarWorkCard(
             verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             Text(
-                text = work.title,
+                text = translatedPageText(work.title),
                 style = MaterialTheme.typography.labelMedium,
                 color = colorScheme.textPrimary,
                 maxLines = 2,
@@ -3024,7 +3026,7 @@ private fun AlbumHeroIdentityOverlay(
         verticalArrangement = Arrangement.spacedBy(9.dp)
     ) {
         Text(
-            text = identity.title,
+            text = translatedPageText(identity.title),
             modifier = Modifier.clickable { copyMeta("标题", identity.title) },
             style = MaterialTheme.typography.titleMedium.copy(
                 fontWeight = FontWeight.Bold,

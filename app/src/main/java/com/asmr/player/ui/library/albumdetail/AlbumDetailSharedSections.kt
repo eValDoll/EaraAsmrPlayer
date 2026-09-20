@@ -1,5 +1,7 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.translation.translatedPageText
+
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
@@ -414,7 +416,7 @@ internal fun DlsiteRecommendedWorkCard(
             }
             Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = work.title.ifBlank { displayRj },
+                    text = translatedPageText(work.title).ifBlank { displayRj },
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     style = MaterialTheme.typography.bodySmall,

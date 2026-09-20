@@ -140,7 +140,7 @@ private enum class SettingsSection(
     Appearance("外观", "调整主题、主题色与播放页背景", Icons.Rounded.Palette),
     Playback("播放设置", "管理迷你播放栏、音频输出与淡入淡出", Icons.Rounded.Headphones),
     Lyrics("歌词", "配置歌词页与悬浮歌词的显示效果", Icons.Rounded.Lyrics),
-    Translation("翻译配置", "管理本地字幕模型与 DeepSeek 翻译", Icons.Rounded.Translate),
+    Translation("翻译配置", "管理页面翻译、字幕模型与 DeepSeek 翻译", Icons.Rounded.Translate),
     SupportStatus("服务状态与代理", "测试服务连通性并配置代理与 DNS", Icons.Rounded.Router),
     AppCache("APP 缓存", "设置缓存容量上限并清理缓存", Icons.Rounded.Storage),
     About("关于", "查看版本信息并检查应用更新", Icons.Rounded.Info),
@@ -968,8 +968,17 @@ fun SettingsScreen(
                 }
                 }
                 if (currentSection == SettingsSection.Translation) {
+                    item(key = "group:page_translation") {
+                        SettingsDetailCard { PageTranslationSettingsSection(isActive = translationDataActive) }
+                    }
                     item(key = "group:translation_config") {
                         SettingsDetailCard {
+                        Text(
+                            text = "字幕翻译",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.SemiBold,
+                            color = colorScheme.textPrimary,
+                        )
                         SubtitleModelSettingsSection(
                             state = subtitleModelState,
                             selectedSourceIds = subtitleModelSourceIds,

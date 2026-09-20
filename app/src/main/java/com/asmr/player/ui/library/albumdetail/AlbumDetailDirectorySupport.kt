@@ -1,5 +1,7 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.translation.translatedPageText
+
 import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -2168,7 +2170,7 @@ internal fun DirectoryBreadcrumbBar(
                 onClick = { onNavigate(crumb.path) },
                 label = {
                     Text(
-                        text = crumb.label,
+                        text = translatedPageText(crumb.label),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -2231,7 +2233,7 @@ internal fun CompactDirectoryBreadcrumbBar(
                     )
                 } else {
                     CompactBreadcrumbNode(
-                        text = crumb.label,
+                        text = translatedPageText(crumb.label),
                         selected = crumb.path == currentPath,
                         onClick = { onNavigate(crumb.path) }
                     )
@@ -2324,7 +2326,7 @@ internal fun CompactDirectoryBreadcrumbContent(
                 )
             } else {
                 CompactBreadcrumbNode(
-                    text = crumb.label,
+                    text = translatedPageText(crumb.label),
                     selected = crumb.path == currentPath,
                     onClick = { onNavigate(crumb.path) }
                 )
@@ -2586,7 +2588,7 @@ internal fun CompactDirectoryBreadcrumbContentV2(
                 )
             } else {
                 CompactBreadcrumbNode(
-                    text = crumb.label,
+                    text = translatedPageText(crumb.label),
                     selected = crumb.path == currentPath,
                     onClick = { onNavigate(crumb.path) }
                 )
@@ -2617,7 +2619,7 @@ internal fun DirectoryFolderRowV2(
         )
         Spacer(modifier = Modifier.width(10.dp))
         Text(
-            text = title,
+            text = translatedPageText(title),
             modifier = Modifier.weight(1f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -2918,7 +2920,7 @@ internal fun DirectoryFolderRow(
             )
             Spacer(modifier = Modifier.width(12.dp))
             Text(
-                text = title,
+                text = translatedPageText(title),
                 modifier = Modifier.weight(1f),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
@@ -2981,7 +2983,7 @@ internal fun CompactDirectoryBreadcrumbContentV3(
                 )
             } else {
                 CompactBreadcrumbNode(
-                    text = crumb.label,
+                    text = translatedPageText(crumb.label),
                     selected = crumb.path == currentPath,
                     onClick = { onNavigate(crumb.path) }
                 )
@@ -3020,7 +3022,7 @@ internal fun DirectoryFolderRowV3(
         }
         Spacer(modifier = Modifier.width(11.dp))
         Text(
-            text = title,
+            text = translatedPageText(title),
             modifier = Modifier.weight(1f),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -3685,7 +3687,7 @@ internal fun DirectoryFileRow(
                 verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
                 Text(
-                    text = file.title,
+                    text = translatedPageText(file.title, fileName = true),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     color = colorScheme.textPrimary,
@@ -3904,7 +3906,7 @@ internal fun TreeFolderRow(
         ListItem(
             headlineContent = { 
                 Text(
-                    title, 
+                    translatedPageText(title, fileName = true),
                     maxLines = 1, 
                     overflow = TextOverflow.Ellipsis,
                     color = colorScheme.textPrimary,
@@ -3975,7 +3977,7 @@ internal fun TreeFileRow(
         ListItem(
             headlineContent = { 
                 Text(
-                    title, 
+                    translatedPageText(title, fileName = true),
                     maxLines = 1, 
                     overflow = TextOverflow.Ellipsis,
                     color = colorScheme.textSecondary,
