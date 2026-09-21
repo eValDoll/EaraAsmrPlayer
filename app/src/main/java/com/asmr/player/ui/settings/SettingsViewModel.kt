@@ -291,6 +291,12 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch { settingsRepository.setPauseOnOutputDisconnect(enabled) }
     }
 
+    fun openSystemAudioEffects() {
+        if (!openSystemAudioEffectsSettings(context)) {
+            messageManager.showError("无法打开系统音效设置")
+        }
+    }
+
     fun setResumeOnOutputConnect(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setResumeOnOutputConnect(enabled) }
     }
