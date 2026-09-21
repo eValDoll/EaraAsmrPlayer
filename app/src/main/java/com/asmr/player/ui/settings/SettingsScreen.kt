@@ -773,6 +773,29 @@ fun SettingsScreen(
                                 onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable(
+                                    role = androidx.compose.ui.semantics.Role.Button,
+                                    onClick = viewModel::openSystemAudioEffects
+                                )
+                                .heightIn(min = 48.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "系统音效",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colorScheme.textPrimary,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Icon(
+                                imageVector = Icons.Rounded.ChevronRight,
+                                contentDescription = null,
+                                tint = colorScheme.textSecondary,
+                                modifier = Modifier.size(22.dp)
+                            )
+                        }
                         SettingsToggleRow(
                             text = "断开扬声器、有线/蓝牙耳机或蓝牙关闭时立刻暂停播放",
                             checked = pauseOnOutputDisconnect,

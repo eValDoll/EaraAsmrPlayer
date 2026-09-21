@@ -154,7 +154,7 @@
     "phoneAppVsPhoneBrowserEqualityConfirmed": false,
     "automatedBrowserCaptureCompleted": false,
     "captureLimitation": "Automatic approval blocked launching the phone browser via ADB; no supported mobile-browser surface exposed by computer-use tools.",
-    "interpretation": "Together with the app PCM measurements, this supports investigating device output differences; the specific cause remains unconfirmed."
+    "interpretation": "Phone browser also differed from the computer. The user subsequently attributed the audible difference to system Dolby after the suggested toggle comparison; no earphone acoustic measurement was performed."
   },
   "releaseInstall": "Passed using gradlew-local.bat :app:installRelease; installed on one device without clearing app data.",
   "releaseVsInstalledBefore": {
@@ -166,5 +166,98 @@
     "differentSamples": 0,
     "maxAbsoluteDifferenceInPcm16Units": 0,
     "bitIdentical": true
+  },
+  "systemDolbyBypassInvestigation": {
+    "dolbyEnabledDuringProbe": true,
+    "platformCapabilities": {
+      "immersiveAudioLevel": 1,
+      "spatializerEnabled": false,
+      "spatializerAvailable": true,
+      "canSpatializeStereoAuto": true,
+      "canSpatializeStereoNever": false,
+      "outputs": [
+        {
+          "type": 1,
+          "supportedMixerCount": 0,
+          "bitPerfectMixerCount": 0
+        },
+        {
+          "type": 2,
+          "supportedMixerCount": 0,
+          "bitPerfectMixerCount": 0
+        },
+        {
+          "type": 7,
+          "supportedMixerCount": 0,
+          "bitPerfectMixerCount": 0
+        },
+        {
+          "type": 8,
+          "supportedMixerCount": 0,
+          "bitPerfectMixerCount": 0
+        },
+        {
+          "type": 18,
+          "supportedMixerCount": 0,
+          "bitPerfectMixerCount": 0
+        }
+      ]
+    },
+    "probeFormat": {
+      "sampleRate": 48000,
+      "channels": 2,
+      "bits": 16,
+      "content": "silence",
+      "secondsPerMode": 8
+    },
+    "modes": [
+      {
+        "spatializationBehavior": "AUTO",
+        "policyFlags": "0x800",
+        "outputThread": "AudioOut_15",
+        "route": "Bluetooth A2DP",
+        "dolbyDapSession": 0,
+        "dolbyDapEnabled": true,
+        "dolbyDapSuspended": false
+      },
+      {
+        "spatializationBehavior": "NEVER",
+        "policyFlags": "0x8800",
+        "outputThread": "AudioOut_15",
+        "route": "Bluetooth A2DP",
+        "dolbyDapSession": 0,
+        "dolbyDapEnabled": true,
+        "dolbyDapSuspended": false
+      },
+      {
+        "spatializationBehavior": "AUTO",
+        "policyFlags": "0x800",
+        "outputThread": "AudioOut_15",
+        "route": "Bluetooth A2DP",
+        "dolbyDapSession": 0,
+        "dolbyDapEnabled": true,
+        "dolbyDapSuspended": false
+      }
+    ],
+    "conclusion": "The opt-out flag is accepted, but the vendor Dolby DAP remains enabled on the same output chain. No verified per-app Dolby bypass; no earphone acoustic measurement.",
+    "prototypeOriginalSoundToggleRemoved": true,
+    "userSelectedImplementation": "System audio effects settings shortcut; user chooses the global effect in the system UI.",
+    "userReportedDolbyListeningDifference": true
+  },
+  "systemAudioEffectsEntry": {
+    "releaseInstall": "Passed using gradlew-local.bat :app:installRelease.",
+    "instrumentationTests": {
+      "tests": 2,
+      "failures": 0,
+      "classes": [
+        "SystemAudioEffectsSettingsAndroidTest",
+        "SystemSpatializationAndroidTest"
+      ]
+    },
+    "observedLaunchPackage": "com.asmr.player",
+    "observedTargetActivity": "com.miui.misound/.HeadsetSettingsActivity",
+    "targetWasTopResumedActivity": true,
+    "fallbackOtherBrandsTested": false,
+    "systemEffectsModifiedByApp": false
   }
 }

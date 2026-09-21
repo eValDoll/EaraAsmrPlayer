@@ -6,9 +6,9 @@
 
 实机数字输出测试未发现 App 的解码或音效处理使本次样本的双声道声场变窄。手机原有版本和本分支 Release 在同一段 14 秒音频上的 1,344,000 个 PCM 采样值完全一致；App 输出与同一 MP3 的 FFmpeg 解码结果也高度一致，见下方“实机自动化补测”。
 
-用户确认使用同一副耳机、播放 MP3、App 音效全部关闭。随后手动试听手机浏览器，反馈“在手机的浏览器上听也和电脑上不一样”。结合 App 数字输出测试，当前证据更支持手机与电脑输出链路的差异，而非 App 特有的解码问题。该反馈没有明确确认手机网页与 App 完全一致，也不是网页数字输出或耳机端声学回录；具体差异来自系统音效、连接配置还是其他设备处理，仍未确定。
+用户确认使用同一副耳机、播放 MP3、App 音效全部关闭。随后手动试听手机浏览器，反馈“在手机的浏览器上听也和电脑上不一样”，并进一步确认关闭系统 Dolby 后听感符合预期，要求提供系统原声相关入口。结合 App 数字输出测试，本次反馈指向设备系统音效，而非 App 特有的解码问题。Dolby 对听感的影响来自用户试听确认，尚无耳机端声学回录；该反馈也没有明确确认手机网页与 App 的数字输出完全一致。
 
-本次只增加音频保真回归测试与排查记录，没有修改生产播放逻辑、音效参数、系统音频策略或界面。
+音频排查未改变生产播放逻辑、音效参数或系统音频策略。用户随后要求在播放设置访问原声相关设置；经下方系统旁路能力验证后，选择增加“系统音效”入口，进入手机系统页面手动选择音效。
 
 ## 解码和播放链路的历史变动
 
@@ -112,6 +112,28 @@ python tools/compare-audio-captures.py --reference .dev-data/audio-fidelity-devi
 
 **浏览器对照：** 自动审批曾拒绝通过 ADB 启动手机 Chrome 打开作品页的操作，仅返回 `blocked by policy`，未给出具体原因。当前电脑使用工具仅暴露 Codex 内置浏览器，没有手机浏览器控制入口。用户随后自行试听，确认手机网页与电脑听感也不同。这是用户主观试听结果，尚未取得浏览器录音，不能将其写作 App 与手机网页的数字输出 A/B 对比已通过。
 
+## 系统 Dolby 旁路能力与设置入口
+
+用户确认关闭系统 Dolby 后听感符合预期，并提出在播放设置增加原声选项。已制作按音轨设置 `SPATIALIZATION_BEHAVIOR_NEVER` 的实验开关，在实机验证后撤回，未作为有效的 Dolby 旁路功能交付。
+
+[Android 的公开接口](https://developer.android.com/media/grow/spatial-audio)允许音轨禁止平台空间化。手机确实接受该标记：标准 Spatializer 能力查询中，双声道 AUTO 可空间化，NEVER 不可空间化。但用户重新开启 Dolby 后，标准 Spatializer 的 enabled 仍为 false，而厂商独立的 Dolby DAP 已启用。
+
+在 App UID 下创建相同格式的 AudioTrack，依次运行 AUTO → NEVER → AUTO，每轮持续播放 8 秒静音 PCM，并采集 AudioPolicy / AudioFlinger 状态：
+
+| 模式 | AudioPolicy 属性 Flags | 输出线程 | Dolby DAP |
+| --- | --- | --- | --- |
+| AUTO | `0x800` | `AudioOut_15`，Bluetooth A2DP | session 0，启用、未暂停 |
+| NEVER | `0x8800` | 同一线程 | session 0，仍启用、未暂停 |
+| AUTO | `0x800` | 同一线程 | session 0，仍启用、未暂停 |
+
+接口调用和 AudioTrack 属性校验通过，但独立 Dolby 没有从效果链移除或停用。这不是耳机端回录，也不能仅凭属性校验通过承诺已绕过 Dolby。因此不保留可能误导用户的“原声播放”开关，不尝试改变全局 Dolby 或伪装通话、闹钟等音频用途。设备当前输出也没有报告可配置的 bit-perfect mixer。
+
+保留 `SystemSpatializationAndroidTest` 作为设备能力探针。传入 instrumentation 参数 `audioPolicyProbeDurationMs=8000` 可开启上述静音播放窗口，用 `dumpsys media.audio_policy`、`dumpsys media.audio_flinger` 检查路由及效果链。默认测试只验证平台接受属性，不将 Dolby 旁路作为成功条件。曾尝试通过 ActivityScenario 验证实际服务切换，但测试页面启动超时，没有进入开关切换；该实验测试已移除，不计入通过项目。
+
+用户选择的最终实现是在“播放设置”增加“系统音效”一行，只有标题和右箭头。小米、Redmi、POCO 优先通过 `miui.intent.action.HEADSET_SETTINGS` 打开 `com.miui.misound`；若厂商入口不存在或权限受限，则依次尝试 Android 声音设置、系统设置。实机解析到 `com.miui.misound/.HeadsetSettingsActivity`。页面由系统提供，系统音效的选择会影响其他应用；App 本身不更改系统开关。
+
+最终执行 `gradlew-local.bat -g D:\toyProjects\EaraAsmrPlayer\.gradle-user-home :app:installRelease -PreleaseAndroidTest :app:assembleReleaseAndroidTest` 成功，Release 安装到连接的手机。实机运行 `SystemAudioEffectsSettingsAndroidTest`、`SystemSpatializationAndroidTest`，2 项通过。ActivityTaskManager 确认入口请求来自 `com.asmr.player` 的 UID 10584，目标为 `com.miui.misound/.HeadsetSettingsActivity`，随后该页面为前台 resumed activity。通用声音设置、系统设置的回退分支未在其他品牌设备上实测。
+
 ## 后续定位方向
 
 App 解码方向目前没有发现需要修复的缺陷。若继续定位设备间的听感差异，应保持同目录、同曲目、同一片段、正常速度与音调，并尽量匹配实际响度，每次只改变一个条件：
@@ -120,4 +142,4 @@ App 解码方向目前没有发现需要修复的缺陷。若继续定位设备�
 - 再核对电脑的系统音效、耳机连接方式与蓝牙协商参数。手机实际为 A2DP AAC / 44.1 kHz，电脑端参数未知，不能直接认定某种编码导致差异。
 - 只有同一手机上网页与 App 仍有差异时，再采集两者相同片段的数字输出，并比较实际 AudioTrack 路由、系统音效和最终耳机输出。
 
-本分支保留回归测试、复测脚本和排查证据；没有改变解码器或既有音效算法，也不将设备间的听感差异报告为已经修复。
+本分支保留回归测试、复测脚本、排查证据和用户选定的系统音效入口；没有改变解码器或既有音效算法。
