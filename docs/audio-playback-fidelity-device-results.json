@@ -149,8 +149,12 @@
     "channelSeparationChangeDb": -0.0007168526981473633
   },
   "browserComparison": {
-    "status": "pending",
-    "reason": "Automatic approval blocked launching the phone browser via ADB; no supported mobile-browser surface exposed by computer-use tools."
+    "status": "user_reported_phone_vs_computer_difference",
+    "userReport": "在手机的浏览器上听也和电脑上不一样",
+    "phoneAppVsPhoneBrowserEqualityConfirmed": false,
+    "automatedBrowserCaptureCompleted": false,
+    "captureLimitation": "Automatic approval blocked launching the phone browser via ADB; no supported mobile-browser surface exposed by computer-use tools.",
+    "interpretation": "Together with the app PCM measurements, this supports investigating device output differences; the specific cause remains unconfirmed."
   },
   "releaseInstall": "Passed using gradlew-local.bat :app:installRelease; installed on one device without clearing app data.",
   "releaseVsInstalledBefore": {
