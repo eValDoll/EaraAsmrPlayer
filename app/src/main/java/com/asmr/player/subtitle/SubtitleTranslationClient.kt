@@ -651,7 +651,7 @@ internal fun parseRetryAfterMillis(
     return (retryAt - nowMs).coerceAtLeast(0L)
 }
 
-internal const val DEEPSEEK_SUBTITLE_MODEL = "deepseek-v4-flash"
+internal const val DEEPSEEK_SUBTITLE_MODEL = "deepseek-flash"
 internal const val SUBTITLE_READ_TOOL_NAME = "read_subtitle_translation_state"
 internal const val SUBTITLE_WRITE_TOOL_NAME = "write_timed_chinese_subtitles"
 internal const val POLISH_READ_TOOL_NAME = "read_subtitle_polish_state"
