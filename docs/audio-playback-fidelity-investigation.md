@@ -130,7 +130,7 @@ python tools/compare-audio-captures.py --reference .dev-data/audio-fidelity-devi
 
 保留 `SystemSpatializationAndroidTest` 作为设备能力探针。传入 instrumentation 参数 `audioPolicyProbeDurationMs=8000` 可开启上述静音播放窗口，用 `dumpsys media.audio_policy`、`dumpsys media.audio_flinger` 检查路由及效果链。默认测试只验证平台接受属性，不将 Dolby 旁路作为成功条件。曾尝试通过 ActivityScenario 验证实际服务切换，但测试页面启动超时，没有进入开关切换；该实验测试已移除，不计入通过项目。
 
-用户选择的最终实现是在“播放设置”增加“系统音效”一行，只有标题和右箭头。小米、Redmi、POCO 优先通过 `miui.intent.action.HEADSET_SETTINGS` 打开 `com.miui.misound`；若厂商入口不存在或权限受限，则依次尝试 Android 声音设置、系统设置。实机解析到 `com.miui.misound/.HeadsetSettingsActivity`。页面由系统提供，系统音效的选择会影响其他应用；App 本身不更改系统开关。
+用户选择的最终实现是在“播放设置”增加“系统音效”入口，按用户指定显示“系统音效：部分系统会默认开启杜比全景声效果，可自行选择是否开启”，右侧保留箭头。小米、Redmi、POCO 优先通过 `miui.intent.action.HEADSET_SETTINGS` 打开 `com.miui.misound`；若厂商入口不存在或权限受限，则依次尝试 Android 声音设置、系统设置。实机解析到 `com.miui.misound/.HeadsetSettingsActivity`。页面由系统提供，系统音效的选择会影响其他应用；App 本身不更改系统开关。
 
 最终执行 `gradlew-local.bat -g D:\toyProjects\EaraAsmrPlayer\.gradle-user-home :app:installRelease -PreleaseAndroidTest :app:assembleReleaseAndroidTest` 成功，Release 安装到连接的手机。实机运行 `SystemAudioEffectsSettingsAndroidTest`、`SystemSpatializationAndroidTest`，2 项通过。ActivityTaskManager 确认入口请求来自 `com.asmr.player` 的 UID 10584，目标为 `com.miui.misound/.HeadsetSettingsActivity`，随后该页面为前台 resumed activity。通用声音设置、系统设置的回退分支未在其他品牌设备上实测。
 

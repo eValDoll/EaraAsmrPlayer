@@ -784,7 +784,7 @@ fun SettingsScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "系统音效",
+                                text = "系统音效：部分系统会默认开启杜比全景声效果，可自行选择是否开启",
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = colorScheme.textPrimary,
                                 modifier = Modifier.weight(1f)
