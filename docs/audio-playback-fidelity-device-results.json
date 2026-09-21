@@ -1,0 +1,166 @@
+{
+  "date": "2026-09-21",
+  "device": {
+    "model": "23078RKD5C",
+    "androidRelease": "16",
+    "sdk": 36
+  },
+  "app": {
+    "versionName": "1.2.2",
+    "versionCode": 10202,
+    "testedReleaseCommit": "9a9260e",
+    "decoder": "c2.mtk.mp3.decoder",
+    "pcmSampleRate": 48000,
+    "pcmChannels": 2,
+    "pcmBits": 16
+  },
+  "source": {
+    "work": "RJ01439823",
+    "directory": "01_本篇（MP3）",
+    "trackNumber": 4,
+    "bytes": 23621445,
+    "sha256": "bc44582bd48d4f2d7a3714f3c211c5e69fdac63d5f7d6a5bdba0f971f92d3972",
+    "codec": "MP3",
+    "bitrate": 192000,
+    "sampleRate": 48000,
+    "channels": 2
+  },
+  "output": {
+    "route": "Bluetooth A2DP",
+    "bluetoothCodec": "AAC",
+    "bluetoothSampleRate": 44100,
+    "bluetoothBits": 16,
+    "bluetoothChannels": 2,
+    "systemMediaVolumeIndex": 4,
+    "systemMediaVolumeMax": 15,
+    "masterMono": false,
+    "masterBalance": 0,
+    "systemDolbyEnabled": true
+  },
+  "capture": {
+    "tool": "scrcpy 2.7",
+    "audioSource": "playback",
+    "audioDup": true,
+    "audioCodec": "raw",
+    "sampleRate": 48000,
+    "channels": 2,
+    "sampleBits": 16,
+    "referenceDecoder": "FFmpeg",
+    "referenceSegmentStartSec": 520,
+    "alignment": "normalized cross-correlation",
+    "measurementScope": "Android digital playback capture; no Bluetooth or earphone acoustic loopback"
+  },
+  "installedBefore": {
+    "referenceSampleRate": 48000,
+    "captureSampleRate": 48000,
+    "alignedSourceStartSec": 537.5986666666666,
+    "durationSec": 16.0,
+    "gain": [
+      1.0000300875922052,
+      1.0000208281875103
+    ],
+    "gainDb": [
+      0.00026133357394054465,
+      0.00018090945407354822
+    ],
+    "correlation": [
+      0.9999293816456158,
+      0.9999999889075677
+    ],
+    "referenceRmsDbFS": [
+      -62.602537626786955,
+      -21.49686275103365
+    ],
+    "captureRmsDbFS": [
+      -62.60166288486809,
+      -21.49668174522906
+    ],
+    "residualRmsDbFS": [
+      -101.10231590277864,
+      -98.03603812324666
+    ],
+    "snrDb": [
+      38.50003960956523,
+      76.53935628166612
+    ],
+    "referenceLRCorrelation": 0.019633774615159246,
+    "captureLRCorrelation": 0.01959785724239374,
+    "mixMatrix": [
+      [
+        1.0000307658910592,
+        5.7679250636647034e-06
+      ],
+      [
+        -3.041486029109971e-07,
+        1.0000208271905502
+      ]
+    ],
+    "referenceRightOverLeftDb": 41.10567487575331,
+    "appRightOverLeftDb": 41.10498113963904,
+    "channelSeparationChangeDb": -0.0006937361142718146,
+    "stableAlignmentChecks": {
+      "captureTimesSeconds": [
+        6,
+        10,
+        14,
+        18,
+        22
+      ],
+      "sameLagSamples": 556736
+    }
+  },
+  "release": {
+    "referenceSampleRate": 48000,
+    "captureSampleRate": 48000,
+    "alignedSourceStartSec": 537.2786666666667,
+    "durationSec": 16,
+    "gainDb": [
+      0.0002595430940809005,
+      0.00017401151444499863
+    ],
+    "correlation": [
+      0.9999273083594938,
+      0.999999988723233
+    ],
+    "referenceRmsDbFS": [
+      -62.728476634314056,
+      -21.67316221104885
+    ],
+    "captureRmsDbFS": [
+      -62.727585672151676,
+      -21.672988101585098
+    ],
+    "residualRmsDbFS": [
+      -101.10256756333492,
+      -98.14086935258811
+    ],
+    "referenceRightOverLeftDb": 41.055314423264726,
+    "appRightOverLeftDb": 41.05459757056658,
+    "mixMatrix": [
+      [
+        1.0000306367512768,
+        -1.1975031532947048e-05
+      ],
+      [
+        -3.306198070755231e-07,
+        1.000020036162439
+      ]
+    ],
+    "channelSeparationChangeDb": -0.0007168526981473633
+  },
+  "browserComparison": {
+    "status": "pending",
+    "reason": "Automatic approval blocked launching the phone browser via ADB; no supported mobile-browser surface exposed by computer-use tools."
+  },
+  "releaseInstall": "Passed using gradlew-local.bat :app:installRelease; installed on one device without clearing app data.",
+  "releaseVsInstalledBefore": {
+    "sourceStartSec": 538,
+    "sourceEndSec": 552,
+    "durationSec": 14,
+    "frames": 672000,
+    "samples": 1344000,
+    "differentSamples": 0,
+    "maxAbsoluteDifferenceInPcm16Units": 0,
+    "bitIdentical": true
+  }
+}

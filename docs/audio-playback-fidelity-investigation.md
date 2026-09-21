@@ -4,9 +4,11 @@
 
 ## 当前结论
 
-尚未证实 App 的解码或音效处理导致用户反馈的“贴耳感减弱”。用户确认使用同一副耳机、播放 MP3、App 音效全部关闭，但网页在电脑上播放，App 在手机上播放。这个对比同时改变了播放设备和输出链路，不能仅据此归因于 App。
+实机数字输出测试未发现 App 的解码或音效处理使本次样本的双声道声场变窄。手机原有版本和本分支 Release 在同一段 14 秒音频上的 1,344,000 个 PCM 采样值完全一致；App 输出与同一 MP3 的 FFmpeg 解码结果也高度一致，见下方“实机自动化补测”。
 
-本次只增加音频保真回归测试与排查记录，没有修改生产播放逻辑、音效参数、系统音频策略或界面。需要在同一部手机上做网页与 App 的对比，才能继续缩小问题范围。
+用户确认使用同一副耳机、播放 MP3、App 音效全部关闭，但网页在电脑上播放，App 在手机上播放。这个对比同时改变了播放设备和输出链路。尚未完成手机浏览器对照或耳机端声学回录，不能把当前数字输出结果延伸为两台设备最终听感一定相同。
+
+本次只增加音频保真回归测试与排查记录，没有修改生产播放逻辑、音效参数、系统音频策略或界面。
 
 ## 解码和播放链路的历史变动
 
@@ -49,7 +51,7 @@ App 在线曲目取 `mediaDownloadUrl`，缺失时使用 `streamUrl`。对普通
 - **应用立体声音效的衰减**：启用时，居中声像和默认距离 5 会产生约 0.524 倍（−5.62 dB）增益；这是已有音效逻辑。用户确认关闭，因此不能用它解释本次反馈，也未改动该效果。
 - **高位深 WAV 转换**：本作品普通 WAV 01 为 24-bit PCM，02 为 32-bit float，均为 48 kHz 双声道。[Media3 1.8.0 默认关闭浮点输出](https://github.com/androidx/media/blob/1.8.0/libraries/exoplayer/src/main/java/androidx/media3/exoplayer/audio/DefaultAudioSink.java)，自定义音效链使用 16-bit 输出路径。用户本次播放 MP3，不能把 WAV 的位深差异当作本次原因。直接打开 float output 还会绕过 Media3 的自定义音效链，不能作为无验证的修复。
 - **系统空间音效**：当前使用默认空间化策略，没有主动禁止系统空间化。[Android 官方说明](https://developer.android.com/media/grow/spatial-audio)指出平台默认仅空间化多声道内容，厂商可定制行为。本作品的 MP3 是双声道，因此不能仅凭默认策略断言手机做了二次空间化。
-- **电脑与手机的输出差异**：系统音效、单声道/声道平衡设置、蓝牙协商和输出音量等仍待核实。同一副耳机不等于同一条输出链路；目前没有证据确定是哪一项。
+- **电脑与手机的输出差异**：下方补测已读取手机的系统音效、单声道/声道平衡设置、蓝牙协商和输出音量；电脑端对应状态仍未取得。同一副耳机不等于同一条输出链路，目前没有证据确定是哪一项导致听感差异。
 
 ## 验证
 
@@ -66,13 +68,55 @@ Release 单元测试通过：`AudioFidelityTest` 4 项、`DynamicAudioProcessorC
 
 执行命令：`gradlew-local.bat -g D:\toyProjects\EaraAsmrPlayer\.gradle-user-home :app:testReleaseUnitTest --tests com.asmr.player.playback.AudioFidelityTest --tests com.asmr.player.playback.DynamicAudioProcessorChainTest --tests com.asmr.player.playback.VolumeThresholdAudioProcessorTest :app:installRelease`。复用主目录依赖缓存，构建输出仍在独立工作目录。
 
-Release 编译、R8 混淆与 `packageRelease` 均通过；`installRelease` 因 `No connected devices!` 失败。`adb devices -l` 未列出设备，未读取用户手机实际安装版本或进行设备解码、录音及听感验证。
+首轮 Release 编译、R8 混淆与 `packageRelease` 均通过；当时 `installRelease` 因 `No connected devices!` 失败。用户随后连接手机，第二轮已成功完成 `gradlew-local.bat :app:installRelease`，安装到 1 台设备，并进行了以下实机录音验证。
+
+## 实机自动化补测
+
+设备为 Redmi `23078RKD5C`，Android 16 / API 36。测试前 App 版本为 1.2.2（10202）。先测已安装版本，再备份原 APK、核对签名一致，安装本分支 `9a9260e` 的 Release 后复测；没有清除 App 数据。
+
+通过媒体会话确认正在播放的音源为 `RJ01439823 / 01_本篇（MP3） / 第 04 首`，为实际 `media/download` URL，48 kHz / 192 kbps / 双声道。完整 MP3 的 SHA-256 为 `bc44582bd48d4f2d7a3714f3c211c5e69fdac63d5f7d6a5bdba0f971f92d3972`。
+
+设备实际状态：
+
+- MP3 解码器：`c2.mtk.mp3.decoder`。
+- App AudioTrack：48 kHz、16-bit PCM、双声道，播放速度 1.0。
+- 音量阈值、场景效果、立体声、均衡器关闭；声道模式正常。
+- 系统 master mono 关闭、左右平衡为 0。
+- 耳机路由为 Bluetooth A2DP，协商 AAC / 44.1 kHz / 16-bit / stereo。
+- 系统媒体音量 4/15；系统 Dolby effect 已启用，MiSound effect 未启用。测试没有改动这些设置。
+
+使用 [scrcpy 的 playback duplication](https://github.com/Genymobile/scrcpy/blob/v2.7/doc/audio.md) 和 raw WAV 录音，保留手机耳机播放；每轮从约 08:54 开始采集 27 秒。下载同一 MP3，用 FFmpeg 解码为 48 kHz 双声道 float PCM，以归一化互相关对齐采样，再避开开始/停止淡入淡出，选 16 秒稳定片段计算指标。
+
+| 指标 | 手机原有版本 | 本分支 Release |
+| --- | ---: | ---: |
+| 主声道（右）与参考波形的相关系数 | 0.9999999889 | 0.9999999887 |
+| 右声道增益变化 | +0.000181 dB | +0.000174 dB |
+| 左声道增益变化 | +0.000261 dB | +0.000260 dB |
+| 左右电平差相对原音的变化 | −0.000694 dB | −0.000717 dB |
+| 增益拟合后右声道残差 RMS | −98.04 dBFS | −98.14 dBFS |
+
+原音在该片段右声道比左声道强约 41 dB，App 保留了这种强烈的左右差异。原有版本在录音第 6、10、14、18、22 秒得到相同的对齐延迟，没有检出片段内变速或持续采样漂移。
+
+再将两次 App 录音精确裁到同一原音位置 **08:58–09:12**：672,000 帧 / 1,344,000 个左右声道采样，**不同采样数为 0，逐样本完全相同**。这说明本分支 Release 没有在这一实机片段引入相对手机原有版本的数字音频变化。
+
+完整数值见 [设备测试结果 JSON](audio-playback-fidelity-device-results.json)。录音和设备日志仅保存在工作目录的 `.dev-data/audio-fidelity-device/`，未加入 Git。测试后恢复原曲目约 08:54 的暂停位置和原队列。
+
+可用 [比对脚本](../tools/compare-audio-captures.py) 重现采样对齐、增益、相关系数、串音矩阵和两次录音的逐样本比较。脚本依赖 NumPy、SciPy，拒绝采样率不同或非双声道输入，不进行重采样、归一化音量或混声道。以下命令已对本次两份实机录音执行，复现上述结果：
+
+```powershell
+$env:PYTHONUTF8=1
+python tools/compare-audio-captures.py --reference .dev-data/audio-fidelity-device/reference-segment.wav --reference-start 520 --capture .dev-data/audio-fidelity-device/app.wav --capture .dev-data/audio-fidelity-device/release.wav --capture-start 6 --duration 16 --common-source-start 538 --common-duration 14 --output .dev-data/audio-fidelity-device/reproduced-comparison.json
+```
+
+**测量边界：** 此处验证的是 Android playback capture 能取得的数字信号，不是蓝牙 AAC 编码之后或耳机的模拟/声学输出。不能据此断言系统 Dolby、手机与电脑的蓝牙编码及耳机端处理完全相同，也没有把 Dolby 的启用状态认定为已证实根因。
+
+**浏览器对照尚未完成：** 自动审批拒绝了通过 ADB 启动手机 Chrome 打开作品页的操作，仅返回 `blocked by policy`，未给出具体原因。当前电脑使用工具仅暴露 Codex 内置浏览器，没有手机浏览器控制入口。已请求用户在手机浏览器打开同一曲目；尚未取得浏览器录音，因此当前结果不能称为 App 与手机网页已完成 A/B 对比。
 
 ## 下一步复现条件
 
 在同一部手机、同一耳机及连接方式下，比较同目录、同曲目的 App 和手机网页，均设正常速度与音调，并尽量匹配实际响度：
 
 - 手机网页与 App 一致，而电脑不同：先检查两台设备的系统音效、输出与连接配置。
-- 手机网页仍明显优于 App：用同一 MP3 文件对比另一个手机播放器，并连接设备读取实际解码器、采样率、声道、AudioTrack 路由和系统音效状态；必要时再做解码 PCM 对比。
+- 手机网页仍明显优于 App：采集网页的同一片段与本次 App 数字输出对比；若数字输出相同，再比较两者实际 AudioTrack 路由、系统音效和最终耳机输出。
 
 在完成上述对照前，不替换解码器、不改变既有音效算法，也不把主观听感差异报告为已经修复。
