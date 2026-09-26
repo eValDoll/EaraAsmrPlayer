@@ -37,7 +37,7 @@
 
 ## Downloads
 
-从 [**GitHub Releases**](https://github.com/eValDoll/EaraAsmrPlayer/releases) 下载最新版本（tag `v*`，当前版本：`v1.2.2`）。
+从 [**GitHub Releases**](https://github.com/eValDoll/EaraAsmrPlayer/releases) 下载最新版本（tag `v*`，当前版本：`v1.2.3`）。
 
 ---
 
