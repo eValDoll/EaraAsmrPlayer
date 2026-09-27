@@ -367,7 +367,7 @@ private fun PlaylistItemRow(
     }
 }
 
-private fun PlaylistItemWithSubtitles.toPlaybackEntity(): PlaylistItemEntity {
+internal fun PlaylistItemWithSubtitles.toPlaybackEntity(): PlaylistItemEntity {
     return PlaylistItemEntity(
         playlistId = playlistId,
         mediaId = mediaId,
@@ -382,6 +382,7 @@ private fun PlaylistItemWithSubtitles.toPlaybackEntity(): PlaylistItemEntity {
         albumWorkId = albumWorkId,
         trackGroup = trackGroup,
         lyricsRelativePathNoExt = lyricsRelativePathNoExt,
+        remoteSubtitleSources = remoteSubtitleSources,
         mimeType = mimeType,
         isVideo = isVideo,
         itemOrder = itemOrder

@@ -48,11 +48,13 @@ interface PlaylistItemDao {
             pi.albumWorkId,
             pi.trackGroup,
             pi.lyricsRelativePathNoExt,
+            pi.remoteSubtitleSources,
             pi.mimeType,
             pi.isVideo,
             pi.itemOrder,
             (
-                EXISTS(
+                pi.remoteSubtitleSources != ''
+                OR EXISTS(
                     SELECT 1
                     FROM tracks t
                     JOIN subtitles s ON s.trackId = t.id
@@ -82,6 +84,9 @@ interface PlaylistItemDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertItems(items: List<PlaylistItemEntity>)
+
+    @Query("UPDATE playlist_items SET remoteSubtitleSources = :sources WHERE playlistId = :playlistId AND mediaId = :mediaId")
+    suspend fun updateRemoteSubtitleSources(playlistId: Long, mediaId: String, sources: String)
 
     @Query("UPDATE playlist_items SET albumId = :toAlbumId WHERE albumId = :fromAlbumId")
     suspend fun moveToAlbum(fromAlbumId: Long, toAlbumId: Long)
