@@ -13,6 +13,7 @@ import com.asmr.player.data.lyrics.deriveLyricsRelativePathNoExt
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.util.RemoteSubtitleSource
+import com.asmr.player.util.encodeRemoteSubtitleSources
 import java.io.File
 
 data class MediaItemRequest(
@@ -179,17 +180,5 @@ object MediaItemFactory {
             "mov" -> "video/quicktime"
             else -> null
         }
-    }
-
-    private fun encodeRemoteSubtitleSources(sources: List<RemoteSubtitleSource>): String? {
-        val normalized = sources.mapNotNull { source ->
-            val url = source.url.trim()
-            if (url.isBlank()) return@mapNotNull null
-            val language = source.language.trim().ifBlank { "default" }
-            val ext = source.ext.trim().ifBlank { url.substringAfterLast('.', "vtt") }
-            listOf(url, language, ext).joinToString("\t")
-        }
-        if (normalized.isEmpty()) return null
-        return normalized.joinToString("\n")
     }
 }

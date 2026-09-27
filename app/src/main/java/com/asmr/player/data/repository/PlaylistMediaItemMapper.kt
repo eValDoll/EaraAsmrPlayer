@@ -1,14 +1,16 @@
 package com.asmr.player.data.repository
 
 import android.net.Uri
-import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
 import com.asmr.player.data.lyrics.EXTRA_ALBUM_WORK_ID
 import com.asmr.player.data.lyrics.EXTRA_LYRICS_RELATIVE_PATH_NO_EXT
+import com.asmr.player.data.lyrics.EXTRA_REMOTE_SUBTITLE_SOURCES_JSON
 import com.asmr.player.data.lyrics.EXTRA_TRACK_GROUP
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
 import com.asmr.player.playback.MediaItemFactory
-import java.io.File
+import com.asmr.player.util.OnlineLyricsStore
+import com.asmr.player.util.decodeRemoteSubtitleSources
+import com.asmr.player.util.encodeRemoteSubtitleSources
 
 object PlaylistMediaItemMapper {
     fun fromMediaItem(
@@ -19,9 +21,12 @@ object PlaylistMediaItemMapper {
         val metadata = item.mediaMetadata
         val extras = metadata.extras
         val normalizedUri = repairPlayableUri(item.localConfiguration?.uri?.toString().orEmpty())
+        val mediaId = item.mediaId.ifBlank { normalizedUri }
+        val subtitleSources = decodeRemoteSubtitleSources(extras?.getString(EXTRA_REMOTE_SUBTITLE_SOURCES_JSON))
+            .ifEmpty { OnlineLyricsStore.get(mediaId) }
         return PlaylistItemEntity(
             playlistId = playlistId,
-            mediaId = item.mediaId.ifBlank { normalizedUri },
+            mediaId = mediaId,
             title = metadata.title?.toString().orEmpty(),
             artist = metadata.artist?.toString().orEmpty(),
             albumTitle = metadata.albumTitle?.toString().orEmpty(),
@@ -33,6 +38,7 @@ object PlaylistMediaItemMapper {
             albumWorkId = extras?.getString(EXTRA_ALBUM_WORK_ID).orEmpty(),
             trackGroup = extras?.getString(EXTRA_TRACK_GROUP).orEmpty(),
             lyricsRelativePathNoExt = extras?.getString(EXTRA_LYRICS_RELATIVE_PATH_NO_EXT).orEmpty(),
+            remoteSubtitleSources = encodeRemoteSubtitleSources(subtitleSources).orEmpty(),
             mimeType = item.localConfiguration?.mimeType.orEmpty(),
             isVideo = extras?.getBoolean("is_video") == true,
             itemOrder = itemOrder
@@ -55,6 +61,7 @@ object PlaylistMediaItemMapper {
             albumWorkId = item.albumWorkId,
             trackGroup = item.trackGroup,
             lyricsRelativePathNoExt = item.lyricsRelativePathNoExt,
+            remoteSubtitleSources = decodeRemoteSubtitleSources(item.remoteSubtitleSources),
             mimeType = item.mimeType.ifBlank { null },
             isVideo = item.isVideo
         )

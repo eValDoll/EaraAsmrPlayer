@@ -28,6 +28,7 @@ import com.asmr.player.playback.AppVolume
 import dagger.hilt.android.qualifiers.ApplicationContext
 import com.asmr.player.util.NetworkMeteredChecker
 import com.asmr.player.util.RemoteSubtitleSource
+import com.asmr.player.util.encodeRemoteSubtitleSources
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -542,18 +543,6 @@ class PlayerConnection @Inject constructor(
             raw
         }
         return runCatching { decoded.toUri() }.getOrNull()
-    }
-
-    private fun encodeRemoteSubtitleSources(sources: List<RemoteSubtitleSource>): String? {
-        val normalized = sources.mapNotNull { source ->
-            val url = source.url.trim()
-            if (url.isBlank()) return@mapNotNull null
-            val language = source.language.trim().ifBlank { "default" }
-            val ext = source.ext.trim().ifBlank { url.substringAfterLast('.', "vtt") }
-            listOf(url, language, ext).joinToString("\t")
-        }
-        if (normalized.isEmpty()) return null
-        return normalized.joinToString("\n")
     }
 
     private suspend fun savePlaybackState() {

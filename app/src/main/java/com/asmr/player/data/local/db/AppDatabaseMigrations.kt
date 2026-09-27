@@ -579,6 +579,12 @@ object AppDatabaseMigrations {
         }
     }
 
+    val MIGRATION_31_32: Migration = object : Migration(31, 32) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE playlist_items ADD COLUMN `remoteSubtitleSources` TEXT NOT NULL DEFAULT ''")
+        }
+    }
+
     private fun createItemChildTable(
         db: SupportSQLiteDatabase,
         table: String,

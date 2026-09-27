@@ -5,6 +5,7 @@ import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.playback.MediaItemRequest
 import com.asmr.player.util.RemoteSubtitleSource
+import com.asmr.player.util.decodeRemoteSubtitleSources
 import com.asmr.player.util.TrackKeyNormalizer
 
 const val EXTRA_ALBUM_WORK_ID = "album_work_id"
@@ -141,22 +142,6 @@ private fun buildLyricsTargetContext(
         relativePathNoExt = normalizedRelativePath,
         remoteSubtitleSources = remoteSubtitleSources
     )
-}
-
-private fun decodeRemoteSubtitleSources(raw: String?): List<RemoteSubtitleSource> {
-    val trimmed = raw.orEmpty().trim()
-    if (trimmed.isBlank()) return emptyList()
-    return trimmed.split('\n')
-        .mapNotNull { line ->
-            val parts = line.split('\t')
-            val url = parts.getOrNull(0).orEmpty().trim()
-            if (url.isBlank()) return@mapNotNull null
-            RemoteSubtitleSource(
-                url = url,
-                language = parts.getOrNull(1).orEmpty().ifBlank { "default" },
-                ext = parts.getOrNull(2).orEmpty().ifBlank { url.substringAfterLast('.', "vtt") }
-            )
-        }
 }
 
 private fun buildCanonicalMediaId(
