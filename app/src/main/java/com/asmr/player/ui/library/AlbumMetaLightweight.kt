@@ -1,5 +1,9 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.ui.common.CvNameSeparator
+
+import com.asmr.player.ui.common.parseCvNames
+
 import com.asmr.player.translation.translatedPageText
 
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -254,7 +258,7 @@ internal fun AlbumItemCvLightweight(
     onClick: (() -> Unit)? = null,
     onCvLongClick: ((String) -> Unit)? = null,
 ) {
-    val cvs = remember(cvText) { parseAlbumCvNames(cvText) }
+    val cvs = remember(cvText) { parseCvNames(cvText) }
     AlbumItemInlineValuesLightweight(
         values = cvs,
         iconRes = R.drawable.ic_album_meta_cv,
@@ -383,7 +387,7 @@ private fun AlbumItemInlineValueItems(
     onClick: (() -> Unit)?,
     onValueLongClick: ((String) -> Unit)?,
 ) {
-    values.forEach { value ->
+    values.forEachIndexed { index, value ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 text = valuePrefix + if (valuePrefix == "#") translatedPageText(value.removePrefix(valuePrefix)) else value,
@@ -410,6 +414,9 @@ private fun AlbumItemInlineValueItems(
                     )
                     .padding(horizontal = 2.dp, vertical = 2.dp)
             )
+            if (prominent && index < values.lastIndex) {
+                Text(CvNameSeparator, color = valueColor, style = MaterialTheme.typography.labelSmall)
+            }
         }
     }
 }
@@ -467,7 +474,7 @@ internal fun AlbumHeaderCvLightweight(
     onCvClick: ((String) -> Unit)? = null,
     onCvLongClick: ((String) -> Unit)? = null,
 ) {
-    val cvs = remember(cvText) { parseAlbumCvNames(cvText) }
+    val cvs = remember(cvText) { parseCvNames(cvText) }
     if (cvs.isEmpty()) return
 
     val colorScheme = AsmrTheme.colorScheme
@@ -497,23 +504,28 @@ internal fun AlbumHeaderCvLightweight(
             horizontalArrangement = Arrangement.spacedBy(6.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            cvs.forEach { cv ->
-                Text(
-                    text = cv,
-                    style = MaterialTheme.typography.labelMedium.copy(
-                        fontSize = if (emphasized) 12.sp else 13.sp
-                    ),
-                    color = colorScheme.textPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(4.dp))
-                        .combinedClickable(
-                            onClick = { onCvClick?.invoke(cv) },
-                            onLongClick = onCvLongClick?.let { longClick -> { longClick(cv) } }
-                        )
-                        .padding(horizontal = 4.dp, vertical = 2.dp)
-                )
+            cvs.forEachIndexed { index, cv ->
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = cv,
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontSize = if (emphasized) 12.sp else 13.sp
+                        ),
+                        color = colorScheme.textPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(4.dp))
+                            .combinedClickable(
+                                onClick = { onCvClick?.invoke(cv) },
+                                onLongClick = onCvLongClick?.let { longClick -> { longClick(cv) } }
+                            )
+                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
+                    if (index < cvs.lastIndex) {
+                        Text(CvNameSeparator, color = colorScheme.textPrimary, style = MaterialTheme.typography.labelMedium)
+                    }
+                }
             }
         }
     }
@@ -586,14 +598,6 @@ internal fun AlbumHeaderTagsLightweight(
             }
         }
     }
-}
-
-private fun parseAlbumCvNames(cvText: String): List<String> {
-    return cvText
-        .split(',', '，', '、', '/', '\n', ';', '；', '|')
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .distinct()
 }
 
 private fun normalizeAlbumTags(tags: List<String>): List<String> {

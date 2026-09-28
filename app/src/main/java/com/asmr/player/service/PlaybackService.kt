@@ -1,5 +1,7 @@
 package com.asmr.player.service
 
+import com.asmr.player.data.repository.AudioMetadataCache
+
 import android.app.PendingIntent
 import android.bluetooth.BluetoothAdapter
 import android.content.BroadcastReceiver
@@ -409,6 +411,20 @@ class PlaybackService : MediaSessionService() {
         }
         
         exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
+            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                val item = exoPlayer.currentMediaItem ?: return
+                val format = tracks.groups.asSequence()
+                    .filter { it.type == androidx.media3.common.C.TRACK_TYPE_AUDIO && it.isSelected }
+                    .flatMap { group ->
+                        (0 until group.length).asSequence()
+                            .filter(group::isTrackSelected)
+                            .map(group::getTrackFormat)
+                    }
+                    .firstOrNull() ?: return
+                AudioMetadataCache.recordPlayback(item.localConfiguration?.uri?.toString().orEmpty(), format, exoPlayer.duration)
+                AudioMetadataCache.recordPlayback(item.mediaId, format, exoPlayer.duration)
+            }
+
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 StereoSpectrumBus.playbackActive = isPlaying
                 if (isPlaying) {

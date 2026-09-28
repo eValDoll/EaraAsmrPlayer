@@ -1,5 +1,21 @@
 package com.asmr.player.ui.player
 
+import com.asmr.player.ui.common.AudioMetadataLine
+import com.asmr.player.ui.common.audioTrailingText
+import com.asmr.player.ui.common.rememberTrackFileSizeText
+import com.asmr.player.ui.common.audioSource
+import com.asmr.player.ui.common.rememberAudioMetadata
+import com.asmr.player.ui.common.formatStoredCv
+import com.asmr.player.data.local.db.AppDatabaseProvider
+import com.asmr.player.playback.EXTRA_ALBUM_CV
+import com.asmr.player.util.Formatting
+import androidx.media3.common.MediaItem
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.withContext
+
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -51,6 +67,7 @@ fun QueueSheetContent(
             .distinctUntilChanged()
     }.collectAsStateWithLifecycle(initialValue = "")
     val queue by viewModel.queue.collectAsStateWithLifecycle()
+    val currentDurationMs by viewModel.resolvedDurationMs.collectAsStateWithLifecycle()
     val colorScheme = AsmrTheme.colorScheme
     val listState = rememberLazyListState()
 
@@ -75,9 +92,10 @@ fun QueueSheetContent(
         ) {
             itemsIndexed(queue, key = { idx, it -> "${it.mediaId}#$idx" }) { index, mediaItem ->
                 val title = mediaItem.mediaMetadata.title?.toString().orEmpty().ifBlank { mediaItem.mediaId }
-                val artist = mediaItem.mediaMetadata.artist?.toString().orEmpty()
+                val details = rememberQueueAudioDetails(mediaItem, !listState.isScrollInProgress)
                 val uriText = mediaItem.localConfiguration?.uri?.toString().orEmpty()
-                val sourceLabel = if (uriText.startsWith("http", ignoreCase = true)) "在线" else "本地"
+                val audioMetadata = rememberAudioMetadata(uriText, !listState.isScrollInProgress)
+                val sizeText = rememberTrackFileSizeText(uriText, !listState.isScrollInProgress)
                 val selected = index == currentIndex
 
                 Column {
@@ -112,12 +130,21 @@ fun QueueSheetContent(
                                 maxLines = 2,
                                 overflow = TextOverflow.Ellipsis
                             )
-                            Text(
-                                text = if (artist.isNotBlank()) "$sourceLabel · $artist" else sourceLabel,
+                            AudioMetadataLine(
+                                text = details.cv,
+                                trailingText = remember(details.durationMs, selected, currentDurationMs, audioMetadata?.durationSeconds, sizeText) {
+                                    audioTrailingText(
+                                        Formatting.formatTrackSeconds(
+                                            (details.durationMs ?: currentDurationMs.takeIf { selected && it > 0 })?.div(1000.0)
+                                                ?: audioMetadata?.durationSeconds
+                                        ),
+                                        sizeText,
+                                    )
+                                },
+                                source = audioSource(uriText),
+                                quality = audioMetadata?.quality,
                                 style = MaterialTheme.typography.labelSmall,
-                                color = colorScheme.textSecondary,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                color = colorScheme.textSecondary
                             )
                         }
                         IconButton(onClick = { viewModel.removeFromQueue(index) }) {
@@ -140,4 +167,40 @@ fun QueueSheetContent(
             }
         }
     }
+}
+
+private data class QueueAudioDetails(val cv: String, val durationMs: Long?)
+
+@Composable
+private fun rememberQueueAudioDetails(item: MediaItem, loadMetadata: Boolean): QueueAudioDetails {
+    val context = LocalContext.current.applicationContext
+    val metadata = item.mediaMetadata
+    val initial = remember(item) {
+        QueueAudioDetails(
+            cv = formatStoredCv(metadata.artist?.toString().orEmpty(), metadata.extras?.getString(EXTRA_ALBUM_CV)),
+            durationMs = metadata.durationMs?.takeIf { it > 0 },
+        )
+    }
+    val attempted = remember(item) { booleanArrayOf(false) }
+    val details by produceState(initialValue = initial, item, loadMetadata) {
+        if (!loadMetadata || attempted[0]) return@produceState
+        if (metadata.extras?.containsKey(EXTRA_ALBUM_CV) == true && initial.durationMs != null) return@produceState
+        delay(200)
+        value = withContext(Dispatchers.IO) {
+            val db = AppDatabaseProvider.get(context)
+            val trackId = metadata.extras?.getLong("track_id") ?: 0L
+            val uri = item.localConfiguration?.uri
+            val path = if (uri?.scheme == "file") uri.path.orEmpty() else uri?.toString().orEmpty()
+            val track = if (trackId > 0) db.trackDao().getTrackByIdOnce(trackId)
+                else db.trackDao().getTrackByPathOnce(path.ifBlank { item.mediaId })
+            val albumId = track?.albumId ?: metadata.extras?.getLong("album_id") ?: 0L
+            val album = if (albumId > 0) db.albumDao().getAlbumById(albumId) else null
+            QueueAudioDetails(
+                cv = formatStoredCv(metadata.artist?.toString().orEmpty(), album?.cv ?: metadata.extras?.getString(EXTRA_ALBUM_CV)),
+                durationMs = initial.durationMs ?: track?.duration?.takeIf { it > 0 }?.let { (it * 1000).toLong() },
+            )
+        }
+        attempted[0] = true
+    }
+    return details
 }

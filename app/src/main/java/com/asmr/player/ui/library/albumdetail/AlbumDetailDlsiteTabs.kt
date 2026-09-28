@@ -1,5 +1,12 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.ui.common.AudioMetadataLine
+import com.asmr.player.ui.common.audioTrailingText
+import com.asmr.player.ui.common.rememberTrackFileSizeText
+import com.asmr.player.ui.common.formatCvNames
+import com.asmr.player.ui.common.audioSource
+import com.asmr.player.ui.common.rememberAudioMetadata
+
 import com.asmr.player.translation.translatedPageText
 
 import android.content.Intent
@@ -544,19 +551,15 @@ private fun DlsiteTrialLoadingList() {
 @Composable
 private fun DlsiteTrialAudioItem(
     track: Track,
+    albumCv: String,
     onClick: () -> Unit,
     onAddToPlaylist: (() -> Unit)? = null,
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val isOnline = remember(track.path) { track.path.trim().startsWith("http", ignoreCase = true) }
-    val durationText = remember(track.duration) { Formatting.formatTrackSeconds(track.duration) }
-    val subtitleText = remember(isOnline, durationText) {
-        when {
-            isOnline && durationText.isNotBlank() -> "在线 · $durationText"
-            isOnline -> "在线"
-            durationText.isNotBlank() -> durationText
-            else -> "在线播放"
-        }
+    val audioMetadata = rememberAudioMetadata(track.path)
+    val sizeText = rememberTrackFileSizeText(track.path)
+    val durationText = remember(track.duration, audioMetadata?.durationSeconds) {
+        Formatting.formatTrackSeconds(track.duration.takeIf { it > 0 } ?: audioMetadata?.durationSeconds)
     }
 
     Row(
@@ -583,10 +586,11 @@ private fun DlsiteTrialAudioItem(
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = colorScheme.textPrimary
             )
-            Text(
-                text = subtitleText,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            AudioMetadataLine(
+                text = remember(albumCv) { formatCvNames(albumCv) },
+                trailingText = remember(durationText, sizeText) { audioTrailingText(durationText, sizeText) },
+                source = audioSource(track.path),
+                quality = audioMetadata?.quality,
                 style = MaterialTheme.typography.bodySmall,
                 color = colorScheme.textTertiary
             )
@@ -1295,6 +1299,8 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                                         val leaf = asmrLeafByRelPath[file.path]
                                         DirectoryFileRow(
                                             file = file.copy(showSubtitleStamp = file.subtitleSources.isNotEmpty()),
+                                            loadAudioMetadata = !listState.isScrollInProgress,
+                                            albumCv = album.cv,
                                             loadRemoteFileSize = loadRemoteFileSize,
                                             onPrimary = {
                                                 when (file.fileType) {
@@ -1588,6 +1594,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                     ) {
                         DlsiteTrialAudioItem(
                             track = track,
+                            albumCv = album.cv,
                             onClick = { onPlayTracks(album, audioTracks, track) },
                             onAddToPlaylist = { onAddToPlaylist(track) }
                         )
@@ -1817,6 +1824,8 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
                                     val leaf = leafByRelPath[file.path]
                                     DirectoryFileRow(
                                         file = file.copy(showSubtitleStamp = file.subtitleSources.isNotEmpty()),
+                                        loadAudioMetadata = !listState.isScrollInProgress,
+                                        albumCv = album.cv,
                                         loadRemoteFileSize = loadRemoteFileSize,
                                         onPrimary = {
                                             when (file.fileType) {

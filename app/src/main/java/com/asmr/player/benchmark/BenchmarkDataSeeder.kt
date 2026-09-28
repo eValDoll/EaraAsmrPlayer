@@ -1,6 +1,8 @@
 package com.asmr.player.benchmark
 
 import androidx.media3.common.MediaItem
+import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.room.withTransaction
 import com.asmr.player.data.local.datastore.SearchCacheStore
 import com.asmr.player.data.local.db.AppDatabase
@@ -15,6 +17,7 @@ import com.asmr.player.data.local.db.entities.SubtitleTaskEntity
 import com.asmr.player.data.local.db.entities.SubtitleTaskItemEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.data.repository.PlaylistRepository
+import com.asmr.player.data.repository.AudioMetadataCache
 import com.asmr.player.data.remote.download.DOWNLOAD_STATE_QUEUED
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.domain.model.Album
@@ -52,6 +55,7 @@ data class BenchmarkSeedSummary(
 )
 
 @Singleton
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class BenchmarkDataSeeder @Inject constructor(
     private val database: AppDatabase,
     private val settingsRepository: SettingsRepository,
@@ -138,7 +142,7 @@ class BenchmarkDataSeeder @Inject constructor(
                         path = albumPath,
                         localPath = albumPath,
                         circle = "Circle ${index % 32}",
-                        cv = "CV ${index % 24}",
+                        cv = "CV ${index % 24}, CV ${(index + 1) % 24}",
                         workId = "WORK${ordinal.toString().padStart(8, '0')}",
                         rjCode = rjCode,
                         description = "Seeded benchmark album $ordinal"
@@ -146,6 +150,19 @@ class BenchmarkDataSeeder @Inject constructor(
                 )
 
                 val trackPath = "/benchmark/audio/$ordinal.mp3"
+                // 覆盖列表前段滚动中的 HQ / SQ 徽章及未知参数，不依赖测试网络。
+                if (index < 200 && index % 3 != 2) {
+                    AudioMetadataCache.recordPlayback(
+                        trackPath,
+                        Format.Builder()
+                            .setSampleMimeType(if (index % 3 == 0) "audio/flac" else "audio/mpeg")
+                            .setSampleRate(44_100)
+                            .setChannelCount(2)
+                            .setAverageBitrate(if (index % 3 == 0) 900_000 else 320_000)
+                            .setPcmEncoding(if (index % 3 == 0) C.ENCODING_PCM_16BIT else C.ENCODING_INVALID)
+                            .build()
+                    )
+                }
                 val trackId = trackDao.insertTrack(
                     TrackEntity(
                         albumId = albumId,
@@ -161,7 +178,7 @@ class BenchmarkDataSeeder @Inject constructor(
                     albumTitle = "Benchmark Album $ordinal",
                     albumPath = albumPath,
                     circle = "Circle ${index % 32}",
-                    cv = "CV ${index % 24}",
+                    cv = "CV ${index % 24}, CV ${(index + 1) % 24}",
                     workId = "WORK${ordinal.toString().padStart(8, '0')}",
                     rjCode = rjCode,
                     trackId = trackId,

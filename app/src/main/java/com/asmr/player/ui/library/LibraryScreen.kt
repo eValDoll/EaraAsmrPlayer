@@ -1,5 +1,7 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.ui.common.formatCvNames
+
 import com.asmr.player.translation.PageTranslationHost
 import com.asmr.player.translation.translatedPageText
 
@@ -67,10 +69,7 @@ import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
 import com.asmr.player.ui.common.lightweightVerticalStretchOverscroll
-import com.asmr.player.ui.common.rememberAudioMeta
-import com.asmr.player.ui.common.rememberAudioMetaText
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
-import com.asmr.player.ui.common.rememberTrackMetaLine
 import com.asmr.player.ui.common.queryCachedTrackFileSize
 import com.asmr.player.ui.common.withAddedBottomPadding
 import androidx.compose.material3.HorizontalDivider
@@ -754,18 +753,16 @@ private fun LibraryScreenContent(
                                                             group = row.trackGroup
                                                         )
                                                     }
-                                                    val meta = rememberAudioMeta(
-                                                        sourcePath = row.trackPath,
-                                                        durationSeconds = row.duration,
-                                                        prefixSegments = listOf(row.cv),
-                                                        loadSize = !listState.isScrollInProgress
-                                                    )
+                                                    val cvText = remember(row.cv) { formatCvNames(row.cv) }
+                                                    val durationText = remember(row.duration) { Formatting.formatTrackSeconds(row.duration) }
 
                                                     Column {
                                                         TrackListRow(
                                                             title = track.title,
-                                                            subtitle = meta.leadingText,
-                                                            fixedTrailingSubtitle = meta.trailingText,
+                                                            sourcePath = track.path,
+                                                            loadAudioMetadata = isActive && isDataActive && !listState.isScrollInProgress,
+                                                            subtitle = cvText,
+                                                            fixedTrailingSubtitle = durationText,
                                                             showSubtitleStamp = row.hasSubtitles,
                                                             isLastInSection = index == rows.lastIndex,
                                                             onClick = {
@@ -1467,6 +1464,8 @@ private fun rememberAlbumTrackListTotalSizeBytes(
 @Composable
 private fun TrackListRow(
     title: String,
+    sourcePath: String,
+    loadAudioMetadata: Boolean,
     subtitle: String,
     fixedTrailingSubtitle: String,
     showSubtitleStamp: Boolean,
@@ -1491,6 +1490,8 @@ private fun TrackListRow(
 
     AudioItemRow(
         title = title,
+        sourcePath = sourcePath,
+        loadAudioMetadata = loadAudioMetadata,
         subtitle = subtitle,
         fixedTrailingSubtitle = fixedTrailingSubtitle,
         showSubtitleStamp = showSubtitleStamp,

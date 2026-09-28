@@ -1,5 +1,12 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.ui.common.AudioMetadataLine
+import com.asmr.player.ui.common.audioTrailingText
+import com.asmr.player.ui.common.rememberTrackFileSizeText
+import com.asmr.player.ui.common.formatCvNames
+import com.asmr.player.ui.common.audioSource
+import com.asmr.player.ui.common.rememberAudioMetadata
+
 import com.asmr.player.translation.translatedPageText
 
 import android.content.Intent
@@ -500,7 +507,7 @@ internal fun AlbumTracks(album: Album, onTrackClick: (Track) -> Unit) {
                     contentType = { _, _ -> "trackRow" }
                 ) { index, track ->
                     val showStamp = track.id > 0L && (subtitleTrackIds.contains(track.id) || remoteSubtitleTrackIds.contains(track.id))
-                    TrackItem(track = track, showSubtitleStamp = showStamp, onClick = { onTrackClick(track) })
+                    TrackItem(track = track, albumCv = album.cv, loadAudioMetadata = !listState.isScrollInProgress, showSubtitleStamp = showStamp, onClick = { onTrackClick(track) })
                     if (index < tracks.size - 1) {
                         HorizontalDivider(
                              modifier = Modifier.padding(horizontal = AlbumDetailHorizontalPadding),
@@ -517,6 +524,8 @@ internal fun AlbumTracks(album: Album, onTrackClick: (Track) -> Unit) {
 @Composable
 internal fun TrackItem(
     track: Track,
+    albumCv: String = "",
+    loadAudioMetadata: Boolean = true,
     showSubtitleStamp: Boolean = false,
     onClick: () -> Unit,
     onAddToPlaylist: (() -> Unit)? = null
@@ -532,16 +541,19 @@ internal fun TrackItem(
                 color = colorScheme.textPrimary
             ) 
         },
-        supportingContent = { 
-            val isOnline = remember(track.path) { track.path.trim().startsWith("http", ignoreCase = true) }
-            val durationText = Formatting.formatTrackSeconds(track.duration)
-            Text(
-                when {
-                    isOnline && durationText.isNotBlank() -> "在线 · $durationText"
-                    isOnline -> "在线"
-                    durationText.isNotBlank() -> durationText
-                    else -> "在线播放"
+        supportingContent = {
+            val audioMetadata = rememberAudioMetadata(track.path, loadAudioMetadata)
+            val sizeText = rememberTrackFileSizeText(track.path, loadAudioMetadata)
+            AudioMetadataLine(
+                text = remember(albumCv) { formatCvNames(albumCv) },
+                trailingText = remember(track.duration, audioMetadata?.durationSeconds, sizeText) {
+                    audioTrailingText(
+                        Formatting.formatTrackSeconds(track.duration.takeIf { it > 0 } ?: audioMetadata?.durationSeconds),
+                        sizeText,
+                    )
                 },
+                source = audioSource(track.path),
+                quality = audioMetadata?.quality,
                 color = colorScheme.textTertiary,
                 style = MaterialTheme.typography.bodySmall
             )
