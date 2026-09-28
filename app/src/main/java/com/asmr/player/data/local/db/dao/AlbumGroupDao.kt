@@ -16,7 +16,11 @@ interface AlbumGroupDao {
             g.id AS id,
             g.name AS name,
             g.createdAt AS createdAt,
-            (SELECT COUNT(*) FROM album_group_items i WHERE i.groupId = g.id) AS itemCount,
+            (
+                SELECT COUNT(DISTINCT i.mediaId) FROM album_group_items i
+                INNER JOIN tracks t ON t.path = i.mediaId
+                WHERE i.groupId = g.id
+            ) AS itemCount,
             (
                 SELECT COUNT(DISTINCT t.albumId)
                 FROM album_group_items i
@@ -30,7 +34,7 @@ interface AlbumGroupDao {
                     NULLIF(a.coverUrl, '')
                 )
                 FROM album_group_items i
-                LEFT JOIN tracks t ON t.path = i.mediaId
+                INNER JOIN tracks t ON t.path = i.mediaId
                 LEFT JOIN albums a ON a.id = t.albumId
                 WHERE i.groupId = g.id
                 ORDER BY i.itemOrder ASC, i.rowid ASC

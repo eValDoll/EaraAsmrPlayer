@@ -23,12 +23,12 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.asmr.player.data.local.db.AppDatabase
 import com.asmr.player.data.local.db.dao.AlbumDao
-import com.asmr.player.data.local.db.entities.AlbumFtsEntity
-import com.asmr.player.data.local.db.dao.TrackDao
-import com.asmr.player.data.local.db.dao.LibraryTrackRow
 import com.asmr.player.data.local.db.dao.LibraryTrackAlbumHeaderRow
+import com.asmr.player.data.local.db.dao.LibraryTrackRow
 import com.asmr.player.data.local.db.dao.TagWithCount
+import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.local.db.entities.AlbumEntity
+import com.asmr.player.data.local.db.entities.AlbumFtsEntity
 import com.asmr.player.data.local.db.entities.AlbumTagEntity
 import com.asmr.player.data.local.db.entities.LocalTreeCacheEntity
 import com.asmr.player.data.local.db.entities.SubtitleEntity
@@ -38,6 +38,8 @@ import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.data.local.db.entities.TrackTagEntity
 import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.data.local.library.LocalAlbumMergeService
+import com.asmr.player.data.local.library.deleteLibraryAlbum
+import com.asmr.player.data.local.library.deleteLibraryTracks
 import com.asmr.player.data.remote.api.AsmrOneApi
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncResolveResult
@@ -976,12 +978,11 @@ class LibraryViewModel @Inject constructor(
                     val hasOnline = isVirtualAlbumPath(entity.path) || tracks.any { isOnlineTrackPath(it.path) }
                     if (!hasOnline) {
                         trackDao.deleteSubtitlesForAlbum(entity.id)
-                        trackDao.deleteTracksForAlbum(entity.id)
                         deleteAlbumEntity(entity)
                     } else {
                         tracks.filter { it.path.startsWith(uriString) }.forEach { track ->
                             trackDao.deleteSubtitlesForTrack(track.id)
-                            trackDao.deleteTrackById(track.id)
+                            database.deleteLibraryTracks(listOf(track.id))
                         }
                         val updatedPath = if (entity.path.startsWith(uriString)) (buildOnlineAlbumPath(entity) ?: entity.path) else entity.path
                         val updated = entity.copy(
@@ -996,7 +997,7 @@ class LibraryViewModel @Inject constructor(
                     val tracks = trackDao.getTracksForAlbumOnce(entity.id)
                     tracks.filter { it.path.startsWith(uriString) }.forEach { track ->
                         trackDao.deleteSubtitlesForTrack(track.id)
-                        trackDao.deleteTrackById(track.id)
+                        database.deleteLibraryTracks(listOf(track.id))
                     }
 
                     val updated = entity.copy(
@@ -1670,7 +1671,6 @@ class LibraryViewModel @Inject constructor(
                         val hasOnline = isVirtualAlbumPath(entity.path) || tracks.any { isOnlineTrackPath(it.path) }
                         if (!hasOnline) {
                             trackDao.deleteSubtitlesForAlbum(entity.id)
-                            trackDao.deleteTracksForAlbum(entity.id)
                             deleteAlbumEntity(entity)
                             removed = true
                         } else {
@@ -1680,7 +1680,7 @@ class LibraryViewModel @Inject constructor(
                             }.map { it.id }
                             if (toRemove.isNotEmpty()) {
                                 trackDao.deleteSubtitlesForTracks(toRemove)
-                                trackDao.deleteTracksByIds(toRemove)
+                                database.deleteLibraryTracks(toRemove)
                             }
 
                             val updatedPath = if (prefixes.any { pfx -> entity.path.startsWith(pfx) }) {
@@ -1738,7 +1738,6 @@ class LibraryViewModel @Inject constructor(
 
                 database.withTransaction {
                     trackDao.deleteSubtitlesForAlbum(album.id)
-                    trackDao.deleteTracksForAlbum(album.id)
                     deleteAlbumEntity(entity)
                     database.tagDao().deleteAlbumTagsByAlbumId(album.id)
                     database.albumFtsDao().deleteByAlbumId(album.id)
@@ -1817,7 +1816,7 @@ class LibraryViewModel @Inject constructor(
                         database.remoteSubtitleSourceDao().deleteByTrackIds(verifiedTrackIds)
                         trackDao.deleteSubtitlesForTracks(verifiedTrackIds)
                         database.trackTagDao().deleteTrackTagsByTrackIds(verifiedTrackIds)
-                        trackDao.deleteTracksByIds(verifiedTrackIds)
+                        database.deleteLibraryTracks(verifiedTrackIds)
                     }
                     if (resourceIds.isNotEmpty()) {
                         database.onlineSavedResourceDao().deleteByIds(resourceIds)
@@ -1864,7 +1863,7 @@ class LibraryViewModel @Inject constructor(
                 runCatching { database.remoteSubtitleSourceDao().deleteByTrackId(trackId) }
                 runCatching { trackDao.deleteSubtitlesForTrack(trackId) }
                 runCatching { database.trackTagDao().deleteTrackTagsByTrackId(trackId) }
-                runCatching { trackDao.deleteTrackById(trackId) }
+                database.deleteLibraryTracks(listOf(trackId))
                 runCatching { database.localTreeCacheDao().deleteByAlbum(track.albumId) }
             }
 
@@ -2276,14 +2275,13 @@ class LibraryViewModel @Inject constructor(
             missing.forEach { entity ->
                 if (entity.localPath.isNullOrBlank() && !entity.path.startsWith("content://")) {
                     trackDao.deleteSubtitlesForAlbum(entity.id)
-                    trackDao.deleteTracksForAlbum(entity.id)
                     deleteAlbumEntity(entity)
                 } else {
                     val dl = entity.downloadPath?.trim().orEmpty()
                     val tracks = trackDao.getTracksForAlbumOnce(entity.id)
                     tracks.filter { it.path.startsWith(dl) }.forEach { track ->
                         trackDao.deleteSubtitlesForTrack(track.id)
-                        trackDao.deleteTrackById(track.id)
+                        database.deleteLibraryTracks(listOf(track.id))
                     }
 
                     val updated = entity.copy(
@@ -2452,7 +2450,7 @@ class LibraryViewModel @Inject constructor(
                 trackDao.deleteSubtitlesForTracks(removedIds)
                 database.remoteSubtitleSourceDao().deleteByTrackIds(removedIds)
                 database.trackTagDao().deleteTrackTagsByTrackIds(removedIds)
-                trackDao.deleteTracksByIds(removedIds)
+                database.deleteLibraryTracks(removedIds)
             }
         }
 
@@ -2581,7 +2579,7 @@ class LibraryViewModel @Inject constructor(
                     trackDao.deleteSubtitlesForTracks(toDelete)
                     database.remoteSubtitleSourceDao().deleteByTrackIds(toDelete)
                     database.trackTagDao().deleteTrackTagsByTrackIds(toDelete)
-                    trackDao.deleteTracksByIds(toDelete)
+                    database.deleteLibraryTracks(toDelete)
                 }
 
                 val filteredTrackSpecs = trackSpecs
@@ -2732,7 +2730,7 @@ class LibraryViewModel @Inject constructor(
                 trackDao.deleteSubtitlesForTracks(removedIds)
                 database.remoteSubtitleSourceDao().deleteByTrackIds(removedIds)
                 database.trackTagDao().deleteTrackTagsByTrackIds(removedIds)
-                trackDao.deleteTracksByIds(removedIds)
+                database.deleteLibraryTracks(removedIds)
             }
             albumDao.updateAlbum(entity.copy(downloadPath = null))
             database.localTreeCacheDao().deleteByAlbum(entity.id)
@@ -2759,13 +2757,12 @@ class LibraryViewModel @Inject constructor(
                     val hasOnline = isVirtualAlbumPath(entity.path) || tracks.any { isOnlineTrackPath(it.path) }
                     if (!hasOnline) {
                         trackDao.deleteSubtitlesForAlbum(entity.id)
-                        trackDao.deleteTracksForAlbum(entity.id)
                         deleteAlbumEntity(entity)
                     } else {
                         val root = rootUriString.trim()
                         tracks.filter { it.path.startsWith(root) }.forEach { track ->
                             trackDao.deleteSubtitlesForTrack(track.id)
-                            trackDao.deleteTrackById(track.id)
+                            database.deleteLibraryTracks(listOf(track.id))
                         }
                         val updatedPath = if (entity.path.startsWith(root)) (buildOnlineAlbumPath(entity) ?: entity.path) else entity.path
                         val updated = entity.copy(
@@ -2781,7 +2778,7 @@ class LibraryViewModel @Inject constructor(
                     val tracks = trackDao.getTracksForAlbumOnce(entity.id)
                     tracks.filter { it.path.startsWith(root) }.forEach { track ->
                         trackDao.deleteSubtitlesForTrack(track.id)
-                        trackDao.deleteTrackById(track.id)
+                        database.deleteLibraryTracks(listOf(track.id))
                     }
 
                     val updated = entity.copy(
@@ -2843,7 +2840,6 @@ class LibraryViewModel @Inject constructor(
                     }
                     if (!hasOnlineTracks) {
                         trackDao.deleteSubtitlesForAlbum(entity.id)
-                        trackDao.deleteTracksForAlbum(entity.id)
                         deleteAlbumEntity(entity)
                         return@forEach
                     }
@@ -2855,7 +2851,7 @@ class LibraryViewModel @Inject constructor(
                     val ts = cachedTracks ?: trackDao.getTracksForAlbumOnce(entity.id).also { cachedTracks = it }
                     ts.filter { it.path.startsWith(local) }.forEach { track ->
                         trackDao.deleteSubtitlesForTrack(track.id)
-                        trackDao.deleteTrackById(track.id)
+                        database.deleteLibraryTracks(listOf(track.id))
                     }
                     updated = updated.copy(
                         path = if (updated.path.startsWith(local)) (download.ifBlank { updated.path }) else updated.path,
@@ -2868,7 +2864,7 @@ class LibraryViewModel @Inject constructor(
                     val ts = cachedTracks ?: trackDao.getTracksForAlbumOnce(entity.id).also { cachedTracks = it }
                     ts.filter { it.path.startsWith(download) }.forEach { track ->
                         trackDao.deleteSubtitlesForTrack(track.id)
-                        trackDao.deleteTrackById(track.id)
+                        database.deleteLibraryTracks(listOf(track.id))
                     }
                     updated = updated.copy(
                         path = if (updated.path.startsWith(download)) (local.ifBlank { updated.path }) else updated.path,
@@ -2907,7 +2903,6 @@ class LibraryViewModel @Inject constructor(
                     if (stillMissing) {
                         if (!hasOnlineTracks) {
                             trackDao.deleteSubtitlesForAlbum(entity.id)
-                            trackDao.deleteTracksForAlbum(entity.id)
                             deleteAlbumEntity(entity)
                             return@forEach
                         }
@@ -3074,7 +3069,7 @@ class LibraryViewModel @Inject constructor(
 
     private suspend fun deleteAlbumEntity(entity: AlbumEntity) {
         database.onlineSavedResourceDao().deleteByAlbumId(entity.id)
-        albumDao.deleteAlbum(entity)
+        database.deleteLibraryAlbum(entity)
     }
 
     private data class DocNode(

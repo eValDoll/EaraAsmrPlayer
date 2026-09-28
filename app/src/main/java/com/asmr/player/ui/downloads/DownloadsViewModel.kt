@@ -12,6 +12,8 @@ import com.asmr.player.data.local.db.AppDatabaseProvider
 import com.asmr.player.data.local.db.dao.AlbumDao
 import com.asmr.player.data.local.db.dao.DownloadDao
 import com.asmr.player.data.local.db.dao.TrackDao
+import com.asmr.player.data.local.library.deleteLibraryAlbum
+import com.asmr.player.data.local.library.deleteLibraryTracks
 import com.asmr.player.data.remote.download.DOWNLOAD_STATE_QUEUED
 import com.asmr.player.data.remote.download.DownloadQueueCoordinator
 import com.asmr.player.data.remote.download.DownloadDestination
@@ -719,7 +721,7 @@ class DownloadsViewModel @Inject constructor(
             val track = trackDao.getTrackByPathOnce(filePath) ?: return@withTransaction
             runCatching { trackDao.deleteSubtitlesForTrack(track.id) }
             runCatching { trackTagDao.deleteTrackTagsByTrackId(track.id) }
-            runCatching { trackDao.deleteTrackById(track.id) }
+            db.deleteLibraryTracks(listOf(track.id))
             reconcileAlbumAfterDownloadChange(db, albumId = track.albumId, deletedRootDir = rootDir)
         }
     }
@@ -749,7 +751,7 @@ class DownloadsViewModel @Inject constructor(
         if (toDelete.isEmpty()) return
         runCatching { trackDao.deleteSubtitlesForTracks(toDelete) }
         toDelete.forEach { id -> runCatching { trackTagDao.deleteTrackTagsByTrackId(id) } }
-        runCatching { trackDao.deleteTracksByIds(toDelete) }
+        db.deleteLibraryTracks(toDelete)
     }
 
     private suspend fun reconcileAlbumAfterDownloadChange(
@@ -775,11 +777,10 @@ class DownloadsViewModel @Inject constructor(
                 albumDao.updateAlbum(album.copy(path = localPath, downloadPath = null, coverPath = clearedCoverPath))
             } else {
                 runCatching { trackDao.deleteSubtitlesForAlbum(albumId) }
-                runCatching { trackDao.deleteTracksForAlbum(albumId) }
                 runCatching { tagDao.deleteAlbumTagsByAlbumId(albumId) }
                 runCatching { albumFtsDao.deleteByAlbumId(albumId) }
                 runCatching { db.onlineSavedResourceDao().deleteByAlbumId(albumId) }
-                runCatching { albumDao.deleteAlbum(album) }
+                db.deleteLibraryAlbum(album)
             }
             return
         }

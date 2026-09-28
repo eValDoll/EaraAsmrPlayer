@@ -4,6 +4,8 @@ import androidx.room.withTransaction
 import com.asmr.player.data.local.db.AppDatabase
 import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
+import com.asmr.player.data.local.library.deleteLibraryAlbum
+import com.asmr.player.data.local.library.deleteLibraryTracks
 import com.asmr.player.util.isOnlineTrackPath
 import java.io.File
 import javax.inject.Inject
@@ -182,28 +184,24 @@ class DownloadDirectoryCoordinator @Inject constructor(
         database.remoteSubtitleSourceDao().deleteByTrackIds(trackIds)
         database.trackTagDao().deleteTrackTagsByTrackIds(trackIds)
         database.trackPlaybackProgressDao().deleteByTrackIds(trackIds)
-        database.playlistItemDao().deleteByTrackIds(trackIds)
-        database.playlistDao().deleteTrackReferences(trackIds)
         if (mediaIds.isNotEmpty()) {
-            database.albumGroupItemDao().deleteByMediaIds(mediaIds)
             mediaIds.forEach { mediaId ->
                 database.manualLyricsSourceDao().deleteByCanonicalMediaId(mediaId)
                 database.trackSliceDao().deleteByTrack(mediaId)
             }
         }
-        database.trackDao().deleteTracksByIds(trackIds)
+        database.deleteLibraryTracks(trackIds)
     }
 
     private suspend fun deleteAlbumCompletely(album: AlbumEntity, remainingTracks: List<TrackEntity>) {
         deleteTrackRecords(remainingTracks)
         database.trackPlaybackProgressDao().deleteByAlbumId(album.id)
-        database.playlistItemDao().deleteByAlbumId(album.id)
         database.playStatDao().deleteByAlbumId(album.id)
         database.tagDao().deleteAlbumTagsByAlbumId(album.id)
         database.albumFtsDao().deleteByAlbumId(album.id)
         database.onlineSavedResourceDao().deleteByAlbumId(album.id)
         database.localTreeCacheDao().deleteByAlbum(album.id)
-        database.albumDao().deleteAlbum(album)
+        database.deleteLibraryAlbum(album)
     }
 
     private fun relativeToDefaultRoot(path: String, defaultRoot: String): String {

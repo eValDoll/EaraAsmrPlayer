@@ -585,6 +585,31 @@ object AppDatabaseMigrations {
         }
     }
 
+    val MIGRATION_32_33: Migration = object : Migration(32, 33) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "DELETE FROM album_group_items WHERE NOT EXISTS " +
+                    "(SELECT 1 FROM tracks t WHERE t.path = album_group_items.mediaId)"
+            )
+            // 在线列表可以独立于本地库存在，只清理明确指向已删除专辑且未被重新导入的项。
+            db.execSQL(
+                """
+                DELETE FROM playlist_items
+                WHERE albumId > 0
+                  AND NOT EXISTS (SELECT 1 FROM albums a WHERE a.id = playlist_items.albumId)
+                  AND NOT EXISTS (
+                      SELECT 1 FROM tracks t
+                      WHERE t.path = playlist_items.mediaId OR t.path = playlist_items.uri
+                  )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "DELETE FROM playlist_track_cross_ref WHERE NOT EXISTS " +
+                    "(SELECT 1 FROM tracks t WHERE t.id = playlist_track_cross_ref.trackId)"
+            )
+        }
+    }
+
     private fun createItemChildTable(
         db: SupportSQLiteDatabase,
         table: String,

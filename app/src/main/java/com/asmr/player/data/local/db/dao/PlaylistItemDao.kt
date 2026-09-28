@@ -97,6 +97,16 @@ interface PlaylistItemDao {
     @Query("DELETE FROM playlist_items WHERE trackId IN (:trackIds)")
     suspend fun deleteByTrackIds(trackIds: List<Long>)
 
+    @Query("DELETE FROM playlist_items WHERE mediaId IN (:mediaIds) OR uri IN (:mediaIds)")
+    suspend fun deleteByMediaIds(mediaIds: List<String>)
+
+    @Query(
+        "DELETE FROM playlist_items WHERE albumId <= 0 AND (" +
+            "UPPER(REPLACE(REPLACE(TRIM(rjCode), ' ', ''), char(9), '')) IN (:workNos) OR " +
+            "UPPER(REPLACE(REPLACE(TRIM(albumWorkId), ' ', ''), char(9), '')) IN (:workNos))"
+    )
+    suspend fun deleteUnboundItemsByWorkNos(workNos: List<String>)
+
     @Query("DELETE FROM playlist_items WHERE albumId = :albumId")
     suspend fun deleteByAlbumId(albumId: Long)
 
