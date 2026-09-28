@@ -118,6 +118,7 @@ import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.cache.LazyListPreloader
+import com.asmr.player.ui.library.albumListCoverSize
 import com.asmr.player.cache.LazyStaggeredGridPreloader
 import com.asmr.player.ui.common.ActiveDropdownMenuItem
 import com.asmr.player.ui.common.CustomSearchBar
@@ -1129,7 +1130,7 @@ private fun SearchScreenContent(
                                     }
                                     val density = LocalDensity.current
                                     val screenWidthDp = LocalConfiguration.current.screenWidthDp
-                                    val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
+                                    val listItemHeight = albumListCoverSize(screenWidthDp)
                                     val coverPx = remember(listItemHeight, density) { with(density) { listItemHeight.roundToPx() } }
                                     val preloadSize = remember(coverPx) { IntSize(coverPx, coverPx) }
                                     val coverFadeInState = remember(listState) {

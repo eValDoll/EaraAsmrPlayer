@@ -1,5 +1,6 @@
 package com.asmr.player.ui.library
 
+import android.os.Build
 import com.asmr.player.translation.translatedPageText
 
 import androidx.compose.animation.AnimatedContent
@@ -47,6 +48,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,6 +63,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
@@ -70,6 +73,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.offset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.asmr.player.domain.model.Album
@@ -121,6 +125,9 @@ private const val AlbumStatsSeparator = "  "
 internal const val ALBUM_ITEM_CARD_TAG = "album_item_card"
 internal const val ALBUM_ITEM_STATS_TAG = "album_item_stats"
 internal const val ALBUM_ITEM_TAGS_TAG = "album_item_tags"
+
+internal fun albumListCoverSize(screenWidthDp: Int): Dp =
+    (screenWidthDp.dp * 0.28f).coerceIn(124.dp, 152.dp)
 
 private fun Album.hasRatingInfo(): Boolean {
     return (ratingValue?.let { it > 0.0 } == true) || ratingCount > 0
@@ -205,18 +212,19 @@ fun AlbumItem(
         albumCoverImageModel(album)
     }
     val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val listItemHeight = (screenWidthDp.dp * 0.28f).coerceIn(124.dp, 152.dp)
+    val listItemHeight = albumListCoverSize(screenWidthDp)
     val coverSize = listItemHeight
     val density = LocalDensity.current
     val coverRequestSize = remember(coverSize, density) {
         val sizePx = with(density) { coverSize.roundToPx() }
         IntSize(sizePx, sizePx)
     }
-    var coverPainterAlphaState by remember(imageModel, coverReloadKey) {
+    val coverPainterAlphaState = remember(imageModel, coverReloadKey) {
         mutableStateOf<State<Float>?>(null)
     }
-    val isCoverFadeComplete = (coverPainterAlphaState?.value ?: 0f) >= 1f
-    val coverDepthProgress = coverPainterAlphaState?.value ?: 0f
+    val isCoverFadeComplete by remember(coverPainterAlphaState) {
+        derivedStateOf { (coverPainterAlphaState.value?.value ?: 0f) >= 1f }
+    }
     val dividerColor = colorScheme.onSurfaceVariant.copy(
         alpha = if (colorScheme.isDark) 0.28f else 0.18f
     )
@@ -272,7 +280,7 @@ fun AlbumItem(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     AlbumCoverDepthShadow(
-                        progress = coverDepthProgress,
+                        progress = { coverPainterAlphaState.value?.value ?: 0f },
                         isDark = colorScheme.isDark,
                         shape = coverShape,
                         blurRadius = AlbumListCoverShadowBlurRadius,
@@ -297,7 +305,7 @@ fun AlbumItem(
                             requestSize = coverRequestSize,
                             loading = NoImageLoadingIndicator,
                             onBitmapPainterState = { painter, alphaState ->
-                                coverPainterAlphaState = if (painter != null) alphaState else null
+                                coverPainterAlphaState.value = if (painter != null) alphaState else null
                             },
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -514,11 +522,12 @@ fun AlbumGridItem(
     val imageModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
         albumCoverImageModel(album)
     }
-    var coverPainterAlphaState by remember(imageModel, coverReloadKey) {
+    val coverPainterAlphaState = remember(imageModel, coverReloadKey) {
         mutableStateOf<State<Float>?>(null)
     }
-    val isCoverFadeComplete = (coverPainterAlphaState?.value ?: 0f) >= 1f
-    val coverDepthProgress = coverPainterAlphaState?.value ?: 0f
+    val isCoverFadeComplete by remember(coverPainterAlphaState) {
+        derivedStateOf { (coverPainterAlphaState.value?.value ?: 0f) >= 1f }
+    }
     Column(
         modifier = modifier
             .combinedClickable(
@@ -532,7 +541,7 @@ fun AlbumGridItem(
                 .aspectRatio(1f)
         ) {
             AlbumCoverDepthShadow(
-                progress = coverDepthProgress,
+                progress = { coverPainterAlphaState.value?.value ?: 0f },
                 isDark = colorScheme.isDark,
                 shape = coverShape,
                 blurRadius = AlbumGridCoverShadowBlurRadius,
@@ -556,7 +565,7 @@ fun AlbumGridItem(
                     peekAnySizeForInitial = true,
                     loading = NoImageLoadingIndicator,
                     onBitmapPainterState = { painter, alphaState ->
-                        coverPainterAlphaState = if (painter != null) alphaState else null
+                        coverPainterAlphaState.value = if (painter != null) alphaState else null
                     },
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -895,17 +904,19 @@ private fun AlbumStatsLine(
 
 @Composable
 private fun AlbumCoverDepthShadow(
-    progress: Float,
+    progress: () -> Float,
     isDark: Boolean,
     shape: Shape,
     blurRadius: Dp,
     modifier: Modifier = Modifier,
 ) {
-    if (progress <= 0f) return
+    val isVisible by remember(progress) { derivedStateOf { progress() > 0f } }
+    if (!isVisible) return
     val layerColor = if (isDark) Color.White else Color.Black
     val resolvedBlurRadius = if (isDark) blurRadius * 1.35f else blurRadius
     Box(
         modifier = modifier
+            .cacheAlbumCoverShadow(outset = resolvedBlurRadius * 3f + 6.dp)
             // 模糊必须位于偏移图层外侧，否则图层会先按封面边界截断模糊结果，
             // 再把已经截平的底边整体下移，形成明显的裁剪直线。
             .blur(
@@ -913,7 +924,7 @@ private fun AlbumCoverDepthShadow(
                 edgeTreatment = BlurredEdgeTreatment.Unbounded,
             )
             .graphicsLayer {
-                alpha = progress * if (isDark) 0.38f else 0.54f
+                alpha = progress() * if (isDark) 0.38f else 0.54f
                 scaleX = 0.93f
                 scaleY = 0.93f
                 translationX = if (isDark) 4.dp.toPx() else 5.dp.toPx()
@@ -922,6 +933,24 @@ private fun AlbumCoverDepthShadow(
             }
             .background(layerColor, shape)
     )
+}
+
+internal fun Modifier.cacheAlbumCoverShadow(outset: Dp): Modifier {
+    // 旧系统的 blur 不会创建 RenderEffect，无需为实色阴影额外分配纹理。
+    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return this
+    return layout { measurable, constraints ->
+        val paddingPx = outset.roundToPx()
+        val extra = paddingPx * 2
+        val placeable = measurable.measure(constraints.offset(extra, extra))
+        layout(placeable.width - extra, placeable.height - extra) {
+            placeable.place(-paddingPx, -paddingPx)
+        }
+    }
+        .graphicsLayer {
+            compositingStrategy = CompositingStrategy.Offscreen
+        }
+        // 离屏纹理会裁剪到自身边界，向外留出模糊及位移空间，但不改变卡片布局尺寸。
+        .padding(outset)
 }
 
 @Composable
