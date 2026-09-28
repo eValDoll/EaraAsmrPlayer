@@ -24,13 +24,14 @@ import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.AlbumFtsEntity
 import com.asmr.player.data.local.db.entities.AlbumTagEntity
-import com.asmr.player.data.local.db.entities.RemoteSubtitleSourceEntity
 import com.asmr.player.data.local.db.entities.OnlineSavedResourceEntity
+import com.asmr.player.data.local.db.entities.RemoteSubtitleSourceEntity
 import com.asmr.player.data.local.db.entities.TagEntity
 import com.asmr.player.data.local.db.entities.TagSource
 import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.data.local.db.entities.TrackTagEntity
 import com.asmr.player.data.local.db.entities.titleForDisplay
+import com.asmr.player.data.local.library.deleteLibraryAlbum
 import com.asmr.player.data.lyrics.LyricsLoader
 import com.asmr.player.data.lyrics.deriveLyricsRelativePathNoExt
 import com.asmr.player.data.remote.NetworkHeaders
@@ -2127,14 +2128,13 @@ class AlbumDetailViewModel @Inject constructor(
                     database.trackTagDao().deleteTrackTagsByTrackIds(trackIds)
                 }
                 trackDao.deleteSubtitlesForAlbum(albumId)
-                trackDao.deleteTracksForAlbum(albumId)
                 database.trackPlaybackProgressDao().deleteByAlbumId(albumId)
                 database.localTreeCacheDao().deleteByAlbum(albumId)
                 database.onlineSavedResourceDao().deleteByAlbumId(albumId)
                 database.tagDao().deleteAlbumTagsByAlbumId(albumId)
                 database.albumFtsDao().deleteByAlbumId(albumId)
                 database.playStatDao().deleteByAlbumId(albumId)
-                albumDao.deleteAlbum(latest)
+                database.deleteLibraryAlbum(latest)
             }
         }
         val remaining = albumDao.getAlbumById(albumId)

@@ -9,16 +9,17 @@ import com.asmr.player.data.remote.auth.buildDlsiteCookieHeader
 import com.asmr.player.data.remote.auth.mergeDlsiteCookieHeaders
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.dlsite.descrambleDlsitePlayImageFile
+import com.asmr.player.data.local.db.AppDatabaseProvider
+import com.asmr.player.data.local.db.dao.DownloadDao
 import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.AlbumFtsEntity
-import com.asmr.player.data.local.db.dao.DownloadDao
 import com.asmr.player.data.local.db.entities.DownloadItemEntity
 import com.asmr.player.data.local.db.entities.DownloadTaskEntity
 import com.asmr.player.data.local.db.entities.RemoteSubtitleSourceEntity
 import com.asmr.player.data.local.db.entities.SubtitleEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
-import com.asmr.player.data.local.db.AppDatabaseProvider
 import com.asmr.player.data.local.library.LocalAlbumMergeService
+import com.asmr.player.data.local.library.deleteLibraryTracks
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.DlsiteWorkNo
 import com.asmr.player.util.SubtitleMatchSupport
@@ -1704,7 +1705,7 @@ private suspend fun upsertDownloadedAlbumToLibrary(
         runCatching { trackDao.deleteSubtitlesForTracks(toDelete) }
         runCatching { db.remoteSubtitleSourceDao().deleteByTrackIds(toDelete) }
         runCatching { db.trackTagDao().deleteTrackTagsByTrackIds(toDelete) }
-        runCatching { trackDao.deleteTracksByIds(toDelete) }
+        db.deleteLibraryTracks(toDelete)
     }
 
     val filteredAudioFiles = ArrayList<File>(audioFiles.size)
@@ -1829,7 +1830,7 @@ private suspend fun upsertDownloadedDocumentAlbumToLibrary(
         trackDao.deleteSubtitlesForTracks(ids)
         db.remoteSubtitleSourceDao().deleteByTrackIds(ids)
         db.trackTagDao().deleteTrackTagsByTrackIds(ids)
-        trackDao.deleteTracksByIds(ids)
+        db.deleteLibraryTracks(ids)
     }
 
     val seenReferences = linkedSetOf<String>()

@@ -89,7 +89,7 @@ import com.asmr.player.data.local.db.entities.TrackPlaybackProgressEntity
         SubtitleCommittedCaptionEntity::class,
         SubtitleTitleOwnerEntity::class
     ],
-    version = 32,
+    version = 33,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
