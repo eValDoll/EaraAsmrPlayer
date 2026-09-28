@@ -83,6 +83,9 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.asmr.player.BuildConfig
 import com.asmr.player.cache.AppCacheLimits
 import com.asmr.player.cache.AppCacheState
@@ -252,6 +255,18 @@ fun SettingsScreen(
     )
     
     var overlayGranted by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+    if (lyricsDataActive) {
+        val lifecycleOwner = LocalLifecycleOwner.current
+        DisposableEffect(lifecycleOwner, context) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    overlayGranted = Settings.canDrawOverlays(context)
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+    }
     var activeTipKey by remember { mutableStateOf<String?>(null) }
     var searchBlockedKeywordInput by rememberSaveable { mutableStateOf("") }
     var showClearAppCacheConfirmation by remember { mutableStateOf(false) }
@@ -272,6 +287,7 @@ fun SettingsScreen(
     }
     val overlayLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         overlayGranted = Settings.canDrawOverlays(context)
+        viewModel.setFloatingLyricsEnabled(overlayGranted)
     }
     val pickRootLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
@@ -862,8 +878,24 @@ fun SettingsScreen(
                         SettingsDetailCard {
                             SettingsToggleRow(
                                 text = "开启悬浮歌词",
-                                checked = floatingLyricsEnabled,
-                                onCheckedChange = { viewModel.setFloatingLyricsEnabled(it) }
+                                checked = floatingLyricsEnabled && overlayGranted,
+                                onCheckedChange = { enabled ->
+                                    overlayGranted = Settings.canDrawOverlays(context)
+                                    viewModel.setFloatingLyricsEnabled(enabled && overlayGranted)
+                                    if (enabled && !overlayGranted) {
+                                        val intent = Intent(
+                                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                            Uri.parse("package:${context.packageName}")
+                                        )
+                                        runCatching {
+                                            overlayLauncher.launch(intent)
+                                        }.recoverCatching {
+                                            overlayLauncher.launch(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
+                                        }.onFailure {
+                                            libraryViewModel.messageManager.showError("无法打开悬浮窗权限设置")
+                                        }
+                                    }
+                                }
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
                             NowPlayingLyricsSettingsSection(
@@ -883,22 +915,6 @@ fun SettingsScreen(
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
                         Text("悬浮歌词细节", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-
-                        if (!overlayGranted && floatingLyricsEnabled) {
-                            OutlinedButton(
-                                onClick = {
-                                    val intent = Intent(
-                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                        Uri.parse("package:${context.packageName}")
-                                    )
-                                    overlayLauncher.launch(intent)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = ButtonDefaults.outlinedButtonColors()
-                            ) {
-                                Text("授权悬浮窗权限")
-                            }
-                        }
 
                         if (floatingLyricsEnabled && overlayGranted) {
                             SettingsSliderRow(
