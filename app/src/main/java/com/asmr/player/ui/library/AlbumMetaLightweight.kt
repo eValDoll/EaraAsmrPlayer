@@ -387,37 +387,32 @@ private fun AlbumItemInlineValueItems(
     onClick: (() -> Unit)?,
     onValueLongClick: ((String) -> Unit)?,
 ) {
-    values.forEachIndexed { index, value ->
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                text = valuePrefix + if (valuePrefix == "#") translatedPageText(value.removePrefix(valuePrefix)) else value,
-                style = MaterialTheme.typography.labelSmall.copy(
-                    fontSize = if (prominent) 13.sp else 12.sp,
-                    fontWeight = if (prominent) FontWeight.SemiBold else FontWeight.Medium,
-                ),
-                color = valueColor,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(4.dp))
-                    .then(
-                        if (onClick != null || onValueLongClick != null) {
-                            Modifier.combinedClickable(
-                                onClick = { onClick?.invoke() },
-                                onLongClick = onValueLongClick?.let { longClick ->
-                                    { longClick(value) }
-                                },
-                            )
-                        } else {
-                            Modifier
-                        }
-                    )
-                    .padding(horizontal = 2.dp, vertical = 2.dp)
-            )
-            if (prominent && index < values.lastIndex) {
-                Text(CvNameSeparator, color = valueColor, style = MaterialTheme.typography.labelSmall)
-            }
-        }
+    values.forEach { value ->
+        Text(
+            text = valuePrefix + if (valuePrefix == "#") translatedPageText(value.removePrefix(valuePrefix)) else value,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontSize = if (prominent) 13.sp else 12.sp,
+                fontWeight = if (prominent) FontWeight.SemiBold else FontWeight.Medium,
+            ),
+            color = valueColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .clip(RoundedCornerShape(4.dp))
+                .then(
+                    if (onClick != null || onValueLongClick != null) {
+                        Modifier.combinedClickable(
+                            onClick = { onClick?.invoke() },
+                            onLongClick = onValueLongClick?.let { longClick ->
+                                { longClick(value) }
+                            },
+                        )
+                    } else {
+                        Modifier
+                    }
+                )
+                .padding(horizontal = 2.dp, vertical = 2.dp)
+        )
     }
 }
 
