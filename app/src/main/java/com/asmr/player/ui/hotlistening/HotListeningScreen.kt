@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.cache.LazyListPreloader
+import com.asmr.player.ui.library.albumListCoverSize
 import com.asmr.player.cache.LazyStaggeredGridPreloader
 import com.asmr.player.domain.model.Album
 import com.asmr.player.hotlistening.HotListeningSortMode
@@ -348,7 +349,7 @@ private fun HotListeningScreenContent(
                     }
                     val density = LocalDensity.current
                     val screenWidthDp = LocalConfiguration.current.screenWidthDp
-                    val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
+                    val listItemHeight = albumListCoverSize(screenWidthDp)
                     val coverPx = remember(listItemHeight, density) { with(density) { listItemHeight.roundToPx() } }
                     val preloadSize = remember(coverPx) { IntSize(coverPx, coverPx) }
                     val listCoverFadeInState = remember(listState) {

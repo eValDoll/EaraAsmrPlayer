@@ -905,7 +905,7 @@ private fun LibraryScreenContent(
                                     }
                                     val density = LocalDensity.current
                                     val screenWidthDp = LocalConfiguration.current.screenWidthDp
-                                    val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
+                                    val listItemHeight = albumListCoverSize(screenWidthDp)
                                     val coverPx = remember(listItemHeight, density) { with(density) { listItemHeight.roundToPx() } }
                                     val preloadSize = remember(coverPx) { IntSize(coverPx, coverPx) }
                                     val coverFadeInState = remember(listState) {
