@@ -494,10 +494,12 @@ class PlayerConnection @Inject constructor(
                 val meta = MediaMetadata.Builder()
                     .setTitle(title)
                     .setArtist(persisted.artist.orEmpty())
+                    .setDurationMs(persisted.durationMs)
                     .setAlbumTitle(persisted.albumTitle.orEmpty())
                     .setArtworkUri(parsePossiblyEncodedUri(persisted.artworkUri))
                     .setExtras(
                         android.os.Bundle().apply {
+                            persisted.albumCv?.let { putString(EXTRA_ALBUM_CV, it) }
                             if (persisted.albumId != null) putLong("album_id", persisted.albumId)
                             if (persisted.trackId != null) putLong("track_id", persisted.trackId)
                             if (!persisted.rjCode.isNullOrBlank()) putString("rj_code", persisted.rjCode)

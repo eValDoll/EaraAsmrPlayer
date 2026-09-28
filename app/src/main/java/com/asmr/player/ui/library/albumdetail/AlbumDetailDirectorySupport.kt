@@ -1,5 +1,12 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.ui.common.AudioMetadataLine
+import com.asmr.player.ui.common.audioTrailingText
+import com.asmr.player.ui.common.cacheTrackFileSize
+import com.asmr.player.ui.common.formatCvNames
+import com.asmr.player.ui.common.AudioSource
+import com.asmr.player.ui.common.rememberAudioMetadata
+
 import com.asmr.player.translation.translatedPageText
 
 import android.content.Intent
@@ -3575,6 +3582,8 @@ internal fun DirectoryFileRow(
     file: DirectoryFileItem,
     loadRemoteFileSize: suspend (String) -> Long?,
     onPrimary: () -> Unit,
+    loadAudioMetadata: Boolean = true,
+    albumCv: String = "",
     selectionMode: Boolean = false,
     selected: Boolean = false,
     selectedPosition: DirectoryFolderPosition = DirectoryFolderPosition.Single,
@@ -3596,18 +3605,26 @@ internal fun DirectoryFileRow(
     val context = LocalContext.current
     val icon = treeFileTypeIcon(file.fileType)
     val iconTint = treeFileTypeTint(file.fileType, colorScheme)
-    val sizeText by produceState<String?>(initialValue = null, file.sizeSource) {
-        value = when (val sizeSource = file.sizeSource) {
+    val sizeText by produceState<String?>(initialValue = null, file.sizeSource, loadAudioMetadata) {
+        if (file.fileType == TreeFileType.Audio) {
+            if (!loadAudioMetadata) return@produceState
+            kotlinx.coroutines.delay(200)
+        }
+        val sizeBytes = when (val sizeSource = file.sizeSource) {
             FileSizeSource.None -> null
             is FileSizeSource.Local -> (sizeSource.sizeBytes ?: withContext(Dispatchers.IO) {
                 queryLocalFileSize(context, sizeSource.path)
-            })?.let(Formatting::formatFileSize)
-            is FileSizeSource.Remote -> loadRemoteFileSize(sizeSource.url)?.let(Formatting::formatFileSize)
+            })
+            is FileSizeSource.Remote -> loadRemoteFileSize(sizeSource.url)
+        }?.takeIf { it > 0 }
+        if (sizeBytes != null) {
+            cacheTrackFileSize(file.track?.path ?: file.url.ifBlank { file.absolutePath }, sizeBytes)
         }
+        value = sizeBytes?.let(Formatting::formatFileSize)
     }
     val metaLine = remember(file.fileType, file.isOnline, file.durationSeconds, sizeText) {
         listOf(
-            directoryFileTypeLabel(file),
+            directoryFileTypeLabel(file).takeUnless { file.fileType == TreeFileType.Audio },
             Formatting.formatTrackSeconds(file.durationSeconds).takeIf { it.isNotBlank() },
             sizeText
         ).filterNotNull().joinToString(" · ")
@@ -3693,7 +3710,25 @@ internal fun DirectoryFileRow(
                     color = colorScheme.textPrimary,
                     style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold)
                 )
-                if (metaLine.isNotBlank()) {
+                if (file.fileType == TreeFileType.Audio) {
+                    val audioMetadata = rememberAudioMetadata(
+                        file.track?.path ?: file.url.ifBlank { file.absolutePath },
+                        loadMetadata = loadAudioMetadata,
+                    )
+                    AudioMetadataLine(
+                        text = remember(albumCv) { formatCvNames(albumCv) },
+                        trailingText = remember(file.durationSeconds, audioMetadata?.durationSeconds, sizeText) {
+                            audioTrailingText(
+                                Formatting.formatTrackSeconds(file.durationSeconds?.takeIf { it > 0 } ?: audioMetadata?.durationSeconds),
+                                sizeText,
+                            )
+                        },
+                        source = if (file.isOnline) AudioSource.Online else AudioSource.Local,
+                        quality = audioMetadata?.quality,
+                        color = colorScheme.textSecondary,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                } else if (metaLine.isNotBlank()) {
                     Text(
                         text = metaLine,
                         color = colorScheme.textSecondary,

@@ -1,5 +1,8 @@
 package com.asmr.player.ui.groups
 
+import com.asmr.player.ui.common.formatCvNames
+import com.asmr.player.playback.EXTRA_ALBUM_CV
+
 import android.net.Uri
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -72,12 +75,9 @@ import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.queryCachedTrackFileSize
-import com.asmr.player.ui.common.rememberAudioMeta
-import com.asmr.player.ui.common.rememberAudioMetaText
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.smoothScrollToTop
-import com.asmr.player.ui.common.rememberTrackMetaLine
 import com.asmr.player.ui.common.reorderable.ItemPosition
 import com.asmr.player.ui.common.reorderable.ReorderableItem
 import com.asmr.player.ui.common.reorderable.detectReorderAfterLongPress
@@ -298,7 +298,7 @@ internal fun AlbumGroupDetailContent(
                                         coverModel = row.coverModel,
                                         showTopDivider = index > 0 && localRows[index - 1] is GroupDetailTrackRow,
                                         isDragging = isDragging,
-                                        loadFileSize = !listState.isScrollInProgress,
+                                        loadAudioMetadata = !listState.isScrollInProgress,
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .testTag("$GROUP_DETAIL_TRACK_TAG_PREFIX:${row.track.mediaId}")
@@ -442,7 +442,7 @@ private fun GroupTrackRow(
     coverModel: Any?,
     showTopDivider: Boolean,
     isDragging: Boolean,
-    loadFileSize: Boolean,
+    loadAudioMetadata: Boolean,
     modifier: Modifier = Modifier,
     onPlay: () -> Unit,
     onMoveToTop: () -> Unit,
@@ -462,15 +462,8 @@ private fun GroupTrackRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
             )
         }
-        val prefixSegments = remember(item.albumCv) {
-            listOf(item.albumCv.orEmpty())
-        }
-        val meta = rememberAudioMeta(
-            sourcePath = item.trackPath,
-            durationSeconds = item.trackDuration,
-            prefixSegments = prefixSegments,
-            loadSize = loadFileSize
-        )
+        val cvText = remember(item.albumCv) { formatCvNames(item.albumCv.orEmpty()) }
+        val durationText = remember(item.trackDuration) { Formatting.formatTrackSeconds(item.trackDuration) }
         val actions = remember(onPlay, onMoveToTop, onMoveToBottom, onRemove) {
             listOf(
                 AudioItemMenuAction(
@@ -496,8 +489,10 @@ private fun GroupTrackRow(
         }
         AudioItemRow(
             title = item.trackTitle.ifBlank { "未命名" },
-            subtitle = meta.leadingText,
-            fixedTrailingSubtitle = meta.trailingText,
+            sourcePath = item.trackPath,
+            loadAudioMetadata = loadAudioMetadata,
+            subtitle = cvText,
+            fixedTrailingSubtitle = durationText,
             showSubtitleStamp = item.hasSubtitles,
             subtitleStampTestTag = "$GROUP_DETAIL_TRACK_SUBTITLE_STAMP_TAG_PREFIX:${item.mediaId}",
             menuButtonTestTag = "$GROUP_DETAIL_TRACK_MENU_BUTTON_TAG_PREFIX:${item.mediaId}",
@@ -622,6 +617,9 @@ private fun AlbumGroupTrackRow.toMediaItem(): MediaItem {
         .trim()
     val metadata = MediaMetadata.Builder()
         .setTitle(trackTitle)
+        .setArtist(formatCvNames(albumCv.orEmpty()))
+        .setDurationMs(trackDuration.takeIf { it > 0 }?.let { (it * 1000).toLong() })
+        .setExtras(android.os.Bundle().apply { putString(EXTRA_ALBUM_CV, albumCv.orEmpty()) })
         .setAlbumTitle(albumTitle.orEmpty())
         .setArtworkUri(artwork.toArtworkUriOrNull())
         .build()

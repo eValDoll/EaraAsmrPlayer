@@ -5,30 +5,25 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import com.asmr.player.util.Formatting
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
-internal data class AudioMetaText(
-    val leadingText: String,
-    val trailingText: String
-)
-
 private object TrackFileSizeCache {
     private const val MissingSize = Long.MIN_VALUE
     private val values = ConcurrentHashMap<String, Long>()
-
-    fun get(path: String): Long? {
-        return when (val cached = getKnown(path)) {
-            null, MissingSize -> null
-            else -> cached
-        }
-    }
 
     fun getKnown(path: String): Long? = values[path]
 
@@ -44,124 +39,27 @@ private object TrackFileSizeCache {
     }
 }
 
+internal fun audioTrailingText(durationText: String, sizeText: String?): String =
+    listOf(durationText.trim(), sizeText.orEmpty().trim()).filter(String::isNotBlank).joinToString(" · ")
+
 @Composable
-internal fun rememberAudioMetaText(
-    sourcePath: String,
-    durationSeconds: Double?,
-    prefixSegments: List<String> = emptyList(),
-    suffixSegments: List<String> = emptyList(),
-    loadSize: Boolean = true
-): String {
-    val context = LocalContext.current
-    val sizeText by produceState<String?>(
-        initialValue = cachedTrackFileSize(sourcePath)?.let(Formatting::formatFileSize),
-        sourcePath,
-        loadSize
-    ) {
-        if (!loadSize || value != null) return@produceState
-        value = withContext(Dispatchers.IO) {
-            queryCachedTrackFileSize(context, sourcePath)
-        }?.let(Formatting::formatFileSize)
+internal fun rememberTrackFileSizeText(path: String, loadSize: Boolean = true): String? {
+    val context = LocalContext.current.applicationContext
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var sizeText by remember(path) {
+        mutableStateOf(TrackFileSizeCache.getKnown(path.trim())
+            ?.let(TrackFileSizeCache::resolveKnownSize)?.let(Formatting::formatFileSize))
     }
-    return buildAudioMetaText(
-        durationSeconds = durationSeconds,
-        sizeText = sizeText,
-        prefixSegments = prefixSegments,
-        suffixSegments = suffixSegments
-    )
-}
-
-@Composable
-internal fun rememberTrackMetaLine(
-    path: String,
-    durationSeconds: Double?
-): String {
-    return rememberAudioMetaText(
-        sourcePath = path,
-        durationSeconds = durationSeconds
-    )
-}
-
-internal fun buildAudioMetaText(
-    durationSeconds: Double?,
-    sizeText: String?,
-    prefixSegments: List<String> = emptyList(),
-    suffixSegments: List<String> = emptyList()
-): String {
-    val meta = buildAudioMeta(durationSeconds, sizeText, prefixSegments, suffixSegments)
-    return listOf(meta.leadingText, meta.trailingText)
-        .filter { it.isNotBlank() }
-        .joinToString(" · ")
-}
-
-internal fun buildAudioMeta(
-    durationSeconds: Double?,
-    sizeText: String?,
-    prefixSegments: List<String> = emptyList(),
-    suffixSegments: List<String> = emptyList()
-): AudioMetaText {
-    val leadingText = (prefixSegments + suffixSegments)
-        .mapNotNull { it.trim().takeIf(String::isNotBlank) }
-        .joinToString(" · ")
-    val trailingText = listOf(
-        Formatting.formatTrackSeconds(durationSeconds).takeIf { it.isNotBlank() },
-        sizeText?.trim()?.takeIf { it.isNotBlank() }
-    ).filterNotNull().joinToString(" · ")
-    return AudioMetaText(
-        leadingText = leadingText,
-        trailingText = trailingText
-    )
-}
-
-@Composable
-internal fun rememberAudioMeta(
-    sourcePath: String,
-    durationSeconds: Double?,
-    prefixSegments: List<String> = emptyList(),
-    suffixSegments: List<String> = emptyList(),
-    loadSize: Boolean = true
-): AudioMetaText {
-    val context = LocalContext.current
-    val sizeText by produceState<String?>(
-        initialValue = cachedTrackFileSize(sourcePath)?.let(Formatting::formatFileSize),
-        sourcePath,
-        loadSize
-    ) {
-        if (!loadSize || value != null) return@produceState
-        value = withContext(Dispatchers.IO) {
-            queryCachedTrackFileSize(context, sourcePath)
-        }?.let(Formatting::formatFileSize)
+    LaunchedEffect(path, loadSize, lifecycleOwner) {
+        if (!loadSize || path.isBlank()) return@LaunchedEffect
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            delay(200)
+            sizeText = withContext(Dispatchers.IO) {
+                queryCachedTrackFileSize(context, path)
+            }?.let(Formatting::formatFileSize)
+        }
     }
-    return buildAudioMeta(
-        durationSeconds = durationSeconds,
-        sizeText = sizeText,
-        prefixSegments = prefixSegments,
-        suffixSegments = suffixSegments
-    )
-}
-
-@Composable
-internal fun rememberTrackMeta(
-    path: String,
-    durationSeconds: Double?
-): AudioMetaText {
-    return rememberAudioMeta(
-        sourcePath = path,
-        durationSeconds = durationSeconds
-    )
-}
-
-internal fun buildTrackMetaLine(
-    durationSeconds: Double?,
-    sizeText: String?
-): String {
-    return buildAudioMetaText(durationSeconds = durationSeconds, sizeText = sizeText)
-}
-
-internal fun cachedTrackFileSize(path: String): Long? {
-    val trimmed = path.trim()
-    if (trimmed.isBlank()) return null
-    return TrackFileSizeCache.get(trimmed)
+    return sizeText
 }
 
 internal fun cacheTrackFileSize(path: String, size: Long?) {

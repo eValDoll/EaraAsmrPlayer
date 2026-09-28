@@ -1,6 +1,7 @@
 package com.asmr.player.ui.common
 
 import com.asmr.player.translation.translatedPageText
+import com.asmr.player.util.Formatting
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -38,7 +39,6 @@ import androidx.compose.ui.graphics.Color.Companion.Unspecified
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.asmr.player.ui.theme.AsmrTheme
@@ -77,12 +77,21 @@ internal fun AudioItemRow(
     titleColor: Color = Unspecified,
     subtitleColor: Color = Unspecified,
     fixedTrailingSubtitle: String = "",
+    sourcePath: String = "",
+    loadAudioMetadata: Boolean = true,
     showClickIndication: Boolean = true,
     compact: Boolean = false,
     compactContentPadding: PaddingValues = PaddingValues(horizontal = 16.dp, vertical = 6.dp),
     titleMaxLines: Int = 2
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val audioMetadata = rememberAudioMetadata(sourcePath, loadAudioMetadata)
+    val durationText = remember(fixedTrailingSubtitle, audioMetadata?.durationSeconds) {
+        fixedTrailingSubtitle.ifBlank { Formatting.formatTrackSeconds(audioMetadata?.durationSeconds) }
+    }
+    val sizeText = rememberTrackFileSizeText(sourcePath, loadAudioMetadata)
+    val trailingText = remember(durationText, sizeText) { audioTrailingText(durationText, sizeText) }
+    val source = remember(sourcePath) { audioSource(sourcePath) }
     val interactionSource = remember { MutableInteractionSource() }
     val resolvedTitleStyle = titleTextStyle ?: MaterialTheme.typography.bodyLarge
     val resolvedSubtitleStyle = subtitleTextStyle ?: MaterialTheme.typography.bodySmall
@@ -127,11 +136,13 @@ internal fun AudioItemRow(
                     style = resolvedTitleStyle,
                     color = resolvedTitleColor
                 )
-                AudioItemSupportingText(
-                    subtitle = subtitle,
-                    fixedTrailingSubtitle = fixedTrailingSubtitle,
-                    textStyle = resolvedSubtitleStyle,
-                    textColor = resolvedSubtitleColor
+                AudioMetadataLine(
+                    text = subtitle,
+                    trailingText = trailingText,
+                    source = source,
+                    quality = audioMetadata?.quality,
+                    style = resolvedSubtitleStyle,
+                    color = resolvedSubtitleColor
                 )
             }
 
@@ -158,11 +169,13 @@ internal fun AudioItemRow(
             )
         },
         supportingContent = {
-            AudioItemSupportingText(
-                subtitle = subtitle,
-                fixedTrailingSubtitle = fixedTrailingSubtitle,
-                textStyle = resolvedSubtitleStyle,
-                textColor = resolvedSubtitleColor
+            AudioMetadataLine(
+                text = subtitle,
+                trailingText = trailingText,
+                source = source,
+                quality = audioMetadata?.quality,
+                style = resolvedSubtitleStyle,
+                color = resolvedSubtitleColor
             )
         },
         leadingContent = leadingContent,
@@ -179,56 +192,6 @@ internal fun AudioItemRow(
         colors = ListItemDefaults.colors(containerColor = Color.Transparent),
         modifier = modifier.then(clickableModifier)
     )
-}
-
-@Composable
-private fun AudioItemSupportingText(
-    subtitle: String,
-    fixedTrailingSubtitle: String,
-    textStyle: TextStyle,
-    textColor: Color
-) {
-    when {
-        subtitle.isNotBlank() && fixedTrailingSubtitle.isNotBlank() -> {
-            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = subtitle,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = textStyle,
-                    color = textColor,
-                    modifier = Modifier.weight(1f, fill = false)
-                )
-                Text(
-                    text = fixedTrailingSubtitle,
-                    maxLines = 1,
-                    overflow = TextOverflow.Clip,
-                    textAlign = TextAlign.End,
-                    style = textStyle,
-                    color = textColor,
-                    modifier = Modifier.padding(start = 8.dp)
-                )
-            }
-        }
-        subtitle.isNotBlank() -> {
-            Text(
-                text = subtitle,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                style = textStyle,
-                color = textColor
-            )
-        }
-        fixedTrailingSubtitle.isNotBlank() -> {
-            Text(
-                text = fixedTrailingSubtitle,
-                maxLines = 1,
-                overflow = TextOverflow.Clip,
-                style = textStyle,
-                color = textColor
-            )
-        }
-    }
 }
 
 @Composable

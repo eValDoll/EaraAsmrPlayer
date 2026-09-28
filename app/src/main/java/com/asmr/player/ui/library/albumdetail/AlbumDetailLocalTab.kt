@@ -394,6 +394,8 @@ internal fun AlbumLocalBreadcrumbTabV2(
                         val downloadableTrack = downloadableOnlineAudioTrack(file)
                         DirectoryFileRow(
                             file = file,
+                            loadAudioMetadata = !listState.isScrollInProgress,
+                            albumCv = album.cv,
                             loadRemoteFileSize = { null },
                             onPrimary = {
                                 scope.launch {

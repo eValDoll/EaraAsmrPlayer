@@ -1,5 +1,7 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.ui.common.formatCvNames
+
 import com.asmr.player.translation.translatedPageText
 
 import android.content.Intent
@@ -2666,7 +2668,7 @@ private fun AlbumDetailSimilarWorkCard(
                 overflow = TextOverflow.Ellipsis
             )
             Text(
-                text = work.cv.ifBlank { work.rjCode },
+                text = remember(work.cv, work.rjCode) { formatCvNames(work.cv).ifBlank { work.rjCode } },
                 style = MaterialTheme.typography.labelSmall,
                 color = colorScheme.textSecondary,
                 maxLines = 1,
@@ -3964,7 +3966,9 @@ internal data class PlaylistAddTarget(
     val lyricsRelativePathNoExt: String = "",
     val remoteSubtitleSources: List<RemoteSubtitleSource> = emptyList(),
     val mimeType: String? = null,
-    val isVideo: Boolean = false
+    val isVideo: Boolean = false,
+    val albumCv: String? = null,
+    val durationSeconds: Double? = null
 ) {
     fun toMediaItem(): MediaItem {
         return MediaItemFactory.fromDetails(
@@ -3982,7 +3986,9 @@ internal data class PlaylistAddTarget(
             lyricsRelativePathNoExt = lyricsRelativePathNoExt,
             remoteSubtitleSources = remoteSubtitleSources,
             mimeType = mimeType,
-            isVideo = isVideo
+            isVideo = isVideo,
+            albumCv = albumCv,
+            durationSeconds = durationSeconds
         )
     }
 
@@ -3997,6 +4003,8 @@ internal data class PlaylistAddTarget(
                 uri = track.path,
                 title = title,
                 artist = artist.orEmpty(),
+                albumCv = album.cv,
+                durationSeconds = track.duration,
                 artworkUri = artwork,
                 albumTitle = album.title,
                 albumId = album.id,
