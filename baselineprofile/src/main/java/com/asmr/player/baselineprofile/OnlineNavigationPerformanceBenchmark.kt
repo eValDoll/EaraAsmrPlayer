@@ -156,10 +156,11 @@ private fun UiDevice.openOnlineTab(label: String) {
 
 private fun UiDevice.openOnlineAlbumAndReturn() {
     val code = waitForOnlineAlbum()
+    val shortEdge = minOf(displayWidth, displayHeight)
     var card: UiObject2? = code
     while (card != null) {
         val bounds = card.visibleBounds
-        if (card.isClickable && bounds.width() > displayWidth / 4 && bounds.height() > displayWidth / 5) {
+        if (card.isClickable && bounds.width() > shortEdge / 4 && bounds.height() > shortEdge / 5) {
             // The cover occupies the upper-left square in both list and grid layouts.
             val inset = minOf(bounds.width(), bounds.height()) / 3
             click(bounds.left + inset, bounds.top + inset)
