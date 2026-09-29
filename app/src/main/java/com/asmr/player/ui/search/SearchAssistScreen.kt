@@ -68,6 +68,8 @@ import com.asmr.player.ui.common.NoImageLoadingIndicator
 import com.asmr.player.ui.common.FlatActionDialog
 import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
+import com.asmr.player.ui.common.LocalMainHeaderPadding
+import com.asmr.player.ui.common.progressiveHeaderContent
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.clearFocusOnTapOutside
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
@@ -207,7 +209,7 @@ internal fun SearchAssistContent(
     } else {
         with(density) { 64.dp.toPx() }
     }
-    val topPadding = with(density) { chromeReservedHeightPx.toDp() } + SearchAssistChromeContentGap
+    val topPadding = with(density) { chromeReservedHeightPx.toDp() } + SearchAssistChromeContentGap + LocalMainHeaderPadding.current
 
     fun buildRequest(
         requestKeyword: String,
@@ -258,7 +260,7 @@ internal fun SearchAssistContent(
         keyboardController?.show()
     }
 
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(modifier = Modifier.fillMaxSize().progressiveHeaderContent()) {
         LazyColumn(
             state = listState,
             modifier = Modifier
@@ -420,7 +422,7 @@ internal fun SearchAssistContent(
         }
 
         SearchChrome(
-            modifier = Modifier.align(Alignment.TopCenter),
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = LocalMainHeaderPadding.current),
             keyword = keyword,
             onKeywordChange = { keyword = it },
             placeholder = hotKeywordCarouselItem.placeholder,

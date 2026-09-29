@@ -105,6 +105,8 @@ import com.asmr.player.ui.downloads.DownloadItemState
 import com.asmr.player.ui.dlsite.DlsiteLoginScreen
 import com.asmr.player.ui.dlsite.DlsiteLoginViewModel
 import com.asmr.player.ui.hotlistening.HotListeningScreen
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.drawscope.clipRect
 import com.asmr.player.ui.hotlistening.HotListeningViewModel
 import com.asmr.player.hotlistening.ListeningTracker
 import com.asmr.player.ui.groups.AlbumGroupsViewModel
@@ -139,6 +141,12 @@ import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.FlatTextFieldDialog
 import com.asmr.player.ui.common.RoundedTopSheet
 import com.asmr.player.ui.common.EaraTopBarContainer
+import com.asmr.player.ui.common.ProgressiveHeaderBlurState
+import com.asmr.player.ui.common.LocalMainHeaderPadding
+import com.asmr.player.ui.common.LocalProgressiveHeaderBlur
+import com.asmr.player.ui.common.progressiveHeaderContent
+import com.asmr.player.ui.common.hasProgressiveMainHeader
+import com.asmr.player.ui.common.rememberProgressiveHeaderBlur
 import com.asmr.player.ui.common.EaraMainTopBarHeight
 import com.asmr.player.ui.common.EaraTopBarIconButton
 import com.asmr.player.ui.common.resolveMainPageBackgroundColor
@@ -614,6 +622,33 @@ private fun SecondaryPageBackground(
             .background(pageBackgroundColor)
     ) {
         content()
+    }
+}
+
+@Composable
+private fun SearchAssistPageBackground(
+    topPadding: Dp,
+    blurState: ProgressiveHeaderBlurState?,
+    isActive: Boolean,
+    content: @Composable () -> Unit,
+) {
+    if (blurState == null) {
+        SecondaryPageBackground(topPadding = topPadding, content = content)
+        return
+    }
+    Box(
+        Modifier.fillMaxSize()
+            .drawWithContent {
+                // The outgoing page must leave the stationary primary header exposed during its slide.
+                clipRect(top = if (isActive) 0f else topPadding.toPx()) { this@drawWithContent.drawContent() }
+            }
+            .background(resolveMainPageBackgroundColor(AsmrTheme.colorScheme))
+    ) {
+        CompositionLocalProvider(
+            LocalMainHeaderPadding provides topPadding,
+            LocalProgressiveHeaderBlur provides blurState,
+            content = content,
+        )
     }
 }
 
@@ -1785,6 +1820,302 @@ fun MainContainer(
         val bottomOverlayPadding = bottomChromeOverlayHeight(useLargeBottomChrome) + navigationBarBottomPadding
         var secondaryPageTopPadding by remember { mutableStateOf(0.dp) }
         val pageTranslationHeader = remember { PageTranslationHeaderState() }
+        val headerBlur = rememberProgressiveHeaderBlur()
+        val showHeaderBlur = headerBlur != null && currentScreenIsPrimary &&
+            hasProgressiveMainHeader(visualPrimaryRoute)
+        val showSearchAssistBlur = headerBlur != null &&
+            (currentRoute == Routes.SearchAssist || currentRoute == Routes.SearchAssistPattern)
+        val searchAssistHeaderPadding = StableWindowInsets.statusBars.asPaddingValues().calculateTopPadding() +
+            EaraMainTopBarHeight
+        val mainHeader: @Composable () -> Unit = {
+            Box {
+                EaraTopBarContainer(blurEnabled = showHeaderBlur || showSearchAssistBlur) {
+                    Column {
+                        Spacer(modifier = Modifier.windowInsetsTopHeight(StableWindowInsets.statusBars))
+                        CenterAlignedTopAppBar(
+                            modifier = Modifier.height(EaraMainTopBarHeight),
+                            title = {
+                                val entry = navBackStackEntry
+                                val resolvedTitleRoute = if (currentScreenIsPrimary || albumDetailTransitionActive) {
+                                    visualPrimaryRoute
+                                } else {
+                                    currentRoute
+                                }
+                                val groupName = if (resolvedTitleRoute == "group/{groupId}/{groupName}") {
+                                    decodeRouteArg(entry?.arguments?.getString("groupName").orEmpty())
+                                } else ""
+                                val playlistName = if (resolvedTitleRoute == "playlist/{playlistId}/{playlistName}") {
+                                    decodeRouteArg(entry?.arguments?.getString("playlistName").orEmpty())
+                                } else ""
+                                val systemPlaylistType = if (resolvedTitleRoute == "playlist_system/{type}") {
+                                    entry?.arguments?.getString("type").orEmpty()
+                                } else ""
+                                val appName = stringResource(R.string.app_name)
+                                val titleText = when {
+                                    resolvedTitleRoute == "library" -> "本地库"
+                                    resolvedTitleRoute == "library_filter" -> "筛选"
+                                    resolvedTitleRoute == "search" -> "在线搜索"
+                                    resolvedTitleRoute == Routes.SearchAssist -> "在线搜索"
+                                    resolvedTitleRoute == Routes.SearchAssistPattern -> "在线搜索"
+                                    resolvedTitleRoute == Routes.HotListening -> "热门收听"
+                                    resolvedTitleRoute == "playlists" -> "我的列表"
+                                    resolvedTitleRoute == "playlist/{playlistId}/{playlistName}" ->
+                                        playlistName.ifBlank { "我的列表" }
+                                    resolvedTitleRoute == "playlist_system/favorites" -> "我的收藏"
+                                    resolvedTitleRoute == "playlist_system/{type}" -> when (systemPlaylistType) {
+                                        "favorites" -> "我的收藏"
+                                        else -> "我的收藏"
+                                    }
+                                    resolvedTitleRoute == "groups" -> "我的分组"
+                                    resolvedTitleRoute == "group/{groupId}/{groupName}" ->
+                                        groupName.ifBlank { "我的分组" }
+                                    resolvedTitleRoute == "settings" -> "设置"
+                                    resolvedTitleRoute == "downloads" -> "任务管理"
+                                    resolvedTitleRoute == "listening_calendar" -> "ASMR 看板"
+                                    resolvedTitleRoute == "dlsite_login" -> "DLsite 登录"
+                                    resolvedTitleRoute?.startsWith("playlist_picker") == true -> "添加到我的列表"
+                                    resolvedTitleRoute?.startsWith("album_detail") == true -> "专辑详情"
+                                    else -> appName
+                                }
+                                AnimatedContent(
+                                    targetState = titleText,
+                                    modifier = Modifier
+                                        .height(40.dp)
+                                        .offset(y = 4.dp),
+                                    contentAlignment = Alignment.Center,
+                                    transitionSpec = {
+                                        (fadeIn(animationSpec = tween(220, easing = LinearOutSlowInEasing))
+                                            + slideInHorizontally(animationSpec = tween(220, easing = LinearOutSlowInEasing)) { it / 4 })
+                                            .togetherWith(
+                                                fadeOut(animationSpec = tween(180, easing = FastOutLinearInEasing))
+                                                    + slideOutHorizontally(animationSpec = tween(180, easing = FastOutLinearInEasing)) { -it / 4 }
+                                            )
+                                    },
+                                    label = "headerTitle"
+                                ) { targetText ->
+                                    Text(
+                                        text = targetText,
+                                        color = if (albumDetailTransitionActive) {
+                                            colorScheme.onSurface
+                                        } else {
+                                            topBarContentColor
+                                        },
+                                        style = MaterialTheme.typography.titleMedium.copy(
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    )
+                                }
+                            },
+                            windowInsets = WindowInsets(0, 0, 0, 0),
+                            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                                containerColor = Color.Transparent,
+                                titleContentColor = topBarContentColor,
+                                navigationIconContentColor = topBarContentColor,
+                                actionIconContentColor = if (albumDetailTransitionActive) {
+                                    colorScheme.onSurface
+                                } else {
+                                    topBarContentColor
+                                }
+                            ),
+                            navigationIcon = {
+                                Box {
+                                    if (showPrimaryBrand || albumDetailTransitionActive) {
+                                        PrimaryTopBarBrand(
+                                            appName = stringResource(R.string.app_name),
+                                            tint = colorScheme.primaryStrong
+                                        )
+                                    }
+                                    if (showBackButton &&
+                                        !albumDetailTransitionActive &&
+                                        hasPreviousBackStackEntry
+                                    ) {
+                                        EaraTopBarIconButton(
+                                            onClick = { navController.popBackStack() }
+                                        ) {
+                                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
+                                        }
+                                    }
+                                }
+                            },
+                            actions = {
+                                val headerActionRoute = if (albumDetailTransitionActive) {
+                                    visualPrimaryRoute
+                                } else {
+                                    currentRoute
+                                }
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (headerActionRoute != null &&
+                                        (isPrimaryRoute(headerActionRoute) || headerActionRoute == "playlist_system/{type}") &&
+                                        !(headerActionRoute == "settings" && settingsDetailPageVisible)
+                                    ) {
+                                        val downloadTasks by downloadsViewModel.tasks.collectAsStateWithLifecycle()
+                                        val activeSubtitleTaskCount by downloadsViewModel.activeSubtitleTaskCount.collectAsStateWithLifecycle()
+                                        val activeDownloadCount = remember(downloadTasks) {
+                                            downloadTasks.sumOf { task ->
+                                                task.items.count {
+                                                    it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED
+                                                }
+                                            }
+                                        }
+                                        val activeTaskCount = activeDownloadCount + activeSubtitleTaskCount
+                                        PageTranslationHeaderAction(headerActionRoute, Modifier.padding(end = 4.dp))
+                                        Box {
+                                            EaraTopBarIconButton(
+                                                onClick = { navController.navigate("downloads") },
+                                                modifier = Modifier.padding(end = 4.dp)
+                                            ) {
+                                                Icon(Icons.Rounded.Inbox, contentDescription = "任务管理")
+                                            }
+                                            if (activeTaskCount > 0) {
+                                                Badge(
+                                                    modifier = Modifier
+                                                        .align(Alignment.TopEnd)
+                                                ) {
+                                                    Text(activeTaskCount.toString())
+                                                }
+                                            }
+                                        }
+                                    }
+                                    if (headerActionRoute == "library") {
+                                        val viewMode by libraryViewModel.libraryViewMode.collectAsStateWithLifecycle()
+                                        if (viewMode != null) {
+                                            var viewMenuExpanded by remember { mutableStateOf(false) }
+                                            Box {
+                                                val normalized = (viewMode ?: 0).coerceIn(0, 2)
+                                                val icon = when (normalized) {
+                                                    1 -> Icons.Rounded.GridView
+                                                    2 -> Icons.Rounded.Audiotrack
+                                                    else -> Icons.AutoMirrored.Rounded.ViewList
+                                                }
+                                                EaraTopBarIconButton(
+                                                    onClick = { viewMenuExpanded = true },
+                                                    modifier = Modifier.padding(end = 4.dp)
+                                                ) {
+                                                    Icon(imageVector = icon, contentDescription = "切换视图")
+                                                }
+                                                MaterialTheme(
+                                                    colorScheme = materialColorScheme.copy(
+                                                        surface = dynamicContainerColor,
+                                                        surfaceContainer = dynamicContainerColor
+                                                    )
+                                                ) {
+                                                    DropdownMenu(
+                                                        expanded = viewMenuExpanded,
+                                                        onDismissRequest = { viewMenuExpanded = false },
+                                                        modifier = Modifier.background(dynamicContainerColor)
+                                                    ) {
+                                                        DropdownMenuItem(
+                                                            text = { Text("专辑列表") },
+                                                            leadingIcon = {
+                                                                Icon(Icons.AutoMirrored.Rounded.ViewList, contentDescription = null)
+                                                            },
+                                                            onClick = {
+                                                                viewMenuExpanded = false
+                                                                libraryViewModel.setLibraryViewMode(0)
+                                                            }
+                                                        )
+                                                        HorizontalDivider(
+                                                            modifier = Modifier.padding(horizontal = 8.dp),
+                                                            thickness = 0.5.dp,
+                                                            color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                                                        )
+                                                        DropdownMenuItem(
+                                                            text = { Text("专辑卡片") },
+                                                            leadingIcon = {
+                                                                Icon(Icons.Rounded.GridView, contentDescription = null)
+                                                            },
+                                                            onClick = {
+                                                                viewMenuExpanded = false
+                                                                libraryViewModel.setLibraryViewMode(1)
+                                                            }
+                                                        )
+                                                        HorizontalDivider(
+                                                            modifier = Modifier.padding(horizontal = 8.dp),
+                                                            thickness = 0.5.dp,
+                                                            color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
+                                                        )
+                                                        DropdownMenuItem(
+                                                            text = { Text("音轨列表") },
+                                                            leadingIcon = {
+                                                                Icon(Icons.Rounded.Audiotrack, contentDescription = null)
+                                                            },
+                                                            onClick = {
+                                                                viewMenuExpanded = false
+                                                                libraryViewModel.setLibraryViewMode(2)
+                                                            }
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    } else if (headerActionRoute == "search") {
+                                        val searchViewModel: SearchViewModel = hiltViewModel(activityViewModelStoreOwner)
+                                        val viewMode by searchViewModel.viewMode.collectAsStateWithLifecycle()
+                                        EaraTopBarIconButton(
+                                            onClick = { searchViewModel.setViewMode(if (viewMode == 1) 0 else 1) },
+                                            modifier = Modifier.padding(end = 4.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (viewMode == 1) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.ViewModule,
+                                                contentDescription = if (viewMode == 1) "切换为列表视图" else "切换为卡片视图"
+                                            )
+                                        }
+                                    } else if (headerActionRoute == Routes.HotListening) {
+                                        val hotListeningViewModel: HotListeningViewModel = hiltViewModel(activityViewModelStoreOwner)
+                                        val viewMode by hotListeningViewModel.viewMode.collectAsStateWithLifecycle()
+                                        EaraTopBarIconButton(
+                                            onClick = { hotListeningViewModel.setViewMode(if (viewMode == 1) 0 else 1) },
+                                            modifier = Modifier.padding(end = 4.dp)
+                                        ) {
+                                            Icon(
+                                                imageVector = if (viewMode == 1) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.ViewModule,
+                                                contentDescription = if (viewMode == 1) "切换为列表视图" else "切换为卡片视图"
+                                            )
+                                        }
+                                    } else if (headerActionRoute == "downloads") {
+                                        val tasks by downloadsViewModel.tasks.collectAsStateWithLifecycle()
+                                        val hasActiveDownloads = remember(tasks) {
+                                            tasks.any { task ->
+                                                task.items.any { it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED }
+                                            }
+                                        }
+                                        val hasPausedDownloads = remember(tasks) {
+                                            tasks.any { task ->
+                                                task.items.any { it.state == DownloadItemState.PAUSED }
+                                            }
+                                        }
+
+                                        if (hasActiveDownloads) {
+                                            TextButton(
+                                                onClick = { downloadsViewModel.pauseAll() },
+                                                colors = ButtonDefaults.textButtonColors(contentColor = topBarContentColor)
+                                            ) { Text("全部暂停") }
+                                        } else if (hasPausedDownloads) {
+                                            TextButton(
+                                                onClick = { downloadsViewModel.resumeAll() },
+                                                colors = ButtonDefaults.textButtonColors(contentColor = topBarContentColor)
+                                            ) { Text("全部继续") }
+                                        }
+                                    }
+                                }
+                            }
+                        )
+
+                        val p = bulkProgress
+                        if (currentRoute == "library" && p?.phase == BulkPhase.ScanningLocal) {
+                            if (p.total > 0) {
+                                LinearProgressIndicator(
+                                    progress = { p.fraction },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            } else {
+                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            }
+                        }
+                    }
+                }
+            }
+        }
         CompositionLocalProvider(
             LocalBottomOverlayPadding provides bottomOverlayPadding,
             LocalRightPanelExpandedState provides rightPanelExpandedState,
@@ -1816,292 +2147,10 @@ fun MainContainer(
                         containerColor = Color.Transparent,
                         contentColor = colorScheme.onBackground,
                         topBar = {
-                            Box {
-                                EaraTopBarContainer {
-                                    Column {
-                                        Spacer(modifier = Modifier.windowInsetsTopHeight(StableWindowInsets.statusBars))
-                                        CenterAlignedTopAppBar(
-                                            modifier = Modifier.height(EaraMainTopBarHeight),
-                                            title = {
-                                                val entry = navBackStackEntry
-                                                val resolvedTitleRoute = if (currentScreenIsPrimary || albumDetailTransitionActive) {
-                                                    visualPrimaryRoute
-                                                } else {
-                                                    currentRoute
-                                                }
-                                                val groupName = if (resolvedTitleRoute == "group/{groupId}/{groupName}") {
-                                                    decodeRouteArg(entry?.arguments?.getString("groupName").orEmpty())
-                                                } else ""
-                                                val playlistName = if (resolvedTitleRoute == "playlist/{playlistId}/{playlistName}") {
-                                                    decodeRouteArg(entry?.arguments?.getString("playlistName").orEmpty())
-                                                } else ""
-                                                val systemPlaylistType = if (resolvedTitleRoute == "playlist_system/{type}") {
-                                                    entry?.arguments?.getString("type").orEmpty()
-                                                } else ""
-                                                val appName = stringResource(R.string.app_name)
-                                                val titleText = when {
-                                                    resolvedTitleRoute == "library" -> "本地库"
-                                                    resolvedTitleRoute == "library_filter" -> "筛选"
-                                                    resolvedTitleRoute == "search" -> "在线搜索"
-                                                    resolvedTitleRoute == Routes.SearchAssist -> "在线搜索"
-                                                    resolvedTitleRoute == Routes.SearchAssistPattern -> "在线搜索"
-                                                    resolvedTitleRoute == Routes.HotListening -> "热门收听"
-                                                    resolvedTitleRoute == "playlists" -> "我的列表"
-                                                    resolvedTitleRoute == "playlist/{playlistId}/{playlistName}" ->
-                                                        playlistName.ifBlank { "我的列表" }
-                                                    resolvedTitleRoute == "playlist_system/favorites" -> "我的收藏"
-                                                    resolvedTitleRoute == "playlist_system/{type}" -> when (systemPlaylistType) {
-                                                        "favorites" -> "我的收藏"
-                                                        else -> "我的收藏"
-                                                    }
-                                                    resolvedTitleRoute == "groups" -> "我的分组"
-                                                    resolvedTitleRoute == "group/{groupId}/{groupName}" ->
-                                                        groupName.ifBlank { "我的分组" }
-                                                    resolvedTitleRoute == "settings" -> "设置"
-                                                    resolvedTitleRoute == "downloads" -> "任务管理"
-                                                    resolvedTitleRoute == "listening_calendar" -> "ASMR 看板"
-                                                    resolvedTitleRoute == "dlsite_login" -> "DLsite 登录"
-                                                    resolvedTitleRoute?.startsWith("playlist_picker") == true -> "添加到我的列表"
-                                                    resolvedTitleRoute?.startsWith("album_detail") == true -> "专辑详情"
-                                                    else -> appName
-                                                }
-                                                AnimatedContent(
-                                                    targetState = titleText,
-                                                    modifier = Modifier
-                                                        .height(40.dp)
-                                                        .offset(y = 4.dp),
-                                                    contentAlignment = Alignment.Center,
-                                                    transitionSpec = {
-                                                        (fadeIn(animationSpec = tween(220, easing = LinearOutSlowInEasing))
-                                                            + slideInHorizontally(animationSpec = tween(220, easing = LinearOutSlowInEasing)) { it / 4 })
-                                                            .togetherWith(
-                                                                fadeOut(animationSpec = tween(180, easing = FastOutLinearInEasing))
-                                                                    + slideOutHorizontally(animationSpec = tween(180, easing = FastOutLinearInEasing)) { -it / 4 }
-                                                            )
-                                                    },
-                                                    label = "headerTitle"
-                                                ) { targetText ->
-                                                    Text(
-                                                        text = targetText,
-                                                        color = if (albumDetailTransitionActive) {
-                                                            colorScheme.onSurface
-                                                        } else {
-                                                            topBarContentColor
-                                                        },
-                                                        style = MaterialTheme.typography.titleMedium.copy(
-                                                            fontWeight = FontWeight.SemiBold
-                                                        )
-                                                    )
-                                                }
-                                            },
-                                            windowInsets = WindowInsets(0, 0, 0, 0),
-                                            colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                                                containerColor = Color.Transparent,
-                                                titleContentColor = topBarContentColor,
-                                                navigationIconContentColor = topBarContentColor,
-                                                actionIconContentColor = if (albumDetailTransitionActive) {
-                                                    colorScheme.onSurface
-                                                } else {
-                                                    topBarContentColor
-                                                }
-                                            ),
-                                            navigationIcon = {
-                                                Box {
-                                                    if (showPrimaryBrand || albumDetailTransitionActive) {
-                                                        PrimaryTopBarBrand(
-                                                            appName = stringResource(R.string.app_name),
-                                                            tint = colorScheme.primaryStrong
-                                                        )
-                                                    }
-                                                    if (showBackButton &&
-                                                        !albumDetailTransitionActive &&
-                                                        hasPreviousBackStackEntry
-                                                    ) {
-                                                        EaraTopBarIconButton(
-                                                            onClick = { navController.popBackStack() }
-                                                        ) {
-                                                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = null)
-                                                        }
-                                                    }
-                                                }
-                                            },
-                                            actions = {
-                                                val headerActionRoute = if (albumDetailTransitionActive) {
-                                                    visualPrimaryRoute
-                                                } else {
-                                                    currentRoute
-                                                }
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    if (headerActionRoute != null &&
-                                                        (isPrimaryRoute(headerActionRoute) || headerActionRoute == "playlist_system/{type}") &&
-                                                        !(headerActionRoute == "settings" && settingsDetailPageVisible)
-                                                    ) {
-                                                        val downloadTasks by downloadsViewModel.tasks.collectAsStateWithLifecycle()
-                                                        val activeSubtitleTaskCount by downloadsViewModel.activeSubtitleTaskCount.collectAsStateWithLifecycle()
-                                                        val activeDownloadCount = remember(downloadTasks) {
-                                                            downloadTasks.sumOf { task ->
-                                                                task.items.count {
-                                                                    it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED
-                                                                }
-                                                            }
-                                                        }
-                                                        val activeTaskCount = activeDownloadCount + activeSubtitleTaskCount
-                                                        PageTranslationHeaderAction(headerActionRoute, Modifier.padding(end = 4.dp))
-                                                        Box {
-                                                            EaraTopBarIconButton(
-                                                                onClick = { navController.navigate("downloads") },
-                                                                modifier = Modifier.padding(end = 4.dp)
-                                                            ) {
-                                                                Icon(Icons.Rounded.Inbox, contentDescription = "任务管理")
-                                                            }
-                                                            if (activeTaskCount > 0) {
-                                                                Badge(
-                                                                    modifier = Modifier
-                                                                        .align(Alignment.TopEnd)
-                                                                ) {
-                                                                    Text(activeTaskCount.toString())
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                    if (headerActionRoute == "library") {
-                                                        val viewMode by libraryViewModel.libraryViewMode.collectAsStateWithLifecycle()
-                                                        if (viewMode != null) {
-                                                            var viewMenuExpanded by remember { mutableStateOf(false) }
-                                                            Box {
-                                                                val normalized = (viewMode ?: 0).coerceIn(0, 2)
-                                                                val icon = when (normalized) {
-                                                                    1 -> Icons.Rounded.GridView
-                                                                    2 -> Icons.Rounded.Audiotrack
-                                                                    else -> Icons.AutoMirrored.Rounded.ViewList
-                                                                }
-                                                                EaraTopBarIconButton(
-                                                                    onClick = { viewMenuExpanded = true },
-                                                                    modifier = Modifier.padding(end = 4.dp)
-                                                                ) {
-                                                                    Icon(imageVector = icon, contentDescription = "切换视图")
-                                                                }
-                                                                MaterialTheme(
-                                                                    colorScheme = materialColorScheme.copy(
-                                                                        surface = dynamicContainerColor,
-                                                                        surfaceContainer = dynamicContainerColor
-                                                                    )
-                                                                ) {
-                                                                    DropdownMenu(
-                                                                        expanded = viewMenuExpanded,
-                                                                        onDismissRequest = { viewMenuExpanded = false },
-                                                                        modifier = Modifier.background(dynamicContainerColor)
-                                                                    ) {
-                                                                        DropdownMenuItem(
-                                                                            text = { Text("专辑列表") },
-                                                                            leadingIcon = {
-                                                                                Icon(Icons.AutoMirrored.Rounded.ViewList, contentDescription = null)
-                                                                            },
-                                                                            onClick = {
-                                                                                viewMenuExpanded = false
-                                                                                libraryViewModel.setLibraryViewMode(0)
-                                                                            }
-                                                                        )
-                                                                        HorizontalDivider(
-                                                                            modifier = Modifier.padding(horizontal = 8.dp),
-                                                                            thickness = 0.5.dp,
-                                                                            color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
-                                                                        )
-                                                                        DropdownMenuItem(
-                                                                            text = { Text("专辑卡片") },
-                                                                            leadingIcon = {
-                                                                                Icon(Icons.Rounded.GridView, contentDescription = null)
-                                                                            },
-                                                                            onClick = {
-                                                                                viewMenuExpanded = false
-                                                                                libraryViewModel.setLibraryViewMode(1)
-                                                                            }
-                                                                        )
-                                                                        HorizontalDivider(
-                                                                            modifier = Modifier.padding(horizontal = 8.dp),
-                                                                            thickness = 0.5.dp,
-                                                                            color = materialColorScheme.outlineVariant.copy(alpha = 0.3f)
-                                                                        )
-                                                                        DropdownMenuItem(
-                                                                            text = { Text("音轨列表") },
-                                                                            leadingIcon = {
-                                                                                Icon(Icons.Rounded.Audiotrack, contentDescription = null)
-                                                                            },
-                                                                            onClick = {
-                                                                                viewMenuExpanded = false
-                                                                                libraryViewModel.setLibraryViewMode(2)
-                                                                            }
-                                                                        )
-                                                                    }
-                                                                }
-                                                            }
-                                                        }
-                                                    } else if (headerActionRoute == "search") {
-                                                        val searchViewModel: SearchViewModel = hiltViewModel(activityViewModelStoreOwner)
-                                                        val viewMode by searchViewModel.viewMode.collectAsStateWithLifecycle()
-                                                        EaraTopBarIconButton(
-                                                            onClick = { searchViewModel.setViewMode(if (viewMode == 1) 0 else 1) },
-                                                            modifier = Modifier.padding(end = 4.dp)
-                                                        ) {
-                                                            Icon(
-                                                                imageVector = if (viewMode == 1) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.ViewModule,
-                                                                contentDescription = if (viewMode == 1) "切换为列表视图" else "切换为卡片视图"
-                                                            )
-                                                        }
-                                                    } else if (headerActionRoute == Routes.HotListening) {
-                                                        val hotListeningViewModel: HotListeningViewModel = hiltViewModel(activityViewModelStoreOwner)
-                                                        val viewMode by hotListeningViewModel.viewMode.collectAsStateWithLifecycle()
-                                                        EaraTopBarIconButton(
-                                                            onClick = { hotListeningViewModel.setViewMode(if (viewMode == 1) 0 else 1) },
-                                                            modifier = Modifier.padding(end = 4.dp)
-                                                        ) {
-                                                            Icon(
-                                                                imageVector = if (viewMode == 1) Icons.AutoMirrored.Rounded.ViewList else Icons.Rounded.ViewModule,
-                                                                contentDescription = if (viewMode == 1) "切换为列表视图" else "切换为卡片视图"
-                                                            )
-                                                        }
-                                                    } else if (headerActionRoute == "downloads") {
-                                                        val tasks by downloadsViewModel.tasks.collectAsStateWithLifecycle()
-                                                        val hasActiveDownloads = remember(tasks) {
-                                                            tasks.any { task ->
-                                                                task.items.any { it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED }
-                                                            }
-                                                        }
-                                                        val hasPausedDownloads = remember(tasks) {
-                                                            tasks.any { task ->
-                                                                task.items.any { it.state == DownloadItemState.PAUSED }
-                                                            }
-                                                        }
-
-                                                        if (hasActiveDownloads) {
-                                                            TextButton(
-                                                                onClick = { downloadsViewModel.pauseAll() },
-                                                                colors = ButtonDefaults.textButtonColors(contentColor = topBarContentColor)
-                                                            ) { Text("全部暂停") }
-                                                        } else if (hasPausedDownloads) {
-                                                            TextButton(
-                                                                onClick = { downloadsViewModel.resumeAll() },
-                                                                colors = ButtonDefaults.textButtonColors(contentColor = topBarContentColor)
-                                                            ) { Text("全部继续") }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        )
-
-                                        val p = bulkProgress
-                                        if (currentRoute == "library" && p?.phase == BulkPhase.ScanningLocal) {
-                                            if (p.total > 0) {
-                                                LinearProgressIndicator(
-                                                    progress = { p.fraction },
-                                                    modifier = Modifier.fillMaxWidth()
-                                                )
-                                            } else {
-                                                LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                                            }
-                                        }
-                                    }
-                                }
+                            if (showSearchAssistBlur) {
+                                Spacer(Modifier.height(searchAssistHeaderPadding))
+                            } else {
+                                mainHeader()
                             }
                         }
                     ) { padding ->
@@ -2121,7 +2170,7 @@ fun MainContainer(
                                     state = primaryPagerState,
                                     modifier = Modifier
                                         .fillMaxSize()
-                                        .padding(top = topContentPadding)
+                                        .padding(top = if (headerBlur == null) topContentPadding else 0.dp)
                                         .graphicsLayer {
                                             translationX = if (albumDetailTransitionActive) {
                                                 0f
@@ -2152,9 +2201,23 @@ fun MainContainer(
                                     val primaryRouteDataActiveState = rememberUpdatedState(
                                         primaryRouteDataActive
                                     )
+                                    val overlayHeaderPadding = if (headerBlur != null && hasProgressiveMainHeader(route)) {
+                                        searchAssistHeaderPadding
+                                    } else 0.dp
+                                    val pageHeaderBlur = if (overlayHeaderPadding > 0.dp) rememberProgressiveHeaderBlur() else null
+                                    CompositionLocalProvider(
+                                        LocalMainHeaderPadding provides overlayHeaderPadding,
+                                        LocalProgressiveHeaderBlur provides pageHeaderBlur,
+                                    ) {
                                     Box(
                                         modifier = Modifier
                                             .fillMaxSize()
+                                            .then(
+                                                if (route !in listOf(Routes.Library, Routes.Search, Routes.HotListening)) {
+                                                    Modifier.progressiveHeaderContent()
+                                                } else Modifier
+                                            )
+                                            .padding(top = if (headerBlur != null && !hasProgressiveMainHeader(route)) topContentPadding else 0.dp)
                                             // 页面内容使用独立 RenderNode 保留 display list；Pager 滚动时
                                             // 只更新图层位置，避免逐帧重录复杂列表和设置页的绘制命令。
                                             .graphicsLayer { clip = false }
@@ -2382,6 +2445,7 @@ fun MainContainer(
                                 }
                             }
                             }
+                            }
 
                         }
                     }
@@ -2519,8 +2583,12 @@ fun MainContainer(
 
                     Box(modifier = Modifier.fillMaxSize())
                 }
-                composable(route = Routes.SearchAssist) {
-                    SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
+                composable(route = Routes.SearchAssist) { backStackEntry ->
+                    SearchAssistPageBackground(
+                        topPadding = if (headerBlur != null) searchAssistHeaderPadding else secondaryPageTopPadding,
+                        blurState = headerBlur,
+                        isActive = showSearchAssistBlur && navBackStackEntry?.id == backStackEntry.id,
+                    ) {
                         SearchAssistScreen(
                             windowSizeClass = windowSizeClass,
                             initialRequest = searchAssistInitialRequest,
@@ -2546,7 +2614,11 @@ fun MainContainer(
                         searchAssistInitialRequest.copy(keyword = initialKeyword)
                     }
 
-                    SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
+                    SearchAssistPageBackground(
+                        topPadding = if (headerBlur != null) searchAssistHeaderPadding else secondaryPageTopPadding,
+                        blurState = headerBlur,
+                        isActive = showSearchAssistBlur && navBackStackEntry?.id == backStackEntry.id,
+                    ) {
                         SearchAssistScreen(
                             windowSizeClass = windowSizeClass,
                             initialRequest = initialRequest,
@@ -2927,6 +2999,10 @@ fun MainContainer(
                     Box(modifier = Modifier.fillMaxSize())
                 }
             }
+
+                if (showSearchAssistBlur) {
+                    mainHeader()
+                }
 
                     if (blockNavTouches || albumDetailExitInProgress) {
                         if (isAlbumDetailRoute) {

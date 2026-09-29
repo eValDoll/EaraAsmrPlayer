@@ -2,6 +2,7 @@ package com.asmr.player.ui.playlists
 
 import com.asmr.player.ui.common.formatStoredCv
 import com.asmr.player.util.Formatting
+import com.asmr.player.ui.common.LocalMainHeaderPadding
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.MutatePriority
@@ -212,7 +213,7 @@ internal fun PlaylistDetailContent(
                     headline = emptyHeadline,
                     sectionIcon = if (isFavorites) Icons.Rounded.Favorite else Icons.AutoMirrored.Rounded.QueueMusic,
                     modifier = contentModifier,
-                    contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current + 88.dp)
+                    contentPadding = PaddingValues(top = LocalMainHeaderPadding.current, bottom = LocalBottomOverlayPadding.current + 88.dp)
                 )
             } else {
                 LazyColumn(
@@ -220,7 +221,7 @@ internal fun PlaylistDetailContent(
                     modifier = contentModifier
                         .reorderable(reorderState),
                     flingBehavior = rememberCalmScrollableFlingBehavior(),
-                    contentPadding = PaddingValues(top = 6.dp, bottom = LocalBottomOverlayPadding.current)
+                    contentPadding = PaddingValues(top = LocalMainHeaderPadding.current + 6.dp, bottom = LocalBottomOverlayPadding.current)
                 ) {
                     item(key = PLAYLIST_DETAIL_REORDER_SENTINEL_KEY) {
                         Spacer(modifier = Modifier.height(1.dp))

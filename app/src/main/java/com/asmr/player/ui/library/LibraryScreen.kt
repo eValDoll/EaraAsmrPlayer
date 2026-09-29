@@ -1,6 +1,8 @@
 package com.asmr.player.ui.library
 
 import com.asmr.player.ui.common.formatCvNames
+import com.asmr.player.ui.common.LocalMainHeaderPadding
+import com.asmr.player.ui.common.progressiveHeaderContent
 
 import com.asmr.player.translation.PageTranslationHost
 import com.asmr.player.translation.translatedPageText
@@ -372,7 +374,7 @@ private fun LibraryScreenContent(
     } else {
         with(LocalDensity.current) { 80.dp.toPx() }
     }
-    val topPadding = with(LocalDensity.current) { chromeReservedHeightPx.toDp() } + LibraryChromeContentGap
+    val topPadding = with(LocalDensity.current) { chromeReservedHeightPx.toDp() } + LibraryChromeContentGap + LocalMainHeaderPadding.current
 
     LaunchedEffect(isTrackList) {
         if (!isTrackList) {
@@ -569,6 +571,7 @@ private fun LibraryScreenContent(
                                     modifier = Modifier
                                         .fillMaxSize()
                                         .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
+                                        .progressiveHeaderContent()
                                 ) {
                                 val isTrackListLoading = isTrackList &&
                                     (pagedTrackAlbumHeaders.loadState.refresh is LoadState.Loading) &&
@@ -682,7 +685,7 @@ private fun LibraryScreenContent(
                                             val isFirstAlbumHeader = headerIndex == 0
                                             val isLastAlbumHeader = headerIndex == headerCount - 1
 
-                                            stickyHeader(key = "album:$albumId") {
+                                            item(key = "album:$albumId", contentType = "albumHeader") {
                                                 Column(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
@@ -971,7 +974,7 @@ private fun LibraryScreenContent(
                                 }
 
                                 LibraryChrome(
-                                    modifier = Modifier.align(Alignment.TopCenter),
+                                    modifier = Modifier.align(Alignment.TopCenter).padding(top = LocalMainHeaderPadding.current),
                                     searchText = searchText,
                                     onSearchTextChange = {
                                         searchText = it
@@ -1210,6 +1213,7 @@ internal fun LibraryChrome(
     onMeasured: (IntSize) -> Unit
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val fadeOnCollapse = LocalMainHeaderPadding.current > 0.dp
     val collapseOvershootPx = with(LocalDensity.current) { LibraryChromeCollapseOvershoot.toPx() }
     val collapseStateDescription by remember(chromeState) {
         derivedStateOf { collapsibleHeaderUiState(chromeState.collapseFraction) }
@@ -1229,7 +1233,7 @@ internal fun LibraryChrome(
             .graphicsLayer {
                 val collapseFraction = chromeState.collapseFraction.coerceIn(0f, 1f)
                 translationY = chromeState.offsetPx - (collapseFraction * collapseOvershootPx)
-                alpha = 1f - (collapseFraction * 0.1f)
+                alpha = 1f - collapseFraction * (if (fadeOnCollapse) 1f else 0.1f)
             }
             .semantics { stateDescription = collapseStateDescription }
             .testTag(LIBRARY_CHROME_TAG),

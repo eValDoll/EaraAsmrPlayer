@@ -1,5 +1,7 @@
 package com.asmr.player.ui.settings
 
+import com.asmr.player.ui.common.LocalMainHeaderPadding
+
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -372,7 +374,7 @@ fun SettingsScreen(
                 state = rootListState,
                 modifier = contentModifier,
                 flingBehavior = rememberCalmScrollableFlingBehavior(),
-                contentPadding = PaddingValues(horizontal = SettingsPageHorizontalPadding, vertical = 10.dp)
+                contentPadding = PaddingValues(start = SettingsPageHorizontalPadding, end = SettingsPageHorizontalPadding, top = LocalMainHeaderPadding.current + 10.dp, bottom = 10.dp)
                     .withAddedBottomPadding(LocalBottomOverlayPadding.current),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -403,7 +405,7 @@ fun SettingsScreen(
                         .fillMaxSize()
                         .background(colorScheme.background),
                     flingBehavior = rememberCalmScrollableFlingBehavior(),
-                    contentPadding = PaddingValues(horizontal = SettingsPageHorizontalPadding, vertical = 10.dp)
+                    contentPadding = PaddingValues(start = SettingsPageHorizontalPadding, end = SettingsPageHorizontalPadding, top = LocalMainHeaderPadding.current + 10.dp, bottom = 10.dp)
                         .withAddedBottomPadding(LocalBottomOverlayPadding.current),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {

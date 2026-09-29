@@ -55,7 +55,8 @@ internal fun AudioMetadataLine(
                 modifier = Modifier.size(14.dp),
             )
         }
-        if (quality != null) AudioQualityBadge(quality)
+        // ListItem uses these baselines to distinguish one supporting line from multiple lines.
+        if (quality != null) AudioQualityBadge(quality, Modifier.alignByBaseline())
         if (text.isNotBlank()) {
             Text(
                 text = text,
@@ -63,7 +64,7 @@ internal fun AudioMetadataLine(
                 color = color,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f),
+                modifier = Modifier.weight(1f).alignByBaseline(),
             )
         } else {
             Spacer(Modifier.weight(1f))
@@ -75,13 +76,14 @@ internal fun AudioMetadataLine(
                 color = color,
                 maxLines = 1,
                 overflow = TextOverflow.Clip,
+                modifier = Modifier.alignByBaseline(),
             )
         }
     }
 }
 
 @Composable
-private fun AudioQualityBadge(quality: AudioQuality) {
+private fun AudioQualityBadge(quality: AudioQuality, modifier: Modifier = Modifier) {
     val colors = AsmrTheme.colorScheme
     val surface = colors.surface
     val dark = colors.isDark
@@ -99,7 +101,7 @@ private fun AudioQualityBadge(quality: AudioQuality) {
             fontWeight = FontWeight.Bold,
         ),
         maxLines = 1,
-        modifier = Modifier
+        modifier = modifier
             .drawWithCache {
                 val radius = CornerRadius(3.dp.toPx())
                 val stroke = 0.5.dp.toPx()
