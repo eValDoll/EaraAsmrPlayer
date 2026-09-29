@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -41,6 +42,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.HorizontalAlignmentLine
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -48,6 +51,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.asmr.player.R
 import com.asmr.player.ui.theme.AsmrTheme
+
+private val AlbumItemMetaCenterLine = HorizontalAlignmentLine { old, new -> minOf(old, new) }
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -186,13 +191,9 @@ internal fun AlbumItemPrimaryMetaLightweight(
                     ),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_album_meta_club),
-                    contentDescription = null,
+                AlbumItemMetaIcon(
+                    iconRes = R.drawable.ic_album_meta_club,
                     tint = creatorIconColor,
-                    modifier = Modifier
-                        .padding(end = 6.dp)
-                        .size(13.dp)
                 )
                 Text(
                     text = translatedPageText(normalizedCircle),
@@ -204,6 +205,7 @@ internal fun AlbumItemPrimaryMetaLightweight(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier
+                        .alignBy { it.measuredHeight / 2 }
                         .clip(RoundedCornerShape(4.dp))
                         .then(
                             if (onClick != null || circleOnLongClick != null) {
@@ -327,13 +329,9 @@ private fun AlbumItemInlineValuesLightweight(
             .clipToBounds(),
         verticalAlignment = Alignment.Top,
     ) {
-        Icon(
-            painter = painterResource(id = iconRes),
-            contentDescription = null,
+        AlbumItemMetaIcon(
+            iconRes = iconRes,
             tint = iconColor,
-            modifier = Modifier
-                .padding(top = 3.dp, end = 6.dp)
-                .size(13.dp)
         )
 
         when (layout) {
@@ -342,6 +340,7 @@ private fun AlbumItemInlineValuesLightweight(
                 Row(
                     modifier = Modifier
                         .weight(1f)
+                        .alignBy(AlbumItemMetaCenterLine)
                         .horizontalScrollEdgeFade(scrollState)
                         .horizontalScroll(scrollState),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -360,7 +359,8 @@ private fun AlbumItemInlineValuesLightweight(
 
             AlbumInlineValuesLayout.Flow -> FlowRow(
                 modifier = Modifier
-                    .weight(1f),
+                    .weight(1f)
+                    .alignBy(AlbumItemMetaCenterLine),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
@@ -377,6 +377,34 @@ private fun AlbumItemInlineValuesLightweight(
     }
 }
 
+@Composable
+private fun RowScope.AlbumItemMetaIcon(
+    iconRes: Int,
+    tint: Color,
+) {
+    Icon(
+        painter = painterResource(id = iconRes),
+        contentDescription = null,
+        tint = tint,
+        modifier = Modifier
+            .alignBy { it.measuredHeight / 2 }
+            .padding(end = 6.dp)
+            .size(13.dp),
+    )
+}
+
+private fun Modifier.albumItemMetaCenterLine(): Modifier = layout { measurable, constraints ->
+    val placeable = measurable.measure(constraints)
+    // 传递首个文本的实际中心，适配字体缩放、字体回退和 FlowRow 换行。
+    layout(
+        width = placeable.width,
+        height = placeable.height,
+        alignmentLines = mapOf(AlbumItemMetaCenterLine to placeable.height / 2),
+    ) {
+        placeable.placeRelative(0, 0)
+    }
+}
+
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AlbumItemInlineValueItems(
@@ -387,7 +415,7 @@ private fun AlbumItemInlineValueItems(
     onClick: (() -> Unit)?,
     onValueLongClick: ((String) -> Unit)?,
 ) {
-    values.forEach { value ->
+    values.forEachIndexed { index, value ->
         Text(
             text = valuePrefix + if (valuePrefix == "#") translatedPageText(value.removePrefix(valuePrefix)) else value,
             style = MaterialTheme.typography.labelSmall.copy(
@@ -398,6 +426,7 @@ private fun AlbumItemInlineValueItems(
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             modifier = Modifier
+                .then(if (index == 0) Modifier.albumItemMetaCenterLine() else Modifier)
                 .clip(RoundedCornerShape(4.dp))
                 .then(
                     if (onClick != null || onValueLongClick != null) {

@@ -2157,7 +2157,6 @@ fun MainContainer(
                         Box(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .zIndex(if (albumDetailTransitionActive) 1f else 0f)
                         ) {
                             val topContentPadding = padding.calculateTopPadding()
                             SideEffect {
