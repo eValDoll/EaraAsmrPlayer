@@ -103,7 +103,7 @@ private fun AudioQualityBadge(quality: AudioQuality, modifier: Modifier = Modifi
         maxLines = 1,
         modifier = modifier
             .drawWithCache {
-                val radius = CornerRadius(3.dp.toPx())
+                val radius = CornerRadius(2.dp.toPx())
                 val stroke = 0.5.dp.toPx()
                 val body = lerp(surface, tint, if (dark) 0.22f else 0.14f)
                 val brush = Brush.verticalGradient(
@@ -123,6 +123,6 @@ private fun AudioQualityBadge(quality: AudioQuality, modifier: Modifier = Modifi
                     )
                 }
             }
-            .padding(horizontal = 4.dp, vertical = 1.dp),
+            .padding(horizontal = 2.dp),
     )
 }

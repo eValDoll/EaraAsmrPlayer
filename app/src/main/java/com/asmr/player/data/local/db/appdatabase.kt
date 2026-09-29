@@ -2,6 +2,8 @@ package com.asmr.player.data.local.db
 
 import androidx.room.Database
 import androidx.room.RoomDatabase
+import com.asmr.player.data.local.db.dao.AudioMetadataDao
+import com.asmr.player.data.local.db.entities.AudioMetadataEntity
 import com.asmr.player.data.local.db.dao.AlbumDao
 import com.asmr.player.data.local.db.dao.AlbumFtsDao
 import com.asmr.player.data.local.db.dao.AlbumGroupDao
@@ -57,6 +59,7 @@ import com.asmr.player.data.local.db.entities.TrackPlaybackProgressEntity
 
 @Database(
     entities = [
+        AudioMetadataEntity::class,
         AlbumEntity::class,
         AlbumFtsEntity::class,
         AlbumPlayStatEntity::class,
@@ -89,10 +92,11 @@ import com.asmr.player.data.local.db.entities.TrackPlaybackProgressEntity
         SubtitleCommittedCaptionEntity::class,
         SubtitleTitleOwnerEntity::class
     ],
-    version = 33,
+    version = 34,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
+    abstract fun audioMetadataDao(): AudioMetadataDao
     abstract fun albumDao(): AlbumDao
     abstract fun albumFtsDao(): AlbumFtsDao
     abstract fun tagDao(): TagDao

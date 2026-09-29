@@ -610,6 +610,24 @@ object AppDatabaseMigrations {
         }
     }
 
+    val MIGRATION_33_34: Migration = object : Migration(33, 34) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS audio_metadata (
+                    sourcePath TEXT NOT NULL PRIMARY KEY,
+                    sampleRate INTEGER NOT NULL,
+                    bitrate INTEGER NOT NULL,
+                    channelCount INTEGER NOT NULL,
+                    bitsPerSample INTEGER NOT NULL,
+                    mimeType TEXT NOT NULL,
+                    durationSeconds REAL NOT NULL
+                )
+                """.trimIndent()
+            )
+        }
+    }
+
     private fun createItemChildTable(
         db: SupportSQLiteDatabase,
         table: String,

@@ -44,7 +44,8 @@ class AudioMetadataPerformanceBenchmark {
         val qualitySelector = By.text(Pattern.compile("HQ|SQ"))
         val row = device.findObjects(By.desc("在线"))
             .map { it.audioRow() }
-            .first { it.visibleBounds.top > 0 && !it.hasObject(qualitySelector) }
+            .filter { it.visibleBounds.top > 0 }
+            .let { rows -> rows.firstOrNull { !it.hasObject(qualitySelector) } ?: rows.first() }
         val title = checkNotNull(row.findObject(By.text(Pattern.compile(".+")))).text
         val beforeHeight = row.visibleBounds.height()
         try {
@@ -53,6 +54,46 @@ class AudioMetadataPerformanceBenchmark {
             device.waitForIdle()
             val updatedRow = checkNotNull(device.findObject(By.text(title))).audioRow()
             assertEquals("音质信息到达后列表项高度发生变化", beforeHeight, updatedRow.visibleBounds.height())
+        } finally {
+            device.pressKeyCode(KeyEvent.KEYCODE_MEDIA_PAUSE)
+        }
+    }
+
+    @Test
+    fun onlineQualitySurvivesProcessRestart() {
+        val device = UiDevice.getInstance(InstrumentationRegistry.getInstrumentation())
+        fun openFavorites() {
+            device.executeShellCommand("am force-stop $PackageName")
+            device.executeShellCommand("am start -W -n $PackageName/.MainActivity --es start_route playlist_system/favorites")
+            check(device.wait(Until.hasObject(By.text("我的收藏")), 5_000))
+            check(device.wait(Until.hasObject(By.desc("在线")), 10_000))
+            device.waitForIdle()
+        }
+        fun UiObject2.audioRow(): UiObject2 {
+            var node = this
+            while (!node.isClickable) node = checkNotNull(node.parent)
+            return node
+        }
+        openFavorites()
+        val titles = device.findObjects(By.desc("在线")).map { it.audioRow() }
+            .filter { it.visibleBounds.top > 0 }
+            .map { checkNotNull(it.findObject(By.text(Pattern.compile(".+")))).text }
+            .distinct().take(2)
+        check(titles.size == 2) { "设备中需要至少两条在线音频收藏" }
+        val quality = By.text(Pattern.compile("HQ|SQ"))
+        try {
+            for (title in titles) {
+                checkNotNull(device.findObject(By.text(title))).audioRow().click()
+                assertNotNull("播放后应识别音质", device.wait(Until.findObject(
+                    By.clickable(true).hasDescendant(By.text(title)).hasDescendant(quality)
+                ), 15_000))
+                device.pressKeyCode(KeyEvent.KEYCODE_MEDIA_PAUSE)
+            }
+            openFavorites()
+            // The first track is no longer selected; its badge must come from disk, not player restoration.
+            assertNotNull("重启后应从本地恢复非当前音频的音质", device.wait(Until.findObject(
+                By.clickable(true).hasDescendant(By.text(titles.first())).hasDescendant(quality)
+            ), 5_000))
         } finally {
             device.pressKeyCode(KeyEvent.KEYCODE_MEDIA_PAUSE)
         }

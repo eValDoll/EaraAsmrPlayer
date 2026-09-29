@@ -421,8 +421,13 @@ class PlaybackService : MediaSessionService() {
                             .map(group::getTrackFormat)
                     }
                     .firstOrNull() ?: return
-                AudioMetadataCache.recordPlayback(item.localConfiguration?.uri?.toString().orEmpty(), format, exoPlayer.duration)
-                AudioMetadataCache.recordPlayback(item.mediaId, format, exoPlayer.duration)
+                val paths = setOf(item.localConfiguration?.uri?.toString().orEmpty(), item.mediaId)
+                for (path in paths) {
+                    val entry = AudioMetadataCache.recordPlayback(path, format, exoPlayer.duration) ?: continue
+                    serviceScope.launch {
+                        AudioMetadataCache.persistPlayback(applicationContext, path, entry)
+                    }
+                }
             }
 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
