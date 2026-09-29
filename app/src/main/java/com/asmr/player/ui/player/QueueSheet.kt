@@ -1,8 +1,6 @@
 package com.asmr.player.ui.player
 
 import com.asmr.player.ui.common.AudioMetadataLine
-import com.asmr.player.ui.common.audioTrailingText
-import com.asmr.player.ui.common.rememberTrackFileSizeText
 import com.asmr.player.ui.common.audioSource
 import com.asmr.player.ui.common.rememberAudioMetadata
 import com.asmr.player.ui.common.formatStoredCv
@@ -95,7 +93,6 @@ fun QueueSheetContent(
                 val details = rememberQueueAudioDetails(mediaItem, !listState.isScrollInProgress)
                 val uriText = mediaItem.localConfiguration?.uri?.toString().orEmpty()
                 val audioMetadata = rememberAudioMetadata(uriText, !listState.isScrollInProgress)
-                val sizeText = rememberTrackFileSizeText(uriText, !listState.isScrollInProgress)
                 val selected = index == currentIndex
 
                 Column {
@@ -132,13 +129,10 @@ fun QueueSheetContent(
                             )
                             AudioMetadataLine(
                                 text = details.cv,
-                                trailingText = remember(details.durationMs, selected, currentDurationMs, audioMetadata?.durationSeconds, sizeText) {
-                                    audioTrailingText(
-                                        Formatting.formatTrackSeconds(
-                                            (details.durationMs ?: currentDurationMs.takeIf { selected && it > 0 })?.div(1000.0)
-                                                ?: audioMetadata?.durationSeconds
-                                        ),
-                                        sizeText,
+                                trailingText = remember(details.durationMs, selected, currentDurationMs, audioMetadata?.durationSeconds) {
+                                    Formatting.formatTrackSeconds(
+                                        (details.durationMs ?: currentDurationMs.takeIf { selected && it > 0 })?.div(1000.0)
+                                            ?: audioMetadata?.durationSeconds
                                     )
                                 },
                                 source = audioSource(uriText),

@@ -87,7 +87,7 @@ class AudioMetadataLineTest {
     }
 
     @Test
-    fun longCvNamesKeepSourceBadgeDurationAndFileSizeVisibleAcrossThemes() {
+    fun longCvNamesKeepSourceBadgeAndDurationVisibleAcrossThemes() {
         composeRule.setContent {
             Column {
                 ThemeMode.values().forEach { mode ->
@@ -95,7 +95,7 @@ class AudioMetadataLineTest {
                         Column(Modifier.width(240.dp).testTag(mode.name)) {
                             AudioMetadataLine(
                                 text = "声优甲、声优乙、声优丙、声优丁、声优戊、声优己",
-                                trailingText = audioTrailingText("01:23:45", "123.4 MB"),
+                                trailingText = "01:23:45",
                                 source = AudioSource.Online,
                                 quality = AudioQuality.SQ,
                             )
@@ -109,7 +109,7 @@ class AudioMetadataLineTest {
         ThemeMode.values().forEach { mode ->
             val parent = hasAnyAncestor(hasTestTag(mode.name))
             val badge = composeRule.onNode(hasText("SQ") and parent)
-            val duration = composeRule.onNode(hasText("01:23:45 · 123.4 MB") and parent)
+            val duration = composeRule.onNode(hasText("01:23:45") and parent)
             badge.assertIsDisplayed()
             duration.assertIsDisplayed()
             val container = composeRule.onNodeWithTag(mode.name).getUnclippedBoundsInRoot()
@@ -120,17 +120,17 @@ class AudioMetadataLineTest {
     }
 
     @Test
-    fun shortAndMissingCvKeepDurationAndSizeAtTheSameRightEdge() {
+    fun shortAndMissingCvKeepDurationAtTheSameRightEdge() {
         composeRule.setContent {
             AsmrPlayerTheme {
                 Column(Modifier.width(240.dp).testTag("rows")) {
-                    AudioMetadataLine(text = "声优甲", trailingText = audioTrailingText("01:05", "26.3 MB"), source = AudioSource.Local, quality = AudioQuality.HQ)
-                    AudioMetadataLine(trailingText = audioTrailingText("", "1.2 GB"), source = AudioSource.Online, quality = AudioQuality.SQ)
+                    AudioMetadataLine(text = "声优甲", trailingText = "01:05", source = AudioSource.Local, quality = AudioQuality.HQ)
+                    AudioMetadataLine(trailingText = "02:30", source = AudioSource.Online, quality = AudioQuality.SQ)
                 }
             }
         }
         val right = composeRule.onNodeWithTag("rows").getUnclippedBoundsInRoot().right.value
-        listOf("01:05 · 26.3 MB", "1.2 GB").forEach { duration ->
+        listOf("01:05", "02:30").forEach { duration ->
             assertEquals(right, composeRule.onNodeWithText(duration).getUnclippedBoundsInRoot().right.value, 0.5f)
         }
     }
@@ -139,7 +139,7 @@ class AudioMetadataLineTest {
     fun unknownQualityDoesNotInventABadge() {
         composeRule.setContent {
             AsmrPlayerTheme {
-                AudioMetadataLine(source = AudioSource.Local, trailingText = audioTrailingText("01:05", null))
+                AudioMetadataLine(source = AudioSource.Local, trailingText = "01:05")
             }
         }
         composeRule.onAllNodesWithContentDescription("本地").assertCountEquals(1)

@@ -89,8 +89,6 @@ internal fun AudioItemRow(
     val durationText = remember(fixedTrailingSubtitle, audioMetadata?.durationSeconds) {
         fixedTrailingSubtitle.ifBlank { Formatting.formatTrackSeconds(audioMetadata?.durationSeconds) }
     }
-    val sizeText = rememberTrackFileSizeText(sourcePath, loadAudioMetadata)
-    val trailingText = remember(durationText, sizeText) { audioTrailingText(durationText, sizeText) }
     val source = remember(sourcePath) { audioSource(sourcePath) }
     val interactionSource = remember { MutableInteractionSource() }
     val resolvedTitleStyle = titleTextStyle ?: MaterialTheme.typography.bodyLarge
@@ -138,7 +136,7 @@ internal fun AudioItemRow(
                 )
                 AudioMetadataLine(
                     text = subtitle,
-                    trailingText = trailingText,
+                    trailingText = durationText,
                     source = source,
                     quality = audioMetadata?.quality,
                     style = resolvedSubtitleStyle,
@@ -171,7 +169,7 @@ internal fun AudioItemRow(
         supportingContent = {
             AudioMetadataLine(
                 text = subtitle,
-                trailingText = trailingText,
+                trailingText = durationText,
                 source = source,
                 quality = audioMetadata?.quality,
                 style = resolvedSubtitleStyle,

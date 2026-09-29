@@ -1,8 +1,6 @@
 package com.asmr.player.ui.library
 
 import com.asmr.player.ui.common.AudioMetadataLine
-import com.asmr.player.ui.common.audioTrailingText
-import com.asmr.player.ui.common.cacheTrackFileSize
 import com.asmr.player.ui.common.formatCvNames
 import com.asmr.player.ui.common.AudioSource
 import com.asmr.player.ui.common.rememberAudioMetadata
@@ -3605,29 +3603,24 @@ internal fun DirectoryFileRow(
     val context = LocalContext.current
     val icon = treeFileTypeIcon(file.fileType)
     val iconTint = treeFileTypeTint(file.fileType, colorScheme)
-    val sizeText by produceState<String?>(initialValue = null, file.sizeSource, loadAudioMetadata) {
-        if (file.fileType == TreeFileType.Audio) {
-            if (!loadAudioMetadata) return@produceState
-            kotlinx.coroutines.delay(200)
+    val metaLine = if (file.fileType == TreeFileType.Audio) "" else {
+        val sizeText by produceState<String?>(initialValue = null, file.sizeSource) {
+            val sizeBytes = when (val sizeSource = file.sizeSource) {
+                FileSizeSource.None -> null
+                is FileSizeSource.Local -> (sizeSource.sizeBytes ?: withContext(Dispatchers.IO) {
+                    queryLocalFileSize(context, sizeSource.path)
+                })
+                is FileSizeSource.Remote -> loadRemoteFileSize(sizeSource.url)
+            }?.takeIf { it > 0 }
+            value = sizeBytes?.let(Formatting::formatFileSize)
         }
-        val sizeBytes = when (val sizeSource = file.sizeSource) {
-            FileSizeSource.None -> null
-            is FileSizeSource.Local -> (sizeSource.sizeBytes ?: withContext(Dispatchers.IO) {
-                queryLocalFileSize(context, sizeSource.path)
-            })
-            is FileSizeSource.Remote -> loadRemoteFileSize(sizeSource.url)
-        }?.takeIf { it > 0 }
-        if (sizeBytes != null) {
-            cacheTrackFileSize(file.track?.path ?: file.url.ifBlank { file.absolutePath }, sizeBytes)
+        remember(file.fileType, file.isOnline, file.durationSeconds, sizeText) {
+            listOf(
+                directoryFileTypeLabel(file),
+                Formatting.formatTrackSeconds(file.durationSeconds).takeIf { it.isNotBlank() },
+                sizeText
+            ).filterNotNull().joinToString(" · ")
         }
-        value = sizeBytes?.let(Formatting::formatFileSize)
-    }
-    val metaLine = remember(file.fileType, file.isOnline, file.durationSeconds, sizeText) {
-        listOf(
-            directoryFileTypeLabel(file).takeUnless { file.fileType == TreeFileType.Audio },
-            Formatting.formatTrackSeconds(file.durationSeconds).takeIf { it.isNotBlank() },
-            sizeText
-        ).filterNotNull().joinToString(" · ")
     }
 
     val showPrimaryAction = file.isPlayable
@@ -3717,11 +3710,8 @@ internal fun DirectoryFileRow(
                     )
                     AudioMetadataLine(
                         text = remember(albumCv) { formatCvNames(albumCv) },
-                        trailingText = remember(file.durationSeconds, audioMetadata?.durationSeconds, sizeText) {
-                            audioTrailingText(
-                                Formatting.formatTrackSeconds(file.durationSeconds?.takeIf { it > 0 } ?: audioMetadata?.durationSeconds),
-                                sizeText,
-                            )
+                        trailingText = remember(file.durationSeconds, audioMetadata?.durationSeconds) {
+                            Formatting.formatTrackSeconds(file.durationSeconds?.takeIf { it > 0 } ?: audioMetadata?.durationSeconds)
                         },
                         source = if (file.isOnline) AudioSource.Online else AudioSource.Local,
                         quality = audioMetadata?.quality,

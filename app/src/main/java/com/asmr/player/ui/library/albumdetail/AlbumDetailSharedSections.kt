@@ -1,8 +1,6 @@
 package com.asmr.player.ui.library
 
 import com.asmr.player.ui.common.AudioMetadataLine
-import com.asmr.player.ui.common.audioTrailingText
-import com.asmr.player.ui.common.rememberTrackFileSizeText
 import com.asmr.player.ui.common.formatCvNames
 import com.asmr.player.ui.common.audioSource
 import com.asmr.player.ui.common.rememberAudioMetadata
@@ -543,14 +541,10 @@ internal fun TrackItem(
         },
         supportingContent = {
             val audioMetadata = rememberAudioMetadata(track.path, loadAudioMetadata)
-            val sizeText = rememberTrackFileSizeText(track.path, loadAudioMetadata)
             AudioMetadataLine(
                 text = remember(albumCv) { formatCvNames(albumCv) },
-                trailingText = remember(track.duration, audioMetadata?.durationSeconds, sizeText) {
-                    audioTrailingText(
-                        Formatting.formatTrackSeconds(track.duration.takeIf { it > 0 } ?: audioMetadata?.durationSeconds),
-                        sizeText,
-                    )
+                trailingText = remember(track.duration, audioMetadata?.durationSeconds) {
+                    Formatting.formatTrackSeconds(track.duration.takeIf { it > 0 } ?: audioMetadata?.durationSeconds)
                 },
                 source = audioSource(track.path),
                 quality = audioMetadata?.quality,

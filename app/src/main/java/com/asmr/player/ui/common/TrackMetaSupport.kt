@@ -4,20 +4,6 @@ import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.repeatOnLifecycle
-import com.asmr.player.util.Formatting
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
 
@@ -39,30 +25,7 @@ private object TrackFileSizeCache {
     }
 }
 
-internal fun audioTrailingText(durationText: String, sizeText: String?): String =
-    listOf(durationText.trim(), sizeText.orEmpty().trim()).filter(String::isNotBlank).joinToString(" · ")
-
-@Composable
-internal fun rememberTrackFileSizeText(path: String, loadSize: Boolean = true): String? {
-    val context = LocalContext.current.applicationContext
-    val lifecycleOwner = LocalLifecycleOwner.current
-    var sizeText by remember(path) {
-        mutableStateOf(TrackFileSizeCache.getKnown(path.trim())
-            ?.let(TrackFileSizeCache::resolveKnownSize)?.let(Formatting::formatFileSize))
-    }
-    LaunchedEffect(path, loadSize, lifecycleOwner) {
-        if (!loadSize || path.isBlank()) return@LaunchedEffect
-        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-            delay(200)
-            sizeText = withContext(Dispatchers.IO) {
-                queryCachedTrackFileSize(context, path)
-            }?.let(Formatting::formatFileSize)
-        }
-    }
-    return sizeText
-}
-
-internal fun cacheTrackFileSize(path: String, size: Long?) {
+private fun cacheTrackFileSize(path: String, size: Long?) {
     val trimmed = path.trim()
     if (trimmed.isBlank()) return
     TrackFileSizeCache.put(trimmed, size)

@@ -1,8 +1,6 @@
 package com.asmr.player.ui.library
 
 import com.asmr.player.ui.common.AudioMetadataLine
-import com.asmr.player.ui.common.audioTrailingText
-import com.asmr.player.ui.common.rememberTrackFileSizeText
 import com.asmr.player.ui.common.formatCvNames
 import com.asmr.player.ui.common.audioSource
 import com.asmr.player.ui.common.rememberAudioMetadata
@@ -557,7 +555,6 @@ private fun DlsiteTrialAudioItem(
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val audioMetadata = rememberAudioMetadata(track.path)
-    val sizeText = rememberTrackFileSizeText(track.path)
     val durationText = remember(track.duration, audioMetadata?.durationSeconds) {
         Formatting.formatTrackSeconds(track.duration.takeIf { it > 0 } ?: audioMetadata?.durationSeconds)
     }
@@ -588,7 +585,7 @@ private fun DlsiteTrialAudioItem(
             )
             AudioMetadataLine(
                 text = remember(albumCv) { formatCvNames(albumCv) },
-                trailingText = remember(durationText, sizeText) { audioTrailingText(durationText, sizeText) },
+                trailingText = durationText,
                 source = audioSource(track.path),
                 quality = audioMetadata?.quality,
                 style = MaterialTheme.typography.bodySmall,
