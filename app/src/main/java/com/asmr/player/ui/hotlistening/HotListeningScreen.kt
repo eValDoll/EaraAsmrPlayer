@@ -1,23 +1,23 @@
 package com.asmr.player.ui.hotlistening
 
+import com.asmr.player.ui.common.LocalMainHeaderPadding
+import com.asmr.player.ui.common.progressiveHeaderContent
+import androidx.compose.ui.unit.Dp
+
 import com.asmr.player.translation.PageTranslationHost
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.MutatePriority
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
@@ -26,18 +26,14 @@ import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
 import androidx.compose.foundation.lazy.staggeredgrid.LazyVerticalStaggeredGrid
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridCells
 import androidx.compose.foundation.lazy.staggeredgrid.StaggeredGridItemSpan
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AccessTime
-import androidx.compose.material.icons.rounded.FilterList
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.material.icons.rounded.KeyboardArrowUp
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Whatshot
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
@@ -56,15 +52,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.cache.LazyListPreloader
@@ -77,7 +69,6 @@ import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.albumStableKey
-import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
 import com.asmr.player.ui.common.lightweightVerticalStretchOverscroll
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
@@ -100,47 +91,6 @@ import kotlinx.coroutines.launch
 
 private fun hotListeningItemKey(section: String, album: Album): String {
     return "hot-listening:$section:${albumStableKey(album)}"
-}
-
-@Composable
-private fun HotListeningPeriodTab(
-    label: String,
-    selected: Boolean,
-    onClick: () -> Unit,
-) {
-    val colorScheme = AsmrTheme.colorScheme
-    val containerColor = if (selected) {
-        colorScheme.primary.copy(alpha = 0.13f)
-    } else {
-        colorScheme.surfaceVariant.copy(alpha = 0.28f)
-    }
-    val labelColor = if (selected) {
-        colorScheme.primary
-    } else {
-        colorScheme.onSurfaceVariant.copy(alpha = 0.78f)
-    }
-
-    Box(
-        modifier = Modifier
-            .height(28.dp)
-            .clip(RoundedCornerShape(8.dp))
-            .background(containerColor)
-            .selectable(
-                selected = selected,
-                onClick = onClick,
-                role = Role.Tab,
-            )
-            .padding(horizontal = 9.dp),
-        contentAlignment = Alignment.Center,
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium.copy(lineHeight = 16.sp),
-            fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-            color = labelColor,
-            maxLines = 1,
-        )
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
@@ -202,9 +152,7 @@ private fun HotListeningScreenContent(
     val gridState = rememberSaveable(contentScrollKey, saver = LazyStaggeredGridState.Saver) {
         LazyStaggeredGridState()
     }
-    val periods = remember {
-        listOf("day" to "过去一天", "week" to "过去一周", "month" to "过去一月")
-    }
+
 
     fun stopActiveScroll() {
         scope.launch(start = CoroutineStart.UNDISPATCHED) {
@@ -250,63 +198,8 @@ private fun HotListeningScreenContent(
         }
     }
 
-    Column(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
-                .padding(horizontal = 8.dp, vertical = 4.dp),
-        ) {
-            Row(
-                modifier = Modifier.align(Alignment.Center),
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                periods.forEach { (period, label) ->
-                    HotListeningPeriodTab(
-                        label = label,
-                        selected = selectedPeriod == period,
-                        onClick = {
-                            viewModel.selectPeriod(period)
-                            requestScrollToTop()
-                        },
-                    )
-                }
-            }
-            Row(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) {
-                        val nextMode = selectedSortMode.nextMode
-                        viewModel.selectSortMode(nextMode)
-                        requestScrollToTop()
-                    }
-                    .padding(horizontal = 4.dp, vertical = 4.dp),
-                horizontalArrangement = Arrangement.spacedBy(3.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    text = selectedSortMode.toggleLabel,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.Medium,
-                    color = colorScheme.primary
-                )
-                Icon(
-                    imageVector = Icons.Rounded.FilterList,
-                    contentDescription = null,
-                    tint = colorScheme.primary,
-                    modifier = Modifier
-                        .padding(top = 1.dp)
-                        .size(14.dp)
-                )
-            }
-        }
-
+    val headerPadding = LocalMainHeaderPadding.current
+    val pageContent: @Composable (Dp) -> Unit = { contentTopPadding ->
         when (val state = uiState) {
             is HotListeningUiState.Loading -> Box(
                 modifier = Modifier.fillMaxSize(),
@@ -320,7 +213,7 @@ private fun HotListeningScreenContent(
                 headline = "数据加载失败",
                 sectionIcon = Icons.Rounded.Whatshot,
                 modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current + 24.dp),
+                contentPadding = PaddingValues(top = contentTopPadding, bottom = LocalBottomOverlayPadding.current + 24.dp),
                 footer = {
                     TextButton(onClick = { viewModel.refresh() }) {
                         Text("重试")
@@ -339,7 +232,7 @@ private fun HotListeningScreenContent(
                         headline = "暂无排行数据",
                         sectionIcon = Icons.Rounded.Whatshot,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current + 24.dp)
+                        contentPadding = PaddingValues(top = contentTopPadding, bottom = LocalBottomOverlayPadding.current + 24.dp)
                     )
                 } else if (viewMode == 0) {
                     val app = LocalContext.current.applicationContext
@@ -382,7 +275,7 @@ private fun HotListeningScreenContent(
                                 modifier = Modifier
                                     .fillMaxSize(),
                                 flingBehavior = rememberCalmScrollableFlingBehavior(),
-                                contentPadding = PaddingValues(bottom = 8.dp)
+                                contentPadding = PaddingValues(top = contentTopPadding, bottom = 8.dp)
                                     .withAddedBottomPadding(LocalBottomOverlayPadding.current)
                             ) {
                                 lazyItemsIndexed(
@@ -470,6 +363,7 @@ private fun HotListeningScreenContent(
                                     .fillMaxSize(),
                                 flingBehavior = rememberCalmScrollableFlingBehavior(),
                                 contentPadding = PaddingValues(
+                                    top = contentTopPadding,
                                     start = 8.dp,
                                     end = 8.dp,
                                     bottom = 16.dp
@@ -526,6 +420,35 @@ private fun HotListeningScreenContent(
                     }
                 }
             }
+        }
+    }
+
+    val periodHeader: @Composable () -> Unit = {
+        HotListeningPeriodHeader(
+            selectedPeriod = selectedPeriod,
+            selectedSortMode = selectedSortMode,
+            onPeriodSelected = {
+                viewModel.selectPeriod(it)
+                requestScrollToTop()
+            },
+            onSortSelected = {
+                viewModel.selectSortMode(it)
+                requestScrollToTop()
+            },
+            onStopScroll = ::stopActiveScroll,
+        )
+    }
+    if (headerPadding == 0.dp) {
+        Column(Modifier.fillMaxSize()) {
+            periodHeader()
+            pageContent(0.dp)
+        }
+    } else {
+        Box(Modifier.fillMaxSize()) {
+            Box(Modifier.fillMaxSize().progressiveHeaderContent(fadeEndOffset = HotListeningPeriodHeaderHeight)) {
+                pageContent(headerPadding + HotListeningPeriodHeaderHeight)
+            }
+            Box(Modifier.padding(top = headerPadding)) { periodHeader() }
         }
     }
 
@@ -637,15 +560,3 @@ private fun HotListeningEntry.toCoverBadge(): AlbumCoverBadge {
         compactOffset = true
     )
 }
-
-private val HotListeningSortMode.toggleLabel: String
-    get() = when (this) {
-        HotListeningSortMode.PlayCount -> "次数"
-        HotListeningSortMode.ListenDuration -> "时长"
-    }
-
-private val HotListeningSortMode.nextMode: HotListeningSortMode
-    get() = when (this) {
-        HotListeningSortMode.PlayCount -> HotListeningSortMode.ListenDuration
-        HotListeningSortMode.ListenDuration -> HotListeningSortMode.PlayCount
-    }

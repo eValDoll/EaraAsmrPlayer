@@ -1,5 +1,8 @@
 package com.asmr.player.ui.search
 
+import com.asmr.player.ui.common.LocalMainHeaderPadding
+import com.asmr.player.ui.common.progressiveHeaderContent
+
 import com.asmr.player.translation.PageTranslationHost
 
 import androidx.compose.animation.core.Spring
@@ -505,7 +508,7 @@ private fun SearchScreenContent(
         success != null -> with(androidx.compose.ui.platform.LocalDensity.current) { 120.dp.toPx() }
         else -> with(androidx.compose.ui.platform.LocalDensity.current) { 80.dp.toPx() }
     }
-    val topPadding = with(androidx.compose.ui.platform.LocalDensity.current) { chromeReservedHeightPx.toDp() } + SearchChromeContentGap
+    val topPadding = with(androidx.compose.ui.platform.LocalDensity.current) { chromeReservedHeightPx.toDp() } + SearchChromeContentGap + LocalMainHeaderPadding.current
 
     fun scrollResultsToTop() {
         scope.launch {
@@ -968,6 +971,7 @@ private fun SearchScreenContent(
                 Box(
                     modifier = searchContentModifier
                         .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
+                        .progressiveHeaderContent()
                 ) {
                     CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
                         Box(
@@ -1345,7 +1349,7 @@ private fun SearchScreenContent(
                     }
 
                     SearchChrome(
-                        modifier = Modifier.align(Alignment.TopCenter),
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = LocalMainHeaderPadding.current),
                         keyword = keyword,
                         onKeywordChange = { keyword = it },
                         placeholder = hotKeywordCarouselItem.placeholder,
@@ -1565,6 +1569,7 @@ internal fun SearchChrome(
     onPrev: () -> Unit,
     onNext: () -> Unit
 ) {
+    val fadeOnCollapse = LocalMainHeaderPadding.current > 0.dp
     val collapseStateDescription by remember(chromeState) {
         derivedStateOf { collapsibleHeaderUiState(chromeState.collapseFraction) }
     }
@@ -1574,6 +1579,7 @@ internal fun SearchChrome(
             // Use layout offset instead of a graphics layer so Android text selection
             // toolbars anchor to the real on-screen position of the editable field.
             .offset { IntOffset(x = 0, y = chromeState.offsetPx.roundToInt()) }
+            .graphicsLayer { alpha = if (fadeOnCollapse) 1f - chromeState.collapseFraction else 1f }
             .semantics { stateDescription = collapseStateDescription }
             .testTag(chromeTestTag)
     ) {

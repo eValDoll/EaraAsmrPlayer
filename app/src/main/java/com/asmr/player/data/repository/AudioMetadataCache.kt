@@ -1,6 +1,7 @@
 package com.asmr.player.data.repository
 
 import android.content.Context
+import android.database.sqlite.SQLiteException
 import android.media.AudioFormat
 import android.media.MediaExtractor
 import android.media.MediaFormat
@@ -8,13 +9,18 @@ import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.Build
 import android.util.LruCache
+import android.util.Log
 import androidx.media3.common.C
 import androidx.media3.common.Format
 import com.asmr.player.util.AudioTechnicalMetadata
+import com.asmr.player.data.local.db.AppDatabaseProvider
+import com.asmr.player.data.local.db.dao.AudioMetadataDao
+import com.asmr.player.data.local.db.entities.AudioMetadataEntity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
@@ -25,6 +31,45 @@ internal object AudioMetadataCache {
         internal val mutableMetadata = MutableStateFlow<AudioTechnicalMetadata?>(null)
         val metadata: StateFlow<AudioTechnicalMetadata?> = mutableMetadata.asStateFlow()
         @Volatile internal var localAttempted = false
+        @Volatile private var restored = false
+        private val persistenceMutex = Mutex()
+        private var persistedMetadata: AudioTechnicalMetadata? = null
+
+        internal fun record(value: AudioTechnicalMetadata) {
+            mutableMetadata.update { current ->
+                if (!value.hasKnownFormat() && current?.hasKnownFormat() == true) {
+                    current.copy(durationSeconds = value.durationSeconds.takeIf { it > 0 } ?: current.durationSeconds)
+                } else {
+                    value
+                }
+            }
+        }
+
+        internal suspend fun restore(path: String, dao: AudioMetadataDao) {
+            if (restored) return
+            persistenceMutex.withLock {
+                if (restored) return
+                val saved = dao.get(path)?.toMetadata()
+                persistedMetadata = saved
+                if (saved != null) {
+                    // A delayed disk read must not overwrite a newer playback callback.
+                    mutableMetadata.update { current -> current?.takeIf { it.hasKnownFormat() } ?: saved }
+                }
+                restored = true
+            }
+        }
+
+        internal suspend fun persist(path: String, dao: AudioMetadataDao) {
+            persistenceMutex.withLock {
+                // Read the latest value after acquiring the lock so writes cannot finish out of order.
+                val current = mutableMetadata.value?.takeIf { it.hasKnownFormat() } ?: return
+                if (current != persistedMetadata) {
+                    dao.upsert(AudioMetadataEntity.from(path, current))
+                    persistedMetadata = current
+                }
+                restored = true
+            }
+        }
     }
 
     private val entries = LruCache<String, Entry>(512)
@@ -53,8 +98,8 @@ internal object AudioMetadataCache {
     }
 
     @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
-    fun recordPlayback(path: String, format: Format, durationMs: Long = 0L) {
-        if (path.isBlank()) return
+    fun recordPlayback(path: String, format: Format, durationMs: Long = 0L): Entry? {
+        if (path.isBlank()) return null
         val entry = entry(path)
         val metadata = AudioTechnicalMetadata(
             sampleRate = format.sampleRate,
@@ -70,8 +115,39 @@ internal object AudioMetadataCache {
             mimeType = format.sampleMimeType.orEmpty(),
             durationSeconds = durationMs.takeIf { it > 0 }?.div(1000.0) ?: entry.metadata.value?.durationSeconds ?: 0.0,
         )
-        entry.mutableMetadata.value = metadata
+        entry.record(metadata)
+        return entry
     }
+
+    suspend fun restoreOnline(context: Context, path: String, entry: Entry) {
+        val key = path.trim()
+        if (!isOnlinePath(key)) return
+        withContext(Dispatchers.IO) {
+            try {
+                entry.restore(key, AppDatabaseProvider.get(context).audioMetadataDao())
+            } catch (error: SQLiteException) {
+                Log.w("AudioMetadataCache", "Could not restore audio metadata", error)
+            }
+        }
+    }
+
+    suspend fun persistPlayback(context: Context, path: String, entry: Entry) {
+        val key = path.trim()
+        if (!isOnlinePath(key)) return
+        withContext(Dispatchers.IO) {
+            try {
+                entry.persist(key, AppDatabaseProvider.get(context).audioMetadataDao())
+            } catch (error: SQLiteException) {
+                Log.w("AudioMetadataCache", "Could not persist audio metadata", error)
+            }
+        }
+    }
+
+    private fun isOnlinePath(path: String) =
+        path.startsWith("https://", ignoreCase = true) || path.startsWith("http://", ignoreCase = true)
+
+    private fun AudioTechnicalMetadata.hasKnownFormat() =
+        sampleRate > 0 && (bitrate > 0 || bitsPerSample > 0)
 
     private fun readLocalMetadata(context: Context, path: String): AudioTechnicalMetadata? {
         val extractor = MediaExtractor()

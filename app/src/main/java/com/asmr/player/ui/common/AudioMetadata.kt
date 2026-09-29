@@ -37,10 +37,16 @@ internal fun rememberAudioMetadata(path: String, loadMetadata: Boolean = true): 
         }
     }
     LaunchedEffect(entry, loadMetadata, lifecycleOwner) {
-        if (loadMetadata && audioSource(path) == AudioSource.Local) {
+        if (loadMetadata) {
             lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
-                delay(200)
-                AudioMetadataCache.loadLocal(context, path, entry)
+                when (audioSource(path)) {
+                    AudioSource.Online -> AudioMetadataCache.restoreOnline(context, path, entry)
+                    AudioSource.Local -> {
+                        delay(200)
+                        AudioMetadataCache.loadLocal(context, path, entry)
+                    }
+                    null -> Unit
+                }
             }
         }
     }
