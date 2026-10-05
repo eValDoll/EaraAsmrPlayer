@@ -178,6 +178,13 @@ internal class SubtitleTranslationClient(
             workContext = workContext,
             scriptContext = scriptContext
         ).toMutableList()
+        var subtitleContextToolCallId: String? = null
+        // 台本检索预留更多轮次，但只有实际写入字幕才重置计数。
+        val maxStalledTurns = if (scriptContext?.files.orEmpty().isEmpty()) {
+            MAX_SUBTITLE_AGENT_STALLED_TURNS
+        } else {
+            MAX_SUBTITLE_AGENT_SCRIPT_TURNS
+        }
         var stalledTurnCount = 0
         while (confirmedSourceCount < sources.size) {
             val response = requestSubtitleAgentResponse(
@@ -204,12 +211,17 @@ internal class SubtitleTranslationClient(
                         )
                     }
                     val toolResult = when (toolCall.function.name.orEmpty()) {
-                        SUBTITLE_READ_TOOL_NAME -> buildSubtitleReadToolResultMessage(
-                            gson = gson,
-                            toolCallId = toolCallId,
-                            sources = sources,
-                            confirmedCaptions = confirmed
-                        )
+                        SUBTITLE_READ_TOOL_NAME -> {
+                            buildSubtitleReadToolResultMessage(
+                                gson = gson,
+                                toolCallId = toolCallId,
+                                sources = sources,
+                                confirmedCaptions = confirmed,
+                                subtitleContextToolCallId = subtitleContextToolCallId
+                            ).also {
+                                if (subtitleContextToolCallId == null) subtitleContextToolCallId = toolCallId
+                            }
+                        }
 
                         SUBTITLE_WRITE_TOOL_NAME -> {
                             val remainingSources = sources.drop(confirmedSourceCount)
@@ -247,7 +259,6 @@ internal class SubtitleTranslationClient(
                         }
 
                         SCRIPT_LIST_TOOL_NAME -> scriptContext?.let { context ->
-                            madeProgress = true
                             buildScriptListToolResultMessage(gson, toolCallId, context)
                         } ?: buildSubtitleToolErrorMessage(
                             gson = gson,
@@ -264,7 +275,6 @@ internal class SubtitleTranslationClient(
                             }
                             parsed.fold(
                                 onSuccess = { args ->
-                                    madeProgress = true
                                     buildScriptReadToolResultMessage(
                                         gson = gson,
                                         toolCallId = toolCallId,
@@ -298,10 +308,10 @@ internal class SubtitleTranslationClient(
                 }
                 stalledTurnCount = if (madeProgress) 0 else stalledTurnCount + 1
             }
-            if (stalledTurnCount >= MAX_SUBTITLE_AGENT_STALLED_TURNS) {
+            if (stalledTurnCount >= maxStalledTurns) {
                 throw SubtitleTranslationException(
-                    message = "字幕翻译 agent 连续多轮没有写入字幕",
-                    retryable = true
+                    message = "字幕翻译连续多轮没有写入字幕，已停止，请手动重试",
+                    retryable = false
                 )
             }
         }
@@ -361,13 +371,15 @@ internal class SubtitleTranslationClient(
         require(allCaptions.map(PolishCaptionInput::captionId).distinct().size == allCaptions.size) {
             "润色字幕主键不能重复"
         }
+        if (allCaptions.isEmpty()) return emptyList()
+        val originalChineseById = allCaptions.associate { it.captionId to it.chinese }
         val messages = buildPolishAgentInitialMessages(
             gson = gson,
             tracks = tracks,
             workContext = workContext
         ).toMutableList()
         val polishedByCaptionId = HashMap<Long, String>()
-        // 服务端维护读取游标：read 每次翻页，直至全部条目展示完毕即视为检查完成。
+        // 服务端维护读取游标；读到空页或全部字幕已写入时结束。
         var nextReadOffset = 0
         var readCompleted = false
         var stalledTurnCount = 0
@@ -404,7 +416,7 @@ internal class SubtitleTranslationClient(
                                 polishedByCaptionId = polishedByCaptionId,
                                 offset = nextReadOffset
                             )
-                            // read 翻页：每次调用展示一页，游标前进；全部展示完则完成。
+                            // 最后一页仍需检查；下一次调用读到空页才确认完成。
                             if (nextReadOffset < allCaptions.size) {
                                 nextReadOffset = (nextReadOffset + POLISH_READ_PAGE_SIZE)
                                     .coerceAtMost(allCaptions.size)
@@ -419,14 +431,22 @@ internal class SubtitleTranslationClient(
                             val parsed = runCatching {
                                 parsePolishWriteToolArguments(
                                     arguments = toolCall.function.arguments.orEmpty(),
-                                    expectedCaptions = allCaptions
-                                )
+                                    expectedCaptions = allCaptions.take(nextReadOffset)
+                                ).also { results ->
+                                    require(results.none { it.captionId in polishedByCaptionId }) {
+                                        "字幕已经润色，不能重复写入；请处理其他字幕或读取下一页"
+                                    }
+                                }
                             }
                             parsed.fold(
                                 onSuccess = { results ->
-                                    onCaptionsPolished(results)
+                                    val changes = results.filter {
+                                        it.chinese != originalChineseById[it.captionId]
+                                    }
+                                    if (changes.isNotEmpty()) onCaptionsPolished(changes)
                                     results.forEach { polishedByCaptionId[it.captionId] = it.chinese }
                                     madeProgress = true
+                                    if (polishedByCaptionId.size == allCaptions.size) readCompleted = true
                                     buildPolishWriteToolResultMessage(
                                         gson = gson,
                                         toolCallId = toolCallId,
@@ -455,10 +475,10 @@ internal class SubtitleTranslationClient(
                 }
                 stalledTurnCount = if (madeProgress) 0 else stalledTurnCount + 1
             }
-            if (stalledTurnCount >= MAX_POLISH_AGENT_STALLED_TURNS) {
+            if (!readCompleted && stalledTurnCount >= MAX_POLISH_AGENT_STALLED_TURNS) {
                 throw SubtitleTranslationException(
-                    message = "润色 agent 连续多轮没有写入字幕",
-                    retryable = true
+                    message = "字幕润色连续多轮没有处理新字幕，已停止，请手动重试",
+                    retryable = false
                 )
             }
         }
@@ -678,6 +698,7 @@ internal const val POLISH_WRITE_TOOL_NAME = "write_polished_chinese_subtitles"
 internal const val SCRIPT_LIST_TOOL_NAME = "list_work_script_files"
 internal const val SCRIPT_READ_TOOL_NAME = "read_work_script_file"
 private const val MAX_SUBTITLE_AGENT_STALLED_TURNS = 4
+private const val MAX_SUBTITLE_AGENT_SCRIPT_TURNS = 8
 private const val MAX_POLISH_AGENT_STALLED_TURNS = 4
 private const val POLISH_READ_PAGE_SIZE = 40
 private const val SCRIPT_READ_DEFAULT_LIMIT = 4_000
@@ -966,7 +987,8 @@ internal fun buildPolishReadToolResultMessage(
                 )
             }
         )
-        put("completed", offset + page.size >= allCaptions.size)
+        // 最后一页仍需要模型检查、写入；下一次读到空页才结束。
+        put("completed", page.isEmpty())
     }
     return DeepSeekChatMessage(
         role = "tool",
@@ -1012,6 +1034,7 @@ internal fun parsePolishWriteToolArguments(
     val captions = runCatching { root.getAsJsonArray("captions") }
         .getOrElse { throw IllegalArgumentException("captions 不是数组", it) }
         ?: throw IllegalArgumentException("缺少 captions 数组")
+    require(captions.size() > 0) { "润色 captions 不能为空；无需修改时请读取下一页" }
     val parsed = captions.map { element ->
         val item = element.takeIf { it.isJsonObject }?.asJsonObject
             ?: throw IllegalArgumentException("润色条目不是对象")
@@ -1073,30 +1096,35 @@ internal fun buildSubtitleReadToolResultMessage(
     gson: Gson,
     toolCallId: String,
     sources: List<GeneratedSubtitleSource>,
-    confirmedCaptions: List<GeneratedSubtitleCaption>
+    confirmedCaptions: List<GeneratedSubtitleCaption>,
+    subtitleContextToolCallId: String? = null
 ): DeepSeekChatMessage {
     require(toolCallId.isNotBlank())
     val confirmedSourceCount = confirmedCaptions.sumOf { it.sourceIndices.size }
     require(confirmedSourceCount in 0..sources.size)
     val nextSource = sources.getOrNull(confirmedSourceCount)
     val result = buildMap<String, Any> {
-        put("japanese_subtitles", sources.map { source ->
-            mapOf(
-                "index" to source.index,
-                "start_ms" to source.startMs,
-                "end_ms" to source.endMs,
-                "japanese" to source.text
-            )
-        })
-        put("completed_chinese_subtitles", confirmedCaptions.map { caption ->
-            mapOf(
-                "source_indices" to caption.sourceIndices,
-                "start_ms" to caption.startMs,
-                "end_ms" to caption.endMs,
-                "japanese" to caption.correctedJapanese,
-                "chinese" to caption.chineseText
-            )
-        })
+        if (subtitleContextToolCallId == null) {
+            put("japanese_subtitles", sources.map { source ->
+                mapOf(
+                    "index" to source.index,
+                    "start_ms" to source.startMs,
+                    "end_ms" to source.endMs,
+                    "japanese" to source.text
+                )
+            })
+            put("completed_chinese_subtitles", confirmedCaptions.map { caption ->
+                mapOf(
+                    "source_indices" to caption.sourceIndices,
+                    "start_ms" to caption.startMs,
+                    "end_ms" to caption.endMs,
+                    "japanese" to caption.correctedJapanese,
+                    "chinese" to caption.chineseText
+                )
+            })
+        } else {
+            put("subtitle_context_tool_call_id", subtitleContextToolCallId)
+        }
         put("completed_source_count", confirmedSourceCount)
         put("remaining_source_count", sources.size - confirmedSourceCount)
         put("completed", nextSource == null)

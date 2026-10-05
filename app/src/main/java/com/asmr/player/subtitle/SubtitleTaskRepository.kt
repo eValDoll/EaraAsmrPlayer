@@ -420,10 +420,9 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
 
     internal suspend fun finishTitleTranslation(taskId: String) = withContext(Dispatchers.IO) {
         database.withTransaction {
-            val pending = database.subtitleTitleOwnerDao()
-                .getByTask(taskId)
-                .any { owner -> owner.displayTitle.isBlank() }
-            if (pending) return@withTransaction
+            // 标题翻译的有限重试已结束。持久化清除未完成登记，防止服务重启后再次请求；
+            // 保留已成功写入的登记，供用户取消任务时还原显示名。
+            database.subtitleTitleOwnerDao().deletePendingForTask(taskId)
             val items = dao.getItemsForTask(taskId)
             if (items.isEmpty() || items.any { item -> item.state != SubtitleItemState.SUCCEEDED }) {
                 return@withTransaction

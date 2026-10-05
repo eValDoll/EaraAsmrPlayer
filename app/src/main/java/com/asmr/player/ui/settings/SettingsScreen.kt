@@ -1344,7 +1344,7 @@ internal fun SubtitleTranslationSettingsHeader(activeTipKey: String?, onToggleTi
         SettingsInfoTip(
             active = activeTipKey == "subtitle_translation",
             title = "字幕翻译",
-            text = "批量翻译需要本地 MP3/WAV 音频、已下载并选用的字幕模型，以及已保存的 DeepSeek API Key。" +
+            text = "批量翻译需要本地 MP3/WAV 音频、已下载并选用的字幕模型，以及已保存的翻译 API 配置。" +
                 "在线音频请先下载。配置完成后，在本地库作品详情中点击“批量翻译”或“翻译选中”开始；保存 API Key 不会自动创建任务。",
             onToggle = { onToggleTip("subtitle_translation") },
             showBackground = false

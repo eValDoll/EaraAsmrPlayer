@@ -97,7 +97,6 @@ internal class SubtitleTaskService : Service() {
     private var transcriptionItemId: String? = null
     private val translationJobs = ConcurrentHashMap<String, Job>()
     private val titleTranslationJobs = ConcurrentHashMap<String, Job>()
-    private val titleTranslationRetryAt = ConcurrentHashMap<String, Long>()
     private val polishingAlbumIds = ConcurrentHashMap.newKeySet<Long>()
     private val balanceRefreshLock = Any()
     private var balanceRefreshRequested = false
@@ -292,30 +291,22 @@ internal class SubtitleTaskService : Service() {
 
     private suspend fun scheduleTitleTranslations() {
         if (!isNetworkAvailable()) return
-        val now = System.currentTimeMillis()
         val ownerDao = database.subtitleTitleOwnerDao()
         ownerDao.getPendingTaskIds().forEach { taskId ->
             if (titleTranslationJobs[taskId]?.isActive == true) return@forEach
-            if ((titleTranslationRetryAt[taskId] ?: 0L) > now) return@forEach
             val items = database.subtitleTaskDao().getItemsForTask(taskId)
             if (items.none { it.state !in TITLE_TRANSLATION_BLOCKED_STATES }) return@forEach
             val job = serviceScope.launch(start = CoroutineStart.LAZY) {
                 try {
-                    translateDisplayNamesForTask(taskId)
-                    repository.finishTitleTranslation(taskId)
-                    titleTranslationRetryAt.remove(taskId)
-                } catch (cancelled: CancellationException) {
-                    throw cancelled
-                } catch (error: SubtitleTranslationException) {
-                    titleTranslationRetryAt[taskId] = if (error.retryable) {
-                        System.currentTimeMillis() + TITLE_TRANSLATION_RETRY_BACKOFF_MS
-                    } else {
-                        TITLE_TRANSLATION_DISABLED_RETRY_AT
+                    try {
+                        // 客户端已限制请求次数；耗尽后保留原名，结束这次标题翻译。
+                        translateDisplayNamesForTask(taskId)
+                    } catch (cancelled: CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        Log.w(TAG, "作品显示名翻译失败 taskId=$taskId", error)
                     }
-                    Log.w(TAG, "作品显示名翻译失败 taskId=$taskId", error)
-                } catch (error: Throwable) {
-                    titleTranslationRetryAt[taskId] = System.currentTimeMillis() + TITLE_TRANSLATION_RETRY_BACKOFF_MS
-                    Log.w(TAG, "作品显示名翻译失败 taskId=$taskId", error)
+                    repository.finishTitleTranslation(taskId)
                 } finally {
                     titleTranslationJobs.remove(taskId)
                     signalWake()
@@ -1144,7 +1135,7 @@ internal class SubtitleTaskService : Service() {
         if (balanceRefreshJob != null) return
         if (database.subtitleTaskDao().countRunnableItems() > 0) return
         val pendingTitleTaskIds = database.subtitleTitleOwnerDao().getPendingTaskIds()
-        if (pendingTitleTaskIds.any { titleTranslationRetryAt[it] != TITLE_TRANSLATION_DISABLED_RETRY_AT }) return
+        if (pendingTitleTaskIds.isNotEmpty()) return
         stoppingSafely = true
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
@@ -1311,8 +1302,6 @@ internal class SubtitleTaskService : Service() {
         private const val BASE_RETRY_DELAY_MS = 1_000L
         private const val RETRY_JITTER_MS = 250L
         private const val SCHEDULER_TICK_MS = 500L
-        private const val TITLE_TRANSLATION_RETRY_BACKOFF_MS = 60_000L
-        private const val TITLE_TRANSLATION_DISABLED_RETRY_AT = Long.MAX_VALUE
         private const val TAG = "SubtitleTaskService"
 
         fun wake(context: Context) {
