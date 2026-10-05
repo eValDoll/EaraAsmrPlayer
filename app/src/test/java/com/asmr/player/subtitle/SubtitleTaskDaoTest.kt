@@ -16,6 +16,7 @@ import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -95,8 +96,13 @@ class SubtitleTaskDaoTest {
         val staleFile = listOf(SubtitleEntity(trackId = trackId, startMs = 0L, endMs = 1000L, text = "旧文件"))
 
         assertFalse(tracks.replaceAutoSubtitles(trackId, staleFile))
+        assertFalse(tracks.importScannedSubtitles(staleFile, restoreDeleted = true))
         tracks.insertAutoSubtitles(staleFile)
         assertEquals(listOf("正在生成"), tracks.getSubtitlesForTrack(trackId).map { it.text })
+
+        tracks.deleteSubtitlesByUser(listOf(trackId))
+        assertFalse(tracks.importScannedSubtitles(staleFile, restoreDeleted = true))
+        assertTrue(tracks.isSubtitleAutoImportBlocked("/album/track.mp3"))
     }
 
     private suspend fun createTrack(name: String): Long {

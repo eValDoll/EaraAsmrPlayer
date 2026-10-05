@@ -273,7 +273,7 @@ class LibraryViewModel @Inject constructor(
             }
             if (!shouldAutoScan) return@launch
             delay(450)
-            scanAllRoots()
+            scanAllRoots(userInitiated = false)
         }
     }
 
@@ -1012,7 +1012,7 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    fun scanAllRoots() {
+    fun scanAllRoots(userInitiated: Boolean = true) {
         viewModelScope.launch {
             val token = syncCoordinator.tryBegin() ?: run {
                 showSyncBusy("刷新本地")
@@ -1063,12 +1063,12 @@ class LibraryViewModel @Inject constructor(
                                 var current = 0
                                 roots.forEach { root ->
                                     currentCoroutineContext().ensureActive()
-                                    scanFromDocumentTree(root) { title ->
+                                    scanFromDocumentTree(root, restoreDeletedSubtitles = userInitiated) { title ->
                                         current += 1
                                         updateBulkAlbumProgress(current = current, currentAlbumTitle = title)
                                     }
                                 }
-                                scanFromDownloadedDir { title ->
+                                scanFromDownloadedDir(restoreDeletedSubtitles = userInitiated) { title ->
                                     current += 1
                                     updateBulkAlbumProgress(current = current, currentAlbumTitle = title)
                                 }
@@ -1130,6 +1130,7 @@ class LibraryViewModel @Inject constructor(
                                         updateBulkAlbumProgress(current = current, currentAlbumTitle = title)
                                     },
                                     importAll = true,
+                                    restoreDeletedSubtitles = true,
                                 )
                             }
                         }
@@ -1176,7 +1177,7 @@ class LibraryViewModel @Inject constructor(
                                 }
                                 startBulkProgress(phase = BulkPhase.ScanningLocal, total = totalAlbums)
                                 var current = 0
-                                scanFromDocumentTree(uriString) { title ->
+                                scanFromDocumentTree(uriString, restoreDeletedSubtitles = true) { title ->
                                     current += 1
                                     updateBulkAlbumProgress(current = current, currentAlbumTitle = title)
                                 }
@@ -1659,7 +1660,7 @@ class LibraryViewModel @Inject constructor(
                             val exists = root.exists()
                             val isDirectory = root.isDirectory
                             if (exists && isDirectory) {
-                                scanTracksAndSubtitlesFromFileAlbum(album.id, root)
+                                scanTracksAndSubtitlesFromFileAlbum(album.id, root, restoreDeletedSubtitles = true)
                                 scannedAny = true
                             }
                         }
@@ -2170,6 +2171,7 @@ class LibraryViewModel @Inject constructor(
 
     private suspend fun scanFromDownloadedDir(
         importAll: Boolean = false,
+        restoreDeletedSubtitles: Boolean,
         onAlbumScanned: ((String) -> Unit)? = null,
     ) {
         val destination = downloadDestinationStore.current()
@@ -2178,6 +2180,7 @@ class LibraryViewModel @Inject constructor(
                 uriString = destination.root,
                 asDownloadRoot = !importAll,
                 requireCompletionMarker = !importAll,
+                restoreDeletedSubtitles = restoreDeletedSubtitles,
                 onAlbumScanned = onAlbumScanned,
             )
             return
@@ -2249,7 +2252,7 @@ class LibraryViewModel @Inject constructor(
                 }
             }
             enqueueAlbumCoverThumbWork(albumId)
-            scanTracksAndSubtitlesFromFileAlbum(albumId, albumDir)
+            scanTracksAndSubtitlesFromFileAlbum(albumId, albumDir, restoreDeletedSubtitles)
         }
         if (!importAll) {
             pruneMissingDownloadedAlbums(baseDir = baseDir, foundDownloadPaths = foundDownloadPaths)
@@ -2316,7 +2319,11 @@ class LibraryViewModel @Inject constructor(
             .enqueueUniqueWork("album_cover_thumb_$albumId", ExistingWorkPolicy.REPLACE, request)
     }
 
-    private suspend fun scanTracksAndSubtitlesFromFileAlbum(albumId: Long, albumDir: File) {
+    private suspend fun scanTracksAndSubtitlesFromFileAlbum(
+        albumId: Long,
+        albumDir: File,
+        restoreDeletedSubtitles: Boolean,
+    ) {
         val prefix = albumDir.absolutePath.trimEnd('\\', '/') + File.separator
         val audioExtensions = setOf("mp3", "flac", "wav", "m4a", "ogg", "aac", "opus")
 
@@ -2370,7 +2377,6 @@ class LibraryViewModel @Inject constructor(
         val tracksToInsert = ArrayList<TrackEntity>(audioFiles.size)
         val tracksToUpdate = ArrayList<TrackEntity>(audioFiles.size)
         val subtitleEntriesByAudioPath = linkedMapOf<String, List<SubtitleEntry>>()
-        val subtitleEntriesByExistingTrackId = linkedMapOf<Long, List<SubtitleEntry>>()
 
         audioFiles.forEach { audio ->
             currentCoroutineContext().ensureActive()
@@ -2411,7 +2417,6 @@ class LibraryViewModel @Inject constructor(
 
         database.withTransaction {
             val subtitlesByTrackId = linkedMapOf<Long, List<SubtitleEntry>>()
-            subtitlesByTrackId.putAll(subtitleEntriesByExistingTrackId.filterKeys { it > 0L })
 
             if (tracksToUpdate.isNotEmpty()) trackDao.updateTracks(tracksToUpdate)
             tracksToUpdate.forEach { trackEntity ->
@@ -2431,9 +2436,8 @@ class LibraryViewModel @Inject constructor(
             }
 
             if (subtitlesByTrackId.isNotEmpty()) {
-                subtitlesByTrackId.forEach { (trackId, entries) ->
-                    trackDao.replaceAutoSubtitles(
-                        trackId,
+                trackDao.importScannedSubtitles(
+                    subtitlesByTrackId.flatMap { (trackId, entries) ->
                         entries.map { entry ->
                             SubtitleEntity(
                                 trackId = trackId,
@@ -2442,8 +2446,9 @@ class LibraryViewModel @Inject constructor(
                                 text = entry.text
                             )
                         }
-                    )
-                }
+                    },
+                    restoreDeleted = restoreDeletedSubtitles,
+                )
             }
 
             if (removedIds.isNotEmpty()) {
@@ -2454,7 +2459,7 @@ class LibraryViewModel @Inject constructor(
             }
         }
 
-        if (subtitleEntriesByAudioPath.isNotEmpty() || subtitleEntriesByExistingTrackId.isNotEmpty()) {
+        if (subtitleEntriesByAudioPath.isNotEmpty()) {
             playerConnection.requestLyricsReload()
         }
 
@@ -2470,6 +2475,7 @@ class LibraryViewModel @Inject constructor(
 
     private suspend fun scanFromDocumentTree(
         uriString: String,
+        restoreDeletedSubtitles: Boolean,
         asDownloadRoot: Boolean = false,
         requireCompletionMarker: Boolean = asDownloadRoot,
         onAlbumScanned: ((String) -> Unit)? = null,
@@ -2605,8 +2611,7 @@ class LibraryViewModel @Inject constructor(
                     tracksToUpdate.forEach { (track, spec) ->
                         val entries = subtitlesByAudioPath[spec.path].orEmpty()
                         if (entries.isNotEmpty()) {
-                            trackDao.replaceAutoSubtitles(
-                                track.id,
+                            val imported = trackDao.importScannedSubtitles(
                                 entries.map { entry ->
                                     SubtitleEntity(
                                         trackId = track.id,
@@ -2615,8 +2620,9 @@ class LibraryViewModel @Inject constructor(
                                         text = entry.text,
                                     )
                                 },
+                                restoreDeleted = restoreDeletedSubtitles,
                             )
-                            wroteAnySubtitles = true
+                            wroteAnySubtitles = wroteAnySubtitles || imported
                         }
                     }
                 }
@@ -2637,8 +2643,8 @@ class LibraryViewModel @Inject constructor(
                         }
                     }
                     if (subtitlesToInsert.isNotEmpty()) {
-                        trackDao.insertAutoSubtitles(subtitlesToInsert)
-                        wroteAnySubtitles = true
+                        val imported = trackDao.importScannedSubtitles(subtitlesToInsert, restoreDeleted = restoreDeletedSubtitles)
+                        wroteAnySubtitles = wroteAnySubtitles || imported
                     }
                 }
 
@@ -3027,9 +3033,9 @@ class LibraryViewModel @Inject constructor(
             trackIdsByPath.forEach { (path, trackId) ->
                 val entries = subtitlesByAudioPath[path].orEmpty()
                 if (entries.isNotEmpty()) {
-                    val replaced = trackDao.replaceAutoSubtitles(trackId, entries.map { entry ->
+                    val replaced = trackDao.importScannedSubtitles(entries.map { entry ->
                         SubtitleEntity(trackId = trackId, startMs = entry.startMs, endMs = entry.endMs, text = entry.text)
-                    })
+                    }, restoreDeleted = true)
                     wroteAnySubtitles = wroteAnySubtitles || replaced
                 }
             }

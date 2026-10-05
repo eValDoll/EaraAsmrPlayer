@@ -98,7 +98,7 @@ class LyricsLoader @Inject constructor(
         val title = track?.titleForDisplay?.takeIf { it.isNotBlank() } ?: fallbackTitle.ifBlank { target.mediaId }
 
         if (trackDao.isSubtitleAutoImportBlocked(track?.path ?: target.mediaId)) {
-            // 删除后不再自动导入旧字幕；主动重新生成的字幕正常显示。
+            // 删除后不自动加载旧文件；主动重扫、选择字幕或重新生成仍可恢复。
             return subtitleResult(title, track?.let { trackDao.getSubtitlesForTrack(it.id) }.orEmpty())
         }
 

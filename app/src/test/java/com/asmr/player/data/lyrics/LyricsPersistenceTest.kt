@@ -10,6 +10,8 @@ import com.asmr.player.data.local.db.AppDatabaseMigrations
 import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.SubtitleEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
+import com.asmr.player.subtitle.GeneratedSubtitleFileExporter
+import com.asmr.player.util.SubtitleParser
 import java.io.File
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.cancelAndJoin
@@ -104,13 +106,14 @@ class LyricsPersistenceTest {
         database.trackDao().deleteSubtitlesByUser(listOf(trackId))
 
         assertFalse(database.trackDao().replaceAutoSubtitles(trackId, alreadyReadFile))
+        assertFalse(database.trackDao().importScannedSubtitles(alreadyReadFile, restoreDeleted = false))
         database.trackDao().insertAutoSubtitles(alreadyReadFile)
 
         assertTrue(database.trackDao().getSubtitlesForTrack(trackId).isEmpty())
     }
 
     @Test
-    fun rescanningSameAudioWithNewTrackId_keepsDeletionChoice() = runBlocking {
+    fun automaticImportWithNewTrackId_staysBlockedUntilUserScan() = runBlocking {
         database.trackDao().deleteSubtitlesByUser(listOf(trackId))
         database.trackDao().deleteTrackById(trackId)
         val replacementId = database.trackDao().insertTrack(TrackEntity(albumId = albumId, title = "重新扫描", path = audio.absolutePath))
@@ -119,6 +122,73 @@ class LyricsPersistenceTest {
 
         assertTrue(database.trackDao().getSubtitlesForTrack(replacementId).isEmpty())
         assertTrue(loader.load(item).lyrics.isEmpty())
+
+        assertTrue(database.trackDao().importScannedSubtitles(
+            listOf(caption("磁盘字幕").copy(trackId = replacementId)), restoreDeleted = true))
+        assertFalse(database.trackDao().isSubtitleAutoImportBlocked(audio.absolutePath))
+        assertEquals(listOf("磁盘字幕"), loader.load(item).lyrics.map { it.text })
+    }
+
+    @Test
+    fun userScan_restoresExistingFileImmediatelyAndAfterReopen() = runBlocking {
+        val sidecar = temporaryFolder.newFile("audio.lrc").apply { writeText("[00:00.00]磁盘上的字幕", Charsets.UTF_8) }
+        assertEquals(listOf("磁盘上的字幕"), loader.load(item).lyrics.map { it.text })
+        database.trackDao().deleteSubtitlesByUser(listOf(trackId))
+        val updates = Channel<LyricsResult>(Channel.UNLIMITED)
+        val job = launch(Dispatchers.Default) { loader.observe(item).collect { updates.send(it) } }
+        try {
+            assertTrue(updates.next().lyrics.isEmpty())
+            val scanned = SubtitleParser.parse(sidecar.absolutePath).map {
+                SubtitleEntity(trackId = trackId, startMs = it.startMs, endMs = it.endMs, text = it.text)
+            }
+            assertTrue(database.trackDao().importScannedSubtitles(scanned, restoreDeleted = true))
+            assertEquals(listOf("磁盘上的字幕"), updates.next().lyrics.map { it.text })
+            assertFalse(database.trackDao().isSubtitleAutoImportBlocked(audio.absolutePath))
+        } finally {
+            job.cancelAndJoin()
+        }
+        database.close()
+        openDatabase()
+        assertEquals(listOf("磁盘上的字幕"), loader.load(item).lyrics.map { it.text })
+    }
+
+    @Test
+    fun userScanWithoutSubtitleFile_leavesDeletedSubtitlesEmpty() = runBlocking {
+        database.trackDao().insertSubtitles(listOf(caption("已删除的字幕")))
+        database.trackDao().deleteSubtitlesByUser(listOf(trackId))
+
+        assertFalse(database.trackDao().importScannedSubtitles(emptyList(), restoreDeleted = true))
+        assertTrue(database.trackDao().isSubtitleAutoImportBlocked(audio.absolutePath))
+        assertTrue(database.trackDao().getSubtitlesForTrack(trackId).isEmpty())
+        assertTrue(loader.load(item).lyrics.isEmpty())
+    }
+
+    @Test
+    fun userScan_restoresOnlyTracksWithReadSubtitles() = runBlocking {
+        val otherAudio = temporaryFolder.newFile("other.mp3")
+        val otherId = database.trackDao().insertTrack(TrackEntity(albumId = albumId, title = "其他音轨", path = otherAudio.absolutePath))
+        database.trackDao().deleteSubtitlesByUser(listOf(trackId, otherId))
+
+        assertTrue(database.trackDao().importScannedSubtitles(listOf(caption("扫描读到的字幕")), restoreDeleted = true))
+        assertEquals(listOf("扫描读到的字幕"), loader.load(item).lyrics.map { it.text })
+        assertFalse(database.trackDao().isSubtitleAutoImportBlocked(audio.absolutePath))
+        assertTrue(database.trackDao().isSubtitleAutoImportBlocked(otherAudio.absolutePath))
+        assertTrue(database.trackDao().getSubtitlesForTrack(otherId).isEmpty())
+    }
+
+    @Test
+    fun regeneratedSubtitles_overwriteOldFileAndUserScanLoadsNewText() = runBlocking {
+        val sidecar = temporaryFolder.newFile("audio.lrc").apply { writeText("[00:00.00]旧字幕", Charsets.UTF_8) }
+        database.trackDao().deleteSubtitlesByUser(listOf(trackId))
+        database.trackDao().insertSubtitles(listOf(caption("重新翻译的字幕")))
+        GeneratedSubtitleFileExporter(context, database).export(trackId)
+
+        val scanned = SubtitleParser.parse(sidecar.absolutePath).map {
+            SubtitleEntity(trackId = trackId, startMs = it.startMs, endMs = it.endMs, text = it.text)
+        }
+        assertEquals(listOf("重新翻译的字幕"), scanned.map { it.text })
+        assertTrue(database.trackDao().importScannedSubtitles(scanned, restoreDeleted = true))
+        assertEquals(listOf("重新翻译的字幕"), loader.load(item).lyrics.map { it.text })
     }
 
     @Test

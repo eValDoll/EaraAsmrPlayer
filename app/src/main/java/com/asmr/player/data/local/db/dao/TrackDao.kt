@@ -34,6 +34,9 @@ interface TrackDao {
     @Query("DELETE FROM subtitle_import_blocks WHERE mediaPath = :mediaPath")
     suspend fun allowSubtitleAutoImport(mediaPath: String)
 
+    @Query("DELETE FROM subtitle_import_blocks WHERE mediaPath IN (SELECT path FROM tracks WHERE id IN (:trackIds))")
+    suspend fun allowSubtitleAutoImportForTracks(trackIds: List<Long>)
+
     @Query("INSERT OR IGNORE INTO subtitle_import_blocks (mediaPath) SELECT path FROM tracks WHERE id IN (:trackIds)")
     suspend fun blockSubtitleAutoImport(trackIds: List<Long>)
 
@@ -47,15 +50,15 @@ interface TrackDao {
 
     @Query(
         "SELECT id FROM tracks WHERE id IN (:trackIds) " +
-            "AND path NOT IN (SELECT mediaPath FROM subtitle_import_blocks) " +
+            "AND (:restoreDeleted OR path NOT IN (SELECT mediaPath FROM subtitle_import_blocks)) " +
             "AND id NOT IN (SELECT trackId FROM subtitle_task_items)"
     )
-    suspend fun getSubtitleAutoImportAllowedTrackIds(trackIds: List<Long>): List<Long>
+    suspend fun getSubtitleImportAllowedTrackIds(trackIds: List<Long>, restoreDeleted: Boolean): List<Long>
 
     @Transaction
     suspend fun insertAutoSubtitles(subtitles: List<SubtitleEntity>) {
         val allowed = subtitles.map { it.trackId }.distinct().chunked(900)
-            .flatMap { getSubtitleAutoImportAllowedTrackIds(it) }.toHashSet()
+            .flatMap { getSubtitleImportAllowedTrackIds(it, restoreDeleted = false) }.toHashSet()
         val accepted = subtitles.filter { it.trackId in allowed }
         if (accepted.isNotEmpty()) insertSubtitles(accepted)
     }
@@ -63,9 +66,23 @@ interface TrackDao {
     @Transaction
     suspend fun replaceAutoSubtitles(trackId: Long, subtitles: List<SubtitleEntity>): Boolean {
         require(subtitles.all { it.trackId == trackId })
-        if (getSubtitleAutoImportAllowedTrackIds(listOf(trackId)).isEmpty()) return false
+        if (getSubtitleImportAllowedTrackIds(listOf(trackId), restoreDeleted = false).isEmpty()) return false
         deleteSubtitlesForTrack(trackId)
         insertSubtitles(subtitles)
+        return true
+    }
+
+    /** 只导入扫描实际读到的字幕；主动扫描成功后解除对应音轨的自动导入限制。 */
+    @Transaction
+    suspend fun importScannedSubtitles(subtitles: List<SubtitleEntity>, restoreDeleted: Boolean): Boolean {
+        val allowed = subtitles.map { it.trackId }.distinct().chunked(900)
+            .flatMap { getSubtitleImportAllowedTrackIds(it, restoreDeleted) }.toHashSet()
+        if (allowed.isEmpty()) return false
+        allowed.toList().chunked(900).forEach { batch ->
+            if (restoreDeleted) allowSubtitleAutoImportForTracks(batch)
+            deleteSubtitlesForTracks(batch)
+        }
+        insertSubtitles(subtitles.filter { it.trackId in allowed })
         return true
     }
 
