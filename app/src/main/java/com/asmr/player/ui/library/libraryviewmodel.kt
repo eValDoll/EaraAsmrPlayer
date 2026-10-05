@@ -2431,19 +2431,19 @@ class LibraryViewModel @Inject constructor(
             }
 
             if (subtitlesByTrackId.isNotEmpty()) {
-                val trackIds = subtitlesByTrackId.keys.toList()
-                val subtitlesToInsert = subtitlesByTrackId.flatMap { (trackId, entries) ->
-                    entries.map { entry ->
-                        SubtitleEntity(
-                            trackId = trackId,
-                            startMs = entry.startMs,
-                            endMs = entry.endMs,
-                            text = entry.text
-                        )
-                    }
+                subtitlesByTrackId.forEach { (trackId, entries) ->
+                    trackDao.replaceAutoSubtitles(
+                        trackId,
+                        entries.map { entry ->
+                            SubtitleEntity(
+                                trackId = trackId,
+                                startMs = entry.startMs,
+                                endMs = entry.endMs,
+                                text = entry.text
+                            )
+                        }
+                    )
                 }
-                trackDao.deleteSubtitlesForTracks(trackIds)
-                trackDao.insertSubtitles(subtitlesToInsert)
             }
 
             if (removedIds.isNotEmpty()) {
@@ -2605,8 +2605,8 @@ class LibraryViewModel @Inject constructor(
                     tracksToUpdate.forEach { (track, spec) ->
                         val entries = subtitlesByAudioPath[spec.path].orEmpty()
                         if (entries.isNotEmpty()) {
-                            trackDao.deleteSubtitlesForTrack(track.id)
-                            trackDao.insertSubtitles(
+                            trackDao.replaceAutoSubtitles(
+                                track.id,
                                 entries.map { entry ->
                                     SubtitleEntity(
                                         trackId = track.id,
@@ -2637,7 +2637,7 @@ class LibraryViewModel @Inject constructor(
                         }
                     }
                     if (subtitlesToInsert.isNotEmpty()) {
-                        trackDao.insertSubtitles(subtitlesToInsert)
+                        trackDao.insertAutoSubtitles(subtitlesToInsert)
                         wroteAnySubtitles = true
                     }
                 }
@@ -2656,7 +2656,7 @@ class LibraryViewModel @Inject constructor(
                         if (sourceSubs.isNotEmpty()) {
                             val targetHasSubs = trackDao.getSubtitlesForTrack(targetId).isNotEmpty()
                             if (!targetHasSubs) {
-                                trackDao.insertSubtitles(
+                                trackDao.insertAutoSubtitles(
                                     sourceSubs.map { s ->
                                         SubtitleEntity(
                                             trackId = targetId,
@@ -2998,43 +2998,39 @@ class LibraryViewModel @Inject constructor(
                 .distinct()
 
             val allExistingTracks = trackDao.getTracksForAlbumOnce(albumId)
-
-            val toDelete = allExistingTracks.filter { it.path.startsWith(treePrefix) }.map { it.id }
+            val existingByPath = allExistingTracks.associateBy { it.path }
+            val scannedPaths = trackSpecs.mapTo(hashSetOf()) { it.path }
+            val toDelete = allExistingTracks
+                .filter { it.path.startsWith(treePrefix) && it.path !in scannedPaths }
+                .map { it.id }
             if (toDelete.isNotEmpty()) {
                 trackDao.deleteSubtitlesForTracks(toDelete)
-                trackDao.deleteTracksByIds(toDelete)
+                database.remoteSubtitleSourceDao().deleteByTrackIds(toDelete)
+                database.trackTagDao().deleteTrackTagsByTrackIds(toDelete)
+                database.deleteLibraryTracks(toDelete)
             }
 
-            val filteredTrackSpecs = trackSpecs
-
-            val tracksToInsert = filteredTrackSpecs.map { spec ->
-                TrackEntity(
-                    albumId = albumId,
-                    title = spec.title,
-                    path = spec.path,
-                    duration = 0.0,
-                    group = spec.group
-                )
+            val tracksToUpdate = trackSpecs.mapNotNull { spec ->
+                existingByPath[spec.path]?.copy(title = spec.title, group = spec.group)
             }
+            if (tracksToUpdate.isNotEmpty()) trackDao.updateTracks(tracksToUpdate)
+            val tracksToInsert = trackSpecs.filter { it.path !in existingByPath }.map { spec ->
+                TrackEntity(albumId = albumId, title = spec.title, path = spec.path, group = spec.group)
+            }
+            val trackIdsByPath = tracksToUpdate.associate { it.path to it.id }.toMutableMap()
             if (tracksToInsert.isNotEmpty()) {
                 val insertedTrackIds = trackDao.insertTracks(tracksToInsert)
-                val subtitlesToInsert = ArrayList<SubtitleEntity>()
-                insertedTrackIds.zip(filteredTrackSpecs).forEach { (trackId, spec) ->
-                    val entries = subtitlesByAudioPath[spec.path].orEmpty()
-                    entries.forEach { e ->
-                        subtitlesToInsert.add(
-                            SubtitleEntity(
-                                trackId = trackId,
-                                startMs = e.startMs,
-                                endMs = e.endMs,
-                                text = e.text
-                            )
-                        )
-                    }
+                insertedTrackIds.zip(tracksToInsert).forEach { (trackId, track) ->
+                    trackIdsByPath[track.path] = trackId
                 }
-                if (subtitlesToInsert.isNotEmpty()) {
-                    trackDao.insertSubtitles(subtitlesToInsert)
-                    wroteAnySubtitles = true
+            }
+            trackIdsByPath.forEach { (path, trackId) ->
+                val entries = subtitlesByAudioPath[path].orEmpty()
+                if (entries.isNotEmpty()) {
+                    val replaced = trackDao.replaceAutoSubtitles(trackId, entries.map { entry ->
+                        SubtitleEntity(trackId = trackId, startMs = entry.startMs, endMs = entry.endMs, text = entry.text)
+                    })
+                    wroteAnySubtitles = wroteAnySubtitles || replaced
                 }
             }
         }

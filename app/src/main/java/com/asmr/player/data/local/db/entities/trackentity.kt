@@ -6,7 +6,7 @@ import androidx.room.PrimaryKey
 
 @Entity(
     tableName = "tracks",
-    indices = [Index(value = ["albumId"])]
+    indices = [Index(value = ["albumId"]), Index(value = ["path"])]
 )
 data class TrackEntity(
     @PrimaryKey(autoGenerate = true) val id: Long = 0L,

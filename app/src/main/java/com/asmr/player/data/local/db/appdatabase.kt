@@ -42,6 +42,7 @@ import com.asmr.player.data.local.db.entities.PlaylistEntity
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
 import com.asmr.player.data.local.db.entities.PlaylistTrackCrossRef
 import com.asmr.player.data.local.db.entities.SubtitleEntity
+import com.asmr.player.data.local.db.entities.SubtitleImportBlockEntity
 import com.asmr.player.data.local.db.entities.SubtitleCommittedCaptionEntity
 import com.asmr.player.data.local.db.entities.SubtitleFallbackCaptionEntity
 import com.asmr.player.data.local.db.entities.SubtitleTaskEntity
@@ -90,9 +91,10 @@ import com.asmr.player.data.local.db.entities.TrackPlaybackProgressEntity
         SubtitleTranslationSourceEntity::class,
         SubtitleFallbackCaptionEntity::class,
         SubtitleCommittedCaptionEntity::class,
-        SubtitleTitleOwnerEntity::class
+        SubtitleTitleOwnerEntity::class,
+        SubtitleImportBlockEntity::class
     ],
-    version = 34,
+    version = 35,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

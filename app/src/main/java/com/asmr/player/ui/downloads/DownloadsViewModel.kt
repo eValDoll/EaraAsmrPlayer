@@ -617,7 +617,7 @@ class DownloadsViewModel @Inject constructor(
                     messageManager.showInfo("已先取消对应字幕任务，清理完成后可删除字幕")
                     return@launch
                 }
-                trackDao.deleteSubtitlesForTrack(trackId)
+                trackDao.deleteSubtitlesByUser(listOf(trackId))
             }
                 .onFailure {
                     messageManager.showError("删除字幕失败")
@@ -637,7 +637,7 @@ class DownloadsViewModel @Inject constructor(
                     messageManager.showInfo("已先取消对应字幕任务，清理完成后可删除字幕")
                     return@launch
                 }
-                trackDao.deleteSubtitlesForTracks(distinctTrackIds)
+                trackDao.deleteSubtitlesByUser(distinctTrackIds)
                 messageManager.showInfo("已删除 ${distinctTrackIds.size} 个字幕")
             }.onFailure {
                 messageManager.showError("删除字幕失败")
