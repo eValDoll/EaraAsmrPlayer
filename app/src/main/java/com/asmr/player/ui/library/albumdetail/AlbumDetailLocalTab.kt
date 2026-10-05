@@ -286,13 +286,22 @@ internal fun AlbumLocalBreadcrumbTabV2(
                 title = track.title
             )
         }
-        if (targets.isNotEmpty()) {
+        val unavailableMessage = when {
+            !subtitleFeatureSupported -> subtitleDeviceCapability.message
+            !subtitleModelAvailable -> SubtitleModelRepository.MODEL_REQUIRED_MESSAGE
+            else -> null
+        }
+        if (unavailableMessage != null) {
+            onSubtitleGenerationUnavailable(unavailableMessage)
+        } else if (targets.isNotEmpty()) {
             scope.launch {
                 try {
+                    val handle = withContext(Dispatchers.IO) {
+                        SubtitleTaskRepository.get(context).enqueueGeneration(targets)
+                    }
                     if (tracks.any { it.id in subtitleTrackIds }) {
                         onSubtitleGenerationQueued("已有字幕，将覆盖后重新生成并翻译")
                     }
-                    val handle = SubtitleTaskRepository.get(context).enqueueGeneration(targets)
                     onSubtitleGenerationQueued(
                         if (handle.reusedExisting) "所选音频已有可继续的字幕任务" else "已加入字幕任务队列"
                     )
@@ -352,36 +361,34 @@ internal fun AlbumLocalBreadcrumbTabV2(
                     onOpenBatchPlaylistPicker = onOpenBatchPlaylistPicker,
                     onAddMediaItemsToQueue = onAddMediaItemsToQueue,
                     onGenerateSubtitlesForCurrentDirectory = {
-                        startSubtitleGeneration(currentDirectorySubtitleGenerationTracks)
+                        if (currentDirectorySubtitleGenerationTracks.isEmpty()) {
+                            scope.launch {
+                                val message = withContext(Dispatchers.Default) {
+                                    subtitleGenerationDirectoryRequirementMessage(treeIndex, currentPath)
+                                }
+                                onSubtitleGenerationUnavailable(message)
+                            }
+                        } else {
+                            startSubtitleGeneration(currentDirectorySubtitleGenerationTracks)
+                        }
                     },
                     subtitleGenerationForCurrentDirectoryEnabled = subtitleFeatureSupported &&
                         currentDirectorySubtitleGenerationTracks.isNotEmpty(),
-                    onGenerateSubtitlesForSelectedFiles = if (subtitleFeatureSupported) { selectedFiles ->
-                        startSubtitleGeneration(
-                            selectedFiles.mapNotNull { file ->
-                                subtitleGenerationTrackForFile(
-                                    file = file,
-                                    unavailableTrackIds = emptySet()
-                                )
-                            }
-                        )
-                    } else null,
-                    canGenerateSubtitleForSelectedFile = if (subtitleFeatureSupported) { file ->
-                        subtitleGenerationTrackForFile(
-                            file = file,
-                            unavailableTrackIds = emptySet()
-                        ) != null
-                    } else null,
-                    subtitleModelAvailable = subtitleModelAvailable,
-                    onSubtitleGenerationUnavailable = {
-                        onSubtitleGenerationUnavailable(
-                            if (subtitleFeatureSupported) {
-                                SubtitleModelRepository.MODEL_REQUIRED_MESSAGE
-                            } else {
-                                subtitleDeviceCapability.message
-                            }
-                        )
+                    onGenerateSubtitlesForSelectedFiles = { selectedFiles ->
+                        val tracks = selectedFiles.mapNotNull { file ->
+                            subtitleGenerationTrackForFile(file, unavailableTrackIds = emptySet())
+                        }
+                        if (tracks.isEmpty()) {
+                            onSubtitleGenerationUnavailable(subtitleGenerationSelectionRequirementMessage(selectedFiles))
+                        } else {
+                            startSubtitleGeneration(tracks)
+                        }
                     },
+                    canGenerateSubtitleForSelectedFile = { file ->
+                        subtitleFeatureSupported &&
+                            subtitleGenerationTrackForFile(file, unavailableTrackIds = emptySet()) != null
+                    },
+                    subtitleModelAvailable = subtitleModelAvailable,
                     animateIntro = animateIntro,
                     preferredPath = preferredCurrentPath,
                     onTogglePreferredPath = { enabled ->
