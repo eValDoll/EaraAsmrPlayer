@@ -3,6 +3,7 @@ package com.asmr.player.playback
 import android.content.Context
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -132,16 +133,19 @@ private fun decodePersistedRemoteSubtitleSources(raw: String?): List<PersistedRe
 }
 
 @Singleton
-class PlaybackStateStore @Inject constructor(
-    @ApplicationContext private val context: Context
+class PlaybackStateStore internal constructor(
+    private val dataStore: DataStore<Preferences>
 ) {
+    @Inject
+    constructor(@ApplicationContext context: Context) : this(context.playbackStateDataStore)
+
     private val gson: Gson = Gson()
     private val keyV1: Preferences.Key<String> = stringPreferencesKey("persisted_playback_state_v1")
     private val keyV2: Preferences.Key<String> = stringPreferencesKey("persisted_playback_state_v2")
 
     suspend fun save(state: PersistedPlaybackStateV2) {
         withContext(Dispatchers.IO) {
-            context.playbackStateDataStore.edit { prefs ->
+            dataStore.edit { prefs ->
                 prefs[keyV2] = gson.toJson(state)
                 prefs.remove(keyV1)
             }
@@ -150,7 +154,7 @@ class PlaybackStateStore @Inject constructor(
 
     suspend fun load(): PersistedPlaybackStateV2? {
         return withContext(Dispatchers.IO) {
-            val prefs = context.playbackStateDataStore.data.first()
+            val prefs = dataStore.data.first()
             val jsonV2 = prefs[keyV2].orEmpty()
             if (jsonV2.isNotBlank()) {
                 return@withContext runCatching {
@@ -197,7 +201,7 @@ class PlaybackStateStore @Inject constructor(
 
     suspend fun clear() {
         withContext(Dispatchers.IO) {
-            context.playbackStateDataStore.edit { prefs ->
+            dataStore.edit { prefs ->
                 prefs.remove(keyV2)
                 prefs.remove(keyV1)
             }
