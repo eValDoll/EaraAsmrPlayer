@@ -4,7 +4,6 @@ import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.util.isOnlineTrackPath
 import com.asmr.player.util.isVirtualAlbumPath
-import java.io.FileNotFoundException
 
 internal enum class LocalSourceAvailability {
     Available,
@@ -44,13 +43,4 @@ internal fun shouldRemoveMissingLocalAlbum(
     val sources = localAlbumPhysicalSources(album, tracks)
     if (sources.isEmpty()) return false
     return sources.all { availability(it) == LocalSourceAvailability.Missing }
-}
-
-internal fun isMissingLocalDocumentFailure(error: Throwable): Boolean {
-    return generateSequence(error) { it.cause }
-        .any { cause ->
-            cause is FileNotFoundException ||
-                cause.message.orEmpty().contains("FileNotFoundException", ignoreCase = true) ||
-                cause.message.orEmpty().contains("Missing file for", ignoreCase = true)
-        }
 }

@@ -2,33 +2,23 @@ package com.asmr.player.playback
 
 import android.content.ComponentName
 import android.content.Context
-import android.net.Uri
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
 import android.view.Choreographer
 import androidx.core.content.ContextCompat
-import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
-import com.asmr.player.data.local.db.dao.AlbumDao
-import com.asmr.player.data.local.db.dao.TrackDao
-import com.asmr.player.data.lyrics.EXTRA_REMOTE_SUBTITLE_SOURCES_JSON
 import com.asmr.player.data.repository.TrackSliceRepository
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.service.PlaybackService
-import com.asmr.player.domain.model.Album
-import com.asmr.player.domain.model.Track
 import com.asmr.player.util.MessageManager
 import com.asmr.player.playback.AppVolume
 import dagger.hilt.android.qualifiers.ApplicationContext
 import com.asmr.player.util.NetworkMeteredChecker
-import com.asmr.player.util.RemoteSubtitleSource
-import com.asmr.player.util.encodeRemoteSubtitleSources
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -53,8 +43,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.suspendCancellableCoroutine
-import java.io.File
-import java.net.URLDecoder
 import java.util.concurrent.CancellationException
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -80,8 +68,7 @@ class PlayerConnection @Inject constructor(
     private val messageManager: MessageManager,
     private val networkMeteredChecker: NetworkMeteredChecker,
     private val playbackStateStore: PlaybackStateStore,
-    private val trackDao: TrackDao,
-    private val albumDao: AlbumDao
+    private val playbackQueueRestorer: PlaybackQueueRestorer
 ) {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private val _snapshot = MutableStateFlow(PlaybackSnapshot())
@@ -382,57 +369,16 @@ class PlayerConnection @Inject constructor(
         if (c.mediaItemCount > 0) return false
         didRestorePlaybackState = true
 
-        val saved = playbackStateStore.load() ?: return false
-        val persisted = runCatching { saved.queue }.getOrNull().orEmpty()
-            .mapNotNull { item ->
-                val mediaId = runCatching { item.mediaId }.getOrNull().orEmpty().trim()
-                if (mediaId.isBlank()) return@mapNotNull null
-                val uri = runCatching { item.uri }.getOrNull().orEmpty().trim()
-                val remoteSubtitleSources = runCatching { item.remoteSubtitleSources }.getOrNull().orEmpty()
-                    .mapNotNull subtitleSource@{ sourceItem ->
-                        val url = runCatching { sourceItem.url }.getOrNull().orEmpty().trim()
-                        if (url.isBlank()) return@subtitleSource null
-                        PersistedRemoteSubtitleSource(
-                            url = url,
-                            language = sourceItem.language,
-                            ext = sourceItem.ext
-                        )
-                    }
-                PersistedPlaybackQueueItem(
-                    mediaId = mediaId,
-                    uri = uri,
-                    mimeType = item.mimeType,
-                    title = item.title,
-                    artist = item.artist,
-                    albumTitle = item.albumTitle,
-                    artworkUri = item.artworkUri,
-                    albumId = item.albumId,
-                    trackId = item.trackId,
-                    rjCode = item.rjCode,
-                    remoteSubtitleSources = remoteSubtitleSources
-                )
-            }
-        if (persisted.isEmpty()) {
-            playbackStateStore.clear()
-            return false
-        }
-        val items = buildMediaItemsFromPersistedItems(persisted)
-        if (items.isEmpty()) {
-            playbackStateStore.clear()
-            return false
-        }
-
-        val index = saved.currentIndex.coerceIn(0, items.lastIndex)
-        val pos = saved.positionMs.coerceAtLeast(0L)
-        val speed = saved.speed.takeIf { it.isFinite() }?.coerceIn(0.5f, 2f) ?: 1f
-        val pitch = saved.pitch.takeIf { it.isFinite() }?.coerceIn(0.5f, 2f) ?: 1f
-
-        c.setMediaItems(items, index, pos)
-        c.repeatMode = saved.repeatMode
-        c.shuffleModeEnabled = saved.shuffleEnabled
-        c.setPlaybackParameters(PlaybackParameters(speed, pitch))
-        c.prepare()
+        val restored = playbackQueueRestorer.restore() ?: return false
+        if (c.mediaItemCount > 0) return false
+        val items = restored.items
+        val state = restored.state
+        c.setMediaItems(items, state.currentIndex, state.positionMs)
+        c.repeatMode = state.repeatMode
+        c.shuffleModeEnabled = state.shuffleEnabled
+        c.setPlaybackParameters(PlaybackParameters(state.speed, state.pitch))
         c.playWhenReady = false
+        c.prepare()
 
         _queue.value = items
         _snapshot.value = c.toSnapshot(
@@ -443,126 +389,8 @@ class PlayerConnection @Inject constructor(
         return true
     }
 
-    private suspend fun buildMediaItemsFromPersistedItems(items: List<PersistedPlaybackQueueItem>): List<MediaItem> {
-        return items.mapNotNull { persisted ->
-            val id = persisted.mediaId.trim()
-            if (id.isBlank()) return@mapNotNull null
-            val track = runCatching { trackDao.getTrackByPathOnce(id) }.getOrNull()
-            if (track == null && persisted.trackId?.let { it > 0L } == true) {
-                return@mapNotNull null
-            }
-            val persistedAlbumId = persisted.albumId
-            if (track == null && persistedAlbumId != null && persistedAlbumId > 0L) {
-                val albumExists = runCatching {
-                    albumDao.getAlbumById(persistedAlbumId) != null
-                }.getOrDefault(true)
-                if (!albumExists) return@mapNotNull null
-            }
-            if (track != null) {
-                val albumEntity = runCatching { albumDao.getAlbumById(track.albumId) }.getOrNull()
-                val album = Album(
-                    id = albumEntity?.id ?: 0L,
-                    title = albumEntity?.title.orEmpty(),
-                    path = albumEntity?.path.orEmpty(),
-                    localPath = albumEntity?.localPath,
-                    downloadPath = albumEntity?.downloadPath,
-                    circle = albumEntity?.circle.orEmpty(),
-                    cv = albumEntity?.cv.orEmpty(),
-                    tags = albumEntity?.tags?.split(",")?.filter { it.isNotBlank() }.orEmpty(),
-                    coverUrl = albumEntity?.coverUrl.orEmpty(),
-                    coverPath = albumEntity?.coverPath.orEmpty(),
-                    coverThumbPath = albumEntity?.coverThumbPath.orEmpty(),
-                    workId = albumEntity?.workId.orEmpty(),
-                    rjCode = albumEntity?.rjCode.orEmpty().ifBlank { albumEntity?.workId.orEmpty() }
-                )
-                val t = Track(
-                    id = track.id,
-                    albumId = track.albumId,
-                    title = track.title,
-                    path = track.path,
-                    duration = track.duration,
-                    group = track.group,
-                    lyricsRelativePathNoExt = "",
-                    remoteSubtitleSources = persisted.remoteSubtitleSources.mapNotNull subtitleSource@{ persistedSource ->
-                        val url = persistedSource.url.trim()
-                        if (url.isBlank()) return@subtitleSource null
-                        RemoteSubtitleSource(
-                            url = url,
-                            language = persistedSource.language.orEmpty().ifBlank { "default" },
-                            ext = persistedSource.ext.orEmpty().ifBlank { url.substringAfterLast('.', "vtt") }
-                        )
-                    }
-                )
-                MediaItemFactory.fromTrack(album, t)
-            } else {
-                val restoredRemoteSubtitleSources = persisted.remoteSubtitleSources.mapNotNull subtitleSource@{ persistedSource ->
-                    val url = persistedSource.url.trim()
-                    if (url.isBlank()) return@subtitleSource null
-                    RemoteSubtitleSource(
-                        url = url,
-                        language = persistedSource.language.orEmpty().ifBlank { "default" },
-                        ext = persistedSource.ext.orEmpty().ifBlank { url.substringAfterLast('.', "vtt") }
-                    )
-                }
-                val uri = MediaItemFactory.toPlayableUri(persisted.uri.ifBlank { id })
-                val title = persisted.title.orEmpty().ifBlank { deriveTitleFromId(id) }
-                val meta = MediaMetadata.Builder()
-                    .setTitle(title)
-                    .setArtist(persisted.artist.orEmpty())
-                    .setDurationMs(persisted.durationMs)
-                    .setAlbumTitle(persisted.albumTitle.orEmpty())
-                    .setArtworkUri(parsePossiblyEncodedUri(persisted.artworkUri))
-                    .setExtras(
-                        android.os.Bundle().apply {
-                            persisted.albumCv?.let { putString(EXTRA_ALBUM_CV, it) }
-                            if (persisted.albumId != null) putLong("album_id", persisted.albumId)
-                            if (persisted.trackId != null) putLong("track_id", persisted.trackId)
-                            if (!persisted.rjCode.isNullOrBlank()) putString("rj_code", persisted.rjCode)
-                            encodeRemoteSubtitleSources(restoredRemoteSubtitleSources)?.let { encoded ->
-                                putString(EXTRA_REMOTE_SUBTITLE_SOURCES_JSON, encoded)
-                            }
-                        }
-                    )
-                    .build()
-                MediaItem.Builder()
-                    .setUri(uri)
-                    .setMediaId(id)
-                    .setMimeType(persisted.mimeType)
-                    .setMediaMetadata(meta)
-                    .build()
-            }
-        }
-    }
-
-    private fun deriveTitleFromId(mediaId: String): String {
-        val id = mediaId.trim()
-        if (id.isBlank()) return ""
-        if (id.startsWith("http", ignoreCase = true)) {
-            val last = runCatching { id.toUri().lastPathSegment }.getOrNull().orEmpty().ifBlank { id.substringAfterLast('/') }
-            val clean = last.substringBefore('?').substringBefore('#')
-            val decoded = runCatching { URLDecoder.decode(clean, "UTF-8") }.getOrDefault(clean)
-            return decoded.substringBeforeLast('.', decoded).ifBlank { id }
-        }
-        return runCatching { File(id).nameWithoutExtension }.getOrDefault(id).ifBlank { id }
-    }
-
-    private fun parsePossiblyEncodedUri(value: String?): Uri? {
-        val raw = value.orEmpty().trim()
-        if (raw.isBlank()) return null
-        val decoded = if (
-            raw.startsWith("http%3A", ignoreCase = true) ||
-                raw.startsWith("https%3A", ignoreCase = true) ||
-                raw.startsWith("content%3A", ignoreCase = true) ||
-                raw.startsWith("file%3A", ignoreCase = true)
-        ) {
-            runCatching { URLDecoder.decode(raw, "UTF-8") }.getOrDefault(raw)
-        } else {
-            raw
-        }
-        return runCatching { decoded.toUri() }.getOrNull()
-    }
-
     private suspend fun savePlaybackState() {
+        if (!restoreAttemptResolved) return
         val c = controller ?: return
         val state = capturePersistedPlaybackState(c, _queue.value)
         if (state == null) {
