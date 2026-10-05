@@ -41,6 +41,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
@@ -176,11 +178,24 @@ class PlayerConnection @Inject constructor(
                         playbackSpeed = c.playbackParameters.speed,
                         playbackPitch = c.playbackParameters.pitch
                     )
-
-                    applySliceLoopIfNeeded(c)
                 }
                 delay(resolvePositionPollIntervalMs())
             }
+        }
+        scope.launch {
+            // 切片控制只依赖时间，不能等待后台或熄屏时可能停止的 UI 帧回调。
+            combine(
+                slicePlaybackController.sliceModeEnabled,
+                slicePlaybackController.previewSlice
+            ) { enabled, preview -> enabled || preview != null }
+                .distinctUntilChanged()
+                .collectLatest { enabled ->
+                    if (!enabled) return@collectLatest
+                    while (isActive) {
+                        controller?.let { applySliceLoopIfNeeded(it) }
+                        delay(250L)
+                    }
+                }
         }
         scope.launch {
             queue
