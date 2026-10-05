@@ -379,7 +379,7 @@ internal class SubtitleModelRepository private constructor(context: Context) {
     private fun deleteIfPresent(file: File): Boolean = !file.exists() || file.delete()
 
     companion object {
-        const val MODEL_REQUIRED_MESSAGE = "请先在设置中下载日语字幕组件"
+        const val MODEL_REQUIRED_MESSAGE = "请先在设置 → 翻译配置中下载并选用字幕模型"
 
         private const val MODEL_ROOT_DIRECTORY_NAME = "subtitle-models"
         private const val PREFERENCES_NAME = "subtitle_model_preferences"
