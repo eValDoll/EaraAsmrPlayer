@@ -1014,11 +1014,9 @@ fun SettingsScreen(
                     }
                     item(key = "group:translation_config") {
                         SettingsDetailCard {
-                        Text(
-                            text = "字幕翻译",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = colorScheme.textPrimary,
+                        SubtitleTranslationSettingsHeader(
+                            activeTipKey = activeTipKey,
+                            onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
                         )
                         SubtitleModelSettingsSection(
                             state = subtitleModelState,
@@ -1309,6 +1307,29 @@ private fun NowPlayingLyricsSettingsSection(
         onValueChange = { onSettingsChange(settings.copy(highlightFontSizeSp = it)) },
         onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
     )
+}
+
+@Composable
+internal fun SubtitleTranslationSettingsHeader(activeTipKey: String?, onToggleTip: (String) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = "字幕翻译",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = AsmrTheme.colorScheme.textPrimary
+        )
+        SettingsInfoTip(
+            active = activeTipKey == "subtitle_translation",
+            title = "字幕翻译",
+            text = "批量翻译需要本地 MP3/WAV 音频、已下载并选用的字幕模型，以及已保存的 DeepSeek API Key。" +
+                "在线音频请先下载。配置完成后，在本地库作品详情中点击“批量翻译”或“翻译选中”开始；保存 API Key 不会自动创建任务。",
+            onToggle = { onToggleTip("subtitle_translation") },
+            showBackground = false
+        )
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -2509,13 +2530,19 @@ private fun SettingsRowLabel(
 }
 
 @Composable
-private fun SettingsInfoTip(active: Boolean, title: String, text: String, onToggle: () -> Unit) {
+private fun SettingsInfoTip(
+    active: Boolean,
+    title: String,
+    text: String,
+    onToggle: () -> Unit,
+    showBackground: Boolean = true
+) {
     val density = LocalDensity.current
     val offset = with(density) { IntOffset(0, 26.dp.roundToPx()) }
 
     Surface(
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+        color = if (showBackground) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f) else Color.Transparent
     ) {
         Box {
             IconButton(

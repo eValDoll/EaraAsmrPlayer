@@ -2659,7 +2659,7 @@ internal fun DirectoryActionGroupButton(
         shape = RoundedCornerShape(10.dp),
         contentPadding = PaddingValues(horizontal = 9.dp, vertical = 0.dp),
         colors = ButtonDefaults.textButtonColors(
-            contentColor = colorScheme.primary,
+            contentColor = if (enabled) colorScheme.primary else colorScheme.textTertiary,
             disabledContentColor = colorScheme.textTertiary
         )
     ) {
@@ -3265,7 +3265,6 @@ internal fun DirectoryBrowserPanelV4(
     onGenerateSubtitlesForSelectedFiles: ((List<DirectoryFileItem>) -> Unit)? = null,
     canGenerateSubtitleForSelectedFile: ((DirectoryFileItem) -> Boolean)? = null,
     subtitleModelAvailable: Boolean = true,
-    onSubtitleGenerationUnavailable: (() -> Unit)? = null,
     animateIntro: Boolean = true,
     parentChromeState: CollapsibleHeaderState? = null,
     preferredPath: String = "",
@@ -3413,9 +3412,7 @@ internal fun DirectoryBrowserPanelV4(
                     subtitleGenerationText = if (selectionMode) "翻译选中" else "批量翻译",
                     subtitleGenerationEnabled = subtitleGenerationEnabled,
                     onGenerateSubtitles = onGenerateSubtitles,
-                    onSubtitleGenerationUnavailable = onSubtitleGenerationUnavailable.takeIf {
-                        hasSubtitleGenerationTargets && !subtitleModelAvailable
-                    }
+                    onSubtitleGenerationUnavailable = onGenerateSubtitles
                 )
                 if (onTogglePreferredPath != null && !selectionMode) {
                     val preferredIcon = if (isPreferredPath) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder
