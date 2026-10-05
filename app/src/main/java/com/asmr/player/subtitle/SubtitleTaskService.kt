@@ -1243,16 +1243,18 @@ internal class SubtitleTaskService : Service() {
     }
 
     private suspend fun requireTranslationClient(): SubtitleTranslationClient {
-        val apiKey = DeepSeekApiKeyStore.get(applicationContext).read()
-        check(apiKey.isNotBlank()) { "请先在设置中配置 DeepSeek API Key" }
-        deepSeekAccountRepository.bindApiKey(apiKey)
+        val config = withContext(Dispatchers.IO) {
+            TranslationApiStore.get(applicationContext).readConfiguration().requireConfigured()
+        }
+        if (config.isDeepSeek) deepSeekAccountRepository.bindApiKey(config.apiKey)
         return SubtitleTranslationClient(
             okHttpClient = deepSeekOkHttpClient,
             gson = gson,
-            apiKey = apiKey,
+            apiKey = config.apiKey,
+            apiConfig = config,
             settings = settingsRepository.loadDeepSeekTranslationSettings(),
             onTokenUsage = { totalTokens ->
-                deepSeekAccountRepository.recordTokenUsage(apiKey, totalTokens)
+                if (config.isDeepSeek) deepSeekAccountRepository.recordTokenUsage(config.apiKey, totalTokens)
             }
         )
     }
@@ -1273,8 +1275,10 @@ internal class SubtitleTaskService : Service() {
                         }
                     }
                     if (!shouldRefresh) break
-                    val apiKey = DeepSeekApiKeyStore.get(applicationContext).read()
-                    if (apiKey.isNotBlank()) deepSeekAccountRepository.refreshBalance(apiKey)
+                    val config = TranslationApiStore.get(applicationContext).readConfiguration()
+                    if (config.isDeepSeek && config.apiKey.isNotBlank()) {
+                        deepSeekAccountRepository.refreshBalance(config.apiKey)
+                    }
                 }
                 signalWake()
             }.also { balanceRefreshJob = it }

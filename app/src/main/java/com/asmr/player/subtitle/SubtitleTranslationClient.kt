@@ -21,6 +21,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import okhttp3.logging.HttpLoggingInterceptor
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.job
@@ -54,16 +55,26 @@ private data class DeepSeekResponseFormat(
 private data class DeepSeekChatRequest(
     val model: String = DEEPSEEK_SUBTITLE_MODEL,
     val messages: List<DeepSeekChatMessage>,
-    val thinking: DeepSeekThinking = DeepSeekThinking(),
+    val thinking: DeepSeekThinking? = DeepSeekThinking(),
     @SerializedName("reasoning_effort")
     val reasoningEffort: String? = "high",
     @SerializedName("response_format")
     val responseFormat: DeepSeekResponseFormat? = DeepSeekResponseFormat(),
     val tools: List<DeepSeekToolDefinition>? = null,
     @SerializedName("max_tokens")
-    val maxTokens: Int = 32_768,
+    val maxTokens: Int? = 32_768,
     val stream: Boolean = false
 )
+
+private fun DeepSeekChatRequest.forApi(config: TranslationApiConfig): DeepSeekChatRequest =
+    if (config.isDeepSeek) this else copy(
+        model = config.model,
+        messages = messages.map { it.copy(reasoningContent = null) },
+        thinking = null,
+        reasoningEffort = null,
+        responseFormat = null,
+        maxTokens = null
+    )
 
 private data class DeepSeekToolDefinition(
     val type: String = "function",
@@ -120,14 +131,17 @@ internal class SubtitleTranslationClient(
     private val gson: Gson,
     apiKey: String,
     private val settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings(),
-    private val apiUrl: String = DEEPSEEK_CHAT_COMPLETIONS_URL,
+    private val apiConfig: TranslationApiConfig = TranslationApiConfig(apiKey = apiKey),
+    private val apiUrl: String = apiConfig.completionsUrl,
     private val onTokenUsage: (Long) -> Unit = {}
 ) {
     private val normalizedApiKey = apiKey.trim().also {
-        require(it.isNotEmpty()) { "请先在设置中配置 DeepSeek API Key" }
+        require(it.isNotEmpty()) { "请先在设置中配置 ${apiConfig.serviceName} API Key" }
     }
     private val authorization = "Bearer $normalizedApiKey"
     private val callFactory: Call.Factory = okHttpClient.newBuilder()
+        .apply { interceptors().removeAll { it is HttpLoggingInterceptor } }
+        .followSslRedirects(false)
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(5, TimeUnit.MINUTES)
         .writeTimeout(30, TimeUnit.SECONDS)
@@ -316,7 +330,8 @@ internal class SubtitleTranslationClient(
             circle = circle,
             cv = cv,
             trackTitles = trackTitles,
-            settings = settings
+            settings = settings,
+            apiConfig = apiConfig
         )
         val expectedTrackIds = trackTitles.map(Pair<Long, String>::first)
         return retrySubtitleTranslation(maxAttempts = maxAttempts, onAttempt = { _, _ -> }, onRetry = { _, _, _ -> }) {
@@ -465,14 +480,16 @@ internal class SubtitleTranslationClient(
             buildPolishAgentRequest(
                 gson = gson,
                 messages = messages,
-                settings = settings
+                settings = settings,
+                apiConfig = apiConfig
             )
         } else {
             buildDeepSeekSubtitleAgentRequest(
                 gson = gson,
                 messages = messages,
                 settings = settings,
-                scriptContext = scriptContext
+                scriptContext = scriptContext,
+                apiConfig = apiConfig
             )
         }
         return executeTranslationRequest(
@@ -508,7 +525,7 @@ internal class SubtitleTranslationClient(
             throw cancelled
         } catch (error: IOException) {
             throw SubtitleTranslationException(
-                message = SubtitleFailureMessages.network(error),
+                message = SubtitleFailureMessages.network(error, apiConfig.serviceName),
                 retryable = true,
                 cause = error
             )
@@ -519,7 +536,9 @@ internal class SubtitleTranslationClient(
                 if (!it.isSuccessful) {
                     val failure = SubtitleFailureMessages.deepSeekHttp(
                         statusCode = it.code,
-                        serviceMessage = parseDeepSeekErrorMessage(raw)
+                        serviceMessage = parseDeepSeekErrorMessage(raw),
+                        serviceName = apiConfig.serviceName,
+                        custom = !apiConfig.isDeepSeek
                     )
                     throw SubtitleTranslationException(
                         message = failure.message,
@@ -658,7 +677,6 @@ internal const val POLISH_READ_TOOL_NAME = "read_subtitle_polish_state"
 internal const val POLISH_WRITE_TOOL_NAME = "write_polished_chinese_subtitles"
 internal const val SCRIPT_LIST_TOOL_NAME = "list_work_script_files"
 internal const val SCRIPT_READ_TOOL_NAME = "read_work_script_file"
-private const val DEEPSEEK_CHAT_COMPLETIONS_URL = "https://api.deepseek.com/chat/completions"
 private const val MAX_SUBTITLE_AGENT_STALLED_TURNS = 4
 private const val MAX_POLISH_AGENT_STALLED_TURNS = 4
 private const val POLISH_READ_PAGE_SIZE = 40
@@ -725,7 +743,8 @@ internal fun buildDeepSeekTitleTranslationRequest(
     circle: String,
     cv: String,
     trackTitles: List<Pair<Long, String>>,
-    settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings()
+    settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings(),
+    apiConfig: TranslationApiConfig = TranslationApiConfig(apiKey = "")
 ): String {
     require(albumTitle.isNotBlank())
     require(trackTitles.isNotEmpty())
@@ -745,7 +764,7 @@ internal fun buildDeepSeekTitleTranslationRequest(
             ),
             thinking = DeepSeekThinking(type = if (settings.thinkingEnabled) "enabled" else "disabled"),
             reasoningEffort = settings.reasoningEffort.wireValue.takeIf { settings.thinkingEnabled }
-        )
+        ).forApi(apiConfig)
     )
 }
 
@@ -839,7 +858,8 @@ internal fun buildDeepSeekSubtitleAgentRequest(
     gson: Gson,
     messages: List<DeepSeekChatMessage>,
     settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings(),
-    scriptContext: SubtitleScriptContext? = null
+    scriptContext: SubtitleScriptContext? = null,
+    apiConfig: TranslationApiConfig = TranslationApiConfig(apiKey = "")
 ): String {
     require(messages.isNotEmpty())
     return gson.toJson(
@@ -853,7 +873,7 @@ internal fun buildDeepSeekSubtitleAgentRequest(
             },
             responseFormat = null,
             tools = subtitleTranslationTools(scriptContext)
-        )
+        ).forApi(apiConfig)
     )
 }
 
@@ -889,7 +909,8 @@ internal fun buildPolishAgentInitialMessages(
 internal fun buildPolishAgentRequest(
     gson: Gson,
     messages: List<DeepSeekChatMessage>,
-    settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings()
+    settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings(),
+    apiConfig: TranslationApiConfig = TranslationApiConfig(apiKey = "")
 ): String {
     require(messages.isNotEmpty())
     return gson.toJson(
@@ -903,7 +924,7 @@ internal fun buildPolishAgentRequest(
             },
             responseFormat = null,
             tools = subtitlePolishTools()
-        )
+        ).forApi(apiConfig)
     )
 }
 

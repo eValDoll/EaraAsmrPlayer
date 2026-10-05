@@ -109,8 +109,8 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
             check(SubtitleModelRepository.get(appContext).isModelAvailable()) {
                 SubtitleModelRepository.MODEL_REQUIRED_MESSAGE
             }
-            check(DeepSeekApiKeyStore.get(appContext).isConfigured()) {
-                "请先在设置中配置 DeepSeek API Key"
+            withContext(Dispatchers.IO) {
+                TranslationApiStore.get(appContext).readConfiguration().requireConfigured()
             }
             enqueue(
                 targets = normalized.map { it.trackId to it.title },
@@ -125,8 +125,8 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
         return enqueueMutex.withLock {
             require(target.trackId > 0L) { "字幕所属音轨无效" }
             ensureTrackAlbumNotPolishing(target.trackId)
-            check(DeepSeekApiKeyStore.get(appContext).isConfigured()) {
-                "请先在设置中配置 DeepSeek API Key"
+            withContext(Dispatchers.IO) {
+                TranslationApiStore.get(appContext).readConfiguration().requireConfigured()
             }
             val subtitles = database.trackDao().getSubtitlesForTrack(target.trackId)
             require(subtitles.any { it.text.isNotBlank() }) { "当前音轨没有可翻译的本地字幕" }

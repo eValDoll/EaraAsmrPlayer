@@ -15,6 +15,11 @@ object AppErrorMessageFormatter {
         "字幕翻译失败：",
         "字幕翻译模型返回格式错误：",
         "DeepSeek ",
+        "自定义翻译服务",
+        "无法连接 自定义翻译服务",
+        "无法与 自定义翻译服务",
+        "请先在设置中配置自定义翻译模型",
+        "请先在设置中配置 自定义翻译服务 API Key",
         "无法连接 DeepSeek",
         "无法与 DeepSeek",
         "请先在设置中配置 DeepSeek API Key"

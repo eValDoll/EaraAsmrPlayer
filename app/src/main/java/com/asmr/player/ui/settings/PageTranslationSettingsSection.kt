@@ -122,6 +122,19 @@ internal fun PageTranslationLanguageSelector(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    SettingsDropdownSelector(label, value, PageTranslationLanguages, onSelect, modifier, tagPrefix = "page_translation")
+}
+
+@Composable
+internal fun SettingsDropdownSelector(
+    label: String,
+    value: String,
+    options: Map<String, String>,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    tagPrefix: String = "settings_dropdown",
+) {
     val colors = AsmrTheme.colorScheme
     var expanded by remember { mutableStateOf(false) }
     var anchorWidth by remember { mutableIntStateOf(0) }
@@ -143,20 +156,20 @@ internal fun PageTranslationLanguageSelector(
                     .clip(shape)
                     .background(fieldColor)
                     .border(1.dp, colors.primaryStrong.copy(alpha = if (expanded) 0.7f else 0.22f), shape)
-                    .clickable(role = Role.DropdownList) { expanded = !expanded }
+                    .clickable(enabled = enabled, role = Role.DropdownList) { expanded = !expanded }
                     .semantics { stateDescription = if (expanded) "已展开" else "已收起" }
-                    .testTag("page_translation_$label")
+                    .testTag("${tagPrefix}_$label")
                     .padding(horizontal = 12.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(PageTranslationLanguages.getValue(value), modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary,
+                Text(options.getValue(value), modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.bodyMedium, color = if (enabled) colors.textPrimary else colors.textTertiary,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Icon(if (expanded) Icons.Rounded.ArrowDropUp else Icons.Rounded.ArrowDropDown,
-                    contentDescription = null, tint = colors.primaryStrong, modifier = Modifier.size(20.dp))
+                    contentDescription = null, tint = if (enabled) colors.primaryStrong else colors.textTertiary, modifier = Modifier.size(20.dp))
             }
-            if (expanded && anchorWidth > 0) {
+            if (expanded && enabled && anchorWidth > 0) {
                 Popup(
                     popupPositionProvider = menuPosition,
                     onDismissRequest = { expanded = false },
@@ -169,12 +182,12 @@ internal fun PageTranslationLanguageSelector(
                             .clip(shape)
                             .background(menuColor)
                             .border(1.dp, colors.primaryStrong.copy(alpha = 0.24f), shape)
-                            .testTag("page_translation_menu_$label")
+                            .testTag("${tagPrefix}_menu_$label")
                             .verticalScroll(rememberScrollState())
                             .selectableGroup()
                             .padding(4.dp),
                     ) {
-                        PageTranslationLanguages.forEach { (code, name) ->
+                        options.forEach { (code, name) ->
                             val selected = code == value
                             Row(
                                 modifier = Modifier
@@ -186,7 +199,7 @@ internal fun PageTranslationLanguageSelector(
                                         expanded = false
                                         onSelect(code)
                                     }
-                                    .testTag("page_translation_option_${label}_$code")
+                                    .testTag("${tagPrefix}_option_${label}_$code")
                                     .padding(horizontal = 8.dp, vertical = 10.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
