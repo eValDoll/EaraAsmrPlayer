@@ -6,10 +6,19 @@ import org.junit.Test
 
 class SubtitleGenerationPolicyTest {
     @Test
-    fun supportsFileName_acceptsOnlyMp3AndWavIgnoringCase() {
-        assertTrue(SubtitleGenerationPolicy.supportsFileName("voice.MP3"))
-        assertTrue(SubtitleGenerationPolicy.supportsFileName("voice.wav"))
-        assertFalse(SubtitleGenerationPolicy.supportsFileName("voice.flac"))
+    fun supportsFileName_acceptsLibraryAudioFormatsIgnoringCase() {
+        listOf("mp3", "wav", "flac", "m4a", "aac", "ogg", "opus").forEach { extension ->
+            assertTrue(extension, SubtitleGenerationPolicy.supportsFileName("音声.$extension"))
+            assertTrue(extension, SubtitleGenerationPolicy.supportsFileName("音声.${extension.uppercase()}"))
+        }
+    }
+
+    @Test
+    fun supportsFileName_rejectsVideosSubtitlesAndUnknownFormats() {
         assertFalse(SubtitleGenerationPolicy.supportsFileName("voice.mp4"))
+        assertFalse(SubtitleGenerationPolicy.supportsFileName("voice.srt"))
+        assertFalse(SubtitleGenerationPolicy.supportsFileName("voice.ape"))
+        assertFalse(SubtitleGenerationPolicy.supportsFileName("voice.acc"))
+        assertFalse(SubtitleGenerationPolicy.supportsFileName("voice"))
     }
 }

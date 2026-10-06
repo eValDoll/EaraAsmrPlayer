@@ -16,8 +16,8 @@ class SubtitleGenerationFeedbackTest {
     @Test
     fun localUnsupportedFormatAndUnindexedAudioHaveDifferentRemedies() {
         assertEquals(
-            "批量翻译仅支持 MP3/WAV 格式，请选择对应的本地音频",
-            subtitleGenerationSelectionRequirementMessage(listOf(audioFile("/album/track.flac")))
+            "所选音频格式暂不支持批量翻译",
+            subtitleGenerationSelectionRequirementMessage(listOf(audioFile("/album/track.ape")))
         )
         assertEquals(
             "未找到可翻译的本地音轨，请重新扫描本地库后重试",
@@ -27,9 +27,9 @@ class SubtitleGenerationFeedbackTest {
 
     @Test
     fun emptySelectionAndNonAudioSelectionExplainWhatToSelect() {
-        assertEquals("请先选择要翻译的本地 MP3/WAV 音频", subtitleGenerationSelectionRequirementMessage(emptyList()))
+        assertEquals("请先选择要翻译的本地音频", subtitleGenerationSelectionRequirementMessage(emptyList()))
         assertEquals(
-            "没有可翻译的音频，请选择本地 MP3/WAV 文件",
+            "没有可翻译的音频，请选择本地音频文件",
             subtitleGenerationSelectionRequirementMessage(listOf(audioFile("/album/cover.jpg").copy(fileType = TreeFileType.Image)))
         )
     }
@@ -48,10 +48,22 @@ class SubtitleGenerationFeedbackTest {
             ),
             tracks = tracks
         )
-        assertTrue(collectSubtitleGenerationTracks(index, "", emptySet()).isEmpty())
+        assertEquals(listOf(2L), collectSubtitleGenerationTracks(index, "", emptySet()).map { it.id })
         assertEquals("批量翻译仅支持本地音频，请先下载音频后重试", subtitleGenerationDirectoryRequirementMessage(index, "online"))
-        assertEquals("批量翻译仅支持 MP3/WAV 格式，请选择对应的本地音频", subtitleGenerationDirectoryRequirementMessage(index, "local"))
-        assertEquals("没有可翻译的音频，请选择本地 MP3/WAV 文件", subtitleGenerationDirectoryRequirementMessage(index, "booklet"))
+        assertEquals(listOf(2L), collectSubtitleGenerationTracks(index, "local", emptySet()).map { it.id })
+        assertTrue(collectSubtitleGenerationTracks(index, "local", setOf(2L)).isEmpty())
+        assertEquals("没有可翻译的音频，请选择本地音频文件", subtitleGenerationDirectoryRequirementMessage(index, "booklet"))
+    }
+
+    @Test
+    fun localLibraryAudioFormatsOfferGenerationAndRespectUnavailableTracks() {
+        listOf("mp3", "wav", "flac", "m4a", "aac", "ogg", "opus").forEach { extension ->
+            val file = audioFile("/album/音声.${extension.uppercase()}")
+            assertEquals(extension, file.track, subtitleGenerationTrackForFile(file, emptySet()))
+            assertEquals(extension, null, subtitleGenerationTrackForFile(file, setOf(1L)))
+            assertEquals(extension, null, subtitleGenerationTrackForFile(file.copy(isOnline = true), emptySet()))
+            assertEquals(extension, null, subtitleGenerationTrackForFile(file.copy(track = null), emptySet()))
+        }
     }
 
     private fun audioFile(path: String, local: Boolean = true): DirectoryFileItem = DirectoryFileItem(
