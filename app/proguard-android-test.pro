@@ -17,6 +17,10 @@
 -keep class com.asmr.player.subtitle.CustomThinkingMode { *; }
 -keep class com.asmr.player.subtitle.CustomReasoningEffort { *; }
 
+# 音频格式设备测试直接调用转录解码器并读取解码后的声道及时间信息。
+-keep class com.asmr.player.subtitle.LocalAudioDecoder { *; }
+-keep class com.asmr.player.subtitle.DecodedAudioChunk { *; }
+
 # 设备端播放回归测试需要通过公开 Media3 API 连接 Release 播放服务。
 -keep class androidx.media3.** { *; }
 -keep class com.google.common.util.concurrent.** { *; }

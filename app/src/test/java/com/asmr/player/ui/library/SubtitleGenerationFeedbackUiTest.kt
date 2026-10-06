@@ -84,7 +84,7 @@ class SubtitleGenerationFeedbackUiTest {
         compose.onNodeWithText(explanation, substring = true).assertDoesNotExist()
         compose.onNodeWithContentDescription("字幕翻译说明").performClick()
         compose.onNodeWithText(explanation, substring = true).assertExists()
-        compose.onNodeWithText("本地 MP3/WAV", substring = true).assertExists()
+        compose.onNodeWithText("本地音频", substring = true).assertExists()
     }
 
     private fun showDirectory(

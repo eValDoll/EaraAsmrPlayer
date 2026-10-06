@@ -3,7 +3,7 @@ package com.asmr.player.ui.library
 import com.asmr.player.util.isOnlineTrackPath
 
 internal fun subtitleGenerationSelectionRequirementMessage(files: List<DirectoryFileItem>): String {
-    if (files.isEmpty()) return "请先选择要翻译的本地 MP3/WAV 音频"
+    if (files.isEmpty()) return "请先选择要翻译的本地音频"
     return subtitleGenerationSourceRequirementMessage(
         files.asSequence().filter { it.fileType == TreeFileType.Audio }.map { file ->
             file.path to (!file.isOnline && file.sizeSource is FileSizeSource.Local &&
@@ -40,9 +40,9 @@ private fun subtitleGenerationSourceRequirementMessage(audioSources: Sequence<Pa
         }
     }
     return when {
-        !hasAudio -> "没有可翻译的音频，请选择本地 MP3/WAV 文件"
+        !hasAudio -> "没有可翻译的音频，请选择本地音频文件"
         !hasLocalAudio -> "批量翻译仅支持本地音频，请先下载音频后重试"
-        !hasSupportedLocalAudio -> "批量翻译仅支持 MP3/WAV 格式，请选择对应的本地音频"
+        !hasSupportedLocalAudio -> "所选音频格式暂不支持批量翻译"
         else -> "未找到可翻译的本地音轨，请重新扫描本地库后重试"
     }
 }
