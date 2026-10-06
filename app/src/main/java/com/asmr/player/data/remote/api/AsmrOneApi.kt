@@ -102,4 +102,10 @@ data class AsmrOneTrackNodeResponse(
     val dlsitePlayImageWidth: Int? = null,
     val dlsitePlayImageHeight: Int? = null,
     val dlsitePlayOptimizedName: String? = null
-)
+) {
+    val playbackUrl: String?
+        get() = if (streamUrl?.contains("#eara-chapter=") == true) streamUrl else mediaDownloadUrl ?: streamUrl
+
+    val downloadUrl: String?
+        get() = if (streamUrl?.contains("#eara-chapter=") == true) mediaDownloadUrl else mediaDownloadUrl ?: streamUrl
+}

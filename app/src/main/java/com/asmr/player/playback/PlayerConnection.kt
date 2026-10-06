@@ -292,12 +292,7 @@ class PlayerConnection @Inject constructor(
                         lastErrorAtMs = now
                         val item = controller?.currentMediaItem
                         val uri = item?.localConfiguration?.uri?.toString().orEmpty()
-                        val msg = if (uri.contains(".m3u8", ignoreCase = true)) {
-                            "当前不支持 m3u8 流媒体，请先下载音频文件"
-                        } else {
-                            "播放失败：${error.errorCodeName}"
-                        }
-                        messageManager.showError(msg)
+                        messageManager.showError("播放失败：${error.errorCodeName}")
                         android.util.Log.e(
                             "PlayerConnection",
                             "Player error: ${error.errorCodeName} ${error.message} uri=$uri mediaId=${item?.mediaId}",

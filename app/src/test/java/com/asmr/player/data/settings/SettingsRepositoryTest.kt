@@ -5,6 +5,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import com.asmr.player.cache.AppCacheLimits
+import com.asmr.player.data.remote.crawler.AlbumResourceSource
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -65,6 +66,28 @@ class SettingsRepositoryTest {
         repository.setAsmrOneSite(-1)
 
         assertEquals(-1, repository.asmrOneSite.first())
+    }
+
+    @Test
+    fun preferredResourceSource_defaultsToAsmrOne() = runBlocking {
+        assertEquals(AlbumResourceSource.AsmrOne, repository.preferredAlbumResourceSource.first())
+    }
+
+    @Test
+    fun preferredResourceSource_survivesRepositoryRecreationWithoutChangingMirror() = runBlocking {
+        repository.setAsmrOneSite(-1)
+        repository.setPreferredAlbumResourceSource(AlbumResourceSource.JapaneseAsmr)
+        val recreated = SettingsRepository(dataStore, proxyPasswordStorage)
+        assertEquals(AlbumResourceSource.JapaneseAsmr, recreated.preferredAlbumResourceSource.first())
+        assertEquals(-1, recreated.asmrOneSite.first())
+        recreated.setPreferredAlbumResourceSource(AlbumResourceSource.AsmrOne)
+        assertEquals(AlbumResourceSource.AsmrOne, repository.preferredAlbumResourceSource.first())
+    }
+
+    @Test
+    fun preferredResourceSource_ignoresUnknownStoredSource() = runBlocking {
+        dataStore.edit { it[SettingsKeys.PREFERRED_ALBUM_RESOURCE_SOURCE] = "removed-source" }
+        assertEquals(AlbumResourceSource.AsmrOne, repository.preferredAlbumResourceSource.first())
     }
 
     @Test

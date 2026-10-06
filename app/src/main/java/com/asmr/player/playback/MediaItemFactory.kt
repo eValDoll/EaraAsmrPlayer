@@ -13,6 +13,7 @@ import com.asmr.player.data.lyrics.deriveLyricsRelativePathNoExt
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.util.RemoteSubtitleSource
+import com.asmr.player.util.ChapterMediaReference
 import com.asmr.player.util.encodeRemoteSubtitleSources
 import java.io.File
 
@@ -144,11 +145,22 @@ object MediaItemFactory {
             .setMediaId(request.mediaId.ifBlank { request.uri })
             .setMimeType(request.mimeType ?: guessMimeType(request.uri))
             .setMediaMetadata(metadata.build())
+            .setClippingConfiguration(chapterClipping(request.mediaId, request.uri))
             .build()
     }
 
+    fun chapterClipping(mediaId: String, uri: String): MediaItem.ClippingConfiguration {
+        val chapter = ChapterMediaReference.parse(mediaId) ?: ChapterMediaReference.parse(uri)
+        return MediaItem.ClippingConfiguration.Builder().apply {
+            if (chapter != null) {
+                setStartPositionMs(chapter.startMs)
+                chapter.endMs?.let(::setEndPositionMs)
+            }
+        }.build()
+    }
+
     fun toPlayableUri(path: String): Uri {
-        val trimmed = path.trim()
+        val trimmed = ChapterMediaReference.parse(path)?.streamUrl ?: path.trim()
         return if (
             trimmed.startsWith("http", ignoreCase = true) ||
                 trimmed.startsWith("content://", ignoreCase = true) ||
@@ -186,6 +198,7 @@ object MediaItemFactory {
             "aac" -> "audio/aac"
             "ogg" -> "audio/ogg"
             "opus" -> "audio/opus"
+            "m3u8" -> "application/x-mpegURL"
             "mp4", "m4v" -> "video/mp4"
             "webm" -> "video/webm"
             "mkv" -> "video/x-matroska"

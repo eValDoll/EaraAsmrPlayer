@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import com.asmr.player.cache.AppCacheLimits
+import com.asmr.player.data.remote.crawler.AlbumResourceSource
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.hotlistening.HotListeningSortMode
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -107,6 +108,11 @@ class SettingsRepository private constructor(
 
     val asmrOneSite: Flow<Int> = context.settingsDataStore.data.map { prefs ->
         prefs[SettingsKeys.ASMR_ONE_SITE] ?: 200
+    }
+
+    val preferredAlbumResourceSource: Flow<AlbumResourceSource> = context.settingsDataStore.data.map { prefs ->
+        AlbumResourceSource.entries.firstOrNull { it.name == prefs[SettingsKeys.PREFERRED_ALBUM_RESOURCE_SOURCE] }
+            ?: AlbumResourceSource.AsmrOne
     }
 
     val networkRouteSettings: Flow<NetworkRouteSettings> = context.settingsDataStore.data.map { prefs ->
@@ -573,6 +579,12 @@ class SettingsRepository private constructor(
     suspend fun setAsmrOneSite(site: Int) {
         withContext(Dispatchers.IO) {
             context.settingsDataStore.edit { it[SettingsKeys.ASMR_ONE_SITE] = site }
+        }
+    }
+
+    suspend fun setPreferredAlbumResourceSource(source: AlbumResourceSource) {
+        withContext(Dispatchers.IO) {
+            context.settingsDataStore.edit { it[SettingsKeys.PREFERRED_ALBUM_RESOURCE_SOURCE] = source.name }
         }
     }
 

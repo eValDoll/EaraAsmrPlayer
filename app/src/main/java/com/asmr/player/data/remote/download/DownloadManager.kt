@@ -1,5 +1,7 @@
 package com.asmr.player.data.remote.download
 
+import com.asmr.player.util.isJapaneseAsmrResource
+
 import com.asmr.player.util.LocalFileOperation
 import com.asmr.player.util.LocalFileScope
 import com.asmr.player.util.LocalFileScopes
@@ -902,9 +904,12 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
 
             val entryPoint = EntryPointAccessors.fromApplication(applicationContext, DownloadWorkerEntryPoint::class.java)
             val baseClient = entryPoint.okHttpClient()
+            val isJapaneseAsmr = relativePath.startsWith("japaneseasmr.com/")
+            val transferUrl = if (isJapaneseAsmr) resolveJapaneseAsmrDownload(baseClient, url, fileName) else url
             val requestBuilder = Request.Builder()
-                .url(url)
+                .url(transferUrl)
                 .header("User-Agent", NetworkHeaders.USER_AGENT)
+            if (isJapaneseAsmr) requestBuilder.header("Referer", "https://japaneseasmr.com/")
             
             val transformAlreadyApplied = hasDlsitePlayImageTransform && file.exists() && !partialFile.exists()
             var existingBytes = if (transferFile.exists()) transferFile.length().coerceAtLeast(0L) else 0L
@@ -989,6 +994,20 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                     return failCurrentDownload(totalBytes = existingBytes.coerceAtLeast(0L))
                 }
                 val body = response.body ?: return failCurrentDownload(totalBytes = existingBytes.coerceAtLeast(0L))
+                if (isJapaneseAsmr) {
+                    val contentType = response.header("Content-Type").orEmpty().lowercase()
+                    val dispositionName = response.header("Content-Disposition").orEmpty()
+                    if (contentType.contains("text/") || contentType.contains("html") ||
+                        Regex("(?i)\\.(exe|scr|lnk|py|bat|cmd)(?:[\"';\\s]|$)").containsMatchIn(dispositionName)) {
+                        return failCurrentDownload(totalBytes = existingBytes)
+                    }
+                    val header = if (response.code == 206 && existingBytes > 0) {
+                        transferFile.inputStream().use { it.readAudioHeader() }
+                    } else {
+                        body.source().peek().inputStream().use { it.readAudioHeader() }
+                    }
+                    if (!isJapaneseAsmrAudioHeader(fileName, header)) return failCurrentDownload(totalBytes = existingBytes)
+                }
                 val supportsRange = response.code == 206 && existingBytes > 0L
                 if (!supportsRange && existingBytes > 0L) {
                     existingBytes = 0L
@@ -1828,11 +1847,15 @@ internal suspend fun replaceMatchedOnlineTracksWithLocalTracks(
     val localTracks = allTracks.filter { !it.path.trim().startsWith("http", ignoreCase = true) }
     val orderedLocalTracks = localTracks
         .sortedWith(compareByDescending<TrackEntity> { it.path.startsWith(preferredLocalPrefix) }.thenBy { it.id })
+    fun sourceKey(track: TrackEntity, includeGroup: Boolean): String {
+        val scope = if (isJapaneseAsmrResource(track.path, track.group)) "japaneseasmr:" else ""
+        return scope + TrackKeyNormalizer.buildKey(track.title, if (includeGroup) track.group else "", null)
+    }
     val localTracksByKey = orderedLocalTracks.groupBy { track ->
-        TrackKeyNormalizer.buildKey(track.title, track.group, null)
+        sourceKey(track, true)
     }
     val localTracksByKeyWithoutGroup = orderedLocalTracks.groupBy { track ->
-        TrackKeyNormalizer.buildKey(track.title, "", null)
+        sourceKey(track, false)
     }
     val onlineTracks = allTracks.filter { it.path.trim().startsWith("http", ignoreCase = true) }
     val consumedLocalTrackIds = linkedSetOf<Long>()
@@ -1840,7 +1863,7 @@ internal suspend fun replaceMatchedOnlineTracksWithLocalTracks(
     val matchedPairs = mutableListOf<Pair<TrackEntity, TrackEntity>>()
 
     onlineTracks.forEach { online ->
-        val key = TrackKeyNormalizer.buildKey(online.title, online.group, null)
+        val key = sourceKey(online, true)
         val target = localTracksByKey[key]
             ?.firstOrNull { local -> local.id !in consumedLocalTrackIds }
             ?: return@forEach
@@ -1851,7 +1874,7 @@ internal suspend fun replaceMatchedOnlineTracksWithLocalTracks(
 
     onlineTracks
         .filter { online -> online.id !in matchedOnlineTrackIds }
-        .groupBy { online -> TrackKeyNormalizer.buildKey(online.title, "", null) }
+        .groupBy { online -> sourceKey(online, false) }
         .forEach { (keyWithoutGroup, unmatchedOnlineTracks) ->
             val remainingLocalTracks = localTracksByKeyWithoutGroup[keyWithoutGroup]
                 .orEmpty()
@@ -1934,4 +1957,15 @@ private fun pickCoverFileFromAlbumDir(dir: File): File? {
     if (direct != null) return direct
     return dir.walkTopDown()
         .firstOrNull { f -> f.isFile && exts.contains(f.extension.lowercase()) }
+}
+
+private fun InputStream.readAudioHeader(): ByteArray {
+    val bytes = ByteArray(12)
+    var size = 0
+    while (size < bytes.size) {
+        val count = read(bytes, size, bytes.size - size)
+        if (count <= 0) break
+        size += count
+    }
+    return bytes.copyOf(size)
 }

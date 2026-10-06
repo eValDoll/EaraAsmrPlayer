@@ -1,5 +1,8 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.data.remote.crawler.AlbumResourceSource
+
+import com.asmr.player.ui.common.ThemedDropdownMenuPositionProvider
 import com.asmr.player.ui.common.formatCvNames
 
 import com.asmr.player.translation.translatedPageText
@@ -67,6 +70,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shadow
@@ -106,6 +110,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -1046,6 +1052,7 @@ fun AlbumDetailScreen(
                                 album = headerAlbum,
                                 dlsiteUrl = model.dlsiteWorkno.takeIf { it.isNotBlank() }?.let { "$DLSITE_DOMAIN${storeSegment()}/work/=/product_id/$it.html" }.orEmpty(),
                                 asmrOneUrl = model.asmrOneWorkId?.takeIf { it.isNotBlank() }?.let { "https://asmr.one/work/$it" }.orEmpty(),
+                                japaneseAsmrUrl = model.japaneseAsmrPageUrl,
                                 dlsiteEditions = headerDlsiteEditions,
                                 dlsiteSelectedLang = model.dlsiteSelectedLang,
                                 onDlsiteLangSelected = { viewModel.selectDlsiteLanguage(it) },
@@ -1209,7 +1216,7 @@ fun AlbumDetailScreen(
                             val asmrOneTreeStateKey = asmrOneDirectoryTreeStateKey(
                                 currentRj = model.rjCode,
                                 baseRj = model.baseRjCode
-                            )
+                            ) + if (model.resourceSource == AlbumResourceSource.JapaneseAsmr) ":japaneseasmr" else ""
                             val asmrOneScrollStateKey = "scroll:$asmrOneTreeStateKey"
                             val landscapeContentShape = rememberAlbumLandscapeContentShape(
                                 waveDepth = landscapeContentWaveDepth
@@ -1394,6 +1401,8 @@ fun AlbumDetailScreen(
                                         asmrOneTree = asmrOneTree,
                                         isLoadingAsmrOne = model.isLoadingAsmrOne,
                                         isLoadingTrial = model.isLoadingDlsiteTrial,
+                                        resourceSource = model.resourceSource,
+                                        onResourceSourceChange = viewModel::selectResourceSource,
                                         onRefreshAsmrOne = { viewModel.refreshAsmrOneSection() },
                                         onRefreshTrial = { viewModel.refreshDlsiteTrialSection() },
                                         onDownloadTrial = {
@@ -3233,6 +3242,7 @@ private fun AlbumHeader(
     album: Album,
     dlsiteUrl: String,
     asmrOneUrl: String,
+    japaneseAsmrUrl: String,
     dlsiteEditions: List<DlsiteLanguageEdition>,
     dlsiteSelectedLang: String,
     onDlsiteLangSelected: (String) -> Unit,
@@ -3332,6 +3342,7 @@ private fun AlbumHeader(
             onDlsiteLangSelected = onDlsiteLangSelected,
             dlsiteUrl = dlsiteUrl,
             asmrOneUrl = asmrOneUrl,
+            japaneseAsmrUrl = japaneseAsmrUrl,
             availableWidth = availableWidth,
             floating = landscapeFloatingActions,
         )
@@ -3355,10 +3366,10 @@ private fun AlbumHeaderActionBar(
     onDlsiteLangSelected: (String) -> Unit,
     dlsiteUrl: String,
     asmrOneUrl: String,
+    japaneseAsmrUrl: String,
     availableWidth: Dp,
     floating: Boolean = false,
 ) {
-    val context = LocalContext.current
     val colorScheme = AsmrTheme.colorScheme
     val compact = availableWidth < 400.dp
     val shape = RoundedCornerShape(15.dp)
@@ -3544,44 +3555,13 @@ private fun AlbumHeaderActionBar(
                             color = borderColor,
                         )
                     }
-                    AlbumHeaderBarAction(
-                        label = "DLsite",
-                        showLabel = true,
-                        enabled = dlsiteUrl.isNotBlank(),
-                        onClick = {
-                            if (dlsiteUrl.isNotBlank()) {
-                                context.startActivity(
-                                    Intent(Intent.ACTION_VIEW, Uri.parse(dlsiteUrl))
-                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                )
-                            }
-                        },
+                    AlbumHeaderSiteDropdown(
+                        dlsiteUrl = dlsiteUrl,
+                        asmrOneUrl = asmrOneUrl,
+                        japaneseAsmrUrl = japaneseAsmrUrl,
                         shape = floatingSegmentShape,
                         modifier = Modifier
-                            .widthIn(min = 78.dp)
-                            .fillMaxHeight(),
-                    )
-
-                    VerticalDivider(
-                        modifier = Modifier.height(16.dp),
-                        thickness = 0.5.dp,
-                        color = borderColor,
-                    )
-                    AlbumHeaderBarAction(
-                        label = "ONE",
-                        showLabel = true,
-                        enabled = asmrOneUrl.isNotBlank(),
-                        onClick = {
-                            if (asmrOneUrl.isNotBlank()) {
-                                context.startActivity(
-                                    Intent(Intent.ACTION_VIEW, Uri.parse(asmrOneUrl))
-                                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                )
-                            }
-                        },
-                        shape = floatingSegmentShape,
-                        modifier = Modifier
-                            .widthIn(min = 66.dp)
+                            .widthIn(min = 104.dp)
                             .fillMaxHeight(),
                     )
                 }
@@ -3696,27 +3676,14 @@ private fun AlbumHeaderActionBar(
                 }
             }
 
-            listOf(
-                Triple("DLsite", dlsiteUrl, 64.dp),
-                Triple("ONE", asmrOneUrl, if (compact) 44.dp else 56.dp),
-            ).forEach { (label, url, width) ->
-                AlbumHeaderBarAction(
-                    label = label,
-                    showLabel = true,
-                    enabled = url.isNotBlank(),
-                    onClick = {
-                        if (url.isNotBlank()) {
-                            context.startActivity(
-                                Intent(Intent.ACTION_VIEW, Uri.parse(url))
-                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                            )
-                        }
-                    },
-                    modifier = Modifier
-                        .width(width)
-                        .fillMaxHeight(),
-                )
-            }
+            AlbumHeaderSiteDropdown(
+                dlsiteUrl = dlsiteUrl,
+                asmrOneUrl = asmrOneUrl,
+                japaneseAsmrUrl = japaneseAsmrUrl,
+                modifier = Modifier
+                    .width(if (compact) 92.dp else 100.dp)
+                    .fillMaxHeight(),
+            )
         }
     }
 }
@@ -3735,6 +3702,7 @@ private fun AlbumHeaderBarAction(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     icon: ImageVector? = null,
+    trailingIcon: ImageVector? = null,
     style: AlbumHeaderActionStyle = AlbumHeaderActionStyle.Standard,
     shape: RoundedCornerShape = RoundedCornerShape(11.dp),
 ) {
@@ -3801,6 +3769,99 @@ private fun AlbumHeaderBarAction(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+            }
+            if (trailingIcon != null) {
+                Spacer(modifier = Modifier.width(4.dp))
+                Icon(
+                    imageVector = trailingIcon,
+                    contentDescription = null,
+                    tint = contentColor,
+                    modifier = Modifier.size(17.dp),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlbumHeaderSiteDropdown(
+    dlsiteUrl: String,
+    asmrOneUrl: String,
+    japaneseAsmrUrl: String,
+    modifier: Modifier = Modifier,
+    shape: RoundedCornerShape = RoundedCornerShape(11.dp),
+) {
+    val context = LocalContext.current
+    val colorScheme = AsmrTheme.colorScheme
+    var expanded by remember { mutableStateOf(false) }
+    val links = remember(dlsiteUrl, asmrOneUrl, japaneseAsmrUrl) {
+        listOf("DLsite" to dlsiteUrl, "ONE" to asmrOneUrl, "JP-ASMR" to japaneseAsmrUrl)
+    }
+    val density = LocalDensity.current
+    val menuPosition = remember(density) {
+        ThemedDropdownMenuPositionProvider(with(density) { 4.dp.roundToPx() }, with(density) { 8.dp.roundToPx() })
+    }
+    val menuShape = RoundedCornerShape(10.dp)
+    val menuContainer = lerp(colorScheme.surface, colorScheme.primarySoft, if (colorScheme.isDark) 0.24f else 0.46f)
+    Box(modifier = modifier) {
+        AlbumHeaderBarAction(
+            label = "打开网页",
+            showLabel = true,
+            trailingIcon = if (expanded) Icons.Rounded.ArrowDropUp else Icons.Rounded.ArrowDropDown,
+            enabled = links.any { it.second.isNotBlank() },
+            onClick = { expanded = !expanded },
+            shape = shape,
+            modifier = Modifier.fillMaxSize(),
+        )
+        if (expanded) {
+            Popup(
+                popupPositionProvider = menuPosition,
+                onDismissRequest = { expanded = false },
+                properties = PopupProperties(focusable = true),
+            ) {
+                Column(
+                    modifier = Modifier
+                        .width(180.dp)
+                        .heightIn(max = 320.dp)
+                        .clip(menuShape)
+                        .background(menuContainer)
+                        .border(1.dp, colorScheme.primaryStrong.copy(alpha = 0.24f), menuShape)
+                        .verticalScroll(rememberScrollState())
+                        .padding(4.dp),
+                ) {
+                    links.forEach { (label, url) ->
+                        val enabled = url.isNotBlank()
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 44.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .clickable(enabled = enabled, role = Role.Button) {
+                                    expanded = false
+                                    context.startActivity(
+                                        Intent(Intent.ACTION_VIEW, Uri.parse(url))
+                                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                    )
+                                }
+                                .padding(horizontal = 8.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
+                                contentDescription = null,
+                                tint = if (enabled) colorScheme.primaryStrong else colorScheme.textTertiary,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Text(
+                                text = label,
+                                color = if (enabled) colorScheme.textPrimary else colorScheme.textTertiary,
+                                style = MaterialTheme.typography.bodySmall,
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                }
             }
         }
     }

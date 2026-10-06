@@ -1,5 +1,7 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.data.remote.crawler.AlbumResourceSource
+
 import com.asmr.player.ui.common.AudioMetadataLine
 import com.asmr.player.ui.common.formatCvNames
 import com.asmr.player.ui.common.audioSource
@@ -1125,6 +1127,8 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     asmrOneTree: List<AsmrOneTrackNodeResponse>,
     isLoadingAsmrOne: Boolean,
     isLoadingTrial: Boolean,
+    resourceSource: AlbumResourceSource,
+    onResourceSourceChange: (AlbumResourceSource) -> Unit,
     onRefreshAsmrOne: () -> Unit,
     onRefreshTrial: () -> Unit,
     onDownloadTrial: () -> Unit,
@@ -1244,12 +1248,19 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         item(key = "dlsite-header") { header() }
         item(key = "dlsite-one-header") {
             AlbumDetailSectionHeading(
-                title = if (asmrOneTree.isNotEmpty()) "ONE（已收录）" else "ONE",
+                title = if (resourceSource == AlbumResourceSource.JapaneseAsmr) "JP-ASMR" else if (asmrOneTree.isNotEmpty()) "ONE（已收录）" else "ONE",
                 modifier = dlsiteAnimatedSectionModifier(
                     Modifier.fillMaxWidth().padding(start = AlbumDetailHorizontalPadding, end = AlbumDetailHorizontalPadding, top = 8.dp, bottom = 0.dp),
                     animateIntro = animateIntro
                 ),
                 actions = {
+                    com.asmr.player.ui.settings.SettingsDropdownSelector(
+                        label = "资源站点", value = resourceSource.name,
+                        options = AlbumResourceSource.entries.associate { it.name to it.label },
+                        onSelect = { name -> onResourceSourceChange(AlbumResourceSource.valueOf(name)) },
+                        modifier = Modifier.width(154.dp), showLabel = false, flatTrigger = true,
+                        tagPrefix = "album_resource_source"
+                    )
                     IconButton(
                         onClick = onRefreshAsmrOne,
                         enabled = !isLoadingAsmrOne,
@@ -1396,7 +1407,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                         }
                         DirectoryTreePanelState.Loading -> DlsiteDirectoryLoadingPanel()
                         DirectoryTreePanelState.Empty -> DlsiteSectionEmptyState(
-                            text = "ONE 暂未收录",
+                            text = "${if (resourceSource == AlbumResourceSource.JapaneseAsmr) "Japanese ASMR" else "ONE"} 暂未收录",
                             artworkKind = DlsiteEmptyArtworkKind.One,
                             modifier = Modifier
                         )
