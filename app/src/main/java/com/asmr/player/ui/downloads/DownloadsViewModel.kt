@@ -1,5 +1,10 @@
 package com.asmr.player.ui.downloads
 
+import com.asmr.player.util.LocalFileScopes
+import com.asmr.player.util.LocalFileOperation
+import com.asmr.player.util.tryBeginFileMutation
+import com.asmr.player.util.LocalFileOperationCoordinator
+
 import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -14,6 +19,7 @@ import com.asmr.player.data.local.db.dao.DownloadDao
 import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.local.library.deleteLibraryAlbum
 import com.asmr.player.data.local.library.deleteLibraryTracks
+import com.asmr.player.data.remote.download.DOWNLOAD_STATE_FINALIZING
 import com.asmr.player.data.remote.download.DOWNLOAD_STATE_QUEUED
 import com.asmr.player.data.remote.download.DownloadQueueCoordinator
 import com.asmr.player.data.remote.download.DownloadDestination
@@ -117,6 +123,7 @@ class DownloadsViewModel @Inject constructor(
     private val downloadStorage: DownloadStorageGateway,
     private val downloadDestinationStore: DownloadDestinationStore,
 ) : ViewModel() {
+    private val fileScopes by lazy { LocalFileScopes(AppDatabaseProvider.get(context), downloadStorage) }
     private val workManager by lazy { WorkManager.getInstance(context) }
     private val subtitleTaskRepository = SubtitleTaskRepository.get(context)
 
@@ -138,6 +145,7 @@ class DownloadsViewModel @Inject constructor(
                 val items = taskWithItems.items.map { item ->
                     val state = when (item.state) {
                         "PAUSED" -> DownloadItemState.PAUSED
+                        DOWNLOAD_STATE_FINALIZING -> DownloadItemState.RUNNING
                         DOWNLOAD_STATE_QUEUED -> DownloadItemState.ENQUEUED
                         else -> when (runCatching { WorkInfo.State.valueOf(item.state) }.getOrDefault(WorkInfo.State.ENQUEUED)) {
                             WorkInfo.State.RUNNING -> DownloadItemState.RUNNING
@@ -380,7 +388,7 @@ class DownloadsViewModel @Inject constructor(
     fun cancelItem(workId: String) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { workManager.cancelWorkById(java.util.UUID.fromString(workId)) }
-            runCatching { downloadDao.updateItemState(workId, WorkInfo.State.CANCELLED.name, System.currentTimeMillis()) }
+            runCatching { downloadDao.stopInterruptibleItem(workId, WorkInfo.State.CANCELLED.name, System.currentTimeMillis()) }
             DownloadQueueCoordinator.requestSchedule(context)
         }
     }
@@ -389,7 +397,7 @@ class DownloadsViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { workManager.cancelWorkById(UUID.fromString(workId)) }
             runCatching {
-                downloadDao.updateItemState(workId, "PAUSED", System.currentTimeMillis())
+                downloadDao.stopInterruptibleItem(workId, "PAUSED", System.currentTimeMillis())
             }
             DownloadQueueCoordinator.requestSchedule(context)
         }
@@ -397,30 +405,44 @@ class DownloadsViewModel @Inject constructor(
 
     fun resumeItem(workId: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            val item = downloadDao.getItemByWorkId(workId) ?: return@launch
-            val existingBytes = runCatching {
-                if (downloadStorage.isDocumentReference(item.targetDir)) {
-                    val staging = downloadStagingFile(context, item)
-                    val scrambled = dlsitePlayImagePartFile(staging)
-                    when {
-                        scrambled.exists() -> scrambled.length()
-                        staging.exists() -> staging.length()
-                        else -> downloadStorage.size(item.filePath)
+            val candidate = downloadDao.getItemByWorkId(workId) ?: return@launch
+            val resource = downloadStorage.stableIdentity(candidate.targetDir) + "/" + candidate.fileName
+            val task = downloadDao.getTaskById(candidate.taskId) ?: return@launch
+            val fileLease = LocalFileOperationCoordinator.shared.tryAcquire(
+                LocalFileOperation.DOWNLOAD, resource, fileScopes.download(task)
+            ) ?: run {
+                messageManager.showInfo(LocalFileOperationCoordinator.BUSY_MESSAGE)
+                return@launch
+            }
+            try {
+                val item = downloadDao.getItemByWorkId(workId) ?: return@launch
+                if (item.state !in setOf("PAUSED", "FAILED", "CANCELLED")) return@launch
+                val existingBytes = runCatching {
+                    if (downloadStorage.isDocumentReference(item.targetDir)) {
+                        val staging = downloadStagingFile(context, item)
+                        val scrambled = dlsitePlayImagePartFile(staging)
+                        when {
+                            scrambled.exists() -> scrambled.length()
+                            staging.exists() -> staging.length()
+                            else -> downloadStorage.size(item.filePath)
+                        }
+                    } else {
+                        File(item.filePath.ifBlank { File(item.targetDir, item.fileName).absolutePath }).length()
                     }
-                } else {
-                    File(item.filePath.ifBlank { File(item.targetDir, item.fileName).absolutePath }).length()
-                }
-            }.getOrDefault(0L)
-            val updatedAt = System.currentTimeMillis()
-            downloadDao.updateItemProgress(
-                workId = workId,
-                state = DOWNLOAD_STATE_QUEUED,
-                downloaded = existingBytes.coerceAtLeast(0L),
-                total = item.total,
-                speed = 0L,
-                updatedAt = updatedAt
-            )
-            DownloadQueueCoordinator.requestSchedule(context)
+                }.getOrDefault(0L)
+                val updatedAt = System.currentTimeMillis()
+                downloadDao.updateItemProgress(
+                    workId = workId,
+                    state = DOWNLOAD_STATE_QUEUED,
+                    downloaded = existingBytes.coerceAtLeast(0L),
+                    total = item.total,
+                    speed = 0L,
+                    updatedAt = updatedAt
+                )
+                DownloadQueueCoordinator.requestSchedule(context)
+            } finally {
+                fileLease.close()
+            }
         }
     }
 
@@ -449,7 +471,7 @@ class DownloadsViewModel @Inject constructor(
             }.forEach { item ->
                 runCatching { workManager.cancelWorkById(UUID.fromString(item.workId)) }
                 runCatching {
-                    downloadDao.updateItemState(item.workId, "PAUSED", System.currentTimeMillis())
+                    downloadDao.stopInterruptibleItem(item.workId, "PAUSED", System.currentTimeMillis())
                 }
             }
             DownloadQueueCoordinator.requestSchedule(context)
@@ -476,7 +498,7 @@ class DownloadsViewModel @Inject constructor(
             }.forEach { item ->
                 runCatching { workManager.cancelWorkById(UUID.fromString(item.workId)) }
                 runCatching {
-                    downloadDao.updateItemState(item.workId, "PAUSED", System.currentTimeMillis())
+                    downloadDao.stopInterruptibleItem(item.workId, "PAUSED", System.currentTimeMillis())
                 }
             }
             DownloadQueueCoordinator.requestSchedule(context)
@@ -502,7 +524,7 @@ class DownloadsViewModel @Inject constructor(
                 downloadDao.getItemsForTask(it.id).forEach { item ->
                     runCatching { workManager.cancelWorkById(UUID.fromString(item.workId)) }
                     if (item.state != WorkInfo.State.SUCCEEDED.name) {
-                        runCatching { downloadDao.updateItemState(item.workId, WorkInfo.State.CANCELLED.name, now) }
+                        runCatching { downloadDao.stopInterruptibleItem(item.workId, WorkInfo.State.CANCELLED.name, now) }
                     }
                 }
             }
@@ -516,7 +538,7 @@ class DownloadsViewModel @Inject constructor(
             downloadDao.getAllActiveOrPausedItems().forEach { item ->
                 runCatching { workManager.cancelWorkById(UUID.fromString(item.workId)) }
                 if (item.state != WorkInfo.State.SUCCEEDED.name) {
-                    runCatching { downloadDao.updateItemState(item.workId, WorkInfo.State.CANCELLED.name, now) }
+                    runCatching { downloadDao.stopInterruptibleItem(item.workId, WorkInfo.State.CANCELLED.name, now) }
                 }
             }
             DownloadQueueCoordinator.requestSchedule(context)
@@ -525,103 +547,130 @@ class DownloadsViewModel @Inject constructor(
 
     fun deleteTask(taskId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
-            val task = downloadDao.getTaskById(taskId) ?: return@launch
-            runCatching { workManager.cancelAllWorkByTag(task.taskKey) }
-            val items = downloadDao.getItemsForTask(taskId)
-            val deleted = deletePathSafely(task.rootDir)
-            if (!deleted) {
-                items.forEach { item ->
-                    val primary = item.filePath.ifBlank {
-                        if (downloadStorage.isDocumentReference(item.targetDir)) ""
-                        else File(item.targetDir, item.fileName).absolutePath
+            val candidate = downloadDao.getTaskById(taskId) ?: return@launch
+            val fileLease = AppDatabaseProvider.get(context).tryBeginFileMutation(fileScopes, fileScopes.download(candidate), allowStoppedDownloads = true) ?: run {
+                messageManager.showInfo(LocalFileOperationCoordinator.BUSY_MESSAGE)
+                return@launch
+            }
+            try {
+                val task = downloadDao.getTaskById(taskId) ?: return@launch
+                runCatching { workManager.cancelAllWorkByTag(task.taskKey) }
+                val items = downloadDao.getItemsForTask(taskId)
+                val deleted = deletePathSafely(task.rootDir)
+                if (!deleted) {
+                    items.forEach { item ->
+                        val primary = item.filePath.ifBlank {
+                            if (downloadStorage.isDocumentReference(item.targetDir)) ""
+                            else File(item.targetDir, item.fileName).absolutePath
+                        }
+                        deletePathSafely(primary)
+                        if (!downloadStorage.isDocumentReference(primary)) {
+                            val outputFile = File(primary)
+                            deletePathSafely(dlsitePlayImagePartFile(outputFile).absolutePath)
+                        }
                     }
-                    deletePathSafely(primary)
-                    if (!downloadStorage.isDocumentReference(primary)) {
-                        val outputFile = File(primary)
-                        deletePathSafely(dlsitePlayImagePartFile(outputFile).absolutePath)
-                    }
+                    deletePathSafely(task.rootDir)
                 }
-                deletePathSafely(task.rootDir)
+                items.forEach { item ->
+                    val staging = downloadStagingFile(context, item)
+                    deletePathSafely(staging.absolutePath)
+                    deletePathSafely(dlsitePlayImagePartFile(staging).absolutePath)
+                }
+                syncLibraryAfterDownloadRootDeleted(task.rootDir)
+                downloadDao.deleteItemsForTask(taskId)
+                downloadDao.deleteTaskById(taskId)
+                DownloadQueueCoordinator.requestSchedule(context)
+                messageManager.showInfo("已删除任务")
+            } finally {
+                fileLease.close()
             }
-            items.forEach { item ->
-                val staging = downloadStagingFile(context, item)
-                deletePathSafely(staging.absolutePath)
-                deletePathSafely(dlsitePlayImagePartFile(staging).absolutePath)
-            }
-            syncLibraryAfterDownloadRootDeleted(task.rootDir)
-            downloadDao.deleteItemsForTask(taskId)
-            downloadDao.deleteTaskById(taskId)
-            DownloadQueueCoordinator.requestSchedule(context)
-            messageManager.showInfo("已删除任务")
         }
     }
 
     fun deleteItem(workId: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            val item = downloadDao.getItemByWorkId(workId) ?: return@launch
-            val task = downloadDao.getTaskById(item.taskId)
-            runCatching { workManager.cancelWorkById(java.util.UUID.fromString(workId)) }
-            val primary = item.filePath.ifBlank {
-                if (downloadStorage.isDocumentReference(item.targetDir)) ""
-                else File(item.targetDir, item.fileName).absolutePath
+            val candidate = downloadDao.getItemByWorkId(workId) ?: return@launch
+            val candidateTask = downloadDao.getTaskById(candidate.taskId) ?: return@launch
+            val fileLease = AppDatabaseProvider.get(context).tryBeginFileMutation(fileScopes, fileScopes.download(candidateTask), allowStoppedDownloads = true) ?: run {
+                messageManager.showInfo(LocalFileOperationCoordinator.BUSY_MESSAGE)
+                return@launch
             }
-            val deleted = deletePathSafely(primary)
-            if (!downloadStorage.isDocumentReference(primary)) {
-                deletePathSafely(dlsitePlayImagePartFile(File(primary)).absolutePath)
-            }
-            val staging = downloadStagingFile(context, item)
-            deletePathSafely(staging.absolutePath)
-            deletePathSafely(dlsitePlayImagePartFile(staging).absolutePath)
-            if (!deleted && !downloadStorage.isDocumentReference(item.targetDir) && item.targetDir.isNotBlank() && item.fileName.isNotBlank()) {
-                deletePathSafely(File(item.targetDir, item.fileName).absolutePath)
-            }
-            downloadDao.deleteItemByWorkId(workId)
-            downloadDao.deleteItemsByFilePath(primary)
-            syncLibraryAfterDownloadedFileDeleted(primary, task?.rootDir.orEmpty())
-            if (task != null && task.taskKey.isNotBlank()) {
-                runCatching {
-                    val finalizeInput = workDataOf(
-                        "taskKey" to task.taskKey,
-                        "taskTitle" to task.title,
-                        "taskSubtitle" to task.subtitle,
-                        "taskRootDir" to task.rootDir,
-                        "albumRootDir" to task.albumRootDir,
-                    )
-                    val request = OneTimeWorkRequestBuilder<FinalizeDownloadTaskWorker>()
-                        .setInputData(finalizeInput)
-                        .addTag("download_finalize")
-                        .addTag(task.taskKey)
-                        .build()
-                    workManager.enqueueUniqueWork(
-                        "download_finalize_${task.taskKey.hashCode()}",
-                        ExistingWorkPolicy.REPLACE,
-                        request
-                    )
+            try {
+                val item = downloadDao.getItemByWorkId(workId) ?: return@launch
+                val task = downloadDao.getTaskById(item.taskId)
+                runCatching { workManager.cancelWorkById(java.util.UUID.fromString(workId)) }
+                val primary = item.filePath.ifBlank {
+                    if (downloadStorage.isDocumentReference(item.targetDir)) ""
+                    else File(item.targetDir, item.fileName).absolutePath
                 }
+                val deleted = deletePathSafely(primary)
+                if (!downloadStorage.isDocumentReference(primary)) {
+                    deletePathSafely(dlsitePlayImagePartFile(File(primary)).absolutePath)
+                }
+                val staging = downloadStagingFile(context, item)
+                deletePathSafely(staging.absolutePath)
+                deletePathSafely(dlsitePlayImagePartFile(staging).absolutePath)
+                if (!deleted && !downloadStorage.isDocumentReference(item.targetDir) && item.targetDir.isNotBlank() && item.fileName.isNotBlank()) {
+                    deletePathSafely(File(item.targetDir, item.fileName).absolutePath)
+                }
+                downloadDao.deleteItemByWorkId(workId)
+                downloadDao.deleteItemsByFilePath(primary)
+                syncLibraryAfterDownloadedFileDeleted(primary, task?.rootDir.orEmpty())
+                if (task != null && task.taskKey.isNotBlank()) {
+                    runCatching {
+                        val finalizeInput = workDataOf(
+                            "taskKey" to task.taskKey,
+                            "taskTitle" to task.title,
+                            "taskSubtitle" to task.subtitle,
+                            "taskRootDir" to task.rootDir,
+                            "albumRootDir" to task.albumRootDir,
+                        )
+                        val request = OneTimeWorkRequestBuilder<FinalizeDownloadTaskWorker>()
+                            .setInputData(finalizeInput)
+                            .addTag("download_finalize")
+                            .addTag(task.taskKey)
+                            .build()
+                        workManager.enqueueUniqueWork(
+                            "download_finalize_${task.taskKey.hashCode()}",
+                            ExistingWorkPolicy.REPLACE,
+                            request
+                        )
+                    }
+                }
+                val remaining = downloadDao.countItemsForTask(item.taskId)
+                if (remaining == 0) {
+                    downloadDao.deleteTaskById(item.taskId)
+                }
+                DownloadQueueCoordinator.requestSchedule(context)
+                messageManager.showInfo("已删除文件：${item.fileName}")
+            } finally {
+                fileLease.close()
             }
-            val remaining = downloadDao.countItemsForTask(item.taskId)
-            if (remaining == 0) {
-                downloadDao.deleteTaskById(item.taskId)
-            }
-            DownloadQueueCoordinator.requestSchedule(context)
-            messageManager.showInfo("已删除文件：${item.fileName}")
         }
     }
 
     fun deleteSubtitleTrack(trackId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching {
-                val activeItem = AppDatabaseProvider.get(context).subtitleTaskDao().getItemForTrack(trackId)
-                if (activeItem != null) {
-                    subtitleTaskRepository.cancelItem(activeItem.id)
-                    messageManager.showInfo("已先取消对应字幕任务，清理完成后可删除字幕")
-                    return@launch
-                }
-                trackDao.deleteSubtitlesByUser(listOf(trackId))
+            val fileLease = AppDatabaseProvider.get(context).tryBeginFileMutation(fileScopes, fileScopes.tracks(listOf(trackId)), allowSubtitleCancellation = true) ?: run {
+                messageManager.showInfo(LocalFileOperationCoordinator.BUSY_MESSAGE)
+                return@launch
             }
-                .onFailure {
-                    messageManager.showError("删除字幕失败")
+            try {
+                runCatching {
+                    val activeItem = AppDatabaseProvider.get(context).subtitleTaskDao().getItemForTrack(trackId)
+                    if (activeItem != null) {
+                        subtitleTaskRepository.cancelItem(activeItem.id)
+                        messageManager.showInfo("已先取消对应字幕任务，清理完成后可删除字幕")
+                        return@launch
+                    }
+                    trackDao.deleteSubtitlesByUser(listOf(trackId))
                 }
+                    .onFailure {
+                        messageManager.showError("删除字幕失败")
+                    }
+            } finally {
+                fileLease.close()
+            }
         }
     }
 
@@ -629,18 +678,26 @@ class DownloadsViewModel @Inject constructor(
         val distinctTrackIds = trackIds.filter { it > 0L }.distinct()
         if (distinctTrackIds.isEmpty()) return
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching {
-                val subtitleTaskDao = AppDatabaseProvider.get(context).subtitleTaskDao()
-                val activeItems = distinctTrackIds.mapNotNull { subtitleTaskDao.getItemForTrack(it) }
-                if (activeItems.isNotEmpty()) {
-                    activeItems.forEach { subtitleTaskRepository.cancelItem(it.id) }
-                    messageManager.showInfo("已先取消对应字幕任务，清理完成后可删除字幕")
-                    return@launch
+            val fileLease = AppDatabaseProvider.get(context).tryBeginFileMutation(fileScopes, fileScopes.tracks(distinctTrackIds), allowSubtitleCancellation = true) ?: run {
+                messageManager.showInfo(LocalFileOperationCoordinator.BUSY_MESSAGE)
+                return@launch
+            }
+            try {
+                runCatching {
+                    val subtitleTaskDao = AppDatabaseProvider.get(context).subtitleTaskDao()
+                    val activeItems = distinctTrackIds.mapNotNull { subtitleTaskDao.getItemForTrack(it) }
+                    if (activeItems.isNotEmpty()) {
+                        activeItems.forEach { subtitleTaskRepository.cancelItem(it.id) }
+                        messageManager.showInfo("已先取消对应字幕任务，清理完成后可删除字幕")
+                        return@launch
+                    }
+                    trackDao.deleteSubtitlesByUser(distinctTrackIds)
+                    messageManager.showInfo("已删除 ${distinctTrackIds.size} 个字幕")
+                }.onFailure {
+                    messageManager.showError("删除字幕失败")
                 }
-                trackDao.deleteSubtitlesByUser(distinctTrackIds)
-                messageManager.showInfo("已删除 ${distinctTrackIds.size} 个字幕")
-            }.onFailure {
-                messageManager.showError("删除字幕失败")
+            } finally {
+                fileLease.close()
             }
         }
     }

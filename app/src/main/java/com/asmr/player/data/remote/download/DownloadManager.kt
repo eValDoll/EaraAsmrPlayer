@@ -1,5 +1,10 @@
 package com.asmr.player.data.remote.download
 
+import com.asmr.player.util.LocalFileOperation
+import com.asmr.player.util.LocalFileScope
+import com.asmr.player.util.LocalFileScopes
+import com.asmr.player.util.LocalFileOperationCoordinator
+
 import android.content.Context
 import android.util.Log
 import androidx.room.withTransaction
@@ -42,11 +47,14 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.ExecutorCoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.NonCancellable
+import com.asmr.player.util.LocalFileSnapshot
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import java.io.File
@@ -64,6 +72,8 @@ import kotlin.math.max
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import javax.inject.Inject
 import javax.inject.Singleton
+
+const val DOWNLOAD_STATE_FINALIZING = "FINALIZING"
 
 private const val DLSITE_PLAY_SCRAMBLED_PART_SUFFIX = ".dlsite-scrambled.part"
 
@@ -294,30 +304,40 @@ class DownloadManager @Inject constructor(
     }
 
     private suspend fun enqueueRequests(requests: List<PendingDownloadItemRequest>): EnqueueDownloadBatchResult {
-        return directoryCoordinator.withDirectoryLock {
+        return directoryCoordinator.withDirectoryLock(scopeFactory = { destination ->
+            requests.fold(LocalFileScope()) { scope, request ->
+                scope + directoryCoordinator.plannedAlbumScope(
+                    destination, request.taskRootDir,
+                    listOf(request.albumRjCode, request.albumWorkId, request.albumTitle) + request.tags,
+                )
+            }
+        }) {
             try {
                 val destination = directoryCoordinator.currentDestination()
                 if (destination is DownloadDestination.DocumentTree && !storage.hasPersistedWritePermission(destination.root)) {
                     return@withDirectoryLock EnqueueDownloadBatchResult.DirectoryUnavailable
                 }
                 val destinationKey = storage.stableIdentity(destination.root).hashCode().toUInt().toString(16)
-                val hasBlockedItem = requests.any { request ->
+                val newRequests = requests.distinctBy { it.taskRootDir to it.relativePath }.filterNot { request ->
                     val logicalTaskKey = request.tags.firstOrNull { it.startsWith("album:") }
                         ?: "dir:${request.taskRootDir}"
                     val task = downloadDao.getTaskByKey("$logicalTaskKey@$destinationKey")
-                        ?: return@any false
+                        ?: return@filterNot false
                     val item = downloadDao.getItemByTaskAndRelativePath(task.id, request.relativePath)
-                        ?: return@any false
+                        ?: return@filterNot false
                     item.state in setOf(
                         WorkInfo.State.RUNNING.name,
                         WorkInfo.State.ENQUEUED.name,
                         WorkInfo.State.BLOCKED.name,
                         DOWNLOAD_STATE_QUEUED,
+                        DOWNLOAD_STATE_FINALIZING,
                     )
                 }
-                if (hasBlockedItem) return@withDirectoryLock EnqueueDownloadBatchResult.TaskBlocked
-                requests.forEach { request -> enqueueDownloadLocked(request) }
-                EnqueueDownloadBatchResult.Accepted(requests.size)
+                if (newRequests.isEmpty()) return@withDirectoryLock EnqueueDownloadBatchResult.TaskBlocked
+                newRequests.forEach { request -> enqueueDownloadLocked(request) }
+                EnqueueDownloadBatchResult.Accepted(newRequests.size)
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
             } catch (_: DownloadTaskBlockedException) {
                 EnqueueDownloadBatchResult.TaskBlocked
             } catch (_: Exception) {
@@ -391,13 +411,18 @@ class DownloadManager @Inject constructor(
                 now = now
             )
 
-            if (existingDestinationFile != null && storage.exists(existingDestinationFile)) {
+            val existingItem = downloadDao.getItemByTaskAndRelativePath(taskId, safeRelativePath)
+            if (existingDestinationFile != null && storage.exists(existingDestinationFile) &&
+                (existingItem == null || existingItem.state == WorkInfo.State.SUCCEEDED.name) &&
+                storage.size(existingDestinationFile) > 0L &&
+                (existingItem == null || existingItem.total <= 0L || hasDlsitePlayImageTransform ||
+                    storage.size(existingDestinationFile) == existingItem.total)
+            ) {
                 val size = storage.size(existingDestinationFile)
-                val existingItem = downloadDao.getItemByTaskAndRelativePath(taskId, safeRelativePath)
                 if (existingItem != null) {
                     downloadDao.updateItemProgress(
                         workId = existingItem.workId,
-                        state = WorkInfo.State.SUCCEEDED.name,
+                        state = DOWNLOAD_STATE_FINALIZING,
                         downloaded = size,
                         total = size,
                         speed = 0L,
@@ -414,7 +439,7 @@ class DownloadManager @Inject constructor(
                             fileName = fileName,
                             targetDir = targetDir,
                             filePath = filePath,
-                            state = WorkInfo.State.SUCCEEDED.name,
+                            state = DOWNLOAD_STATE_FINALIZING,
                             downloaded = size,
                             total = size,
                             speed = 0L,
@@ -423,50 +448,10 @@ class DownloadManager @Inject constructor(
                         )
                     )
                 }
-                runCatching {
-                    val task = downloadDao.getTaskByKey(taskKey)
-                    if (task != null) {
-                        val items = downloadDao.getItemsForTask(task.id)
-                        val done = items.isNotEmpty() && items.all { it.state == WorkInfo.State.SUCCEEDED.name }
-                        if (done) {
-                            val db = AppDatabaseProvider.get(context)
-                            db.withTransaction {
-                                upsertDownloadedAlbumToLibrary(
-                                    db = db,
-                                    appContext = context,
-                                    rootDir = resolvedPaths.albumRootDir,
-                                    taskTitle = taskTitle,
-                                    taskSubtitle = safeTaskSubtitle,
-                                    albumTitle = safeAlbumTitle,
-                                    albumCircle = safeAlbumCircle,
-                                    albumCv = safeAlbumCv,
-                                    albumTagsCsv = safeAlbumTagsCsv,
-                                    albumCoverUrl = safeAlbumCoverUrl,
-                                    albumDescription = safeAlbumDescription,
-                                    albumWorkId = safeAlbumWorkId,
-                                    albumRjCode = safeAlbumRjCode
-                                )
-                            }
-                            runCatching {
-                                if (storage.isDocumentReference(resolvedPaths.albumRootDir)) {
-                                    storage.ensureFile(
-                                        resolvedPaths.albumRootDir,
-                                        ".download_complete",
-                                        "application/octet-stream",
-                                    )
-                                } else {
-                                    val marker = File(resolvedPaths.albumRootDir, ".download_complete")
-                                    if (!marker.exists()) marker.createNewFile()
-                                }
-                                Unit
-                            }
-                        }
-                    }
-                }
+                downloadDao.getTaskById(taskId)?.let { enqueueDownloadFinalization(context, it) }
                 return
             }
 
-            val existingItem = downloadDao.getItemByTaskAndRelativePath(taskId, safeRelativePath)
             val partialFile = existingItem?.let { downloadStagingFile(context, it) }
             val existingBytes = runCatching {
                 when {
@@ -476,15 +461,11 @@ class DownloadManager @Inject constructor(
                 }
             }.getOrDefault(0L).coerceAtLeast(0L)
             if (existingItem != null) {
-                val existingReference = existingItem.filePath.ifBlank { filePath }
-                if (existingItem.state == WorkInfo.State.SUCCEEDED.name && storage.exists(existingReference)) {
-                    return
-                }
                 if (
                     existingItem.state == WorkInfo.State.RUNNING.name ||
                     existingItem.state == WorkInfo.State.ENQUEUED.name ||
                     existingItem.state == WorkInfo.State.BLOCKED.name ||
-                    existingItem.state == DOWNLOAD_STATE_QUEUED
+                    existingItem.state == DOWNLOAD_STATE_QUEUED || existingItem.state == DOWNLOAD_STATE_FINALIZING
                 ) {
                     throw DownloadTaskBlockedException()
                 }
@@ -660,28 +641,14 @@ object DownloadQueueCoordinator {
     suspend fun recoverDownloadsOnAppLaunch(context: Context) {
         val appContext = context.applicationContext
         val dao = AppDatabaseProvider.get(appContext).downloadDao()
+        dao.getPendingFinalizationTasks().forEach { enqueueDownloadFinalization(appContext, it) }
         val recoverableItems = dao.getAllActiveOrPausedItems()
         if (recoverableItems.isEmpty()) return
         val wm = WorkManager.getInstance(appContext)
         runCatching { wm.cancelAllWorkByTag("download") }
         val now = System.currentTimeMillis()
         recoverableItems.forEach { item ->
-            val resolvedBytes = resolveExistingBytes(appContext, item)
-            val resolvedState = when (item.state) {
-                WorkInfo.State.SUCCEEDED.name -> WorkInfo.State.SUCCEEDED.name
-                "PAUSED" -> "PAUSED"
-                else -> "PAUSED"
-            }
-            runCatching {
-                dao.updateItemProgress(
-                    workId = item.workId,
-                    state = resolvedState,
-                    downloaded = resolvedBytes,
-                    total = item.total,
-                    speed = 0L,
-                    updatedAt = now
-                )
-            }
+            dao.stopInterruptibleItem(item.workId, "PAUSED", now)
         }
     }
 
@@ -758,19 +725,18 @@ object DownloadQueueCoordinator {
                     )
                     .build()
 
-                wm.enqueue(request)
-
                 val existingBytes = runCatching {
                     resolveExistingBytes(appContext, item)
                 }.getOrDefault(item.downloaded).coerceAtLeast(0L)
 
-                dao.replaceWorkIdForResume(
+                val scheduled = dao.replaceWorkIdForResume(
                     oldWorkId = item.workId,
                     newWorkId = request.id.toString(),
                     state = WorkInfo.State.ENQUEUED.name,
                     downloaded = existingBytes,
                     updatedAt = System.currentTimeMillis()
                 )
+                if (scheduled > 0) wm.enqueue(request)
             }
         }
     }
@@ -780,7 +746,7 @@ object DownloadQueueCoordinator {
         dao.getActiveItems().forEach { item ->
             val workId = runCatching { UUID.fromString(item.workId) }.getOrNull()
             if (workId == null) {
-                dao.updateItemProgress(
+                dao.updateRunningItemProgress(
                     workId = item.workId,
                     state = DOWNLOAD_STATE_QUEUED,
                     downloaded = resolveExistingBytes(context, item),
@@ -791,12 +757,12 @@ object DownloadQueueCoordinator {
                 return@forEach
             }
 
-                val info = runCatching { workManager.getWorkInfoById(workId).get() }.getOrNull()
+            val info = runCatching { workManager.getWorkInfoById(workId).get() }.getOrNull()
             when (info?.state) {
                 null -> {
                     val recentlyScheduled = now - item.updatedAt <= ACTIVE_WORK_RECONCILE_GRACE_MS
                     if (!recentlyScheduled) {
-                        dao.updateItemProgress(
+                        dao.updateRunningItemProgress(
                             workId = item.workId,
                             state = DOWNLOAD_STATE_QUEUED,
                             downloaded = resolveExistingBytes(context, item),
@@ -808,17 +774,18 @@ object DownloadQueueCoordinator {
                 }
                 WorkInfo.State.SUCCEEDED -> {
                     val size = resolveExistingBytes(context, item)
-                    dao.updateItemProgress(
+                    dao.updateRunningItemProgress(
                         workId = item.workId,
-                        state = WorkInfo.State.SUCCEEDED.name,
+                        state = DOWNLOAD_STATE_FINALIZING,
                         downloaded = size,
                         total = size.coerceAtLeast(item.total),
                         speed = 0L,
                         updatedAt = now
                     )
+                    dao.getTaskById(item.taskId)?.let { enqueueDownloadFinalization(context, it) }
                 }
-                WorkInfo.State.FAILED -> dao.updateItemState(item.workId, WorkInfo.State.FAILED.name, now)
-                WorkInfo.State.CANCELLED -> dao.updateItemState(item.workId, WorkInfo.State.CANCELLED.name, now)
+                WorkInfo.State.FAILED -> dao.failRunningItem(item.workId, now)
+                WorkInfo.State.CANCELLED -> dao.updateRunningItemProgress(item.workId, WorkInfo.State.CANCELLED.name, item.downloaded, item.total, 0, now)
                 else -> Unit
             }
         }
@@ -867,7 +834,15 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
     }
 
     override suspend fun doWork(): ListenableWorker.Result = withContext(downloadDispatcher(applicationContext)) {
-        executeDownloadWork()
+        val target = inputData.getString("targetDir").orEmpty()
+        val resource = DownloadStorageGateway(applicationContext).stableIdentity(target) + "/" + inputData.getString("fileName").orEmpty()
+        val database = AppDatabaseProvider.get(applicationContext)
+        val item = database.downloadDao().getItemByWorkId(id.toString()) ?: return@withContext ListenableWorker.Result.failure()
+        val task = database.downloadDao().getTaskById(item.taskId) ?: return@withContext ListenableWorker.Result.failure()
+        val scope = LocalFileScopes(database, DownloadStorageGateway(applicationContext)).download(task)
+        LocalFileOperationCoordinator.shared.withOperation(LocalFileOperation.DOWNLOAD, resource, scope) {
+            executeDownloadWork()
+        }
     }
 
     private suspend fun executeDownloadWork(): ListenableWorker.Result {
@@ -875,19 +850,8 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
         val fileName = inputData.getString("fileName") ?: return ListenableWorker.Result.failure()
         val targetDir = inputData.getString("targetDir") ?: return ListenableWorker.Result.failure()
         val taskKey = inputData.getString("taskKey").orEmpty()
-        val taskTitle = inputData.getString("taskTitle").orEmpty()
-        val taskSubtitle = inputData.getString("taskSubtitle").orEmpty()
         val taskRootDir = inputData.getString("taskRootDir").orEmpty()
-        val albumRootDir = inputData.getString("albumRootDir").orEmpty()
         val relativePath = inputData.getString("relativePath").orEmpty().ifBlank { fileName }.replace('\\', '/')
-        val albumTitle = inputData.getString("albumTitle").orEmpty()
-        val albumCircle = inputData.getString("albumCircle").orEmpty()
-        val albumCv = inputData.getString("albumCv").orEmpty()
-        val albumTagsCsv = inputData.getString("albumTagsCsv").orEmpty()
-        val albumCoverUrl = inputData.getString("albumCoverUrl").orEmpty()
-        val albumDescription = inputData.getString("albumDescription").orEmpty()
-        val albumWorkId = inputData.getString("albumWorkId").orEmpty()
-        val albumRjCode = inputData.getString("albumRjCode").orEmpty()
         val dlsitePlayImageSeed = inputData.getInt("dlsitePlayImageSeed", -1).takeIf { it >= 0 }
         val dlsitePlayImageWidth = inputData.getInt("dlsitePlayImageWidth", -1).takeIf { it > 0 }
         val dlsitePlayImageHeight = inputData.getInt("dlsitePlayImageHeight", -1).takeIf { it > 0 }
@@ -899,78 +863,19 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
             val workId = id.toString()
             val appDb = AppDatabaseProvider.get(applicationContext)
             val dao = appDb.downloadDao()
+            val currentItem = dao.getItemByWorkId(workId)
+                ?: return ListenableWorker.Result.failure()
+            if (currentItem.state !in setOf(WorkInfo.State.ENQUEUED.name, WorkInfo.State.RUNNING.name)) {
+                return ListenableWorker.Result.success()
+            }
             val dailyStatDao = appDb.dailyStatDao()
             val storage = DownloadStorageGateway(applicationContext)
             val now0 = System.currentTimeMillis()
             val resolvedTaskKey = taskKey.ifBlank { "dir:${taskRootDir.ifBlank { targetDir }}" }
-            val resolvedRootDir = taskRootDir.ifBlank { targetDir }
-            val resolvedTitle = taskTitle.ifBlank { resolvedTaskKey.removePrefix("album:").ifBlank { File(resolvedRootDir).name.ifBlank { "download" } } }
-            val resolvedSubtitle = taskSubtitle.trim()
-            val taskId = run {
-                val existing = dao.getTaskByKey(resolvedTaskKey)
-                if (existing != null) {
-                    val mergedSubtitle = existing.subtitle.ifBlank { resolvedSubtitle }
-                    val mergedAlbumTitle = existing.albumTitle.ifBlank { albumTitle }
-                    val mergedAlbumCircle = existing.albumCircle.ifBlank { albumCircle }
-                    val mergedAlbumCv = existing.albumCv.ifBlank { albumCv }
-                    val mergedAlbumTagsCsv = existing.albumTagsCsv.ifBlank { albumTagsCsv }
-                    val mergedAlbumCoverUrl = existing.albumCoverUrl.ifBlank { albumCoverUrl }
-                    val mergedAlbumDescription = existing.albumDescription.ifBlank { albumDescription }
-                    val mergedAlbumWorkId = existing.albumWorkId.ifBlank { albumWorkId }
-                    val mergedAlbumRjCode = existing.albumRjCode.ifBlank { albumRjCode }
-                    if (
-                        mergedSubtitle != existing.subtitle ||
-                        mergedAlbumTitle != existing.albumTitle ||
-                        mergedAlbumCircle != existing.albumCircle ||
-                        mergedAlbumCv != existing.albumCv ||
-                        mergedAlbumTagsCsv != existing.albumTagsCsv ||
-                        mergedAlbumCoverUrl != existing.albumCoverUrl ||
-                        mergedAlbumDescription != existing.albumDescription ||
-                        mergedAlbumWorkId != existing.albumWorkId ||
-                        mergedAlbumRjCode != existing.albumRjCode
-                    ) {
-                        runCatching {
-                            dao.updateTaskMetadata(
-                                taskId = existing.id,
-                                subtitle = mergedSubtitle,
-                                albumTitle = mergedAlbumTitle,
-                                albumCircle = mergedAlbumCircle,
-                                albumCv = mergedAlbumCv,
-                                albumTagsCsv = mergedAlbumTagsCsv,
-                                albumCoverUrl = mergedAlbumCoverUrl,
-                                albumDescription = mergedAlbumDescription,
-                                albumWorkId = mergedAlbumWorkId,
-                                albumRjCode = mergedAlbumRjCode,
-                                updatedAt = now0
-                            )
-                        }
-                    }
-                    existing.id
-                } else {
-                    val inserted = dao.insertTask(
-                        DownloadTaskEntity(
-                            taskKey = resolvedTaskKey,
-                            title = resolvedTitle,
-                            subtitle = resolvedSubtitle,
-                            rootDir = resolvedRootDir,
-                            albumTitle = albumTitle,
-                            albumCircle = albumCircle,
-                            albumCv = albumCv,
-                            albumTagsCsv = albumTagsCsv,
-                            albumCoverUrl = albumCoverUrl,
-                            albumDescription = albumDescription,
-                            albumWorkId = albumWorkId,
-                            albumRjCode = albumRjCode,
-                            createdAt = now0,
-                            updatedAt = now0
-                        )
-                    )
-                    if (inserted > 0) inserted else (dao.getTaskByKey(resolvedTaskKey)?.id ?: 0L)
-                }
+            if (dao.getTaskById(currentItem.taskId) == null || currentItem.targetDir != targetDir) {
+                return ListenableWorker.Result.failure()
             }
 
-            val currentItem = dao.getItemByWorkId(workId)
-                ?: return ListenableWorker.Result.failure()
             val usesDocumentTree = storage.isDocumentReference(targetDir)
             val targetFolder = if (usesDocumentTree) null else File(targetDir)
             val file = if (usesDocumentTree) {
@@ -1057,7 +962,7 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                 totalBytes: Long = -1L
             ): ListenableWorker.Result {
                 runCatching {
-                    dao.updateItemProgress(
+                    dao.updateRunningItemProgress(
                         workId = workId,
                         state = WorkInfo.State.FAILED.name,
                         downloaded = downloadedBytes,
@@ -1078,7 +983,7 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
             }
 
             val transferAlreadyComplete = transformAlreadyApplied ||
-                (hasDlsitePlayImageTransform && knownTotal > 0L && existingBytes >= knownTotal)
+                (knownTotal > 0L && existingBytes == knownTotal)
             if (!transferAlreadyComplete) client.newCall(requestBuilder.build()).execute().use { response ->
                 if (!response.isSuccessful) {
                     Log.w(TAG, "download failed code=${response.code} url=${response.request.url}")
@@ -1100,37 +1005,16 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                 @Suppress("UNUSED_VARIABLE") var progressBaselineBytes = 0L
                 @Suppress("UNUSED_VARIABLE") var progressBaselineTs = System.currentTimeMillis()
 
-                dao.upsertItem(
-                    currentItem.copy(
-                        taskId = taskId,
-                        workId = workId,
-                        targetDir = targetDir,
-                        state = WorkInfo.State.RUNNING.name,
-                        downloaded = downloaded,
-                        total = total,
-                        speed = 0L,
-                        updatedAt = now0,
-                    )
-                )
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                if (dao.updateRunningItemProgress(
+                        workId, WorkInfo.State.RUNNING.name, downloaded, total, 0L, now0
+                    ) == 0) throw kotlinx.coroutines.CancellationException("下载已暂停或取消")
 
                 body.byteStream().use { input ->
                     FileOutputStream(transferFile, existingBytes > 0L).use { output ->
                         while (true) {
-                            if (isStopped) {
-                                val now = System.currentTimeMillis()
-                                flushTrafficStats()
-                                dao.updateItemState(workId, "PAUSED", now)
-                                DownloadQueueCoordinator.requestSchedule(applicationContext)
-                                return ListenableWorker.Result.success(
-                                    workDataOf(
-                                        "fileName" to fileName,
-                                        "targetDir" to targetDir,
-                                        "filePath" to file.absolutePath,
-                                        "relativePath" to relativePath,
-                                        "taskKey" to resolvedTaskKey
-                                    )
-                                )
-                            }
+                            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                            if (isStopped) throw kotlinx.coroutines.CancellationException("下载已停止")
                             val read = input.read(buffer)
                             if (read <= 0) break
                             output.write(buffer, 0, read)
@@ -1143,7 +1027,7 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                                 flushTrafficStats()
                                 val dt = (now - progressBaselineTs).coerceAtLeast(1)
                                 val speed = ((downloaded - progressBaselineBytes) * 1000 / dt).coerceAtLeast(0)
-                                dao.updateItemProgress(
+                                dao.updateRunningItemProgress(
                                     workId = workId,
                                     state = WorkInfo.State.RUNNING.name,
                                     downloaded = downloaded,
@@ -1157,6 +1041,16 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                         }
                     }
                 }
+            }
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
+            if (!transformAlreadyApplied) {
+                check(transferFile.isFile && transferFile.length() == downloaded) { "下载文件已被外部修改" }
+                check(total < 0L || downloaded == total) { "下载文件不完整" }
+            } else {
+                check(file.isFile) { "下载文件已移动或删除" }
+            }
+            if (dao.getItemByWorkId(workId)?.state !in setOf(WorkInfo.State.RUNNING.name, WorkInfo.State.ENQUEUED.name)) {
+                throw kotlinx.coroutines.CancellationException("下载已暂停或取消")
             }
             if (hasDlsitePlayImageTransform && !transformAlreadyApplied) {
                 descrambleDlsitePlayImageFile(
@@ -1192,44 +1086,27 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
             } else {
                 file.absolutePath
             }
+            check(storage.exists(publishedReference)) { "下载文件已移动或删除" }
+            if (!hasDlsitePlayImageTransform) {
+                check(storage.size(publishedReference) == downloaded) { "下载文件已被外部修改" }
+            }
+            kotlinx.coroutines.currentCoroutineContext().ensureActive()
             val now = System.currentTimeMillis()
             try {
                 flushTrafficStats()
             } catch (_: Exception) {
             }
             val finalTotal = if (total > 0) total else downloaded
-            dao.updateItemProgress(
-                workId = workId,
-                state = WorkInfo.State.SUCCEEDED.name,
-                downloaded = downloaded,
-                total = finalTotal,
-                speed = 0L,
-                updatedAt = now
-            )
-            runCatching {
-                val finalizeInput = workDataOf(
-                    "taskKey" to resolvedTaskKey,
-                    "taskTitle" to resolvedTitle,
-                    "taskSubtitle" to resolvedSubtitle,
-                    "taskRootDir" to resolvedRootDir,
-                    "albumRootDir" to albumRootDir,
-                    "albumTitle" to albumTitle,
-                    "albumCircle" to albumCircle,
-                    "albumCv" to albumCv,
-                    "albumTagsCsv" to albumTagsCsv,
-                    "albumCoverUrl" to albumCoverUrl,
-                    "albumDescription" to albumDescription,
-                    "albumWorkId" to albumWorkId,
-                    "albumRjCode" to albumRjCode
+            withContext(NonCancellable) {
+                dao.updateRunningItemProgress(
+                    workId = workId,
+                    state = DOWNLOAD_STATE_FINALIZING,
+                    downloaded = downloaded,
+                    total = finalTotal,
+                    speed = 0L,
+                    updatedAt = now
                 )
-                val request = OneTimeWorkRequestBuilder<FinalizeDownloadTaskWorker>()
-                    .setInputData(finalizeInput)
-                    .addTag("download_finalize")
-                    .addTag(resolvedTaskKey)
-                    .build()
-                val unique = "download_finalize_${resolvedTaskKey.hashCode()}"
-                WorkManager.getInstance(applicationContext)
-                    .enqueueUniqueWork(unique, ExistingWorkPolicy.REPLACE, request)
+                dao.getTaskById(currentItem.taskId)?.let { enqueueDownloadFinalization(applicationContext, it) }
             }
             DownloadQueueCoordinator.requestSchedule(applicationContext)
             ListenableWorker.Result.success(
@@ -1241,12 +1118,14 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                     "taskKey" to resolvedTaskKey
                 )
             )
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
         } catch (e: Exception) {
             val now = System.currentTimeMillis()
             runCatching {
                 val workId = id.toString()
                 val dao = AppDatabaseProvider.get(applicationContext).downloadDao()
-                dao.updateItemState(workId, WorkInfo.State.FAILED.name, now)
+                dao.failRunningItem(workId, now)
             }
             DownloadQueueCoordinator.requestSchedule(applicationContext)
             ListenableWorker.Result.failure(
@@ -1301,8 +1180,34 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
     }
 }
 
+private suspend fun enqueueDownloadFinalization(context: Context, task: DownloadTaskEntity) {
+    if (!AppDatabaseProvider.get(context).downloadDao().isReadyForFinalization(task.id)) return
+    val request = OneTimeWorkRequestBuilder<FinalizeDownloadTaskWorker>()
+        .setInputData(workDataOf("taskKey" to task.taskKey, "taskRootDir" to task.rootDir))
+        .addTag("download_finalize")
+        .addTag(task.taskKey)
+        .build()
+    WorkManager.getInstance(context).enqueueUniqueWork(
+        "download_finalize_${task.taskKey.hashCode()}", ExistingWorkPolicy.APPEND_OR_REPLACE, request
+    )
+}
+
 class FinalizeDownloadTaskWorker(context: Context, parameters: WorkerParameters) : CoroutineWorker(context, parameters) {
-    override suspend fun doWork(): ListenableWorker.Result {
+    override suspend fun doWork(): ListenableWorker.Result = withContext(Dispatchers.IO) {
+        val database = AppDatabaseProvider.get(applicationContext)
+        val taskKey = inputData.getString("taskKey").orEmpty()
+        val task = if (taskKey.isNotBlank()) database.downloadDao().getTaskByKey(taskKey)
+            else database.downloadDao().getTaskByRootDir(inputData.getString("taskRootDir").orEmpty())
+        if (task == null || !database.downloadDao().isReadyForFinalization(task.id)) {
+            return@withContext ListenableWorker.Result.success()
+        }
+        val scope = LocalFileScopes(database, DownloadStorageGateway(applicationContext)).download(task)
+        LocalFileOperationCoordinator.shared.withOperation(LocalFileOperation.FINALIZE_DOWNLOAD, scope = scope) {
+            finalizeDownload()
+        }
+    }
+
+    private suspend fun finalizeDownload(): ListenableWorker.Result {
         val taskKey = inputData.getString("taskKey").orEmpty()
         val taskTitle = inputData.getString("taskTitle").orEmpty()
         val taskSubtitle = inputData.getString("taskSubtitle").orEmpty()
@@ -1321,51 +1226,63 @@ class FinalizeDownloadTaskWorker(context: Context, parameters: WorkerParameters)
 
         return try {
             val db = AppDatabaseProvider.get(applicationContext)
+            val dao = db.downloadDao()
+            val task = if (taskKey.isNotBlank()) {
+                dao.getTaskByKey(taskKey)
+            } else {
+                dao.getTaskByRootDir(taskRootDir)
+            } ?: return ListenableWorker.Result.success()
+
+            val items = dao.getItemsForTask(task.id)
+            val done = items.isNotEmpty() && items.all { it.state == WorkInfo.State.SUCCEEDED.name || it.state == DOWNLOAD_STATE_FINALIZING }
+            if (!done || items.none { it.state == DOWNLOAD_STATE_FINALIZING }) return ListenableWorker.Result.success()
+
+            val storage = DownloadStorageGateway(applicationContext)
+            val resolvedAlbumRoot = task.albumRootDir
+                .ifBlank { albumRootDir }
+                .ifBlank { task.rootDir.ifBlank { taskRootDir } }
+            val completedMarker = storage.findFile(resolvedAlbumRoot, ".download_complete")
+            val invalidItems = items.filter { item ->
+                val extractedArchive = item.fileName.equals("dlsite_lossless_archive.zip", true) && completedMarker != null
+                !extractedArchive && (!storage.exists(item.filePath) ||
+                    item.total > 0L && !item.hasDlsitePlayImageTransform() && storage.size(item.filePath) != item.total)
+            }
+            if (invalidItems.isNotEmpty()) {
+                invalidItems.forEach { dao.updateItemState(it.workId, WorkInfo.State.FAILED.name, System.currentTimeMillis()) }
+                completedMarker?.let(storage::delete)
+                return ListenableWorker.Result.success()
+            }
+            if (storage.isDocumentReference(resolvedAlbumRoot)) {
+                finalizeDlsiteLosslessArchiveInStorageIfNeeded(
+                    context = applicationContext,
+                    rootDir = resolvedAlbumRoot,
+                    items = items,
+                    storage = storage,
+                )
+            } else {
+                finalizeDlsiteLosslessArchiveIfNeeded(File(resolvedAlbumRoot), items)
+            }
+
+            val sourceSnapshots = (listOf(resolvedAlbumRoot) + storage.walk(resolvedAlbumRoot).map { it.reference })
+                .associateWith { LocalFileSnapshot.read(applicationContext, it) }
             db.withTransaction {
-                val dao = db.downloadDao()
-                val task = if (taskKey.isNotBlank()) {
-                    dao.getTaskByKey(taskKey)
-                } else {
-                    dao.getTaskByRootDir(taskRootDir)
-                } ?: return@withTransaction
-
-                val items = dao.getItemsForTask(task.id)
-                val done = items.isNotEmpty() && items.all { it.state == WorkInfo.State.SUCCEEDED.name }
-                if (!done) return@withTransaction
-
-                val storage = DownloadStorageGateway(applicationContext)
-                val resolvedAlbumRoot = task.albumRootDir
-                    .ifBlank { albumRootDir }
-                    .ifBlank { task.rootDir.ifBlank { taskRootDir } }
-                if (storage.isDocumentReference(resolvedAlbumRoot)) {
-                    runCatching {
-                        finalizeDlsiteLosslessArchiveInStorageIfNeeded(
-                            context = applicationContext,
-                            rootDir = resolvedAlbumRoot,
-                            items = items,
-                            storage = storage,
-                        )
-                    }
-                } else {
-                    runCatching { finalizeDlsiteLosslessArchiveIfNeeded(File(resolvedAlbumRoot), items) }
-                }
-
                 upsertDownloadedAlbumToLibrary(
                     db = db,
                     appContext = applicationContext,
                     rootDir = resolvedAlbumRoot,
                     taskTitle = task.title.ifBlank { taskTitle },
                     taskSubtitle = task.subtitle.ifBlank { taskSubtitle },
-                    albumTitle = albumTitle,
-                    albumCircle = albumCircle,
-                    albumCv = albumCv,
-                    albumTagsCsv = albumTagsCsv,
-                    albumCoverUrl = albumCoverUrl,
-                    albumDescription = albumDescription,
-                    albumWorkId = albumWorkId,
-                    albumRjCode = albumRjCode
+                    albumTitle = task.albumTitle.ifBlank { albumTitle },
+                    albumCircle = task.albumCircle.ifBlank { albumCircle },
+                    albumCv = task.albumCv.ifBlank { albumCv },
+                    albumTagsCsv = task.albumTagsCsv.ifBlank { albumTagsCsv },
+                    albumCoverUrl = task.albumCoverUrl.ifBlank { albumCoverUrl },
+                    albumDescription = task.albumDescription.ifBlank { albumDescription },
+                    albumWorkId = task.albumWorkId.ifBlank { albumWorkId },
+                    albumRjCode = task.albumRjCode.ifBlank { albumRjCode }
                 )
 
+                sourceSnapshots.forEach { (reference, snapshot) -> snapshot.requireUnchanged(applicationContext, reference) }
                 runCatching {
                     if (storage.isDocumentReference(resolvedAlbumRoot)) {
                         storage.ensureFile(resolvedAlbumRoot, ".download_complete", "application/octet-stream")
@@ -1375,10 +1292,15 @@ class FinalizeDownloadTaskWorker(context: Context, parameters: WorkerParameters)
                     }
                     Unit
                 }
+                dao.finishFinalizingItems(task.id, System.currentTimeMillis())
             }
             ListenableWorker.Result.success()
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
         } catch (_: Exception) {
-            ListenableWorker.Result.success()
+            AppDatabaseProvider.get(applicationContext).downloadDao()
+                .failFinalizingItems(taskKey, System.currentTimeMillis())
+            ListenableWorker.Result.failure()
         }
     }
 }
@@ -1490,10 +1412,8 @@ private fun finalizeDlsiteLosslessArchiveIfNeeded(rootDir: File, items: List<Dow
                 file.extension.equals("zip", ignoreCase = true)
         }
         ?: return
-    runCatching {
-        unzipIntoRootDirectory(archive, rootDir)
-        archive.delete()
-    }
+    unzipIntoRootDirectory(archive, rootDir)
+    archive.delete()
 }
 
 private suspend fun finalizeDlsiteLosslessArchiveInStorageIfNeeded(

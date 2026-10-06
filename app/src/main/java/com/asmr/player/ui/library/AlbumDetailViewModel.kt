@@ -1,5 +1,8 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.util.LocalFileScopes
+import com.asmr.player.util.tryBeginFileMutation
+
 import com.asmr.player.util.isMissingLocalDocumentFailure
 
 import android.content.Context
@@ -152,6 +155,7 @@ class AlbumDetailViewModel @Inject constructor(
     val messageManager: MessageManager,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
+    private val fileScopes by lazy { LocalFileScopes(database, com.asmr.player.data.remote.download.DownloadStorageGateway(context)) }
 
     private val isLocalLibraryDetail = savedStateHandle.get<Long>("albumId")?.let { it > 0L } == true
 
@@ -1059,8 +1063,8 @@ class AlbumDetailViewModel @Inject constructor(
         }
 
         viewModelScope.launch {
-            val token = syncCoordinator.tryBegin() ?: run {
-                messageManager.showInfo("同步任务进行中，请等待完成或取消后再同步")
+            val token = syncCoordinator.tryBegin(fileScopes.album(local.id) + fileScopes.create(listOf(normalized))) ?: run {
+                messageManager.showInfo("请先完成或取消本地文件任务，再同步")
                 return@launch
             }
             _uiState.value = AlbumDetailUiState.Loading
@@ -2114,30 +2118,36 @@ class AlbumDetailViewModel @Inject constructor(
             return LocalAlbumLoadResult.Available(entityToDomain(entity, tracks))
         }
 
+        val fileLease = database.tryBeginFileMutation(fileScopes, fileScopes.album(entity.id))
+            ?: return LocalAlbumLoadResult.Available(entityToDomain(entity, tracks))
         var removedMediaIds: Set<String> = emptySet()
-        withContext(Dispatchers.IO) {
-            database.withTransaction {
-                val latest = albumDao.getAlbumById(albumId) ?: return@withTransaction
-                val latestTracks = trackDao.getTracksForAlbumOnce(albumId)
-                if (!shouldRemoveMissingLocalAlbum(latest, latestTracks, ::queryLocalSourceAvailability)) {
-                    return@withTransaction
+        try {
+            withContext(Dispatchers.IO) {
+                database.withTransaction {
+                    val latest = albumDao.getAlbumById(albumId) ?: return@withTransaction
+                    val latestTracks = trackDao.getTracksForAlbumOnce(albumId)
+                    if (!shouldRemoveMissingLocalAlbum(latest, latestTracks, ::queryLocalSourceAvailability)) {
+                        return@withTransaction
+                    }
+                    val trackIds = latestTracks.map { it.id }
+                    removedMediaIds = latestTracks.map { it.path }.filter(String::isNotBlank).toSet()
+                    if (trackIds.isNotEmpty()) {
+                        database.subtitleTaskDao().deleteItemsForTracks(trackIds)
+                        database.remoteSubtitleSourceDao().deleteByTrackIds(trackIds)
+                        database.trackTagDao().deleteTrackTagsByTrackIds(trackIds)
+                    }
+                    trackDao.deleteSubtitlesForAlbum(albumId)
+                    database.trackPlaybackProgressDao().deleteByAlbumId(albumId)
+                    database.localTreeCacheDao().deleteByAlbum(albumId)
+                    database.onlineSavedResourceDao().deleteByAlbumId(albumId)
+                    database.tagDao().deleteAlbumTagsByAlbumId(albumId)
+                    database.albumFtsDao().deleteByAlbumId(albumId)
+                    database.playStatDao().deleteByAlbumId(albumId)
+                    database.deleteLibraryAlbum(latest)
                 }
-                val trackIds = latestTracks.map { it.id }
-                removedMediaIds = latestTracks.map { it.path }.filter(String::isNotBlank).toSet()
-                if (trackIds.isNotEmpty()) {
-                    database.subtitleTaskDao().deleteItemsForTracks(trackIds)
-                    database.remoteSubtitleSourceDao().deleteByTrackIds(trackIds)
-                    database.trackTagDao().deleteTrackTagsByTrackIds(trackIds)
-                }
-                trackDao.deleteSubtitlesForAlbum(albumId)
-                database.trackPlaybackProgressDao().deleteByAlbumId(albumId)
-                database.localTreeCacheDao().deleteByAlbum(albumId)
-                database.onlineSavedResourceDao().deleteByAlbumId(albumId)
-                database.tagDao().deleteAlbumTagsByAlbumId(albumId)
-                database.albumFtsDao().deleteByAlbumId(albumId)
-                database.playStatDao().deleteByAlbumId(albumId)
-                database.deleteLibraryAlbum(latest)
             }
+        } finally {
+            fileLease.close()
         }
         val remaining = albumDao.getAlbumById(albumId)
         if (remaining != null) {
@@ -3173,7 +3183,7 @@ class AlbumDetailViewModel @Inject constructor(
                 messageManager.showError("下载目录不可用，请重新选择或重置为默认目录")
             }
             EnqueueDownloadBatchResult.TaskBlocked -> {
-                messageManager.showInfo("相同作品已有下载任务正在处理")
+                messageManager.showInfo("所选文件已在下载任务中")
             }
         }
     }

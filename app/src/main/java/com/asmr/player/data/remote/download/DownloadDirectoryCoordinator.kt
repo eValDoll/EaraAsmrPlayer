@@ -7,6 +7,16 @@ import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.data.local.library.deleteLibraryAlbum
 import com.asmr.player.data.local.library.deleteLibraryTracks
 import com.asmr.player.util.isOnlineTrackPath
+import com.asmr.player.util.LocalFileOperation
+import com.asmr.player.util.LocalFileScope
+import com.asmr.player.util.LocalFileScopes
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.distinctUntilChanged
+import com.asmr.player.util.LocalFileOperationCoordinator
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.first
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -24,6 +34,7 @@ sealed interface DownloadDirectoryChangeResult {
     data object Changed : DownloadDirectoryChangeResult
     data object Unchanged : DownloadDirectoryChangeResult
     data object BlockedByUnfinishedTasks : DownloadDirectoryChangeResult
+    data object BlockedByLocalFileOperation : DownloadDirectoryChangeResult
     data object DirectoryUnavailable : DownloadDirectoryChangeResult
     data class Failed(val cause: Throwable) : DownloadDirectoryChangeResult
 }
@@ -38,7 +49,50 @@ class DownloadDirectoryCoordinator @Inject constructor(
 
     suspend fun hasUnfinishedDownloads(): Boolean = database.downloadDao().countUnfinishedItems() > 0
 
-    suspend fun <T> withDirectoryLock(block: suspend () -> T): T = mutex.withLock { block() }
+    private val fileScopes = LocalFileScopes(database, storage)
+
+    suspend fun <T> withDirectoryLock(
+        scopeFactory: (DownloadDestination) -> LocalFileScope,
+        block: suspend () -> T,
+    ): T = withContext(Dispatchers.IO) { withDirectoryLockInternal(scopeFactory, block) }
+
+    private suspend fun <T> withDirectoryLockInternal(
+        scopeFactory: (DownloadDestination) -> LocalFileScope,
+        block: suspend () -> T,
+    ): T {
+        while (true) {
+            val destination = destinationStore.current()
+            val scope = scopeFactory(destination)
+            database.subtitleTaskDao().observeTaskTrackIds().distinctUntilChanged().first { trackIds ->
+                trackIds.isEmpty() || !scope.overlaps(fileScopes.tracks(trackIds))
+            }
+            var result: Result<T>? = null
+            LocalFileOperationCoordinator.shared.withOperation(LocalFileOperation.DOWNLOAD, scope = scope) {
+                if (destinationStore.current() == destination && !fileScopes.hasSubtitles(scope)) {
+                    result = Result.success(mutex.withLock { block() })
+                }
+            }
+            result?.let { return it.getOrThrow() }
+        }
+    }
+
+    fun plannedAlbumScope(
+        destination: DownloadDestination,
+        taskRootDir: String,
+        workNos: List<String>,
+    ): LocalFileScope {
+        val defaultRoot = destinationStore.defaultDestination().root
+        val relative = relativeToDefaultRoot(taskRootDir, defaultRoot).substringBefore('/')
+        val original = fileScopes.create(workNos, listOf(File(defaultRoot, relative).absolutePath))
+        val plannedRoots = fileScopes.create(roots = listOf(destination.root)).roots.mapTo(mutableSetOf()) { root ->
+            when {
+                root.startsWith("provider:") -> root
+                root.endsWith(':') -> "$root$relative"
+                else -> "$root/$relative"
+            }
+        }
+        return original + LocalFileScope(roots = plannedRoots)
+    }
 
     suspend fun currentDestination(): DownloadDestination = destinationStore.current()
 
@@ -71,9 +125,22 @@ class DownloadDirectoryCoordinator @Inject constructor(
         }
     }
 
-    suspend fun changeDestination(newDestination: DownloadDestination): DownloadDirectoryChangeResult = mutex.withLock {
+    suspend fun changeDestination(newDestination: DownloadDestination): DownloadDirectoryChangeResult {
+        val lease = LocalFileOperationCoordinator.shared.tryAcquire(LocalFileOperation.CHANGE_DIRECTORY)
+            ?: return DownloadDirectoryChangeResult.BlockedByLocalFileOperation
+        try {
+            return changeDestinationLocked(newDestination)
+        } finally {
+            lease.close()
+        }
+    }
+
+    private suspend fun changeDestinationLocked(newDestination: DownloadDestination): DownloadDirectoryChangeResult = mutex.withLock {
         if (database.downloadDao().countUnfinishedItems() > 0) {
             return@withLock DownloadDirectoryChangeResult.BlockedByUnfinishedTasks
+        }
+        if (database.subtitleTaskDao().countAllItems() > 0) {
+            return@withLock DownloadDirectoryChangeResult.BlockedByLocalFileOperation
         }
         if (newDestination is DownloadDestination.DocumentTree && !storage.hasPersistedWritePermission(newDestination.root)) {
             return@withLock DownloadDirectoryChangeResult.DirectoryUnavailable
@@ -91,7 +158,8 @@ class DownloadDirectoryCoordinator @Inject constructor(
             }
             DownloadDirectoryChangeResult.Changed
         } catch (error: Throwable) {
-            runCatching { destinationStore.set(oldDestination) }
+            withContext(NonCancellable) { destinationStore.set(oldDestination) }
+            if (error is CancellationException) throw error
             DownloadDirectoryChangeResult.Failed(error)
         }
     }

@@ -144,13 +144,29 @@ interface DownloadDao {
         updatedAt: Long
     )
 
+    @Query(
+        "UPDATE download_items SET state = :state, downloaded = :downloaded, total = :total, " +
+            "speed = :speed, updatedAt = :updatedAt WHERE workId = :workId AND state IN ('ENQUEUED', 'RUNNING', 'BLOCKED')"
+    )
+    suspend fun updateRunningItemProgress(
+        workId: String, state: String, downloaded: Long, total: Long, speed: Long, updatedAt: Long
+    ): Int
+
+    @Query("UPDATE download_items SET state = 'FAILED', speed = 0, updatedAt = :updatedAt " +
+        "WHERE workId = :workId AND state IN ('ENQUEUED', 'RUNNING', 'BLOCKED')")
+    suspend fun failRunningItem(workId: String, updatedAt: Long)
+
+    @Query("UPDATE download_items SET state = :state, speed = 0, updatedAt = :updatedAt " +
+        "WHERE workId = :workId AND state IN ('QUEUED','ENQUEUED','RUNNING','BLOCKED','PAUSED','FAILED','CANCELLED')")
+    suspend fun stopInterruptibleItem(workId: String, state: String, updatedAt: Long): Int
+
     @Query("UPDATE download_items SET state = :state, updatedAt = :updatedAt WHERE workId = :workId")
     suspend fun updateItemState(workId: String, state: String, updatedAt: Long)
 
     @Query(
         "UPDATE download_items " +
             "SET workId = :newWorkId, state = :state, downloaded = :downloaded, speed = 0, updatedAt = :updatedAt " +
-            "WHERE workId = :oldWorkId"
+            "WHERE workId = :oldWorkId AND state = 'QUEUED'"
     )
     suspend fun replaceWorkIdForResume(
         oldWorkId: String,
@@ -158,7 +174,7 @@ interface DownloadDao {
         state: String,
         downloaded: Long,
         updatedAt: Long
-    )
+    ): Int
 
     @Query("DELETE FROM download_items WHERE workId = :workId")
     suspend fun deleteItemByWorkId(workId: String)
@@ -171,9 +187,6 @@ interface DownloadDao {
 
     @Query("DELETE FROM download_tasks WHERE id = :taskId")
     suspend fun deleteTaskById(taskId: Long)
-
-    @Query("UPDATE download_items SET state = :state, updatedAt = :updatedAt WHERE taskId = :taskId AND state NOT IN ('SUCCEEDED', 'PAUSED')")
-    suspend fun pauseAllItemsInTask(taskId: Long, state: String, updatedAt: Long)
 
     @Query("SELECT * FROM download_items WHERE state = 'PAUSED' OR state IN ('RUNNING', 'ENQUEUED', 'BLOCKED', 'QUEUED')")
     suspend fun getAllActiveOrPausedItems(): List<DownloadItemEntity>
@@ -189,6 +202,27 @@ interface DownloadDao {
 
     @Query("SELECT COUNT(*) FROM download_items WHERE state != 'SUCCEEDED'")
     suspend fun countUnfinishedItems(): Int
+
+    @Query("SELECT * FROM download_tasks WHERE id IN (SELECT taskId FROM download_items WHERE state != 'SUCCEEDED' " +
+        "AND (:inFlightOnly = 0 OR state IN ('QUEUED','ENQUEUED','RUNNING','BLOCKED','FINALIZING')))")
+    suspend fun getBlockingTasks(inFlightOnly: Boolean): List<DownloadTaskEntity>
+
+    @Query("SELECT * FROM download_tasks WHERE id IN (SELECT taskId FROM download_items WHERE state != 'SUCCEEDED')")
+    fun observeBlockingTasks(): Flow<List<DownloadTaskEntity>>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM download_items WHERE taskId = :taskId AND state = 'FINALIZING') " +
+        "AND NOT EXISTS(SELECT 1 FROM download_items WHERE taskId = :taskId AND state NOT IN ('SUCCEEDED','FINALIZING'))")
+    suspend fun isReadyForFinalization(taskId: Long): Boolean
+
+    @Query("SELECT * FROM download_tasks WHERE id IN (SELECT taskId FROM download_items WHERE state = 'FINALIZING')")
+    suspend fun getPendingFinalizationTasks(): List<DownloadTaskEntity>
+
+    @Query("UPDATE download_items SET state = 'SUCCEEDED', updatedAt = :now WHERE taskId = :taskId AND state = 'FINALIZING'")
+    suspend fun finishFinalizingItems(taskId: Long, now: Long)
+
+    @Query("UPDATE download_items SET state = 'FAILED', updatedAt = :now WHERE taskId IN " +
+        "(SELECT id FROM download_tasks WHERE taskKey = :taskKey) AND state = 'FINALIZING'")
+    suspend fun failFinalizingItems(taskKey: String, now: Long)
 }
 
 data class DownloadTaskAlbumCoverRow(
