@@ -1,5 +1,9 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.util.isJapaneseAsmrResource
+
+import com.asmr.player.util.ChapterMediaReference
+
 import com.asmr.player.ui.common.AudioMetadataLine
 import com.asmr.player.ui.common.formatCvNames
 import com.asmr.player.ui.common.AudioSource
@@ -667,7 +671,8 @@ internal fun resolveExistingRemoteSelectionPaths(
         val trackKey: String,
         val trackKeyWithoutGroup: String,
         val extension: String,
-        val fileType: TreeFileType
+        val fileType: TreeFileType,
+        val japaneseAsmr: Boolean
     )
 
     data class RemoteCandidate(
@@ -678,7 +683,8 @@ internal fun resolveExistingRemoteSelectionPaths(
         val trackKey: String,
         val trackKeyWithoutGroup: String,
         val extension: String,
-        val fileType: TreeFileType
+        val fileType: TreeFileType,
+        val japaneseAsmr: Boolean
     )
 
     fun normalizeRelativePath(path: String): String {
@@ -688,7 +694,8 @@ internal fun resolveExistingRemoteSelectionPaths(
     fun canonicalUrl(value: String): String {
         val trimmed = value.trim()
         if (!isOnlineTrackPath(trimmed)) return ""
-        return trimmed.substringBefore('#').substringBefore('?')
+        val chapter = ChapterMediaReference.parse(trimmed)
+        return (chapter?.downloadUrl ?: trimmed).substringBefore('#').substringBefore('?')
     }
 
     fun fileName(path: String): String {
@@ -731,7 +738,9 @@ internal fun resolveExistingRemoteSelectionPaths(
                     TrackKeyNormalizer.buildKey(it.title, "", null)
                 }.orEmpty(),
                 extension = resolvedExtension(local.relativePath, sourcePath),
-                fileType = resolvedFileType(local.relativePath, sourcePath)
+                fileType = resolvedFileType(local.relativePath, sourcePath),
+                japaneseAsmr = isJapaneseAsmrResource(sourcePath, track?.group.orEmpty()) ||
+                    local.relativePath.split('/').contains("japaneseasmr.com")
             )
         }
         .toList()
@@ -745,7 +754,8 @@ internal fun resolveExistingRemoteSelectionPaths(
             trackKey = remoteTrackKey(remote.relativePath, includeGroup = true),
             trackKeyWithoutGroup = remoteTrackKey(remote.relativePath, includeGroup = false),
             extension = resolvedExtension(remote.relativePath, remote.url),
-            fileType = treeFileTypeForNode(remote.relativePath, remote.url)
+            fileType = treeFileTypeForNode(remote.relativePath, remote.url),
+            japaneseAsmr = remote.relativePath.startsWith("japaneseasmr.com/")
         )
     }
 
@@ -777,7 +787,7 @@ internal fun resolveExistingRemoteSelectionPaths(
     ) {
         if (!unmatchedRemotes[remoteIndex] || key.isBlank()) return
         val candidateIndex = index[key]
-            ?.firstOrNull { available[it] && isCompatible(candidates[it]) }
+            ?.firstOrNull { available[it] && candidates[it].japaneseAsmr == remotes[remoteIndex].japaneseAsmr && isCompatible(candidates[it]) }
             ?: return
         available[candidateIndex] = false
         unmatchedRemotes[remoteIndex] = false
@@ -1081,7 +1091,7 @@ internal fun buildRemoteTreeIndex(
     fun collectSubtitleCandidates(nodes: List<AsmrOneTrackNodeResponse>, parentPath: String) {
         nodes.forEach { node ->
             val children = node.children.orEmpty()
-            val url = node.mediaDownloadUrl ?: node.streamUrl
+            val url = node.playbackUrl
             val rawTitle = node.title?.trim().orEmpty().ifBlank { "item" }
             val safeTitle = sanitize(rawTitle)
             val path = if (parentPath.isBlank()) safeTitle else "$parentPath/$safeTitle"
@@ -1116,7 +1126,7 @@ internal fun buildRemoteTreeIndex(
     ) {
         val leafFiles = nodes.mapNotNull { node ->
             val children = node.children.orEmpty()
-            val url = node.mediaDownloadUrl ?: node.streamUrl
+            val url = node.playbackUrl
             if (!url.isNullOrBlank() && children.isEmpty()) {
                 val rawTitle = node.title?.trim().orEmpty().ifBlank { "item" }
                 val safeTitle = sanitize(rawTitle)
@@ -1390,7 +1400,8 @@ internal suspend fun loadOrBuildLocalTreeIndex(
         return onlineTracks.mapNotNull { t ->
             val url = t.path.trim()
             if (url.isBlank()) return@mapNotNull null
-            val ext = guessExtFromUrl(url)
+            val chapter = ChapterMediaReference.parse(url)
+            val ext = chapter?.fileName?.substringAfterLast('.', "") ?: guessExtFromUrl(url)
             val type = when {
                 videoExts.contains(ext) -> TreeFileType.Video
                 audioExts.contains(ext) -> TreeFileType.Audio
@@ -1847,7 +1858,7 @@ internal fun flattenAsmrOneTracksForUi(tree: List<AsmrOneTrackNodeResponse>): Li
     fun collectSubtitleCandidates(nodes: List<AsmrOneTrackNodeResponse>, parentPath: String) {
         nodes.forEach { node ->
             val children = node.children.orEmpty()
-            val url = node.mediaDownloadUrl ?: node.streamUrl
+            val url = node.playbackUrl
             val rawTitle = node.title?.trim().orEmpty().ifBlank { "item" }
             val safeTitle = sanitize(rawTitle)
             val path = if (parentPath.isBlank()) safeTitle else "$parentPath/$safeTitle"
@@ -1867,7 +1878,7 @@ internal fun flattenAsmrOneTracksForUi(tree: List<AsmrOneTrackNodeResponse>): Li
     fun walk(nodes: List<AsmrOneTrackNodeResponse>, parentPath: String) {
         val leaves = nodes.mapNotNull { node ->
             val children = node.children.orEmpty()
-            val url = node.mediaDownloadUrl ?: node.streamUrl
+            val url = node.playbackUrl
             if (!url.isNullOrBlank() && children.isEmpty()) {
                 val rawTitle = node.title?.trim().orEmpty().ifBlank { "item" }
                 val safeTitle = sanitize(rawTitle)
@@ -1998,7 +2009,7 @@ internal fun flattenAsmrOneTreeForUi(
                 val safeTitle = sanitize(title)
                 val path = if (parentPath.isBlank()) safeTitle else "$parentPath/$safeTitle"
                 val children = node.children.orEmpty()
-                val url = node.mediaDownloadUrl ?: node.streamUrl
+                val url = node.playbackUrl
                 if (children.isEmpty()) {
                     val type = treeFileTypeForNode(title, url, node.type)
                     if (type == TreeFileType.Other || type == TreeFileType.Subtitle) return@forEach
@@ -2018,7 +2029,7 @@ internal fun flattenAsmrOneTreeForUi(
             val safeTitle = sanitize(title)
             val path = if (parentPath.isBlank()) safeTitle else "$parentPath/$safeTitle"
             val children = node.children.orEmpty()
-            val url = node.mediaDownloadUrl ?: node.streamUrl
+            val url = node.playbackUrl
             if (children.isEmpty()) {
                 val type = treeFileTypeForNode(title, url, node.type)
                 if (type == TreeFileType.Other || type == TreeFileType.Subtitle) return@forEach

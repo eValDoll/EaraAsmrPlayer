@@ -37,6 +37,23 @@ class DownloadLibraryMergeTest {
     }
 
     @Test
+    fun japaneseAsmrDownloadsReplaceOnlyTheirOwnSavedChapters() = runBlocking {
+        val albumId = db.albumDao().insertAlbum(AlbumEntity(title = "Album", path = "web://rj/RJ123456"))
+        val otherId = db.trackDao().insertTrack(TrackEntity(albumId = albumId, title = "導入",
+            path = "https://asmr.example/intro.m4a", group = "mp3"))
+        val savedId = db.trackDao().insertTrack(TrackEntity(albumId = albumId, title = "導入",
+            path = com.asmr.player.util.ChapterMediaReference("https://audio.example/a.m3u8", 0, 106000,
+                "https://ts.buzzheavier.com/d/file", "導入.m4a").encode(), group = "japaneseasmr.com"))
+        val localId = db.trackDao().insertTrack(TrackEntity(albumId = albumId, title = "導入",
+            path = "/downloads/RJ123456/japaneseasmr.com/導入.m4a", group = "japaneseasmr.com"))
+        replaceMatchedOnlineTracksWithLocalTracks(db, albumId, "/downloads/RJ123456/")
+        val ids = db.trackDao().getTracksForAlbumOnce(albumId).map { it.id }
+        assertTrue(ids.contains(otherId))
+        assertTrue(ids.contains(localId))
+        assertFalse(ids.contains(savedId))
+    }
+
+    @Test
     fun replaceMatchedOnlineTracksWithLocalTracks_migratesSubtitlesAndDeletesOnlineTrack() = runBlocking {
         val albumId = db.albumDao().insertAlbum(
             AlbumEntity(

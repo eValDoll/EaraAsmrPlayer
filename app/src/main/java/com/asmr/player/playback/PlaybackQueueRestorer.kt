@@ -171,6 +171,7 @@ class PlaybackQueueRestorer @Inject constructor(
                 .setMediaId(id)
                 .setMimeType(persisted.mimeType)
                 .setMediaMetadata(meta)
+                .setClippingConfiguration(MediaItemFactory.chapterClipping(id, persisted.uri))
                 .build()
         }
     }

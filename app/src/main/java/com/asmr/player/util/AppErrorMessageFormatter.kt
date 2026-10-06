@@ -73,7 +73,6 @@ object AppErrorMessageFormatter {
     private fun knownTechnicalMessage(message: String): String? {
         val lower = message.lowercase()
         return when {
-            ".m3u8" in lower -> "当前暂不支持在线播放该音频，请先下载后再播放"
             "401" in lower || "认证" in message || "登录" in message && ("失败" in message || "过期" in message) ->
                 "登录状态已失效，请重新登录后重试"
             "403" in lower || "访问被拒绝" in message -> "当前访问受限，请稍后再试"

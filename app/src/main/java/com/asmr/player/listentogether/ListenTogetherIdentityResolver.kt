@@ -5,6 +5,8 @@ import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
 import androidx.media3.common.MediaItem
+import com.asmr.player.data.remote.NetworkHeaders
+import com.asmr.player.util.ChapterMediaReference
 import com.asmr.player.util.DlsiteWorkNo
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -44,20 +46,27 @@ class ListenTogetherIdentityResolver @Inject constructor(
             )
             if (rjCode.isBlank()) return@withContext null
 
-            val fileProbe = probeFile(context, rawSourcePath) ?: return@withContext null
-            val totalSize = fileProbe.fileSizeBytes
-            val streamFactory = fileProbe.inputStreamFactory
-
-            val (fingerprint, algorithm, effectiveSize) = if (totalSize > 0L) {
-                val hashHex = XxHash64.hashStreamHexWithSize(
-                    inputStreamFactory = streamFactory ?: return@withContext null,
-                    fileSizeBytes = totalSize
-                )
-                Triple("size:${totalSize}_xxh64:$hashHex", "size+xxh64", totalSize)
+            val chapter = ChapterMediaReference.parse(mediaId) ?: ChapterMediaReference.parse(rawSourcePath)
+            val (fingerprint, algorithm, effectiveSize) = if (chapter != null) {
+                // A playlist is not audio bytes; identify each clipped chapter independently.
+                val source = "${chapter.streamUrl}|${chapter.startMs}|${chapter.endMs ?: ""}"
+                val hashHex = XxHash64.hashHex(source.toByteArray(Charsets.UTF_8))
+                Triple("hls_chapter_xxh64:$hashHex", "hls-chapter+xxh64", 0L)
             } else {
-                val stream = streamFactory?.invoke() ?: return@withContext null
-                val hashHex = stream.use { XxHash64.hashStreamHex(it) }
-                Triple("prefix_xxh64:$hashHex", "prefix+xxh64", 0L)
+                val fileProbe = probeFile(context, rawSourcePath) ?: return@withContext null
+                val totalSize = fileProbe.fileSizeBytes
+                val streamFactory = fileProbe.inputStreamFactory
+                if (totalSize > 0L) {
+                    val hashHex = XxHash64.hashStreamHexWithSize(
+                        inputStreamFactory = streamFactory ?: return@withContext null,
+                        fileSizeBytes = totalSize
+                    )
+                    Triple("size:${totalSize}_xxh64:$hashHex", "size+xxh64", totalSize)
+                } else {
+                    val stream = streamFactory?.invoke() ?: return@withContext null
+                    val hashHex = stream.use { XxHash64.hashStreamHex(it) }
+                    Triple("prefix_xxh64:$hashHex", "prefix+xxh64", 0L)
+                }
             }
 
             val mediaKind = if (extras?.getBoolean("is_video") == true || mediaItem.localConfiguration?.mimeType?.startsWith("video/") == true) {
@@ -90,7 +99,10 @@ class ListenTogetherIdentityResolver @Inject constructor(
         val normalized = sourcePath.trim()
         if (normalized.isBlank()) return null
         if (normalized.startsWith("http://", ignoreCase = true) || normalized.startsWith("https://", ignoreCase = true)) {
-            val rangeRequest = Request.Builder().url(normalized).header("Range", "bytes=0-10239").build()
+            val rangeRequest = Request.Builder().url(normalized)
+                .header("Range", "bytes=0-10239")
+                .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
+                .build()
             val rangeResponse = runCatching {
                 okHttpClient.newCall(rangeRequest).execute()
             }.getOrNull() ?: return null

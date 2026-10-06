@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import com.asmr.player.BuildConfig
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.api.AsmrOneEndpoint
+import com.asmr.player.data.remote.crawler.AlbumResourceSource
+import com.asmr.player.data.remote.crawler.JapaneseAsmrClient
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.util.ASMR_ONE_SITE_TEST_FAILURE_MESSAGE
 import com.asmr.player.util.MessageManager
@@ -38,6 +40,8 @@ class DrawerStatusViewModel @Inject constructor(
 ) : ViewModel() {
     val asmrOneSite: StateFlow<Int> = settingsRepository.asmrOneSite
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 200)
+    val preferredResourceSource: StateFlow<AlbumResourceSource> = settingsRepository.preferredAlbumResourceSource
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AlbumResourceSource.AsmrOne)
 
     private val _dlsite = MutableStateFlow(SiteStatus())
     val dlsite: StateFlow<SiteStatus> = _dlsite
@@ -45,6 +49,23 @@ class DrawerStatusViewModel @Inject constructor(
     private val _asmr = MutableStateFlow(SiteStatus())
     val asmr: StateFlow<SiteStatus> = _asmr
     private var asmrTestJob: Job? = null
+    private val _japaneseAsmr = MutableStateFlow(SiteStatus())
+    val japaneseAsmr: StateFlow<SiteStatus> = _japaneseAsmr
+    private var japaneseAsmrTestJob: Job? = null
+
+    fun setPreferredResourceSource(source: AlbumResourceSource) {
+        viewModelScope.launch { settingsRepository.setPreferredAlbumResourceSource(source) }
+    }
+
+    fun testJapaneseAsmr() {
+        japaneseAsmrTestJob?.cancel()
+        japaneseAsmrTestJob = viewModelScope.launch(Dispatchers.IO) {
+            _japaneseAsmr.value = SiteStatus(type = SiteStatusType.Testing)
+            val latency = measure("${JapaneseAsmrClient.BASE}/", suppressAutomaticError = true, acceptNotFound = false)
+            coroutineContext.ensureActive()
+            _japaneseAsmr.value = latency.toStatus()
+        }
+    }
 
     fun testDlsite() {
         viewModelScope.launch(Dispatchers.IO) {
@@ -85,7 +106,7 @@ class DrawerStatusViewModel @Inject constructor(
         }
     }
 
-    private fun measure(url: String, suppressAutomaticError: Boolean = false): Long? {
+    private fun measure(url: String, suppressAutomaticError: Boolean = false, acceptNotFound: Boolean = true): Long? {
         val client = okHttpClient.newBuilder()
             .callTimeout(10, TimeUnit.SECONDS)
             .connectTimeout(5, TimeUnit.SECONDS)
@@ -107,8 +128,8 @@ class DrawerStatusViewModel @Inject constructor(
         val start = SystemClock.elapsedRealtime()
         return runCatching {
             client.newCall(request).execute().use { resp ->
-                // 只要不是 404 或网络错误，都认为通了（即使是空搜索结果）
-                if (!resp.isSuccessful && resp.code != 404) return@use null
+                // ASMR One 的空搜索结果可返回 404，首页检测则要求成功响应。
+                if (!resp.isSuccessful && !(acceptNotFound && resp.code == 404)) return@use null
                 SystemClock.elapsedRealtime() - start
             }
         }.getOrNull()

@@ -16,6 +16,11 @@ import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.UiObject2
 import androidx.test.uiautomator.Until
 import java.util.regex.Pattern
+import java.net.Proxy
+import java.net.ProxySelector
+import java.net.URI
+import java.net.SocketAddress
+import java.io.IOException
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -51,6 +56,55 @@ class OnlineNavigationPerformanceBenchmark {
     @Test
     fun hotListeningAlbumTransitions() = measureOnlineScreen("hot_listening") {
         device.openOnlineAlbumAndReturn()
+    }
+
+    @Test
+    fun japaneseAsmrChapterDirectory() {
+        val rj = InstrumentationRegistry.getArguments().getString("eara.japaneseAsmrRj") ?: "RJ01707048"
+        val originalProxy = ProxySelector.getDefault()
+        // Keep the local trace server reachable when the device uses an HTTP proxy.
+        ProxySelector.setDefault(object : ProxySelector() {
+            override fun select(uri: URI): List<Proxy> = if (uri.host in setOf("localhost", "127.0.0.1")) {
+                listOf(Proxy.NO_PROXY)
+            } else originalProxy?.select(uri) ?: listOf(Proxy.NO_PROXY)
+            override fun connectFailed(uri: URI?, address: SocketAddress?, error: IOException?) {
+                originalProxy?.connectFailed(uri, address, error)
+            }
+        })
+        try {
+            benchmarkRule.measureRepeated(
+                packageName = PackageName,
+                metrics = listOf(FrameTimingGfxInfoMetric()),
+                compilationMode = CompilationMode.Ignore(),
+                startupMode = null,
+                iterations = 5,
+                setupBlock = {
+                    killProcess()
+                    startMainActivity(startRoute = "album_detail_online/$rj", clearData = false)
+                    val sourceSelector = By.text(Pattern.compile("asmr\\.one|Japanese ASMR"))
+                    var source = device.wait(Until.findObject(sourceSelector), 5_000)
+                    repeat(5) {
+                        if (source == null) {
+                            device.swipe(device.displayWidth / 2, device.displayHeight * 3 / 4,
+                                device.displayWidth / 2, device.displayHeight / 3, 30)
+                            source = device.wait(Until.findObject(sourceSelector), 2_000)
+                        }
+                    }
+                    checkNotNull(source) { "Missing resource source selector" }.click()
+                    checkNotNull(device.wait(Until.findObject(By.text("Japanese ASMR")), 5_000)).click()
+                    checkNotNull(device.wait(Until.findObject(By.text("japaneseasmr.com")), 40_000)) {
+                        "Japanese ASMR chapter directory did not load"
+                    }.click()
+                    check(device.wait(Until.hasObject(By.text(Pattern.compile(".*導入.*"))), 10_000)) {
+                        "Japanese ASMR chapters are missing"
+                    }
+                    SystemClock.sleep(1_000)
+                },
+                measureBlock = { device.performSlowDragAndFling() },
+            )
+        } finally {
+            ProxySelector.setDefault(originalProxy)
+        }
     }
 
     @Test

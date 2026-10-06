@@ -353,6 +353,7 @@ internal fun DrawerSiteStatusFooter(
     val dlsite by viewModel.dlsite.collectAsStateWithLifecycle()
     val asmr by viewModel.asmr.collectAsStateWithLifecycle()
     val site by viewModel.asmrOneSite.collectAsStateWithLifecycle()
+    val japaneseAsmr by viewModel.japaneseAsmr.collectAsStateWithLifecycle()
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         SiteStatusTestRow(
             name = "dlsite.com",
@@ -369,6 +370,11 @@ internal fun DrawerSiteStatusFooter(
                     onSiteSelected = viewModel::setAsmrOneSite
                 )
             }
+        )
+        SiteStatusTestRow(
+            name = "Japanese ASMR",
+            status = japaneseAsmr,
+            onTest = viewModel::testJapaneseAsmr
         )
     }
 }

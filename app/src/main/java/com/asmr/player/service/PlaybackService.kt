@@ -337,6 +337,10 @@ class PlaybackService : MediaSessionService() {
                         headers["Cookie"] = cookie
                     }
                     dataSpec.buildUpon().setHttpRequestHeaders(headers).build()
+                } else if (host == "weeab0o.xyz" || host.endsWith(".weeab0o.xyz")) {
+                    val headers = LinkedHashMap(dataSpec.httpRequestHeaders)
+                    headers["Referer"] = "https://japaneseasmr.com/"
+                    dataSpec.buildUpon().setHttpRequestHeaders(headers).build()
                 } else {
                     dataSpec
                 }

@@ -1,5 +1,7 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.data.remote.crawler.AlbumResourceSource
+
 import com.asmr.player.ui.common.formatCvNames
 
 import com.asmr.player.translation.translatedPageText
@@ -1045,7 +1047,7 @@ fun AlbumDetailScreen(
                             AlbumHeader(
                                 album = headerAlbum,
                                 dlsiteUrl = model.dlsiteWorkno.takeIf { it.isNotBlank() }?.let { "$DLSITE_DOMAIN${storeSegment()}/work/=/product_id/$it.html" }.orEmpty(),
-                                asmrOneUrl = model.asmrOneWorkId?.takeIf { it.isNotBlank() }?.let { "https://asmr.one/work/$it" }.orEmpty(),
+                                asmrOneUrl = if (model.resourceSource == AlbumResourceSource.JapaneseAsmr) model.japaneseAsmrPageUrl else model.asmrOneWorkId?.takeIf { it.isNotBlank() }?.let { "https://asmr.one/work/$it" }.orEmpty(),
                                 dlsiteEditions = headerDlsiteEditions,
                                 dlsiteSelectedLang = model.dlsiteSelectedLang,
                                 onDlsiteLangSelected = { viewModel.selectDlsiteLanguage(it) },
@@ -1209,7 +1211,7 @@ fun AlbumDetailScreen(
                             val asmrOneTreeStateKey = asmrOneDirectoryTreeStateKey(
                                 currentRj = model.rjCode,
                                 baseRj = model.baseRjCode
-                            )
+                            ) + if (model.resourceSource == AlbumResourceSource.JapaneseAsmr) ":japaneseasmr" else ""
                             val asmrOneScrollStateKey = "scroll:$asmrOneTreeStateKey"
                             val landscapeContentShape = rememberAlbumLandscapeContentShape(
                                 waveDepth = landscapeContentWaveDepth
@@ -1394,6 +1396,8 @@ fun AlbumDetailScreen(
                                         asmrOneTree = asmrOneTree,
                                         isLoadingAsmrOne = model.isLoadingAsmrOne,
                                         isLoadingTrial = model.isLoadingDlsiteTrial,
+                                        resourceSource = model.resourceSource,
+                                        onResourceSourceChange = viewModel::selectResourceSource,
                                         onRefreshAsmrOne = { viewModel.refreshAsmrOneSection() },
                                         onRefreshTrial = { viewModel.refreshDlsiteTrialSection() },
                                         onDownloadTrial = {

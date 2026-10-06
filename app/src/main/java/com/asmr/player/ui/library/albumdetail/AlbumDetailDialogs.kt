@@ -290,7 +290,7 @@ internal fun flattenOnlineSaveLeaves(tree: List<AsmrOneTrackNodeResponse>): List
             val titleRaw = node.title?.trim().orEmpty().ifBlank { "item" }
             val safeTitle = sanitize(titleRaw)
             val path = if (parentPath.isBlank()) safeTitle else "$parentPath/$safeTitle"
-            val url = node.mediaDownloadUrl ?: node.streamUrl
+            val url = node.playbackUrl
             if (children.isEmpty()) {
                 if (url.isNullOrBlank()) return@forEach
                 val type = treeFileTypeForNode(titleRaw, url, node.type)
@@ -322,7 +322,7 @@ private fun buildSaveLeafPathIndex(tree: List<AsmrOneTrackNodeResponse>): Map<St
             val safeTitle = sanitize(titleRaw)
             val path = if (parentPath.isBlank()) safeTitle else "$parentPath/$safeTitle"
             val children = node.children.orEmpty()
-            val url = node.mediaDownloadUrl ?: node.streamUrl
+            val url = node.playbackUrl
             if (children.isEmpty()) {
                 if (url.isNullOrBlank()) return@forEach
                 val type = treeFileTypeForNode(titleRaw, url, node.type)
@@ -353,7 +353,7 @@ private fun flattenAsmrOneSaveTreeForUi(
     fun nodeHasMedia(node: AsmrOneTrackNodeResponse): Boolean {
         val children = node.children.orEmpty()
         val titleRaw = node.title?.trim().orEmpty().ifBlank { "item" }
-        val url = node.mediaDownloadUrl ?: node.streamUrl
+        val url = node.playbackUrl
         return if (children.isEmpty()) {
             if (url.isNullOrBlank()) return false
             val type = treeFileTypeForNode(titleRaw, url, node.type)
@@ -369,7 +369,7 @@ private fun flattenAsmrOneSaveTreeForUi(
             val safeTitle = sanitize(titleRaw)
             val path = if (parentPath.isBlank()) safeTitle else "$parentPath/$safeTitle"
             val children = node.children.orEmpty()
-            val url = node.mediaDownloadUrl ?: node.streamUrl
+            val url = node.playbackUrl
             if (children.isEmpty()) {
                 if (url.isNullOrBlank()) return@forEach
                 val type = treeFileTypeForNode(titleRaw, url, node.type)
@@ -781,7 +781,7 @@ private fun buildLeafPathIndex(tree: List<AsmrOneTrackNodeResponse>): Map<String
             val safeTitle = sanitize(title)
             val path = if (parentPath.isBlank()) safeTitle else "$parentPath/$safeTitle"
             val children = node.children.orEmpty()
-            val url = node.mediaDownloadUrl ?: node.streamUrl
+            val url = node.playbackUrl
             if (!url.isNullOrBlank() && children.isEmpty()) {
                 folderStack.forEach { folder ->
                     folderToLeaves.getOrPut(folder) { mutableListOf() }.add(path)

@@ -1,5 +1,7 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.data.remote.crawler.AlbumResourceSource
+
 import android.content.Context
 import android.util.Log
 import androidx.compose.runtime.Immutable
@@ -266,7 +268,9 @@ data class AlbumDetailModel(
     val isLoadingDlsite: Boolean,
     val isLoadingDlsiteTrial: Boolean,
     val isLoadingAsmrOne: Boolean,
-    val isLoadingDlsitePlay: Boolean
+    val isLoadingDlsitePlay: Boolean,
+    val resourceSource: AlbumResourceSource = AlbumResourceSource.AsmrOne,
+    val japaneseAsmrPageUrl: String = ""
 )
 
 internal fun resolveAlbumDetailRj(routeRj: String?, localAlbum: Album?): String {
@@ -691,7 +695,7 @@ internal fun flattenAsmrOneTracks(tree: List<AsmrOneTrackNodeResponse>): List<Tr
 internal fun filterDownloadableMediaTree(tree: List<AsmrOneTrackNodeResponse>): List<AsmrOneTrackNodeResponse> {
     return tree.mapNotNull { node ->
         val filteredChildren = filterDownloadableMediaTree(node.children.orEmpty())
-        val url = (node.mediaDownloadUrl ?: node.streamUrl).orEmpty().trim()
+        val url = node.downloadUrl.orEmpty().trim()
         when {
             filteredChildren.isNotEmpty() -> node.copy(children = filteredChildren)
             url.isBlank() -> null
@@ -810,7 +814,7 @@ internal fun flattenAsmrOneLeafDownloads(tree: List<AsmrOneTrackNodeResponse>): 
             val safeTitle = sanitizeSegment(title)
             val path = if (parentPath.isBlank()) safeTitle else "$parentPath/$safeTitle"
             val children = node.children.orEmpty()
-            val url = node.mediaDownloadUrl ?: node.streamUrl
+            val url = node.downloadUrl
             if (!url.isNullOrBlank() && children.isEmpty()) {
                 val imageWidth = node.dlsitePlayImageWidth?.takeIf { it > 0 }
                 val imageHeight = node.dlsitePlayImageHeight?.takeIf { it > 0 }

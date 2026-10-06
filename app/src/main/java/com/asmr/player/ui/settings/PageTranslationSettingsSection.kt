@@ -134,6 +134,8 @@ internal fun SettingsDropdownSelector(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     tagPrefix: String = "settings_dropdown",
+    showLabel: Boolean = true,
+    flatTrigger: Boolean = false,
 ) {
     val colors = AsmrTheme.colorScheme
     var expanded by remember { mutableStateOf(false) }
@@ -147,24 +149,26 @@ internal fun SettingsDropdownSelector(
         PageTranslationMenuPositionProvider(with(density) { 4.dp.roundToPx() }, with(density) { 8.dp.roundToPx() })
     }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(label, color = colors.textSecondary, style = MaterialTheme.typography.labelMedium)
+        if (showLabel) Text(label, color = colors.textSecondary, style = MaterialTheme.typography.labelMedium)
         Box(Modifier.fillMaxWidth().onSizeChanged { anchorWidth = it.width }) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 48.dp)
+                    .heightIn(min = if (flatTrigger) 36.dp else 48.dp)
                     .clip(shape)
-                    .background(fieldColor)
-                    .border(1.dp, colors.primaryStrong.copy(alpha = if (expanded) 0.7f else 0.22f), shape)
+                    .then(if (flatTrigger) Modifier else Modifier
+                        .background(fieldColor)
+                        .border(1.dp, colors.primaryStrong.copy(alpha = if (expanded) 0.7f else 0.22f), shape))
                     .clickable(enabled = enabled, role = Role.DropdownList) { expanded = !expanded }
                     .semantics { stateDescription = if (expanded) "已展开" else "已收起" }
                     .testTag("${tagPrefix}_$label")
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .padding(horizontal = if (flatTrigger) 8.dp else 12.dp, vertical = if (flatTrigger) 6.dp else 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(options.getValue(value), modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyMedium, color = if (enabled) colors.textPrimary else colors.textTertiary,
+                    style = if (flatTrigger) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+                    color = if (enabled) colors.textPrimary else colors.textTertiary,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Icon(if (expanded) Icons.Rounded.ArrowDropUp else Icons.Rounded.ArrowDropDown,
                     contentDescription = null, tint = if (enabled) colors.primaryStrong else colors.textTertiary, modifier = Modifier.size(20.dp))
@@ -205,7 +209,7 @@ internal fun SettingsDropdownSelector(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                             ) {
                                 Text(name, modifier = Modifier.weight(1f),
-                                    style = MaterialTheme.typography.bodyMedium,
+                                    style = if (flatTrigger) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
                                     color = if (selected) colors.primaryStrong else colors.textPrimary,
                                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
                                 if (selected) Icon(Icons.Rounded.Check, contentDescription = null,
