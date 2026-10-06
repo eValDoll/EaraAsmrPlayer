@@ -13,6 +13,7 @@ import com.asmr.player.util.SyncCoordinator
 import com.asmr.player.util.LocalFileScopes
 import com.asmr.player.util.withSubtitleFileAccess
 import com.asmr.player.util.tryBeginFileMutation
+import com.asmr.player.util.withDownloadDeletion
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.withTimeout
@@ -31,6 +32,36 @@ import org.robolectric.annotation.Config
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [34])
 class DownloadDirectoryBlockingTest {
+    @Test
+    fun pausedDownloadDeletionProtectsOnlyTheCorrespondingPendingSubtitleFile() = runBlocking {
+        val context = RuntimeEnvironment.getApplication()
+        val database = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
+        try {
+            val scopes = LocalFileScopes(database, DownloadStorageGateway(context))
+            val root = "/albums/RJ12345678"
+            val albumId = database.albumDao().insertAlbum(AlbumEntity(title = "作品", path = root))
+            val trackId = database.trackDao().insertTrack(TrackEntity(albumId = albumId, title = "音轨", path = "$root/audio.mp3"))
+            insertSubtitleTask(database, "pending-subtitle", trackId, "$root/audio.mp3")
+            val dao = database.downloadDao()
+            val task = DownloadTaskEntity(taskKey = "download", title = "作品", rootDir = root, createdAt = 1L, updatedAt = 1L)
+                .let { it.copy(id = dao.insertTask(it)) }
+            val selected = item(task.id, "selected", "PAUSED")
+            dao.upsertItem(selected)
+            org.junit.Assert.assertFalse(database.withDownloadDeletion(scopes, task, selected, stopDownload = {
+                org.junit.Assert.fail("字幕仍引用目标文件时不能开始删除")
+            }) { org.junit.Assert.fail("不能删除字幕任务引用的文件") })
+            val sibling = selected.copy(workId = "sibling", fileName = "other.mp3", relativePath = "other.mp3", filePath = "$root/other.mp3")
+            dao.upsertItem(sibling)
+            org.junit.Assert.assertTrue(database.withDownloadDeletion(scopes, task, sibling, stopDownload = {}) {
+                dao.deleteItemByWorkId(sibling.workId)
+            })
+            assertNotNull(dao.getItemByWorkId(selected.workId))
+            assertNotNull(database.subtitleTaskDao().getTask("pending-subtitle"))
+        } finally {
+            database.close()
+        }
+    }
+
     @Test
     fun runningAlbumAcceptsNewFilesWhileSkippingDuplicateSelections() = runBlocking {
         val context = RuntimeEnvironment.getApplication()

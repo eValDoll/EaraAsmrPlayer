@@ -1731,7 +1731,7 @@ private fun DownloadFileRow(
                             color = when (item.state) {
                                 DownloadItemState.SUCCEEDED -> colors.primary
                                 DownloadItemState.FAILED -> colors.danger
-                                DownloadItemState.RUNNING -> colors.primary
+                                DownloadItemState.RUNNING, DownloadItemState.FINALIZING -> colors.primary
                                 else -> colors.textSecondary
                             },
                             fontSize = 11.sp
@@ -2013,7 +2013,7 @@ private fun downloadItemStateLabel(state: DownloadItemState): String {
     return when (state) {
         DownloadItemState.SUCCEEDED -> "已完成"
         DownloadItemState.FAILED -> "失败"
-        DownloadItemState.RUNNING -> "下载中"
+        DownloadItemState.RUNNING, DownloadItemState.FINALIZING -> "下载中"
         DownloadItemState.PAUSED -> "已暂停"
         DownloadItemState.CANCELLED -> "已取消"
         DownloadItemState.ENQUEUED -> "等待中"

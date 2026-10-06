@@ -160,6 +160,19 @@ interface DownloadDao {
         "WHERE workId = :workId AND state IN ('QUEUED','ENQUEUED','RUNNING','BLOCKED','PAUSED','FAILED','CANCELLED')")
     suspend fun stopInterruptibleItem(workId: String, state: String, updatedAt: Long): Int
 
+    @Query("UPDATE download_items SET state = 'PAUSED', speed = 0, updatedAt = :updatedAt " +
+        "WHERE taskId = :taskId AND state IN ('QUEUED','ENQUEUED','RUNNING','BLOCKED')")
+    suspend fun pauseActiveTaskItems(taskId: Long, updatedAt: Long)
+
+    @Transaction
+    suspend fun pauseTaskItems(taskId: Long, updatedAt: Long): List<String> {
+        val workIds = getItemsForTask(taskId)
+            .filter { it.state in setOf("QUEUED", "ENQUEUED", "RUNNING", "BLOCKED") }
+            .map { it.workId }
+        pauseActiveTaskItems(taskId, updatedAt)
+        return workIds
+    }
+
     @Query("UPDATE download_items SET state = :state, updatedAt = :updatedAt WHERE workId = :workId")
     suspend fun updateItemState(workId: String, state: String, updatedAt: Long)
 
@@ -206,6 +219,9 @@ interface DownloadDao {
     @Query("SELECT * FROM download_tasks WHERE id IN (SELECT taskId FROM download_items WHERE state != 'SUCCEEDED' " +
         "AND (:inFlightOnly = 0 OR state IN ('QUEUED','ENQUEUED','RUNNING','BLOCKED','FINALIZING')))")
     suspend fun getBlockingTasks(inFlightOnly: Boolean): List<DownloadTaskEntity>
+
+    @Query("SELECT * FROM download_items WHERE state IN ('QUEUED','ENQUEUED','RUNNING','BLOCKED','FINALIZING')")
+    suspend fun getBlockingItems(): List<DownloadItemEntity>
 
     @Query("SELECT * FROM download_tasks WHERE id IN (SELECT taskId FROM download_items WHERE state != 'SUCCEEDED')")
     fun observeBlockingTasks(): Flow<List<DownloadTaskEntity>>

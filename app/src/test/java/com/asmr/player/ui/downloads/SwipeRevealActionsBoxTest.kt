@@ -1,9 +1,13 @@
 package com.asmr.player.ui.downloads
 
+import android.app.Application
+import android.content.ComponentName
+import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.getValue
@@ -18,6 +22,7 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
+import androidx.compose.ui.test.click
 import androidx.compose.ui.unit.dp
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import org.junit.Assert.assertEquals
@@ -26,16 +31,43 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.junit.rules.ExternalResource
+import org.junit.rules.RuleChain
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.Shadows.shadowOf
+import org.robolectric.annotation.Config
+import androidx.test.core.app.ApplicationProvider
 
 @RunWith(RobolectricTestRunner::class)
+@Config(application = Application::class, sdk = [28])
 class SwipeRevealActionsBoxTest {
-    @get:Rule
     val composeRule = createComposeRule()
+    @get:Rule val rules: RuleChain = RuleChain.outerRule(object : ExternalResource() {
+        override fun before() {
+            val context = ApplicationProvider.getApplicationContext<Application>()
+            shadowOf(context.packageManager).addActivityIfNotPresent(ComponentName(context, ComponentActivity::class.java))
+        }
+    }).around(composeRule)
 
     private var revealed by mutableStateOf(false)
     private var contentClickCount = 0
+    private var actionClickCount = 0
     private lateinit var closeController: SwipeRevealCloseController
+
+    @Test
+    fun revealedAction_receivesTouchWithoutClosingOrOpeningContent() {
+        setSwipeContent()
+        swipeOpen()
+
+        composeRule.onNodeWithTag(SWIPE_BOX_TAG).performTouchInput {
+            click(Offset(width * (320f - 84f) / 320f, center.y))
+        }
+        composeRule.waitForIdle()
+
+        assertEquals(1, actionClickCount)
+        assertEquals(0, contentClickCount)
+        assertTrue(revealed)
+    }
 
     @Test
     fun repeatedSwipeAndSmallFingerJitter_closesWithoutOpeningContent() {
@@ -102,6 +134,7 @@ class SwipeRevealActionsBoxTest {
     private fun setSwipeContent() {
         revealed = false
         contentClickCount = 0
+        actionClickCount = 0
         closeController = SwipeRevealCloseController()
         composeRule.setContent {
             AsmrPlayerTheme {
@@ -119,9 +152,12 @@ class SwipeRevealActionsBoxTest {
                     actions = {
                         Box(
                             modifier = Modifier
-                                .fillMaxSize()
+                                .weight(1f)
+                                .fillMaxHeight()
                                 .background(Color.Red)
+                                .clickable { actionClickCount++ }
                         )
+                        Box(modifier = Modifier.weight(1f).fillMaxHeight().background(Color.Blue))
                     }
                 ) {
                     Box(
