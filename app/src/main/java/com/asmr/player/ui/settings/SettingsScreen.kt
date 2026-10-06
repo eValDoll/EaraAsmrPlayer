@@ -227,6 +227,7 @@ fun SettingsScreen(
     val deepSeekAccountState by viewModel.deepSeekAccountState.collectAsStateWhileActive(translationDataActive)
     val deepSeekTranslationSettings by viewModel.deepSeekTranslationSettings.collectAsStateWhileActive(translationDataActive)
     val translationApiState by viewModel.translationApiState.collectAsStateWhileActive(translationDataActive)
+    val customTranslationTokenTotal by viewModel.customTranslationTokenTotal.collectAsStateWhileActive(translationDataActive)
     val updateState by viewModel.updateState.collectAsStateWhileActive(aboutDataActive)
     val autoUpdateCheckEnabled by viewModel.autoUpdateCheckEnabled.collectAsStateWhileActive(aboutDataActive)
     val scanRoots by libraryViewModel.scanRoots.collectAsStateWhileActive(localLibraryDataActive)
@@ -1042,10 +1043,13 @@ fun SettingsScreen(
                             state = translationApiState,
                             onProviderSelected = viewModel::selectTranslationProvider,
                             onSaveCustom = viewModel::saveCustomTranslationApi,
+                            onLoadModels = viewModel::loadCustomTranslationModels,
+                            customTotalTokens = if (BuildConfig.TRANSLATION_USAGE_PREVIEW) 456_789L else customTranslationTokenTotal,
+                            usagePreview = BuildConfig.TRANSLATION_USAGE_PREVIEW,
                             deepSeekContent = {
                                 DeepSeekTranslationSettingsSection(
                                     state = deepSeekApiKeyState,
-                                    accountState = deepSeekAccountState,
+                                    accountState = if (BuildConfig.TRANSLATION_USAGE_PREVIEW) deepSeekAccountState.copy(totalTokens = 1_234_567L) else deepSeekAccountState,
                                     settings = deepSeekTranslationSettings,
                                     apiKeyInput = deepSeekApiKeyInput,
                                     compact = isCompact,
@@ -1055,6 +1059,11 @@ fun SettingsScreen(
                                     onThinkingEnabledChanged = viewModel::setDeepSeekThinkingEnabled,
                                     onReasoningEffortChanged = viewModel::setDeepSeekReasoningEffort,
                                     onFinalPolishEnabledChanged = viewModel::setDeepSeekFinalPolishEnabled,
+                                    model = translationApiState.settings.deepSeekModel,
+                                    modelSaving = translationApiState.saving || !translationApiState.loaded,
+                                    onModelSelected = viewModel::selectDeepSeekModel,
+                                    onLoadModels = viewModel::loadDeepSeekModels,
+                                    usagePreview = BuildConfig.TRANSLATION_USAGE_PREVIEW,
                                     activeTipKey = activeTipKey,
                                     onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
                                 )
@@ -1369,7 +1378,12 @@ internal fun DeepSeekTranslationSettingsSection(
     onReasoningEffortChanged: (DeepSeekReasoningEffort) -> Unit,
     onFinalPolishEnabledChanged: (Boolean) -> Unit,
     activeTipKey: String? = null,
-    onToggleTip: ((String) -> Unit)? = null
+    onToggleTip: ((String) -> Unit)? = null,
+    model: String = DEEPSEEK_SUBTITLE_MODEL,
+    modelSaving: Boolean = false,
+    onModelSelected: (String) -> Unit = {},
+    onLoadModels: suspend (String) -> List<String>? = { null },
+    usagePreview: Boolean = false,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val actionButtonColors = settingsPrimaryTonalButtonColors()
@@ -1380,7 +1394,7 @@ internal fun DeepSeekTranslationSettingsSection(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
-            text = DEEPSEEK_SUBTITLE_MODEL,
+            text = "DeepSeek",
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
@@ -1389,19 +1403,21 @@ internal fun DeepSeekTranslationSettingsSection(
                 .weight(1f)
                 .testTag("deepseek_model_name")
         )
-        if (state.configured) {
+        if (state.configured || usagePreview) {
             Row(
-                modifier = Modifier.width(if (compact) 208.dp else 248.dp),
+                modifier = Modifier.weight(2f),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
-                    text = "Token ${formatDeepSeekTokenTotal(accountState.totalTokens)} · 余额 ${formatDeepSeekBalances(accountState.balances)}",
+                    text = "Token ${formatDeepSeekTokenTotal(accountState.totalTokens)} · 余额 ${formatDeepSeekBalances(accountState.balances)}" +
+                        if (usagePreview) " · 模拟" else "",
                     style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.End,
                     color = if (accountState.balanceAvailable == false) {
                         MaterialTheme.colorScheme.error
                     } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
+                        colorScheme.textSecondary
                     },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1409,7 +1425,7 @@ internal fun DeepSeekTranslationSettingsSection(
                         .weight(1f)
                         .testTag("deepseek_account_summary")
                 )
-                Icon(
+                if (state.configured) Icon(
                     imageVector = Icons.Rounded.CheckCircle,
                     contentDescription = "API Key 已配置",
                     tint = Color(0xFF3E9B63),
@@ -1430,23 +1446,20 @@ internal fun DeepSeekTranslationSettingsSection(
         } else {
             Modifier.widthIn(max = 280.dp)
         }
-        OutlinedTextField(
+        TranslationSettingsTextField(
+            label = "API Key",
             value = apiKeyInput,
             onValueChange = onApiKeyInputChanged,
             modifier = inputModifier
-                .height(48.dp)
-                .testTag("deepseek_api_key_input"),
-            placeholder = {
-                Text(
-                    text = "API Key（sk-…）",
-                    style = MaterialTheme.typography.bodySmall
-                )
-            },
-            singleLine = true,
+                .heightIn(min = 48.dp),
+            tag = "deepseek_api_key_input",
+            placeholder = "API Key（sk-…）",
+            showLabel = false,
             visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            keyboardType = KeyboardType.Password,
             enabled = !state.saving,
-            isError = state.errorMessage != null
+            isError = state.errorMessage != null,
+            errorMessage = state.errorMessage.orEmpty(),
         )
         FilledTonalButton(
             onClick = onSave,
@@ -1469,6 +1482,17 @@ internal fun DeepSeekTranslationSettingsSection(
             text = message,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.error
+        )
+    }
+
+    key(apiKeyInput, state.saveVersion) {
+        TranslationSettingsModelField(
+            model = model, onModelChanged = onModelSelected,
+            enabled = !state.saving && !modelSaving,
+            canLoad = state.configured || apiKeyInput.isNotBlank(),
+            loadInitially = state.configured && apiKeyInput.isBlank(),
+            onLoad = { onLoadModels(apiKeyInput) },
+            tagPrefix = "deepseek", allowManual = false,
         )
     }
 

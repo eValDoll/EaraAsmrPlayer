@@ -34,12 +34,19 @@ import com.asmr.player.subtitle.CustomThinkingMode
 import com.asmr.player.subtitle.CustomReasoningEffort
 import com.asmr.player.subtitle.TranslationProvider
 import com.asmr.player.subtitle.DeepSeekAccountRepository
+import com.asmr.player.subtitle.CustomTranslationUsageRepository
+import com.asmr.player.subtitle.TranslationModelsClient
+import com.asmr.player.subtitle.customTranslationUsageIdentity
+import com.asmr.player.subtitle.translationModelsUrl
+import com.asmr.player.subtitle.DEEPSEEK_TRANSLATION_BASE_URL
+import com.asmr.player.di.DEEPSEEK_HTTP_CLIENT
 import com.asmr.player.util.MessageManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.io.File
 import java.io.FileOutputStream
 import javax.inject.Inject
+import javax.inject.Named
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
@@ -47,6 +54,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -111,6 +119,8 @@ class SettingsViewModel @Inject constructor(
     private val appCacheManager: AppCacheManager,
     private val okHttpClient: OkHttpClient,
     private val deepSeekAccountRepository: DeepSeekAccountRepository,
+    private val customTranslationUsageRepository: CustomTranslationUsageRepository,
+    @Named(DEEPSEEK_HTTP_CLIENT) translationHttpClient: OkHttpClient,
     private val downloadDestinationStore: DownloadDestinationStore,
     private val downloadDirectoryCoordinator: DownloadDirectoryCoordinator,
     private val messageManager: MessageManager,
@@ -118,6 +128,16 @@ class SettingsViewModel @Inject constructor(
 ) : ViewModel() {
     private val subtitleModelRepository = SubtitleModelRepository.get(context)
     private val translationApiStore = TranslationApiStore.get(context)
+    private val translationModelsClient = TranslationModelsClient(translationHttpClient)
+    private val customUsageIdentity = MutableStateFlow<String?>(null)
+    internal val customTranslationTokenTotal = combine(customUsageIdentity, customTranslationUsageRepository.totals) { identity, totals ->
+        totals[identity] ?: 0L
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
+
+    private fun refreshCustomUsageIdentity() {
+        customTranslationUsageRepository.load()
+        customUsageIdentity.value = translationApiStore.readCustomConfiguration()?.let(::customTranslationUsageIdentity)
+    }
 
     val downloadDestination: StateFlow<DownloadDestination> = downloadDestinationStore.destination
         .stateIn(
@@ -255,6 +275,7 @@ class SettingsViewModel @Inject constructor(
         settingsDataPrepared = true
         viewModelScope.launch(Dispatchers.IO) {
             val settings = translationApiStore.readSettings()
+            refreshCustomUsageIdentity()
             _translationApiState.value = TranslationApiUiState(settings = settings, loaded = true)
             val apiKey = translationApiStore.readDeepSeekKey()
             val configured = apiKey.isNotBlank()
@@ -458,6 +479,43 @@ class SettingsViewModel @Inject constructor(
         updateTranslationApi { translationApiStore.selectProvider(provider) }
     }
 
+    internal fun selectDeepSeekModel(model: String) {
+        updateTranslationApi { translationApiStore.saveDeepSeekModel(model) }
+    }
+
+    internal suspend fun loadDeepSeekModels(apiKey: String): List<String>? = try {
+        withContext(Dispatchers.IO) {
+            val key = apiKey.trim().ifBlank { translationApiStore.readDeepSeekKey() }
+            translationModelsClient.loadModels(DEEPSEEK_TRANSLATION_BASE_URL, key)
+        }
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        messageManager.showError(error.message ?: "DeepSeek 模型列表拉取失败")
+        null
+    }
+
+    internal suspend fun loadCustomTranslationModels(baseUrl: String, apiKey: String): List<String>? {
+        return try {
+            withContext(Dispatchers.IO) {
+                val key = apiKey.trim().ifBlank {
+                    val saved = translationApiStore.readCustomConfiguration()
+                    require(saved != null) { "请先输入 API Key" }
+                    require(translationModelsUrl(saved.baseUrl) == translationModelsUrl(baseUrl)) {
+                        "API 地址已更改，请重新输入 API Key"
+                    }
+                    saved.apiKey
+                }
+                translationModelsClient.loadModels(baseUrl, key)
+            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            messageManager.showError(error.message ?: "模型列表拉取失败")
+            null
+        }
+    }
+
     internal fun saveCustomTranslationApi(
         baseUrl: String,
         model: String,
@@ -479,6 +537,7 @@ class SettingsViewModel @Inject constructor(
             try {
                 val settings = withContext(Dispatchers.IO) {
                     save()
+                    refreshCustomUsageIdentity()
                     translationApiStore.readSettings()
                 }
                 _translationApiState.value = current.copy(

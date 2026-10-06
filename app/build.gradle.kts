@@ -93,6 +93,7 @@ android {
         versionCode = 10203
         versionName = "1.2.3"
         buildConfigField("String", "UPDATE_REPO_OWNER", "\"eValDoll\"")
+        buildConfigField("boolean", "TRANSLATION_USAGE_PREVIEW", (providers.gradleProperty("translationUsagePreview").orNull == "true").toString())
         buildConfigField("String", "UPDATE_REPO_NAME", "\"EaraAsmrPlayer\"")
         buildConfigField("String", "LISTEN_TOGETHER_BASE_URL", "\"$listenTogetherBaseUrl\"")
         buildConfigField("String", "SUBTITLE_MODEL_GITHUB_URL", "\"$subtitleModelGitHubUrl\"")

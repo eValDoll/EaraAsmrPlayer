@@ -86,6 +86,7 @@ internal class SubtitleTaskService : Service() {
         fun settingsRepository(): SettingsRepository
         fun messageManager(): MessageManager
         fun deepSeekAccountRepository(): DeepSeekAccountRepository
+        fun customTranslationUsageRepository(): CustomTranslationUsageRepository
     }
 
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
@@ -99,6 +100,7 @@ internal class SubtitleTaskService : Service() {
     private lateinit var settingsRepository: SettingsRepository
     private lateinit var messageManager: MessageManager
     private lateinit var deepSeekAccountRepository: DeepSeekAccountRepository
+    private lateinit var customTranslationUsageRepository: CustomTranslationUsageRepository
     private lateinit var generatedSubtitleFileExporter: GeneratedSubtitleFileExporter
     @Volatile private var transcriptionJob: Job? = null
     @Volatile private var transcriptionItemId: String? = null
@@ -135,6 +137,7 @@ internal class SubtitleTaskService : Service() {
         settingsRepository = entryPoint.settingsRepository()
         messageManager = entryPoint.messageManager()
         deepSeekAccountRepository = entryPoint.deepSeekAccountRepository()
+        customTranslationUsageRepository = entryPoint.customTranslationUsageRepository()
         generatedSubtitleFileExporter = GeneratedSubtitleFileExporter(applicationContext, database)
         createNotificationChannel()
         startAsForeground(buildNotification(emptyList()))
@@ -1318,6 +1321,7 @@ internal class SubtitleTaskService : Service() {
             TranslationApiStore.get(applicationContext).readConfiguration().requireConfigured()
         }
         if (config.isDeepSeek) deepSeekAccountRepository.bindApiKey(config.apiKey)
+        val customUsageIdentity = if (config.isDeepSeek) null else customTranslationUsageIdentity(config)
         return SubtitleTranslationClient(
             okHttpClient = deepSeekOkHttpClient,
             gson = gson,
@@ -1326,6 +1330,7 @@ internal class SubtitleTaskService : Service() {
             settings = settingsRepository.loadDeepSeekTranslationSettings(),
             onTokenUsage = { totalTokens ->
                 if (config.isDeepSeek) deepSeekAccountRepository.recordTokenUsage(config.apiKey, totalTokens)
+                else customTranslationUsageRepository.recordTokenUsage(requireNotNull(customUsageIdentity), totalTokens)
             }
         )
     }
