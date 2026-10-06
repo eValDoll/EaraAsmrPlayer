@@ -12,14 +12,12 @@ import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import com.asmr.player.data.settings.DeepSeekTranslationSettings
-import com.asmr.player.subtitle.DeepSeekAccountState
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.ThemeMode
 import org.junit.Assert.*
@@ -106,22 +104,4 @@ class DeepSeekTranslationSettingsSectionTest {
         compose.runOnIdle { assertEquals(1, modelRequests) }
     }
 
-    @Test
-    fun simulatedUsage_isVisibleWithoutPretendingKeyIsConfigured() {
-        compose.setContent {
-            AsmrPlayerTheme(mode = ThemeMode.Dark) {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    DeepSeekTranslationSettingsSection(
-                        state = DeepSeekApiKeyUiState(), accountState = DeepSeekAccountState(totalTokens = 1_234_567L),
-                        settings = DeepSeekTranslationSettings(), apiKeyInput = "", compact = false,
-                        segmentedButtonColors = SegmentedButtonDefaults.colors(), onApiKeyInputChanged = {}, onSave = {},
-                        onThinkingEnabledChanged = {}, onReasoningEffortChanged = {}, onFinalPolishEnabledChanged = {},
-                        usagePreview = true,
-                    )
-                }
-            }
-        }
-        compose.onNodeWithTag("deepseek_account_summary").assertTextContains("Token 1.2M · 余额 -- · 模拟")
-        compose.onNodeWithContentDescription("API Key 已配置").assertDoesNotExist()
-    }
 }

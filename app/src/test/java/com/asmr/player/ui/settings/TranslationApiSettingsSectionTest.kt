@@ -234,17 +234,4 @@ class TranslationApiSettingsSectionTest {
         compose.onNodeWithTag("custom_api_models_refresh").assertIsEnabled()
     }
 
-    @Test
-    fun simulatedCustomUsage_canBePreviewedWithoutSavingCredentials() {
-        compose.setContent {
-            AsmrPlayerTheme(mode = ThemeMode.Light) {
-                TranslationApiSettingsSection(
-                    TranslationApiUiState(settings = TranslationApiSettings(provider = TranslationProvider.CUSTOM), loaded = true),
-                    {}, { _, _, _, _, _, _ -> }, {}, {}, customTotalTokens = 456_789L, usagePreview = true,
-                )
-            }
-        }
-        compose.onNodeWithTag("custom_api_token_total").assertTextContains("Token 456.8K · 模拟")
-        compose.onNodeWithTag("custom_api_save").assertIsNotEnabled()
-    }
 }
