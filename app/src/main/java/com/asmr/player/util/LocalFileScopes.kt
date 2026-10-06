@@ -7,7 +7,9 @@ import java.io.File
 import com.asmr.player.data.local.db.AppDatabase
 import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.DownloadTaskEntity
+import com.asmr.player.data.local.db.entities.DownloadItemEntity
 import com.asmr.player.data.remote.download.DownloadStorageGateway
+import com.asmr.player.data.remote.download.dlsitePlayImagePartFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -62,6 +64,23 @@ internal class LocalFileScopes(
     fun download(task: DownloadTaskEntity): LocalFileScope = create(
         listOf(task.albumRjCode, task.albumWorkId, task.title), listOf(task.albumRootDir, task.rootDir)
     )
+
+    fun downloadFile(item: DownloadItemEntity): LocalFileScope {
+        val path = item.filePath.ifBlank {
+            if (storage.isDocumentReference(item.targetDir)) item.targetDir
+            else File(item.targetDir, item.fileName).absolutePath
+        }
+        val paths = if (storage.isDocumentReference(path)) listOf(path)
+            else listOf(path, dlsitePlayImagePartFile(File(path)).absolutePath)
+        return create(roots = paths)
+    }
+
+    suspend fun hasSubtitleFiles(scope: LocalFileScope): Boolean = withContext(Dispatchers.IO) {
+        val items = database.subtitleTaskDao().getAllItems()
+        val paths = items.map { it.trackPath } + database.trackDao()
+            .getTracksByIdsOnce(items.map { it.trackId }.distinct()).map { it.path }
+        paths.any { scope.overlaps(create(roots = listOf(it))) }
+    }
 
     suspend fun hasDownloads(scope: LocalFileScope, inFlightOnly: Boolean = false): Boolean = withContext(Dispatchers.IO) {
         database.downloadDao().getBlockingTasks(inFlightOnly).any { scope.overlaps(download(it)) }

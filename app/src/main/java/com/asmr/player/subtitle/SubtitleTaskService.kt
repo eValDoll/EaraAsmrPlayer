@@ -100,8 +100,8 @@ internal class SubtitleTaskService : Service() {
     private lateinit var messageManager: MessageManager
     private lateinit var deepSeekAccountRepository: DeepSeekAccountRepository
     private lateinit var generatedSubtitleFileExporter: GeneratedSubtitleFileExporter
-    private var transcriptionJob: Job? = null
-    private var transcriptionItemId: String? = null
+    @Volatile private var transcriptionJob: Job? = null
+    @Volatile private var transcriptionItemId: String? = null
     private val sourceSnapshots = ConcurrentHashMap<String, LocalFileSnapshot>()
     private val outputSnapshots = ConcurrentHashMap<String, GeneratedSubtitleOutputSnapshot>()
     private val translationJobs = ConcurrentHashMap<String, Job>()
@@ -175,12 +175,17 @@ internal class SubtitleTaskService : Service() {
         runCatching { connectivityManager.unregisterNetworkCallback(networkCallback) }
         wakeLock?.takeIf(PowerManager.WakeLock::isHeld)?.release()
         wakeLock = null
-        runCatching { transcriptionEngine?.close() }
-        transcriptionEngine = null
         // 润色 job 随 serviceScope 一并取消，清空内存中的“润色中”标记，避免 UI 残留禁用
         repository.clearPolishState()
         polishingAlbumIds.clear()
+        val serviceJob = checkNotNull(serviceScope.coroutineContext[Job])
         serviceScope.cancel()
+        // 取消不能中断正在执行的 JNI 推理，后台执行完全退出后才能释放模型。
+        serviceScope.launch(NonCancellable + Dispatchers.IO) {
+            serviceJob.join()
+            runCatching { transcriptionEngine?.close() }
+            transcriptionEngine = null
+        }
         super.onDestroy()
     }
 
@@ -229,8 +234,9 @@ internal class SubtitleTaskService : Service() {
     }
 
     private suspend fun scheduleTranscription() {
-        if (transcriptionJob?.isActive == true) return
+        if (transcriptionJob?.isCompleted == false) return
         transcriptionJob = null
+        transcriptionItemId = null
         val candidate = database.subtitleTaskDao().getNextTranscription() ?: return
         val selectedId = SubtitleDispatchPolicy.selectTranscriptionItem(
             orderedCandidates = listOf(candidate.id),
@@ -238,21 +244,21 @@ internal class SubtitleTaskService : Service() {
         ) ?: return
         val item = if (candidate.id == selectedId) candidate else return
         transcriptionItemId = item.id
-        transcriptionJob = serviceScope.launch {
+        val job = serviceScope.launch(start = CoroutineStart.LAZY) {
             try {
                 transcribe(item.id)
             } finally {
-                transcriptionJob = null
-                transcriptionItemId = null
                 signalWake()
             }
         }
+        transcriptionJob = job
+        job.start()
     }
 
     private suspend fun scheduleTranslations() {
         val dao = database.subtitleTaskDao()
         val candidates = dao.getTranslationCandidates(System.currentTimeMillis(), Int.MAX_VALUE)
-            .filterNot { translationJobs[it.id]?.isActive == true }
+            .filterNot { translationJobs[it.id]?.isCompleted == false }
         if (!isNetworkAvailable()) {
             candidates.forEach { item ->
                 if (item.state != SubtitleItemState.WAITING_NETWORK) {
@@ -270,7 +276,7 @@ internal class SubtitleTaskService : Service() {
         }
         val selectedIds = SubtitleDispatchPolicy.selectTranslationItems(
             orderedCandidates = candidates.map(SubtitleTaskItemEntity::id),
-            activeItemIds = translationJobs.filterValues(Job::isActive).keys,
+            activeItemIds = translationJobs.filterValues { !it.isCompleted }.keys,
             concurrency = DEEPSEEK_TRANSLATION_CONCURRENCY
         )
         val selected = candidates.filter { it.id in selectedIds }
@@ -303,7 +309,7 @@ internal class SubtitleTaskService : Service() {
         if (!isNetworkAvailable()) return
         val ownerDao = database.subtitleTitleOwnerDao()
         ownerDao.getPendingTaskIds().forEach { taskId ->
-            if (titleTranslationJobs[taskId]?.isActive == true) return@forEach
+            if (titleTranslationJobs[taskId]?.isCompleted == false) return@forEach
             val items = database.subtitleTaskDao().getItemsForTask(taskId)
             if (items.none { it.state !in TITLE_TRANSLATION_BLOCKED_STATES }) return@forEach
             val job = serviceScope.launch(start = CoroutineStart.LAZY) {
@@ -1152,8 +1158,8 @@ internal class SubtitleTaskService : Service() {
     }
 
     private fun isJobRunning(itemId: String): Boolean {
-        if (translationJobs[itemId]?.isActive == true) return true
-        return transcriptionItemId == itemId && transcriptionJob?.isActive == true
+        if (translationJobs[itemId]?.isCompleted == false) return true
+        return transcriptionItemId == itemId && transcriptionJob?.isCompleted == false
     }
 
     private suspend fun pauseAll() {
@@ -1169,7 +1175,7 @@ internal class SubtitleTaskService : Service() {
     }
 
     private suspend fun releaseTranscriptionEngineWhenIdle() {
-        if (transcriptionJob?.isActive == true) return
+        if (transcriptionJob?.isCompleted == false) return
         if (database.subtitleTaskDao().getNextTranscription() != null) return
         val engine = transcriptionEngine ?: return
         runCatching { engine.close() }
@@ -1203,8 +1209,8 @@ internal class SubtitleTaskService : Service() {
     }
 
     private suspend fun stopWhenIdle() {
-        if (transcriptionJob?.isActive == true || translationJobs.values.any(Job::isActive)) return
-        if (titleTranslationJobs.values.any(Job::isActive)) return
+        if (transcriptionJob?.isCompleted == false || translationJobs.values.any { !it.isCompleted }) return
+        if (titleTranslationJobs.values.any { !it.isCompleted }) return
         if (polishingAlbumIds.isNotEmpty()) return
         if (balanceRefreshJob != null) return
         if (database.subtitleTaskDao().countRunnableItems() > 0) return

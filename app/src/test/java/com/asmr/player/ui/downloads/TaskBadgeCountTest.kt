@@ -8,6 +8,26 @@ import org.junit.Test
 
 class TaskBadgeCountTest {
     @Test
+    fun finalizingFile_doesNotMaskPausedTaskOrCountAsAnActiveDownload() {
+        val task = downloadTask(1L, listOf(DownloadItemState.FINALIZING, DownloadItemState.PAUSED))
+        assertEquals(DownloadItemState.PAUSED, resolveDownloadTaskState(task.items))
+        assertEquals(0, countActiveDownloadFiles(listOf(task)))
+    }
+
+    @Test
+    fun finalizingFile_preservesRunningStateWhileOtherFilesResume() {
+        val task = downloadTask(1L, listOf(DownloadItemState.FINALIZING, DownloadItemState.ENQUEUED))
+        assertEquals(DownloadItemState.RUNNING, resolveDownloadTaskState(task.items))
+        assertEquals(1, countActiveDownloadFiles(listOf(task)))
+    }
+
+    @Test
+    fun finalizingOnlyTask_keepsItsExistingProgressStateWithoutDownloadControls() {
+        val task = downloadTask(1L, listOf(DownloadItemState.FINALIZING))
+        assertEquals(DownloadItemState.RUNNING, resolveDownloadTaskState(task.items))
+        assertEquals(0, countActiveDownloadFiles(listOf(task)))
+    }
+    @Test
     fun downloadBadge_countsEveryActiveFileWithinTheSameAlbum() {
         val activeTask = downloadTask(
             id = 1L,

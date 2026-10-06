@@ -838,8 +838,7 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
         val resource = DownloadStorageGateway(applicationContext).stableIdentity(target) + "/" + inputData.getString("fileName").orEmpty()
         val database = AppDatabaseProvider.get(applicationContext)
         val item = database.downloadDao().getItemByWorkId(id.toString()) ?: return@withContext ListenableWorker.Result.failure()
-        val task = database.downloadDao().getTaskById(item.taskId) ?: return@withContext ListenableWorker.Result.failure()
-        val scope = LocalFileScopes(database, DownloadStorageGateway(applicationContext)).download(task)
+        val scope = LocalFileScopes(database, DownloadStorageGateway(applicationContext)).downloadFile(item)
         LocalFileOperationCoordinator.shared.withOperation(LocalFileOperation.DOWNLOAD, resource, scope) {
             executeDownloadWork()
         }
