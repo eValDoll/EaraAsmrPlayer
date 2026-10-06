@@ -58,7 +58,7 @@ internal fun EaraTopBarContainer(
                             val fadeStops = Array(9) { index ->
                                 val progress = index / 8f
                                 val alpha = 1f - progress * progress * (3f - 2f * progress)
-                                progress to colorScheme.background.copy(alpha = alpha)
+                                progress to tonalTop.copy(alpha = alpha)
                             }
                             val upperMask = Brush.verticalGradient(
                                 *fadeStops,

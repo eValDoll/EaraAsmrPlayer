@@ -192,8 +192,8 @@ fun SettingsScreen(
     val aboutDataActive = isDataActive && selectedSection == SettingsSection.About
     val appCacheDataActive = isDataActive && selectedSection == SettingsSection.AppCache
 
-    LaunchedEffect(selectedSection) {
-        currentOnDetailPageChanged(selectedSection != null)
+    LaunchedEffect(isActive, selectedSection) {
+        currentOnDetailPageChanged(isActive && selectedSection != null)
     }
     DisposableEffect(Unit) {
         onDispose { currentOnDetailPageChanged(false) }
@@ -343,6 +343,8 @@ fun SettingsScreen(
     ) { padding ->
         LaunchedEffect(isActive) {
             if (isActive) return@LaunchedEffect
+            selectedSection = null
+            retainedSection = null
             deepSeekApiKeyInput = ""
             rootListState.stopScroll(MutatePriority.PreventUserInput)
             detailListState.stopScroll(MutatePriority.PreventUserInput)

@@ -34,6 +34,7 @@ class HeaderBlurPerformanceBenchmark {
     @Test fun groups() = measureHeader("groups")
     @Test fun listeningCalendar() = measureHeader("listening_calendar")
     @Test fun settings() = measureHeader("settings")
+    @Test fun settingsNavigation() = measureHeader("settings", navigateSettings = true)
     @Test fun translationSettings() = measureHeader("settings", translationSettings = true)
 
     private fun measureHeader(
@@ -42,6 +43,7 @@ class HeaderBlurPerformanceBenchmark {
         navigatePrimaryPages: Boolean = false,
         slowEdgeScroll: Boolean = false,
         translationSettings: Boolean = false,
+        navigateSettings: Boolean = false,
     ) {
         benchmarkRule.measureRepeated(
             packageName = PackageName,
@@ -98,7 +100,29 @@ class HeaderBlurPerformanceBenchmark {
                 SystemClock.sleep(2_000)
             },
         ) {
-            if (navigatePrimaryPages) {
+            if (navigateSettings) {
+                fun navigate(label: String) {
+                    checkNotNull(device.wait(Until.findObject(By.desc(label)), 5_000)) {
+                        "Navigation item did not become visible: $label"
+                    }.click()
+                    device.waitForIdle()
+                    waitForSceneToSettle()
+                }
+                repeat(2) {
+                    navigate("我的列表")
+                    navigate("设置")
+                    check(device.wait(Until.gone(By.desc("返回设置")), 5_000)) {
+                        "Settings detail remained open after primary navigation"
+                    }
+                    check(device.wait(Until.hasObject(By.text("配置歌词页与悬浮歌词的显示效果")), 5_000)) {
+                        "Settings root did not return after primary navigation"
+                    }
+                    checkNotNull(device.findObject(By.text("歌词"))).click()
+                    check(device.wait(Until.hasObject(By.text("开启悬浮歌词")), 5_000))
+                    device.waitForIdle()
+                    waitForSceneToSettle()
+                }
+            } else if (navigatePrimaryPages) {
                 val headerHeight = device.findObject(By.res("main_header_progressive_blur")).visibleBounds.height()
                 for (label in listOf("热门收听", "在线搜索", "热门收听", "本地库", "热门收听", "在线搜索")) {
                     checkNotNull(device.findObject(By.desc(label))).click()
