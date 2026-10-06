@@ -26,8 +26,10 @@ suspend fun AppDatabase.deleteLibraryTracks(trackIds: List<Long>) {
                 playlistItemDao().deleteByMediaIds(mediaIdBatch)
                 albumGroupItemDao().deleteByMediaIds(mediaIdBatch)
             }
+            subtitleTaskDao().deleteItemsForTracks(ids)
             trackDao().deleteTracksByIds(ids)
         }
+        subtitleTaskDao().deleteTasksWithoutItems()
     }
 }
 

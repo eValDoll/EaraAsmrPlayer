@@ -1,7 +1,12 @@
 package com.asmr.player.data.lyrics
 
+import com.asmr.player.util.LocalFileScopes
+import com.asmr.player.util.LocalFileOperation
+import com.asmr.player.util.LocalFileOperationCoordinator
+
 import android.content.Context
 import android.net.Uri
+import androidx.room.withTransaction
 import androidx.media3.common.MediaItem
 import com.asmr.player.data.local.db.dao.AlbumDao
 import com.asmr.player.data.local.db.dao.RemoteSubtitleSourceDao
@@ -49,6 +54,7 @@ data class LyricsResult(
 
 @Singleton
 class LyricsLoader @Inject constructor(
+    private val database: com.asmr.player.data.local.db.AppDatabase,
     private val trackDao: TrackDao,
     private val albumDao: AlbumDao,
     private val remoteSubtitleSourceDao: RemoteSubtitleSourceDao,
@@ -251,8 +257,19 @@ class LyricsLoader @Inject constructor(
 
     private suspend fun persistAutoLyrics(trackId: Long, target: LyricsTargetContext, entries: List<SubtitleEntry>) {
         if (entries.isEmpty()) return
-        if (trackDao.replaceAutoSubtitles(trackId, entries.toSubtitleEntities(trackId))) {
-            manualLyricsSourceRepository.clearForAutoLyrics(target)
+        val scopes = LocalFileScopes(database, com.asmr.player.data.remote.download.DownloadStorageGateway(context))
+        val scope = scopes.tracks(listOf(trackId))
+        val lease = LocalFileOperationCoordinator.shared.tryAcquire(LocalFileOperation.LIBRARY, scope = scope) ?: return
+        try {
+            if (trackDao.getTrackByIdOnce(trackId) == null || trackDao.getSubtitlesForTrack(trackId).isNotEmpty()) return
+            if (database.subtitleTaskDao().getItemForTrack(trackId) != null) return
+            database.withTransaction {
+                if (trackDao.replaceAutoSubtitles(trackId, entries.toSubtitleEntities(trackId))) {
+                    manualLyricsSourceRepository.clearForAutoLyrics(target)
+                }
+            }
+        } finally {
+            lease.close()
         }
     }
 

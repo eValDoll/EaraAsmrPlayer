@@ -10,6 +10,7 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -62,7 +63,7 @@ private data class DeepSeekChatRequest(
     val responseFormat: DeepSeekResponseFormat? = DeepSeekResponseFormat(),
     val tools: List<DeepSeekToolDefinition>? = null,
     @SerializedName("max_tokens")
-    val maxTokens: Int? = 32_768,
+    val maxTokens: Int = DEFAULT_TRANSLATION_MAX_OUTPUT_TOKENS,
     val stream: Boolean = false
 )
 
@@ -71,10 +72,20 @@ private fun DeepSeekChatRequest.forApi(config: TranslationApiConfig): DeepSeekCh
         model = config.model,
         messages = messages.map { it.copy(reasoningContent = null) },
         thinking = null,
-        reasoningEffort = null,
+        reasoningEffort = config.customReasoningEffortValue,
         responseFormat = null,
-        maxTokens = null
+        maxTokens = config.maxOutputTokens
     )
+
+private fun requiresMaxCompletionTokens(raw: String): Boolean = runCatching {
+    val error = JsonParser.parseString(raw).asJsonObject.getAsJsonObject("error") ?: return@runCatching false
+    fun field(name: String): String = error.get(name)?.takeUnless { it.isJsonNull }?.asString.orEmpty()
+    val message = field("message").lowercase(Locale.ROOT)
+    field("param") == "max_tokens" && field("code") in setOf(
+        "unsupported_parameter", "unknown_parameter", "unrecognized_parameter"
+    ) || message.contains("max_tokens") && message.contains("max_completion_tokens") &&
+        listOf("not supported", "unsupported", "instead", "deprecated").any(message::contains)
+}.getOrDefault(false)
 
 private data class DeepSeekToolDefinition(
     val type: String = "function",
@@ -139,6 +150,7 @@ internal class SubtitleTranslationClient(
         require(it.isNotEmpty()) { "请先在设置中配置 ${apiConfig.serviceName} API Key" }
     }
     private val authorization = "Bearer $normalizedApiKey"
+    private val useMaxCompletionTokens = AtomicBoolean(false)
     private val callFactory: Call.Factory = okHttpClient.newBuilder()
         .apply { interceptors().removeAll { it is HttpLoggingInterceptor } }
         .followSslRedirects(false)
@@ -528,11 +540,17 @@ internal class SubtitleTranslationClient(
         targetIndices: List<Int>,
         parseMessage: (DeepSeekChatMessage, finishReason: String?) -> T
     ): T = withContext(Dispatchers.IO) {
+        val useCompletionLimit = !apiConfig.isDeepSeek && useMaxCompletionTokens.get()
+        val body = if (useCompletionLimit) {
+            val json = JsonParser.parseString(requestBody).asJsonObject
+            json.add("max_completion_tokens", json.remove("max_tokens"))
+            gson.toJson(json)
+        } else requestBody
         val request = Request.Builder()
             .url(apiUrl)
             .header("Authorization", authorization)
             .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
-            .post(requestBody.toRequestBody(JSON_MEDIA_TYPE))
+            .post(body.toRequestBody(JSON_MEDIA_TYPE))
             .build()
 
         val call = callFactory.newCall(request)
@@ -554,6 +572,12 @@ internal class SubtitleTranslationClient(
             response.use {
                 val raw = it.body?.string().orEmpty()
                 if (!it.isSuccessful) {
+                    if (!apiConfig.isDeepSeek && !useCompletionLimit &&
+                        it.code in listOf(400, 422) && requiresMaxCompletionTokens(raw)) {
+                        // 只切换被明确拒绝的参数名，保留用户设置的上限。
+                        useMaxCompletionTokens.set(true)
+                        return@withContext executeTranslationRequest(requestBody, targetIndices, parseMessage)
+                    }
                     val failure = SubtitleFailureMessages.deepSeekHttp(
                         statusCode = it.code,
                         serviceMessage = parseDeepSeekErrorMessage(raw),

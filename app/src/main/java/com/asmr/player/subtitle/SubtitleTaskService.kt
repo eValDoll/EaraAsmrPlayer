@@ -1,5 +1,9 @@
 package com.asmr.player.subtitle
 
+import com.asmr.player.util.LocalFileScopes
+import com.asmr.player.util.LocalFileOperation
+import com.asmr.player.util.withSubtitleFileAccess
+
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -38,6 +42,8 @@ import com.asmr.player.domain.model.Track
 import com.asmr.player.ui.library.LocalTreeNode
 import com.asmr.player.ui.library.TreeFileType
 import com.asmr.player.ui.library.loadOrBuildLocalTreeIndex
+import com.asmr.player.util.LocalFileSnapshot
+import com.asmr.player.util.isOnlineTrackPath
 import com.asmr.player.util.MessageManager
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
@@ -85,6 +91,7 @@ internal class SubtitleTaskService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val wakeSignals = Channel<Unit>(Channel.CONFLATED)
     private lateinit var database: AppDatabase
+    private lateinit var fileScopes: LocalFileScopes
     private lateinit var repository: SubtitleTaskRepository
     private lateinit var connectivityManager: ConnectivityManager
     private lateinit var gson: Gson
@@ -95,6 +102,8 @@ internal class SubtitleTaskService : Service() {
     private lateinit var generatedSubtitleFileExporter: GeneratedSubtitleFileExporter
     private var transcriptionJob: Job? = null
     private var transcriptionItemId: String? = null
+    private val sourceSnapshots = ConcurrentHashMap<String, LocalFileSnapshot>()
+    private val outputSnapshots = ConcurrentHashMap<String, GeneratedSubtitleOutputSnapshot>()
     private val translationJobs = ConcurrentHashMap<String, Job>()
     private val titleTranslationJobs = ConcurrentHashMap<String, Job>()
     private val polishingAlbumIds = ConcurrentHashMap.newKeySet<Long>()
@@ -115,6 +124,7 @@ internal class SubtitleTaskService : Service() {
         super.onCreate()
         database = AppDatabaseProvider.get(applicationContext)
         repository = SubtitleTaskRepository.get(applicationContext)
+        fileScopes = LocalFileScopes(database, com.asmr.player.data.remote.download.DownloadStorageGateway(applicationContext))
         connectivityManager = getSystemService(ConnectivityManager::class.java)
         val entryPoint = EntryPointAccessors.fromApplication(
             applicationContext,
@@ -322,6 +332,13 @@ internal class SubtitleTaskService : Service() {
      * 只在任务仍处于翻译阶段（未取消/未删除）时提交结果。
      */
     private suspend fun translateDisplayNamesForTask(taskId: String) {
+        val trackIds = database.subtitleTaskDao().getItemsForTask(taskId).map { it.trackId }
+        database.withSubtitleFileAccess(fileScopes, fileScopes.tracks(trackIds)) {
+            translateDisplayNamesForTaskLocked(taskId)
+        }
+    }
+
+    private suspend fun translateDisplayNamesForTaskLocked(taskId: String) {
         val ownerDao = database.subtitleTitleOwnerDao()
         val registeredOwners = ownerDao.getByTask(taskId)
         if (registeredOwners.none { owner -> owner.displayTitle.isBlank() }) return
@@ -375,6 +392,18 @@ internal class SubtitleTaskService : Service() {
     }
 
     private suspend fun transcribe(itemId: String) {
+        val trackId = database.subtitleTaskDao().getItem(itemId)?.trackId ?: return
+        database.withSubtitleFileAccess(fileScopes, fileScopes.tracks(listOf(trackId)), "track:$trackId") {
+            try {
+                transcribeLocked(itemId)
+            } finally {
+                sourceSnapshots.remove(itemId)
+                outputSnapshots.remove(itemId)
+            }
+        }
+    }
+
+    private suspend fun transcribeLocked(itemId: String) {
         val dao = database.subtitleTaskDao()
         val initial = dao.getItem(itemId) ?: return
         if (initial.state != SubtitleItemState.QUEUED_TRANSCRIPTION) return
@@ -391,6 +420,7 @@ internal class SubtitleTaskService : Service() {
         dao.updateItem(activeItem)
         repository.refreshTaskState(activeItem.taskId)
         try {
+            captureTaskSource(activeItem)
             val engine = requireTranscriptionEngine(modelId)
             val existingChunks = dao.getChunks(itemId)
             val resumeAtMs = existingChunks.lastOrNull()?.endMs ?: 0L
@@ -426,6 +456,7 @@ internal class SubtitleTaskService : Service() {
                 database.withTransaction {
                     val current = dao.getItem(itemId) ?: throw CancellationException("字幕任务已删除")
                     if (current.state != SubtitleItemState.TRANSCRIBING) throw CancellationException("字幕转录已暂停或取消")
+                    requireTaskSourceUnchanged(current)
                     val chunkIndex = current.transcriptionChunkCursor
                     val processedMs = chunk.startMs + chunk.durationMs
                     dao.upsertChunk(
@@ -455,6 +486,7 @@ internal class SubtitleTaskService : Service() {
                     )
                 }
             }
+            requireTaskSourceUnchanged(activeItem)
             prepareGeneratedTranslation(itemId)
         } catch (cancelled: CancellationException) {
             settleCancelledExecution(itemId)
@@ -522,6 +554,18 @@ internal class SubtitleTaskService : Service() {
     }
 
     private suspend fun translate(itemId: String) {
+        val trackId = database.subtitleTaskDao().getItem(itemId)?.trackId ?: return
+        database.withSubtitleFileAccess(fileScopes, fileScopes.tracks(listOf(trackId)), "track:$trackId") {
+            try {
+                translateLocked(itemId)
+            } finally {
+                sourceSnapshots.remove(itemId)
+                outputSnapshots.remove(itemId)
+            }
+        }
+    }
+
+    private suspend fun translateLocked(itemId: String) {
         val dao = database.subtitleTaskDao()
         val item = dao.getItem(itemId) ?: return
         if (item.state !in TRANSLATION_QUEUE_STATES) return
@@ -546,6 +590,7 @@ internal class SubtitleTaskService : Service() {
         )
         repository.refreshTaskState(item.taskId)
         try {
+            captureTaskSource(item)
             if (item.mode == SubtitleTaskMode.GENERATED) {
                 translateGeneratedFull(itemId, sources)
             } else {
@@ -619,7 +664,7 @@ internal class SubtitleTaskService : Service() {
     private suspend fun exportGeneratedSubtitleFile(itemId: String) {
         val item = database.subtitleTaskDao().getItem(itemId) ?: return
         if (item.mode != SubtitleTaskMode.GENERATED) return
-        runCatching { generatedSubtitleFileExporter.export(item.trackId) }
+        runCatching { generatedSubtitleFileExporter.export(item.trackId, expectedOutput = outputSnapshots[itemId]) }
             .onSuccess { result ->
                 when (result) {
                     is GeneratedSubtitleExportResult.Exported -> {
@@ -651,8 +696,13 @@ internal class SubtitleTaskService : Service() {
      * 并把"润色中"状态通过 [SubtitleTaskRepository.markPolishStarted] 暴露给 UI。
      */
     private suspend fun startPolishAlbum(albumId: Long) {
+        database.withSubtitleFileAccess(fileScopes, fileScopes.album(albumId), operation = LocalFileOperation.POLISH_SUBTITLE) {
+            startPolishAlbumLocked(albumId)
+        }
+    }
+
+    private suspend fun startPolishAlbumLocked(albumId: Long) {
         if (!polishingAlbumIds.add(albumId)) return
-        var started = false
         try {
             val settings = settingsRepository.loadDeepSeekTranslationSettings()
             if (!settings.finalPolishEnabled) {
@@ -675,24 +725,21 @@ internal class SubtitleTaskService : Service() {
                 messageManager.showWarning(SubtitleTaskRepository.ACTIVE_TASKS_BLOCK_POLISH_MESSAGE)
                 return
             }
-            started = true
             repository.markPolishStarted(albumId)
             messageManager.showInfo("已开始润色该作品字幕，完成后会自动更新")
             Log.i(TAG, "开始作品级手动润色 albumId=$albumId tracks=${polishableTracks.size}")
-            serviceScope.launch {
-                runCatching { polishAlbum(albumId, polishableTracks) }
-                    .onFailure { error ->
-                        Log.w(TAG, "作品级润色失败 albumId=$albumId（不影响已有字幕）", error)
-                    }
-                    .onSuccess { changedCount ->
-                        Log.i(TAG, "作品级润色完成 albumId=$albumId 修改字幕=$changedCount 条")
-                    }
-                repository.markPolishFinished(albumId)
-                polishingAlbumIds.remove(albumId)
-                signalWake()
-            }
+            runCatching { polishAlbum(albumId, polishableTracks) }
+                .onFailure { error ->
+                    Log.w(TAG, "作品级润色失败 albumId=$albumId（不影响已有字幕）", error)
+                }
+                .onSuccess { changedCount ->
+                    Log.i(TAG, "作品级润色完成 albumId=$albumId 修改字幕=$changedCount 条")
+                }
+
         } finally {
-            if (!started) polishingAlbumIds.remove(albumId)
+            withContext(NonCancellable) { repository.markPolishFinished(albumId) }
+            polishingAlbumIds.remove(albumId)
+            signalWake()
         }
     }
 
@@ -888,11 +935,21 @@ internal class SubtitleTaskService : Service() {
             circle = album.circle,
             cv = album.cv
         )
+        val snapshots = withContext(Dispatchers.IO) {
+            tracks.filterNot { isOnlineTrackPath(it.path) }.associate { track ->
+                track.path to LocalFileSnapshot.read(applicationContext, track.path)
+            }
+        }
         val client = requireTranslationClient()
         val results = client.polishSubtitles(
             tracks = polishInputs,
             workContext = workContext
-        ) { batch -> commitPolishedCaptions(batch, subtitleByCaptionId) }
+        ) { batch ->
+            withContext(Dispatchers.IO) {
+                snapshots.forEach { (path, snapshot) -> snapshot.requireUnchanged(applicationContext, path) }
+            }
+            commitPolishedCaptions(batch, subtitleByCaptionId)
+        }
         return results.count { result ->
             val original = subtitleByCaptionId[result.captionId]?.text
             original != null && original != result.chinese
@@ -997,7 +1054,24 @@ internal class SubtitleTaskService : Service() {
         }
     }
 
+    private suspend fun captureTaskSource(item: SubtitleTaskItemEntity) = withContext(Dispatchers.IO) {
+        val track = database.trackDao().getTrackByIdOnce(item.trackId)
+        check(track != null && track.path == item.trackPath) { "音轨已移除或位置已变化" }
+        if (!isOnlineTrackPath(item.trackPath)) {
+            sourceSnapshots[item.id] = LocalFileSnapshot.read(applicationContext, item.trackPath)
+            generatedSubtitleFileExporter.captureOutput(item.trackId)?.let { outputSnapshots[item.id] = it }
+        }
+    }
+
+    private suspend fun requireTaskSourceUnchanged(item: SubtitleTaskItemEntity) = withContext(Dispatchers.IO) {
+        val track = database.trackDao().getTrackByIdOnce(item.trackId)
+        check(track != null && track.path == item.trackPath) { "音轨已移除或位置已变化" }
+        sourceSnapshots[item.id]?.requireUnchanged(applicationContext, item.trackPath)
+        outputSnapshots[item.id]?.let { generatedSubtitleFileExporter.requireOutputUnchanged(it) }
+    }
+
     private suspend fun assertTaskControlsCurrentSubtitles(item: SubtitleTaskItemEntity) {
+        requireTaskSourceUnchanged(item)
         val current = database.trackDao().getSubtitlesForTrack(item.trackId).sortedWith(SUBTITLE_ORDER)
         check(taskStillControlsSubtitles(subtitleHash(current), item.lastPublishedHash)) {
             "字幕在任务期间已被修改，已停止写入"

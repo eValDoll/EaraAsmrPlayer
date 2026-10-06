@@ -2,6 +2,16 @@ package com.asmr.player.subtitle
 
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 
+internal const val DEFAULT_TRANSLATION_MAX_OUTPUT_TOKENS = 32_768
+
+internal enum class CustomThinkingMode(val label: String) {
+    FOLLOW_SERVER("跟随服务端"), DISABLED("关闭"), ENABLED("开启")
+}
+
+internal enum class CustomReasoningEffort(val wireValue: String) {
+    MINIMAL("minimal"), LOW("low"), MEDIUM("medium"), HIGH("high"), XHIGH("xhigh"), MAX("max")
+}
+
 internal enum class TranslationProvider(val label: String) {
     DEEPSEEK("DeepSeek"),
     CUSTOM("自定义（OpenAI 兼容）")
@@ -11,7 +21,10 @@ internal data class TranslationApiSettings(
     val provider: TranslationProvider = TranslationProvider.DEEPSEEK,
     val customBaseUrl: String = "",
     val customModel: String = "",
-    val customKeyConfigured: Boolean = false
+    val customKeyConfigured: Boolean = false,
+    val customMaxOutputTokens: Int = DEFAULT_TRANSLATION_MAX_OUTPUT_TOKENS,
+    val customThinkingMode: CustomThinkingMode = CustomThinkingMode.FOLLOW_SERVER,
+    val customReasoningEffort: CustomReasoningEffort = CustomReasoningEffort.HIGH
 )
 
 // 密钥不参与 data class 的 toString，避免在日志中意外输出。
@@ -19,11 +32,23 @@ internal class TranslationApiConfig(
     val provider: TranslationProvider = TranslationProvider.DEEPSEEK,
     val apiKey: String,
     val baseUrl: String = "https://api.deepseek.com",
-    val model: String = DEEPSEEK_SUBTITLE_MODEL
+    val model: String = DEEPSEEK_SUBTITLE_MODEL,
+    val maxOutputTokens: Int = DEFAULT_TRANSLATION_MAX_OUTPUT_TOKENS,
+    val thinkingMode: CustomThinkingMode = CustomThinkingMode.FOLLOW_SERVER,
+    val reasoningEffort: CustomReasoningEffort = CustomReasoningEffort.HIGH
 ) {
+    init {
+        require(maxOutputTokens > 0) { "最大输出 Token 必须为正整数" }
+    }
+
     val isDeepSeek: Boolean get() = provider == TranslationProvider.DEEPSEEK
     val serviceName: String get() = if (isDeepSeek) "DeepSeek" else "自定义翻译服务"
     val completionsUrl: String get() = translationChatCompletionsUrl(baseUrl)
+    val customReasoningEffortValue: String? get() = when (thinkingMode) {
+        CustomThinkingMode.FOLLOW_SERVER -> null
+        CustomThinkingMode.DISABLED -> "none"
+        CustomThinkingMode.ENABLED -> reasoningEffort.wireValue
+    }
 
     fun requireConfigured(): TranslationApiConfig {
         require(apiKey.isNotBlank()) { "请先在设置中配置 $serviceName API Key" }

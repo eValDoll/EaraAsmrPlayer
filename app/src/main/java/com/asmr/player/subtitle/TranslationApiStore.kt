@@ -30,7 +30,10 @@ internal class TranslationApiStore internal constructor(
             provider = selectedProvider(),
             customBaseUrl = custom?.baseUrl.orEmpty(),
             customModel = custom?.model.orEmpty(),
-            customKeyConfigured = custom?.apiKey?.isNotBlank() == true
+            customKeyConfigured = custom?.apiKey?.isNotBlank() == true,
+            customMaxOutputTokens = custom?.maxOutputTokens ?: DEFAULT_TRANSLATION_MAX_OUTPUT_TOKENS,
+            customThinkingMode = custom?.thinkingMode ?: CustomThinkingMode.FOLLOW_SERVER,
+            customReasoningEffort = custom?.reasoningEffort ?: CustomReasoningEffort.HIGH
         )
     }
 
@@ -50,17 +53,30 @@ internal class TranslationApiStore internal constructor(
         check(preferences.edit().putString(KEY_PROVIDER, provider.name).commit()) { "翻译服务保存失败" }
     }
 
-    fun saveCustom(baseUrl: String, model: String, apiKey: String) = synchronized(lock) {
+    fun saveCustom(
+        baseUrl: String,
+        model: String,
+        apiKey: String,
+        maxOutputTokens: Int,
+        thinkingMode: CustomThinkingMode = CustomThinkingMode.FOLLOW_SERVER,
+        reasoningEffort: CustomReasoningEffort = CustomReasoningEffort.HIGH,
+    ) = synchronized(lock) {
         val config = TranslationApiConfig(
             provider = TranslationProvider.CUSTOM,
             apiKey = apiKey.trim().ifBlank { readCustom()?.apiKey.orEmpty() },
             baseUrl = baseUrl.trim(),
-            model = model.trim()
+            model = model.trim(),
+            maxOutputTokens = maxOutputTokens,
+            thinkingMode = thinkingMode,
+            reasoningEffort = reasoningEffort
         ).requireConfigured()
         val raw = JSONObject()
             .put("baseUrl", config.baseUrl)
             .put("model", config.model)
             .put("apiKey", config.apiKey)
+            .put("maxOutputTokens", config.maxOutputTokens)
+            .put("thinkingMode", config.thinkingMode.name)
+            .put("reasoningEffort", config.reasoningEffort.wireValue)
             .toString()
         saveEncrypted(raw, CUSTOM_PREFIX, TranslationProvider.CUSTOM)
     }
@@ -79,7 +95,14 @@ internal class TranslationApiStore internal constructor(
                 provider = TranslationProvider.CUSTOM,
                 apiKey = json.getString("apiKey"),
                 baseUrl = json.getString("baseUrl"),
-                model = json.getString("model")
+                model = json.getString("model"),
+                maxOutputTokens = if (json.has("maxOutputTokens")) json.getInt("maxOutputTokens")
+                    else DEFAULT_TRANSLATION_MAX_OUTPUT_TOKENS,
+                thinkingMode = if (json.has("thinkingMode")) CustomThinkingMode.valueOf(json.getString("thinkingMode"))
+                    else CustomThinkingMode.FOLLOW_SERVER,
+                reasoningEffort = if (json.has("reasoningEffort")) {
+                    CustomReasoningEffort.entries.first { it.wireValue == json.getString("reasoningEffort") }
+                } else CustomReasoningEffort.HIGH
             )
         }.getOrNull()
     }

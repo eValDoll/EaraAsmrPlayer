@@ -30,6 +30,8 @@ import com.asmr.player.subtitle.SubtitleModelRepository
 import com.asmr.player.subtitle.SubtitleModelState
 import com.asmr.player.subtitle.TranslationApiStore
 import com.asmr.player.subtitle.TranslationApiSettings
+import com.asmr.player.subtitle.CustomThinkingMode
+import com.asmr.player.subtitle.CustomReasoningEffort
 import com.asmr.player.subtitle.TranslationProvider
 import com.asmr.player.subtitle.DeepSeekAccountRepository
 import com.asmr.player.util.MessageManager
@@ -146,6 +148,9 @@ class SettingsViewModel @Inject constructor(
                 DownloadDirectoryChangeResult.Unchanged -> messageManager.showInfo("当前已使用该下载目录")
                 DownloadDirectoryChangeResult.BlockedByUnfinishedTasks -> {
                     messageManager.showError("请先完成或删除未完成任务")
+                }
+                DownloadDirectoryChangeResult.BlockedByLocalFileOperation -> {
+                    messageManager.showInfo(com.asmr.player.util.LocalFileOperationCoordinator.BUSY_MESSAGE)
                 }
                 DownloadDirectoryChangeResult.DirectoryUnavailable -> {
                     messageManager.showError("下载目录不可用，请重新选择或重置为默认目录")
@@ -453,8 +458,17 @@ class SettingsViewModel @Inject constructor(
         updateTranslationApi { translationApiStore.selectProvider(provider) }
     }
 
-    internal fun saveCustomTranslationApi(baseUrl: String, model: String, apiKey: String) {
-        updateTranslationApi { translationApiStore.saveCustom(baseUrl, model, apiKey) }
+    internal fun saveCustomTranslationApi(
+        baseUrl: String,
+        model: String,
+        apiKey: String,
+        maxOutputTokens: Int,
+        thinkingMode: CustomThinkingMode,
+        reasoningEffort: CustomReasoningEffort,
+    ) {
+        updateTranslationApi {
+            translationApiStore.saveCustom(baseUrl, model, apiKey, maxOutputTokens, thinkingMode, reasoningEffort)
+        }
     }
 
     private fun updateTranslationApi(save: () -> Unit) {

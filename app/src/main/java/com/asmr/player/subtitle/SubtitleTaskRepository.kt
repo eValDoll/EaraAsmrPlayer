@@ -1,5 +1,10 @@
 package com.asmr.player.subtitle
 
+import com.asmr.player.util.LocalFileScopes
+import com.asmr.player.util.LocalFileOperation
+import com.asmr.player.util.withSubtitleFileAccess
+import com.asmr.player.util.LocalFileOperationCoordinator
+
 import android.content.Context
 import androidx.room.withTransaction
 import androidx.work.WorkManager
@@ -31,6 +36,7 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
     private val appContext = context.applicationContext
     private val database = AppDatabaseProvider.get(appContext)
     private val dao = database.subtitleTaskDao()
+    private val fileScopes = LocalFileScopes(database, com.asmr.player.data.remote.download.DownloadStorageGateway(appContext))
     private val enqueueMutex = Mutex()
     private val startupMutex = Mutex()
     @Volatile private var startupReconciled = false
@@ -98,6 +104,12 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
 
     suspend fun enqueueGeneration(targets: List<SubtitleGenerationTarget>): SubtitleTaskHandle {
         reconcileOnAppLaunch()
+        return database.withSubtitleFileAccess(fileScopes, fileScopes.tracks(targets.map { it.trackId })) {
+            enqueueGenerationLocked(targets)
+        }
+    }
+
+    private suspend fun enqueueGenerationLocked(targets: List<SubtitleGenerationTarget>): SubtitleTaskHandle {
         return enqueueMutex.withLock {
             val normalized = targets.asSequence()
                 .filter { it.trackId > 0L }
@@ -122,6 +134,12 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
 
     suspend fun enqueueTranslation(target: SubtitleTranslationTarget): SubtitleTaskHandle {
         reconcileOnAppLaunch()
+        return database.withSubtitleFileAccess(fileScopes, fileScopes.tracks(listOf(target.trackId))) {
+            enqueueTranslationLocked(target)
+        }
+    }
+
+    private suspend fun enqueueTranslationLocked(target: SubtitleTranslationTarget): SubtitleTaskHandle {
         return enqueueMutex.withLock {
             require(target.trackId > 0L) { "字幕所属音轨无效" }
             ensureTrackAlbumNotPolishing(target.trackId)
@@ -347,7 +365,14 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
         SubtitleTaskService.wake(appContext)
     }
 
-    internal suspend fun finishCancellation(itemId: String): String? = withContext(Dispatchers.IO) {
+    internal suspend fun finishCancellation(itemId: String): String? {
+        val item = dao.getItem(itemId) ?: return null
+        return LocalFileOperationCoordinator.shared.withOperation(
+            LocalFileOperation.SUBTITLE, resource = "track:${item.trackId}", scope = fileScopes.tracks(listOf(item.trackId))
+        ) { finishCancellationLocked(itemId) }
+    }
+
+    private suspend fun finishCancellationLocked(itemId: String): String? = withContext(Dispatchers.IO) {
         var warning: String? = null
         var taskId: String? = null
         database.withTransaction {

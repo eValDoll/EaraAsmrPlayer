@@ -25,6 +25,8 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import com.asmr.player.subtitle.TranslationProvider
+import com.asmr.player.subtitle.CustomThinkingMode
+import com.asmr.player.subtitle.CustomReasoningEffort
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.theme.AsmrTheme
 
@@ -32,7 +34,7 @@ import com.asmr.player.ui.theme.AsmrTheme
 internal fun TranslationApiSettingsSection(
     state: TranslationApiUiState,
     onProviderSelected: (TranslationProvider) -> Unit,
-    onSaveCustom: (String, String, String) -> Unit,
+    onSaveCustom: (String, String, String, Int, CustomThinkingMode, CustomReasoningEffort) -> Unit,
     deepSeekContent: @Composable () -> Unit,
     customOptions: @Composable () -> Unit
 ) {
@@ -40,17 +42,26 @@ internal fun TranslationApiSettingsSection(
     var provider by rememberSaveable { mutableStateOf(state.settings.provider) }
     var baseUrl by rememberSaveable { mutableStateOf(state.settings.customBaseUrl) }
     var model by rememberSaveable { mutableStateOf(state.settings.customModel) }
+    var maxOutputTokens by rememberSaveable { mutableStateOf(state.settings.customMaxOutputTokens.toString()) }
+    var thinkingMode by rememberSaveable { mutableStateOf(state.settings.customThinkingMode) }
+    var reasoningEffort by rememberSaveable { mutableStateOf(state.settings.customReasoningEffort) }
     var apiKey by remember { mutableStateOf("") }
     LaunchedEffect(state.loaded, state.saveVersion) {
         if (state.loaded) {
             provider = state.settings.provider
             baseUrl = state.settings.customBaseUrl
             model = state.settings.customModel
+            maxOutputTokens = state.settings.customMaxOutputTokens.toString()
+            thinkingMode = state.settings.customThinkingMode
+            reasoningEffort = state.settings.customReasoningEffort
             apiKey = ""
         }
     }
     val enabled = state.loaded && !state.saving
+    val parsedMaxOutputTokens = maxOutputTokens.toIntOrNull()?.takeIf { it > 0 }
     val options = remember { TranslationProvider.entries.associate { it.name to it.label } }
+    val thinkingOptions = remember { CustomThinkingMode.entries.associate { it.name to it.label } }
+    val effortOptions = remember { CustomReasoningEffort.entries.associate { it.name to it.wireValue } }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         SettingsDropdownSelector(
             label = "翻译服务",
@@ -113,10 +124,40 @@ internal fun TranslationApiSettingsSection(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 modifier = Modifier.fillMaxWidth().testTag("custom_api_key")
             )
+            OutlinedTextField(
+                value = maxOutputTokens,
+                onValueChange = { maxOutputTokens = it },
+                label = { Text("最大输出 Token") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true, enabled = enabled, colors = fieldColors,
+                isError = parsedMaxOutputTokens == null,
+                shape = RoundedCornerShape(10.dp),
+                modifier = Modifier.fillMaxWidth().testTag("custom_api_max_output_tokens")
+            )
+            SettingsDropdownSelector(
+                label = "思考模式",
+                value = thinkingMode.name,
+                options = thinkingOptions,
+                onSelect = { thinkingMode = CustomThinkingMode.valueOf(it) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = enabled,
+                tagPrefix = "custom_api_thinking"
+            )
+            SettingsDropdownSelector(
+                label = "思考强度",
+                value = reasoningEffort.name,
+                options = effortOptions,
+                onSelect = { reasoningEffort = CustomReasoningEffort.valueOf(it) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = enabled && thinkingMode == CustomThinkingMode.ENABLED,
+                tagPrefix = "custom_api_effort"
+            )
             FilledTonalButton(
-                onClick = { onSaveCustom(baseUrl, model, apiKey) },
+                onClick = {
+                    parsedMaxOutputTokens?.let { onSaveCustom(baseUrl, model, apiKey, it, thinkingMode, reasoningEffort) }
+                },
                 enabled = enabled && baseUrl.isNotBlank() && model.isNotBlank() &&
-                    (apiKey.isNotBlank() || state.settings.customKeyConfigured),
+                    (apiKey.isNotBlank() || state.settings.customKeyConfigured) && parsedMaxOutputTokens != null,
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.filledTonalButtonColors(
                     containerColor = colors.primarySoft,

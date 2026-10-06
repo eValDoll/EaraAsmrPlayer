@@ -82,6 +82,7 @@ class PlaylistSubtitlePersistenceTest {
                 .build()
         }.build()
         val loader = LyricsLoader(
+            database = db,
             trackDao = db.trackDao(),
             albumDao = db.albumDao(),
             remoteSubtitleSourceDao = db.remoteSubtitleSourceDao(),

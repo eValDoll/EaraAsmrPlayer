@@ -1,5 +1,12 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.util.LocalFileScopes
+import com.asmr.player.data.remote.download.DownloadStorageGateway
+import com.asmr.player.util.LocalFileOperation
+import com.asmr.player.util.tryBeginFileMutation
+import com.asmr.player.util.LocalFileSnapshot
+import com.asmr.player.util.LocalFileOperationCoordinator
+
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -145,6 +152,7 @@ class LibraryViewModel @Inject constructor(
     private val playerConnection: PlayerConnection,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
+    private val fileScopes by lazy { LocalFileScopes(database, DownloadStorageGateway(context)) }
     private companion object {
         const val TAG = "LibraryViewModel"
     }
@@ -677,7 +685,7 @@ class LibraryViewModel @Inject constructor(
     }
 
     private fun showSyncBusy(nextAction: String) {
-        messageManager.showInfo("同步任务进行中，请等待完成或取消后再$nextAction")
+        messageManager.showInfo("请先完成或取消本地文件任务，再$nextAction")
     }
 
     private fun tryRegisterAlbumJob(albumId: Long, taskName: String): Boolean {
@@ -894,120 +902,144 @@ class LibraryViewModel @Inject constructor(
     }
 
     fun addScanRoot(uriString: String): Boolean {
-        val existingRoots = scanRootsStore.getRoots()
-        
-        // 检查重复
-        if (existingRoots.contains(uriString)) {
-            messageManager.showInfo("扫描目录已存在")
+        val fileLease = LocalFileOperationCoordinator.shared.tryAcquire(LocalFileOperation.LIBRARY) ?: run {
+            messageManager.showInfo(LocalFileOperationCoordinator.BUSY_MESSAGE)
             return false
         }
-        
-        // 检查嵌套：新目录是否是现有目录的子目录
-        val newUri = runCatching { Uri.parse(uriString) }.getOrNull()
-        if (newUri != null) {
-            for (existingRoot in existingRoots) {
-                val existingUri = runCatching { Uri.parse(existingRoot) }.getOrNull() ?: continue
-                
-                // 检查新目录是否是现有目录的子目录
-                if (isSubdirectory(newUri, existingUri)) {
-                    messageManager.showInfo("该目录已被包含在现有扫描目录中")
-                    return false
-                }
-                
-                // 检查现有目录是否是新目录的子目录
-                if (isSubdirectory(existingUri, newUri)) {
-                    messageManager.showInfo("该目录包含了现有的扫描目录，请先移除子目录")
-                    return false
+        try {
+            val existingRoots = scanRootsStore.getRoots()
+
+            // 检查重复
+            if (existingRoots.contains(uriString)) {
+                messageManager.showInfo("扫描目录已存在")
+                return false
+            }
+
+            // 检查嵌套：新目录是否是现有目录的子目录
+            val newUri = runCatching { Uri.parse(uriString) }.getOrNull()
+            if (newUri != null) {
+                for (existingRoot in existingRoots) {
+                    val existingUri = runCatching { Uri.parse(existingRoot) }.getOrNull() ?: continue
+
+                    // 检查新目录是否是现有目录的子目录
+                    if (isSubdirectory(newUri, existingUri)) {
+                        messageManager.showInfo("该目录已被包含在现有扫描目录中")
+                        return false
+                    }
+
+                    // 检查现有目录是否是新目录的子目录
+                    if (isSubdirectory(existingUri, newUri)) {
+                        messageManager.showInfo("该目录包含了现有的扫描目录，请先移除子目录")
+                        return false
+                    }
                 }
             }
+
+            val added = scanRootsStore.addRoot(uriString)
+            _scanRoots.value = runCatching { scanRootsStore.getRoots() }.getOrDefault(emptySet())
+            if (added) {
+                messageManager.showSuccess("已添加扫描目录")
+            }
+            return added
+        } finally {
+            fileLease.close()
         }
-        
-        val added = scanRootsStore.addRoot(uriString)
-        _scanRoots.value = runCatching { scanRootsStore.getRoots() }.getOrDefault(emptySet())
-        if (added) {
-            messageManager.showSuccess("已添加扫描目录")
-        }
-        return added
     }
-    
+
     private fun isSubdirectory(child: Uri, parent: Uri): Boolean {
         // 如果是相同的 URI scheme 和 authority
         if (child.scheme != parent.scheme || child.authority != parent.authority) {
             return false
         }
-        
+
         // 获取文档树 ID
-        val childTreeId = runCatching { 
-            DocumentsContract.getTreeDocumentId(child) 
+        val childTreeId = runCatching {
+            DocumentsContract.getTreeDocumentId(child)
         }.getOrNull() ?: return false
-        
-        val parentTreeId = runCatching { 
-            DocumentsContract.getTreeDocumentId(parent) 
+
+        val parentTreeId = runCatching {
+            DocumentsContract.getTreeDocumentId(parent)
         }.getOrNull() ?: return false
-        
+
         // 检查子目录关系
-        return childTreeId.startsWith(parentTreeId) && childTreeId != parentTreeId
+        return childTreeId.startsWith(parentTreeId.trimEnd('/') + "/")
     }
 
     fun removeScanRoot(uriString: String) {
-        scanRootsStore.removeRoot(uriString)
-        _scanRoots.value = runCatching { scanRootsStore.getRoots() }.getOrDefault(emptySet())
-        messageManager.showInfo("已移除扫描目录")
+        val fileLease = LocalFileOperationCoordinator.shared.tryAcquire(LocalFileOperation.LIBRARY) ?: run {
+            messageManager.showInfo(LocalFileOperationCoordinator.BUSY_MESSAGE)
+            return
+        }
+        try {
+            scanRootsStore.removeRoot(uriString)
+            _scanRoots.value = runCatching { scanRootsStore.getRoots() }.getOrDefault(emptySet())
+            messageManager.showInfo("已移除扫描目录")
+        } finally {
+            fileLease.close()
+        }
     }
 
     fun removeScanRootAndDeleteAlbums(uriString: String) {
         viewModelScope.launch(Dispatchers.IO) {
-            scanRootsStore.removeRoot(uriString)
-            _scanRoots.value = runCatching { scanRootsStore.getRoots() }.getOrDefault(emptySet())
-
-            val allAlbums = albumDao.getAllAlbumsOnce()
-            val affected = allAlbums.filter { entity ->
-                entity.path.startsWith(uriString) ||
-                    (entity.localPath?.startsWith(uriString) == true) ||
-                    entity.coverPath.startsWith(uriString)
+            val fileLease = database.tryBeginFileMutation(fileScopes) ?: run {
+                messageManager.showInfo(LocalFileOperationCoordinator.BUSY_MESSAGE)
+                return@launch
             }
+            try {
+                scanRootsStore.removeRoot(uriString)
+                _scanRoots.value = runCatching { scanRootsStore.getRoots() }.getOrDefault(emptySet())
 
-            affected.forEach { entity ->
-                val downloadPath = entity.downloadPath
-                val keepByDownload = !downloadPath.isNullOrBlank() &&
-                    !downloadPath.startsWith("content://") &&
-                    runCatching { File(downloadPath).exists() }.getOrDefault(false)
+                val allAlbums = albumDao.getAllAlbumsOnce()
+                val affected = allAlbums.filter { entity ->
+                    entity.path.startsWith(uriString) ||
+                        (entity.localPath?.startsWith(uriString) == true) ||
+                        entity.coverPath.startsWith(uriString)
+                }
 
-                if (!keepByDownload) {
-                    val tracks = trackDao.getTracksForAlbumOnce(entity.id)
-                    val hasOnline = isVirtualAlbumPath(entity.path) || tracks.any { isOnlineTrackPath(it.path) }
-                    if (!hasOnline) {
-                        trackDao.deleteSubtitlesForAlbum(entity.id)
-                        deleteAlbumEntity(entity)
+                affected.forEach { entity ->
+                    val downloadPath = entity.downloadPath
+                    val keepByDownload = !downloadPath.isNullOrBlank() &&
+                        !downloadPath.startsWith("content://") &&
+                        runCatching { File(downloadPath).exists() }.getOrDefault(false)
+
+                    if (!keepByDownload) {
+                        val tracks = trackDao.getTracksForAlbumOnce(entity.id)
+                        val hasOnline = isVirtualAlbumPath(entity.path) || tracks.any { isOnlineTrackPath(it.path) }
+                        if (!hasOnline) {
+                            trackDao.deleteSubtitlesForAlbum(entity.id)
+                            deleteAlbumEntity(entity)
+                        } else {
+                            tracks.filter { it.path.startsWith(uriString) }.forEach { track ->
+                                trackDao.deleteSubtitlesForTrack(track.id)
+                                database.deleteLibraryTracks(listOf(track.id))
+                            }
+                            val updatedPath = if (entity.path.startsWith(uriString)) (buildOnlineAlbumPath(entity) ?: entity.path) else entity.path
+                            val updated = entity.copy(
+                                path = updatedPath,
+                                localPath = entity.localPath?.takeIf { !it.startsWith(uriString) },
+                                coverPath = if (entity.coverPath.startsWith(uriString)) "" else entity.coverPath
+                            )
+                            albumDao.updateAlbum(updated)
+                            upsertAlbumFtsIndex(updated.id, updated)
+                        }
                     } else {
+                        val tracks = trackDao.getTracksForAlbumOnce(entity.id)
                         tracks.filter { it.path.startsWith(uriString) }.forEach { track ->
                             trackDao.deleteSubtitlesForTrack(track.id)
                             database.deleteLibraryTracks(listOf(track.id))
                         }
-                        val updatedPath = if (entity.path.startsWith(uriString)) (buildOnlineAlbumPath(entity) ?: entity.path) else entity.path
+
                         val updated = entity.copy(
-                            path = updatedPath,
+                            path = if (entity.path.startsWith(uriString)) downloadPath!! else entity.path,
                             localPath = entity.localPath?.takeIf { !it.startsWith(uriString) },
                             coverPath = if (entity.coverPath.startsWith(uriString)) "" else entity.coverPath
                         )
                         albumDao.updateAlbum(updated)
                         upsertAlbumFtsIndex(updated.id, updated)
                     }
-                } else {
-                    val tracks = trackDao.getTracksForAlbumOnce(entity.id)
-                    tracks.filter { it.path.startsWith(uriString) }.forEach { track ->
-                        trackDao.deleteSubtitlesForTrack(track.id)
-                        database.deleteLibraryTracks(listOf(track.id))
-                    }
-
-                    val updated = entity.copy(
-                        path = if (entity.path.startsWith(uriString)) downloadPath!! else entity.path,
-                        localPath = entity.localPath?.takeIf { !it.startsWith(uriString) },
-                        coverPath = if (entity.coverPath.startsWith(uriString)) "" else entity.coverPath
-                    )
-                    albumDao.updateAlbum(updated)
-                    upsertAlbumFtsIndex(updated.id, updated)
                 }
+            } finally {
+                fileLease.close()
             }
         }
     }
@@ -1274,7 +1306,7 @@ class LibraryViewModel @Inject constructor(
         if (!tryRegisterAlbumJob(album.id, "云同步")) return
         val job = viewModelScope.launch {
             val ownerJob = currentCoroutineContext()[Job]
-            val token = syncCoordinator.tryBegin() ?: run {
+            val token = syncCoordinator.tryBegin(fileScopes.album(album.id)) ?: run {
                 showSyncBusy("云同步")
                 albumJobs.remove(album.id, ownerJob)
                 return@launch
@@ -1625,7 +1657,7 @@ class LibraryViewModel @Inject constructor(
         if (!tryRegisterAlbumJob(album.id, "本地同步")) return
         val job = viewModelScope.launch {
             val ownerJob = currentCoroutineContext()[Job]
-            val token = syncCoordinator.tryBegin() ?: run {
+            val token = syncCoordinator.tryBegin(fileScopes.album(album.id)) ?: run {
                 showSyncBusy("本地同步")
                 albumJobs.remove(album.id, ownerJob)
                 return@launch
@@ -1724,43 +1756,51 @@ class LibraryViewModel @Inject constructor(
     }
     fun deleteAlbum(album: Album) {
         viewModelScope.launch(Dispatchers.IO) {
-            if (album.id <= 0L) return@launch
-            if (isBulkTaskRunning()) {
-                messageManager.showInfo("正在执行批量任务，请先取消后再删除")
+            val fileLease = database.tryBeginFileMutation(fileScopes, fileScopes.album(album.id)) ?: run {
+                messageManager.showInfo(LocalFileOperationCoordinator.BUSY_MESSAGE)
                 return@launch
             }
-
-            albumJobs.remove(album.id)?.cancel()
-            _syncStatus.value -= album.id
-
             try {
-                val entity = albumDao.getAlbumById(album.id) ?: return@launch
-                val downloadRoot = entity.downloadPath.orEmpty()
-
-                database.withTransaction {
-                    trackDao.deleteSubtitlesForAlbum(album.id)
-                    deleteAlbumEntity(entity)
-                    database.tagDao().deleteAlbumTagsByAlbumId(album.id)
-                    database.albumFtsDao().deleteByAlbumId(album.id)
+                if (album.id <= 0L) return@launch
+                if (isBulkTaskRunning()) {
+                    messageManager.showInfo("正在执行批量任务，请先取消后再删除")
+                    return@launch
                 }
 
-                if (downloadRoot.isNotBlank()) {
-                    val downloadDao = database.downloadDao()
-                    val task = runCatching { downloadDao.getTaskByRootDir(downloadRoot) }.getOrNull()
-                    if (task != null) {
-                        runCatching { WorkManager.getInstance(context).cancelAllWorkByTag(task.taskKey) }
-                        runCatching { downloadDao.deleteItemsForTask(task.id) }
-                        runCatching { downloadDao.deleteTaskById(task.id) }
+                albumJobs.remove(album.id)?.cancel()
+                _syncStatus.value -= album.id
+
+                try {
+                    val entity = albumDao.getAlbumById(album.id) ?: return@launch
+                    val downloadRoot = entity.downloadPath.orEmpty()
+
+                    database.withTransaction {
+                        trackDao.deleteSubtitlesForAlbum(album.id)
+                        deleteAlbumEntity(entity)
+                        database.tagDao().deleteAlbumTagsByAlbumId(album.id)
+                        database.albumFtsDao().deleteByAlbumId(album.id)
                     }
-                    deletePathSafely(downloadRoot)
-                }
 
-                messageManager.showSuccess("已删除专辑")
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                Log.e("LibraryViewModel", "deleteAlbum failed: ${album.id}", e)
-                messageManager.showError("删除失败：${e.message ?: "未知错误"}")
+                    if (downloadRoot.isNotBlank()) {
+                        val downloadDao = database.downloadDao()
+                        val task = runCatching { downloadDao.getTaskByRootDir(downloadRoot) }.getOrNull()
+                        if (task != null) {
+                            runCatching { WorkManager.getInstance(context).cancelAllWorkByTag(task.taskKey) }
+                            runCatching { downloadDao.deleteItemsForTask(task.id) }
+                            runCatching { downloadDao.deleteTaskById(task.id) }
+                        }
+                        deletePathSafely(downloadRoot)
+                    }
+
+                    messageManager.showSuccess("已删除专辑")
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e("LibraryViewModel", "deleteAlbum failed: ${album.id}", e)
+                    messageManager.showError("删除失败：${e.message ?: "未知错误"}")
+                }
+            } finally {
+                fileLease.close()
             }
         }
     }
@@ -1771,109 +1811,126 @@ class LibraryViewModel @Inject constructor(
         onComplete: (Boolean) -> Unit = {},
     ) {
         viewModelScope.launch(Dispatchers.IO) {
-            val relativePath = normalizeLocalTreeRelativePath(target.relativePath)
-            if (album.id <= 0L || relativePath == null) {
-                messageManager.showError("删除失败：目录项路径无效")
+            val fileLease = database.tryBeginFileMutation(fileScopes, fileScopes.album(album.id)) ?: run {
+                messageManager.showInfo(LocalFileOperationCoordinator.BUSY_MESSAGE)
                 withContext(Dispatchers.Main.immediate) { onComplete(false) }
                 return@launch
             }
-
             try {
-                val albumRoots = album.getAllLocalPaths()
-                val physicalDeletionSucceeded = when {
-                    !target.hasLocalContent -> true
-                    target.isDirectory -> deleteLocalTreeDirectories(albumRoots, relativePath)
-                    else -> deleteLocalTreeFile(albumRoots, target.absolutePath.orEmpty())
-                }
-                check(physicalDeletionSucceeded) {
-                    if (target.isDirectory) "无法删除目录，请检查存储权限" else "无法删除文件，请检查存储权限"
+                val relativePath = normalizeLocalTreeRelativePath(target.relativePath)
+                if (album.id <= 0L || relativePath == null) {
+                    messageManager.showError("删除失败：目录项路径无效")
+                    withContext(Dispatchers.Main.immediate) { onComplete(false) }
+                    return@launch
                 }
 
-                val verifiedTrackIds = target.trackIds
-                    .asSequence()
-                    .filter { it > 0L }
-                    .distinct()
-                    .toList()
-                    .takeIf { it.isNotEmpty() }
-                    ?.let { ids ->
-                        trackDao.getTracksByIdsOnce(ids)
-                            .filter { it.albumId == album.id }
-                            .map { it.id }
+                try {
+                    val albumRoots = album.getAllLocalPaths()
+                    val physicalDeletionSucceeded = when {
+                        !target.hasLocalContent -> true
+                        target.isDirectory -> deleteLocalTreeDirectories(albumRoots, relativePath)
+                        else -> deleteLocalTreeFile(albumRoots, target.absolutePath.orEmpty())
                     }
-                    .orEmpty()
-                val resourceIds = database.onlineSavedResourceDao()
-                    .getForAlbumOnce(album.id)
-                    .filter { resource ->
-                        localTreePathMatchesTarget(
-                            candidatePath = resource.relativePath,
-                            targetPath = relativePath,
-                            targetIsDirectory = target.isDirectory,
-                        )
+                    check(physicalDeletionSucceeded) {
+                        if (target.isDirectory) "无法删除目录，请检查存储权限" else "无法删除文件，请检查存储权限"
                     }
-                    .map { it.id }
 
-                database.withTransaction {
+                    val verifiedTrackIds = target.trackIds
+                        .asSequence()
+                        .filter { it > 0L }
+                        .distinct()
+                        .toList()
+                        .takeIf { it.isNotEmpty() }
+                        ?.let { ids ->
+                            trackDao.getTracksByIdsOnce(ids)
+                                .filter { it.albumId == album.id }
+                                .map { it.id }
+                        }
+                        .orEmpty()
+                    val resourceIds = database.onlineSavedResourceDao()
+                        .getForAlbumOnce(album.id)
+                        .filter { resource ->
+                            localTreePathMatchesTarget(
+                                candidatePath = resource.relativePath,
+                                targetPath = relativePath,
+                                targetIsDirectory = target.isDirectory,
+                            )
+                        }
+                        .map { it.id }
+
+                    database.withTransaction {
+                        if (verifiedTrackIds.isNotEmpty()) {
+                            database.remoteSubtitleSourceDao().deleteByTrackIds(verifiedTrackIds)
+                            trackDao.deleteSubtitlesForTracks(verifiedTrackIds)
+                            database.trackTagDao().deleteTrackTagsByTrackIds(verifiedTrackIds)
+                            database.deleteLibraryTracks(verifiedTrackIds)
+                        }
+                        if (resourceIds.isNotEmpty()) {
+                            database.onlineSavedResourceDao().deleteByIds(resourceIds)
+                        }
+                        database.localTreeCacheDao().deleteByAlbum(album.id)
+                    }
                     if (verifiedTrackIds.isNotEmpty()) {
-                        database.remoteSubtitleSourceDao().deleteByTrackIds(verifiedTrackIds)
-                        trackDao.deleteSubtitlesForTracks(verifiedTrackIds)
-                        database.trackTagDao().deleteTrackTagsByTrackIds(verifiedTrackIds)
-                        database.deleteLibraryTracks(verifiedTrackIds)
+                        refreshAlbumAudioAggregate(album.id)
                     }
-                    if (resourceIds.isNotEmpty()) {
-                        database.onlineSavedResourceDao().deleteByIds(resourceIds)
-                    }
-                    database.localTreeCacheDao().deleteByAlbum(album.id)
-                }
-                if (verifiedTrackIds.isNotEmpty()) {
-                    refreshAlbumAudioAggregate(album.id)
-                }
 
-                messageManager.showSuccess(if (target.isDirectory) "已删除目录" else "已删除文件")
-                withContext(Dispatchers.Main.immediate) { onComplete(true) }
-            } catch (cancelled: CancellationException) {
-                throw cancelled
-            } catch (error: Exception) {
-                Log.e(TAG, "deleteAlbumTreeEntry failed: ${target.relativePath}", error)
-                messageManager.showError("删除失败：${error.message ?: "未知错误"}")
-                withContext(Dispatchers.Main.immediate) { onComplete(false) }
+                    messageManager.showSuccess(if (target.isDirectory) "已删除目录" else "已删除文件")
+                    withContext(Dispatchers.Main.immediate) { onComplete(true) }
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    Log.e(TAG, "deleteAlbumTreeEntry failed: ${target.relativePath}", error)
+                    messageManager.showError("删除失败：${error.message ?: "未知错误"}")
+                    withContext(Dispatchers.Main.immediate) { onComplete(false) }
+                }
+            } finally {
+                fileLease.close()
             }
         }
     }
 
     fun removeTrackFromAlbum(trackId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
-            val track = trackDao.getTrackByIdOnce(trackId) ?: return@launch
-            val album = albumDao.getAlbumById(track.albumId)
-            val path = track.path.trim()
-
-            val deletedFile = if (path.startsWith("http", ignoreCase = true) || path.startsWith("content://", ignoreCase = true)) {
-                false
-            } else {
-                val base = context.getExternalFilesDir(null)
-                val allowedRoots = listOfNotNull(
-                    album?.downloadPath?.takeIf { it.isNotBlank() }?.let { File(it) },
-                    base
-                )
-                    .mapNotNull { runCatching { it.canonicalFile }.getOrNull() ?: it.absoluteFile }
-                val target = runCatching { File(path).canonicalFile }.getOrNull() ?: File(path).absoluteFile
-                val isInAllowed = allowedRoots.any { root -> isCanonicalDescendant(target, root) }
-                if (isInAllowed) deletePathSafely(target.absolutePath) else false
+            val fileLease = database.tryBeginFileMutation(fileScopes, fileScopes.tracks(listOf(trackId))) ?: run {
+                messageManager.showInfo(LocalFileOperationCoordinator.BUSY_MESSAGE)
+                return@launch
             }
+            try {
+                val track = trackDao.getTrackByIdOnce(trackId) ?: return@launch
+                val album = albumDao.getAlbumById(track.albumId)
+                val path = track.path.trim()
 
-            database.withTransaction {
-                runCatching { database.remoteSubtitleSourceDao().deleteByTrackId(trackId) }
-                runCatching { trackDao.deleteSubtitlesForTrack(trackId) }
-                runCatching { database.trackTagDao().deleteTrackTagsByTrackId(trackId) }
-                database.deleteLibraryTracks(listOf(trackId))
-                runCatching { database.localTreeCacheDao().deleteByAlbum(track.albumId) }
-            }
+                val deletedFile = if (path.startsWith("http", ignoreCase = true) || path.startsWith("content://", ignoreCase = true)) {
+                    false
+                } else {
+                    val base = context.getExternalFilesDir(null)
+                    val allowedRoots = listOfNotNull(
+                        album?.downloadPath?.takeIf { it.isNotBlank() }?.let { File(it) },
+                        base
+                    )
+                        .mapNotNull { runCatching { it.canonicalFile }.getOrNull() ?: it.absoluteFile }
+                    val target = runCatching { File(path).canonicalFile }.getOrNull() ?: File(path).absoluteFile
+                    val isInAllowed = allowedRoots.any { root -> isCanonicalDescendant(target, root) }
+                    if (isInAllowed) deletePathSafely(target.absolutePath) else false
+                }
 
-            refreshAlbumAudioAggregate(track.albumId)
+                database.withTransaction {
+                    runCatching { database.remoteSubtitleSourceDao().deleteByTrackId(trackId) }
+                    runCatching { trackDao.deleteSubtitlesForTrack(trackId) }
+                    runCatching { database.trackTagDao().deleteTrackTagsByTrackId(trackId) }
+                    database.deleteLibraryTracks(listOf(trackId))
+                    runCatching { database.localTreeCacheDao().deleteByAlbum(track.albumId) }
+                }
 
-            if (deletedFile) {
-                messageManager.showSuccess("已删除文件并移除")
-            } else {
-                messageManager.showSuccess("已从专辑移除")
+                refreshAlbumAudioAggregate(track.albumId)
+
+                if (deletedFile) {
+                    messageManager.showSuccess("已删除文件并移除")
+                } else {
+                    messageManager.showSuccess("已从专辑移除")
+                }
+            } finally {
+                fileLease.close()
             }
         }
     }
@@ -2188,12 +2245,13 @@ class LibraryViewModel @Inject constructor(
         val baseDir = File(destination.root)
         if (!baseDir.exists() || !baseDir.isDirectory) return
         val foundDownloadPaths = LinkedHashSet<String>()
-        baseDir.listFiles()
-            ?.filter { albumDir ->
+        val children = checkNotNull(baseDir.listFiles()) { "无法读取下载目录" }
+        children
+            .filter { albumDir ->
                 albumDir.isDirectory && isScannableLocalDirectoryName(albumDir.name) &&
                     (importAll || File(albumDir, ".download_complete").exists())
             }
-            ?.forEach { albumDir ->
+            .forEach { albumDir ->
             currentCoroutineContext().ensureActive()
             foundDownloadPaths.add(albumDir.absolutePath)
             val coverFile = pickCoverFileFromAlbumDir(albumDir)
@@ -2324,6 +2382,9 @@ class LibraryViewModel @Inject constructor(
         albumDir: File,
         restoreDeletedSubtitles: Boolean,
     ) {
+        check(albumDir.isDirectory && albumDir.canRead()) { "扫描目录不可用" }
+        val sourceSnapshots = linkedMapOf<String, LocalFileSnapshot>()
+        sourceSnapshots[albumDir.absolutePath] = LocalFileSnapshot.read(context, albumDir.absolutePath)
         val prefix = albumDir.absolutePath.trimEnd('\\', '/') + File.separator
         val audioExtensions = setOf("mp3", "flac", "wav", "m4a", "ogg", "aac", "opus")
 
@@ -2331,9 +2392,11 @@ class LibraryViewModel @Inject constructor(
         val subtitleFiles = mutableListOf<File>()
         val cacheLeaves = mutableListOf<CacheLeafEntry>()
         albumDir.walkTopDown()
+            .onFail { _, error -> throw error }
             .onEnter { directory -> directory == albumDir || isScannableLocalDirectoryName(directory.name) }
             .forEach { f ->
             currentCoroutineContext().ensureActive()
+            sourceSnapshots[f.absolutePath] = LocalFileSnapshot.read(context, f.absolutePath)
             if (!f.isFile) return@forEach
             val ext = f.extension.lowercase()
             if (audioExtensions.contains(ext)) {
@@ -2415,6 +2478,7 @@ class LibraryViewModel @Inject constructor(
             .map { it.id }
             .toList()
 
+        sourceSnapshots.forEach { (path, snapshot) -> snapshot.requireUnchanged(context, path) }
         database.withTransaction {
             val subtitlesByTrackId = linkedMapOf<Long, List<SubtitleEntry>>()
 
@@ -2554,6 +2618,9 @@ class LibraryViewModel @Inject constructor(
             var wroteAnySubtitles = false
 
             var insertedAlbumId = 0L
+            check(all.toSet() == walkTree(uri, albumDir.documentId).filter { it.mimeType != DocumentsContract.Document.MIME_TYPE_DIR }.toSet()) {
+                "扫描期间文件已变化，请重新扫描"
+            }
             database.withTransaction {
                 val entity = AlbumEntity(
                     id = existing?.id ?: 0L,
@@ -2826,7 +2893,7 @@ class LibraryViewModel @Inject constructor(
                 val main = entity.path.trim()
 
                 val localMissing = local.isNotBlank() && !uriOrFileExists(local)
-                val downloadMissing = download.isNotBlank() && !fileExists(download)
+                val downloadMissing = download.isNotBlank() && !uriOrFileExists(download)
                 val mainMissing = main.isNotBlank() && !uriOrFileExists(main)
 
                 var cachedTracks: List<TrackEntity>? = null
@@ -2992,6 +3059,9 @@ class LibraryViewModel @Inject constructor(
         val treePrefix = treeUri.toString().trimEnd('/') + "/document/"
         var persistedPaths: List<String> = emptyList()
 
+        check(all.toSet() == walkTree(treeUri, albumDocId).filter { it.mimeType != DocumentsContract.Document.MIME_TYPE_DIR }.toSet()) {
+            "扫描期间文件已变化，请重新扫描"
+        }
         database.withTransaction {
             val entity = albumDao.getAlbumById(albumId) ?: return@withTransaction
             if (coverPath.isNotBlank()) {
@@ -3079,6 +3149,7 @@ class LibraryViewModel @Inject constructor(
         val displayName: String,
         val mimeType: String,
         val sizeBytes: Long = 0L,
+        val modifiedAt: Long = 0L,
         val relativePath: String = ""
     )
 
@@ -3088,24 +3159,28 @@ class LibraryViewModel @Inject constructor(
             DocumentsContract.Document.COLUMN_DOCUMENT_ID,
             DocumentsContract.Document.COLUMN_DISPLAY_NAME,
             DocumentsContract.Document.COLUMN_MIME_TYPE,
-            DocumentsContract.Document.COLUMN_SIZE
+            DocumentsContract.Document.COLUMN_SIZE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED
         )
         val result = mutableListOf<DocNode>()
         val resolver = context.contentResolver
-        runCatching {
-            resolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
-                val idIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-                val nameIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
-                val mimeIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
-                val sizeIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
-                while (cursor.moveToNext()) {
-                    val id = cursor.getString(idIndex)
-                    val name = cursor.getString(nameIndex).orEmpty()
-                    val mime = cursor.getString(mimeIndex).orEmpty()
-                    val size = if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) cursor.getLong(sizeIndex) else 0L
-                    val relPath = if (parentRelativePath.isEmpty()) name else "$parentRelativePath/$name"
-                    result.add(DocNode(documentId = id, displayName = name, mimeType = mime, sizeBytes = size, relativePath = relPath))
-                }
+        check(documentExists(treeUri, parentDocumentId)) { "扫描目录已移动、删除或无法访问" }
+        val cursor = resolver.query(childrenUri, projection, null, null, null)
+            ?: error("无法读取扫描目录")
+        cursor.use {
+            val idIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
+            val nameIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_DISPLAY_NAME)
+            val mimeIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_MIME_TYPE)
+            val sizeIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_SIZE)
+            val modifiedIndex = cursor.getColumnIndex(DocumentsContract.Document.COLUMN_LAST_MODIFIED)
+            while (cursor.moveToNext()) {
+                val id = cursor.getString(idIndex)
+                val name = cursor.getString(nameIndex).orEmpty()
+                val mime = cursor.getString(mimeIndex).orEmpty()
+                val size = if (sizeIndex >= 0 && !cursor.isNull(sizeIndex)) cursor.getLong(sizeIndex) else 0L
+                val modified = if (modifiedIndex >= 0 && !cursor.isNull(modifiedIndex)) cursor.getLong(modifiedIndex) else 0L
+                val relPath = if (parentRelativePath.isEmpty()) name else "$parentRelativePath/$name"
+                result.add(DocNode(documentId = id, displayName = name, mimeType = mime, sizeBytes = size, modifiedAt = modified, relativePath = relPath))
             }
         }
         return result
@@ -3115,11 +3190,14 @@ class LibraryViewModel @Inject constructor(
         val resolver = context.contentResolver
         val docUri = DocumentsContract.buildDocumentUriUsingTree(treeUri, documentId)
         val projection = arrayOf(DocumentsContract.Document.COLUMN_DOCUMENT_ID)
-        return runCatching {
-            resolver.query(docUri, projection, null, null, null)?.use { cursor ->
-                cursor.moveToFirst()
-            } ?: false
-        }.getOrDefault(false)
+        val treeId = DocumentsContract.getTreeDocumentId(treeUri)
+        check(resolver.persistedUriPermissions.any { permission ->
+            permission.isReadPermission && permission.uri.authority == treeUri.authority &&
+                runCatching { DocumentsContract.getTreeDocumentId(permission.uri) }.getOrNull() == treeId
+        }) { "扫描目录权限已失效" }
+        return resolver.query(docUri, projection, null, null, null)?.use { cursor ->
+            cursor.moveToFirst()
+        } ?: error("无法读取扫描目录状态")
     }
 
     private fun walkTree(treeUri: Uri, rootDocumentId: String): List<DocNode> {
