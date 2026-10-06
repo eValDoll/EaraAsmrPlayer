@@ -145,7 +145,7 @@ private enum class SettingsSection(
     Appearance("外观", "调整主题、主题色与播放页背景", Icons.Rounded.Palette),
     Playback("播放设置", "管理迷你播放栏、音频输出与淡入淡出", Icons.Rounded.Headphones),
     Lyrics("歌词", "配置歌词页与悬浮歌词的显示效果", Icons.Rounded.Lyrics),
-    Translation("翻译配置", "管理页面翻译、字幕模型与 DeepSeek 翻译", Icons.Rounded.Translate),
+    Translation("翻译配置", "管理页面翻译、字幕模型与翻译 API", Icons.Rounded.Translate),
     SupportStatus("服务状态与代理", "测试服务连通性并配置代理与 DNS", Icons.Rounded.Router),
     AppCache("APP 缓存", "设置缓存容量上限并清理缓存", Icons.Rounded.Storage),
     About("关于", "查看版本信息并检查应用更新", Icons.Rounded.Info),
@@ -226,6 +226,7 @@ fun SettingsScreen(
     val deepSeekApiKeyState by viewModel.deepSeekApiKeyState.collectAsStateWhileActive(translationDataActive)
     val deepSeekAccountState by viewModel.deepSeekAccountState.collectAsStateWhileActive(translationDataActive)
     val deepSeekTranslationSettings by viewModel.deepSeekTranslationSettings.collectAsStateWhileActive(translationDataActive)
+    val translationApiState by viewModel.translationApiState.collectAsStateWhileActive(translationDataActive)
     val updateState by viewModel.updateState.collectAsStateWhileActive(aboutDataActive)
     val autoUpdateCheckEnabled by viewModel.autoUpdateCheckEnabled.collectAsStateWhileActive(aboutDataActive)
     val scanRoots by libraryViewModel.scanRoots.collectAsStateWhileActive(localLibraryDataActive)
@@ -1035,20 +1036,39 @@ fun SettingsScreen(
                             onClearFailure = viewModel::clearSubtitleModelFailure
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
-                        DeepSeekTranslationSettingsSection(
-                            state = deepSeekApiKeyState,
-                            accountState = deepSeekAccountState,
-                            settings = deepSeekTranslationSettings,
-                            apiKeyInput = deepSeekApiKeyInput,
-                            compact = isCompact,
-                            segmentedButtonColors = segmentedButtonColors,
-                            onApiKeyInputChanged = { deepSeekApiKeyInput = it },
-                            onSave = { viewModel.saveDeepSeekApiKey(deepSeekApiKeyInput) },
-                            onThinkingEnabledChanged = viewModel::setDeepSeekThinkingEnabled,
-                            onReasoningEffortChanged = viewModel::setDeepSeekReasoningEffort,
-                            onFinalPolishEnabledChanged = viewModel::setDeepSeekFinalPolishEnabled,
-                            activeTipKey = activeTipKey,
-                            onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
+                        TranslationApiSettingsSection(
+                            state = translationApiState,
+                            onProviderSelected = viewModel::selectTranslationProvider,
+                            onSaveCustom = viewModel::saveCustomTranslationApi,
+                            deepSeekContent = {
+                                DeepSeekTranslationSettingsSection(
+                                    state = deepSeekApiKeyState,
+                                    accountState = deepSeekAccountState,
+                                    settings = deepSeekTranslationSettings,
+                                    apiKeyInput = deepSeekApiKeyInput,
+                                    compact = isCompact,
+                                    segmentedButtonColors = segmentedButtonColors,
+                                    onApiKeyInputChanged = { deepSeekApiKeyInput = it },
+                                    onSave = { viewModel.saveDeepSeekApiKey(deepSeekApiKeyInput) },
+                                    onThinkingEnabledChanged = viewModel::setDeepSeekThinkingEnabled,
+                                    onReasoningEffortChanged = viewModel::setDeepSeekReasoningEffort,
+                                    onFinalPolishEnabledChanged = viewModel::setDeepSeekFinalPolishEnabled,
+                                    activeTipKey = activeTipKey,
+                                    onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
+                                )
+                            },
+                            customOptions = {
+                                SettingsToggleRow(
+                                    text = "最终润色",
+                                    checked = deepSeekTranslationSettings.finalPolishEnabled,
+                                    onCheckedChange = viewModel::setDeepSeekFinalPolishEnabled,
+                                    infoKey = "final_polish",
+                                    infoTitle = "最终润色",
+                                    infoText = "翻译完成后，可在任务管理中左滑作品卡片，对现有中文字幕进行整体润色。此操作会额外消耗 Token。",
+                                    activeTipKey = activeTipKey,
+                                    onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
+                                )
+                            }
                         )
                     }
                 }
@@ -1324,7 +1344,7 @@ internal fun SubtitleTranslationSettingsHeader(activeTipKey: String?, onToggleTi
         SettingsInfoTip(
             active = activeTipKey == "subtitle_translation",
             title = "字幕翻译",
-            text = "批量翻译需要本地 MP3/WAV 音频、已下载并选用的字幕模型，以及已保存的 DeepSeek API Key。" +
+            text = "批量翻译需要本地 MP3/WAV 音频、已下载并选用的字幕模型，以及已保存的翻译 API 配置。" +
                 "在线音频请先下载。配置完成后，在本地库作品详情中点击“批量翻译”或“翻译选中”开始；保存 API Key 不会自动创建任务。",
             onToggle = { onToggleTip("subtitle_translation") },
             showBackground = false

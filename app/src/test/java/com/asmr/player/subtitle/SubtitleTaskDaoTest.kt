@@ -6,6 +6,7 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import com.asmr.player.data.local.db.AppDatabase
 import com.asmr.player.data.local.db.entities.AlbumEntity
+import com.asmr.player.data.local.db.entities.SubtitleEntity
 import com.asmr.player.data.local.db.entities.SubtitleTaskEntity
 import com.asmr.player.data.local.db.entities.SubtitleTaskItemEntity
 import com.asmr.player.data.local.db.entities.SubtitleTaskSnapshotEntity
@@ -13,7 +14,9 @@ import com.asmr.player.data.local.db.entities.TrackEntity
 import kotlinx.coroutines.runBlocking
 import org.junit.After
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -81,6 +84,25 @@ class SubtitleTaskDaoTest {
 
         assertEquals(0, dao.getSnapshots("item").size)
         assertEquals(null, dao.getItem("item"))
+    }
+
+    @Test
+    fun automaticImports_doNotOverwriteSubtitlesWhileTaskOwnsTrack() = runBlocking {
+        val dao = database.subtitleTaskDao()
+        dao.insertTask(task("batch"))
+        dao.insertItems(listOf(item("item", "batch", trackId, 1L)))
+        val tracks = database.trackDao()
+        tracks.insertSubtitles(listOf(SubtitleEntity(trackId = trackId, startMs = 0L, endMs = 1000L, text = "正在生成")))
+        val staleFile = listOf(SubtitleEntity(trackId = trackId, startMs = 0L, endMs = 1000L, text = "旧文件"))
+
+        assertFalse(tracks.replaceAutoSubtitles(trackId, staleFile))
+        assertFalse(tracks.importScannedSubtitles(staleFile, restoreDeleted = true))
+        tracks.insertAutoSubtitles(staleFile)
+        assertEquals(listOf("正在生成"), tracks.getSubtitlesForTrack(trackId).map { it.text })
+
+        tracks.deleteSubtitlesByUser(listOf(trackId))
+        assertFalse(tracks.importScannedSubtitles(staleFile, restoreDeleted = true))
+        assertTrue(tracks.isSubtitleAutoImportBlocked("/album/track.mp3"))
     }
 
     private suspend fun createTrack(name: String): Long {

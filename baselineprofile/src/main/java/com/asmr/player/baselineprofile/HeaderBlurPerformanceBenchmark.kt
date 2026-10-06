@@ -34,12 +34,14 @@ class HeaderBlurPerformanceBenchmark {
     @Test fun groups() = measureHeader("groups")
     @Test fun listeningCalendar() = measureHeader("listening_calendar")
     @Test fun settings() = measureHeader("settings")
+    @Test fun translationSettings() = measureHeader("settings", translationSettings = true)
 
     private fun measureHeader(
         route: String,
         expandLibraryAlbum: Boolean = false,
         navigatePrimaryPages: Boolean = false,
         slowEdgeScroll: Boolean = false,
+        translationSettings: Boolean = false,
     ) {
         benchmarkRule.measureRepeated(
             packageName = PackageName,
@@ -72,10 +74,18 @@ class HeaderBlurPerformanceBenchmark {
                     }
                 }
                 if (route == "settings") {
-                    val lyrics = device.wait(Until.findObject(By.text("歌词")), 5_000)
+                    val category = if (translationSettings) "翻译配置" else "歌词"
+                    repeat(5) {
+                        if (!device.hasObject(By.text(category))) {
+                            val x = device.displayWidth / 40
+                            device.swipe(x, (device.displayHeight * 0.8f).toInt(), x, (device.displayHeight * 0.3f).toInt(), 30)
+                        }
+                    }
+                    val entry = device.wait(Until.findObject(By.text(category)), 5_000)
                         ?: error("Settings category was not visible")
-                    lyrics.click()
-                    check(device.wait(Until.hasObject(By.text("开启悬浮歌词")), 5_000))
+                    entry.click()
+                    val content = if (translationSettings) "页面翻译" else "开启悬浮歌词"
+                    check(device.wait(Until.hasObject(By.text(content)), 5_000))
                 }
                 check(device.wait(Until.hasObject(By.scrollable(true)), 30_000)) {
                     "No scrollable content on $route; populate this page before measuring"

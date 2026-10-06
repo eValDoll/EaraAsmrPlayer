@@ -96,6 +96,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -153,6 +154,7 @@ class PlaybackService : MediaSessionService() {
     @Volatile private var lastEffectiveSettings: EqualizerSettings = EqualizerSettings()
     
     private var currentLyrics: List<SubtitleEntry> = emptyList()
+    private var lyricsLoadJob: Job? = null
     private var lyricsIndexFinder: SubtitleIndexFinder? = null
     private var lastLyricIndex: Int = Int.MIN_VALUE
     private var floatingLyricsEnabled: Boolean = false
@@ -1248,13 +1250,23 @@ class PlaybackService : MediaSessionService() {
         manager.createNotificationChannel(channel)
     }
 
-    private suspend fun loadLyricsForCurrentMedia() {
-        val item = withContext(Dispatchers.Main.immediate) { exoPlayer.currentMediaItem }
-        val result = lyricsLoader.load(item)
-        currentLyrics = result.lyrics
-        lyricsIndexFinder = if (result.lyrics.isNotEmpty()) SubtitleIndexFinder(result.lyrics) else null
+    private suspend fun loadLyricsForCurrentMedia() = withContext(Dispatchers.Main.immediate) {
+        val item = exoPlayer.currentMediaItem
+        lyricsLoadJob?.cancel()
+        currentLyrics = emptyList()
+        lyricsIndexFinder = null
         lastLyricIndex = Int.MIN_VALUE
-        refreshMediaNotification()
+        lyricsLoadJob = serviceScope.launch {
+            lyricsLoader.observe(item).collect { result ->
+                val indexFinder = withContext(Dispatchers.Default) {
+                    if (result.lyrics.isNotEmpty()) SubtitleIndexFinder(result.lyrics) else null
+                }
+                currentLyrics = result.lyrics
+                lyricsIndexFinder = indexFinder
+                lastLyricIndex = Int.MIN_VALUE
+                refreshMediaNotification()
+            }
+        }
     }
 
     private suspend fun updateLyricsTick(): Long {
@@ -1392,6 +1404,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         overlay?.hide()
+        lyricsLoadJob?.cancel()
         statsJob?.cancel()
         runBlocking(Dispatchers.IO) {
             flushPendingNetworkTraffic()

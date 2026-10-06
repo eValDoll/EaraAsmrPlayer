@@ -1735,8 +1735,7 @@ private suspend fun upsertDownloadedAlbumToLibrary(
         val identity = runCatching { audio.canonicalPath }.getOrDefault(audio.absolutePath)
         val trackId = indexedTracksByIdentity[identity]?.id ?: return@forEach
         runCatching {
-            trackDao.deleteSubtitlesForTrack(trackId)
-            trackDao.insertSubtitles(entries.map { entry -> entry.toEntity(trackId) })
+            trackDao.replaceAutoSubtitles(trackId, entries.map { entry -> entry.toEntity(trackId) })
         }
     }
 
@@ -1863,8 +1862,7 @@ private suspend fun upsertDownloadedDocumentAlbumToLibrary(
         val entriesForTrack = subtitlesByAudioReference[audio.reference].orEmpty()
         if (entriesForTrack.isEmpty()) return@forEach
         val trackId = indexedTracksByIdentity[storage.stableIdentity(audio.reference)]?.id ?: return@forEach
-        trackDao.deleteSubtitlesForTrack(trackId)
-        trackDao.insertSubtitles(entriesForTrack.map { entry -> entry.toEntity(trackId) })
+        trackDao.replaceAutoSubtitles(trackId, entriesForTrack.map { entry -> entry.toEntity(trackId) })
     }
     replaceMatchedOnlineTracksWithLocalTracks(db, albumId, rootDir)
     mergeService.deduplicateTracks(albumId)
@@ -1955,7 +1953,7 @@ internal suspend fun replaceMatchedOnlineTracksWithLocalTracks(
             val targetHasSubs = runCatching { trackDao.getSubtitlesForTrack(target.id) }.getOrDefault(emptyList()).isNotEmpty()
             if (!targetHasSubs) {
                 runCatching {
-                    trackDao.insertSubtitles(
+                    trackDao.insertAutoSubtitles(
                         sourceSubs.map { subtitle ->
                             SubtitleEntity(
                                 trackId = target.id,

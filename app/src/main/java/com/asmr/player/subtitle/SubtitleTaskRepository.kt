@@ -109,8 +109,8 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
             check(SubtitleModelRepository.get(appContext).isModelAvailable()) {
                 SubtitleModelRepository.MODEL_REQUIRED_MESSAGE
             }
-            check(DeepSeekApiKeyStore.get(appContext).isConfigured()) {
-                "请先在设置中配置 DeepSeek API Key"
+            withContext(Dispatchers.IO) {
+                TranslationApiStore.get(appContext).readConfiguration().requireConfigured()
             }
             enqueue(
                 targets = normalized.map { it.trackId to it.title },
@@ -125,8 +125,8 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
         return enqueueMutex.withLock {
             require(target.trackId > 0L) { "字幕所属音轨无效" }
             ensureTrackAlbumNotPolishing(target.trackId)
-            check(DeepSeekApiKeyStore.get(appContext).isConfigured()) {
-                "请先在设置中配置 DeepSeek API Key"
+            withContext(Dispatchers.IO) {
+                TranslationApiStore.get(appContext).readConfiguration().requireConfigured()
             }
             val subtitles = database.trackDao().getSubtitlesForTrack(target.trackId)
             require(subtitles.any { it.text.isNotBlank() }) { "当前音轨没有可翻译的本地字幕" }
@@ -420,10 +420,9 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
 
     internal suspend fun finishTitleTranslation(taskId: String) = withContext(Dispatchers.IO) {
         database.withTransaction {
-            val pending = database.subtitleTitleOwnerDao()
-                .getByTask(taskId)
-                .any { owner -> owner.displayTitle.isBlank() }
-            if (pending) return@withTransaction
+            // 标题翻译的有限重试已结束。持久化清除未完成登记，防止服务重启后再次请求；
+            // 保留已成功写入的登记，供用户取消任务时还原显示名。
+            database.subtitleTitleOwnerDao().deletePendingForTask(taskId)
             val items = dao.getItemsForTask(taskId)
             if (items.isEmpty() || items.any { item -> item.state != SubtitleItemState.SUCCEEDED }) {
                 return@withTransaction

@@ -628,6 +628,13 @@ object AppDatabaseMigrations {
         }
     }
 
+    val MIGRATION_34_35: Migration = object : Migration(34, 35) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS subtitle_import_blocks (mediaPath TEXT NOT NULL PRIMARY KEY)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_tracks_path ON tracks (path)")
+        }
+    }
+
     private fun createItemChildTable(
         db: SupportSQLiteDatabase,
         table: String,

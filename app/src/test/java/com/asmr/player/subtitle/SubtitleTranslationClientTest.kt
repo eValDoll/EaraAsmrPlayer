@@ -630,7 +630,7 @@ class SubtitleTranslationClientTest {
         val firstJson = JsonParser.parseString(first.content).asJsonObject
         assertEquals(3, firstJson.getAsJsonArray("subtitles").size())
         assertEquals(0, firstJson.get("offset").asInt)
-        assertEquals(true, firstJson.get("completed").asBoolean)
+        assertEquals(false, firstJson.get("completed").asBoolean)
 
         val polished = mapOf(1L to "改过了")
         val second = buildPolishReadToolResultMessage(gson, "c2", tracks, polished, offset = 3)

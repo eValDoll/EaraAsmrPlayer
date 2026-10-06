@@ -27,6 +27,14 @@ import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -50,6 +58,20 @@ class LyricsLoader @Inject constructor(
 ) {
     private val gson = Gson()
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    fun observe(item: MediaItem?): Flow<LyricsResult> {
+        val target = lyricsTargetContextFromMediaItem(item)
+            ?: return flowOf(LyricsResult("", emptyList()))
+        return flow {
+            // 一次订阅内复用外部字幕读取结果，避免每批翻译写入都重新解析音频和文件。
+            val cache = LyricsReadCache()
+            emitAll(trackDao.observeLyricsState(target.mediaId, target.trackId)
+                .distinctUntilChanged()
+                .mapLatest { load(target, item?.mediaMetadata?.title?.toString().orEmpty(), cache) }
+                .distinctUntilChanged())
+        }.flowOn(Dispatchers.IO)
+    }
+
     suspend fun load(item: MediaItem?): LyricsResult = withContext(Dispatchers.IO) {
         val target = lyricsTargetContextFromMediaItem(item)
             ?: return@withContext LyricsResult(title = "", lyrics = emptyList())
@@ -67,7 +89,7 @@ class LyricsLoader @Inject constructor(
         return@withContext load(target, fallbackTitle)
     }
 
-    private suspend fun load(target: LyricsTargetContext, fallbackTitle: String): LyricsResult {
+    private suspend fun load(target: LyricsTargetContext, fallbackTitle: String, cache: LyricsReadCache? = null): LyricsResult {
         if (target.mediaId.isBlank()) return LyricsResult(title = "", lyrics = emptyList())
 
         val trackByPath = trackDao.getTrackByPathOnce(target.mediaId)
@@ -75,7 +97,12 @@ class LyricsLoader @Inject constructor(
         val track = trackByPath ?: trackById
         val title = track?.titleForDisplay?.takeIf { it.isNotBlank() } ?: fallbackTitle.ifBlank { target.mediaId }
 
-        val manualLyrics = loadManualLyrics(target)
+        if (trackDao.isSubtitleAutoImportBlocked(track?.path ?: target.mediaId)) {
+            // 删除后不自动加载旧文件；主动重扫、选择字幕或重新生成仍可恢复。
+            return subtitleResult(title, track?.let { trackDao.getSubtitlesForTrack(it.id) }.orEmpty())
+        }
+
+        val manualLyrics = loadManualLyrics(target, cache)
         if (manualLyrics.isNotEmpty()) {
             return LyricsResult(title = title, lyrics = manualLyrics)
         }
@@ -86,19 +113,18 @@ class LyricsLoader @Inject constructor(
             return LyricsResult(title = title, lyrics = remoteLyrics)
         }
 
-        val embedded = EmbeddedMediaExtractor.extractEmbeddedLyricsEntries(context, track.path)
+        val embedded = cache?.embedded?.takeIf { it.first == track.path }?.second
+            ?: EmbeddedMediaExtractor.extractEmbeddedLyricsEntries(context, track.path).also {
+                cache?.embedded = track.path to it
+            }
         if (embedded.isNotEmpty()) {
             return LyricsResult(title = title, lyrics = embedded)
         }
 
         var subs = trackDao.getSubtitlesForTrack(track.id)
         if (subs.isEmpty()) {
-            val imported = importBestLyricsIfPossible(track, target)
-            if (imported.isNotEmpty()) {
-                subs = imported.toSubtitleEntities(track.id)
-            } else {
-                subs = trackDao.getSubtitlesForTrack(track.id)
-            }
+            importBestLyricsIfPossible(track, target)
+            subs = trackDao.getSubtitlesForTrack(track.id)
         }
 
         if (subs.isEmpty() && track.path.trim().startsWith("http", ignoreCase = true)) {
@@ -116,17 +142,17 @@ class LyricsLoader @Inject constructor(
             }
         }
 
-        val normalized = normalizeAndDistinct(subs)
-        if (normalized.size != subs.size) {
-            persistAutoLyrics(track.id, target, normalized.map { SubtitleEntry(it.startMs, it.endMs, it.text) })
-        }
-        val entries = normalized.sortedBy { it.startMs }.map { SubtitleEntry(it.startMs, it.endMs, it.text) }
-        return LyricsResult(title = title, lyrics = entries)
+        return subtitleResult(title, subs)
     }
 
     suspend fun saveManualLyrics(target: LyricsTargetContext, sourceUri: String): LyricsResult = withContext(Dispatchers.IO) {
         manualLyricsSourceRepository.upsert(target, sourceUri)
         val entries = readLyricsFromUri(sourceUri)
+        if (entries.isNotEmpty()) {
+            val track = trackDao.getTrackByPathOnce(target.mediaId)
+                ?: target.trackId.takeIf { it > 0 }?.let { trackDao.getTrackByIdOnce(it) }
+            trackDao.allowSubtitleAutoImport(track?.path ?: target.mediaId)
+        }
         LyricsResult(title = target.title.ifBlank { target.mediaId }, lyrics = entries)
     }
 
@@ -134,10 +160,11 @@ class LyricsLoader @Inject constructor(
         return fetchText(url)
     }
 
-    private suspend fun loadManualLyrics(target: LyricsTargetContext): List<SubtitleEntry> {
+    private suspend fun loadManualLyrics(target: LyricsTargetContext, cache: LyricsReadCache?): List<SubtitleEntry> {
         val manual = manualLyricsSourceRepository.findBestMatch(target) ?: return emptyList()
-        val entries = readLyricsFromUri(manual.sourceUri)
-        return entries
+        val key = "${manual.sourceUri}|${manual.updatedAt}"
+        return cache?.manual?.takeIf { it.first == key }?.second
+            ?: readLyricsFromUri(manual.sourceUri).also { cache?.manual = key to it }
     }
 
     private suspend fun importBestLyricsIfPossible(track: TrackEntity, target: LyricsTargetContext): List<SubtitleEntry> {
@@ -224,10 +251,16 @@ class LyricsLoader @Inject constructor(
 
     private suspend fun persistAutoLyrics(trackId: Long, target: LyricsTargetContext, entries: List<SubtitleEntry>) {
         if (entries.isEmpty()) return
-        trackDao.deleteSubtitlesForTrack(trackId)
-        trackDao.insertSubtitles(entries.toSubtitleEntities(trackId))
-        manualLyricsSourceRepository.clearForAutoLyrics(target)
+        if (trackDao.replaceAutoSubtitles(trackId, entries.toSubtitleEntities(trackId))) {
+            manualLyricsSourceRepository.clearForAutoLyrics(target)
+        }
     }
+
+    private fun subtitleResult(title: String, subtitles: List<SubtitleEntity>): LyricsResult = LyricsResult(
+        title = title,
+        lyrics = normalizeAndDistinct(subtitles).sortedBy { it.startMs }
+            .map { SubtitleEntry(it.startMs, it.endMs, it.text) }
+    )
 
     private fun normalizeAndDistinct(subs: List<SubtitleEntity>): List<SubtitleEntity> {
         fun normalizeDuplicateMergedLines(text: String): String {
@@ -392,4 +425,9 @@ class LyricsLoader @Inject constructor(
         val absolutePath: String,
         val fileType: String
     )
+
+    private class LyricsReadCache {
+        var embedded: Pair<String, List<SubtitleEntry>>? = null
+        var manual: Pair<String, List<SubtitleEntry>>? = null
+    }
 }

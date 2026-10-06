@@ -28,7 +28,9 @@ import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.subtitle.SubtitleModelDownloadSource
 import com.asmr.player.subtitle.SubtitleModelRepository
 import com.asmr.player.subtitle.SubtitleModelState
-import com.asmr.player.subtitle.DeepSeekApiKeyStore
+import com.asmr.player.subtitle.TranslationApiStore
+import com.asmr.player.subtitle.TranslationApiSettings
+import com.asmr.player.subtitle.TranslationProvider
 import com.asmr.player.subtitle.DeepSeekAccountRepository
 import com.asmr.player.util.MessageManager
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -37,6 +39,7 @@ import java.io.File
 import java.io.FileOutputStream
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -61,6 +64,13 @@ internal data class DeepSeekApiKeyUiState(
     val configured: Boolean = false,
     val saving: Boolean = false,
     val errorMessage: String? = null,
+    val saveVersion: Long = 0L
+)
+
+internal data class TranslationApiUiState(
+    val settings: TranslationApiSettings = TranslationApiSettings(),
+    val loaded: Boolean = false,
+    val saving: Boolean = false,
     val saveVersion: Long = 0L
 )
 
@@ -105,7 +115,7 @@ class SettingsViewModel @Inject constructor(
     @ApplicationContext private val context: Context
 ) : ViewModel() {
     private val subtitleModelRepository = SubtitleModelRepository.get(context)
-    private val deepSeekApiKeyStore = DeepSeekApiKeyStore.get(context)
+    private val translationApiStore = TranslationApiStore.get(context)
 
     val downloadDestination: StateFlow<DownloadDestination> = downloadDestinationStore.destination
         .stateIn(
@@ -225,6 +235,8 @@ class SettingsViewModel @Inject constructor(
     private val _deepSeekApiKeyState = MutableStateFlow(DeepSeekApiKeyUiState())
     internal val deepSeekApiKeyState = _deepSeekApiKeyState.asStateFlow()
     internal val deepSeekAccountState = deepSeekAccountRepository.state
+    private val _translationApiState = MutableStateFlow(TranslationApiUiState())
+    internal val translationApiState = _translationApiState.asStateFlow()
 
     private val updateClient = GitHubUpdateClient(okHttpClient)
     private val _updateState = MutableStateFlow<AppUpdateState>(AppUpdateState.Idle)
@@ -237,10 +249,12 @@ class SettingsViewModel @Inject constructor(
         if (settingsDataPrepared) return
         settingsDataPrepared = true
         viewModelScope.launch(Dispatchers.IO) {
-            val apiKey = deepSeekApiKeyStore.read()
+            val settings = translationApiStore.readSettings()
+            _translationApiState.value = TranslationApiUiState(settings = settings, loaded = true)
+            val apiKey = translationApiStore.readDeepSeekKey()
             val configured = apiKey.isNotBlank()
             _deepSeekApiKeyState.value = _deepSeekApiKeyState.value.copy(configured = configured)
-            if (configured) {
+            if (configured && settings.provider == TranslationProvider.DEEPSEEK) {
                 deepSeekAccountRepository.bindApiKey(apiKey)
                 deepSeekAccountRepository.refreshBalance(apiKey)
             }
@@ -411,7 +425,7 @@ class SettingsViewModel @Inject constructor(
                 saving = true,
                 errorMessage = null
             )
-            val saved = runCatching { deepSeekApiKeyStore.save(normalized) }.isSuccess
+            val saved = runCatching { translationApiStore.saveDeepSeekKey(normalized) }.isSuccess
             if (saved) {
                 deepSeekAccountRepository.bindApiKey(normalized)
                 val current = _deepSeekApiKeyState.value
@@ -433,6 +447,41 @@ class SettingsViewModel @Inject constructor(
 
     internal fun setDeepSeekThinkingEnabled(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setDeepSeekThinkingEnabled(enabled) }
+    }
+
+    internal fun selectTranslationProvider(provider: TranslationProvider) {
+        updateTranslationApi { translationApiStore.selectProvider(provider) }
+    }
+
+    internal fun saveCustomTranslationApi(baseUrl: String, model: String, apiKey: String) {
+        updateTranslationApi { translationApiStore.saveCustom(baseUrl, model, apiKey) }
+    }
+
+    private fun updateTranslationApi(save: () -> Unit) {
+        val current = _translationApiState.value
+        if (!current.loaded || current.saving) return
+        _translationApiState.value = current.copy(saving = true)
+        viewModelScope.launch {
+            try {
+                val settings = withContext(Dispatchers.IO) {
+                    save()
+                    translationApiStore.readSettings()
+                }
+                _translationApiState.value = current.copy(
+                    settings = settings, saving = false, saveVersion = current.saveVersion + 1L
+                )
+                messageManager.showSuccess("翻译配置已保存")
+                if (settings.provider == TranslationProvider.DEEPSEEK) {
+                    val key = withContext(Dispatchers.IO) { translationApiStore.readDeepSeekKey() }
+                    if (key.isNotBlank()) deepSeekAccountRepository.refreshBalance(key)
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                _translationApiState.value = current.copy(saving = false)
+                messageManager.showError(error.message ?: "翻译配置保存失败")
+            }
+        }
     }
 
     internal fun setDeepSeekReasoningEffort(effort: DeepSeekReasoningEffort) {

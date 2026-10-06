@@ -11,6 +11,10 @@
 -keep class androidx.datastore.** { *; }
 -keep class com.asmr.player.translation.** { *; }
 
+# 设备端翻译配置测试需要创建独立的加密存储并重新读取配置。
+-keep class com.asmr.player.subtitle.TranslationApi* { *; }
+-keep class com.asmr.player.subtitle.TranslationProvider { *; }
+
 # 设备端播放回归测试需要通过公开 Media3 API 连接 Release 播放服务。
 -keep class androidx.media3.** { *; }
 -keep class com.google.common.util.concurrent.** { *; }
