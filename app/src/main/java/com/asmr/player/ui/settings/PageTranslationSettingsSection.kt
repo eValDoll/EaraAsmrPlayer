@@ -31,19 +31,15 @@ import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntRect
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.asmr.player.translation.PageTranslationLanguages
 import com.asmr.player.translation.PageTranslationSettings
 import com.asmr.player.translation.rememberPageTranslationServices
+import com.asmr.player.ui.common.ThemedDropdownMenuPositionProvider
 import com.asmr.player.ui.theme.AsmrTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -146,7 +142,7 @@ internal fun SettingsDropdownSelector(
     val menuColor = lerp(colors.surface, colors.primarySoft, if (colors.isDark) 0.24f else 0.46f)
     val selectedColor = lerp(colors.surface, colors.primarySoft, if (colors.isDark) 0.52f else 0.88f)
     val menuPosition = remember(density) {
-        PageTranslationMenuPositionProvider(with(density) { 4.dp.roundToPx() }, with(density) { 8.dp.roundToPx() })
+        ThemedDropdownMenuPositionProvider(with(density) { 4.dp.roundToPx() }, with(density) { 8.dp.roundToPx() })
     }
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (showLabel) Text(label, color = colors.textSecondary, style = MaterialTheme.typography.labelMedium)
@@ -220,23 +216,5 @@ internal fun SettingsDropdownSelector(
                 }
             }
         }
-    }
-}
-
-private class PageTranslationMenuPositionProvider(private val gap: Int, private val margin: Int) : PopupPositionProvider {
-    override fun calculatePosition(
-        anchorBounds: IntRect,
-        windowSize: IntSize,
-        layoutDirection: LayoutDirection,
-        popupContentSize: IntSize,
-    ): IntOffset {
-        val start = if (layoutDirection == LayoutDirection.Ltr) anchorBounds.left else anchorBounds.right - popupContentSize.width
-        val below = anchorBounds.bottom + gap
-        val above = anchorBounds.top - popupContentSize.height - gap
-        val top = if (below + popupContentSize.height <= windowSize.height - margin) below else above
-        return IntOffset(
-            start.coerceIn(margin, (windowSize.width - popupContentSize.width - margin).coerceAtLeast(margin)),
-            top.coerceIn(margin, (windowSize.height - popupContentSize.height - margin).coerceAtLeast(margin)),
-        )
     }
 }
