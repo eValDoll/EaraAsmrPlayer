@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
@@ -15,6 +16,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
+import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
 import com.asmr.player.subtitle.TranslationApiSettings
 import com.asmr.player.subtitle.TranslationProvider
@@ -22,6 +24,8 @@ import com.asmr.player.subtitle.CustomThinkingMode
 import com.asmr.player.subtitle.CustomReasoningEffort
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.ThemeMode
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Rule
@@ -65,6 +69,7 @@ class TranslationApiSettingsSectionTest {
         assertNull(selected)
         compose.onNodeWithText("DeepSeek 配置").assertDoesNotExist()
         compose.onNodeWithTag("custom_api_max_output_tokens").assertTextContains("32768")
+        compose.onNodeWithTag("custom_api_max_output_tokens").assertHeightIsAtLeast(48.dp)
         compose.onNodeWithTag("custom_api_save").assertIsNotEnabled()
         compose.onNodeWithTag("custom_api_url").performTextInput("https://example.com/v1")
         compose.onNodeWithTag("custom_api_model").performTextInput("vendor/model")
@@ -146,5 +151,100 @@ class TranslationApiSettingsSectionTest {
         compose.onNodeWithTag("custom_api_effort_思考强度").assertIsNotEnabled()
         compose.onNodeWithTag("custom_api_save").performClick()
         assertEquals(CustomThinkingMode.DISABLED to CustomReasoningEffort.XHIGH, saved)
+    }
+
+    @Test
+    fun fetchedModels_selectAndSaveWithoutManualEntryAndCanReturnToManualInput() {
+        var savedModel: String? = null
+        var requests = 0
+        compose.setContent {
+            AsmrPlayerTheme(mode = ThemeMode.Light) {
+                TranslationApiSettingsSection(
+                    TranslationApiUiState(settings = TranslationApiSettings(provider = TranslationProvider.CUSTOM), loaded = true),
+                    {}, { _, model, _, _, _, _ -> savedModel = model }, {}, {},
+                    onLoadModels = { url, key ->
+                        assertEquals("https://example.com/v1", url)
+                        assertEquals("custom-key", key)
+                        requests++
+                        listOf("first-model", "second-model")
+                    }
+                )
+            }
+        }
+        compose.onNodeWithTag("custom_api_models_refresh").assertIsNotEnabled()
+        compose.onNodeWithTag("custom_api_url").performTextInput("https://example.com/v1")
+        compose.onNodeWithTag("custom_api_key").performTextInput("custom-key")
+        compose.onNodeWithTag("custom_api_models_refresh").assertIsEnabled().performClick()
+        compose.onNodeWithTag("custom_api_model_模型").performClick()
+        compose.onNodeWithTag("custom_api_model_option_模型_second-model").performClick()
+        compose.onNodeWithTag("custom_api_save").performClick()
+        assertEquals("second-model", savedModel)
+        assertEquals(1, requests)
+        compose.onNodeWithTag("custom_api_model_模型").performClick()
+        compose.onNodeWithText("手动输入").performClick()
+        compose.onNodeWithTag("custom_api_model").performTextReplacement("private-model")
+        compose.onNodeWithTag("custom_api_save").performClick()
+        assertEquals("private-model", savedModel)
+    }
+
+    @Test
+    fun savedModel_isPreservedWhenMissingFromListAndUsageIsShown() {
+        var savedModel: String? = null
+        compose.setContent {
+            AsmrPlayerTheme(mode = ThemeMode.Dark) {
+                TranslationApiSettingsSection(
+                    TranslationApiUiState(settings = TranslationApiSettings(
+                        TranslationProvider.CUSTOM, "https://example.com/v1", "saved-model", true
+                    ), loaded = true),
+                    {}, { _, model, _, _, _, _ -> savedModel = model }, {}, {},
+                    onLoadModels = { _, _ -> listOf("another-model") },
+                    customTotalTokens = 1_234L
+                )
+            }
+        }
+        compose.onNodeWithTag("custom_api_model_模型").assertTextContains("saved-model")
+        compose.onNodeWithTag("custom_api_token_total").assertTextContains("Token 1.2K")
+        compose.onNodeWithTag("custom_api_save").performClick()
+        assertEquals("saved-model", savedModel)
+        compose.onNodeWithTag("custom_api_url").performTextReplacement("https://other.example.com/v1")
+        compose.onNodeWithTag("custom_api_model").assertTextContains("saved-model")
+    }
+
+    @Test
+    fun changingEndpoint_cancelsModelLoadingAndKeepsManualEntryAvailable() {
+        val response = CompletableDeferred<List<String>?>()
+        var cancelled = false
+        compose.setContent {
+            AsmrPlayerTheme(mode = ThemeMode.Dark) {
+                TranslationApiSettingsSection(
+                    TranslationApiUiState(settings = TranslationApiSettings(
+                        TranslationProvider.CUSTOM, "https://example.com/v1", "saved-model", true
+                    ), loaded = true), {}, { _, _, _, _, _, _ -> }, {}, {},
+                    onLoadModels = { _, _ ->
+                        try { response.await() }
+                        catch (error: CancellationException) { cancelled = true; throw error }
+                    }
+                )
+            }
+        }
+        compose.onNodeWithTag("custom_api_models_refresh").assertIsNotEnabled()
+        compose.onNodeWithTag("custom_api_url").performTextReplacement("https://other.example.com/v1")
+        compose.runOnIdle { assertEquals(true, cancelled) }
+        compose.onNodeWithTag("custom_api_model").assertTextContains("saved-model")
+        compose.onNodeWithTag("custom_api_models_refresh").assertIsEnabled()
+    }
+
+    @Test
+    fun simulatedCustomUsage_canBePreviewedWithoutSavingCredentials() {
+        compose.setContent {
+            AsmrPlayerTheme(mode = ThemeMode.Light) {
+                TranslationApiSettingsSection(
+                    TranslationApiUiState(settings = TranslationApiSettings(provider = TranslationProvider.CUSTOM), loaded = true),
+                    {}, { _, _, _, _, _, _ -> }, {}, {}, customTotalTokens = 456_789L, usagePreview = true,
+                )
+            }
+        }
+        compose.onNodeWithTag("custom_api_token_total").assertTextContains("Token 456.8K · 模拟")
+        compose.onNodeWithTag("custom_api_save").assertIsNotEnabled()
     }
 }

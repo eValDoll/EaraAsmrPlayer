@@ -68,7 +68,7 @@ private data class DeepSeekChatRequest(
 )
 
 private fun DeepSeekChatRequest.forApi(config: TranslationApiConfig): DeepSeekChatRequest =
-    if (config.isDeepSeek) this else copy(
+    if (config.isDeepSeek) copy(model = config.model) else copy(
         model = config.model,
         messages = messages.map { it.copy(reasoningContent = null) },
         thinking = null,
@@ -105,8 +105,18 @@ private data class DeepSeekChatResponse(
 
 private data class DeepSeekChatUsage(
     @SerializedName("total_tokens")
-    val totalTokens: Long = 0L
-)
+    val totalTokens: Long? = null,
+    @SerializedName("prompt_tokens")
+    val promptTokens: Long? = null,
+    @SerializedName("completion_tokens")
+    val completionTokens: Long? = null
+) {
+    fun reportedTotal(): Long? = totalTokens?.takeIf { it >= 0L } ?: run {
+        val input = promptTokens?.takeIf { it >= 0L } ?: return null
+        val output = completionTokens?.takeIf { it >= 0L } ?: return null
+        if (Long.MAX_VALUE - input < output) Long.MAX_VALUE else input + output
+    }
+}
 
 private data class DeepSeekChoice(
     @SerializedName("finish_reason")
@@ -593,9 +603,9 @@ internal class SubtitleTranslationClient(
                 val deepSeekResponse = runCatching {
                     gson.fromJson(raw, DeepSeekChatResponse::class.java)
                 }.getOrNull()
-                deepSeekResponse?.usage?.totalTokens?.takeIf { totalTokens -> totalTokens > 0L }?.let { totalTokens ->
+                deepSeekResponse?.usage?.reportedTotal()?.takeIf { totalTokens -> totalTokens > 0L }?.let { totalTokens ->
                     runCatching { onTokenUsage(totalTokens) }
-                        .onFailure { error -> Log.w(TAG, "记录 DeepSeek token 用量失败", error) }
+                        .onFailure { error -> Log.w(TAG, "记录翻译 token 用量失败", error) }
                 }
                 val choice = deepSeekResponse?.choices?.firstOrNull()
                 val message = choice?.message ?: DeepSeekChatMessage(role = "assistant")

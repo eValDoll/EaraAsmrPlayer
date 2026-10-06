@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -132,6 +134,7 @@ internal fun SettingsDropdownSelector(
     tagPrefix: String = "settings_dropdown",
     showLabel: Boolean = true,
     flatTrigger: Boolean = false,
+    lazyOptions: Boolean = false,
 ) {
     val colors = AsmrTheme.colorScheme
     var expanded by remember { mutableStateOf(false) }
@@ -175,42 +178,47 @@ internal fun SettingsDropdownSelector(
                     onDismissRequest = { expanded = false },
                     properties = PopupProperties(focusable = true),
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .width(with(density) { anchorWidth.toDp() })
-                            .heightIn(max = 320.dp)
-                            .clip(shape)
-                            .background(menuColor)
-                            .border(1.dp, colors.primaryStrong.copy(alpha = 0.24f), shape)
-                            .testTag("${tagPrefix}_menu_$label")
-                            .verticalScroll(rememberScrollState())
-                            .selectableGroup()
-                            .padding(4.dp),
-                    ) {
-                        options.forEach { (code, name) ->
-                            val selected = code == value
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 44.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(if (selected) selectedColor else Color.Transparent)
-                                    .selectable(selected = selected, role = Role.RadioButton) {
-                                        expanded = false
-                                        onSelect(code)
-                                    }
-                                    .testTag("${tagPrefix}_option_${label}_$code")
-                                    .padding(horizontal = 8.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Text(name, modifier = Modifier.weight(1f),
-                                    style = if (flatTrigger) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
-                                    color = if (selected) colors.primaryStrong else colors.textPrimary,
-                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
-                                if (selected) Icon(Icons.Rounded.Check, contentDescription = null,
-                                    tint = colors.primaryStrong, modifier = Modifier.size(18.dp))
-                            }
+                    val menuModifier = Modifier
+                        .width(with(density) { anchorWidth.toDp() })
+                        .heightIn(max = 320.dp)
+                        .clip(shape)
+                        .background(menuColor)
+                        .border(1.dp, colors.primaryStrong.copy(alpha = 0.24f), shape)
+                        .testTag("${tagPrefix}_menu_$label")
+                        .selectableGroup()
+                    val optionContent: @Composable (String, String) -> Unit = { code, name ->
+                        val selected = code == value
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 44.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (selected) selectedColor else Color.Transparent)
+                                .selectable(selected = selected, role = Role.RadioButton) {
+                                    expanded = false
+                                    onSelect(code)
+                                }
+                                .testTag("${tagPrefix}_option_${label}_$code")
+                                .padding(horizontal = 8.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(name, modifier = Modifier.weight(1f),
+                                style = if (flatTrigger) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+                                color = if (selected) colors.primaryStrong else colors.textPrimary,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+                            if (selected) Icon(Icons.Rounded.Check, contentDescription = null,
+                                tint = colors.primaryStrong, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                    if (lazyOptions) {
+                        val entries = remember(options) { options.entries.toList() }
+                        LazyColumn(modifier = menuModifier, contentPadding = PaddingValues(4.dp)) {
+                            items(entries, key = { it.key }) { optionContent(it.key, it.value) }
+                        }
+                    } else {
+                        Column(menuModifier.verticalScroll(rememberScrollState()).padding(4.dp)) {
+                            options.forEach { (code, name) -> optionContent(code, name) }
                         }
                     }
                 }

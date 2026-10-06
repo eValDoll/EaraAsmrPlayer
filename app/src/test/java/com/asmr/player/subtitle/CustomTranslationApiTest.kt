@@ -44,6 +44,27 @@ class CustomTranslationApiTest {
     }
 
     @Test
+    fun selectedDeepSeekModel_isUsedByTitleSubtitleAndPolishRequests() {
+        val config = TranslationApiConfig(apiKey = "key", model = "deepseek-v4-pro")
+        val settings = DeepSeekTranslationSettings(thinkingEnabled = true)
+        val messages = listOf(DeepSeekChatMessage("assistant", "", reasoningContent = "思考内容"))
+        val requests = listOf(
+            buildDeepSeekTitleTranslationRequest(gson, "作品", "", "", listOf(1L to "音轨"), settings, config),
+            buildDeepSeekSubtitleAgentRequest(gson, messages, settings, apiConfig = config),
+            buildPolishAgentRequest(gson, messages, settings, config)
+        ).map { JsonParser.parseString(it).asJsonObject }
+        requests.forEach { body ->
+            assertEquals("deepseek-v4-pro", body["model"].asString)
+            assertEquals("enabled", body["thinking"].asJsonObject["type"].asString)
+            assertEquals("high", body["reasoning_effort"].asString)
+        }
+        requests.drop(1).forEach { body ->
+            assertEquals("思考内容", body["messages"].asJsonArray[0].asJsonObject["reasoning_content"].asString)
+            assertTrue(body["tools"].asJsonArray.size() >= 2)
+        }
+    }
+
+    @Test
     fun allCustomRequests_useConfiguredModelAndOmitVendorSpecificFields() {
         val config = TranslationApiConfig(TranslationProvider.CUSTOM, "custom-key", "https://example.com/v1", "vendor/model", 65_536)
         val messages = listOf(DeepSeekChatMessage("assistant", "", reasoningContent = "私有思考字段"))
@@ -247,6 +268,51 @@ class CustomTranslationApiTest {
         assertFalse(failure.retryable)
         assertTrue(SubtitleFailureMessages.deepSeekHttp(429, null, "自定义翻译服务", true).retryable)
         assertFalse(SubtitleFailureMessages.network(UnknownHostException(), "自定义翻译服务").contains("DeepSeek"))
+    }
+
+    @Test
+    fun customUsage_recordsEveryToolRoundTripAndFallsBackToInputPlusOutput() = runBlocking {
+        MockWebServer().use { server ->
+            server.enqueue(toolResponse("read", SUBTITLE_READ_TOOL_NAME, "{}").withUsage(
+                """{"total_tokens":100,"prompt_tokens":60,"completion_tokens":40}"""))
+            server.enqueue(toolResponse("write", SUBTITLE_WRITE_TOOL_NAME,
+                """{"captions":[{"source_indices":[0],"start_ms":0,"end_ms":900,"japanese":"おやすみ","chinese":"晚安"}]}""")
+                .withUsage("""{"prompt_tokens":80,"completion_tokens":20}"""))
+            val recorded = mutableListOf<Long>()
+            val config = TranslationApiConfig(TranslationProvider.CUSTOM, "key", server.url("/v1").toString(), "model")
+            val client = SubtitleTranslationClient(OkHttpClient(), gson, config.apiKey,
+                apiConfig = config, onTokenUsage = recorded::add)
+            client.translateSubtitles(
+                listOf(GeneratedSubtitleSource(index = 0, startMs = 0, endMs = 900, text = "おやすみ")),
+                allowMerging = false, onCaptionsConfirmed = {}
+            )
+            assertEquals(listOf(100L, 100L), recorded)
+        }
+    }
+
+    @Test
+    fun customUsage_doesNotEstimateMissingOrPartialUsageOrDoubleCountDetails() = runBlocking {
+        MockWebServer().use { server ->
+            val content = gson.toJson(mapOf("work_title" to "作品", "tracks" to listOf(mapOf("track_id" to 1, "title" to "音轨"))))
+            listOf(null, "null", """{"prompt_tokens":50}""", """{"total_tokens":0}""",
+                """{"total_tokens":75,"prompt_tokens":50,"completion_tokens":25,"completion_tokens_details":{"reasoning_tokens":10}}""")
+                .forEach { usage ->
+                    val response = chatResponse(mapOf("role" to "assistant", "content" to content))
+                    server.enqueue(if (usage == null) response else response.withUsage(usage))
+                }
+            val recorded = mutableListOf<Long>()
+            val config = TranslationApiConfig(TranslationProvider.CUSTOM, "key", server.url("/v1").toString(), "model")
+            val client = SubtitleTranslationClient(OkHttpClient(), gson, config.apiKey,
+                apiConfig = config, onTokenUsage = recorded::add)
+            repeat(5) { client.translateDisplayNames("作品", "", "", listOf(1L to "音轨"), maxAttempts = 1) }
+            assertEquals(listOf(75L), recorded)
+        }
+    }
+
+    private fun MockResponse.withUsage(usage: String): MockResponse {
+        val json = JsonParser.parseString(requireNotNull(getBody()).readUtf8()).asJsonObject
+        json.add("usage", JsonParser.parseString(usage))
+        return setBody(gson.toJson(json))
     }
 
     private fun toolResponse(id: String, name: String, arguments: String): MockResponse = chatResponse(mapOf(

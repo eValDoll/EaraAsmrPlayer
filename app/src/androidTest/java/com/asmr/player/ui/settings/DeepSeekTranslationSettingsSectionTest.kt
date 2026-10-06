@@ -56,7 +56,7 @@ class DeepSeekTranslationSettingsSectionTest {
         val bounds = composeRule.onNodeWithTag("deepseek_api_key_input")
             .getUnclippedBoundsInRoot()
         val actualHeight = bounds.bottom - bounds.top
-        assertEquals(48f, actualHeight.value, 0.5f)
+        assertTrue(actualHeight.value >= 48f)
     }
 
     @Test

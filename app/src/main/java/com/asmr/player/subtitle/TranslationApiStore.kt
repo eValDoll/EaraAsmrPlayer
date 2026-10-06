@@ -24,6 +24,8 @@ internal class TranslationApiStore internal constructor(
 
     fun readDeepSeekKey(): String = synchronized(lock) { readEncrypted() }
 
+    fun readCustomConfiguration(): TranslationApiConfig? = synchronized(lock) { readCustom() }
+
     fun readSettings(): TranslationApiSettings = synchronized(lock) {
         val custom = readCustom()
         TranslationApiSettings(
@@ -33,13 +35,14 @@ internal class TranslationApiStore internal constructor(
             customKeyConfigured = custom?.apiKey?.isNotBlank() == true,
             customMaxOutputTokens = custom?.maxOutputTokens ?: DEFAULT_TRANSLATION_MAX_OUTPUT_TOKENS,
             customThinkingMode = custom?.thinkingMode ?: CustomThinkingMode.FOLLOW_SERVER,
-            customReasoningEffort = custom?.reasoningEffort ?: CustomReasoningEffort.HIGH
+            customReasoningEffort = custom?.reasoningEffort ?: CustomReasoningEffort.HIGH,
+            deepSeekModel = readDeepSeekModel(),
         )
     }
 
     fun readConfiguration(): TranslationApiConfig = synchronized(lock) {
         when (selectedProvider()) {
-            TranslationProvider.DEEPSEEK -> TranslationApiConfig(apiKey = readEncrypted())
+            TranslationProvider.DEEPSEEK -> TranslationApiConfig(apiKey = readEncrypted(), model = readDeepSeekModel())
             TranslationProvider.CUSTOM -> readCustom() ?: TranslationApiConfig(
                 provider = TranslationProvider.CUSTOM, apiKey = "", baseUrl = "", model = ""
             )
@@ -52,6 +55,15 @@ internal class TranslationApiStore internal constructor(
         }
         check(preferences.edit().putString(KEY_PROVIDER, provider.name).commit()) { "翻译服务保存失败" }
     }
+
+    fun saveDeepSeekModel(model: String) = synchronized(lock) {
+        val normalized = model.trim()
+        require(normalized.isNotEmpty()) { "请选择 DeepSeek 模型" }
+        check(preferences.edit().putString(KEY_DEEPSEEK_MODEL, normalized).commit()) { "DeepSeek 模型保存失败" }
+    }
+
+    private fun readDeepSeekModel(): String = preferences.getString(KEY_DEEPSEEK_MODEL, null)
+        ?.trim()?.takeIf { it.isNotEmpty() } ?: DEEPSEEK_SUBTITLE_MODEL
 
     fun saveCustom(
         baseUrl: String,
@@ -172,6 +184,7 @@ internal class TranslationApiStore internal constructor(
     companion object {
         private const val PREFERENCES_NAME = "deepseek_api_key_preferences"
         private const val KEY_PROVIDER = "translation_provider"
+        private const val KEY_DEEPSEEK_MODEL = "deepseek_model"
         private const val CUSTOM_PREFIX = "custom_"
         private const val KEY_ENCRYPTED_VALUE = "encrypted_value"
         private const val KEY_INITIALIZATION_VECTOR = "initialization_vector"
