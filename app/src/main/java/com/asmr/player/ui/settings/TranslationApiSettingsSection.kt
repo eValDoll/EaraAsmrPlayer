@@ -45,7 +45,6 @@ internal fun TranslationApiSettingsSection(
     customOptions: @Composable () -> Unit,
     onLoadModels: suspend (String, String) -> List<String>? = { _, _ -> null },
     customTotalTokens: Long = 0L,
-    usagePreview: Boolean = false,
 ) {
     val colors = AsmrTheme.colorScheme
     var provider by rememberSaveable { mutableStateOf(state.settings.provider) }
@@ -89,8 +88,8 @@ internal fun TranslationApiSettingsSection(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("API 配置", modifier = Modifier.weight(1f), color = colors.textPrimary,
                     style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-                if (state.settings.customKeyConfigured || usagePreview) {
-                    Text("Token ${formatDeepSeekTokenTotal(customTotalTokens)}" + if (usagePreview) " · 模拟" else "", color = colors.textSecondary,
+                if (state.settings.customKeyConfigured) {
+                    Text("Token ${formatDeepSeekTokenTotal(customTotalTokens)}", color = colors.textSecondary,
                         style = MaterialTheme.typography.labelMedium,
                         modifier = Modifier.testTag("custom_api_token_total"))
                 }
