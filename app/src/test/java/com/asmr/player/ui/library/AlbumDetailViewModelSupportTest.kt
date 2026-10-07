@@ -10,6 +10,7 @@ import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.domain.model.Album
 import com.asmr.player.ui.nav.AlbumCoverHint
+import com.asmr.player.data.remote.crawler.AlbumResourceSource
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Assert.assertFalse
@@ -17,6 +18,15 @@ import org.junit.Test
 import java.io.FileNotFoundException
 
 class AlbumDetailViewModelSupportTest {
+    @Test fun numericLocalAlbumReopensWithJapaneseAsmrAndKeepsExplicitSourceChoice() {
+        val album = Album(title = "数字作品", path = "web://rj/UN124393", workId = "UN124393", rjCode = "UN124393")
+        assertEquals("UN124393", resolveAlbumDetailRj(null, album))
+        assertEquals("UN124393", resolveAlbumDetailRj("un124393", null))
+        assertEquals(AlbumResourceSource.JapaneseAsmr, resolveAlbumResourceSource("UN124393", null, AlbumResourceSource.AsmrOne))
+        assertEquals(AlbumResourceSource.AsmrOne, resolveAlbumResourceSource("UN124393", AlbumResourceSource.AsmrOne, AlbumResourceSource.JapaneseAsmr))
+        assertEquals(AlbumResourceSource.AsmrOne, resolveAlbumResourceSource("RJ124393", null, AlbumResourceSource.AsmrOne))
+    }
+
     @Test
     fun shouldRemoveMissingLocalAlbum_removesOnlyConfirmedMissingPhysicalWork() {
         val album = AlbumEntity(

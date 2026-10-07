@@ -47,6 +47,16 @@ class LibraryItemDeletionTest {
     @After
     fun tearDown() = db.close()
 
+    @Test fun deletingNumericAlbumOnlyRemovesItsOwnUnboundPlaylistItems() = runBlocking {
+        val album = insertAlbum("UN124393")
+        db.playlistItemDao().upsertItems(listOf(
+            PlaylistItemEntity(playlistId, "numeric", "数字作品", uri = "https://audio.example/124393.m3u8", rjCode = "UN124393"),
+            PlaylistItemEntity(playlistId, "rj", "DLsite 作品", uri = "https://audio.example/RJ124393.m3u8", rjCode = "RJ124393")
+        ))
+        db.deleteLibraryAlbum(album)
+        assertEquals(listOf("rj"), db.playlistItemDao().getItemsOnce(playlistId).map { it.mediaId })
+    }
+
     @Test
     fun deleteMixedAlbum_clearsGroupsPlaylistsAndFavorites() = runBlocking {
         val album = insertAlbum("RJ123456")

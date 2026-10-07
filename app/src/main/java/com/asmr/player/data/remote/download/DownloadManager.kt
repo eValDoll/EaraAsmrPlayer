@@ -28,7 +28,7 @@ import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.data.local.library.LocalAlbumMergeService
 import com.asmr.player.data.local.library.deleteLibraryTracks
 import com.asmr.player.util.SubtitleEntry
-import com.asmr.player.util.DlsiteWorkNo
+import com.asmr.player.util.AlbumWorkNo
 import com.asmr.player.util.SubtitleMatchSupport
 import com.asmr.player.util.SubtitleParser
 import com.asmr.player.util.TrackKeyNormalizer
@@ -1508,7 +1508,7 @@ private suspend fun upsertDownloadedAlbumToLibrary(
     val titleTrimmed = taskTitle.trim()
     val subtitleTrimmed = taskSubtitle.trim()
     val normalizedWorkId = albumRjCode.trim().ifBlank { albumWorkId.trim() }
-    val rj = DlsiteWorkNo.extractWorkNo(normalizedWorkId.ifBlank { titleTrimmed.ifBlank { dir.name } })
+    val rj = AlbumWorkNo.extractWorkNo(normalizedWorkId.ifBlank { titleTrimmed.ifBlank { dir.name } })
 
     val albumDao = db.albumDao()
     val trackDao = db.trackDao()
@@ -1706,7 +1706,7 @@ private suspend fun upsertDownloadedDocumentAlbumToLibrary(
     val titleTrimmed = taskTitle.trim()
     val subtitleTrimmed = taskSubtitle.trim()
     val normalizedWorkId = albumRjCode.trim().ifBlank { albumWorkId.trim() }
-    val rj = DlsiteWorkNo.extractWorkNo(normalizedWorkId.ifBlank { titleTrimmed })
+    val rj = AlbumWorkNo.extractWorkNo(normalizedWorkId.ifBlank { titleTrimmed })
     val albumDao = db.albumDao()
     val trackDao = db.trackDao()
     val albumFtsDao = db.albumFtsDao()

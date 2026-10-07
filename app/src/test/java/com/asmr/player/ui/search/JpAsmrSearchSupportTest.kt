@@ -12,6 +12,17 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class JpAsmrSearchSupportTest {
+    @Test fun numericResultsRetainIdentityAndDetailSource() {
+        val item = AsmrOneCollectedSearchItem(workId = 138562, rj = "UN124393", title = "数字作品", pageUrl = "https://japaneseasmr.com/138562/")
+        val album = item.toCollectedAlbum(source = CollectedSearchSource.JapaneseAsmr)
+        assertEquals("UN124393", album.rjCode)
+        assertEquals("UN124393", album.workId)
+        assertFalse(album.hasAsmrOne)
+        assertNull(album.asmrOneWorkId)
+        assertEquals("album_detail_rj/UN124393?resourceSource=JapaneseAsmr", Routes.albumDetailByRj(album.rjCode, resourceSource = album.collectedSourceName))
+        assertEquals("", item.resolvedWorkNo())
+    }
+
     @Test fun sourceSelectionHasIndependentFiltersAndSorting() {
         val jp = SearchFilterOption.fromState(false, false, false, true, "JapaneseAsmr")
         assertEquals(SearchFilterOption.JapaneseAsmr, jp)

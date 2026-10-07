@@ -18,7 +18,7 @@ internal class LocalFileScopes(
     private val storage: DownloadStorageGateway,
 ) {
     fun create(workNos: List<String> = emptyList(), roots: List<String> = emptyList(), albumId: Long = 0L): LocalFileScope {
-        val identities = workNos.mapNotNull { DlsiteWorkNo.extractWorkNo(it).uppercase().takeIf(String::isNotBlank) }
+        val identities = workNos.mapNotNull { AlbumWorkNo.extractWorkNo(it).uppercase().takeIf(String::isNotBlank) }
             .mapTo(mutableSetOf()) { "work:$it" }
         if (albumId > 0L) identities += "album:$albumId"
         val paths = roots.filter { it.isNotBlank() && !isOnlineTrackPath(it) && !it.startsWith("web://") }

@@ -85,6 +85,7 @@ import com.asmr.player.ui.nav.AlbumCoverHint
 import com.asmr.player.ui.nav.AlbumCoverHintStore
 import com.asmr.player.ui.nav.albumFromCoverHint
 import com.asmr.player.util.DlsiteWorkNo
+import com.asmr.player.util.AlbumWorkNo
 import com.asmr.player.util.ASMR_ONE_SITE_FAILURE_MESSAGE
 import com.asmr.player.util.MessageManager
 import com.asmr.player.util.OnlineLyricsStore
@@ -1665,6 +1666,7 @@ class AlbumDetailViewModel @Inject constructor(
     fun refreshDlsiteTrialSection() {
         val current = _uiState.value as? AlbumDetailUiState.Success ?: return
         val workno = current.model.dlsiteWorkno.trim().uppercase().ifBlank { current.model.rjCode.trim().uppercase() }
+        if (AlbumWorkNo.isNumericWork(workno)) return
         if (workno.isBlank() || current.model.isLoadingDlsite || current.model.isLoadingDlsiteTrial) return
 
         val token = ++dlsiteTrialLoadToken
@@ -1728,7 +1730,7 @@ class AlbumDetailViewModel @Inject constructor(
             }
             _uiState.value = AlbumDetailUiState.Success(
                 model = latestBefore.model.copy(
-                    resourceSource = selectedResourceSource ?: preferred,
+                    resourceSource = resolveAlbumResourceSource(keyRj, selectedResourceSource, preferred),
                     isLoadingAsmrOne = true,
                     hasResolvedAsmrOneContent = false
                 )
@@ -2103,6 +2105,7 @@ class AlbumDetailViewModel @Inject constructor(
         dlsiteInfo: Album? = null,
         preserveHeaderAlbumMetadata: Boolean = false
     ): AlbumDetailModel {
+        val numericWork = AlbumWorkNo.isNumericWork(rj)
         return AlbumDetailModel(
             baseRjCode = rj,
             rjCode = rj,
@@ -2113,20 +2116,20 @@ class AlbumDetailViewModel @Inject constructor(
             dlsiteGalleryUrls = emptyList(),
             dlsiteTrialTracks = emptyList(),
             dlsiteRecommendations = DlsiteRecommendations(),
-            dlsiteWorkno = rj,
+            dlsiteWorkno = rj.takeUnless { numericWork }.orEmpty(),
             dlsitePlayWorkno = "",
-            dlsiteEditions = defaultDlsiteEditions(rj),
+            dlsiteEditions = if (numericWork) emptyList() else defaultDlsiteEditions(rj),
             dlsiteSelectedLang = "JPN",
-            hasResolvedInitialDlsiteTarget = false,
-            hasLoadedInitialDlsiteContent = false,
+            hasResolvedInitialDlsiteTarget = numericWork,
+            hasLoadedInitialDlsiteContent = numericWork,
             hasResolvedAsmrOneContent = false,
-            hasResolvedDlsitePlayContent = false,
+            hasResolvedDlsitePlayContent = numericWork,
             preserveHeaderAlbumMetadata = preserveHeaderAlbumMetadata,
             isDlsiteLanguageUserSelected = false,
             asmrOneWorkId = null,
             asmrOneSite = null,
             asmrOneTree = emptyList(),
-            resourceSource = selectedResourceSource ?: preferredResourceSource ?: AlbumResourceSource.AsmrOne,
+            resourceSource = resolveAlbumResourceSource(rj, selectedResourceSource, preferredResourceSource),
             dlsitePlayTree = emptyList(),
             isLoadingDlsite = false,
             isLoadingDlsiteTrial = false,
@@ -2508,7 +2511,7 @@ class AlbumDetailViewModel @Inject constructor(
                     )
                 }
 
-                val rj = normalizeWorkNo(displayAlbum.rjCode.ifBlank { displayAlbum.workId }.ifBlank { model.rjCode })
+                val rj = AlbumWorkNo.extractWorkNo(displayAlbum.rjCode.ifBlank { displayAlbum.workId }.ifBlank { model.rjCode })
                 val workKey = rj.ifBlank { displayAlbum.workId.trim().ifBlank { displayAlbum.title.trim() } }
                 val onlinePath = "web://rj/${workKey.uppercase()}"
                 val albumDir = onlineSaveAlbumDir(displayAlbum, workKey).apply {

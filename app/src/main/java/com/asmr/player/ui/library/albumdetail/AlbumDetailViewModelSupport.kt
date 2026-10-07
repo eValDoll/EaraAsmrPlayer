@@ -1,6 +1,7 @@
 package com.asmr.player.ui.library
 
 import com.asmr.player.data.remote.crawler.AlbumResourceSource
+import com.asmr.player.util.AlbumWorkNo
 
 import android.content.Context
 import android.util.Log
@@ -281,9 +282,19 @@ internal fun resolveAlbumDetailRj(routeRj: String?, localAlbum: Album?): String 
         localAlbum?.title.orEmpty(),
         localAlbum?.path.orEmpty()
     )
-        .map(DlsiteWorkNo::extractWorkNo)
+        .map(AlbumWorkNo::extractWorkNo)
         .firstOrNull { it.isNotBlank() }
         .orEmpty()
+}
+
+internal fun resolveAlbumResourceSource(
+    workNo: String,
+    selected: AlbumResourceSource?,
+    preferred: AlbumResourceSource?
+): AlbumResourceSource = selected ?: if (AlbumWorkNo.isNumericWork(workNo)) {
+    AlbumResourceSource.JapaneseAsmr
+} else {
+    preferred ?: AlbumResourceSource.AsmrOne
 }
 
 internal fun albumDetailRequestKey(albumId: Long?, rjCode: String?): String {
