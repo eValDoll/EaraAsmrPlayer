@@ -198,7 +198,7 @@ import java.util.UUID
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
-private enum class AlbumHeaderButtonGroupState {
+internal enum class AlbumHeaderButtonGroupState {
     DownloadOnly,
     Save,
     Lossless
@@ -3351,7 +3351,7 @@ private fun AlbumHeader(
 }
 
 @Composable
-private fun AlbumHeaderActionBar(
+internal fun AlbumHeaderActionBar(
     groupState: AlbumHeaderButtonGroupState,
     onDownloadClick: () -> Unit,
     onSaveClick: () -> Unit,
@@ -3562,7 +3562,8 @@ private fun AlbumHeaderActionBar(
                         japaneseAsmrUrl = japaneseAsmrUrl,
                         shape = floatingSegmentShape,
                         modifier = Modifier
-                            .widthIn(min = 104.dp)
+                            // 内部 fillMaxSize 需要明确宽度，避免占满整行并挤掉下载/保存按钮组。
+                            .width(104.dp)
                             .fillMaxHeight(),
                     )
                 }
