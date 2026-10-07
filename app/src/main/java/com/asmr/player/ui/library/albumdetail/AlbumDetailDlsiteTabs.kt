@@ -1258,7 +1258,8 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                         label = "资源站点", value = resourceSource.name,
                         options = AlbumResourceSource.entries.associate { it.name to it.label },
                         onSelect = { name -> onResourceSourceChange(AlbumResourceSource.valueOf(name)) },
-                        modifier = Modifier.width(154.dp), showLabel = false, flatTrigger = true,
+                        modifier = Modifier.widthIn(min = 154.dp),
+                        showLabel = false, flatTrigger = true, singleLineOptions = true,
                         tagPrefix = "album_resource_source"
                     )
                     IconButton(
