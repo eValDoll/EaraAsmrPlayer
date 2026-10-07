@@ -903,17 +903,18 @@ class AlbumDetailViewModel @Inject constructor(
         return resolvedWorkno
     }
 
-    suspend fun loadAlbumAndAwait(albumId: Long?, rjCode: String?, force: Boolean = false) {
-        loadAlbum(albumId, rjCode, force)
+    suspend fun loadAlbumAndAwait(albumId: Long?, rjCode: String?, force: Boolean = false, initialResourceSource: AlbumResourceSource? = null) {
+        loadAlbum(albumId, rjCode, force, initialResourceSource)
         albumLoadJob?.join()
     }
 
-    fun loadAlbum(albumId: Long?, rjCode: String?, force: Boolean = false) {
+    fun loadAlbum(albumId: Long?, rjCode: String?, force: Boolean = false, initialResourceSource: AlbumResourceSource? = null) {
         val normalizedRj = rjCode?.trim().orEmpty().uppercase()
         val key = albumDetailRequestKey(albumId, normalizedRj)
         val current = _uiState.value as? AlbumDetailUiState.Success
         val isAlbumSwitch = lastAlbumKey != key
         if (isAlbumSwitch && lastAlbumKey != null) selectedResourceSource = null
+        if (initialResourceSource != null) selectedResourceSource = initialResourceSource
         if (
             shouldReuseAlbumDetailModel(
                 force = force,
@@ -924,6 +925,7 @@ class AlbumDetailViewModel @Inject constructor(
             )
         ) {
             observeLocalTracks(current?.model?.localAlbum?.id ?: 0L)
+            if (initialResourceSource != null) selectResourceSource(initialResourceSource)
             return
         }
         cancelPendingOnlineJobs(resetLoadingState = false)
@@ -1646,7 +1648,7 @@ class AlbumDetailViewModel @Inject constructor(
         if (updatedKey.equals(keyRj, ignoreCase = true)) {
             if (showFailureMessage && updated.asmrOneTree.isEmpty()) {
                 if (updated.resourceSource == AlbumResourceSource.JapaneseAsmr) {
-                    messageManager.showError("资源站点加载失败，请重试")
+                    messageManager.showError("jp-asmr 目录加载失败，请重试")
                 } else {
                     albumDetailAsmrOneFailureMessage(isLocalLibraryDetail)?.let(messageManager::showError)
                 }
@@ -1737,6 +1739,7 @@ class AlbumDetailViewModel @Inject constructor(
                     val result = withTimeout(30_000L) { japaneseAsmrClient.load(keyRj) }
                     val updated = (_uiState.value as? AlbumDetailUiState.Success)?.model ?: return@launch
                     if (token != asmrOneLoadToken || updated.rjCode.trim().uppercase() != keyRj) return@launch
+                    if (result.tree.isEmpty()) messageManager.showError("jp-asmr 目录尚未同步")
                     _uiState.value = AlbumDetailUiState.Success(updated.copy(
                         asmrOneTree = result.tree, japaneseAsmrPageUrl = result.pageUrl,
                         hasResolvedAsmrOneContent = true, isLoadingAsmrOne = false

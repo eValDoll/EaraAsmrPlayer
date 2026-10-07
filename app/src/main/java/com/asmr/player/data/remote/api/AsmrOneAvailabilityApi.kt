@@ -8,6 +8,7 @@ import com.asmr.player.data.remote.withOnlineDirectoryRequestTimeouts
 import com.asmr.player.data.remote.withSearchTimeouts
 import com.asmr.player.listentogether.XxHash64
 import com.asmr.player.util.DlsiteWorkNo
+import com.asmr.player.domain.model.CollectedSearchSource
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
@@ -58,6 +59,8 @@ data class AsmrOneCollectedSearchItem(
     val rj: String = "",
     @SerializedName(value = "sourceId", alternate = ["source_id"])
     val sourceId: String = "",
+    val source: String = "",
+    val pageUrl: String = "",
     val title: String = "",
     val circle: String = "",
     val cvs: List<String>? = emptyList(),
@@ -118,6 +121,7 @@ data class AsmrOneBackendTrackTreeResponse(
     val rj: String = "",
     val workId: Int = 0,
     val sourceIdDigits: String = "",
+    val pageUrl: String = "",
     val trackTree: List<AsmrOneTrackNodeResponse>? = emptyList(),
     val fetchedAt: String = "",
     val lastError: String = "",
@@ -217,7 +221,8 @@ class AsmrOneAvailabilityApi @Inject constructor(
         offset: Int,
         sort: String,
         hasSubtitle: Boolean = false,
-        allAges: Boolean = false
+        allAges: Boolean = false,
+        source: CollectedSearchSource = CollectedSearchSource.AsmrOne
     ): AsmrOneCollectedSearchResponse {
         if (backendBaseUrl.isBlank()) throw IOException("asmr.one backend is not configured")
         return withContext(Dispatchers.IO) {
@@ -228,7 +233,8 @@ class AsmrOneAvailabilityApi @Inject constructor(
                 offset = offset,
                 sort = sort,
                 hasSubtitle = hasSubtitle,
-                allAges = allAges
+                allAges = allAges,
+                source = source
             )
             val request = Request.Builder()
                 .url(url)
@@ -241,7 +247,7 @@ class AsmrOneAvailabilityApi @Inject constructor(
                 .build()
             requestClient.newCall(request).awaitResponse().use { response ->
                 if (!response.isSuccessful) {
-                    throw IOException("asmr.one search failed: HTTP ${response.code}")
+                    throw IOException("${source.apiPath} search failed: HTTP ${response.code}")
                 }
                 val raw = response.body?.string().orEmpty()
                 if (raw.isBlank()) return@withContext AsmrOneCollectedSearchResponse()
@@ -315,12 +321,15 @@ class AsmrOneAvailabilityApi @Inject constructor(
             }
         }
 
-    suspend fun getTrackTreeByRj(rj: String): AsmrOneBackendTrackTreeResponse {
+    suspend fun getTrackTreeByRj(
+        rj: String,
+        source: CollectedSearchSource = CollectedSearchSource.AsmrOne
+    ): AsmrOneBackendTrackTreeResponse {
         if (backendBaseUrl.isBlank()) throw IOException("asmr.one backend is not configured")
         val normalizedRj = DlsiteWorkNo.normalizeWorkNo(rj, minimumDigits = 6)
         if (normalizedRj.isBlank()) throw IOException("asmr.one tracks work number is invalid")
         return withContext(Dispatchers.IO) {
-            val url = buildAsmrOneBackendTracksUrl(backendBaseUrl, normalizedRj)
+            val url = buildAsmrOneBackendTracksUrl(backendBaseUrl, normalizedRj, source)
             val request = Request.Builder()
                 .url(url)
                 .header("User-Agent", userAgent)
@@ -336,7 +345,7 @@ class AsmrOneAvailabilityApi @Inject constructor(
                     return@withContext AsmrOneBackendTrackTreeResponse(rj = normalizedRj)
                 }
                 if (!response.isSuccessful) {
-                    throw IOException("asmr.one tracks backend failed: HTTP ${response.code}")
+                    throw IOException("${source.apiPath} tracks backend failed: HTTP ${response.code}")
                 }
                 if (raw.isBlank()) return@withContext AsmrOneBackendTrackTreeResponse(rj = normalizedRj)
                 val responseType = object : TypeToken<AsmrOneBackendTrackTreeResponse>() {}.type
@@ -394,25 +403,30 @@ internal fun buildAsmrOneCollectedSearchUrl(
     offset: Int,
     sort: String,
     hasSubtitle: Boolean,
-    allAges: Boolean
+    allAges: Boolean,
+    source: CollectedSearchSource = CollectedSearchSource.AsmrOne
 ): HttpUrl {
-    return "${baseUrl.trimEnd('/')}/api/asmr-one/search"
+    return "${baseUrl.trimEnd('/')}/api/${source.apiPath}/search"
         .toHttpUrlOrNull()
         ?.newBuilder()
         ?.addQueryParameter("q", keyword.trim())
         ?.addQueryParameter("limit", limit.coerceIn(1, 100).toString())
         ?.addQueryParameter("offset", offset.coerceAtLeast(0).toString())
-        ?.addQueryParameter("sort", sort.trim().ifBlank { "release" })
+        ?.addQueryParameter("sort", if (source == CollectedSearchSource.JapaneseAsmr) "release" else sort.trim().ifBlank { "release" })
         ?.apply {
-            if (hasSubtitle) addQueryParameter("hasSubtitle", "true")
+            if (hasSubtitle && source == CollectedSearchSource.AsmrOne) addQueryParameter("hasSubtitle", "true")
             if (allAges) addQueryParameter("allAges", "true")
         }
         ?.build()
         ?: throw IOException("invalid asmr.one backend url")
 }
 
-internal fun buildAsmrOneBackendTracksUrl(baseUrl: String, rj: String): HttpUrl {
-    return "${baseUrl.trimEnd('/')}/api/asmr-one/tracks"
+internal fun buildAsmrOneBackendTracksUrl(
+    baseUrl: String,
+    rj: String,
+    source: CollectedSearchSource = CollectedSearchSource.AsmrOne
+): HttpUrl {
+    return "${baseUrl.trimEnd('/')}/api/${source.apiPath}/tracks"
         .toHttpUrlOrNull()
         ?.newBuilder()
         ?.addQueryParameter("rj", rj.trim().uppercase())

@@ -7,7 +7,6 @@ import com.asmr.player.BuildConfig
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.api.AsmrOneEndpoint
 import com.asmr.player.data.remote.crawler.AlbumResourceSource
-import com.asmr.player.data.remote.crawler.JapaneseAsmrClient
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.util.ASMR_ONE_SITE_TEST_FAILURE_MESSAGE
 import com.asmr.player.util.MessageManager
@@ -61,7 +60,10 @@ class DrawerStatusViewModel @Inject constructor(
         japaneseAsmrTestJob?.cancel()
         japaneseAsmrTestJob = viewModelScope.launch(Dispatchers.IO) {
             _japaneseAsmr.value = SiteStatus(type = SiteStatusType.Testing)
-            val latency = measure("${JapaneseAsmrClient.BASE}/", suppressAutomaticError = true, acceptNotFound = false)
+            val url = BuildConfig.LISTEN_TOGETHER_BASE_URL.trim().trimEnd('/')
+                .takeIf { it.isNotBlank() }
+                ?.let { "$it/api/jp-asmr/tracks?rj=RJ01000000" }
+            val latency = url?.let { measure(it, suppressAutomaticError = true, acceptNotFound = true) }
             coroutineContext.ensureActive()
             _japaneseAsmr.value = latency.toStatus()
         }

@@ -1,5 +1,7 @@
 package com.asmr.player
 
+import com.asmr.player.data.remote.crawler.AlbumResourceSource
+import com.asmr.player.ui.search.SEARCH_ASSIST_RESULT_COLLECTED_SOURCE_KEY
 import com.asmr.player.translation.LocalPageTranslationHeader
 import com.asmr.player.translation.PageTranslationAction
 import com.asmr.player.translation.PageTranslationHeaderAction
@@ -1049,6 +1051,7 @@ fun MainContainer(
         mutableStateOf(SearchAssistSearchRequest().chineseTranslatedOnly)
     }
     var submittedSearchCollectedOnly by rememberSaveable { mutableStateOf(SearchAssistSearchRequest().collectedOnly) }
+    var submittedSearchCollectedSourceName by rememberSaveable { mutableStateOf(SearchAssistSearchRequest().collectedSourceName) }
     var submittedSearchHasSubtitle by rememberSaveable { mutableStateOf(SearchAssistSearchRequest().hasSubtitle) }
     var submittedSearchAllAges by rememberSaveable { mutableStateOf(SearchAssistSearchRequest().allAges) }
     var submittedSearchCollectedSortName by rememberSaveable {
@@ -1270,11 +1273,11 @@ fun MainContainer(
         }
     }
 
-    fun openAlbumDetailFromSearch(albumId: Long?, rj: String?, preferDlsitePlay: Boolean = false) {
+    fun openAlbumDetailFromSearch(albumId: Long?, rj: String?, preferDlsitePlay: Boolean = false, resourceSource: String? = null) {
         val seq = ++pendingDetailNavigationSeq
         pendingDetailNavigation = true
         cancelPendingDetailNavigation = false
-        navigator.openAlbumDetail(albumId = albumId, rj = rj, preferDlsitePlay = preferDlsitePlay)
+        navigator.openAlbumDetail(albumId = albumId, rj = rj, preferDlsitePlay = preferDlsitePlay, resourceSource = resourceSource)
         scope.launch {
             delay(700)
             if (pendingDetailNavigationSeq == seq) {
@@ -1296,6 +1299,7 @@ fun MainContainer(
             request.chineseTranslatedOnly
         )
         targetEntry?.savedStateHandle?.set(SEARCH_ASSIST_RESULT_COLLECTED_ONLY_KEY, request.collectedOnly)
+        targetEntry?.savedStateHandle?.set(SEARCH_ASSIST_RESULT_COLLECTED_SOURCE_KEY, request.collectedSourceName)
         targetEntry?.savedStateHandle?.set(SEARCH_ASSIST_RESULT_HAS_SUBTITLE_KEY, request.hasSubtitle)
         targetEntry?.savedStateHandle?.set(SEARCH_ASSIST_RESULT_ALL_AGES_KEY, request.allAges)
         targetEntry?.savedStateHandle?.set(SEARCH_ASSIST_RESULT_COLLECTED_SORT_KEY, request.collectedSortName)
@@ -1317,6 +1321,7 @@ fun MainContainer(
         submittedSearchPresaleOnly = request.presaleOnly
         submittedSearchChineseTranslatedOnly = request.chineseTranslatedOnly
         submittedSearchCollectedOnly = request.collectedOnly
+        submittedSearchCollectedSourceName = request.collectedSourceName
         submittedSearchHasSubtitle = request.hasSubtitle
         submittedSearchAllAges = request.allAges
         submittedSearchCollectedSortName = request.collectedSortName
@@ -2268,6 +2273,7 @@ fun MainContainer(
                                                 submittedSearchPresaleOnly = submittedSearchPresaleOnly,
                                                 submittedSearchChineseTranslatedOnly = submittedSearchChineseTranslatedOnly,
                                                 submittedSearchCollectedOnly = submittedSearchCollectedOnly,
+                                                submittedSearchCollectedSourceName = submittedSearchCollectedSourceName,
                                                 submittedSearchHasSubtitle = submittedSearchHasSubtitle,
                                                 submittedSearchAllAges = submittedSearchAllAges,
                                                 submittedSearchCollectedSortName = submittedSearchCollectedSortName,
@@ -2303,7 +2309,8 @@ fun MainContainer(
                                                     openAlbumDetailFromSearch(
                                                         albumId = album.id,
                                                         rj = workNo,
-                                                        preferDlsitePlay = fromPurchasedOnly
+                                                        preferDlsitePlay = fromPurchasedOnly,
+                                                        resourceSource = album.collectedSourceName.takeIf { !it.isNullOrBlank() }
                                                     )
                                                 },
                                                 viewModel = searchViewModel
@@ -2514,6 +2521,9 @@ fun MainContainer(
                     val submittedCollectedOnly by backStackEntry.savedStateHandle
                         .getStateFlow(SEARCH_ASSIST_RESULT_COLLECTED_ONLY_KEY, SearchAssistSearchRequest().collectedOnly)
                         .collectAsStateWithLifecycle()
+                    val submittedCollectedSourceName by backStackEntry.savedStateHandle
+                        .getStateFlow(SEARCH_ASSIST_RESULT_COLLECTED_SOURCE_KEY, SearchAssistSearchRequest().collectedSourceName)
+                        .collectAsStateWithLifecycle()
                     val submittedHasSubtitle by backStackEntry.savedStateHandle
                         .getStateFlow(SEARCH_ASSIST_RESULT_HAS_SUBTITLE_KEY, SearchAssistSearchRequest().hasSubtitle)
                         .collectAsStateWithLifecycle()
@@ -2541,6 +2551,7 @@ fun MainContainer(
                         submittedPresaleOnly,
                         submittedChineseTranslatedOnly,
                         submittedCollectedOnly,
+                        submittedCollectedSourceName,
                         submittedHasSubtitle,
                         submittedAllAges,
                         submittedCollectedSortName,
@@ -2553,6 +2564,7 @@ fun MainContainer(
                         submittedSearchPresaleOnly = submittedPresaleOnly
                         submittedSearchChineseTranslatedOnly = submittedChineseTranslatedOnly
                         submittedSearchCollectedOnly = submittedCollectedOnly
+                        submittedSearchCollectedSourceName = submittedCollectedSourceName
                         submittedSearchHasSubtitle = submittedHasSubtitle
                         submittedSearchAllAges = submittedAllAges
                         submittedSearchCollectedSortName = submittedCollectedSortName
@@ -2569,6 +2581,8 @@ fun MainContainer(
                             SearchAssistSearchRequest().chineseTranslatedOnly
                         backStackEntry.savedStateHandle[SEARCH_ASSIST_RESULT_COLLECTED_ONLY_KEY] =
                             SearchAssistSearchRequest().collectedOnly
+                        backStackEntry.savedStateHandle[SEARCH_ASSIST_RESULT_COLLECTED_SOURCE_KEY] =
+                            SearchAssistSearchRequest().collectedSourceName
                         backStackEntry.savedStateHandle[SEARCH_ASSIST_RESULT_HAS_SUBTITLE_KEY] =
                             SearchAssistSearchRequest().hasSubtitle
                         backStackEntry.savedStateHandle[SEARCH_ASSIST_RESULT_ALL_AGES_KEY] =
@@ -2632,7 +2646,8 @@ fun MainContainer(
                     route = Routes.AlbumDetailByRjPattern,
                     arguments = listOf(
                         navArgument("rj") { defaultValue = "" },
-                        navArgument("initialTab") { type = NavType.StringType; nullable = true; defaultValue = null }
+                        navArgument("initialTab") { type = NavType.StringType; nullable = true; defaultValue = null },
+                        navArgument("resourceSource") { type = NavType.StringType; nullable = true; defaultValue = null }
                     )
                 ) { backStackEntry ->
                     val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
@@ -2663,6 +2678,9 @@ fun MainContainer(
                             initialTab = backStackEntry.arguments
                                 ?.getString("initialTab")
                                 .toAlbumDetailInitialTab(),
+                            initialResourceSource = AlbumResourceSource.entries.firstOrNull {
+                                it.name == backStackEntry.arguments?.getString("resourceSource")
+                            },
                             onPlayTracks = { album, tracks, startTrack ->
                                 scope.launch {
                                     if (playerViewModel.playTracksPrepared(album, tracks, startTrack)) {

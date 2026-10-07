@@ -198,7 +198,8 @@ class SearchScreenChromeTest {
         ).assertExists()
         composeRule.onNodeWithText("已购").assertExists()
         composeRule.onNodeWithText("预售").assertExists()
-        composeRule.onNodeWithText("已收录").assertExists()
+        composeRule.onNodeWithText("asmr.one").assertExists()
+        composeRule.onNodeWithText("jp-asmr").assertExists()
         composeRule.onNodeWithText("全部作品").assertExists()
         composeRule.onNodeWithTag(
             "${SEARCH_SCOPE_OPTION_TAG_PREFIX}_${SearchFilterOption.Standard.name}"

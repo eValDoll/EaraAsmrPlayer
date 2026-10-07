@@ -15,7 +15,7 @@ object Routes {
     const val AlbumDetailByIdPattern = "album_detail/{albumId}?rjCode={rjCode}&initialTab={initialTab}"
     const val AlbumDetailOnlineByRjPattern = "album_detail_online/{rj}"
 
-    const val AlbumDetailByRjPattern = "album_detail_rj/{rj}?initialTab={initialTab}"
+    const val AlbumDetailByRjPattern = "album_detail_rj/{rj}?initialTab={initialTab}&resourceSource={resourceSource}"
     fun searchAssist(keyword: String = ""): String {
         val normalized = keyword.trim()
         if (normalized.isBlank()) return SearchAssist
@@ -23,7 +23,7 @@ object Routes {
         return "search_assist?keyword=$encoded"
     }
 
-    fun albumDetailByRj(rj: String, initialTab: String? = null): String {
+    fun albumDetailByRj(rj: String, initialTab: String? = null, resourceSource: String? = null): String {
         val encoded = URLEncoder.encode(rj, "UTF-8")
         return buildString {
             append("album_detail_rj/")
@@ -31,6 +31,11 @@ object Routes {
             if (!initialTab.isNullOrBlank()) {
                 append("?initialTab=")
                 append(URLEncoder.encode(initialTab, "UTF-8"))
+            }
+            if (!resourceSource.isNullOrBlank()) {
+                append(if (initialTab.isNullOrBlank()) "?" else "&")
+                append("resourceSource=")
+                append(URLEncoder.encode(resourceSource, "UTF-8"))
             }
         }
     }
@@ -51,10 +56,10 @@ class AppNavigator(
     private val navController: NavHostController,
     private val scheduleAlbumDetailNavigation: (() -> Unit) -> Unit = { navigation -> navigation() }
 ) {
-    fun openAlbumDetail(albumId: Long?, rj: String?, preferDlsitePlay: Boolean = false) {
+    fun openAlbumDetail(albumId: Long?, rj: String?, preferDlsitePlay: Boolean = false, resourceSource: String? = null) {
         val normalizedRj = rj?.trim().orEmpty()
         if (normalizedRj.isNotBlank()) {
-            openAlbumDetailByRj(normalizedRj, preferDlsitePlay)
+            openAlbumDetailByRj(normalizedRj, preferDlsitePlay, resourceSource)
             return
         }
         val id = albumId ?: 0L
@@ -75,12 +80,13 @@ class AppNavigator(
         }
     }
 
-    fun openAlbumDetailByRj(rj: String, preferDlsitePlay: Boolean = false) {
+    fun openAlbumDetailByRj(rj: String, preferDlsitePlay: Boolean = false, resourceSource: String? = null) {
         val normalized = rj.trim().uppercase()
         if (normalized.isBlank()) return
         val route = Routes.albumDetailByRj(
             normalized,
-            initialTab = if (preferDlsitePlay) "dlsitePlay" else null
+            initialTab = if (preferDlsitePlay) "dlsitePlay" else null,
+            resourceSource = resourceSource
         )
         scheduleAlbumDetailNavigation {
             val currentRoute = navController.currentBackStackEntry?.destination?.route
