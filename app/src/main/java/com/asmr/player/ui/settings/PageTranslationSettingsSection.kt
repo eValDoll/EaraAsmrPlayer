@@ -32,6 +32,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
@@ -135,11 +136,32 @@ internal fun SettingsDropdownSelector(
     showLabel: Boolean = true,
     flatTrigger: Boolean = false,
     lazyOptions: Boolean = false,
+    singleLineOptions: Boolean = false,
 ) {
     val colors = AsmrTheme.colorScheme
     var expanded by remember { mutableStateOf(false) }
     var anchorWidth by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
+    val textStyle = if (flatTrigger) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium
+    val fieldHorizontalPadding = if (flatTrigger) 8.dp else 12.dp
+    val optionsWidthModifier = if (singleLineOptions) {
+        val textMeasurer = rememberTextMeasurer()
+        val optionsWidth = remember(options, textMeasurer, textStyle, density, fieldHorizontalPadding) {
+            val labelWidth = options.values.maxOfOrNull { name ->
+                maxOf(
+                    textMeasurer.measure(name, textStyle, softWrap = false, maxLines = 1).size.width,
+                    textMeasurer.measure(name, textStyle.copy(fontWeight = FontWeight.SemiBold),
+                        softWrap = false, maxLines = 1).size.width,
+                )
+            } ?: 0
+            with(density) {
+                val fieldPadding = fieldHorizontalPadding.roundToPx() * 2 + 8.dp.roundToPx() + 20.dp.roundToPx()
+                val menuPadding = 4.dp.roundToPx() * 2 + 8.dp.roundToPx() * 2 + 8.dp.roundToPx() + 18.dp.roundToPx()
+                (labelWidth + maxOf(fieldPadding, menuPadding)).toDp()
+            }
+        }
+        Modifier.width(optionsWidth)
+    } else Modifier
     val shape = RoundedCornerShape(10.dp)
     val fieldColor = lerp(colors.surface, colors.primarySoft, if (colors.isDark) 0.18f else 0.24f)
     val menuColor = lerp(colors.surface, colors.primarySoft, if (colors.isDark) 0.24f else 0.46f)
@@ -147,7 +169,7 @@ internal fun SettingsDropdownSelector(
     val menuPosition = remember(density) {
         ThemedDropdownMenuPositionProvider(with(density) { 4.dp.roundToPx() }, with(density) { 8.dp.roundToPx() })
     }
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Column(modifier.then(optionsWidthModifier), verticalArrangement = Arrangement.spacedBy(6.dp)) {
         if (showLabel) Text(label, color = colors.textSecondary, style = MaterialTheme.typography.labelMedium)
         Box(Modifier.fillMaxWidth().onSizeChanged { anchorWidth = it.width }) {
             Row(
@@ -161,12 +183,12 @@ internal fun SettingsDropdownSelector(
                     .clickable(enabled = enabled, role = Role.DropdownList) { expanded = !expanded }
                     .semantics { stateDescription = if (expanded) "已展开" else "已收起" }
                     .testTag("${tagPrefix}_$label")
-                    .padding(horizontal = if (flatTrigger) 8.dp else 12.dp, vertical = if (flatTrigger) 6.dp else 10.dp),
+                    .padding(horizontal = fieldHorizontalPadding, vertical = if (flatTrigger) 6.dp else 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(options.getValue(value), modifier = Modifier.weight(1f),
-                    style = if (flatTrigger) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+                    style = textStyle,
                     color = if (enabled) colors.textPrimary else colors.textTertiary,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Icon(if (expanded) Icons.Rounded.ArrowDropUp else Icons.Rounded.ArrowDropDown,
@@ -204,9 +226,12 @@ internal fun SettingsDropdownSelector(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
                             Text(name, modifier = Modifier.weight(1f),
-                                style = if (flatTrigger) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium,
+                                style = textStyle,
                                 color = if (selected) colors.primaryStrong else colors.textPrimary,
-                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                maxLines = if (singleLineOptions) 1 else Int.MAX_VALUE,
+                                softWrap = !singleLineOptions,
+                                overflow = if (singleLineOptions) TextOverflow.Ellipsis else TextOverflow.Clip)
                             if (selected) Icon(Icons.Rounded.Check, contentDescription = null,
                                 tint = colors.primaryStrong, modifier = Modifier.size(18.dp))
                         }
