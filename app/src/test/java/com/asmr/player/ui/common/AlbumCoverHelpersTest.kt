@@ -1,13 +1,34 @@
 package com.asmr.player.ui.common
 
 import com.asmr.player.domain.model.Album
+import com.asmr.player.cache.CacheImageModel
+import com.asmr.player.util.JapaneseAsmrAntiHotlink
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertSame
 import org.junit.Test
 
 class AlbumCoverHelpersTest {
+    @Test
+    fun japaneseCoverCarriesRefererAndReusesItsModel() {
+        val album = Album(title = "作品", path = "", coverUrl = "https://pic.weeabo0.xyz/RJ01728295_img_main.jpg")
+        val model = albumCoverImageModel(album) as CacheImageModel
+        assertEquals(album.coverUrl, model.data)
+        assertEquals(JapaneseAsmrAntiHotlink.REFERER, model.headers["Referer"])
+        assertEquals("jp-asmr", model.keyTag)
+        assertSame(model, albumCoverImageModel(album))
+        assertEquals("/covers/local.webp", albumCoverImageModel(album.copy(coverPath = "/covers/local.webp")))
+    }
+
+    @Test
+    fun existingDlsiteCoverKeepsItsHeadersAndCacheTag() {
+        val model = albumCoverImageModel(Album(title = "作品", path = "", coverUrl = "https://img.dlsite.jp/a.jpg")) as CacheImageModel
+        assertEquals("https://www.dlsite.com/", model.headers["Referer"])
+        assertEquals("dlsite", model.keyTag)
+    }
+
     @Test
     fun albumStableKey_prefersRjOrWorkId() {
         val album = Album(

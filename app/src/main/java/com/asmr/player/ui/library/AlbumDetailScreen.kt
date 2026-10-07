@@ -532,6 +532,7 @@ fun AlbumDetailScreen(
     onOpenAlbumByRj: (String, DlsiteRecommendedWork?) -> Unit = { _, _ -> },
     onSearchKeyword: (String) -> Unit = {},
     initialTab: Int? = null,
+    initialResourceSource: AlbumResourceSource? = null,
     playlistsViewModel: PlaylistsViewModel = hiltViewModel(),
     albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel(),
@@ -614,11 +615,11 @@ fun AlbumDetailScreen(
     LaunchedEffect(viewModel) {
         viewModel.setListenTogetherRjSummaryPollingEnabled(true)
     }
-    LaunchedEffect(albumId, rjCode) {
+    LaunchedEffect(albumId, rjCode, initialResourceSource) {
         val hasCachedAlbum = viewModel.hasCachedAlbum(albumId, rjCode)
         isInitialRouteReady = hasCachedAlbum
         if (!hasCachedAlbum) withFrameNanos { }
-        viewModel.loadAlbumAndAwait(albumId, rjCode, force = false)
+        viewModel.loadAlbumAndAwait(albumId, rjCode, force = false, initialResourceSource = initialResourceSource)
         isInitialRouteReady = true
     }
     DisposableEffect(screenKey, viewModel) {

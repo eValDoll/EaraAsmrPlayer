@@ -1,56 +1,66 @@
 package com.asmr.player.data.remote.crawler
 
+import com.asmr.player.data.remote.api.AsmrOneAvailabilityApi
 import com.asmr.player.util.ChapterMediaReference
-import org.jsoup.Jsoup
+import com.google.gson.Gson
+import kotlinx.coroutines.runBlocking
+import okhttp3.OkHttpClient
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
 import org.junit.Assert.*
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
+import java.io.IOException
+import java.util.concurrent.TimeUnit
 
+@RunWith(RobolectricTestRunner::class)
+@Config(sdk = [28])
 class JapaneseAsmrClientTest {
-    private val base = "https://japaneseasmr.com/150867/"
-    private val page = """
-        <p id="work_title_jp">作品 [RJ01707048]</p>
-        <div class="cleanPlayer"><video><source src="https://audio.example/RJ01707048.m3u8"></video>
-        <table><tr><td><a data-track-title="導入" data-value="0">導入</a></td></tr>
-        <tr><td><a data-track-title="本編" data-value="106">本編</a></td></tr>
-        <tr><td><a data-track-title="終章" data-value="1018">終章</a></td></tr></table></div>
-        <div class="audio_main"><audio src="https://audio.example/RJ01707048.m3u8"></audio></div>
-    """.trimIndent()
-
-    @Test fun chaptersUseNextBoundaryAndKeepLastOpenEndedWithoutDuplicatePlayers() {
-        val document = Jsoup.parse(page, base)
-        val downloads = parseJapaneseAsmrDownloads(Jsoup.parse("""
-            <a href="https://ts.buzzheavier.com/d/a">RJ01707048 - 01_導入.m4a</a>
-            <a href="https://ts.buzzheavier.com/d/b">RJ01707048 - 02_本編.m4a</a>
-            <a href="https://ts.buzzheavier.com/d/c">RJ01707048 - 03_終章.m4a</a>
-            <a href="https://bad.example/installer.exe">RJ01707048.exe</a>
-            <a href="https://bad.example/other.m4a">RJ999999.m4a</a>
-        """.trimIndent(), base), "RJ01707048")
-        assertEquals(3, downloads.size)
-        val root = parseJapaneseAsmrTree(document, "RJ01707048", downloads).single()
-        assertEquals("japaneseasmr.com", root.title)
-        val leaves = root.children.orEmpty()
-        assertEquals(3, leaves.size)
-        assertEquals(listOf(106.0, 912.0, null), leaves.map { it.duration })
-        val references = leaves.map { ChapterMediaReference.parse(it.playbackUrl!!)!! }
-        assertEquals(listOf(0L, 106000L, 1018000L), references.map { it.startMs })
-        assertEquals(listOf(106000L, 1018000L, null), references.map { it.endMs })
-        assertEquals(downloads.map { it.url }, leaves.map { it.downloadUrl })
-        assertEquals(3, leaves.map { it.playbackUrl }.distinct().size)
-        assertTrue(japaneseAsmrPageMatches(document, "RJ01707048"))
-        assertFalse(japaneseAsmrPageMatches(document, "RJ0170704"))
+    @Test fun readsServerDirectoryAndPreservesChapterAndDownloadMetadata() = runBlocking {
+        val server = MockWebServer()
+        server.start()
+        try {
+            server.enqueue(MockResponse().setBody("""{
+                "rj":"RJ01707048", "workId":150867,"pageUrl":"https://japaneseasmr.com/150867/",
+                "trackTree":[{"title":"japaneseasmr.com","type":"folder","children":[
+                    {"title":"01_導入.m4a","type":"audio","duration":106,
+                     "streamUrl":"https://audio.example/a.m3u8#eara-chapter=0,106000&file=01_%E5%B0%8E%E5%85%A5.m4a&download=https%3A%2F%2Fdownload.example%2F1",
+                     "mediaDownloadUrl":"https://download.example/1"},
+                    {"title":"02_本編.m4a","type":"audio",
+                     "streamUrl":"https://audio.example/a.m3u8#eara-chapter=106000,&file=02_%E6%9C%AC%E7%B7%A8.m4a"}
+                ]}]
+            }"""))
+            val api = AsmrOneAvailabilityApi(OkHttpClient(), Gson()) { server.url("/").toString() }
+            val result = JapaneseAsmrClient(api).load("rj01707048")
+            val request = server.takeRequest(5, TimeUnit.SECONDS)!!
+            assertEquals("/api/jp-asmr/tracks?rj=RJ01707048", request.path)
+            assertEquals("https://japaneseasmr.com/150867/", result.pageUrl)
+            val leaves = result.tree.single().children!!
+            val first = ChapterMediaReference.parse(leaves[0].playbackUrl!!)!!
+            val last = ChapterMediaReference.parse(leaves[1].playbackUrl!!)!!
+            assertEquals(0L, first.startMs)
+            assertEquals(106000L, first.endMs)
+            assertEquals("01_導入.m4a", first.fileName)
+            assertEquals("https://download.example/1", first.downloadUrl)
+            assertNull(last.endMs)
+            assertNull(leaves[1].downloadUrl)
+            assertEquals(1, server.requestCount)
+        } finally { server.shutdown() }
     }
 
-    @Test fun missingDownloadsStillPlayButNeverDownloadTheHlsManifest() {
-        val leaves = parseJapaneseAsmrTree(Jsoup.parse(page, base), "RJ01707048", emptyList()).single().children!!
-        assertTrue(leaves.all { it.playbackUrl != null && it.downloadUrl == null })
-    }
-
-    @Test fun invalidTimesAreIgnoredAndLeadingContentIsPreserved() {
-        val html = page.replace("data-value=\"0\"", "data-value=\"NaN\"")
-            .replace("data-value=\"1018\"", "data-value=\"-1\"")
-        val leaves = parseJapaneseAsmrTree(Jsoup.parse(html, base), "RJ01707048", emptyList()).single().children!!
-        assertEquals(2, leaves.size)
-        assertEquals(0L, ChapterMediaReference.parse(leaves[0].playbackUrl!!)!!.startMs)
-        assertEquals(106000L, ChapterMediaReference.parse(leaves[1].playbackUrl!!)!!.startMs)
+    @Test fun missingDirectoryDoesNotFallBackToSiteRequests() = runBlocking {
+        val server = MockWebServer()
+        server.start()
+        try {
+            val api = AsmrOneAvailabilityApi(OkHttpClient(), Gson()) { server.url("/").toString() }
+            server.enqueue(MockResponse().setResponseCode(404).setBody("""{"error":"tracks_not_found"}"""))
+            assertTrue(JapaneseAsmrClient(api).load("RJ01707048").tree.isEmpty())
+            server.enqueue(MockResponse().setResponseCode(503).setBody("{}"))
+            try { JapaneseAsmrClient(api).load("RJ01707048"); fail("expected backend failure") }
+            catch (_: IOException) { }
+            assertEquals(2, server.requestCount)
+        } finally { server.shutdown() }
     }
 }

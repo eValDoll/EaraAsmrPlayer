@@ -6,6 +6,7 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.asmr.player.domain.model.Album
+import com.asmr.player.domain.model.CollectedSearchSource
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -24,6 +25,7 @@ data class LastSearchStateV1(
     val presaleOnly: Boolean = false,
     val chineseTranslatedOnly: Boolean = false,
     val collectedOnly: Boolean = false,
+    val collectedSourceName: String? = null,
     val hasSubtitle: Boolean = false,
     val allAges: Boolean = false,
     val collectedSortName: String = "",
@@ -32,6 +34,16 @@ data class LastSearchStateV1(
     val canGoNext: Boolean,
     val results: List<Album>
 )
+
+internal fun LastSearchStateV1.restoreCollectedSource(): LastSearchStateV1 {
+    val source = CollectedSearchSource.fromName(collectedSourceName)
+    return copy(
+        collectedSourceName = source.name,
+        results = if (collectedOnly && !purchasedOnly && !presaleOnly && !chineseTranslatedOnly) {
+            results.map { it.copy(collectedSourceName = source.name) }
+        } else results
+    )
+}
 
 @Singleton
 class SearchCacheStore @Inject constructor(
@@ -46,7 +58,7 @@ class SearchCacheStore @Inject constructor(
         val raw = context.searchCacheDataStore.data.first()[key].orEmpty()
         if (raw.isBlank()) return null
         return runCatching {
-            gson.fromJson(raw, LastSearchStateV1::class.java)
+            gson.fromJson(raw, LastSearchStateV1::class.java).restoreCollectedSource()
         }.getOrNull()
     }
 

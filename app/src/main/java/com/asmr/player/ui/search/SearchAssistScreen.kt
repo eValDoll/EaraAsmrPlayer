@@ -1,5 +1,6 @@
 package com.asmr.player.ui.search
 
+import com.asmr.player.domain.model.CollectedSearchSource
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -154,6 +155,9 @@ internal fun SearchAssistContent(
     var collectedOnly by rememberSaveable(initialRequest.collectedOnly) {
         mutableStateOf(initialRequest.collectedOnly)
     }
+    var collectedSourceName by rememberSaveable(initialRequest.collectedSourceName) {
+        mutableStateOf(initialRequest.collectedSourceName)
+    }
     var hasSubtitle by rememberSaveable(initialRequest.hasSubtitle) {
         mutableStateOf(initialRequest.hasSubtitle)
     }
@@ -170,20 +174,22 @@ internal fun SearchAssistContent(
     val selectedOrder = remember(selectedOrderName) {
         SearchSortOption.values().firstOrNull { it.name == selectedOrderName } ?: SearchSortOption.Trend
     }
-    val selectedCollectedSort = remember(selectedCollectedSortName) {
-        SearchCollectedSortOption.fromName(selectedCollectedSortName)
+    val selectedCollectedSort = remember(selectedCollectedSortName, collectedSourceName) {
+        normalizedCollectedSort(collectedSourceName, SearchCollectedSortOption.fromName(selectedCollectedSortName))
     }
     val selectedFilter = remember(
         purchasedOnly,
         presaleOnly,
         chineseTranslatedOnly,
-        collectedOnly
+        collectedOnly,
+        collectedSourceName
     ) {
         SearchFilterOption.fromState(
             purchasedOnly = purchasedOnly,
             presaleOnly = presaleOnly,
             chineseTranslatedOnly = chineseTranslatedOnly,
-            collectedOnly = collectedOnly
+            collectedOnly = collectedOnly,
+            collectedSourceName = collectedSourceName
         )
     }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
@@ -218,6 +224,7 @@ internal fun SearchAssistContent(
         presaleOnlyValue: Boolean = presaleOnly,
         chineseTranslatedOnlyValue: Boolean = chineseTranslatedOnly,
         collectedOnlyValue: Boolean = collectedOnly,
+        collectedSourceValue: String = collectedSourceName,
         hasSubtitleValue: Boolean = hasSubtitle,
         allAgesValue: Boolean = allAges,
         collectedSort: SearchCollectedSortOption = selectedCollectedSort,
@@ -229,6 +236,7 @@ internal fun SearchAssistContent(
         presaleOnly = presaleOnlyValue,
         chineseTranslatedOnly = chineseTranslatedOnlyValue,
         collectedOnly = collectedOnlyValue,
+        collectedSourceName = collectedSourceValue,
         hasSubtitle = hasSubtitleValue,
         allAges = allAgesValue,
         collectedSortName = collectedSort.name,
@@ -456,6 +464,7 @@ internal fun SearchAssistContent(
                 presaleOnly = option.isPresaleOnly
                 chineseTranslatedOnly = option.isChineseTranslated
                 collectedOnly = option.isCollectedOnly
+                collectedSourceName = option.collectedSource.name
                 selectedOrderName = options.order.name
                 selectedCollectedSortName = options.collectedSort.name
                 hasSubtitle = options.hasSubtitle
@@ -473,6 +482,7 @@ internal fun SearchAssistContent(
                             presaleOnlyValue = option.isPresaleOnly,
                             chineseTranslatedOnlyValue = option.isChineseTranslated,
                             collectedOnlyValue = option.isCollectedOnly,
+                            collectedSourceValue = option.collectedSource.name,
                             hasSubtitleValue = options.hasSubtitle,
                             allAgesValue = options.allAges,
                             collectedSort = options.collectedSort,
