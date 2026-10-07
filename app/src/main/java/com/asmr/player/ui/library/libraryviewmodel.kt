@@ -63,7 +63,7 @@ import com.asmr.player.domain.model.Track
 import com.asmr.player.playback.PlayerConnection
 import com.asmr.player.ui.common.queryTrackFileSize
 import com.asmr.player.util.GlobalSyncState
-import com.asmr.player.util.DlsiteWorkNo
+import com.asmr.player.util.AlbumWorkNo
 import com.asmr.player.util.ScanRootsStore
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.SubtitleMatchSupport
@@ -2087,7 +2087,7 @@ class LibraryViewModel @Inject constructor(
     }
 
     private fun extractWorkNo(input: String): String {
-        return DlsiteWorkNo.extractWorkNo(input)
+        return AlbumWorkNo.extractWorkNo(input)
     }
 
     private fun buildOnlineAlbumPath(entity: AlbumEntity): String? {

@@ -1,5 +1,6 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.util.AlbumWorkNo
 import com.asmr.player.data.remote.crawler.AlbumResourceSource
 
 import com.asmr.player.ui.common.ThemedDropdownMenuPositionProvider
@@ -1035,7 +1036,7 @@ fun AlbumDetailScreen(
                                 OnlineDownloadSource.DlsitePlay -> model.dlsitePlayTree
                                 else -> emptyList()
                             }
-                            val headerDlsiteEditions = if (isLocalTab) {
+                            val headerDlsiteEditions = if (isLocalTab || AlbumWorkNo.isNumericWork(model.rjCode)) {
                                 emptyList()
                             } else {
                                 model.dlsiteEditions.ifEmpty {

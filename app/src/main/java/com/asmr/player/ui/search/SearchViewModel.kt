@@ -17,6 +17,7 @@ import com.asmr.player.domain.model.Album
 import com.asmr.player.hotlistening.HotListeningApi
 import com.asmr.player.util.AppErrorMessageFormatter
 import com.asmr.player.util.DlsiteWorkNo
+import com.asmr.player.util.AlbumWorkNo
 import com.asmr.player.util.MessageManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -1228,7 +1229,10 @@ class SearchViewModel @Inject constructor(
     }
 }
 
-internal fun AsmrOneCollectedSearchItem.resolvedWorkNo(fallbackWorkNo: String = ""): String {
+internal fun AsmrOneCollectedSearchItem.resolvedWorkNo(
+    fallbackWorkNo: String = "",
+    source: CollectedSearchSource = CollectedSearchSource.AsmrOne
+): String {
     return buildList {
         add(rj)
         add(sourceId)
@@ -1237,7 +1241,10 @@ internal fun AsmrOneCollectedSearchItem.resolvedWorkNo(fallbackWorkNo: String = 
         addAll(matchedRjs.orEmpty())
     }
         .asSequence()
-        .map { DlsiteWorkNo.normalizeWorkNo(it, minimumDigits = 6) }
+        .map {
+            if (source == CollectedSearchSource.JapaneseAsmr) AlbumWorkNo.normalizeWorkNo(it, minimumDigits = 6)
+            else DlsiteWorkNo.normalizeWorkNo(it, minimumDigits = 6)
+        }
         .firstOrNull { it.isNotBlank() }
         .orEmpty()
 }
@@ -1260,7 +1267,7 @@ internal fun AsmrOneCollectedSearchItem.toCollectedAlbum(
     fallbackWorkNo: String = "",
     source: CollectedSearchSource = CollectedSearchSource.AsmrOne
 ): Album {
-    val workNo = resolvedWorkNo(fallbackWorkNo)
+    val workNo = resolvedWorkNo(fallbackWorkNo, source)
     return Album(
         title = title.trim().ifBlank { workNo.ifBlank { "已收录作品" } },
         path = "",

@@ -18,6 +18,24 @@ import java.util.concurrent.TimeUnit
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [28])
 class JapaneseAsmrClientTest {
+    @Test fun numericWorkReadsCanonicalServerIdentityAndOriginalStream() = runBlocking {
+        val server = MockWebServer().apply { start() }
+        try {
+            server.enqueue(MockResponse().setBody("""{"rj":"UN124393","workId":138562,"pageUrl":"https://japaneseasmr.com/138562/",
+                "trackTree":[{"title":"japaneseasmr.com","type":"folder","children":[{"title":"本編.m4a","type":"audio",
+                "streamUrl":"https://audio.example/124393.m3u8#eara-chapter=0,&file=%E6%9C%AC%E7%B7%A8.m4a"}]}]}"""))
+            val api = AsmrOneAvailabilityApi(OkHttpClient(), Gson()) { server.url("/").toString() }
+            val result = JapaneseAsmrClient(api).load("un124393")
+            assertEquals("/api/jp-asmr/tracks?rj=UN124393", server.takeRequest(5, TimeUnit.SECONDS)!!.path)
+            val chapter = ChapterMediaReference.parse(result.tree.single().children!!.single().playbackUrl!!)!!
+            assertEquals("https://audio.example/124393.m3u8", chapter.streamUrl)
+            assertNull(chapter.endMs)
+            try { api.getTrackTreeByRj("UN124393"); fail("UN must not query asmr.one") }
+            catch (_: IOException) { }
+            assertEquals(1, server.requestCount)
+        } finally { server.shutdown() }
+    }
+
     @Test fun readsServerDirectoryAndPreservesChapterAndDownloadMetadata() = runBlocking {
         val server = MockWebServer()
         server.start()

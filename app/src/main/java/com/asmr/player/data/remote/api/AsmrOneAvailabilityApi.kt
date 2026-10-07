@@ -8,6 +8,7 @@ import com.asmr.player.data.remote.withOnlineDirectoryRequestTimeouts
 import com.asmr.player.data.remote.withSearchTimeouts
 import com.asmr.player.listentogether.XxHash64
 import com.asmr.player.util.DlsiteWorkNo
+import com.asmr.player.util.AlbumWorkNo
 import com.asmr.player.domain.model.CollectedSearchSource
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
@@ -326,8 +327,12 @@ class AsmrOneAvailabilityApi @Inject constructor(
         source: CollectedSearchSource = CollectedSearchSource.AsmrOne
     ): AsmrOneBackendTrackTreeResponse {
         if (backendBaseUrl.isBlank()) throw IOException("asmr.one backend is not configured")
-        val normalizedRj = DlsiteWorkNo.normalizeWorkNo(rj, minimumDigits = 6)
-        if (normalizedRj.isBlank()) throw IOException("asmr.one tracks work number is invalid")
+        val normalizedRj = if (source == CollectedSearchSource.JapaneseAsmr) {
+            AlbumWorkNo.normalizeWorkNo(rj, minimumDigits = 6)
+        } else {
+            DlsiteWorkNo.normalizeWorkNo(rj, minimumDigits = 6)
+        }
+        if (normalizedRj.isBlank()) throw IOException("${source.apiPath} tracks work number is invalid")
         return withContext(Dispatchers.IO) {
             val url = buildAsmrOneBackendTracksUrl(backendBaseUrl, normalizedRj, source)
             val request = Request.Builder()

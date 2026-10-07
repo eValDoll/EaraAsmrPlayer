@@ -4,7 +4,7 @@ import android.net.Uri
 import androidx.room.withTransaction
 import com.asmr.player.data.local.db.AppDatabase
 import com.asmr.player.data.local.db.entities.AlbumEntity
-import com.asmr.player.util.DlsiteWorkNo
+import com.asmr.player.util.AlbumWorkNo
 
 /** 用于真正移除库内容；重建索引或合并记录时保留原有关联。 */
 suspend fun AppDatabase.deleteLibraryTracks(trackIds: List<Long>) {
@@ -36,7 +36,7 @@ suspend fun AppDatabase.deleteLibraryTracks(trackIds: List<Long>) {
 suspend fun AppDatabase.deleteLibraryAlbum(album: AlbumEntity) {
     if (album.id <= 0L) return
     withTransaction {
-        val workNos = DlsiteWorkNo.normalizeCandidates(listOf(album.rjCode, album.workId))
+        val workNos = listOf(album.rjCode, album.workId).map { AlbumWorkNo.normalizeWorkNo(it) }.filter(String::isNotBlank).distinct()
         playlistItemDao().deleteByAlbumId(album.id)
         if (workNos.isNotEmpty()) playlistItemDao().deleteUnboundItemsByWorkNos(workNos)
         deleteLibraryTracks(trackDao().getTracksForAlbumOnce(album.id).map { it.id })
