@@ -1036,7 +1036,7 @@ fun AlbumDetailScreen(
                                 OnlineDownloadSource.DlsitePlay -> model.dlsitePlayTree
                                 else -> emptyList()
                             }
-                            val headerDlsiteEditions = if (isLocalTab || AlbumWorkNo.isNumericWork(model.rjCode)) {
+                            val headerDlsiteEditions = if (isLocalTab || AlbumWorkNo.isJapaneseAsmrOnlyWork(model.rjCode)) {
                                 emptyList()
                             } else {
                                 model.dlsiteEditions.ifEmpty {

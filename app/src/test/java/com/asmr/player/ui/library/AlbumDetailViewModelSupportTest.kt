@@ -18,6 +18,14 @@ import org.junit.Test
 import java.io.FileNotFoundException
 
 class AlbumDetailViewModelSupportTest {
+    @Test fun dmmLocalAlbumReopensWithJapaneseAsmrAndKeepsExplicitSourceChoice() {
+        val album = Album(title = "DMM 作品", path = "web://rj/UND353674", workId = "UND353674", rjCode = "UND353674")
+        assertEquals("UND353674", resolveAlbumDetailRj(null, album))
+        assertEquals("UND353674", resolveAlbumDetailRj("und353674", null))
+        assertEquals(AlbumResourceSource.JapaneseAsmr, resolveAlbumResourceSource("UND353674", null, AlbumResourceSource.AsmrOne))
+        assertEquals(AlbumResourceSource.AsmrOne, resolveAlbumResourceSource("UND353674", AlbumResourceSource.AsmrOne, AlbumResourceSource.JapaneseAsmr))
+    }
+
     @Test fun numericLocalAlbumReopensWithJapaneseAsmrAndKeepsExplicitSourceChoice() {
         val album = Album(title = "数字作品", path = "web://rj/UN124393", workId = "UN124393", rjCode = "UN124393")
         assertEquals("UN124393", resolveAlbumDetailRj(null, album))

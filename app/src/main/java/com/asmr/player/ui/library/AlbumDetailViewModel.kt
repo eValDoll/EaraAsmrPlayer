@@ -1666,7 +1666,7 @@ class AlbumDetailViewModel @Inject constructor(
     fun refreshDlsiteTrialSection() {
         val current = _uiState.value as? AlbumDetailUiState.Success ?: return
         val workno = current.model.dlsiteWorkno.trim().uppercase().ifBlank { current.model.rjCode.trim().uppercase() }
-        if (AlbumWorkNo.isNumericWork(workno)) return
+        if (AlbumWorkNo.isJapaneseAsmrOnlyWork(workno)) return
         if (workno.isBlank() || current.model.isLoadingDlsite || current.model.isLoadingDlsiteTrial) return
 
         val token = ++dlsiteTrialLoadToken
@@ -2105,7 +2105,7 @@ class AlbumDetailViewModel @Inject constructor(
         dlsiteInfo: Album? = null,
         preserveHeaderAlbumMetadata: Boolean = false
     ): AlbumDetailModel {
-        val numericWork = AlbumWorkNo.isNumericWork(rj)
+        val siteOnlyWork = AlbumWorkNo.isJapaneseAsmrOnlyWork(rj)
         return AlbumDetailModel(
             baseRjCode = rj,
             rjCode = rj,
@@ -2116,14 +2116,14 @@ class AlbumDetailViewModel @Inject constructor(
             dlsiteGalleryUrls = emptyList(),
             dlsiteTrialTracks = emptyList(),
             dlsiteRecommendations = DlsiteRecommendations(),
-            dlsiteWorkno = rj.takeUnless { numericWork }.orEmpty(),
+            dlsiteWorkno = rj.takeUnless { siteOnlyWork }.orEmpty(),
             dlsitePlayWorkno = "",
-            dlsiteEditions = if (numericWork) emptyList() else defaultDlsiteEditions(rj),
+            dlsiteEditions = if (siteOnlyWork) emptyList() else defaultDlsiteEditions(rj),
             dlsiteSelectedLang = "JPN",
-            hasResolvedInitialDlsiteTarget = numericWork,
-            hasLoadedInitialDlsiteContent = numericWork,
+            hasResolvedInitialDlsiteTarget = siteOnlyWork,
+            hasLoadedInitialDlsiteContent = siteOnlyWork,
             hasResolvedAsmrOneContent = false,
-            hasResolvedDlsitePlayContent = numericWork,
+            hasResolvedDlsitePlayContent = siteOnlyWork,
             preserveHeaderAlbumMetadata = preserveHeaderAlbumMetadata,
             isDlsiteLanguageUserSelected = false,
             asmrOneWorkId = null,
