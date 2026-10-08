@@ -291,7 +291,7 @@ internal fun resolveAlbumResourceSource(
     workNo: String,
     selected: AlbumResourceSource?,
     preferred: AlbumResourceSource?
-): AlbumResourceSource = selected ?: if (AlbumWorkNo.isNumericWork(workNo)) {
+): AlbumResourceSource = selected ?: if (AlbumWorkNo.isJapaneseAsmrOnlyWork(workNo)) {
     AlbumResourceSource.JapaneseAsmr
 } else {
     preferred ?: AlbumResourceSource.AsmrOne
