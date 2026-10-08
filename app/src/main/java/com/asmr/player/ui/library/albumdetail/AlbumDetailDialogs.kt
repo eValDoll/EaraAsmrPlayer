@@ -123,6 +123,8 @@ import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
 import com.asmr.player.ui.common.CvChipsFlow
 import com.asmr.player.ui.common.RoundedTopSheet
+import com.asmr.player.ui.common.LocalVisibleAppMessages
+import com.asmr.player.ui.common.NonTouchableAppMessageOverlay
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.collapsibleHeaderUiState
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
@@ -141,6 +143,7 @@ internal fun AsmrOneDownloadDialog(
     albumTitle: String,
     trackTree: List<AsmrOneTrackNodeResponse>,
     disabledPaths: Set<String> = emptySet(),
+    isPreparing: Boolean = false,
     onDismiss: () -> Unit,
     onConfirm: (Set<String>) -> Unit
 ) {
@@ -162,7 +165,8 @@ internal fun AsmrOneDownloadDialog(
                 title = "选择要下载的文件",
                 confirmText = "开始下载",
                 confirmIcon = Icons.Rounded.Download,
-                confirmEnabled = selected.isNotEmpty(),
+                confirmEnabled = selected.isNotEmpty() && !isPreparing,
+                confirmInProgress = isPreparing,
                 onDismiss = onDismiss,
                 onConfirm = { onConfirm(selected.toSet()) }
             )
@@ -179,6 +183,7 @@ internal fun AsmrOneDownloadDialog(
                     totalCount = selectableLeafPaths.size,
                     unavailableCount = leafPaths.size - selectableLeafPaths.size,
                     unavailableLabel = "已下载",
+                    selectionEnabled = !isPreparing,
                     onSelectAll = {
                         selected.clear()
                         selected.addAll(selectableLeafPaths)
@@ -221,7 +226,7 @@ internal fun AsmrOneDownloadDialog(
                                         depth = entry.depth,
                                         expanded = expanded.contains(entry.path),
                                         toggleState = state,
-                                        checkboxEnabled = selectableFolderLeafPaths.isNotEmpty(),
+                                        checkboxEnabled = selectableFolderLeafPaths.isNotEmpty() && !isPreparing,
                                         onToggleExpand = {
                                             if (expanded.contains(entry.path)) expanded.remove(entry.path) else expanded.add(entry.path)
                                         },
@@ -245,6 +250,7 @@ internal fun AsmrOneDownloadDialog(
                                         fileType = entry.fileType,
                                         checked = isChecked,
                                         enabled = enabled,
+                                        selectionEnabled = !isPreparing,
                                         unavailableLabel = "已下载",
                                         onCheckedChange = { checked ->
                                             if (!enabled) return@AsmrTreeFileCheckboxRow
@@ -270,6 +276,7 @@ internal fun AsmrOneDownloadDialog(
                 }
             }
         }
+        NonTouchableAppMessageOverlay(messages = LocalVisibleAppMessages.current)
     }
 }
 
@@ -542,7 +549,8 @@ private fun AlbumDetailSelectionSheetTopBar(
     confirmIcon: ImageVector,
     confirmEnabled: Boolean,
     onDismiss: () -> Unit,
-    onConfirm: () -> Unit
+    onConfirm: () -> Unit,
+    confirmInProgress: Boolean = false,
 ) {
     Row(
         modifier = Modifier
@@ -567,7 +575,15 @@ private fun AlbumDetailSelectionSheetTopBar(
             contentPadding = PaddingValues(horizontal = 14.dp, vertical = 0.dp),
             modifier = Modifier.height(40.dp)
         ) {
-            Icon(imageVector = confirmIcon, contentDescription = null, modifier = Modifier.size(18.dp))
+            if (confirmInProgress) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(18.dp).semantics { stateDescription = "正在检查源文件" },
+                    color = AsmrTheme.colorScheme.primary,
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Icon(imageVector = confirmIcon, contentDescription = null, modifier = Modifier.size(18.dp))
+            }
             Spacer(modifier = Modifier.width(6.dp))
             Text(confirmText, maxLines = 1)
         }
@@ -583,7 +599,8 @@ private fun AlbumDetailSelectionSummary(
     unavailableCount: Int,
     unavailableLabel: String,
     onSelectAll: () -> Unit,
-    onClearSelection: () -> Unit
+    onClearSelection: () -> Unit,
+    selectionEnabled: Boolean = true,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     Surface(
@@ -623,7 +640,7 @@ private fun AlbumDetailSelectionSummary(
                 CompositionLocalProvider(LocalMinimumInteractiveComponentEnforcement provides false) {
                     OutlinedButton(
                         onClick = onSelectAll,
-                        enabled = totalCount > 0 && selectedCount < totalCount,
+                        enabled = selectionEnabled && totalCount > 0 && selectedCount < totalCount,
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                         modifier = Modifier.height(30.dp)
                     ) {
@@ -631,7 +648,7 @@ private fun AlbumDetailSelectionSummary(
                     }
                     OutlinedButton(
                         onClick = onClearSelection,
-                        enabled = selectedCount > 0,
+                        enabled = selectionEnabled && selectedCount > 0,
                         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 0.dp),
                         modifier = Modifier.height(30.dp)
                     ) {
@@ -712,7 +729,8 @@ private fun AsmrTreeFileCheckboxRow(
     checked: Boolean,
     enabled: Boolean,
     unavailableLabel: String,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    selectionEnabled: Boolean = true,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val icon = treeFileTypeIcon(fileType)
@@ -732,8 +750,8 @@ private fun AsmrTreeFileCheckboxRow(
             CompositionLocalProvider(LocalMinimumInteractiveComponentEnforcement provides false) {
                 Checkbox(
                     checked = checked,
-                    onCheckedChange = onCheckedChange.takeIf { enabled },
-                    enabled = enabled,
+                    onCheckedChange = onCheckedChange.takeIf { enabled && selectionEnabled },
+                    enabled = enabled && selectionEnabled,
                     colors = CheckboxDefaults.colors(
                         checkedColor = colorScheme.primary,
                         uncheckedColor = colorScheme.textSecondary,

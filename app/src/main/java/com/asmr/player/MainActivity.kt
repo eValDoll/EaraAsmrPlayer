@@ -156,6 +156,7 @@ import com.asmr.player.util.MessageManager
 import com.asmr.player.ui.common.NonTouchableAppMessageOverlay
 import com.asmr.player.ui.common.PlayerModalSheet
 import com.asmr.player.ui.common.VisibleAppMessage
+import com.asmr.player.ui.common.LocalVisibleAppMessages
 import com.asmr.player.ui.theme.HuePalette
 import com.asmr.player.ui.theme.PlayerTheme
 import com.asmr.player.ui.theme.ThemeMode
@@ -578,6 +579,7 @@ class MainActivity : ComponentActivity() {
                         .calmVerticalFling()
                 ) {
                     val visibleMessagesSnapshot = visibleMessages.toList()
+                    CompositionLocalProvider(LocalVisibleAppMessages provides visibleMessagesSnapshot) {
                     MainContainer(
                         windowSizeClass = windowSizeClass,
                         playerViewModel = playerViewModel,
@@ -601,6 +603,7 @@ class MainActivity : ComponentActivity() {
                         forceImmersive = showSplash,
                         volumeKeyEventTick = volumeKeyTick
                     )
+                    }
                     NonTouchableAppMessageOverlay(messages = visibleMessagesSnapshot)
 
                     if (showSplash) {

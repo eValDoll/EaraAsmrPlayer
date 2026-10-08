@@ -1,6 +1,7 @@
 package com.asmr.player.data.remote.download
 
 import com.asmr.player.data.remote.crawler.isJapaneseAsmrAudioName
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
 import okhttp3.OkHttpClient
@@ -29,7 +30,7 @@ class JapaneseAsmrDownloadTest {
         assertFalse(isBuzzheavierUrl("https://buzzheavier.com.example/id"))
     }
 
-    @Test fun resolvesDownloadEndpointAndRefreshesItsLinkForEachTransfer() {
+    @Test fun resolvesDownloadEndpointAndRefreshesItsLinkForEachTransfer() = runBlocking<Unit> {
         var resolutions = 0
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             val request = chain.request()
@@ -54,7 +55,7 @@ class JapaneseAsmrDownloadTest {
     }
 
     @Test(expected = java.io.IOException::class)
-    fun challengeResponsesCannotBeSavedAsAudio() {
+    fun challengeResponsesCannotBeSavedAsAudio() = runBlocking<Unit> {
         val client = OkHttpClient.Builder().addInterceptor { chain ->
             Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1).code(403).message("Forbidden")
                 .body("<html>Just a moment...</html>".toResponseBody()).build()

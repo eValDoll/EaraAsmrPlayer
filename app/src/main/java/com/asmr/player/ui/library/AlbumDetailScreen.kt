@@ -567,6 +567,7 @@ fun AlbumDetailScreen(
         mutableStateOf(viewModel.hasCachedAlbum(albumId, rjCode))
     }
     var showAsmrDownloadDialog by remember { mutableStateOf(false) }
+    var isPreparingDownload by remember { mutableStateOf(false) }
     var showOnlineSaveDialog by remember { mutableStateOf(false) }
     var pendingOnlineSaveSelection by remember { mutableStateOf<PendingOnlineSaveSelection?>(null) }
     var batchPlaylistItems by remember { mutableStateOf<List<MediaItem>?>(null) }
@@ -1622,14 +1623,20 @@ fun AlbumDetailScreen(
                         albumTitle = album.title,
                         trackTree = downloadTree,
                         disabledPaths = downloadDisabledPaths,
+                        isPreparing = isPreparingDownload,
                         onDismiss = { showAsmrDownloadDialog = false },
-                        onConfirm = { selected ->
-                            when (downloadSource) {
-                                OnlineDownloadSource.AsmrOne -> viewModel.downloadAsmrOneSelected(selected)
-                                OnlineDownloadSource.DlsitePlay -> viewModel.downloadDlsitePlaySelected(selected)
-                                OnlineDownloadSource.DlsiteTrial -> viewModel.downloadDlsiteTrialSelected(selected)
+                        onConfirm = confirm@{ selected ->
+                            if (isPreparingDownload) return@confirm
+                            isPreparingDownload = true
+                            val onFinished: (Boolean) -> Unit = { accepted ->
+                                isPreparingDownload = false
+                                if (accepted) showAsmrDownloadDialog = false
                             }
-                            showAsmrDownloadDialog = false
+                            when (downloadSource) {
+                                OnlineDownloadSource.AsmrOne -> viewModel.downloadAsmrOneSelected(selected, onFinished)
+                                OnlineDownloadSource.DlsitePlay -> viewModel.downloadDlsitePlaySelected(selected, onFinished)
+                                OnlineDownloadSource.DlsiteTrial -> viewModel.downloadDlsiteTrialSelected(selected, onFinished)
+                            }
                         }
                     )
                 }

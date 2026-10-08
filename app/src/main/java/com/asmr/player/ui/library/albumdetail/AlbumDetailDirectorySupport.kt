@@ -695,6 +695,9 @@ internal fun resolveExistingRemoteSelectionPaths(
         val trimmed = value.trim()
         if (!isOnlineTrackPath(trimmed)) return ""
         val chapter = ChapterMediaReference.parse(trimmed)
+        if (chapter != null && chapter.downloadUrl.isNullOrBlank()) {
+            return "${chapter.streamUrl.substringBefore('?')}#eara-chapter=${chapter.startMs},${chapter.endMs ?: ""}"
+        }
         return (chapter?.downloadUrl ?: trimmed).substringBefore('#').substringBefore('?')
     }
 

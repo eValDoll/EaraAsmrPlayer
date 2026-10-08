@@ -86,6 +86,7 @@ import com.asmr.player.ui.library.AlbumHeroBlurLayerCache
 import com.asmr.player.ui.library.AlbumDetailUiState
 import com.asmr.player.ui.library.AlbumDetailViewModel
 import com.asmr.player.ui.library.CloudSyncSelectionDialog
+import com.asmr.player.ui.library.JapaneseAsmrOnlineDownloadDialog
 import com.asmr.player.ui.library.LibraryFilterScreen
 import com.asmr.player.ui.library.LibraryScreen
 import com.asmr.player.ui.library.LibraryViewModel
@@ -1012,6 +1013,7 @@ fun MainContainer(
     val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val downloadsViewModel: DownloadsViewModel = hiltViewModel(activityViewModelStoreOwner)
+    val onlineAudioDownloadConfirmation by downloadsViewModel.onlineAudioDownloadConfirmation.collectAsStateWithLifecycle()
     val settingsViewModel: SettingsViewModel = hiltViewModel(activityViewModelStoreOwner)
     val hasCurrentMediaItem by remember(playerViewModel) {
         playerViewModel.playback
@@ -3063,6 +3065,14 @@ fun MainContainer(
                         showManualRjDialog = false
                         albumDetailViewModel.manualSetRjAndSync(manualRjInput.trim())
                     },
+                )
+            }
+
+            onlineAudioDownloadConfirmation?.let { files ->
+                JapaneseAsmrOnlineDownloadDialog(
+                    missingFileCount = files.size,
+                    onConfirm = downloadsViewModel::confirmOnlineAudioDownload,
+                    onCancel = downloadsViewModel::cancelOnlineAudioDownload,
                 )
             }
 
