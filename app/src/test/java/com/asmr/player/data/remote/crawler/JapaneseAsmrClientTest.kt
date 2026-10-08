@@ -84,7 +84,7 @@ class JapaneseAsmrClientTest {
             assertEquals("01_導入.m4a", first.fileName)
             assertEquals("https://download.example/1", first.downloadUrl)
             assertNull(last.endMs)
-            assertNull(leaves[1].downloadUrl)
+            assertEquals(last, ChapterMediaReference.parse(leaves[1].downloadUrl!!))
             assertEquals(1, server.requestCount)
         } finally { server.shutdown() }
     }

@@ -13,13 +13,18 @@ data class ChapterMediaReference(
     val startMs: Long,
     val endMs: Long?,
     val downloadUrl: String?,
-    val fileName: String
+    val fileName: String,
+    val useHlsDownload: Boolean = false,
 ) {
+    val isHls: Boolean
+        get() = streamUrl.substringBefore('?').endsWith(".m3u8", ignoreCase = true)
+
     fun encode(): String = buildString {
         append(streamUrl.substringBefore('#'))
         append("#eara-chapter=").append(startMs).append(',').append(endMs ?: "")
         append("&file=").append(URLEncoder.encode(fileName, "UTF-8"))
         downloadUrl?.let { append("&download=").append(URLEncoder.encode(it, "UTF-8")) }
+        if (useHlsDownload) append("&hls=1")
     }
 
     companion object {
@@ -36,7 +41,8 @@ data class ChapterMediaReference(
                 require(stream.startsWith("https://"))
                 ChapterMediaReference(stream, start, end,
                     fields["download"]?.let { URLDecoder.decode(it, "UTF-8") },
-                    fields["file"]?.let { URLDecoder.decode(it, "UTF-8") }.orEmpty())
+                    fields["file"]?.let { URLDecoder.decode(it, "UTF-8") }.orEmpty(),
+                    useHlsDownload = fields["hls"] == "1")
             }.getOrNull()
         }
     }

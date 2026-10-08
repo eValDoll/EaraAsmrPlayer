@@ -107,5 +107,14 @@ data class AsmrOneTrackNodeResponse(
         get() = if (streamUrl?.contains("#eara-chapter=") == true) streamUrl else mediaDownloadUrl ?: streamUrl
 
     val downloadUrl: String?
-        get() = if (streamUrl?.contains("#eara-chapter=") == true) mediaDownloadUrl else mediaDownloadUrl ?: streamUrl
+        get() {
+            val chapter = com.asmr.player.util.ChapterMediaReference.parse(streamUrl.orEmpty())
+            return when {
+                chapter?.isHls == true -> chapter.copy(
+                    downloadUrl = mediaDownloadUrl?.takeIf { it.isNotBlank() } ?: chapter.downloadUrl,
+                ).encode()
+                chapter != null -> mediaDownloadUrl
+                else -> mediaDownloadUrl ?: streamUrl
+            }
+        }
 }

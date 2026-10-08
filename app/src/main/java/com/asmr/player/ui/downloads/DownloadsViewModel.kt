@@ -23,6 +23,7 @@ import com.asmr.player.data.local.library.deleteLibraryTracks
 import com.asmr.player.data.remote.download.DOWNLOAD_STATE_FINALIZING
 import com.asmr.player.data.remote.download.DOWNLOAD_STATE_QUEUED
 import com.asmr.player.data.remote.download.DownloadQueueCoordinator
+import com.asmr.player.data.remote.download.DownloadPreparationCoordinator
 import com.asmr.player.data.remote.download.DownloadDestination
 import com.asmr.player.data.remote.download.DownloadDestinationStore
 import com.asmr.player.data.remote.download.DownloadStorageGateway
@@ -134,7 +135,14 @@ class DownloadsViewModel @Inject constructor(
     private val messageManager: MessageManager,
     private val downloadStorage: DownloadStorageGateway,
     private val downloadDestinationStore: DownloadDestinationStore,
+    private val downloadPreparation: DownloadPreparationCoordinator,
 ) : ViewModel() {
+    val onlineAudioDownloadConfirmation = downloadPreparation.onlineAudioConfirmation
+
+    fun confirmOnlineAudioDownload() = downloadPreparation.confirmOnlineAudio()
+
+    fun cancelOnlineAudioDownload() = downloadPreparation.cancelOnlineAudio()
+
     private val fileScopes by lazy { LocalFileScopes(AppDatabaseProvider.get(context), downloadStorage) }
     private val workManager by lazy { WorkManager.getInstance(context) }
     private val subtitleTaskRepository = SubtitleTaskRepository.get(context)

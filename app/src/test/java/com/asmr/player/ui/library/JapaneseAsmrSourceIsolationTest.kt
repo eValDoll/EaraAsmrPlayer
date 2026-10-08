@@ -6,6 +6,18 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class JapaneseAsmrSourceIsolationTest {
+    @Test fun hlsOnlyChaptersDoNotMatchAnotherChapterOfTheSameStream() {
+        val first = ChapterMediaReference("https://audio.example/work.m3u8", 0, 10_000L, null, "first.m4a")
+        val last = first.copy(startMs = 10_000L, endMs = null, fileName = "last.m4a")
+        val saved = LocalSelectionFileRef("japaneseasmr.com/renamed.m4a", last.encode(),
+            Track(albumId = 1, title = "renamed", path = last.encode(), group = "japaneseasmr.com"))
+        val remotes = listOf(
+            RemoteSelectionFileRef("japaneseasmr.com/first.m4a", first.encode()),
+            RemoteSelectionFileRef("japaneseasmr.com/last.m4a", last.encode()),
+        )
+        assertEquals(setOf(remotes[1].relativePath), resolveExistingRemoteSelectionPaths(remotes, listOf(saved), true))
+    }
+
     @Test fun sameNamedFilesFromOtherSourcesDoNotDisableJapaneseAsmrActions() {
         val remote = RemoteSelectionFileRef("japaneseasmr.com/01_導入.m4a", "https://ts.buzzheavier.com/d/file")
         val otherSource = LocalSelectionFileRef("01_導入.m4a", "/album/01_導入.m4a",

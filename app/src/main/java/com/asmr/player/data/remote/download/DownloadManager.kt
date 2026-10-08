@@ -1,6 +1,7 @@
 package com.asmr.player.data.remote.download
 
 import com.asmr.player.util.isJapaneseAsmrResource
+import com.asmr.player.util.ChapterMediaReference
 
 import com.asmr.player.util.LocalFileOperation
 import com.asmr.player.util.LocalFileScope
@@ -905,15 +906,18 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
             val entryPoint = EntryPointAccessors.fromApplication(applicationContext, DownloadWorkerEntryPoint::class.java)
             val baseClient = entryPoint.okHttpClient()
             val isJapaneseAsmr = relativePath.startsWith("japaneseasmr.com/")
-            val transferUrl = if (isJapaneseAsmr) resolveJapaneseAsmrDownload(baseClient, url, fileName) else url
+            val chapter = if (isJapaneseAsmr) ChapterMediaReference.parse(url)?.takeIf { it.isHls } else null
+            val nativeUrl = chapter?.downloadUrl?.takeIf { it.isNotBlank() } ?: url
             val requestBuilder = Request.Builder()
-                .url(transferUrl)
+                .url(nativeUrl)
                 .header("User-Agent", NetworkHeaders.USER_AGENT)
-            if (isJapaneseAsmr) requestBuilder.header("Referer", "https://japaneseasmr.com/")
+            if (isJapaneseAsmr) requestBuilder
+                .header("Referer", "https://japaneseasmr.com/")
+                .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
             
             val transformAlreadyApplied = hasDlsitePlayImageTransform && file.exists() && !partialFile.exists()
             var existingBytes = if (transferFile.exists()) transferFile.length().coerceAtLeast(0L) else 0L
-            val lowerUrl = url.lowercase()
+            val lowerUrl = nativeUrl.lowercase()
             val sessionCookieJar = SessionCookieJar()
             if (lowerUrl.contains("play.dlsite.com")) {
                 val cookie = mergeDlsiteCookieHeaders(
@@ -988,73 +992,101 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
 
             val transferAlreadyComplete = transformAlreadyApplied ||
                 (knownTotal > 0L && existingBytes == knownTotal)
-            if (!transferAlreadyComplete) client.newCall(requestBuilder.build()).execute().use { response ->
-                if (!response.isSuccessful) {
-                    Log.w(TAG, "download failed code=${response.code} url=${response.request.url}")
-                    return failCurrentDownload(totalBytes = existingBytes.coerceAtLeast(0L))
+            suspend fun downloadHls() {
+                val fallback = checkNotNull(chapter)
+                check(fallback.useHlsDownload) { "在线音源下载尚未确认" }
+                var progressAt = System.currentTimeMillis()
+                downloadJapaneseAsmrHls(applicationContext, baseClient, fallback, file) { bytes, networkBytes ->
+                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                    if (isStopped) throw kotlinx.coroutines.CancellationException("下载已停止")
+                    downloaded = bytes
+                    pendingTrafficBytes += networkBytes
+                    flushTrafficStats()
+                    val now = System.currentTimeMillis()
+                    val speed = networkBytes * 1_000L / (now - progressAt).coerceAtLeast(1L)
+                    progressAt = now
+                    if (dao.updateRunningItemProgress(
+                            workId, WorkInfo.State.RUNNING.name, bytes, -1L, speed, now,
+                        ) == 0) throw kotlinx.coroutines.CancellationException("下载已暂停或取消")
                 }
-                val body = response.body ?: return failCurrentDownload(totalBytes = existingBytes.coerceAtLeast(0L))
-                if (isJapaneseAsmr) {
-                    val contentType = response.header("Content-Type").orEmpty().lowercase()
-                    val dispositionName = response.header("Content-Disposition").orEmpty()
-                    if (contentType.contains("text/") || contentType.contains("html") ||
-                        Regex("(?i)\\.(exe|scr|lnk|py|bat|cmd)(?:[\"';\\s]|$)").containsMatchIn(dispositionName)) {
-                        return failCurrentDownload(totalBytes = existingBytes)
+                downloaded = file.length()
+                total = downloaded
+                existingBytes = 0L
+            }
+            if (!transferAlreadyComplete && chapter?.useHlsDownload == true) {
+                downloadHls()
+            } else if (!transferAlreadyComplete) {
+                if (chapter != null && chapter.downloadUrl.isNullOrBlank()) throw IOException("在线音源下载尚未确认")
+                if (isJapaneseAsmr) requestBuilder.url(resolveJapaneseAsmrDownload(baseClient, nativeUrl, fileName))
+                client.newCall(requestBuilder.build()).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        Log.w(TAG, "download failed code=${response.code} url=${response.request.url}")
+                        if (isJapaneseAsmr) throw IOException("音频下载请求失败 (${response.code})")
+                        return failCurrentDownload(totalBytes = existingBytes.coerceAtLeast(0L))
                     }
-                    val header = if (response.code == 206 && existingBytes > 0) {
-                        transferFile.inputStream().use { it.readAudioHeader() }
-                    } else {
-                        body.source().peek().inputStream().use { it.readAudioHeader() }
+                    val body = response.body ?: return failCurrentDownload(totalBytes = existingBytes.coerceAtLeast(0L))
+                    if (isJapaneseAsmr) {
+                        val contentType = response.header("Content-Type").orEmpty().lowercase()
+                        val dispositionName = response.header("Content-Disposition").orEmpty()
+                        if (contentType.contains("text/") || contentType.contains("html") ||
+                            Regex("(?i)\\.(exe|scr|lnk|py|bat|cmd)(?:[\"';\\s]|$)").containsMatchIn(dispositionName)) {
+                            throw IOException("下载链接未返回音频")
+                        }
+                        val header = if (response.code == 206 && existingBytes > 0) {
+                            transferFile.inputStream().use { it.readAudioHeader() }
+                        } else {
+                            body.source().peek().inputStream().use { it.readAudioHeader() }
+                        }
+                        if (!isJapaneseAsmrAudioHeader(fileName, header)) throw IOException("下载链接未返回音频")
                     }
-                    if (!isJapaneseAsmrAudioHeader(fileName, header)) return failCurrentDownload(totalBytes = existingBytes)
-                }
-                val supportsRange = response.code == 206 && existingBytes > 0L
-                if (!supportsRange && existingBytes > 0L) {
-                    existingBytes = 0L
-                    downloaded = 0L
-                }
-                val contentLen = body.contentLength().takeIf { it > 0 } ?: -1L
-                total = when {
-                    supportsRange && contentLen > 0 -> existingBytes + contentLen
-                    contentLen > 0 -> contentLen
-                    else -> -1L
-                }
-                val buffer = ByteArray(DOWNLOAD_BUFFER_SIZE)
-                @Suppress("UNUSED_VARIABLE") var progressBaselineBytes = 0L
-                @Suppress("UNUSED_VARIABLE") var progressBaselineTs = System.currentTimeMillis()
+                    val supportsRange = response.code == 206 && existingBytes > 0L
+                    if (!supportsRange && existingBytes > 0L) {
+                        existingBytes = 0L
+                        downloaded = 0L
+                    }
+                    val contentLen = body.contentLength().takeIf { it > 0 } ?: -1L
+                    total = when {
+                        supportsRange && contentLen > 0 -> existingBytes + contentLen
+                        contentLen > 0 -> contentLen
+                        else -> -1L
+                    }
+                    val buffer = ByteArray(DOWNLOAD_BUFFER_SIZE)
+                    @Suppress("UNUSED_VARIABLE") var progressBaselineBytes = 0L
+                    @Suppress("UNUSED_VARIABLE") var progressBaselineTs = System.currentTimeMillis()
 
-                kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                if (dao.updateRunningItemProgress(
-                        workId, WorkInfo.State.RUNNING.name, downloaded, total, 0L, now0
-                    ) == 0) throw kotlinx.coroutines.CancellationException("下载已暂停或取消")
+                    kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                    if (dao.updateRunningItemProgress(
+                            workId, WorkInfo.State.RUNNING.name, downloaded, total, 0L, now0
+                        ) == 0) throw kotlinx.coroutines.CancellationException("下载已暂停或取消")
 
-                body.byteStream().use { input ->
-                    FileOutputStream(transferFile, existingBytes > 0L).use { output ->
-                        while (true) {
-                            kotlinx.coroutines.currentCoroutineContext().ensureActive()
-                            if (isStopped) throw kotlinx.coroutines.CancellationException("下载已停止")
-                            val read = input.read(buffer)
-                            if (read <= 0) break
-                            output.write(buffer, 0, read)
-                            downloaded += read
-                            pendingTrafficBytes += read.toLong()
+                    body.byteStream().use { input ->
+                        FileOutputStream(transferFile, existingBytes > 0L).use { output ->
+                            while (true) {
+                                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                                if (isStopped) throw kotlinx.coroutines.CancellationException("下载已停止")
+                                val read = input.read(buffer)
+                                if (read <= 0) break
+                                output.write(buffer, 0, read)
+                                downloaded += read
+                                pendingTrafficBytes += read.toLong()
 
-                            val now = System.currentTimeMillis()
-                            val shouldUpdate = now - progressBaselineTs >= PROGRESS_UPDATE_INTERVAL_MS
-                            if (shouldUpdate) {
-                                flushTrafficStats()
-                                val dt = (now - progressBaselineTs).coerceAtLeast(1)
-                                val speed = ((downloaded - progressBaselineBytes) * 1000 / dt).coerceAtLeast(0)
-                                dao.updateRunningItemProgress(
-                                    workId = workId,
-                                    state = WorkInfo.State.RUNNING.name,
-                                    downloaded = downloaded,
-                                    total = total,
-                                    speed = speed,
-                                    updatedAt = now
-                                )
-                                progressBaselineBytes = downloaded
-                                progressBaselineTs = now
+                                val now = System.currentTimeMillis()
+                                val shouldUpdate = now - progressBaselineTs >= PROGRESS_UPDATE_INTERVAL_MS
+                                if (shouldUpdate) {
+                                    flushTrafficStats()
+                                    val dt = (now - progressBaselineTs).coerceAtLeast(1)
+                                    val speed = ((downloaded - progressBaselineBytes) * 1000 / dt).coerceAtLeast(0)
+                                    dao.updateRunningItemProgress(
+                                        workId = workId,
+                                        state = WorkInfo.State.RUNNING.name,
+                                        downloaded = downloaded,
+                                        total = total,
+                                        speed = speed,
+                                        updatedAt = now
+                                    )
+                                    progressBaselineBytes = downloaded
+                                    progressBaselineTs = now
+                                }
                             }
                         }
                     }
@@ -1139,6 +1171,7 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
         } catch (cancelled: kotlinx.coroutines.CancellationException) {
             throw cancelled
         } catch (e: Exception) {
+            Log.w(TAG, "download failed for $fileName", e)
             val now = System.currentTimeMillis()
             runCatching {
                 val workId = id.toString()
