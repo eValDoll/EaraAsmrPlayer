@@ -25,6 +25,7 @@ data class Album(
     val dlCount: Int = 0,
     val priceJpy: Int = 0,
     val hasAsmrOne: Boolean = false,
+    val collectionAvailability: CollectionAvailability? = null,
     /** ASMR.ONE 的数字作品 ID；在线搜索缺少作品编号时用于后台补全。 */
     val asmrOneWorkId: Int? = null,
     val collectedSourceName: String? = null,

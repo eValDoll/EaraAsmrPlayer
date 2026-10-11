@@ -2,9 +2,13 @@ package com.asmr.player.ui.search
 
 import android.app.Application
 import android.os.Looper
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.emptyPreferences
 import androidx.lifecycle.ViewModelStore
 import com.asmr.player.data.local.datastore.SearchCacheStore
+import com.asmr.player.data.local.datastore.LastSearchStateV1
 import com.asmr.player.data.remote.api.Asmr100Api
 import com.asmr.player.data.remote.api.Asmr200Api
 import com.asmr.player.data.remote.api.Asmr300Api
@@ -14,15 +18,22 @@ import com.asmr.player.data.remote.crawler.AsmrOneCrawler
 import com.asmr.player.data.remote.dlsite.DlsitePlayLibraryClient
 import com.asmr.player.data.remote.scraper.DLSiteScraper
 import com.asmr.player.data.settings.SettingsRepository
+import com.asmr.player.domain.model.Album
 import com.asmr.player.hotlistening.HotListeningApi
 import com.asmr.player.util.MessageManager
 import com.asmr.player.util.MessageType
+import com.asmr.player.ui.library.collectedRibbonLabel
+import com.asmr.player.ui.nav.Routes
 import com.google.gson.Gson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.MockResponse
@@ -44,6 +55,73 @@ import java.util.concurrent.TimeUnit
 @LooperMode(LooperMode.Mode.PAUSED)
 class JpAsmrSearchFlowTest {
     @Test
+    fun restoredDlsiteResultsRefreshSourceLabelsRoutesAndPersistAvailability() {
+        val server = MockWebServer().apply { start() }
+        val context = RuntimeEnvironment.getApplication()
+        val settingsScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        val settings = SettingsRepository(PreferenceDataStoreFactory.create(
+            scope = settingsScope,
+            produceFile = { context.cacheDir.resolve("collection-status.preferences_pb") }
+        ))
+        val cache = SearchCacheStore(InMemoryPreferencesDataStore())
+        val viewModels = ViewModelStore()
+        val client = OkHttpClient()
+        val gson = Gson()
+        val retrofit = Retrofit.Builder().baseUrl(server.url("/"))
+            .addConverterFactory(GsonConverterFactory.create()).build()
+        val vm = SearchViewModel(
+            DLSiteScraper(context), DlsitePlayLibraryClient(client, context),
+            AsmrOneAvailabilityApi(client, gson) { server.url("/").toString() },
+            AsmrOneCrawler(retrofit.create(AsmrOneApi::class.java), retrofit.create(Asmr100Api::class.java),
+                retrofit.create(Asmr200Api::class.java), retrofit.create(Asmr300Api::class.java), settings),
+            settings, cache, HotListeningApi(client, gson), MessageManager()
+        ).also { viewModels.put("availability", it) }
+        try {
+            val workNos = listOf("RJ123456", "RJ654321", "UN124393", "UND124393")
+            runBlocking {
+                cache.writeLast(LastSearchStateV1(
+                    savedAtMs = 1L, keyword = "耳", orderName = "Trend", purchasedOnly = false,
+                    locale = "ja_JP", page = 1, canGoNext = false,
+                    results = workNos.map { Album(title = "作品", path = "", rjCode = it, workId = it, hasAsmrOne = true) }
+                ))
+            }
+            server.enqueue(MockResponse().setBody("""{"items":[
+                {"rj":"RJ123456","collected":true,"sources":[
+                    {"source":"asmr.one","rj":"RJ123456","workId":123456},
+                    {"source":"jp-asmr","rj":"RJ123456","workId":150866}]},
+                {"rj":"RJ654321","collected":true,"sources":[{"source":"asmr.one","rj":"RJ654321","workId":654321}]},
+                {"rj":"UN124393","collected":true,"sources":[{"source":"jp-asmr","rj":"UN124393","workId":138562,"pageUrl":"https://japaneseasmr.com/138562/"}]},
+                {"rj":"UND124393","collected":false,"sources":[]}
+            ]}"""))
+            vm.bootstrap("", false, "ja_JP", initialCollectedOnly = false)
+            await { vm.uiState.value is SearchUiState.Success }
+            assertEquals(0, server.requestCount)
+            vm.refreshCollectionAvailability()
+            await { (vm.uiState.value as? SearchUiState.Success)?.results?.all { it.collectionAvailability != null } == true }
+            val albums = (vm.uiState.value as SearchUiState.Success).results
+            assertEquals(listOf("收录", "asmr.one", "jp-asmr", null), albums.map { it.collectedRibbonLabel })
+            assertEquals(listOf(true, true, false, false), albums.map { it.hasAsmrOne })
+            assertEquals("album_detail_rj/UN124393?resourceSource=JapaneseAsmr",
+                Routes.albumDetailByRj(albums[2].rjCode, resourceSource = albums[2].collectedSourceName))
+            assertNull(albums[2].asmrOneWorkId)
+            assertEquals("https://japaneseasmr.com/138562/", albums[2].collectedPageUrl)
+            assertNull(albums[3].collectedSourceName)
+            await { !(vm.uiState.value as SearchUiState.Success).isAsmrOneChecking }
+            vm.refreshCollectionAvailability()
+            await { !(vm.uiState.value as SearchUiState.Success).isAsmrOneChecking }
+            await { runBlocking { cache.readLast() }?.results == albums }
+            val restored = runBlocking { cache.readLast() }!!.results
+            assertEquals(albums.map { it.collectedRibbonLabel }, restored.map { it.collectedRibbonLabel })
+            assertEquals("JapaneseAsmr", restored[2].collectedSourceName)
+            assertEquals(1, server.requestCount)
+        } finally {
+            viewModels.clear()
+            settingsScope.cancel()
+            server.shutdown()
+        }
+    }
+
+    @Test
     fun switchingPagingRetryAndCacheRestorationKeepIndependentSource() {
         val server = MockWebServer().apply { start() }
         val context = RuntimeEnvironment.getApplication()
@@ -52,7 +130,7 @@ class JpAsmrSearchFlowTest {
             scope = settingsScope,
             produceFile = { context.cacheDir.resolve("jp-search.preferences_pb") }
         ))
-        val cache = SearchCacheStore(context)
+        val cache = SearchCacheStore(InMemoryPreferencesDataStore())
         val messages = MessageManager()
         val viewModels = ViewModelStore()
         val client = OkHttpClient()
@@ -150,5 +228,14 @@ class JpAsmrSearchFlowTest {
             Thread.sleep(10)
         }
         fail("search state did not settle")
+    }
+
+    private class InMemoryPreferencesDataStore : DataStore<Preferences> {
+        private val state = MutableStateFlow(emptyPreferences())
+        private val mutex = Mutex()
+        override val data: StateFlow<Preferences> = state
+
+        override suspend fun updateData(transform: suspend (Preferences) -> Preferences): Preferences =
+            mutex.withLock { transform(state.value).also { state.value = it } }
     }
 }

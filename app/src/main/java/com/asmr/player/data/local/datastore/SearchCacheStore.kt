@@ -1,6 +1,7 @@
 package com.asmr.player.data.local.datastore
 
 import android.content.Context
+import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -46,16 +47,19 @@ internal fun LastSearchStateV1.restoreCollectedSource(): LastSearchStateV1 {
 }
 
 @Singleton
-class SearchCacheStore @Inject constructor(
-    @ApplicationContext private val context: Context
+class SearchCacheStore internal constructor(
+    private val dataStore: DataStore<Preferences>
 ) {
+    @Inject
+    constructor(@ApplicationContext context: Context) : this(context.searchCacheDataStore)
+
     private val key: Preferences.Key<String> = stringPreferencesKey("last_search_state_v1")
     private val historyKey: Preferences.Key<String> = stringPreferencesKey("search_history_keywords_v1")
     private val gson = Gson()
     private val historyListType = object : TypeToken<List<String>>() {}.type
 
     suspend fun readLast(): LastSearchStateV1? {
-        val raw = context.searchCacheDataStore.data.first()[key].orEmpty()
+        val raw = dataStore.data.first()[key].orEmpty()
         if (raw.isBlank()) return null
         return runCatching {
             gson.fromJson(raw, LastSearchStateV1::class.java).restoreCollectedSource()
@@ -63,13 +67,13 @@ class SearchCacheStore @Inject constructor(
     }
 
     suspend fun writeLast(state: LastSearchStateV1) {
-        context.searchCacheDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs[key] = gson.toJson(state)
         }
     }
 
     suspend fun readHistory(): List<String> {
-        val raw = context.searchCacheDataStore.data.first()[historyKey].orEmpty()
+        val raw = dataStore.data.first()[historyKey].orEmpty()
         if (raw.isBlank()) return emptyList()
         return runCatching {
             val parsed: List<String> = gson.fromJson(raw, historyListType)
@@ -80,19 +84,19 @@ class SearchCacheStore @Inject constructor(
     suspend fun addHistory(keyword: String) {
         val current = readHistory()
         val next = mergeSearchHistory(keyword, current)
-        context.searchCacheDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs[historyKey] = gson.toJson(next)
         }
     }
 
     suspend fun clearHistory() {
-        context.searchCacheDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs.remove(historyKey)
         }
     }
 
     suspend fun clear() {
-        context.searchCacheDataStore.edit { prefs ->
+        dataStore.edit { prefs ->
             prefs.remove(key)
         }
     }

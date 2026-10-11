@@ -10,6 +10,7 @@ import com.asmr.player.listentogether.XxHash64
 import com.asmr.player.util.DlsiteWorkNo
 import com.asmr.player.util.AlbumWorkNo
 import com.asmr.player.domain.model.CollectedSearchSource
+import com.asmr.player.domain.model.CollectionAvailability
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
@@ -29,7 +30,8 @@ import javax.inject.Singleton
 import kotlin.text.Charsets.UTF_8
 
 data class AsmrOneAvailabilityRequest(
-    val rjs: List<String>
+    val rjs: List<String>,
+    val includeJpAsmr: Boolean? = null
 )
 
 data class AsmrOneAvailabilityResponse(
@@ -43,7 +45,15 @@ data class AsmrOneAvailabilityItem(
     val workId: Int = 0,
     val matchedRjs: List<String> = emptyList(),
     val originalWorkno: String = "",
-    val title: String = ""
+    val title: String = "",
+    val sources: List<AsmrOneAvailabilitySource>? = null
+)
+
+data class AsmrOneAvailabilitySource(
+    val source: String = "",
+    val rj: String = "",
+    val workId: Int = 0,
+    val pageUrl: String = ""
 )
 
 data class AsmrOneCollectedSearchResponse(
@@ -153,10 +163,10 @@ class AsmrOneAvailabilityApi @Inject constructor(
     val isBackendConfigured: Boolean
         get() = backendBaseUrl.isNotBlank()
 
-    suspend fun check(rjs: List<String>): Map<String, Boolean> {
+    suspend fun check(rjs: List<String>): Map<String, CollectionAvailability> {
         val normalized = rjs
             .asSequence()
-            .map { DlsiteWorkNo.normalizeWorkNo(it, minimumDigits = 6) }
+            .map { AlbumWorkNo.normalizeWorkNo(it, minimumDigits = 6) }
             .filter { it.isNotBlank() }
             .distinct()
             .take(MAX_RJS)
@@ -164,13 +174,12 @@ class AsmrOneAvailabilityApi @Inject constructor(
         if (normalized.isEmpty() || backendBaseUrl.isBlank()) return emptyMap()
 
         return try {
-            val parsed = fetchAvailability(normalized) ?: return emptyMap()
+            val parsed = fetchAvailability(normalized, includeJpAsmr = true) ?: return emptyMap()
             val requested = normalized.toSet()
             buildMap {
                 parsed.items.forEach { item ->
-                    item.matchedRequestRjs(requested).forEach { rj ->
-                        put(rj, item.collected)
-                    }
+                    val rj = AlbumWorkNo.normalizeWorkNo(item.rj, minimumDigits = 6)
+                    if (rj in requested) item.toCollectionAvailability(rj)?.let { put(rj, it) }
                 }
             }
         } catch (error: CancellationException) {
@@ -197,7 +206,10 @@ class AsmrOneAvailabilityApi @Inject constructor(
         }
     }
 
-    private suspend fun fetchAvailability(normalized: List<String>): AsmrOneAvailabilityResponse? =
+    private suspend fun fetchAvailability(
+        normalized: List<String>,
+        includeJpAsmr: Boolean = false
+    ): AsmrOneAvailabilityResponse? =
         withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url(resolveUrl("api/asmr-one/availability"))
@@ -206,7 +218,10 @@ class AsmrOneAvailabilityApi @Inject constructor(
                 .header("X-Listen-Together-Client-Session-Id", clientSessionId)
                 .header("X-Listen-Together-Device-Fingerprint", deviceFingerprint)
                 .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
-                .post(gson.toJson(AsmrOneAvailabilityRequest(normalized)).toRequestBody(JSON_MEDIA_TYPE))
+                .post(
+                    gson.toJson(AsmrOneAvailabilityRequest(normalized, true.takeIf { includeJpAsmr }))
+                        .toRequestBody(JSON_MEDIA_TYPE)
+                )
                 .build()
             requestClient.newCall(request).awaitResponse().use { response ->
                 if (!response.isSuccessful) return@withContext null
@@ -486,16 +501,22 @@ private fun List<String>.cleanRecommendationFeatureValues(limit: Int): List<Stri
         .toList()
 }
 
-private fun AsmrOneAvailabilityItem.matchedRequestRjs(requested: Set<String>): List<String> {
-    if (requested.isEmpty()) return emptyList()
-    return buildList {
-        add(rj)
-        add(originalWorkno)
-        addAll(matchedRjs)
+private fun AsmrOneAvailabilityItem.toCollectionAvailability(rj: String): CollectionAvailability? {
+    val sourceItems = sources ?: return CollectionAvailability(
+        hasAsmrOne = collected,
+        asmrOneWorkId = workId.takeIf { collected && it > 0 }
+    )
+    val one = sourceItems.firstOrNull {
+        it.source == "asmr.one" && AlbumWorkNo.normalizeWorkNo(it.rj, minimumDigits = 6) == rj
     }
-        .asSequence()
-        .map { it.trim().uppercase() }
-        .filter { it in requested }
-        .distinct()
-        .toList()
+    val jp = sourceItems.firstOrNull {
+        it.source == "jp-asmr" && AlbumWorkNo.normalizeWorkNo(it.rj, minimumDigits = 6) == rj
+    }
+    if (collected && one == null && jp == null) return null
+    return CollectionAvailability(
+        hasAsmrOne = one != null,
+        hasJapaneseAsmr = jp != null,
+        asmrOneWorkId = one?.workId?.takeIf { it > 0 },
+        japaneseAsmrPageUrl = jp?.pageUrl.orEmpty()
+    )
 }

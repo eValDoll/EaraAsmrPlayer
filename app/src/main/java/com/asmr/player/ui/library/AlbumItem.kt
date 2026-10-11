@@ -48,6 +48,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -332,7 +333,8 @@ fun AlbumItem(
                         }
                     }
                     AnimatedCollectedCoverRibbon(
-                        visible = isCoverFadeComplete && showCollectedIndicator && album.hasAsmrOne,
+                        visible = isCoverFadeComplete && showCollectedIndicator && album.collectedRibbonLabel != null,
+                        label = album.collectedRibbonLabel.orEmpty(),
                     )
                 }
             },
@@ -592,7 +594,8 @@ fun AlbumGridItem(
                 }
             }
             AnimatedCollectedCoverRibbon(
-                visible = isCoverFadeComplete && showCollectedIndicator && album.hasAsmrOne,
+                visible = isCoverFadeComplete && showCollectedIndicator && album.collectedRibbonLabel != null,
+                label = album.collectedRibbonLabel.orEmpty(),
             )
         }
         
@@ -954,7 +957,7 @@ internal fun Modifier.cacheAlbumCoverShadow(outset: Dp): Modifier {
 }
 
 @Composable
-private fun CollectedCoverRibbon(modifier: Modifier = Modifier) {
+internal fun CollectedCoverRibbon(label: String, modifier: Modifier = Modifier) {
     val colorScheme = AsmrTheme.colorScheme
     Box(
         modifier = modifier
@@ -1000,9 +1003,9 @@ private fun CollectedCoverRibbon(modifier: Modifier = Modifier) {
             },
     ) {
         Text(
-            text = "收录",
+            text = label,
             style = MaterialTheme.typography.labelSmall.copy(
-                fontSize = 11.sp,
+                fontSize = if (label == "收录") 11.sp else 9.sp,
                 fontWeight = FontWeight.Bold,
             ),
             color = colorScheme.onPrimary,
@@ -1018,7 +1021,11 @@ private fun CollectedCoverRibbon(modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun BoxScope.AnimatedCollectedCoverRibbon(visible: Boolean) {
+private fun BoxScope.AnimatedCollectedCoverRibbon(visible: Boolean, label: String) {
+    var retainedLabel by remember { mutableStateOf(label) }
+    SideEffect {
+        if (label.isNotEmpty()) retainedLabel = label
+    }
     androidx.compose.animation.AnimatedVisibility(
         visible = visible,
         modifier = Modifier
@@ -1027,6 +1034,9 @@ private fun BoxScope.AnimatedCollectedCoverRibbon(visible: Boolean) {
         enter = fadeIn(animationSpec = tween(AlbumCollectedRibbonFadeMillis)),
         exit = fadeOut(animationSpec = tween(AlbumCollectedRibbonFadeMillis)),
     ) {
-        CollectedCoverRibbon()
+        CollectedCoverRibbon(label.ifEmpty { retainedLabel })
     }
 }
+
+internal val Album.collectedRibbonLabel: String?
+    get() = if (collectionAvailability != null) collectionAvailability.label else "收录".takeIf { hasAsmrOne }
