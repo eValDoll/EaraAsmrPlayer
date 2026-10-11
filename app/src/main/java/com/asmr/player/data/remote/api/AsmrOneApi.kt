@@ -102,4 +102,19 @@ data class AsmrOneTrackNodeResponse(
     val dlsitePlayImageWidth: Int? = null,
     val dlsitePlayImageHeight: Int? = null,
     val dlsitePlayOptimizedName: String? = null
-)
+) {
+    val playbackUrl: String?
+        get() = if (streamUrl?.contains("#eara-chapter=") == true) streamUrl else mediaDownloadUrl ?: streamUrl
+
+    val downloadUrl: String?
+        get() {
+            val chapter = com.asmr.player.util.ChapterMediaReference.parse(streamUrl.orEmpty())
+            return when {
+                chapter?.isHls == true -> chapter.copy(
+                    downloadUrl = mediaDownloadUrl?.takeIf { it.isNotBlank() } ?: chapter.downloadUrl,
+                ).encode()
+                chapter != null -> mediaDownloadUrl
+                else -> mediaDownloadUrl ?: streamUrl
+            }
+        }
+}

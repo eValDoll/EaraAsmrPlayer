@@ -579,6 +579,62 @@ object AppDatabaseMigrations {
         }
     }
 
+    val MIGRATION_31_32: Migration = object : Migration(31, 32) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE playlist_items ADD COLUMN `remoteSubtitleSources` TEXT NOT NULL DEFAULT ''")
+        }
+    }
+
+    val MIGRATION_32_33: Migration = object : Migration(32, 33) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "DELETE FROM album_group_items WHERE NOT EXISTS " +
+                    "(SELECT 1 FROM tracks t WHERE t.path = album_group_items.mediaId)"
+            )
+            // 在线列表可以独立于本地库存在，只清理明确指向已删除专辑且未被重新导入的项。
+            db.execSQL(
+                """
+                DELETE FROM playlist_items
+                WHERE albumId > 0
+                  AND NOT EXISTS (SELECT 1 FROM albums a WHERE a.id = playlist_items.albumId)
+                  AND NOT EXISTS (
+                      SELECT 1 FROM tracks t
+                      WHERE t.path = playlist_items.mediaId OR t.path = playlist_items.uri
+                  )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "DELETE FROM playlist_track_cross_ref WHERE NOT EXISTS " +
+                    "(SELECT 1 FROM tracks t WHERE t.id = playlist_track_cross_ref.trackId)"
+            )
+        }
+    }
+
+    val MIGRATION_33_34: Migration = object : Migration(33, 34) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS audio_metadata (
+                    sourcePath TEXT NOT NULL PRIMARY KEY,
+                    sampleRate INTEGER NOT NULL,
+                    bitrate INTEGER NOT NULL,
+                    channelCount INTEGER NOT NULL,
+                    bitsPerSample INTEGER NOT NULL,
+                    mimeType TEXT NOT NULL,
+                    durationSeconds REAL NOT NULL
+                )
+                """.trimIndent()
+            )
+        }
+    }
+
+    val MIGRATION_34_35: Migration = object : Migration(34, 35) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("CREATE TABLE IF NOT EXISTS subtitle_import_blocks (mediaPath TEXT NOT NULL PRIMARY KEY)")
+            db.execSQL("CREATE INDEX IF NOT EXISTS index_tracks_path ON tracks (path)")
+        }
+    }
+
     private fun createItemChildTable(
         db: SupportSQLiteDatabase,
         table: String,

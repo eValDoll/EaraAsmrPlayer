@@ -1,5 +1,7 @@
 package com.asmr.player.ui.calendar
 
+import com.asmr.player.ui.common.LocalMainHeaderPadding
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.animation.SizeTransform
@@ -149,7 +151,7 @@ fun ListeningCalendarScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(
                     start = 16.dp,
-                    top = 16.dp,
+                    top = LocalMainHeaderPadding.current + 16.dp,
                     end = 16.dp,
                     bottom = bottomOverlayPadding + 24.dp
                 ),

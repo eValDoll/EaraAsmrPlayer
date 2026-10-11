@@ -118,7 +118,7 @@ class LocalAlbumMergeService @Inject constructor(
         val subtitles = trackDao.getSubtitlesForTrack(from.id)
             .filter { listOf(it.startMs, it.endMs, it.text, it.japaneseText) !in existingSubtitles }
             .map { it.copy(id = 0L, trackId = to.id) }
-        if (subtitles.isNotEmpty()) trackDao.insertSubtitles(subtitles)
+        if (subtitles.isNotEmpty()) trackDao.insertAutoSubtitles(subtitles)
 
         val remoteDao = database.remoteSubtitleSourceDao()
         val existingRemote = remoteDao.getSourcesForTrackOnce(to.id)

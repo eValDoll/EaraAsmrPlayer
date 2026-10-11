@@ -1,10 +1,28 @@
 package com.asmr.player.ui.search
 
 import com.asmr.player.domain.model.Album
+import com.asmr.player.domain.model.CollectionAvailability
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
 class SearchAlbumDetailMergeTest {
+    @Test
+    fun detailEnrichmentPreservesCollectionSourcesAndResourceRoute() {
+        val base = Album(title = "作品", path = "", rjCode = "RJ123456")
+            .withCollectionAvailability(CollectionAvailability(
+                hasJapaneseAsmr = true,
+                japaneseAsmrPageUrl = "https://japaneseasmr.com/150867/"
+            ))
+        val detail = Album(title = "翻译标题", path = "", cv = "CV", tags = listOf("耳语"))
+        for (localizedTextOnly in listOf(false, true)) {
+            val merged = mergeSearchAlbumDetail(base, detail, localizedTextOnly = localizedTextOnly)
+            assertEquals(base.collectionAvailability, merged.collectionAvailability)
+            assertEquals("JapaneseAsmr", merged.collectedSourceName)
+            assertEquals(base.collectedPageUrl, merged.collectedPageUrl)
+            assertEquals(false, merged.hasAsmrOne)
+        }
+    }
+
     @Test
     fun mergeSearchAlbumDetail_prefersCompleteDetailCvOverPartialListCv() {
         val base = Album(

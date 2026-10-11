@@ -29,6 +29,7 @@ object SettingsKeys {
     val PLAY_MODE = intPreferencesKey("play_mode")
 
     val ASMR_ONE_SITE = intPreferencesKey("asmr_one_site")
+    val PREFERRED_ALBUM_RESOURCE_SOURCE = stringPreferencesKey("preferred_album_resource_source")
     val NETWORK_PROXY_MODE = stringPreferencesKey("network_proxy_mode")
     val NETWORK_PROXY_HOST = stringPreferencesKey("network_proxy_host")
     val NETWORK_PROXY_PORT = intPreferencesKey("network_proxy_port")

@@ -13,7 +13,11 @@ import com.asmr.player.data.lyrics.deriveLyricsRelativePathNoExt
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.util.RemoteSubtitleSource
+import com.asmr.player.util.ChapterMediaReference
+import com.asmr.player.util.encodeRemoteSubtitleSources
 import java.io.File
+
+internal const val EXTRA_ALBUM_CV = "album_cv"
 
 data class MediaItemRequest(
     val mediaId: String,
@@ -30,7 +34,9 @@ data class MediaItemRequest(
     val lyricsRelativePathNoExt: String = "",
     val remoteSubtitleSources: List<RemoteSubtitleSource> = emptyList(),
     val mimeType: String? = null,
-    val isVideo: Boolean = false
+    val isVideo: Boolean = false,
+    val albumCv: String? = null,
+    val durationSeconds: Double? = null
 )
 
 object MediaItemFactory {
@@ -48,6 +54,8 @@ object MediaItemFactory {
                 mediaId = track.path,
                 uri = track.path,
                 title = track.title,
+                albumCv = album.cv,
+                durationSeconds = track.duration,
                 artist = artist,
                 albumTitle = album.title,
                 artworkUri = album.coverPath.ifBlank { album.coverUrl },
@@ -79,7 +87,9 @@ object MediaItemFactory {
         lyricsRelativePathNoExt: String = "",
         remoteSubtitleSources: List<RemoteSubtitleSource> = emptyList(),
         mimeType: String? = null,
-        isVideo: Boolean = false
+        isVideo: Boolean = false,
+        albumCv: String? = null,
+        durationSeconds: Double? = null
     ): MediaItem {
         return fromRequest(
             MediaItemRequest(
@@ -97,7 +107,9 @@ object MediaItemFactory {
                 lyricsRelativePathNoExt = lyricsRelativePathNoExt,
                 remoteSubtitleSources = remoteSubtitleSources,
                 mimeType = mimeType,
-                isVideo = isVideo
+                isVideo = isVideo,
+                albumCv = albumCv,
+                durationSeconds = durationSeconds
             )
         )
     }
@@ -106,9 +118,11 @@ object MediaItemFactory {
         val metadata = MediaMetadata.Builder()
             .setTitle(request.title)
             .setArtist(request.artist)
+            .setDurationMs(request.durationSeconds?.takeIf { it.isFinite() && it > 0 }?.let { (it * 1000).toLong() })
             .setArtworkUri(toArtworkUri(request.artworkUri))
             .setExtras(
                 Bundle().apply {
+                    request.albumCv?.let { putString(EXTRA_ALBUM_CV, it) }
                     if (request.albumId > 0L) putLong("album_id", request.albumId)
                     if (request.trackId > 0L) putLong("track_id", request.trackId)
                     if (request.rjCode.isNotBlank()) putString("rj_code", request.rjCode)
@@ -131,11 +145,22 @@ object MediaItemFactory {
             .setMediaId(request.mediaId.ifBlank { request.uri })
             .setMimeType(request.mimeType ?: guessMimeType(request.uri))
             .setMediaMetadata(metadata.build())
+            .setClippingConfiguration(chapterClipping(request.mediaId, request.uri))
             .build()
     }
 
+    fun chapterClipping(mediaId: String, uri: String): MediaItem.ClippingConfiguration {
+        val chapter = ChapterMediaReference.parse(mediaId) ?: ChapterMediaReference.parse(uri)
+        return MediaItem.ClippingConfiguration.Builder().apply {
+            if (chapter != null) {
+                setStartPositionMs(chapter.startMs)
+                chapter.endMs?.let(::setEndPositionMs)
+            }
+        }.build()
+    }
+
     fun toPlayableUri(path: String): Uri {
-        val trimmed = path.trim()
+        val trimmed = ChapterMediaReference.parse(path)?.streamUrl ?: path.trim()
         return if (
             trimmed.startsWith("http", ignoreCase = true) ||
                 trimmed.startsWith("content://", ignoreCase = true) ||
@@ -173,23 +198,12 @@ object MediaItemFactory {
             "aac" -> "audio/aac"
             "ogg" -> "audio/ogg"
             "opus" -> "audio/opus"
+            "m3u8" -> "application/x-mpegURL"
             "mp4", "m4v" -> "video/mp4"
             "webm" -> "video/webm"
             "mkv" -> "video/x-matroska"
             "mov" -> "video/quicktime"
             else -> null
         }
-    }
-
-    private fun encodeRemoteSubtitleSources(sources: List<RemoteSubtitleSource>): String? {
-        val normalized = sources.mapNotNull { source ->
-            val url = source.url.trim()
-            if (url.isBlank()) return@mapNotNull null
-            val language = source.language.trim().ifBlank { "default" }
-            val ext = source.ext.trim().ifBlank { url.substringAfterLast('.', "vtt") }
-            listOf(url, language, ext).joinToString("\t")
-        }
-        if (normalized.isEmpty()) return null
-        return normalized.joinToString("\n")
     }
 }

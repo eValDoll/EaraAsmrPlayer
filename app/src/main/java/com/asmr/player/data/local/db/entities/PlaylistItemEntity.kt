@@ -1,5 +1,6 @@
 package com.asmr.player.data.local.db.entities
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.Index
 
@@ -25,6 +26,8 @@ data class PlaylistItemEntity(
     val albumWorkId: String = "",
     val trackGroup: String = "",
     val lyricsRelativePathNoExt: String = "",
+    @ColumnInfo(defaultValue = "''")
+    val remoteSubtitleSources: String = "",
     val mimeType: String = "",
     val isVideo: Boolean = false,
     val itemOrder: Int = 0

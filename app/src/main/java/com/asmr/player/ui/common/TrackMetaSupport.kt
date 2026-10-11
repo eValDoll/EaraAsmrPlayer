@@ -4,31 +4,12 @@ import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
 import android.provider.OpenableColumns
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.produceState
-import androidx.compose.ui.platform.LocalContext
-import com.asmr.player.util.Formatting
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.concurrent.ConcurrentHashMap
-
-internal data class AudioMetaText(
-    val leadingText: String,
-    val trailingText: String
-)
 
 private object TrackFileSizeCache {
     private const val MissingSize = Long.MIN_VALUE
     private val values = ConcurrentHashMap<String, Long>()
-
-    fun get(path: String): Long? {
-        return when (val cached = getKnown(path)) {
-            null, MissingSize -> null
-            else -> cached
-        }
-    }
 
     fun getKnown(path: String): Long? = values[path]
 
@@ -44,127 +25,7 @@ private object TrackFileSizeCache {
     }
 }
 
-@Composable
-internal fun rememberAudioMetaText(
-    sourcePath: String,
-    durationSeconds: Double?,
-    prefixSegments: List<String> = emptyList(),
-    suffixSegments: List<String> = emptyList(),
-    loadSize: Boolean = true
-): String {
-    val context = LocalContext.current
-    val sizeText by produceState<String?>(
-        initialValue = cachedTrackFileSize(sourcePath)?.let(Formatting::formatFileSize),
-        sourcePath,
-        loadSize
-    ) {
-        if (!loadSize || value != null) return@produceState
-        value = withContext(Dispatchers.IO) {
-            queryCachedTrackFileSize(context, sourcePath)
-        }?.let(Formatting::formatFileSize)
-    }
-    return buildAudioMetaText(
-        durationSeconds = durationSeconds,
-        sizeText = sizeText,
-        prefixSegments = prefixSegments,
-        suffixSegments = suffixSegments
-    )
-}
-
-@Composable
-internal fun rememberTrackMetaLine(
-    path: String,
-    durationSeconds: Double?
-): String {
-    return rememberAudioMetaText(
-        sourcePath = path,
-        durationSeconds = durationSeconds
-    )
-}
-
-internal fun buildAudioMetaText(
-    durationSeconds: Double?,
-    sizeText: String?,
-    prefixSegments: List<String> = emptyList(),
-    suffixSegments: List<String> = emptyList()
-): String {
-    val meta = buildAudioMeta(durationSeconds, sizeText, prefixSegments, suffixSegments)
-    return listOf(meta.leadingText, meta.trailingText)
-        .filter { it.isNotBlank() }
-        .joinToString(" · ")
-}
-
-internal fun buildAudioMeta(
-    durationSeconds: Double?,
-    sizeText: String?,
-    prefixSegments: List<String> = emptyList(),
-    suffixSegments: List<String> = emptyList()
-): AudioMetaText {
-    val leadingText = (prefixSegments + suffixSegments)
-        .mapNotNull { it.trim().takeIf(String::isNotBlank) }
-        .joinToString(" · ")
-    val trailingText = listOf(
-        Formatting.formatTrackSeconds(durationSeconds).takeIf { it.isNotBlank() },
-        sizeText?.trim()?.takeIf { it.isNotBlank() }
-    ).filterNotNull().joinToString(" · ")
-    return AudioMetaText(
-        leadingText = leadingText,
-        trailingText = trailingText
-    )
-}
-
-@Composable
-internal fun rememberAudioMeta(
-    sourcePath: String,
-    durationSeconds: Double?,
-    prefixSegments: List<String> = emptyList(),
-    suffixSegments: List<String> = emptyList(),
-    loadSize: Boolean = true
-): AudioMetaText {
-    val context = LocalContext.current
-    val sizeText by produceState<String?>(
-        initialValue = cachedTrackFileSize(sourcePath)?.let(Formatting::formatFileSize),
-        sourcePath,
-        loadSize
-    ) {
-        if (!loadSize || value != null) return@produceState
-        value = withContext(Dispatchers.IO) {
-            queryCachedTrackFileSize(context, sourcePath)
-        }?.let(Formatting::formatFileSize)
-    }
-    return buildAudioMeta(
-        durationSeconds = durationSeconds,
-        sizeText = sizeText,
-        prefixSegments = prefixSegments,
-        suffixSegments = suffixSegments
-    )
-}
-
-@Composable
-internal fun rememberTrackMeta(
-    path: String,
-    durationSeconds: Double?
-): AudioMetaText {
-    return rememberAudioMeta(
-        sourcePath = path,
-        durationSeconds = durationSeconds
-    )
-}
-
-internal fun buildTrackMetaLine(
-    durationSeconds: Double?,
-    sizeText: String?
-): String {
-    return buildAudioMetaText(durationSeconds = durationSeconds, sizeText = sizeText)
-}
-
-internal fun cachedTrackFileSize(path: String): Long? {
-    val trimmed = path.trim()
-    if (trimmed.isBlank()) return null
-    return TrackFileSizeCache.get(trimmed)
-}
-
-internal fun cacheTrackFileSize(path: String, size: Long?) {
+private fun cacheTrackFileSize(path: String, size: Long?) {
     val trimmed = path.trim()
     if (trimmed.isBlank()) return
     TrackFileSizeCache.put(trimmed, size)

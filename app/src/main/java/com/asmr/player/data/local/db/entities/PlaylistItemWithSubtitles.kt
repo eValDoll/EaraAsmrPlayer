@@ -17,6 +17,7 @@ data class PlaylistItemWithSubtitles(
     val albumWorkId: String = "",
     val trackGroup: String = "",
     val lyricsRelativePathNoExt: String = "",
+    val remoteSubtitleSources: String = "",
     val mimeType: String = "",
     val isVideo: Boolean = false,
     val itemOrder: Int = 0,

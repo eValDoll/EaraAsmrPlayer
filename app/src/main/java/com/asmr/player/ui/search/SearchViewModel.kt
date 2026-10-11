@@ -1,5 +1,6 @@
 package com.asmr.player.ui.search
 
+import com.asmr.player.domain.model.CollectedSearchSource
 import android.os.SystemClock
 import android.util.Log
 import com.asmr.player.BuildConfig
@@ -13,9 +14,11 @@ import com.asmr.player.data.remote.dlsite.DlsitePlayLibraryClient
 import com.asmr.player.data.remote.scraper.DLSiteScraper
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.domain.model.Album
+import com.asmr.player.domain.model.CollectionAvailability
 import com.asmr.player.hotlistening.HotListeningApi
 import com.asmr.player.util.AppErrorMessageFormatter
 import com.asmr.player.util.DlsiteWorkNo
+import com.asmr.player.util.AlbumWorkNo
 import com.asmr.player.util.MessageManager
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -80,16 +83,19 @@ class SearchViewModel @Inject constructor(
     private var presaleOnly: Boolean = false
     private var chineseTranslatedOnly: Boolean = false
     private var collectedOnly: Boolean = true
+    private var collectedSourceName = CollectedSearchSource.AsmrOne.name
+    private var searchJob: Job? = null
+    private var requestGeneration = 0L
     private var hasSubtitle: Boolean = false
     private var allAges: Boolean = false
     private var enrichJob: Job? = null
-    private var asmrOneJob: Job? = null
+    private var availabilityJob: Job? = null
     private var collectedWorkNoJob: Job? = null
     private var cacheWriteJob: Job? = null
     private val dlsiteDetailCache = BoundedLruCache<DlsiteDetailCacheKey, Album>(maxEntries = 180)
     private val enrichDispatcher = Dispatchers.IO
-    private val asmrOneAvailabilityCache =
-        BoundedLruCache<String, CachedAsmrOneAvailability>(maxEntries = 1_000)
+    private val availabilityCache =
+        BoundedLruCache<String, CachedCollectionAvailability>(maxEntries = 1_000)
     private val asmrOneCollectedWorkNoCache = BoundedLruCache<Int, String>(maxEntries = 300)
     private val bootstrapped = AtomicBoolean(false)
     private val hotKeywordsRequested = AtomicBoolean(false)
@@ -136,6 +142,7 @@ class SearchViewModel @Inject constructor(
         initialPurchasedOnly: Boolean,
         initialLocale: String?,
         initialCollectedOnly: Boolean = true,
+        initialCollectedSourceName: String = CollectedSearchSource.AsmrOne.name,
         initialCollectedSort: SearchCollectedSortOption = SearchCollectedSortOption.ReleaseNew,
         initialHasSubtitle: Boolean = false,
         initialAllAges: Boolean = false
@@ -151,15 +158,17 @@ class SearchViewModel @Inject constructor(
                     purchasedOnly = initialPurchasedOnly,
                     presaleOnly = false,
                     chineseTranslatedOnly = false,
-                    collectedOnly = initialCollectedOnly
+                    collectedOnly = initialCollectedOnly,
+                    collectedSourceName = initialCollectedSourceName
                 )
                 purchasedOnly = initialFilters.purchasedOnly
                 presaleOnly = initialFilters.presaleOnly
                 chineseTranslatedOnly = initialFilters.chineseTranslatedOnly
                 collectedOnly = initialFilters.collectedOnly
+                collectedSourceName = initialFilters.collectedSourceName
                 hasSubtitle = initialHasSubtitle
                 allAges = initialAllAges
-                currentCollectedSort = initialCollectedSort
+                currentCollectedSort = normalizedCollectedSort(collectedSourceName, initialCollectedSort)
                 currentLocale = initialLocale
                 lastRequestedKeyword = initialKeyword.trim()
                 requestPage(lastRequestedKeyword, 1, SearchPendingRequestKind.Search)
@@ -183,6 +192,17 @@ class SearchViewModel @Inject constructor(
         }
     }
 
+    fun refreshCollectionAvailability() {
+        val current = _uiState.value as? SearchUiState.Success ?: return
+        if (current.purchasedOnly || current.collectedOnly || current.isBusy || availabilityJob?.isActive == true) return
+        startMarkCollectionAvailability(
+            keyword = current.keyword,
+            page = current.page,
+            baseItems = current.results,
+            resultRevision = current.resultRevision
+        )
+    }
+
     fun search(keyword: String): Boolean {
         return search(
             keyword = keyword,
@@ -192,6 +212,7 @@ class SearchViewModel @Inject constructor(
             presaleOnly = presaleOnly,
             chineseTranslatedOnly = chineseTranslatedOnly,
             collectedOnly = collectedOnly,
+            collectedSourceName = collectedSourceName,
             hasSubtitle = hasSubtitle,
             allAges = allAges,
             locale = currentLocale
@@ -206,6 +227,7 @@ class SearchViewModel @Inject constructor(
         presaleOnly: Boolean,
         chineseTranslatedOnly: Boolean,
         collectedOnly: Boolean,
+        collectedSourceName: String = this.collectedSourceName,
         hasSubtitle: Boolean,
         allAges: Boolean,
         locale: String?
@@ -217,7 +239,8 @@ class SearchViewModel @Inject constructor(
             purchasedOnly = purchasedOnly,
             presaleOnly = presaleOnly,
             chineseTranslatedOnly = chineseTranslatedOnly,
-            collectedOnly = collectedOnly
+            collectedOnly = collectedOnly,
+            collectedSourceName = collectedSourceName
         )
         if (nextFilters.purchasedOnly && !dlsitePlayLibraryClient.hasStoredCredentials()) {
             messageManager.showWarning("请先登录 DLsite 后再使用\"已购\"搜索")
@@ -226,11 +249,12 @@ class SearchViewModel @Inject constructor(
         val normalizedKeyword = keyword.trim()
         Log.d("SearchViewModel", "Search requested: keyword=$normalizedKeyword")
         currentOrder = order
-        currentCollectedSort = collectedSort
+        currentCollectedSort = normalizedCollectedSort(nextFilters.collectedSourceName, collectedSort)
         this.purchasedOnly = nextFilters.purchasedOnly
         this.presaleOnly = nextFilters.presaleOnly
         this.chineseTranslatedOnly = nextFilters.chineseTranslatedOnly
         this.collectedOnly = nextFilters.collectedOnly
+        this.collectedSourceName = nextFilters.collectedSourceName
         this.hasSubtitle = hasSubtitle
         this.allAges = allAges
         currentLocale = locale
@@ -262,6 +286,7 @@ class SearchViewModel @Inject constructor(
         presaleOnly: Boolean = this.presaleOnly,
         chineseTranslatedOnly: Boolean = this.chineseTranslatedOnly,
         collectedOnly: Boolean = this.collectedOnly,
+        collectedSourceName: String = this.collectedSourceName,
         hasSubtitle: Boolean = this.hasSubtitle,
         allAges: Boolean = this.allAges,
         locale: String? = currentLocale
@@ -270,7 +295,8 @@ class SearchViewModel @Inject constructor(
             purchasedOnly = purchasedOnly,
             presaleOnly = presaleOnly,
             chineseTranslatedOnly = chineseTranslatedOnly,
-            collectedOnly = collectedOnly
+            collectedOnly = collectedOnly,
+            collectedSourceName = collectedSourceName
         )
         val current = _uiState.value as? SearchUiState.Success ?: return false
         if (current.isBusy) return false
@@ -285,16 +311,18 @@ class SearchViewModel @Inject constructor(
                 this.presaleOnly != nextFilters.presaleOnly ||
                 this.chineseTranslatedOnly != nextFilters.chineseTranslatedOnly ||
                 this.collectedOnly != nextFilters.collectedOnly ||
+                this.collectedSourceName != nextFilters.collectedSourceName ||
                 this.hasSubtitle != hasSubtitle ||
                 this.allAges != allAges
         val localeChanged = currentLocale != locale
         if (!searchRequestChanged && !localeChanged) return true
         currentOrder = order
-        currentCollectedSort = collectedSort
+        currentCollectedSort = normalizedCollectedSort(nextFilters.collectedSourceName, collectedSort)
         this.purchasedOnly = nextFilters.purchasedOnly
         this.presaleOnly = nextFilters.presaleOnly
         this.chineseTranslatedOnly = nextFilters.chineseTranslatedOnly
         this.collectedOnly = nextFilters.collectedOnly
+        this.collectedSourceName = nextFilters.collectedSourceName
         this.hasSubtitle = hasSubtitle
         this.allAges = allAges
         currentLocale = locale
@@ -374,7 +402,9 @@ class SearchViewModel @Inject constructor(
         val page = targetPage.coerceAtLeast(1)
         lastRequestedKeyword = normalizedKeyword
 
-        viewModelScope.launch {
+        val generation = ++requestGeneration
+        searchJob?.cancel()
+        searchJob = viewModelScope.launch {
             val previousSuccess = _uiState.value as? SearchUiState.Success
             cancelBackgroundJobs()
 
@@ -399,9 +429,11 @@ class SearchViewModel @Inject constructor(
                     presaleOnly = presaleOnly,
                     chineseTranslatedOnly = chineseTranslatedOnly,
                     collectedOnly = collectedOnly,
+                    collectedSourceName = collectedSourceName,
                     hasSubtitle = hasSubtitle,
                     allAges = allAges
                 )
+                if (generation != requestGeneration) return@launch
                 val resultRevision = ++searchResultRevision
                 _uiState.value = SearchUiState.Success(
                     results = pageResult.items,
@@ -413,6 +445,7 @@ class SearchViewModel @Inject constructor(
                     presaleOnly = presaleOnly,
                     chineseTranslatedOnly = chineseTranslatedOnly,
                     collectedOnly = collectedOnly,
+                    collectedSourceName = collectedSourceName,
                     hasSubtitle = hasSubtitle,
                     allAges = allAges,
                     locale = currentLocale,
@@ -447,7 +480,7 @@ class SearchViewModel @Inject constructor(
                             chineseTranslatedOnly = chineseTranslatedOnly
                         )
                     )
-                    startMarkAsmrOneAvailability(
+                    startMarkCollectionAvailability(
                         keyword = normalizedKeyword,
                         page = page,
                         baseItems = pageResult.items,
@@ -465,6 +498,7 @@ class SearchViewModel @Inject constructor(
                 }
                 scheduleCacheWrite()
             } catch (e: Exception) {
+                if (generation != requestGeneration) return@launch
                 val cancelled = e is CancellationException
                 if (!cancelled) Log.e("SearchViewModel", "Search paging failed", e)
                 val msg = if (cancelled) {
@@ -482,6 +516,7 @@ class SearchViewModel @Inject constructor(
                     presaleOnly = previousSuccess.presaleOnly
                     chineseTranslatedOnly = previousSuccess.chineseTranslatedOnly
                     collectedOnly = previousSuccess.collectedOnly
+                    collectedSourceName = previousSuccess.collectedSourceName
                     hasSubtitle = previousSuccess.hasSubtitle
                     allAges = previousSuccess.allAges
                     currentLocale = previousSuccess.locale
@@ -521,7 +556,7 @@ class SearchViewModel @Inject constructor(
 
     private fun cancelBackgroundJobs() {
         enrichJob?.cancel()
-        asmrOneJob?.cancel()
+        availabilityJob?.cancel()
         collectedWorkNoJob?.cancel()
     }
 
@@ -534,6 +569,7 @@ class SearchViewModel @Inject constructor(
         presaleOnly: Boolean,
         chineseTranslatedOnly: Boolean,
         collectedOnly: Boolean,
+        collectedSourceName: String = this.collectedSourceName,
         hasSubtitle: Boolean,
         allAges: Boolean
     ): SearchPageResult {
@@ -541,9 +577,10 @@ class SearchViewModel @Inject constructor(
             purchasedOnly = purchasedOnly,
             presaleOnly = presaleOnly,
             chineseTranslatedOnly = chineseTranslatedOnly,
-            collectedOnly = collectedOnly
+            collectedOnly = collectedOnly,
+            collectedSourceName = collectedSourceName
         )
-        val appliedHasSubtitle = hasSubtitle && selectedFilter.supportsWorkFilters
+        val appliedHasSubtitle = hasSubtitle && selectedFilter.supportsSubtitleFilter
         val appliedAllAges = allAges && selectedFilter.supportsWorkFilters
         if (purchasedOnly) {
             val resp = dlsitePlayLibraryClient.searchPurchased(keyword, page, pageSize)
@@ -561,22 +598,24 @@ class SearchViewModel @Inject constructor(
                 offset = offset,
                 sort = collectedSort.backendSort,
                 hasSubtitle = appliedHasSubtitle,
-                allAges = appliedAllAges
+                allAges = appliedAllAges,
+                source = CollectedSearchSource.fromName(collectedSourceName)
             )
             val collectedItems = resp.items.orEmpty()
             val mappedItems = withContext(Dispatchers.Default) {
-                collectedItems.map { it.toCollectedAlbum() }
+                collectedItems.map { it.toCollectedAlbum(source = CollectedSearchSource.fromName(collectedSourceName)) }
             }
             val directWorkNo = DlsiteWorkNo.normalizeWorkNo(keyword, minimumDigits = 6)
             val items = mappedItems.ifEmpty {
-                directWorkNo.takeIf { it.isNotBlank() }?.let { workNo ->
+                directWorkNo.takeIf { it.isNotBlank() && CollectedSearchSource.fromName(collectedSourceName) == CollectedSearchSource.AsmrOne }?.let { workNo ->
                     listOf(
                         Album(
                             title = workNo,
                             path = "",
                             workId = workNo,
                             rjCode = workNo,
-                            hasAsmrOne = true
+                            hasAsmrOne = true,
+                            collectedSourceName = CollectedSearchSource.AsmrOne.name
                         )
                     )
                 }.orEmpty()
@@ -806,13 +845,14 @@ class SearchViewModel @Inject constructor(
         val order = SearchSortOption.values()
             .firstOrNull { it.name == cached.orderName }
             ?: SearchSortOption.Trend
-        val collectedSort = SearchCollectedSortOption.fromName(cached.collectedSortName)
+        val collectedSort = normalizedCollectedSort(cached.collectedSourceName, SearchCollectedSortOption.fromName(cached.collectedSortName))
         val page = cached.page.coerceAtLeast(1)
         val filters = normalizeSearchFilters(
             purchasedOnly = cached.purchasedOnly,
             presaleOnly = cached.presaleOnly,
             chineseTranslatedOnly = cached.chineseTranslatedOnly,
-            collectedOnly = cached.collectedOnly
+            collectedOnly = cached.collectedOnly,
+            collectedSourceName = cached.collectedSourceName
         )
         currentOrder = order
         currentCollectedSort = collectedSort
@@ -820,6 +860,7 @@ class SearchViewModel @Inject constructor(
         presaleOnly = filters.presaleOnly
         chineseTranslatedOnly = filters.chineseTranslatedOnly
         collectedOnly = filters.collectedOnly
+        collectedSourceName = filters.collectedSourceName
         hasSubtitle = cached.hasSubtitle
         allAges = cached.allAges
         currentLocale = cached.locale
@@ -833,6 +874,7 @@ class SearchViewModel @Inject constructor(
             presaleOnly = filters.presaleOnly,
             chineseTranslatedOnly = filters.chineseTranslatedOnly,
             collectedOnly = filters.collectedOnly,
+            collectedSourceName = filters.collectedSourceName,
             hasSubtitle = cached.hasSubtitle,
             allAges = cached.allAges,
             locale = cached.locale,
@@ -884,6 +926,7 @@ class SearchViewModel @Inject constructor(
                         presaleOnly = latest.presaleOnly,
                         chineseTranslatedOnly = latest.chineseTranslatedOnly,
                         collectedOnly = latest.collectedOnly,
+                        collectedSourceName = latest.collectedSourceName,
                         hasSubtitle = latest.hasSubtitle,
                         allAges = latest.allAges,
                         locale = latest.locale,
@@ -1046,14 +1089,14 @@ class SearchViewModel @Inject constructor(
         if (changed) scheduleCacheWrite()
     }
 
-    private fun startMarkAsmrOneAvailability(
+    private fun startMarkCollectionAvailability(
         keyword: String,
         page: Int,
         baseItems: List<Album>,
         resultRevision: Long,
     ) {
-        asmrOneJob?.cancel()
-        asmrOneJob = viewModelScope.launch(Dispatchers.IO) {
+        availabilityJob?.cancel()
+        availabilityJob = viewModelScope.launch(Dispatchers.IO) {
             val startedAt = SystemClock.elapsedRealtime()
             val cur0 = _uiState.value as? SearchUiState.Success ?: return@launch
             if (
@@ -1066,7 +1109,9 @@ class SearchViewModel @Inject constructor(
 
             val indexByRj = linkedMapOf<String, MutableList<Int>>()
             baseItems.forEachIndexed { idx, a ->
-                val rj = extractAsmrOneWorkNo(a) ?: return@forEachIndexed
+                val rj = sequenceOf(a.rjCode, a.workId)
+                    .map { AlbumWorkNo.normalizeWorkNo(it, minimumDigits = 6) }
+                    .firstOrNull { it.isNotBlank() } ?: return@forEachIndexed
                 val list = indexByRj.getOrPut(rj) { mutableListOf() }
                 list.add(idx)
             }
@@ -1087,17 +1132,17 @@ class SearchViewModel @Inject constructor(
             try {
                 val cacheReadAt = SystemClock.elapsedRealtime()
                 val cachedAvailability = indexByRj.keys.associateWith { rj ->
-                    asmrOneAvailabilityCache[rj]
+                    availabilityCache[rj]
                 }
-                val cachedTrue = cachedAvailability
-                    .filterValues { cached -> cached?.collected == true }
-                    .keys
-                if (cachedTrue.isNotEmpty()) {
-                    updateAsmrOneAvailability(
+                val known = cachedAvailability.mapNotNull { (rj, cached) ->
+                    cached?.let { rj to it.availability }
+                }.toMap()
+                if (known.isNotEmpty()) {
+                    updateCollectionAvailability(
                         keyword = keyword,
                         page = page,
                         resultRevision = resultRevision,
-                        rjs = cachedTrue.toSet(),
+                        availability = known,
                         indexByRj = indexByRj
                     )
                 }
@@ -1105,28 +1150,24 @@ class SearchViewModel @Inject constructor(
                 val unknown = cachedAvailability
                     .filterValues { cached ->
                         cached == null ||
-                            (!cached.collected &&
-                                cacheReadAt - cached.checkedAtElapsedMs >= ASMR_ONE_NEGATIVE_CACHE_TTL_MS)
+                            cacheReadAt - cached.checkedAtElapsedMs >= COLLECTION_AVAILABILITY_CACHE_TTL_MS
                     }
                     .keys
                     .toList()
                 val availability = asmrOneAvailabilityApi.check(unknown)
                 val checkedAt = SystemClock.elapsedRealtime()
-                availability.forEach { (rj, collected) ->
-                    asmrOneAvailabilityCache[rj] = CachedAsmrOneAvailability(
-                        collected = collected,
+                availability.forEach { (rj, status) ->
+                    availabilityCache[rj] = CachedCollectionAvailability(
+                        availability = status,
                         checkedAtElapsedMs = checkedAt,
                     )
                 }
-                val newlyCollected = availability
-                    .filterValues { collected -> collected }
-                    .keys
-                if (newlyCollected.isNotEmpty()) {
-                    updateAsmrOneAvailability(
+                if (availability.isNotEmpty()) {
+                    updateCollectionAvailability(
                         keyword = keyword,
                         page = page,
                         resultRevision = resultRevision,
-                        rjs = newlyCollected,
+                        availability = availability,
                         indexByRj = indexByRj
                     )
                 }
@@ -1135,7 +1176,7 @@ class SearchViewModel @Inject constructor(
                     val dt = (SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0L)
                     Log.d(
                         "SearchViewModel",
-                        "asmrOne availability page done keyword=${keyword.trim()} page=$page " +
+                        "collection availability page done keyword=${keyword.trim()} page=$page " +
                             "rjCount=${indexByRj.size} dt=${dt}ms"
                     )
                 }
@@ -1155,11 +1196,11 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    private fun updateAsmrOneAvailability(
+    private fun updateCollectionAvailability(
         keyword: String,
         page: Int,
         resultRevision: Long,
-        rjs: Set<String>,
+        availability: Map<String, CollectionAvailability>,
         indexByRj: Map<String, List<Int>>
     ) {
         var changed = false
@@ -1173,16 +1214,17 @@ class SearchViewModel @Inject constructor(
                 cur.collectedOnly
             ) return@update state
 
-            val indices = rjs.flatMap { rj -> indexByRj[rj].orEmpty() }
-            if (indices.isEmpty()) return@update state
-
             val list = cur.results.toMutableList()
-            indices.forEach { idx ->
-                if (idx !in list.indices) return@forEach
-                val old = list[idx]
-                if (!old.hasAsmrOne) {
-                    list[idx] = old.copy(hasAsmrOne = true)
-                    changed = true
+            availability.forEach { (rj, status) ->
+                indexByRj[rj].orEmpty().forEach { idx ->
+                    if (idx in list.indices) {
+                        val old = list[idx]
+                        val updated = old.withCollectionAvailability(status)
+                        if (old != updated) {
+                            list[idx] = updated
+                            changed = true
+                        }
+                    }
                 }
             }
             if (!changed) cur else cur.copy(results = list)
@@ -1193,12 +1235,15 @@ class SearchViewModel @Inject constructor(
     }
 
     private companion object {
-        private const val ASMR_ONE_NEGATIVE_CACHE_TTL_MS = 5 * 60 * 1_000L
+        private const val COLLECTION_AVAILABILITY_CACHE_TTL_MS = 5 * 60 * 1_000L
         private const val COLLECTED_WORK_NO_RESOLVE_TIMEOUT_MS = 3_000L
     }
 }
 
-internal fun AsmrOneCollectedSearchItem.resolvedWorkNo(fallbackWorkNo: String = ""): String {
+internal fun AsmrOneCollectedSearchItem.resolvedWorkNo(
+    fallbackWorkNo: String = "",
+    source: CollectedSearchSource = CollectedSearchSource.AsmrOne
+): String {
     return buildList {
         add(rj)
         add(sourceId)
@@ -1207,7 +1252,10 @@ internal fun AsmrOneCollectedSearchItem.resolvedWorkNo(fallbackWorkNo: String = 
         addAll(matchedRjs.orEmpty())
     }
         .asSequence()
-        .map { DlsiteWorkNo.normalizeWorkNo(it, minimumDigits = 6) }
+        .map {
+            if (source == CollectedSearchSource.JapaneseAsmr) AlbumWorkNo.normalizeWorkNo(it, minimumDigits = 6)
+            else DlsiteWorkNo.normalizeWorkNo(it, minimumDigits = 6)
+        }
         .firstOrNull { it.isNotBlank() }
         .orEmpty()
 }
@@ -1226,8 +1274,11 @@ internal fun WorkDetailsResponse.resolvedWorkNo(): String {
         .orEmpty()
 }
 
-internal fun AsmrOneCollectedSearchItem.toCollectedAlbum(fallbackWorkNo: String = ""): Album {
-    val workNo = resolvedWorkNo(fallbackWorkNo)
+internal fun AsmrOneCollectedSearchItem.toCollectedAlbum(
+    fallbackWorkNo: String = "",
+    source: CollectedSearchSource = CollectedSearchSource.AsmrOne
+): Album {
+    val workNo = resolvedWorkNo(fallbackWorkNo, source)
     return Album(
         title = title.trim().ifBlank { workNo.ifBlank { "已收录作品" } },
         path = "",
@@ -1249,8 +1300,10 @@ internal fun AsmrOneCollectedSearchItem.toCollectedAlbum(fallbackWorkNo: String 
         ratingCount = (rateCount ?: reviewCount ?: 0).coerceAtLeast(0),
         dlCount = 0,
         priceJpy = price ?: 0,
-        hasAsmrOne = true,
-        asmrOneWorkId = workId.takeIf { it > 0 }
+        hasAsmrOne = source == CollectedSearchSource.AsmrOne,
+        collectedSourceName = source.name,
+        collectedPageUrl = pageUrl.orEmpty(),
+        asmrOneWorkId = workId.takeIf { it > 0 && source == CollectedSearchSource.AsmrOne }
     )
 }
 
@@ -1270,8 +1323,16 @@ internal suspend fun resolveOptionalCollectedWorkNo(
     }
 }
 
-private data class CachedAsmrOneAvailability(
-    val collected: Boolean,
+internal fun Album.withCollectionAvailability(availability: CollectionAvailability): Album = copy(
+    hasAsmrOne = availability.hasAsmrOne,
+    collectionAvailability = availability,
+    asmrOneWorkId = availability.asmrOneWorkId ?: asmrOneWorkId.takeIf { availability.hasAsmrOne },
+    collectedSourceName = availability.preferredSource?.name,
+    collectedPageUrl = availability.japaneseAsmrPageUrl.takeIf { availability.hasJapaneseAsmr == true }
+)
+
+private data class CachedCollectionAvailability(
+    val availability: CollectionAvailability,
     val checkedAtElapsedMs: Long,
 )
 
@@ -1297,7 +1358,8 @@ private fun normalizeSearchFilters(
     purchasedOnly: Boolean,
     presaleOnly: Boolean,
     chineseTranslatedOnly: Boolean,
-    collectedOnly: Boolean
+    collectedOnly: Boolean,
+    collectedSourceName: String? = null
 ): SearchFilterFlags {
     val normalizedPurchasedOnly = purchasedOnly
     val normalizedChineseTranslatedOnly = !normalizedPurchasedOnly && chineseTranslatedOnly
@@ -1308,7 +1370,8 @@ private fun normalizeSearchFilters(
         purchasedOnly = normalizedPurchasedOnly,
         presaleOnly = normalizedPresaleOnly,
         chineseTranslatedOnly = normalizedChineseTranslatedOnly,
-        collectedOnly = normalizedCollectedOnly
+        collectedOnly = normalizedCollectedOnly,
+        collectedSourceName = CollectedSearchSource.fromName(collectedSourceName).name
     )
 }
 
@@ -1316,7 +1379,8 @@ private data class SearchFilterFlags(
     val purchasedOnly: Boolean,
     val presaleOnly: Boolean,
     val chineseTranslatedOnly: Boolean,
-    val collectedOnly: Boolean
+    val collectedOnly: Boolean,
+    val collectedSourceName: String
 )
 
 private data class SearchPageResult(
@@ -1416,6 +1480,7 @@ sealed class SearchUiState {
         val presaleOnly: Boolean,
         val chineseTranslatedOnly: Boolean,
         val collectedOnly: Boolean,
+        val collectedSourceName: String = CollectedSearchSource.AsmrOne.name,
         val hasSubtitle: Boolean = false,
         val allAges: Boolean = false,
         val locale: String?,

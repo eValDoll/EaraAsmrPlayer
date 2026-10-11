@@ -1,5 +1,7 @@
 package com.asmr.player.ui.playlists
 
+import com.asmr.player.ui.common.LocalMainHeaderPadding
+
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -117,14 +119,14 @@ fun PlaylistsScreen(
                         headline = "还没有创建列表",
                         sectionIcon = Icons.AutoMirrored.Rounded.QueueMusic,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current + 88.dp)
+                        contentPadding = PaddingValues(top = LocalMainHeaderPadding.current, bottom = LocalBottomOverlayPadding.current + 88.dp)
                     )
                 } else {
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
                         flingBehavior = rememberCalmScrollableFlingBehavior(),
-                        contentPadding = PaddingValues(horizontal = PlaylistsPageHorizontalPadding, vertical = 8.dp)
+                        contentPadding = PaddingValues(start = PlaylistsPageHorizontalPadding, end = PlaylistsPageHorizontalPadding, top = LocalMainHeaderPadding.current + 8.dp, bottom = 8.dp)
                             .withAddedBottomPadding(LocalBottomOverlayPadding.current + 72.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {

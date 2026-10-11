@@ -1,5 +1,9 @@
 package com.asmr.player.ui.playlists
 
+import com.asmr.player.ui.common.formatStoredCv
+import com.asmr.player.util.Formatting
+import com.asmr.player.ui.common.LocalMainHeaderPadding
+
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
@@ -68,12 +72,10 @@ import com.asmr.player.ui.common.FlatActionDialog
 import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
-import com.asmr.player.ui.common.rememberAudioMeta
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.collectAsStateWhileActive
-import com.asmr.player.ui.common.rememberAudioMetaText
 import com.asmr.player.ui.common.reorderable.ItemPosition
 import com.asmr.player.ui.common.reorderable.ReorderableItem
 import com.asmr.player.ui.common.reorderable.detectReorderAfterLongPress
@@ -211,7 +213,7 @@ internal fun PlaylistDetailContent(
                     headline = emptyHeadline,
                     sectionIcon = if (isFavorites) Icons.Rounded.Favorite else Icons.AutoMirrored.Rounded.QueueMusic,
                     modifier = contentModifier,
-                    contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current + 88.dp)
+                    contentPadding = PaddingValues(top = LocalMainHeaderPadding.current, bottom = LocalBottomOverlayPadding.current + 88.dp)
                 )
             } else {
                 LazyColumn(
@@ -219,7 +221,7 @@ internal fun PlaylistDetailContent(
                     modifier = contentModifier
                         .reorderable(reorderState),
                     flingBehavior = rememberCalmScrollableFlingBehavior(),
-                    contentPadding = PaddingValues(top = 6.dp, bottom = LocalBottomOverlayPadding.current)
+                    contentPadding = PaddingValues(top = LocalMainHeaderPadding.current + 6.dp, bottom = LocalBottomOverlayPadding.current)
                 ) {
                     item(key = PLAYLIST_DETAIL_REORDER_SENTINEL_KEY) {
                         Spacer(modifier = Modifier.height(1.dp))
@@ -243,7 +245,7 @@ internal fun PlaylistDetailContent(
                                 showSubtitleStamp = item.hasSubtitles,
                                 showTopDivider = index > 0,
                                 isDragging = isDragging,
-                                loadFileSize = !listState.isScrollInProgress,
+                                loadAudioMetadata = !listState.isScrollInProgress,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .testTag("$PLAYLIST_DETAIL_ITEM_TAG_PREFIX:${item.mediaId}")
@@ -286,7 +288,7 @@ private fun PlaylistItemRow(
     showSubtitleStamp: Boolean,
     showTopDivider: Boolean,
     isDragging: Boolean,
-    loadFileSize: Boolean,
+    loadAudioMetadata: Boolean,
     modifier: Modifier = Modifier,
     onPlay: () -> Unit,
     onMoveToTop: () -> Unit,
@@ -306,15 +308,10 @@ private fun PlaylistItemRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.2f)
             )
         }
-        val prefixSegments = remember(item.artist, item.albumCv) {
-            listOf(item.artist, item.albumCv)
+        val cvText = remember(item.artist, item.albumCv) {
+            formatStoredCv(item.artist, item.albumCv.takeIf { it.isNotBlank() })
         }
-        val meta = rememberAudioMeta(
-            sourcePath = item.uri.ifBlank { item.mediaId },
-            durationSeconds = item.duration,
-            prefixSegments = prefixSegments,
-            loadSize = loadFileSize
-        )
+        val durationText = remember(item.duration) { Formatting.formatTrackSeconds(item.duration) }
         val actions = remember(onPlay, onMoveToTop, onMoveToBottom, onRemove) {
             listOf(
                 AudioItemMenuAction(
@@ -340,8 +337,10 @@ private fun PlaylistItemRow(
         }
         AudioItemRow(
             title = item.title.ifBlank { "未命名" },
-            subtitle = meta.leadingText,
-            fixedTrailingSubtitle = meta.trailingText,
+            sourcePath = item.uri.ifBlank { item.mediaId },
+            loadAudioMetadata = loadAudioMetadata && !item.isVideo,
+            subtitle = cvText,
+            fixedTrailingSubtitle = durationText,
             showSubtitleStamp = showSubtitleStamp,
             menuButtonTestTag = "$PLAYLIST_DETAIL_ITEM_MENU_BUTTON_TAG_PREFIX:${item.mediaId}",
             onClick = onPlay,
@@ -367,7 +366,7 @@ private fun PlaylistItemRow(
     }
 }
 
-private fun PlaylistItemWithSubtitles.toPlaybackEntity(): PlaylistItemEntity {
+internal fun PlaylistItemWithSubtitles.toPlaybackEntity(): PlaylistItemEntity {
     return PlaylistItemEntity(
         playlistId = playlistId,
         mediaId = mediaId,
@@ -382,6 +381,7 @@ private fun PlaylistItemWithSubtitles.toPlaybackEntity(): PlaylistItemEntity {
         albumWorkId = albumWorkId,
         trackGroup = trackGroup,
         lyricsRelativePathNoExt = lyricsRelativePathNoExt,
+        remoteSubtitleSources = remoteSubtitleSources,
         mimeType = mimeType,
         isVideo = isVideo,
         itemOrder = itemOrder

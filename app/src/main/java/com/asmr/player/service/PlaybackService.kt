@@ -1,5 +1,7 @@
 package com.asmr.player.service
 
+import com.asmr.player.data.repository.AudioMetadataCache
+
 import android.app.PendingIntent
 import android.bluetooth.BluetoothAdapter
 import android.content.BroadcastReceiver
@@ -94,6 +96,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -151,6 +154,7 @@ class PlaybackService : MediaSessionService() {
     @Volatile private var lastEffectiveSettings: EqualizerSettings = EqualizerSettings()
     
     private var currentLyrics: List<SubtitleEntry> = emptyList()
+    private var lyricsLoadJob: Job? = null
     private var lyricsIndexFinder: SubtitleIndexFinder? = null
     private var lastLyricIndex: Int = Int.MIN_VALUE
     private var floatingLyricsEnabled: Boolean = false
@@ -333,6 +337,10 @@ class PlaybackService : MediaSessionService() {
                         headers["Cookie"] = cookie
                     }
                     dataSpec.buildUpon().setHttpRequestHeaders(headers).build()
+                } else if (host == "weeab0o.xyz" || host.endsWith(".weeab0o.xyz")) {
+                    val headers = LinkedHashMap(dataSpec.httpRequestHeaders)
+                    headers["Referer"] = "https://japaneseasmr.com/"
+                    dataSpec.buildUpon().setHttpRequestHeaders(headers).build()
                 } else {
                     dataSpec
                 }
@@ -409,6 +417,25 @@ class PlaybackService : MediaSessionService() {
         }
         
         exoPlayer.addListener(object : androidx.media3.common.Player.Listener {
+            override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                val item = exoPlayer.currentMediaItem ?: return
+                val format = tracks.groups.asSequence()
+                    .filter { it.type == androidx.media3.common.C.TRACK_TYPE_AUDIO && it.isSelected }
+                    .flatMap { group ->
+                        (0 until group.length).asSequence()
+                            .filter(group::isTrackSelected)
+                            .map(group::getTrackFormat)
+                    }
+                    .firstOrNull() ?: return
+                val paths = setOf(item.localConfiguration?.uri?.toString().orEmpty(), item.mediaId)
+                for (path in paths) {
+                    val entry = AudioMetadataCache.recordPlayback(path, format, exoPlayer.duration) ?: continue
+                    serviceScope.launch {
+                        AudioMetadataCache.persistPlayback(applicationContext, path, entry)
+                    }
+                }
+            }
+
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 StereoSpectrumBus.playbackActive = isPlaying
                 if (isPlaying) {
@@ -1227,13 +1254,23 @@ class PlaybackService : MediaSessionService() {
         manager.createNotificationChannel(channel)
     }
 
-    private suspend fun loadLyricsForCurrentMedia() {
-        val item = withContext(Dispatchers.Main.immediate) { exoPlayer.currentMediaItem }
-        val result = lyricsLoader.load(item)
-        currentLyrics = result.lyrics
-        lyricsIndexFinder = if (result.lyrics.isNotEmpty()) SubtitleIndexFinder(result.lyrics) else null
+    private suspend fun loadLyricsForCurrentMedia() = withContext(Dispatchers.Main.immediate) {
+        val item = exoPlayer.currentMediaItem
+        lyricsLoadJob?.cancel()
+        currentLyrics = emptyList()
+        lyricsIndexFinder = null
         lastLyricIndex = Int.MIN_VALUE
-        refreshMediaNotification()
+        lyricsLoadJob = serviceScope.launch {
+            lyricsLoader.observe(item).collect { result ->
+                val indexFinder = withContext(Dispatchers.Default) {
+                    if (result.lyrics.isNotEmpty()) SubtitleIndexFinder(result.lyrics) else null
+                }
+                currentLyrics = result.lyrics
+                lyricsIndexFinder = indexFinder
+                lastLyricIndex = Int.MIN_VALUE
+                refreshMediaNotification()
+            }
+        }
     }
 
     private suspend fun updateLyricsTick(): Long {
@@ -1371,6 +1408,7 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         overlay?.hide()
+        lyricsLoadJob?.cancel()
         statsJob?.cancel()
         runBlocking(Dispatchers.IO) {
             flushPendingNetworkTraffic()

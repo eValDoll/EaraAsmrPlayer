@@ -9,10 +9,15 @@ import com.asmr.player.data.lyrics.LyricsLoader
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.playback.PlayerConnection
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChangedBy
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.onStart
+import kotlinx.coroutines.flow.stateIn
 import javax.inject.Inject
 
 data class LyricsUiState(
@@ -27,55 +32,23 @@ class LyricsViewModel @Inject constructor(
     private val playerConnection: PlayerConnection,
     private val lyricsLoader: LyricsLoader
 ) : ViewModel() {
-    private val _uiState = MutableStateFlow(LyricsUiState())
-    val uiState: StateFlow<LyricsUiState> = _uiState.asStateFlow()
-
     val playback = playerConnection.snapshot
 
-    private suspend fun reloadForItem(item: MediaItem?) {
-        val mediaId = item?.mediaId.orEmpty()
-        if (mediaId.isBlank()) {
-            _uiState.value = LyricsUiState()
-            return
-        }
+    @OptIn(ExperimentalCoroutinesApi::class)
+    val uiState: StateFlow<LyricsUiState> = combine(
+        playback.map { it.currentMediaItem }.distinctUntilChangedBy(::lyricsContentKeyForItem),
+        playerConnection.lyricsReloadRequests.onStart { emit(Unit) }
+    ) { item, _ -> item }.flatMapLatest { item ->
         val mediaKey = lyricsContentKeyForItem(item)
-        _uiState.value = _uiState.value.copy(isLoading = true)
-        val result = lyricsLoader.load(item)
-        _uiState.value = LyricsUiState(
-            title = result.title,
-            contentKey = mediaKey,
-            isLoading = false,
-            lyrics = result.lyrics
-        )
-    }
+        lyricsLoader.observe(item).map { result ->
+            LyricsUiState(title = result.title, contentKey = mediaKey, lyrics = result.lyrics)
+        }.onStart {
+            emit(LyricsUiState(contentKey = mediaKey, isLoading = item != null))
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), LyricsUiState())
 
     fun refreshCurrentLyrics() {
-        viewModelScope.launch {
-            reloadForItem(playback.value.currentMediaItem)
-        }
-    }
-
-    init {
-        viewModelScope.launch {
-            playerConnection.lyricsReloadRequests.collect {
-                reloadForItem(playback.value.currentMediaItem)
-            }
-        }
-        viewModelScope.launch {
-            var lastMediaKey: String? = null
-            playerConnection.snapshot.collect { snap ->
-                val item = snap.currentMediaItem
-                val mediaId = item?.mediaId.orEmpty()
-                val mediaKey = lyricsContentKeyForItem(item)
-                if (mediaId.isBlank()) {
-                    _uiState.value = LyricsUiState()
-                    return@collect
-                }
-                if (lastMediaKey == mediaKey) return@collect
-                lastMediaKey = mediaKey
-                reloadForItem(item)
-            }
-        }
+        playerConnection.requestLyricsReload()
     }
 
     private fun lyricsContentKeyForItem(item: MediaItem?): String {

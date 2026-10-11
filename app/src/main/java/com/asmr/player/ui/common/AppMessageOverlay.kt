@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.key
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -34,6 +35,8 @@ data class VisibleAppMessage(
     val durationMs: Long = 2000L,
     val isVisible: Boolean = true
 )
+
+internal val LocalVisibleAppMessages = compositionLocalOf<List<VisibleAppMessage>> { emptyList() }
 
 @Composable
 fun AppMessageOverlay(

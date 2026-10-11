@@ -167,19 +167,29 @@ class AlbumDetailDirectorySupportTest {
     }
 
     @Test
-    fun collectSubtitleGenerationTracks_includesMp3AndWavRecursively() {
+    fun collectSubtitleGenerationTracks_includesSupportedLocalAudioRecursively() {
         val tracks = listOf(
             Track(id = 1L, albumId = 7L, title = "root mp3", path = "/album/root.mp3"),
             Track(id = 2L, albumId = 7L, title = "nested wav", path = "/album/disc/nested.wav"),
             Track(id = 3L, albumId = 7L, title = "nested flac", path = "/album/disc/nested.flac"),
-            Track(id = 4L, albumId = 7L, title = "online mp3", path = "https://example.com/online.mp3")
+            Track(id = 4L, albumId = 7L, title = "online mp3", path = "https://example.com/online.mp3"),
+            Track(id = 5L, albumId = 7L, title = "nested m4a", path = "/album/disc/voice.m4a"),
+            Track(id = 6L, albumId = 7L, title = "nested aac", path = "/album/disc/voice.aac"),
+            Track(id = 7L, albumId = 7L, title = "nested ogg", path = "/album/disc/voice.ogg"),
+            Track(id = 8L, albumId = 7L, title = "nested opus", path = "/album/disc/voice.opus"),
+            Track(id = 9L, albumId = 7L, title = "unsupported", path = "/album/disc/voice.ape")
         )
         val index = buildLocalTreeIndexFromLeaves(
             leaves = listOf(
                 LocalTreeLeafCacheEntry("root.mp3", tracks[0].path, TreeFileType.Audio),
                 LocalTreeLeafCacheEntry("disc/nested.wav", tracks[1].path, TreeFileType.Audio),
                 LocalTreeLeafCacheEntry("disc/nested.flac", tracks[2].path, TreeFileType.Audio),
-                LocalTreeLeafCacheEntry("disc/online.mp3", tracks[3].path, TreeFileType.Audio)
+                LocalTreeLeafCacheEntry("disc/online.mp3", tracks[3].path, TreeFileType.Audio),
+                LocalTreeLeafCacheEntry("disc/voice.m4a", tracks[4].path, TreeFileType.Audio),
+                LocalTreeLeafCacheEntry("disc/voice.aac", tracks[5].path, TreeFileType.Audio),
+                LocalTreeLeafCacheEntry("disc/voice.ogg", tracks[6].path, TreeFileType.Audio),
+                LocalTreeLeafCacheEntry("disc/voice.opus", tracks[7].path, TreeFileType.Audio),
+                LocalTreeLeafCacheEntry("disc/voice.ape", tracks[8].path, TreeFileType.Audio)
             ),
             tracks = tracks
         )
@@ -195,8 +205,8 @@ class AlbumDetailDirectorySupportTest {
             unavailableTrackIds = setOf(2L)
         )
 
-        assertEquals(listOf(2L, 1L), rootResult.map { it.id })
-        assertTrue(nestedResult.isEmpty())
+        assertEquals(listOf(3L, 2L, 6L, 5L, 7L, 8L, 1L), rootResult.map { it.id })
+        assertEquals(listOf(3L, 6L, 5L, 7L, 8L), nestedResult.map { it.id })
     }
 
     @Test
@@ -221,7 +231,7 @@ class AlbumDetailDirectorySupportTest {
         assertEquals(null, subtitleGenerationTrackForFile(file, setOf(track.id)))
         assertEquals(
             null,
-            subtitleGenerationTrackForFile(file.copy(path = "track.flac"), emptySet())
+            subtitleGenerationTrackForFile(file.copy(path = "track.ape"), emptySet())
         )
     }
 

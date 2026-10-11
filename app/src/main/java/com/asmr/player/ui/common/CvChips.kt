@@ -22,14 +22,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.asmr.player.ui.theme.AsmrTheme
 
-private fun parseCvNames(cvText: String): List<String> {
-    return cvText
-        .split(',', '，', '、', '/', '\n', ';', '；', '|')
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .distinct()
-}
-
 @Composable
 fun CvChipsSingleLine(
     cvText: String,

@@ -1,5 +1,7 @@
 package com.asmr.player.ui.settings
 
+import com.asmr.player.ui.common.LocalMainHeaderPadding
+
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -83,6 +85,9 @@ import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.asmr.player.BuildConfig
 import com.asmr.player.cache.AppCacheLimits
 import com.asmr.player.cache.AppCacheState
@@ -140,7 +145,7 @@ private enum class SettingsSection(
     Appearance("外观", "调整主题、主题色与播放页背景", Icons.Rounded.Palette),
     Playback("播放设置", "管理迷你播放栏、音频输出与淡入淡出", Icons.Rounded.Headphones),
     Lyrics("歌词", "配置歌词页与悬浮歌词的显示效果", Icons.Rounded.Lyrics),
-    Translation("翻译配置", "管理页面翻译、字幕模型与 DeepSeek 翻译", Icons.Rounded.Translate),
+    Translation("翻译配置", "管理页面翻译、字幕模型与翻译 API", Icons.Rounded.Translate),
     SupportStatus("服务状态与代理", "测试服务连通性并配置代理与 DNS", Icons.Rounded.Router),
     AppCache("APP 缓存", "设置缓存容量上限并清理缓存", Icons.Rounded.Storage),
     About("关于", "查看版本信息并检查应用更新", Icons.Rounded.Info),
@@ -187,8 +192,8 @@ fun SettingsScreen(
     val aboutDataActive = isDataActive && selectedSection == SettingsSection.About
     val appCacheDataActive = isDataActive && selectedSection == SettingsSection.AppCache
 
-    LaunchedEffect(selectedSection) {
-        currentOnDetailPageChanged(selectedSection != null)
+    LaunchedEffect(isActive, selectedSection) {
+        currentOnDetailPageChanged(isActive && selectedSection != null)
     }
     DisposableEffect(Unit) {
         onDispose { currentOnDetailPageChanged(false) }
@@ -221,6 +226,8 @@ fun SettingsScreen(
     val deepSeekApiKeyState by viewModel.deepSeekApiKeyState.collectAsStateWhileActive(translationDataActive)
     val deepSeekAccountState by viewModel.deepSeekAccountState.collectAsStateWhileActive(translationDataActive)
     val deepSeekTranslationSettings by viewModel.deepSeekTranslationSettings.collectAsStateWhileActive(translationDataActive)
+    val translationApiState by viewModel.translationApiState.collectAsStateWhileActive(translationDataActive)
+    val customTranslationTokenTotal by viewModel.customTranslationTokenTotal.collectAsStateWhileActive(translationDataActive)
     val updateState by viewModel.updateState.collectAsStateWhileActive(aboutDataActive)
     val autoUpdateCheckEnabled by viewModel.autoUpdateCheckEnabled.collectAsStateWhileActive(aboutDataActive)
     val scanRoots by libraryViewModel.scanRoots.collectAsStateWhileActive(localLibraryDataActive)
@@ -252,6 +259,18 @@ fun SettingsScreen(
     )
     
     var overlayGranted by remember { mutableStateOf(Settings.canDrawOverlays(context)) }
+    if (lyricsDataActive) {
+        val lifecycleOwner = LocalLifecycleOwner.current
+        DisposableEffect(lifecycleOwner, context) {
+            val observer = LifecycleEventObserver { _, event ->
+                if (event == Lifecycle.Event.ON_RESUME) {
+                    overlayGranted = Settings.canDrawOverlays(context)
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+        }
+    }
     var activeTipKey by remember { mutableStateOf<String?>(null) }
     var searchBlockedKeywordInput by rememberSaveable { mutableStateOf("") }
     var showClearAppCacheConfirmation by remember { mutableStateOf(false) }
@@ -272,6 +291,7 @@ fun SettingsScreen(
     }
     val overlayLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
         overlayGranted = Settings.canDrawOverlays(context)
+        viewModel.setFloatingLyricsEnabled(overlayGranted)
     }
     val pickRootLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree(),
@@ -324,6 +344,8 @@ fun SettingsScreen(
     ) { padding ->
         LaunchedEffect(isActive) {
             if (isActive) return@LaunchedEffect
+            selectedSection = null
+            retainedSection = null
             deepSeekApiKeyInput = ""
             rootListState.stopScroll(MutatePriority.PreventUserInput)
             detailListState.stopScroll(MutatePriority.PreventUserInput)
@@ -356,7 +378,7 @@ fun SettingsScreen(
                 state = rootListState,
                 modifier = contentModifier,
                 flingBehavior = rememberCalmScrollableFlingBehavior(),
-                contentPadding = PaddingValues(horizontal = SettingsPageHorizontalPadding, vertical = 10.dp)
+                contentPadding = PaddingValues(start = SettingsPageHorizontalPadding, end = SettingsPageHorizontalPadding, top = LocalMainHeaderPadding.current + 10.dp, bottom = 10.dp)
                     .withAddedBottomPadding(LocalBottomOverlayPadding.current),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
@@ -387,7 +409,7 @@ fun SettingsScreen(
                         .fillMaxSize()
                         .background(colorScheme.background),
                     flingBehavior = rememberCalmScrollableFlingBehavior(),
-                    contentPadding = PaddingValues(horizontal = SettingsPageHorizontalPadding, vertical = 10.dp)
+                    contentPadding = PaddingValues(start = SettingsPageHorizontalPadding, end = SettingsPageHorizontalPadding, top = LocalMainHeaderPadding.current + 10.dp, bottom = 10.dp)
                         .withAddedBottomPadding(LocalBottomOverlayPadding.current),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
@@ -862,8 +884,24 @@ fun SettingsScreen(
                         SettingsDetailCard {
                             SettingsToggleRow(
                                 text = "开启悬浮歌词",
-                                checked = floatingLyricsEnabled,
-                                onCheckedChange = { viewModel.setFloatingLyricsEnabled(it) }
+                                checked = floatingLyricsEnabled && overlayGranted,
+                                onCheckedChange = { enabled ->
+                                    overlayGranted = Settings.canDrawOverlays(context)
+                                    viewModel.setFloatingLyricsEnabled(enabled && overlayGranted)
+                                    if (enabled && !overlayGranted) {
+                                        val intent = Intent(
+                                            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                                            Uri.parse("package:${context.packageName}")
+                                        )
+                                        runCatching {
+                                            overlayLauncher.launch(intent)
+                                        }.recoverCatching {
+                                            overlayLauncher.launch(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION))
+                                        }.onFailure {
+                                            libraryViewModel.messageManager.showError("无法打开悬浮窗权限设置")
+                                        }
+                                    }
+                                }
                             )
                             HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
                             NowPlayingLyricsSettingsSection(
@@ -883,22 +921,6 @@ fun SettingsScreen(
 
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f))
                         Text("悬浮歌词细节", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
-
-                        if (!overlayGranted && floatingLyricsEnabled) {
-                            OutlinedButton(
-                                onClick = {
-                                    val intent = Intent(
-                                        Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                        Uri.parse("package:${context.packageName}")
-                                    )
-                                    overlayLauncher.launch(intent)
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = ButtonDefaults.outlinedButtonColors()
-                            ) {
-                                Text("授权悬浮窗权限")
-                            }
-                        }
 
                         if (floatingLyricsEnabled && overlayGranted) {
                             SettingsSliderRow(
@@ -996,11 +1018,9 @@ fun SettingsScreen(
                     }
                     item(key = "group:translation_config") {
                         SettingsDetailCard {
-                        Text(
-                            text = "字幕翻译",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = colorScheme.textPrimary,
+                        SubtitleTranslationSettingsHeader(
+                            activeTipKey = activeTipKey,
+                            onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
                         )
                         SubtitleModelSettingsSection(
                             state = subtitleModelState,
@@ -1019,20 +1039,45 @@ fun SettingsScreen(
                             onClearFailure = viewModel::clearSubtitleModelFailure
                         )
                         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.14f))
-                        DeepSeekTranslationSettingsSection(
-                            state = deepSeekApiKeyState,
-                            accountState = deepSeekAccountState,
-                            settings = deepSeekTranslationSettings,
-                            apiKeyInput = deepSeekApiKeyInput,
-                            compact = isCompact,
-                            segmentedButtonColors = segmentedButtonColors,
-                            onApiKeyInputChanged = { deepSeekApiKeyInput = it },
-                            onSave = { viewModel.saveDeepSeekApiKey(deepSeekApiKeyInput) },
-                            onThinkingEnabledChanged = viewModel::setDeepSeekThinkingEnabled,
-                            onReasoningEffortChanged = viewModel::setDeepSeekReasoningEffort,
-                            onFinalPolishEnabledChanged = viewModel::setDeepSeekFinalPolishEnabled,
-                            activeTipKey = activeTipKey,
-                            onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
+                        TranslationApiSettingsSection(
+                            state = translationApiState,
+                            onProviderSelected = viewModel::selectTranslationProvider,
+                            onSaveCustom = viewModel::saveCustomTranslationApi,
+                            onLoadModels = viewModel::loadCustomTranslationModels,
+                            customTotalTokens = customTranslationTokenTotal,
+                            deepSeekContent = {
+                                DeepSeekTranslationSettingsSection(
+                                    state = deepSeekApiKeyState,
+                                    accountState = deepSeekAccountState,
+                                    settings = deepSeekTranslationSettings,
+                                    apiKeyInput = deepSeekApiKeyInput,
+                                    compact = isCompact,
+                                    segmentedButtonColors = segmentedButtonColors,
+                                    onApiKeyInputChanged = { deepSeekApiKeyInput = it },
+                                    onSave = { viewModel.saveDeepSeekApiKey(deepSeekApiKeyInput) },
+                                    onThinkingEnabledChanged = viewModel::setDeepSeekThinkingEnabled,
+                                    onReasoningEffortChanged = viewModel::setDeepSeekReasoningEffort,
+                                    onFinalPolishEnabledChanged = viewModel::setDeepSeekFinalPolishEnabled,
+                                    model = translationApiState.settings.deepSeekModel,
+                                    modelSaving = translationApiState.saving || !translationApiState.loaded,
+                                    onModelSelected = viewModel::selectDeepSeekModel,
+                                    onLoadModels = viewModel::loadDeepSeekModels,
+                                    activeTipKey = activeTipKey,
+                                    onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
+                                )
+                            },
+                            customOptions = {
+                                SettingsToggleRow(
+                                    text = "最终润色",
+                                    checked = deepSeekTranslationSettings.finalPolishEnabled,
+                                    onCheckedChange = viewModel::setDeepSeekFinalPolishEnabled,
+                                    infoKey = "final_polish",
+                                    infoTitle = "最终润色",
+                                    infoText = "翻译完成后，可在任务管理中左滑作品卡片，对现有中文字幕进行整体润色。此操作会额外消耗 Token。",
+                                    activeTipKey = activeTipKey,
+                                    onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
+                                )
+                            }
                         )
                     }
                 }
@@ -1293,6 +1338,29 @@ private fun NowPlayingLyricsSettingsSection(
     )
 }
 
+@Composable
+internal fun SubtitleTranslationSettingsHeader(activeTipKey: String?, onToggleTip: (String) -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = "字幕翻译",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = AsmrTheme.colorScheme.textPrimary
+        )
+        SettingsInfoTip(
+            active = activeTipKey == "subtitle_translation",
+            title = "字幕翻译",
+            text = "批量翻译需要本地音频、已下载并选用的字幕模型，以及已保存的翻译 API 配置。" +
+                "在线音频请先下载。配置完成后，在本地库作品详情中点击“批量翻译”或“翻译选中”开始；保存 API Key 不会自动创建任务。",
+            onToggle = { onToggleTip("subtitle_translation") },
+            showBackground = false
+        )
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun DeepSeekTranslationSettingsSection(
@@ -1308,7 +1376,11 @@ internal fun DeepSeekTranslationSettingsSection(
     onReasoningEffortChanged: (DeepSeekReasoningEffort) -> Unit,
     onFinalPolishEnabledChanged: (Boolean) -> Unit,
     activeTipKey: String? = null,
-    onToggleTip: ((String) -> Unit)? = null
+    onToggleTip: ((String) -> Unit)? = null,
+    model: String = DEEPSEEK_SUBTITLE_MODEL,
+    modelSaving: Boolean = false,
+    onModelSelected: (String) -> Unit = {},
+    onLoadModels: suspend (String) -> List<String>? = { null },
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val actionButtonColors = settingsPrimaryTonalButtonColors()
@@ -1319,7 +1391,7 @@ internal fun DeepSeekTranslationSettingsSection(
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
-            text = DEEPSEEK_SUBTITLE_MODEL,
+            text = "DeepSeek",
             style = MaterialTheme.typography.bodyMedium,
             fontWeight = FontWeight.SemiBold,
             maxLines = 1,
@@ -1330,17 +1402,18 @@ internal fun DeepSeekTranslationSettingsSection(
         )
         if (state.configured) {
             Row(
-                modifier = Modifier.width(if (compact) 208.dp else 248.dp),
+                modifier = Modifier.weight(2f),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Text(
                     text = "Token ${formatDeepSeekTokenTotal(accountState.totalTokens)} · 余额 ${formatDeepSeekBalances(accountState.balances)}",
                     style = MaterialTheme.typography.bodySmall,
+                    textAlign = TextAlign.End,
                     color = if (accountState.balanceAvailable == false) {
                         MaterialTheme.colorScheme.error
                     } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
+                        colorScheme.textSecondary
                     },
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1369,23 +1442,20 @@ internal fun DeepSeekTranslationSettingsSection(
         } else {
             Modifier.widthIn(max = 280.dp)
         }
-        OutlinedTextField(
+        TranslationSettingsTextField(
+            label = "API Key",
             value = apiKeyInput,
             onValueChange = onApiKeyInputChanged,
             modifier = inputModifier
-                .height(48.dp)
-                .testTag("deepseek_api_key_input"),
-            placeholder = {
-                Text(
-                    text = "API Key（sk-…）",
-                    style = MaterialTheme.typography.bodySmall
-                )
-            },
-            singleLine = true,
+                .heightIn(min = 48.dp),
+            tag = "deepseek_api_key_input",
+            placeholder = "API Key（sk-…）",
+            showLabel = false,
             visualTransformation = PasswordVisualTransformation(),
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            keyboardType = KeyboardType.Password,
             enabled = !state.saving,
-            isError = state.errorMessage != null
+            isError = state.errorMessage != null,
+            errorMessage = state.errorMessage.orEmpty(),
         )
         FilledTonalButton(
             onClick = onSave,
@@ -1408,6 +1478,17 @@ internal fun DeepSeekTranslationSettingsSection(
             text = message,
             style = MaterialTheme.typography.labelSmall,
             color = MaterialTheme.colorScheme.error
+        )
+    }
+
+    key(apiKeyInput, state.saveVersion) {
+        TranslationSettingsModelField(
+            model = model, onModelChanged = onModelSelected,
+            enabled = !state.saving && !modelSaving,
+            canLoad = state.configured || apiKeyInput.isNotBlank(),
+            loadInitially = state.configured && apiKeyInput.isBlank(),
+            onLoad = { onLoadModels(apiKeyInput) },
+            tagPrefix = "deepseek", allowManual = false,
         )
     }
 
@@ -2491,13 +2572,19 @@ private fun SettingsRowLabel(
 }
 
 @Composable
-private fun SettingsInfoTip(active: Boolean, title: String, text: String, onToggle: () -> Unit) {
+private fun SettingsInfoTip(
+    active: Boolean,
+    title: String,
+    text: String,
+    onToggle: () -> Unit,
+    showBackground: Boolean = true
+) {
     val density = LocalDensity.current
     val offset = with(density) { IntOffset(0, 26.dp.roundToPx()) }
 
     Surface(
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+        color = if (showBackground) MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f) else Color.Transparent
     ) {
         Box {
             IconButton(

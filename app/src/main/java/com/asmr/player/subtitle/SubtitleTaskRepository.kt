@@ -1,5 +1,10 @@
 package com.asmr.player.subtitle
 
+import com.asmr.player.util.LocalFileScopes
+import com.asmr.player.util.LocalFileOperation
+import com.asmr.player.util.withSubtitleFileAccess
+import com.asmr.player.util.LocalFileOperationCoordinator
+
 import android.content.Context
 import androidx.room.withTransaction
 import androidx.work.WorkManager
@@ -31,6 +36,7 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
     private val appContext = context.applicationContext
     private val database = AppDatabaseProvider.get(appContext)
     private val dao = database.subtitleTaskDao()
+    private val fileScopes = LocalFileScopes(database, com.asmr.player.data.remote.download.DownloadStorageGateway(appContext))
     private val enqueueMutex = Mutex()
     private val startupMutex = Mutex()
     @Volatile private var startupReconciled = false
@@ -98,6 +104,12 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
 
     suspend fun enqueueGeneration(targets: List<SubtitleGenerationTarget>): SubtitleTaskHandle {
         reconcileOnAppLaunch()
+        return database.withSubtitleFileAccess(fileScopes, fileScopes.tracks(targets.map { it.trackId })) {
+            enqueueGenerationLocked(targets)
+        }
+    }
+
+    private suspend fun enqueueGenerationLocked(targets: List<SubtitleGenerationTarget>): SubtitleTaskHandle {
         return enqueueMutex.withLock {
             val normalized = targets.asSequence()
                 .filter { it.trackId > 0L }
@@ -109,8 +121,8 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
             check(SubtitleModelRepository.get(appContext).isModelAvailable()) {
                 SubtitleModelRepository.MODEL_REQUIRED_MESSAGE
             }
-            check(DeepSeekApiKeyStore.get(appContext).isConfigured()) {
-                "请先在设置中配置 DeepSeek API Key"
+            withContext(Dispatchers.IO) {
+                TranslationApiStore.get(appContext).readConfiguration().requireConfigured()
             }
             enqueue(
                 targets = normalized.map { it.trackId to it.title },
@@ -122,11 +134,17 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
 
     suspend fun enqueueTranslation(target: SubtitleTranslationTarget): SubtitleTaskHandle {
         reconcileOnAppLaunch()
+        return database.withSubtitleFileAccess(fileScopes, fileScopes.tracks(listOf(target.trackId))) {
+            enqueueTranslationLocked(target)
+        }
+    }
+
+    private suspend fun enqueueTranslationLocked(target: SubtitleTranslationTarget): SubtitleTaskHandle {
         return enqueueMutex.withLock {
             require(target.trackId > 0L) { "字幕所属音轨无效" }
             ensureTrackAlbumNotPolishing(target.trackId)
-            check(DeepSeekApiKeyStore.get(appContext).isConfigured()) {
-                "请先在设置中配置 DeepSeek API Key"
+            withContext(Dispatchers.IO) {
+                TranslationApiStore.get(appContext).readConfiguration().requireConfigured()
             }
             val subtitles = database.trackDao().getSubtitlesForTrack(target.trackId)
             require(subtitles.any { it.text.isNotBlank() }) { "当前音轨没有可翻译的本地字幕" }
@@ -347,7 +365,14 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
         SubtitleTaskService.wake(appContext)
     }
 
-    internal suspend fun finishCancellation(itemId: String): String? = withContext(Dispatchers.IO) {
+    internal suspend fun finishCancellation(itemId: String): String? {
+        val item = dao.getItem(itemId) ?: return null
+        return LocalFileOperationCoordinator.shared.withOperation(
+            LocalFileOperation.SUBTITLE, resource = "track:${item.trackId}", scope = fileScopes.tracks(listOf(item.trackId))
+        ) { finishCancellationLocked(itemId) }
+    }
+
+    private suspend fun finishCancellationLocked(itemId: String): String? = withContext(Dispatchers.IO) {
         var warning: String? = null
         var taskId: String? = null
         database.withTransaction {
@@ -420,10 +445,9 @@ internal class SubtitleTaskRepository private constructor(context: Context) {
 
     internal suspend fun finishTitleTranslation(taskId: String) = withContext(Dispatchers.IO) {
         database.withTransaction {
-            val pending = database.subtitleTitleOwnerDao()
-                .getByTask(taskId)
-                .any { owner -> owner.displayTitle.isBlank() }
-            if (pending) return@withTransaction
+            // 标题翻译的有限重试已结束。持久化清除未完成登记，防止服务重启后再次请求；
+            // 保留已成功写入的登记，供用户取消任务时还原显示名。
+            database.subtitleTitleOwnerDao().deletePendingForTask(taskId)
             val items = dao.getItemsForTask(taskId)
             if (items.isEmpty() || items.any { item -> item.state != SubtitleItemState.SUCCEEDED }) {
                 return@withTransaction

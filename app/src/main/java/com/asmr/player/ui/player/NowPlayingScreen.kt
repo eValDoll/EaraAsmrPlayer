@@ -1,5 +1,9 @@
 package com.asmr.player.ui.player
 
+import com.asmr.player.ui.common.parseCvNames
+import com.asmr.player.ui.common.formatArtistMetadata
+import com.asmr.player.ui.common.CvNameSeparator
+
 import android.content.res.Configuration
 import android.content.Intent
 import android.view.KeyEvent as AndroidKeyEvent
@@ -784,7 +788,7 @@ private fun LandscapePlayerIdentity(
             tabletLayout = tabletLayout
         )
     }
-    val artistSummary = remember(artistMeta) { formatClassicArtistSummary(artistMeta) }
+    val artistSummary = remember(artistMeta) { formatNowPlayingArtistSummary(artistMeta) }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -909,29 +913,12 @@ internal fun parseNowPlayingArtistMeta(artist: String): NowPlayingArtistMeta {
     val parts = normalized.split(" / ", limit = 2).map { it.trim() }
     val circle = parts.takeIf { it.size == 2 }?.first().orEmpty()
     val cvText = if (parts.size == 2) parts[1] else normalized
-    val cvNames = cvText
-        .split(',', '，', '、', '/', '\n', ';', '；', '|')
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .distinct()
+    val cvNames = parseCvNames(cvText)
     return NowPlayingArtistMeta(circle = circle, cvNames = cvNames)
 }
 
-internal fun formatExpandedArtistSummary(artistMeta: NowPlayingArtistMeta): String {
-    val cvSummary = artistMeta.cvNames.joinToString("、")
-    return listOf(artistMeta.circle, cvSummary)
-        .filter { it.isNotBlank() }
-        .joinToString(" | ")
-}
-
-internal fun formatClassicArtistSummary(artistMeta: NowPlayingArtistMeta): String {
-    val circle = artistMeta.circle.takeIf { it.isNotBlank() }?.let { "社团 $it" }
-    val cv = artistMeta.cvNames
-        .joinToString("、")
-        .takeIf { it.isNotBlank() }
-        ?.let { "CV $it" }
-    return listOfNotNull(circle, cv).joinToString(" / ")
-}
+internal fun formatNowPlayingArtistSummary(artistMeta: NowPlayingArtistMeta): String =
+    formatArtistMetadata(artistMeta.circle, artistMeta.cvNames.joinToString(CvNameSeparator))
 
 @Composable
 private fun ClassicPlayerIdentity(
@@ -982,7 +969,7 @@ private fun ClassicPlayerIdentity(
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center
         )
-        val artistSummary = remember(artistMeta) { formatClassicArtistSummary(artistMeta) }
+        val artistSummary = remember(artistMeta) { formatNowPlayingArtistSummary(artistMeta) }
         if (artistSummary.isNotBlank()) {
             Text(
                 text = artistSummary,
@@ -1010,7 +997,7 @@ private fun ExpandedPlayerIdentityOverlay(
     pageEntranceSettled: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val artistSummary = remember(artistMeta) { formatExpandedArtistSummary(artistMeta) }
+    val artistSummary = remember(artistMeta) { formatNowPlayingArtistSummary(artistMeta) }
     val overlayShadow = remember {
         Shadow(
             color = Color.Black.copy(alpha = 0.72f),

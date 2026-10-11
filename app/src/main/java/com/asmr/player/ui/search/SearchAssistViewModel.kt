@@ -1,5 +1,6 @@
 package com.asmr.player.ui.search
 
+import com.asmr.player.domain.model.CollectedSearchSource
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.asmr.player.data.local.datastore.SearchCacheStore
@@ -29,6 +30,7 @@ internal const val SEARCH_ASSIST_RESULT_PURCHASED_ONLY_KEY = "searchPurchasedOnl
 internal const val SEARCH_ASSIST_RESULT_PRESALE_ONLY_KEY = "searchPresaleOnly"
 internal const val SEARCH_ASSIST_RESULT_CHINESE_TRANSLATED_ONLY_KEY = "searchChineseTranslatedOnly"
 internal const val SEARCH_ASSIST_RESULT_COLLECTED_ONLY_KEY = "searchCollectedOnly"
+internal const val SEARCH_ASSIST_RESULT_COLLECTED_SOURCE_KEY = "searchCollectedSourceName"
 internal const val SEARCH_ASSIST_RESULT_HAS_SUBTITLE_KEY = "searchHasSubtitle"
 internal const val SEARCH_ASSIST_RESULT_ALL_AGES_KEY = "searchAllAges"
 internal const val SEARCH_ASSIST_RESULT_COLLECTED_SORT_KEY = "searchCollectedSortName"
@@ -42,6 +44,7 @@ data class SearchAssistSearchRequest(
     val presaleOnly: Boolean = false,
     val chineseTranslatedOnly: Boolean = false,
     val collectedOnly: Boolean = true,
+    val collectedSourceName: String = CollectedSearchSource.AsmrOne.name,
     val hasSubtitle: Boolean = false,
     val allAges: Boolean = false,
     val collectedSortName: String = SearchCollectedSortOption.ReleaseNew.name,
@@ -55,11 +58,12 @@ data class SearchAssistSearchRequest(
             purchasedOnly = purchasedOnly,
             presaleOnly = presaleOnly,
             chineseTranslatedOnly = chineseTranslatedOnly,
-            collectedOnly = collectedOnly
+            collectedOnly = collectedOnly,
+            collectedSourceName = collectedSourceName
         )
 
     val selectedCollectedSort: SearchCollectedSortOption
-        get() = SearchCollectedSortOption.fromName(collectedSortName)
+        get() = normalizedCollectedSort(collectedSourceName, SearchCollectedSortOption.fromName(collectedSortName))
 }
 
 @HiltViewModel

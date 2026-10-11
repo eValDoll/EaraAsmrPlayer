@@ -1,5 +1,10 @@
 package com.asmr.player.ui.search
 
+import com.asmr.player.domain.model.CollectedSearchSource
+
+internal fun normalizedCollectedSort(sourceName: String?, sort: SearchCollectedSortOption): SearchCollectedSortOption =
+    if (CollectedSearchSource.fromName(sourceName) == CollectedSearchSource.JapaneseAsmr) SearchCollectedSortOption.ReleaseNew else sort
+
 enum class SearchSortOption(
     val label: String,
     val dlsiteOrder: String

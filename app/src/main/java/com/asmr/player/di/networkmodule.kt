@@ -27,11 +27,21 @@ import com.asmr.player.subtitle.DEEPSEEK_TRANSLATION_CONCURRENCY
 import com.asmr.player.util.MessageManager
 import com.asmr.player.util.ASMR_ONE_SITE_FAILURE_MESSAGE
 import com.asmr.player.util.DlsiteAntiHotlink
+import com.asmr.player.util.JapaneseAsmrAntiHotlink
 import com.google.gson.Gson
 import java.io.IOException
 
 internal const val DEEPSEEK_HTTP_CLIENT = "deepseek"
 private val ASMR_ONE_SITE_DOMAINS = setOf("asmr.one", "asmr-100.com", "asmr-200.com", "asmr-300.com")
+
+private val earaBackendHost: String?
+    get() = BuildConfig.LISTEN_TOGETHER_BASE_URL
+        .toHttpUrlOrNull()
+        ?.host
+        ?.lowercase()
+
+private fun isEaraBackendHost(host: String): Boolean =
+    earaBackendHost?.let { host == it } == true
 
 internal fun createDeepSeekDispatcher(): Dispatcher = Dispatcher().apply {
     maxRequests = DEEPSEEK_TRANSLATION_CONCURRENCY
@@ -43,6 +53,28 @@ internal fun isAsmrOneSiteRequest(host: String, encodedPath: String): Boolean {
     return ASMR_ONE_SITE_DOMAINS.any { domain ->
         normalizedHost == domain || normalizedHost.endsWith(".$domain")
     } || encodedPath.startsWith("/api/asmr-one/")
+}
+
+internal fun createImageHeadersInterceptor(deviceIdProvider: () -> String): Interceptor = Interceptor { chain ->
+    val request = chain.request()
+    val host = request.url.host.lowercase()
+    val builder = request.newBuilder().header("User-Agent", NetworkHeaders.USER_AGENT)
+
+    if (isEaraBackendHost(host)) {
+        builder.header(NetworkHeaders.HEADER_EARA_DEVICE_ID, deviceIdProvider())
+    }
+    if (host.contains("asmr.one") || host.contains("asmr-100.com") || host.contains("asmr-200.com") || host.contains("asmr-300.com")) {
+        builder.header("Origin", "https://www.asmr.one")
+        builder.header("Referer", "https://www.asmr.one/")
+    } else {
+        val headers = JapaneseAsmrAntiHotlink.headersForImageHost(host).ifEmpty {
+            DlsiteAntiHotlink.headersForImageUrl(request.url.toString())
+        }
+        headers.forEach { (key, value) ->
+            if (request.header(key) == null) builder.header(key, value)
+        }
+    }
+    chain.proceed(builder.build())
 }
 
 @Module
@@ -98,6 +130,9 @@ object NetworkModule {
                 if (request.header("Referer") == null) {
                     builder.header("Referer", "https://www.dlsite.com/")
                 }
+            }
+            JapaneseAsmrAntiHotlink.headersForImageHost(host).forEach { (key, value) ->
+                if (request.header(key) == null) builder.header(key, value)
             }
             
             try {
@@ -163,32 +198,7 @@ object NetworkModule {
             redactHeader("Proxy-Authorization")
             level = HttpLoggingInterceptor.Level.BASIC
         }
-        val headers = Interceptor { chain ->
-            val request = chain.request()
-            val host = request.url.host.lowercase()
-
-            val builder = request.newBuilder()
-                .header("User-Agent", NetworkHeaders.USER_AGENT)
-
-            if (isEaraBackendHost(host)) {
-                builder.header(NetworkHeaders.HEADER_EARA_DEVICE_ID, deviceIdentityStore.getOrCreateDeviceId())
-            }
-
-            if (host.contains("asmr.one")) {
-                builder.header("Origin", "https://www.asmr.one")
-                builder.header("Referer", "https://www.asmr.one/")
-            } else if (host.contains("asmr-100.com") || host.contains("asmr-200.com") || host.contains("asmr-300.com")) {
-                builder.header("Origin", "https://www.asmr.one")
-                builder.header("Referer", "https://www.asmr.one/")
-            } else {
-                val dlsiteHeaders = DlsiteAntiHotlink.headersForImageUrl(request.url.toString())
-                dlsiteHeaders.forEach { (k, v) ->
-                    if (request.header(k) == null) builder.header(k, v)
-                }
-            }
-
-            chain.proceed(builder.build())
-        }
+        val headers = createImageHeadersInterceptor(deviceIdentityStore::getOrCreateDeviceId)
 
         val dispatcher = Dispatcher().apply {
             maxRequests = 32
@@ -256,13 +266,4 @@ object NetworkModule {
         return retrofit.create(Asmr300Api::class.java)
     }
 
-    private val earaBackendHost: String?
-        get() = BuildConfig.LISTEN_TOGETHER_BASE_URL
-            .toHttpUrlOrNull()
-            ?.host
-            ?.lowercase()
-
-    private fun isEaraBackendHost(host: String): Boolean {
-        return earaBackendHost?.let { host == it } == true
-    }
 }

@@ -23,6 +23,21 @@ class LongListPerformanceBenchmark {
     val benchmarkRule = MacrobenchmarkRule()
 
     @Test
+    @OptIn(ExperimentalMacrobenchmarkApi::class)
+    fun localFileCoordinationNavigationFrameTiming() {
+        benchmarkRule.measureRepeated(
+            packageName = PackageName,
+            metrics = listOf(FrameTimingGfxInfoMetric()),
+            compilationMode = CompilationMode.Ignore(),
+            startupMode = null,
+            iterations = FrameTimingIterations,
+            setupBlock = { startMainActivity(clearData = false) }
+        ) {
+            device.performPrimaryNavigationClickProfile()
+        }
+    }
+
+    @Test
     fun startupColdMainActivity() {
         benchmarkRule.measureRepeated(
             packageName = PackageName,

@@ -689,10 +689,6 @@ class PlayerViewModel @Inject constructor(
             messageManager.showError("播放器未连接")
             return
         }
-        if (startTrack.path.contains(".m3u8", ignoreCase = true)) {
-            messageManager.showError("当前不支持 m3u8 流媒体，请先下载音频文件")
-            return
-        }
         val items = tracks.map { MediaItemFactory.fromTrack(album, it) }
         val index = tracks.indexOfFirst { it.path == startTrack.path }.coerceAtLeast(0)
         playerConnection.setQueue(items = items, startIndex = index, startPositionMs = startPositionMs, playWhenReady = true)
@@ -706,10 +702,6 @@ class PlayerViewModel @Inject constructor(
     ): Boolean {
         if (playerConnection.getControllerOrNull() == null) {
             messageManager.showError("播放器未连接")
-            return false
-        }
-        if (startTrack.path.contains(".m3u8", ignoreCase = true)) {
-            messageManager.showError("当前不支持 m3u8 流媒体，请先下载音频文件")
             return false
         }
         val (items, index) = withContext(Dispatchers.Default) {

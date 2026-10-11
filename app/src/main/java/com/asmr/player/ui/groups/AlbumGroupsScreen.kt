@@ -1,5 +1,7 @@
 package com.asmr.player.ui.groups
 
+import com.asmr.player.ui.common.LocalMainHeaderPadding
+
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -118,14 +120,14 @@ fun AlbumGroupsScreen(
                         headline = "还没有创建分组",
                         sectionIcon = Icons.Rounded.Folder,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current + 88.dp)
+                        contentPadding = PaddingValues(top = LocalMainHeaderPadding.current, bottom = LocalBottomOverlayPadding.current + 88.dp)
                     )
                 } else {
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
                         flingBehavior = rememberCalmScrollableFlingBehavior(),
-                        contentPadding = PaddingValues(horizontal = AlbumGroupsPageHorizontalPadding, vertical = 8.dp)
+                        contentPadding = PaddingValues(start = AlbumGroupsPageHorizontalPadding, end = AlbumGroupsPageHorizontalPadding, top = LocalMainHeaderPadding.current + 8.dp, bottom = 8.dp)
                             .withAddedBottomPadding(LocalBottomOverlayPadding.current + 72.dp),
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {

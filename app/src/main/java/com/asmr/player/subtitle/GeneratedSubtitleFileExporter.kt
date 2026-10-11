@@ -1,5 +1,9 @@
 package com.asmr.player.subtitle
 
+import com.asmr.player.util.LocalFileScopes
+import com.asmr.player.util.withSubtitleFileAccess
+import com.asmr.player.util.LocalFileSnapshot
+
 import android.content.Context
 import android.net.Uri
 import android.provider.DocumentsContract
@@ -22,6 +26,13 @@ internal sealed interface GeneratedSubtitleExportResult {
     data object UnsupportedTrackLocation : GeneratedSubtitleExportResult
 }
 
+internal data class GeneratedSubtitleOutputSnapshot(
+    val directory: String,
+    val fileName: String,
+    val reference: String?,
+    val version: LocalFileSnapshot?,
+)
+
 /**
  * 把自动生成的中文字幕导出为音频同目录、同名的 LRC 文件。
  *
@@ -32,20 +43,35 @@ internal class GeneratedSubtitleFileExporter(
     private val database: AppDatabase,
     private val storage: DownloadStorageGateway = DownloadStorageGateway(context)
 ) {
+    private val fileScopes = LocalFileScopes(database, storage)
+
     suspend fun export(
         trackId: Long,
-        overwriteExisting: Boolean = true
+        overwriteExisting: Boolean = true,
+        expectedOutput: GeneratedSubtitleOutputSnapshot? = null,
+    ): GeneratedSubtitleExportResult =
+        database.withSubtitleFileAccess(fileScopes, fileScopes.tracks(listOf(trackId)), "track:$trackId") {
+            exportLocked(trackId, overwriteExisting, expectedOutput)
+        }
+
+    private suspend fun exportLocked(
+        trackId: Long,
+        overwriteExisting: Boolean,
+        expectedOutput: GeneratedSubtitleOutputSnapshot?,
     ): GeneratedSubtitleExportResult = withContext(Dispatchers.IO) {
         val track = database.trackDao().getTrackByIdOnce(trackId)
             ?: return@withContext GeneratedSubtitleExportResult.UnsupportedTrackLocation
         val target = resolveTarget(track.path)
             ?: return@withContext GeneratedSubtitleExportResult.UnsupportedTrackLocation
+        val source = LocalFileSnapshot.read(context, track.path)
         val subtitles = database.trackDao().getSubtitlesForTrack(trackId).sortedWith(SUBTITLE_ORDER)
         check(subtitles.isNotEmpty()) { "没有可导出的字幕" }
         val existing = storage.findFile(target.directory, target.fileName)
+        expectedOutput?.let { requireOutputUnchanged(it) }
         if (existing != null && !overwriteExisting) {
             return@withContext GeneratedSubtitleExportResult.ExistingFilePreserved(existing)
         }
+        source.requireUnchanged(context, track.path)
         val reference = storage.ensureFile(
             directory = target.directory,
             name = target.fileName,
@@ -54,7 +80,22 @@ internal class GeneratedSubtitleFileExporter(
         storage.openOutput(reference).buffered().use { output ->
             output.write(renderChineseLrc(subtitles).toByteArray(Charsets.UTF_8))
         }
+        source.requireUnchanged(context, track.path)
+        check(storage.exists(reference)) { "字幕文件已移动或删除" }
         GeneratedSubtitleExportResult.Exported(reference)
+    }
+
+    suspend fun captureOutput(trackId: Long): GeneratedSubtitleOutputSnapshot? = withContext(Dispatchers.IO) {
+        val track = database.trackDao().getTrackByIdOnce(trackId) ?: return@withContext null
+        val target = resolveTarget(track.path) ?: return@withContext null
+        val reference = storage.findFile(target.directory, target.fileName)
+        GeneratedSubtitleOutputSnapshot(target.directory, target.fileName, reference, reference?.let { LocalFileSnapshot.read(context, it) })
+    }
+
+    suspend fun requireOutputUnchanged(snapshot: GeneratedSubtitleOutputSnapshot) = withContext(Dispatchers.IO) {
+        val current = storage.findFile(snapshot.directory, snapshot.fileName)
+        check(current == snapshot.reference) { "字幕文件在任务期间已被修改，已停止写入" }
+        snapshot.reference?.let { snapshot.version?.requireUnchanged(context, it) }
     }
 
     private fun resolveTarget(trackPath: String): SubtitleExportTarget? {

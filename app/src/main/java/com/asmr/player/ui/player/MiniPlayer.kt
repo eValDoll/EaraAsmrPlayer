@@ -1,5 +1,7 @@
 package com.asmr.player.ui.player
 
+import com.asmr.player.ui.common.formatStoredArtist
+
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Animatable
@@ -352,7 +354,7 @@ fun MiniPlayer(
                                         color = colorScheme.textPrimary
                                     )
                                     Text(
-                                        text = metadata.artist?.toString().orEmpty(),
+                                        text = remember(metadata.artist) { formatStoredArtist(metadata.artist?.toString().orEmpty()) },
                                         modifier = Modifier.graphicsLayer {
                                             compositingStrategy = CompositingStrategy.Offscreen
                                         },

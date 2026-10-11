@@ -1,5 +1,7 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.ui.common.parseCvNames
+
 import com.asmr.player.translation.translatedPageText
 
 import androidx.compose.animation.animateContentSize
@@ -92,14 +94,6 @@ internal fun rememberAlbumMetaCopyAction(
     }
 }
 
-private fun parseAlbumCvNames(cvText: String): List<String> {
-    return cvText
-        .split(',', '，', '、', '/', '\n', ';', '；', '|')
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .distinct()
-}
-
 private fun normalizeAlbumTags(tags: List<String>): List<String> {
     return tags
         .map { it.trim() }
@@ -116,7 +110,7 @@ internal fun AlbumCvChipsSingleLine(
     onCvLongClick: ((String) -> Unit)? = null,
     leadingVisual: AlbumMetaLeadingVisual = AlbumMetaLeadingVisual.None,
 ) {
-    val cvs = remember(cvText) { parseAlbumCvNames(cvText) }
+    val cvs = remember(cvText) { parseCvNames(cvText) }
     if (cvs.isEmpty()) return
 
     Row(
@@ -168,7 +162,7 @@ internal fun AlbumCvChipsFlow(
     onCvLongClick: ((String) -> Unit)? = null,
     leadingVisual: AlbumMetaLeadingVisual = AlbumMetaLeadingVisual.None,
 ) {
-    val cvs = remember(cvText) { parseAlbumCvNames(cvText) }
+    val cvs = remember(cvText) { parseCvNames(cvText) }
     if (cvs.isEmpty()) return
 
     FlowRow(
@@ -294,7 +288,7 @@ internal fun AlbumHeaderCvFlow(
     onCvClick: ((String) -> Unit)? = null,
     onCvLongClick: ((String) -> Unit)? = null,
 ) {
-    val cvs = remember(cvText) { parseAlbumCvNames(cvText) }
+    val cvs = remember(cvText) { parseCvNames(cvText) }
     if (cvs.isEmpty()) return
     var expanded by rememberSaveable(cvText) { mutableStateOf(false) }
 

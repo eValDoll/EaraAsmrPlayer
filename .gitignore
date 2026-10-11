@@ -17,6 +17,13 @@ prompts/
 # 本地开发/分析临时数据（设备备份、字幕导出样本等）
 .dev-data/
 
+# 本地方案、调查与分析记录不纳入版本控制
+docs/plans/
+docs/*-plan.md
+docs/*-proposal.md
+docs/*-investigation.md
+docs/*-design.md
+
 .gradle/
 .gradle-home
 .gradle-user-home/

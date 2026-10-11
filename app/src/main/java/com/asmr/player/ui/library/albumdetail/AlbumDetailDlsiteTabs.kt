@@ -1,5 +1,12 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.data.remote.crawler.AlbumResourceSource
+
+import com.asmr.player.ui.common.AudioMetadataLine
+import com.asmr.player.ui.common.formatCvNames
+import com.asmr.player.ui.common.audioSource
+import com.asmr.player.ui.common.rememberAudioMetadata
+
 import com.asmr.player.translation.translatedPageText
 
 import android.content.Intent
@@ -544,19 +551,14 @@ private fun DlsiteTrialLoadingList() {
 @Composable
 private fun DlsiteTrialAudioItem(
     track: Track,
+    albumCv: String,
     onClick: () -> Unit,
     onAddToPlaylist: (() -> Unit)? = null,
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val isOnline = remember(track.path) { track.path.trim().startsWith("http", ignoreCase = true) }
-    val durationText = remember(track.duration) { Formatting.formatTrackSeconds(track.duration) }
-    val subtitleText = remember(isOnline, durationText) {
-        when {
-            isOnline && durationText.isNotBlank() -> "在线 · $durationText"
-            isOnline -> "在线"
-            durationText.isNotBlank() -> durationText
-            else -> "在线播放"
-        }
+    val audioMetadata = rememberAudioMetadata(track.path)
+    val durationText = remember(track.duration, audioMetadata?.durationSeconds) {
+        Formatting.formatTrackSeconds(track.duration.takeIf { it > 0 } ?: audioMetadata?.durationSeconds)
     }
 
     Row(
@@ -583,10 +585,11 @@ private fun DlsiteTrialAudioItem(
                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
                 color = colorScheme.textPrimary
             )
-            Text(
-                text = subtitleText,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
+            AudioMetadataLine(
+                text = remember(albumCv) { formatCvNames(albumCv) },
+                trailingText = durationText,
+                source = audioSource(track.path),
+                quality = audioMetadata?.quality,
                 style = MaterialTheme.typography.bodySmall,
                 color = colorScheme.textTertiary
             )
@@ -1124,6 +1127,8 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
     asmrOneTree: List<AsmrOneTrackNodeResponse>,
     isLoadingAsmrOne: Boolean,
     isLoadingTrial: Boolean,
+    resourceSource: AlbumResourceSource,
+    onResourceSourceChange: (AlbumResourceSource) -> Unit,
     onRefreshAsmrOne: () -> Unit,
     onRefreshTrial: () -> Unit,
     onDownloadTrial: () -> Unit,
@@ -1243,12 +1248,20 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
         item(key = "dlsite-header") { header() }
         item(key = "dlsite-one-header") {
             AlbumDetailSectionHeading(
-                title = if (asmrOneTree.isNotEmpty()) "ONE（已收录）" else "ONE",
+                title = if (resourceSource == AlbumResourceSource.JapaneseAsmr) "JP-ASMR" else if (asmrOneTree.isNotEmpty()) "ONE（已收录）" else "ONE",
                 modifier = dlsiteAnimatedSectionModifier(
                     Modifier.fillMaxWidth().padding(start = AlbumDetailHorizontalPadding, end = AlbumDetailHorizontalPadding, top = 8.dp, bottom = 0.dp),
                     animateIntro = animateIntro
                 ),
                 actions = {
+                    com.asmr.player.ui.settings.SettingsDropdownSelector(
+                        label = "资源站点", value = resourceSource.name,
+                        options = AlbumResourceSource.entries.associate { it.name to it.label },
+                        onSelect = { name -> onResourceSourceChange(AlbumResourceSource.valueOf(name)) },
+                        modifier = Modifier.widthIn(min = 154.dp),
+                        showLabel = false, flatTrigger = true, singleLineOptions = true,
+                        tagPrefix = "album_resource_source"
+                    )
                     IconButton(
                         onClick = onRefreshAsmrOne,
                         enabled = !isLoadingAsmrOne,
@@ -1295,6 +1308,8 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                                         val leaf = asmrLeafByRelPath[file.path]
                                         DirectoryFileRow(
                                             file = file.copy(showSubtitleStamp = file.subtitleSources.isNotEmpty()),
+                                            loadAudioMetadata = !listState.isScrollInProgress,
+                                            albumCv = album.cv,
                                             loadRemoteFileSize = loadRemoteFileSize,
                                             onPrimary = {
                                                 when (file.fileType) {
@@ -1393,7 +1408,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                         }
                         DirectoryTreePanelState.Loading -> DlsiteDirectoryLoadingPanel()
                         DirectoryTreePanelState.Empty -> DlsiteSectionEmptyState(
-                            text = "ONE 暂未收录",
+                            text = "${if (resourceSource == AlbumResourceSource.JapaneseAsmr) "Japanese ASMR" else "ONE"} 暂未收录",
                             artworkKind = DlsiteEmptyArtworkKind.One,
                             modifier = Modifier
                         )
@@ -1588,6 +1603,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTabV2(
                     ) {
                         DlsiteTrialAudioItem(
                             track = track,
+                            albumCv = album.cv,
                             onClick = { onPlayTracks(album, audioTracks, track) },
                             onAddToPlaylist = { onAddToPlaylist(track) }
                         )
@@ -1817,6 +1833,8 @@ internal fun AlbumDlsitePlayBreadcrumbTabV2(
                                     val leaf = leafByRelPath[file.path]
                                     DirectoryFileRow(
                                         file = file.copy(showSubtitleStamp = file.subtitleSources.isNotEmpty()),
+                                        loadAudioMetadata = !listState.isScrollInProgress,
+                                        albumCv = album.cv,
                                         loadRemoteFileSize = loadRemoteFileSize,
                                         onPrimary = {
                                             when (file.fileType) {

@@ -15,6 +15,11 @@ object AppErrorMessageFormatter {
         "字幕翻译失败：",
         "字幕翻译模型返回格式错误：",
         "DeepSeek ",
+        "自定义翻译服务",
+        "无法连接 自定义翻译服务",
+        "无法与 自定义翻译服务",
+        "请先在设置中配置自定义翻译模型",
+        "请先在设置中配置 自定义翻译服务 API Key",
         "无法连接 DeepSeek",
         "无法与 DeepSeek",
         "请先在设置中配置 DeepSeek API Key"
@@ -68,7 +73,6 @@ object AppErrorMessageFormatter {
     private fun knownTechnicalMessage(message: String): String? {
         val lower = message.lowercase()
         return when {
-            ".m3u8" in lower -> "当前暂不支持在线播放该音频，请先下载后再播放"
             "401" in lower || "认证" in message || "登录" in message && ("失败" in message || "过期" in message) ->
                 "登录状态已失效，请重新登录后重试"
             "403" in lower || "访问被拒绝" in message -> "当前访问受限，请稍后再试"

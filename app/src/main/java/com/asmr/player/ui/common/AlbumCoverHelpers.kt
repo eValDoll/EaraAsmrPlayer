@@ -3,6 +3,7 @@ package com.asmr.player.ui.common
 import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.domain.model.Album
 import com.asmr.player.util.DlsiteAntiHotlink
+import com.asmr.player.util.JapaneseAsmrAntiHotlink
 import java.util.LinkedHashMap
 import kotlin.math.absoluteValue
 
@@ -47,15 +48,16 @@ fun albumCoverImageModel(
     synchronized(albumCoverModelCacheLock) {
         albumCoverModelCache[data]?.let { return it }
     }
+    val japaneseHeaders = JapaneseAsmrAntiHotlink.headersForImageUrl(data)
     val headers = if (data.startsWith("http", ignoreCase = true)) {
-        DlsiteAntiHotlink.headersForImageUrl(data)
+        japaneseHeaders.ifEmpty { DlsiteAntiHotlink.headersForImageUrl(data) }
     } else {
         emptyMap()
     }
     val model: Any = if (headers.isEmpty()) {
         data
     } else {
-        CacheImageModel(data = data, headers = headers, keyTag = "dlsite")
+        CacheImageModel(data = data, headers = headers, keyTag = if (japaneseHeaders.isNotEmpty()) "jp-asmr" else "dlsite")
     }
     return synchronized(albumCoverModelCacheLock) {
         albumCoverModelCache[data] ?: model.also { albumCoverModelCache[data] = it }

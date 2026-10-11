@@ -10,6 +10,7 @@ import java.io.IOException
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -21,6 +22,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
+import okhttp3.logging.HttpLoggingInterceptor
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.job
@@ -54,16 +56,36 @@ private data class DeepSeekResponseFormat(
 private data class DeepSeekChatRequest(
     val model: String = DEEPSEEK_SUBTITLE_MODEL,
     val messages: List<DeepSeekChatMessage>,
-    val thinking: DeepSeekThinking = DeepSeekThinking(),
+    val thinking: DeepSeekThinking? = DeepSeekThinking(),
     @SerializedName("reasoning_effort")
     val reasoningEffort: String? = "high",
     @SerializedName("response_format")
     val responseFormat: DeepSeekResponseFormat? = DeepSeekResponseFormat(),
     val tools: List<DeepSeekToolDefinition>? = null,
     @SerializedName("max_tokens")
-    val maxTokens: Int = 32_768,
+    val maxTokens: Int = DEFAULT_TRANSLATION_MAX_OUTPUT_TOKENS,
     val stream: Boolean = false
 )
+
+private fun DeepSeekChatRequest.forApi(config: TranslationApiConfig): DeepSeekChatRequest =
+    if (config.isDeepSeek) copy(model = config.model) else copy(
+        model = config.model,
+        messages = messages.map { it.copy(reasoningContent = null) },
+        thinking = null,
+        reasoningEffort = config.customReasoningEffortValue,
+        responseFormat = null,
+        maxTokens = config.maxOutputTokens
+    )
+
+private fun requiresMaxCompletionTokens(raw: String): Boolean = runCatching {
+    val error = JsonParser.parseString(raw).asJsonObject.getAsJsonObject("error") ?: return@runCatching false
+    fun field(name: String): String = error.get(name)?.takeUnless { it.isJsonNull }?.asString.orEmpty()
+    val message = field("message").lowercase(Locale.ROOT)
+    field("param") == "max_tokens" && field("code") in setOf(
+        "unsupported_parameter", "unknown_parameter", "unrecognized_parameter"
+    ) || message.contains("max_tokens") && message.contains("max_completion_tokens") &&
+        listOf("not supported", "unsupported", "instead", "deprecated").any(message::contains)
+}.getOrDefault(false)
 
 private data class DeepSeekToolDefinition(
     val type: String = "function",
@@ -83,8 +105,18 @@ private data class DeepSeekChatResponse(
 
 private data class DeepSeekChatUsage(
     @SerializedName("total_tokens")
-    val totalTokens: Long = 0L
-)
+    val totalTokens: Long? = null,
+    @SerializedName("prompt_tokens")
+    val promptTokens: Long? = null,
+    @SerializedName("completion_tokens")
+    val completionTokens: Long? = null
+) {
+    fun reportedTotal(): Long? = totalTokens?.takeIf { it >= 0L } ?: run {
+        val input = promptTokens?.takeIf { it >= 0L } ?: return null
+        val output = completionTokens?.takeIf { it >= 0L } ?: return null
+        if (Long.MAX_VALUE - input < output) Long.MAX_VALUE else input + output
+    }
+}
 
 private data class DeepSeekChoice(
     @SerializedName("finish_reason")
@@ -120,14 +152,18 @@ internal class SubtitleTranslationClient(
     private val gson: Gson,
     apiKey: String,
     private val settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings(),
-    private val apiUrl: String = DEEPSEEK_CHAT_COMPLETIONS_URL,
+    private val apiConfig: TranslationApiConfig = TranslationApiConfig(apiKey = apiKey),
+    private val apiUrl: String = apiConfig.completionsUrl,
     private val onTokenUsage: (Long) -> Unit = {}
 ) {
     private val normalizedApiKey = apiKey.trim().also {
-        require(it.isNotEmpty()) { "请先在设置中配置 DeepSeek API Key" }
+        require(it.isNotEmpty()) { "请先在设置中配置 ${apiConfig.serviceName} API Key" }
     }
     private val authorization = "Bearer $normalizedApiKey"
+    private val useMaxCompletionTokens = AtomicBoolean(false)
     private val callFactory: Call.Factory = okHttpClient.newBuilder()
+        .apply { interceptors().removeAll { it is HttpLoggingInterceptor } }
+        .followSslRedirects(false)
         .connectTimeout(20, TimeUnit.SECONDS)
         .readTimeout(5, TimeUnit.MINUTES)
         .writeTimeout(30, TimeUnit.SECONDS)
@@ -164,6 +200,13 @@ internal class SubtitleTranslationClient(
             workContext = workContext,
             scriptContext = scriptContext
         ).toMutableList()
+        var subtitleContextToolCallId: String? = null
+        // 台本检索预留更多轮次，但只有实际写入字幕才重置计数。
+        val maxStalledTurns = if (scriptContext?.files.orEmpty().isEmpty()) {
+            MAX_SUBTITLE_AGENT_STALLED_TURNS
+        } else {
+            MAX_SUBTITLE_AGENT_SCRIPT_TURNS
+        }
         var stalledTurnCount = 0
         while (confirmedSourceCount < sources.size) {
             val response = requestSubtitleAgentResponse(
@@ -190,12 +233,17 @@ internal class SubtitleTranslationClient(
                         )
                     }
                     val toolResult = when (toolCall.function.name.orEmpty()) {
-                        SUBTITLE_READ_TOOL_NAME -> buildSubtitleReadToolResultMessage(
-                            gson = gson,
-                            toolCallId = toolCallId,
-                            sources = sources,
-                            confirmedCaptions = confirmed
-                        )
+                        SUBTITLE_READ_TOOL_NAME -> {
+                            buildSubtitleReadToolResultMessage(
+                                gson = gson,
+                                toolCallId = toolCallId,
+                                sources = sources,
+                                confirmedCaptions = confirmed,
+                                subtitleContextToolCallId = subtitleContextToolCallId
+                            ).also {
+                                if (subtitleContextToolCallId == null) subtitleContextToolCallId = toolCallId
+                            }
+                        }
 
                         SUBTITLE_WRITE_TOOL_NAME -> {
                             val remainingSources = sources.drop(confirmedSourceCount)
@@ -233,7 +281,6 @@ internal class SubtitleTranslationClient(
                         }
 
                         SCRIPT_LIST_TOOL_NAME -> scriptContext?.let { context ->
-                            madeProgress = true
                             buildScriptListToolResultMessage(gson, toolCallId, context)
                         } ?: buildSubtitleToolErrorMessage(
                             gson = gson,
@@ -250,7 +297,6 @@ internal class SubtitleTranslationClient(
                             }
                             parsed.fold(
                                 onSuccess = { args ->
-                                    madeProgress = true
                                     buildScriptReadToolResultMessage(
                                         gson = gson,
                                         toolCallId = toolCallId,
@@ -284,10 +330,10 @@ internal class SubtitleTranslationClient(
                 }
                 stalledTurnCount = if (madeProgress) 0 else stalledTurnCount + 1
             }
-            if (stalledTurnCount >= MAX_SUBTITLE_AGENT_STALLED_TURNS) {
+            if (stalledTurnCount >= maxStalledTurns) {
                 throw SubtitleTranslationException(
-                    message = "字幕翻译 agent 连续多轮没有写入字幕",
-                    retryable = true
+                    message = "字幕翻译连续多轮没有写入字幕，已停止，请手动重试",
+                    retryable = false
                 )
             }
         }
@@ -316,7 +362,8 @@ internal class SubtitleTranslationClient(
             circle = circle,
             cv = cv,
             trackTitles = trackTitles,
-            settings = settings
+            settings = settings,
+            apiConfig = apiConfig
         )
         val expectedTrackIds = trackTitles.map(Pair<Long, String>::first)
         return retrySubtitleTranslation(maxAttempts = maxAttempts, onAttempt = { _, _ -> }, onRetry = { _, _, _ -> }) {
@@ -346,13 +393,15 @@ internal class SubtitleTranslationClient(
         require(allCaptions.map(PolishCaptionInput::captionId).distinct().size == allCaptions.size) {
             "润色字幕主键不能重复"
         }
+        if (allCaptions.isEmpty()) return emptyList()
+        val originalChineseById = allCaptions.associate { it.captionId to it.chinese }
         val messages = buildPolishAgentInitialMessages(
             gson = gson,
             tracks = tracks,
             workContext = workContext
         ).toMutableList()
         val polishedByCaptionId = HashMap<Long, String>()
-        // 服务端维护读取游标：read 每次翻页，直至全部条目展示完毕即视为检查完成。
+        // 服务端维护读取游标；读到空页或全部字幕已写入时结束。
         var nextReadOffset = 0
         var readCompleted = false
         var stalledTurnCount = 0
@@ -389,7 +438,7 @@ internal class SubtitleTranslationClient(
                                 polishedByCaptionId = polishedByCaptionId,
                                 offset = nextReadOffset
                             )
-                            // read 翻页：每次调用展示一页，游标前进；全部展示完则完成。
+                            // 最后一页仍需检查；下一次调用读到空页才确认完成。
                             if (nextReadOffset < allCaptions.size) {
                                 nextReadOffset = (nextReadOffset + POLISH_READ_PAGE_SIZE)
                                     .coerceAtMost(allCaptions.size)
@@ -404,14 +453,22 @@ internal class SubtitleTranslationClient(
                             val parsed = runCatching {
                                 parsePolishWriteToolArguments(
                                     arguments = toolCall.function.arguments.orEmpty(),
-                                    expectedCaptions = allCaptions
-                                )
+                                    expectedCaptions = allCaptions.take(nextReadOffset)
+                                ).also { results ->
+                                    require(results.none { it.captionId in polishedByCaptionId }) {
+                                        "字幕已经润色，不能重复写入；请处理其他字幕或读取下一页"
+                                    }
+                                }
                             }
                             parsed.fold(
                                 onSuccess = { results ->
-                                    onCaptionsPolished(results)
+                                    val changes = results.filter {
+                                        it.chinese != originalChineseById[it.captionId]
+                                    }
+                                    if (changes.isNotEmpty()) onCaptionsPolished(changes)
                                     results.forEach { polishedByCaptionId[it.captionId] = it.chinese }
                                     madeProgress = true
+                                    if (polishedByCaptionId.size == allCaptions.size) readCompleted = true
                                     buildPolishWriteToolResultMessage(
                                         gson = gson,
                                         toolCallId = toolCallId,
@@ -440,10 +497,10 @@ internal class SubtitleTranslationClient(
                 }
                 stalledTurnCount = if (madeProgress) 0 else stalledTurnCount + 1
             }
-            if (stalledTurnCount >= MAX_POLISH_AGENT_STALLED_TURNS) {
+            if (!readCompleted && stalledTurnCount >= MAX_POLISH_AGENT_STALLED_TURNS) {
                 throw SubtitleTranslationException(
-                    message = "润色 agent 连续多轮没有写入字幕",
-                    retryable = true
+                    message = "字幕润色连续多轮没有处理新字幕，已停止，请手动重试",
+                    retryable = false
                 )
             }
         }
@@ -465,14 +522,16 @@ internal class SubtitleTranslationClient(
             buildPolishAgentRequest(
                 gson = gson,
                 messages = messages,
-                settings = settings
+                settings = settings,
+                apiConfig = apiConfig
             )
         } else {
             buildDeepSeekSubtitleAgentRequest(
                 gson = gson,
                 messages = messages,
                 settings = settings,
-                scriptContext = scriptContext
+                scriptContext = scriptContext,
+                apiConfig = apiConfig
             )
         }
         return executeTranslationRequest(
@@ -491,11 +550,17 @@ internal class SubtitleTranslationClient(
         targetIndices: List<Int>,
         parseMessage: (DeepSeekChatMessage, finishReason: String?) -> T
     ): T = withContext(Dispatchers.IO) {
+        val useCompletionLimit = !apiConfig.isDeepSeek && useMaxCompletionTokens.get()
+        val body = if (useCompletionLimit) {
+            val json = JsonParser.parseString(requestBody).asJsonObject
+            json.add("max_completion_tokens", json.remove("max_tokens"))
+            gson.toJson(json)
+        } else requestBody
         val request = Request.Builder()
             .url(apiUrl)
             .header("Authorization", authorization)
             .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
-            .post(requestBody.toRequestBody(JSON_MEDIA_TYPE))
+            .post(body.toRequestBody(JSON_MEDIA_TYPE))
             .build()
 
         val call = callFactory.newCall(request)
@@ -508,7 +573,7 @@ internal class SubtitleTranslationClient(
             throw cancelled
         } catch (error: IOException) {
             throw SubtitleTranslationException(
-                message = SubtitleFailureMessages.network(error),
+                message = SubtitleFailureMessages.network(error, apiConfig.serviceName),
                 retryable = true,
                 cause = error
             )
@@ -517,9 +582,17 @@ internal class SubtitleTranslationClient(
             response.use {
                 val raw = it.body?.string().orEmpty()
                 if (!it.isSuccessful) {
+                    if (!apiConfig.isDeepSeek && !useCompletionLimit &&
+                        it.code in listOf(400, 422) && requiresMaxCompletionTokens(raw)) {
+                        // 只切换被明确拒绝的参数名，保留用户设置的上限。
+                        useMaxCompletionTokens.set(true)
+                        return@withContext executeTranslationRequest(requestBody, targetIndices, parseMessage)
+                    }
                     val failure = SubtitleFailureMessages.deepSeekHttp(
                         statusCode = it.code,
-                        serviceMessage = parseDeepSeekErrorMessage(raw)
+                        serviceMessage = parseDeepSeekErrorMessage(raw),
+                        serviceName = apiConfig.serviceName,
+                        custom = !apiConfig.isDeepSeek
                     )
                     throw SubtitleTranslationException(
                         message = failure.message,
@@ -530,9 +603,9 @@ internal class SubtitleTranslationClient(
                 val deepSeekResponse = runCatching {
                     gson.fromJson(raw, DeepSeekChatResponse::class.java)
                 }.getOrNull()
-                deepSeekResponse?.usage?.totalTokens?.takeIf { totalTokens -> totalTokens > 0L }?.let { totalTokens ->
+                deepSeekResponse?.usage?.reportedTotal()?.takeIf { totalTokens -> totalTokens > 0L }?.let { totalTokens ->
                     runCatching { onTokenUsage(totalTokens) }
-                        .onFailure { error -> Log.w(TAG, "记录 DeepSeek token 用量失败", error) }
+                        .onFailure { error -> Log.w(TAG, "记录翻译 token 用量失败", error) }
                 }
                 val choice = deepSeekResponse?.choices?.firstOrNull()
                 val message = choice?.message ?: DeepSeekChatMessage(role = "assistant")
@@ -658,8 +731,8 @@ internal const val POLISH_READ_TOOL_NAME = "read_subtitle_polish_state"
 internal const val POLISH_WRITE_TOOL_NAME = "write_polished_chinese_subtitles"
 internal const val SCRIPT_LIST_TOOL_NAME = "list_work_script_files"
 internal const val SCRIPT_READ_TOOL_NAME = "read_work_script_file"
-private const val DEEPSEEK_CHAT_COMPLETIONS_URL = "https://api.deepseek.com/chat/completions"
 private const val MAX_SUBTITLE_AGENT_STALLED_TURNS = 4
+private const val MAX_SUBTITLE_AGENT_SCRIPT_TURNS = 8
 private const val MAX_POLISH_AGENT_STALLED_TURNS = 4
 private const val POLISH_READ_PAGE_SIZE = 40
 private const val SCRIPT_READ_DEFAULT_LIMIT = 4_000
@@ -725,7 +798,8 @@ internal fun buildDeepSeekTitleTranslationRequest(
     circle: String,
     cv: String,
     trackTitles: List<Pair<Long, String>>,
-    settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings()
+    settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings(),
+    apiConfig: TranslationApiConfig = TranslationApiConfig(apiKey = "")
 ): String {
     require(albumTitle.isNotBlank())
     require(trackTitles.isNotEmpty())
@@ -745,7 +819,7 @@ internal fun buildDeepSeekTitleTranslationRequest(
             ),
             thinking = DeepSeekThinking(type = if (settings.thinkingEnabled) "enabled" else "disabled"),
             reasoningEffort = settings.reasoningEffort.wireValue.takeIf { settings.thinkingEnabled }
-        )
+        ).forApi(apiConfig)
     )
 }
 
@@ -839,7 +913,8 @@ internal fun buildDeepSeekSubtitleAgentRequest(
     gson: Gson,
     messages: List<DeepSeekChatMessage>,
     settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings(),
-    scriptContext: SubtitleScriptContext? = null
+    scriptContext: SubtitleScriptContext? = null,
+    apiConfig: TranslationApiConfig = TranslationApiConfig(apiKey = "")
 ): String {
     require(messages.isNotEmpty())
     return gson.toJson(
@@ -853,7 +928,7 @@ internal fun buildDeepSeekSubtitleAgentRequest(
             },
             responseFormat = null,
             tools = subtitleTranslationTools(scriptContext)
-        )
+        ).forApi(apiConfig)
     )
 }
 
@@ -889,7 +964,8 @@ internal fun buildPolishAgentInitialMessages(
 internal fun buildPolishAgentRequest(
     gson: Gson,
     messages: List<DeepSeekChatMessage>,
-    settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings()
+    settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings(),
+    apiConfig: TranslationApiConfig = TranslationApiConfig(apiKey = "")
 ): String {
     require(messages.isNotEmpty())
     return gson.toJson(
@@ -903,7 +979,7 @@ internal fun buildPolishAgentRequest(
             },
             responseFormat = null,
             tools = subtitlePolishTools()
-        )
+        ).forApi(apiConfig)
     )
 }
 
@@ -945,7 +1021,8 @@ internal fun buildPolishReadToolResultMessage(
                 )
             }
         )
-        put("completed", offset + page.size >= allCaptions.size)
+        // 最后一页仍需要模型检查、写入；下一次读到空页才结束。
+        put("completed", page.isEmpty())
     }
     return DeepSeekChatMessage(
         role = "tool",
@@ -991,6 +1068,7 @@ internal fun parsePolishWriteToolArguments(
     val captions = runCatching { root.getAsJsonArray("captions") }
         .getOrElse { throw IllegalArgumentException("captions 不是数组", it) }
         ?: throw IllegalArgumentException("缺少 captions 数组")
+    require(captions.size() > 0) { "润色 captions 不能为空；无需修改时请读取下一页" }
     val parsed = captions.map { element ->
         val item = element.takeIf { it.isJsonObject }?.asJsonObject
             ?: throw IllegalArgumentException("润色条目不是对象")
@@ -1052,30 +1130,35 @@ internal fun buildSubtitleReadToolResultMessage(
     gson: Gson,
     toolCallId: String,
     sources: List<GeneratedSubtitleSource>,
-    confirmedCaptions: List<GeneratedSubtitleCaption>
+    confirmedCaptions: List<GeneratedSubtitleCaption>,
+    subtitleContextToolCallId: String? = null
 ): DeepSeekChatMessage {
     require(toolCallId.isNotBlank())
     val confirmedSourceCount = confirmedCaptions.sumOf { it.sourceIndices.size }
     require(confirmedSourceCount in 0..sources.size)
     val nextSource = sources.getOrNull(confirmedSourceCount)
     val result = buildMap<String, Any> {
-        put("japanese_subtitles", sources.map { source ->
-            mapOf(
-                "index" to source.index,
-                "start_ms" to source.startMs,
-                "end_ms" to source.endMs,
-                "japanese" to source.text
-            )
-        })
-        put("completed_chinese_subtitles", confirmedCaptions.map { caption ->
-            mapOf(
-                "source_indices" to caption.sourceIndices,
-                "start_ms" to caption.startMs,
-                "end_ms" to caption.endMs,
-                "japanese" to caption.correctedJapanese,
-                "chinese" to caption.chineseText
-            )
-        })
+        if (subtitleContextToolCallId == null) {
+            put("japanese_subtitles", sources.map { source ->
+                mapOf(
+                    "index" to source.index,
+                    "start_ms" to source.startMs,
+                    "end_ms" to source.endMs,
+                    "japanese" to source.text
+                )
+            })
+            put("completed_chinese_subtitles", confirmedCaptions.map { caption ->
+                mapOf(
+                    "source_indices" to caption.sourceIndices,
+                    "start_ms" to caption.startMs,
+                    "end_ms" to caption.endMs,
+                    "japanese" to caption.correctedJapanese,
+                    "chinese" to caption.chineseText
+                )
+            })
+        } else {
+            put("subtitle_context_tool_call_id", subtitleContextToolCallId)
+        }
         put("completed_source_count", confirmedSourceCount)
         put("remaining_source_count", sources.size - confirmedSourceCount)
         put("completed", nextSource == null)

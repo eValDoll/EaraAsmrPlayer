@@ -50,6 +50,9 @@ interface SubtitleTaskDao {
     @Query("SELECT COUNT(*) FROM subtitle_task_items")
     suspend fun countAllItems(): Int
 
+    @Query("SELECT DISTINCT trackId FROM subtitle_task_items")
+    fun observeTaskTrackIds(): Flow<List<Long>>
+
     @Query(
         "SELECT * FROM subtitle_task_items WHERE state = 'QUEUED_TRANSCRIPTION' " +
             "ORDER BY queueSequence LIMIT 1"

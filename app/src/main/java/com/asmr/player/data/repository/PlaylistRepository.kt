@@ -110,7 +110,7 @@ class PlaylistRepository @Inject constructor(
             return@withLock PlaylistAddSummary(addedCount = 0, skippedCount = items.size)
         }
         val currentItems = playlistItemDao.getItemsOnce(playlistId)
-        val existingIds = currentItems.map { it.mediaId }.toHashSet()
+        val existingItems = currentItems.associateBy { it.mediaId }
         val stagedIds = linkedSetOf<String>()
         val toInsert = mutableListOf<PlaylistItemEntity>()
         var nextOrder = (currentItems.maxOfOrNull { it.itemOrder } ?: -1) + 1
@@ -118,15 +118,24 @@ class PlaylistRepository @Inject constructor(
 
         items.forEach { item ->
             val mediaId = item.mediaId.ifBlank { item.localConfiguration?.uri.toString().orEmpty() }.trim()
-            if (mediaId.isBlank() || !existingIds.add(mediaId) || !stagedIds.add(mediaId)) {
+            if (mediaId.isBlank() || !stagedIds.add(mediaId)) {
                 skipped += 1
                 return@forEach
             }
+            val existing = existingItems[mediaId]
             val mapped = PlaylistMediaItemMapper.fromMediaItem(
                 playlistId = playlistId,
                 item = item,
-                itemOrder = nextOrder++
+                itemOrder = existing?.itemOrder ?: nextOrder
             )
+            if (existing != null) {
+                if (mapped.remoteSubtitleSources.isNotBlank() && mapped.remoteSubtitleSources != existing.remoteSubtitleSources) {
+                    playlistItemDao.updateRemoteSubtitleSources(playlistId, mediaId, mapped.remoteSubtitleSources)
+                }
+                skipped += 1
+                return@forEach
+            }
+            nextOrder++
             toInsert += mapped.copy(artworkUri = resolvePlaylistItemArtwork(item, mapped.artworkUri))
         }
 

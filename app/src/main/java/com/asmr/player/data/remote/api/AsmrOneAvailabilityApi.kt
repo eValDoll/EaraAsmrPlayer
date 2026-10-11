@@ -8,6 +8,9 @@ import com.asmr.player.data.remote.withOnlineDirectoryRequestTimeouts
 import com.asmr.player.data.remote.withSearchTimeouts
 import com.asmr.player.listentogether.XxHash64
 import com.asmr.player.util.DlsiteWorkNo
+import com.asmr.player.util.AlbumWorkNo
+import com.asmr.player.domain.model.CollectedSearchSource
+import com.asmr.player.domain.model.CollectionAvailability
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
 import com.google.gson.reflect.TypeToken
@@ -27,7 +30,8 @@ import javax.inject.Singleton
 import kotlin.text.Charsets.UTF_8
 
 data class AsmrOneAvailabilityRequest(
-    val rjs: List<String>
+    val rjs: List<String>,
+    val includeJpAsmr: Boolean? = null
 )
 
 data class AsmrOneAvailabilityResponse(
@@ -41,7 +45,15 @@ data class AsmrOneAvailabilityItem(
     val workId: Int = 0,
     val matchedRjs: List<String> = emptyList(),
     val originalWorkno: String = "",
-    val title: String = ""
+    val title: String = "",
+    val sources: List<AsmrOneAvailabilitySource>? = null
+)
+
+data class AsmrOneAvailabilitySource(
+    val source: String = "",
+    val rj: String = "",
+    val workId: Int = 0,
+    val pageUrl: String = ""
 )
 
 data class AsmrOneCollectedSearchResponse(
@@ -58,6 +70,8 @@ data class AsmrOneCollectedSearchItem(
     val rj: String = "",
     @SerializedName(value = "sourceId", alternate = ["source_id"])
     val sourceId: String = "",
+    val source: String = "",
+    val pageUrl: String = "",
     val title: String = "",
     val circle: String = "",
     val cvs: List<String>? = emptyList(),
@@ -118,6 +132,7 @@ data class AsmrOneBackendTrackTreeResponse(
     val rj: String = "",
     val workId: Int = 0,
     val sourceIdDigits: String = "",
+    val pageUrl: String = "",
     val trackTree: List<AsmrOneTrackNodeResponse>? = emptyList(),
     val fetchedAt: String = "",
     val lastError: String = "",
@@ -148,10 +163,10 @@ class AsmrOneAvailabilityApi @Inject constructor(
     val isBackendConfigured: Boolean
         get() = backendBaseUrl.isNotBlank()
 
-    suspend fun check(rjs: List<String>): Map<String, Boolean> {
+    suspend fun check(rjs: List<String>): Map<String, CollectionAvailability> {
         val normalized = rjs
             .asSequence()
-            .map { DlsiteWorkNo.normalizeWorkNo(it, minimumDigits = 6) }
+            .map { AlbumWorkNo.normalizeWorkNo(it, minimumDigits = 6) }
             .filter { it.isNotBlank() }
             .distinct()
             .take(MAX_RJS)
@@ -159,13 +174,12 @@ class AsmrOneAvailabilityApi @Inject constructor(
         if (normalized.isEmpty() || backendBaseUrl.isBlank()) return emptyMap()
 
         return try {
-            val parsed = fetchAvailability(normalized) ?: return emptyMap()
+            val parsed = fetchAvailability(normalized, includeJpAsmr = true) ?: return emptyMap()
             val requested = normalized.toSet()
             buildMap {
                 parsed.items.forEach { item ->
-                    item.matchedRequestRjs(requested).forEach { rj ->
-                        put(rj, item.collected)
-                    }
+                    val rj = AlbumWorkNo.normalizeWorkNo(item.rj, minimumDigits = 6)
+                    if (rj in requested) item.toCollectionAvailability(rj)?.let { put(rj, it) }
                 }
             }
         } catch (error: CancellationException) {
@@ -192,7 +206,10 @@ class AsmrOneAvailabilityApi @Inject constructor(
         }
     }
 
-    private suspend fun fetchAvailability(normalized: List<String>): AsmrOneAvailabilityResponse? =
+    private suspend fun fetchAvailability(
+        normalized: List<String>,
+        includeJpAsmr: Boolean = false
+    ): AsmrOneAvailabilityResponse? =
         withContext(Dispatchers.IO) {
             val request = Request.Builder()
                 .url(resolveUrl("api/asmr-one/availability"))
@@ -201,7 +218,10 @@ class AsmrOneAvailabilityApi @Inject constructor(
                 .header("X-Listen-Together-Client-Session-Id", clientSessionId)
                 .header("X-Listen-Together-Device-Fingerprint", deviceFingerprint)
                 .header(NetworkHeaders.HEADER_SILENT_IO_ERROR, NetworkHeaders.SILENT_IO_ERROR_ON)
-                .post(gson.toJson(AsmrOneAvailabilityRequest(normalized)).toRequestBody(JSON_MEDIA_TYPE))
+                .post(
+                    gson.toJson(AsmrOneAvailabilityRequest(normalized, true.takeIf { includeJpAsmr }))
+                        .toRequestBody(JSON_MEDIA_TYPE)
+                )
                 .build()
             requestClient.newCall(request).awaitResponse().use { response ->
                 if (!response.isSuccessful) return@withContext null
@@ -217,7 +237,8 @@ class AsmrOneAvailabilityApi @Inject constructor(
         offset: Int,
         sort: String,
         hasSubtitle: Boolean = false,
-        allAges: Boolean = false
+        allAges: Boolean = false,
+        source: CollectedSearchSource = CollectedSearchSource.AsmrOne
     ): AsmrOneCollectedSearchResponse {
         if (backendBaseUrl.isBlank()) throw IOException("asmr.one backend is not configured")
         return withContext(Dispatchers.IO) {
@@ -228,7 +249,8 @@ class AsmrOneAvailabilityApi @Inject constructor(
                 offset = offset,
                 sort = sort,
                 hasSubtitle = hasSubtitle,
-                allAges = allAges
+                allAges = allAges,
+                source = source
             )
             val request = Request.Builder()
                 .url(url)
@@ -241,7 +263,7 @@ class AsmrOneAvailabilityApi @Inject constructor(
                 .build()
             requestClient.newCall(request).awaitResponse().use { response ->
                 if (!response.isSuccessful) {
-                    throw IOException("asmr.one search failed: HTTP ${response.code}")
+                    throw IOException("${source.apiPath} search failed: HTTP ${response.code}")
                 }
                 val raw = response.body?.string().orEmpty()
                 if (raw.isBlank()) return@withContext AsmrOneCollectedSearchResponse()
@@ -315,12 +337,19 @@ class AsmrOneAvailabilityApi @Inject constructor(
             }
         }
 
-    suspend fun getTrackTreeByRj(rj: String): AsmrOneBackendTrackTreeResponse {
+    suspend fun getTrackTreeByRj(
+        rj: String,
+        source: CollectedSearchSource = CollectedSearchSource.AsmrOne
+    ): AsmrOneBackendTrackTreeResponse {
         if (backendBaseUrl.isBlank()) throw IOException("asmr.one backend is not configured")
-        val normalizedRj = DlsiteWorkNo.normalizeWorkNo(rj, minimumDigits = 6)
-        if (normalizedRj.isBlank()) throw IOException("asmr.one tracks work number is invalid")
+        val normalizedRj = if (source == CollectedSearchSource.JapaneseAsmr) {
+            AlbumWorkNo.normalizeWorkNo(rj, minimumDigits = 6)
+        } else {
+            DlsiteWorkNo.normalizeWorkNo(rj, minimumDigits = 6)
+        }
+        if (normalizedRj.isBlank()) throw IOException("${source.apiPath} tracks work number is invalid")
         return withContext(Dispatchers.IO) {
-            val url = buildAsmrOneBackendTracksUrl(backendBaseUrl, normalizedRj)
+            val url = buildAsmrOneBackendTracksUrl(backendBaseUrl, normalizedRj, source)
             val request = Request.Builder()
                 .url(url)
                 .header("User-Agent", userAgent)
@@ -336,7 +365,7 @@ class AsmrOneAvailabilityApi @Inject constructor(
                     return@withContext AsmrOneBackendTrackTreeResponse(rj = normalizedRj)
                 }
                 if (!response.isSuccessful) {
-                    throw IOException("asmr.one tracks backend failed: HTTP ${response.code}")
+                    throw IOException("${source.apiPath} tracks backend failed: HTTP ${response.code}")
                 }
                 if (raw.isBlank()) return@withContext AsmrOneBackendTrackTreeResponse(rj = normalizedRj)
                 val responseType = object : TypeToken<AsmrOneBackendTrackTreeResponse>() {}.type
@@ -394,25 +423,30 @@ internal fun buildAsmrOneCollectedSearchUrl(
     offset: Int,
     sort: String,
     hasSubtitle: Boolean,
-    allAges: Boolean
+    allAges: Boolean,
+    source: CollectedSearchSource = CollectedSearchSource.AsmrOne
 ): HttpUrl {
-    return "${baseUrl.trimEnd('/')}/api/asmr-one/search"
+    return "${baseUrl.trimEnd('/')}/api/${source.apiPath}/search"
         .toHttpUrlOrNull()
         ?.newBuilder()
         ?.addQueryParameter("q", keyword.trim())
         ?.addQueryParameter("limit", limit.coerceIn(1, 100).toString())
         ?.addQueryParameter("offset", offset.coerceAtLeast(0).toString())
-        ?.addQueryParameter("sort", sort.trim().ifBlank { "release" })
+        ?.addQueryParameter("sort", if (source == CollectedSearchSource.JapaneseAsmr) "release" else sort.trim().ifBlank { "release" })
         ?.apply {
-            if (hasSubtitle) addQueryParameter("hasSubtitle", "true")
+            if (hasSubtitle && source == CollectedSearchSource.AsmrOne) addQueryParameter("hasSubtitle", "true")
             if (allAges) addQueryParameter("allAges", "true")
         }
         ?.build()
         ?: throw IOException("invalid asmr.one backend url")
 }
 
-internal fun buildAsmrOneBackendTracksUrl(baseUrl: String, rj: String): HttpUrl {
-    return "${baseUrl.trimEnd('/')}/api/asmr-one/tracks"
+internal fun buildAsmrOneBackendTracksUrl(
+    baseUrl: String,
+    rj: String,
+    source: CollectedSearchSource = CollectedSearchSource.AsmrOne
+): HttpUrl {
+    return "${baseUrl.trimEnd('/')}/api/${source.apiPath}/tracks"
         .toHttpUrlOrNull()
         ?.newBuilder()
         ?.addQueryParameter("rj", rj.trim().uppercase())
@@ -467,16 +501,22 @@ private fun List<String>.cleanRecommendationFeatureValues(limit: Int): List<Stri
         .toList()
 }
 
-private fun AsmrOneAvailabilityItem.matchedRequestRjs(requested: Set<String>): List<String> {
-    if (requested.isEmpty()) return emptyList()
-    return buildList {
-        add(rj)
-        add(originalWorkno)
-        addAll(matchedRjs)
+private fun AsmrOneAvailabilityItem.toCollectionAvailability(rj: String): CollectionAvailability? {
+    val sourceItems = sources ?: return CollectionAvailability(
+        hasAsmrOne = collected,
+        asmrOneWorkId = workId.takeIf { collected && it > 0 }
+    )
+    val one = sourceItems.firstOrNull {
+        it.source == "asmr.one" && AlbumWorkNo.normalizeWorkNo(it.rj, minimumDigits = 6) == rj
     }
-        .asSequence()
-        .map { it.trim().uppercase() }
-        .filter { it in requested }
-        .distinct()
-        .toList()
+    val jp = sourceItems.firstOrNull {
+        it.source == "jp-asmr" && AlbumWorkNo.normalizeWorkNo(it.rj, minimumDigits = 6) == rj
+    }
+    if (collected && one == null && jp == null) return null
+    return CollectionAvailability(
+        hasAsmrOne = one != null,
+        hasJapaneseAsmr = jp != null,
+        asmrOneWorkId = one?.workId?.takeIf { it > 0 },
+        japaneseAsmrPageUrl = jp?.pageUrl.orEmpty()
+    )
 }

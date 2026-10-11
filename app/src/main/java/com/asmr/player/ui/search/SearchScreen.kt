@@ -1,5 +1,9 @@
 package com.asmr.player.ui.search
 
+import com.asmr.player.domain.model.CollectedSearchSource
+import com.asmr.player.ui.common.LocalMainHeaderPadding
+import com.asmr.player.ui.common.progressiveHeaderContent
+
 import com.asmr.player.translation.PageTranslationHost
 
 import androidx.compose.animation.core.Spring
@@ -118,6 +122,7 @@ import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.cache.LazyListPreloader
+import com.asmr.player.ui.library.albumListCoverSize
 import com.asmr.player.cache.LazyStaggeredGridPreloader
 import com.asmr.player.ui.common.ActiveDropdownMenuItem
 import com.asmr.player.ui.common.CustomSearchBar
@@ -222,6 +227,8 @@ internal fun searchResultScrollKey(success: SearchUiState.Success?): String {
         append(success.chineseTranslatedOnly)
         append(':')
         append(success.collectedOnly)
+        append(':')
+        append(success.collectedSourceName)
         append(':')
         append(success.hasSubtitle)
         append(':')
@@ -328,6 +335,7 @@ fun SearchScreen(
     submittedSearchPresaleOnly: Boolean = false,
     submittedSearchChineseTranslatedOnly: Boolean = false,
     submittedSearchCollectedOnly: Boolean = true,
+    submittedSearchCollectedSourceName: String = CollectedSearchSource.AsmrOne.name,
     submittedSearchHasSubtitle: Boolean = false,
     submittedSearchAllAges: Boolean = false,
     submittedSearchCollectedSortName: String = SearchCollectedSortOption.ReleaseNew.name,
@@ -350,6 +358,7 @@ fun SearchScreen(
             submittedSearchPresaleOnly = submittedSearchPresaleOnly,
             submittedSearchChineseTranslatedOnly = submittedSearchChineseTranslatedOnly,
             submittedSearchCollectedOnly = submittedSearchCollectedOnly,
+            submittedSearchCollectedSourceName = submittedSearchCollectedSourceName,
             submittedSearchHasSubtitle = submittedSearchHasSubtitle,
             submittedSearchAllAges = submittedSearchAllAges,
             submittedSearchCollectedSortName = submittedSearchCollectedSortName,
@@ -376,6 +385,7 @@ private fun SearchScreenContent(
     submittedSearchPresaleOnly: Boolean = false,
     submittedSearchChineseTranslatedOnly: Boolean = false,
     submittedSearchCollectedOnly: Boolean = true,
+    submittedSearchCollectedSourceName: String = CollectedSearchSource.AsmrOne.name,
     submittedSearchHasSubtitle: Boolean = false,
     submittedSearchAllAges: Boolean = false,
     submittedSearchCollectedSortName: String = SearchCollectedSortOption.ReleaseNew.name,
@@ -390,6 +400,7 @@ private fun SearchScreenContent(
     var presaleOnly by rememberSaveable { mutableStateOf(false) }
     var chineseTranslatedOnly by rememberSaveable { mutableStateOf(false) }
     var collectedOnly by rememberSaveable { mutableStateOf(true) }
+    var collectedSourceName by rememberSaveable { mutableStateOf(CollectedSearchSource.AsmrOne.name) }
     var hasSubtitle by rememberSaveable { mutableStateOf(false) }
     var allAges by rememberSaveable { mutableStateOf(false) }
     var selectedCollectedSortName by rememberSaveable { mutableStateOf(SearchCollectedSortOption.ReleaseNew.name) }
@@ -398,15 +409,16 @@ private fun SearchScreenContent(
     val selectedOrder = remember(selectedOrderName) {
         SearchSortOption.values().firstOrNull { it.name == selectedOrderName } ?: SearchSortOption.Trend
     }
-    val selectedCollectedSort = remember(selectedCollectedSortName) {
-        SearchCollectedSortOption.fromName(selectedCollectedSortName)
+    val selectedCollectedSort = remember(selectedCollectedSortName, collectedSourceName) {
+        normalizedCollectedSort(collectedSourceName, SearchCollectedSortOption.fromName(selectedCollectedSortName))
     }
-    val selectedFilter = remember(purchasedOnly, presaleOnly, chineseTranslatedOnly, collectedOnly) {
+    val selectedFilter = remember(purchasedOnly, presaleOnly, chineseTranslatedOnly, collectedOnly, collectedSourceName) {
         SearchFilterOption.fromState(
             purchasedOnly = purchasedOnly,
             presaleOnly = presaleOnly,
             chineseTranslatedOnly = chineseTranslatedOnly,
-            collectedOnly = collectedOnly
+            collectedOnly = collectedOnly,
+            collectedSourceName = collectedSourceName
         )
     }
     val viewMode by viewModel.viewMode.collectAsStateWhileActive(isDataActive)
@@ -446,6 +458,7 @@ private fun SearchScreenContent(
             initialPurchasedOnly = purchasedOnly,
             initialLocale = selectedLocale,
             initialCollectedOnly = collectedOnly,
+            initialCollectedSourceName = collectedSourceName,
             initialCollectedSort = selectedCollectedSort,
             initialHasSubtitle = hasSubtitle,
             initialAllAges = allAges
@@ -454,6 +467,10 @@ private fun SearchScreenContent(
 
     LaunchedEffect(isDataActive, viewModel) {
         if (isDataActive) viewModel.ensureHotKeywordTermsLoaded()
+    }
+
+    LaunchedEffect(isDataActive, success?.resultRevision, viewModel) {
+        if (isDataActive) viewModel.refreshCollectionAvailability()
     }
 
     LaunchedEffect(success?.keyword) {
@@ -472,6 +489,7 @@ private fun SearchScreenContent(
         success?.presaleOnly,
         success?.chineseTranslatedOnly,
         success?.collectedOnly,
+        success?.collectedSourceName,
         success?.hasSubtitle,
         success?.allAges,
         success?.locale
@@ -482,6 +500,7 @@ private fun SearchScreenContent(
             presaleOnly = state.presaleOnly
             chineseTranslatedOnly = state.chineseTranslatedOnly
             collectedOnly = state.collectedOnly
+            collectedSourceName = state.collectedSourceName
             hasSubtitle = state.hasSubtitle
             allAges = state.allAges
             selectedCollectedSortName = state.collectedSort.name
@@ -504,7 +523,7 @@ private fun SearchScreenContent(
         success != null -> with(androidx.compose.ui.platform.LocalDensity.current) { 120.dp.toPx() }
         else -> with(androidx.compose.ui.platform.LocalDensity.current) { 80.dp.toPx() }
     }
-    val topPadding = with(androidx.compose.ui.platform.LocalDensity.current) { chromeReservedHeightPx.toDp() } + SearchChromeContentGap
+    val topPadding = with(androidx.compose.ui.platform.LocalDensity.current) { chromeReservedHeightPx.toDp() } + SearchChromeContentGap + LocalMainHeaderPadding.current
 
     fun scrollResultsToTop() {
         scope.launch {
@@ -558,6 +577,7 @@ private fun SearchScreenContent(
             presaleOnly = presaleOnly,
             chineseTranslatedOnly = chineseTranslatedOnly,
             collectedOnly = collectedOnly,
+            collectedSourceName = collectedSourceName,
             hasSubtitle = hasSubtitle,
             allAges = allAges,
             locale = selectedLocale
@@ -576,6 +596,7 @@ private fun SearchScreenContent(
             presaleOnly = presaleOnly,
             chineseTranslatedOnly = chineseTranslatedOnly,
             collectedOnly = collectedOnly,
+            collectedSourceName = collectedSourceName,
             hasSubtitle = hasSubtitle,
             allAges = allAges,
             collectedSortName = selectedCollectedSort.name,
@@ -591,6 +612,7 @@ private fun SearchScreenContent(
         submittedSearchPresaleOnly,
         submittedSearchChineseTranslatedOnly,
         submittedSearchCollectedOnly,
+        submittedSearchCollectedSourceName,
         submittedSearchHasSubtitle,
         submittedSearchAllAges,
         submittedSearchCollectedSortName,
@@ -619,6 +641,7 @@ private fun SearchScreenContent(
             presaleOnly = submittedSearchPresaleOnly,
             chineseTranslatedOnly = submittedSearchChineseTranslatedOnly,
             collectedOnly = submittedSearchCollectedOnly,
+            collectedSourceName = submittedSearchCollectedSourceName,
             hasSubtitle = submittedSearchHasSubtitle,
             allAges = submittedSearchAllAges,
             locale = submittedSearchLocale
@@ -632,6 +655,7 @@ private fun SearchScreenContent(
         presaleOnly = submittedSearchPresaleOnly
         chineseTranslatedOnly = submittedSearchChineseTranslatedOnly
         collectedOnly = submittedSearchCollectedOnly
+        collectedSourceName = submittedSearchCollectedSourceName
         hasSubtitle = submittedSearchHasSubtitle
         allAges = submittedSearchAllAges
         selectedLocale = submittedSearchLocale
@@ -967,6 +991,7 @@ private fun SearchScreenContent(
                 Box(
                     modifier = searchContentModifier
                         .interruptScrollableFlingOnPointerDown { stopActiveScroll() }
+                        .progressiveHeaderContent()
                 ) {
                     CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
                         Box(
@@ -1129,7 +1154,7 @@ private fun SearchScreenContent(
                                     }
                                     val density = LocalDensity.current
                                     val screenWidthDp = LocalConfiguration.current.screenWidthDp
-                                    val listItemHeight = (screenWidthDp.dp * 0.24f).coerceIn(112.dp, 140.dp)
+                                    val listItemHeight = albumListCoverSize(screenWidthDp)
                                     val coverPx = remember(listItemHeight, density) { with(density) { listItemHeight.roundToPx() } }
                                     val preloadSize = remember(coverPx) { IntSize(coverPx, coverPx) }
                                     val coverFadeInState = remember(listState) {
@@ -1344,7 +1369,7 @@ private fun SearchScreenContent(
                     }
 
                     SearchChrome(
-                        modifier = Modifier.align(Alignment.TopCenter),
+                        modifier = Modifier.align(Alignment.TopCenter).padding(top = LocalMainHeaderPadding.current),
                         keyword = keyword,
                         onKeywordChange = { keyword = it },
                         placeholder = hotKeywordCarouselItem.placeholder,
@@ -1384,6 +1409,7 @@ private fun SearchScreenContent(
                                 presaleOnly = option.isPresaleOnly,
                                 chineseTranslatedOnly = option.isChineseTranslated,
                                 collectedOnly = option.isCollectedOnly,
+                                collectedSourceName = option.collectedSource.name,
                                 hasSubtitle = options.hasSubtitle,
                                 allAges = options.allAges,
                                 locale = options.locale
@@ -1393,6 +1419,7 @@ private fun SearchScreenContent(
                                 presaleOnly = option.isPresaleOnly
                                 chineseTranslatedOnly = option.isChineseTranslated
                                 collectedOnly = option.isCollectedOnly
+                                collectedSourceName = option.collectedSource.name
                                 selectedOrderName = options.order.name
                                 selectedCollectedSortName = options.collectedSort.name
                                 hasSubtitle = options.hasSubtitle
@@ -1564,6 +1591,7 @@ internal fun SearchChrome(
     onPrev: () -> Unit,
     onNext: () -> Unit
 ) {
+    val fadeOnCollapse = LocalMainHeaderPadding.current > 0.dp
     val collapseStateDescription by remember(chromeState) {
         derivedStateOf { collapsibleHeaderUiState(chromeState.collapseFraction) }
     }
@@ -1573,6 +1601,7 @@ internal fun SearchChrome(
             // Use layout offset instead of a graphics layer so Android text selection
             // toolbars anchor to the real on-screen position of the editable field.
             .offset { IntOffset(x = 0, y = chromeState.offsetPx.roundToInt()) }
+            .graphicsLayer { alpha = if (fadeOnCollapse) 1f - chromeState.collapseFraction else 1f }
             .semantics { stateDescription = collapseStateDescription }
             .testTag(chromeTestTag)
     ) {
@@ -1662,7 +1691,7 @@ internal fun SearchToolbar(
     val supportsWorkFilters = selectedFilter.supportsWorkFilters
     val supportsSortAndLanguageOptions = selectedFilter.supportsSortAndLanguageOptions
     val activeWorkFilterCount = if (supportsWorkFilters) {
-        (if (hasSubtitle) 1 else 0) + (if (allAges) 1 else 0)
+        (if (hasSubtitle && selectedFilter.supportsSubtitleFilter) 1 else 0) + (if (allAges) 1 else 0)
     } else {
         0
     }
@@ -1797,16 +1826,18 @@ internal fun SearchToolbar(
 
                         if (supportsWorkFilters) {
                             SearchMenuSectionLabel("作品筛选")
-                            SearchCheckableMenuItem(
-                                label = "有字幕",
-                                icon = Icons.Rounded.Subtitles,
-                                selected = hasSubtitle,
-                                testTag = SEARCH_HAS_SUBTITLE_OPTION_TAG,
-                                onClick = {
-                                    onOptionsChanged(options.copy(hasSubtitle = !hasSubtitle))
-                                }
-                            )
-                            SearchMenuDivider()
+                            if (selectedFilter.supportsSubtitleFilter) {
+                                SearchCheckableMenuItem(
+                                    label = "有字幕",
+                                    icon = Icons.Rounded.Subtitles,
+                                    selected = hasSubtitle,
+                                    testTag = SEARCH_HAS_SUBTITLE_OPTION_TAG,
+                                    onClick = {
+                                        onOptionsChanged(options.copy(hasSubtitle = !hasSubtitle))
+                                    }
+                                )
+                                SearchMenuDivider()
+                            }
                             SearchCheckableMenuItem(
                                 label = "全年龄",
                                 icon = Icons.Rounded.FamilyRestroom,
@@ -1873,7 +1904,7 @@ internal fun SearchToolbar(
                                 modifier = Modifier.background(dropdownContainerColor)
                             ) {
                                 if (selectedFilter.isCollectedOnly) {
-                                    SearchCollectedSortOption.entries.forEachIndexed { index, option ->
+                                    selectedFilter.collectedSortOptions.forEachIndexed { index, option ->
                                         if (index > 0) {
                                             SearchMenuDivider()
                                         }

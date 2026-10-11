@@ -29,8 +29,8 @@ class NowPlayingArtistMetaTest {
     @Test
     fun formatsExpandedSummaryWithCircleCvDividerAndReadableCvSeparator() {
         assertEquals(
-            "妄想研究所 | 一之瀬りと、みもりあいの",
-            formatExpandedArtistSummary(
+            "妄想研究所 / 一之瀬りと、みもりあいの",
+            formatNowPlayingArtistSummary(
                 NowPlayingArtistMeta(
                     circle = "妄想研究所",
                     cvNames = listOf("一之瀬りと", "みもりあいの")
@@ -40,12 +40,12 @@ class NowPlayingArtistMetaTest {
     }
 
     @Test
-    fun formatsClassicSummaryAsOnePlainTextLine() {
+    fun formatsCvOnlySummaryWithoutExtraLabelOrSeparator() {
         assertEquals(
-            "社团 妄想研究所 / CV 一之瀬りと、みもりあいの",
-            formatClassicArtistSummary(
+            "一之瀬りと、みもりあいの",
+            formatNowPlayingArtistSummary(
                 NowPlayingArtistMeta(
-                    circle = "妄想研究所",
+                    circle = "",
                     cvNames = listOf("一之瀬りと", "みもりあいの")
                 )
             )

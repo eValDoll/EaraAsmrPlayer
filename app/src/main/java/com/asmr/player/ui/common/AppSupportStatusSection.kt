@@ -13,6 +13,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.asmr.player.data.settings.AppProxyMode
 import com.asmr.player.data.settings.NetworkRouteSettings
 import com.asmr.player.ui.drawer.DrawerStatusViewModel
+import com.asmr.player.data.remote.crawler.AlbumResourceSource
+import com.asmr.player.ui.settings.SettingsDropdownSelector
 import com.asmr.player.ui.theme.AsmrTheme
 
 @Composable
@@ -47,6 +49,8 @@ fun SiteStatusSection(
     val dlsite by viewModel.dlsite.collectAsStateWithLifecycle()
     val asmr by viewModel.asmr.collectAsStateWithLifecycle()
     val site by viewModel.asmrOneSite.collectAsStateWithLifecycle()
+    val japaneseAsmr by viewModel.japaneseAsmr.collectAsStateWithLifecycle()
+    val preferredSource by viewModel.preferredResourceSource.collectAsStateWithLifecycle()
 
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(
@@ -69,6 +73,19 @@ fun SiteStatusSection(
                     lightweight = true
                 )
             }
+        )
+        SiteStatusTestRow(
+            name = "Japanese ASMR",
+            status = japaneseAsmr,
+            onTest = viewModel::testJapaneseAsmr
+        )
+        SettingsDropdownSelector(
+            label = "资源站点优先级",
+            value = preferredSource.name,
+            options = AlbumResourceSource.entries.associate { it.name to "${it.label} 优先" },
+            onSelect = { viewModel.setPreferredResourceSource(AlbumResourceSource.valueOf(it)) },
+            tagPrefix = "resource_source_priority",
+            flatTrigger = true
         )
     }
 }

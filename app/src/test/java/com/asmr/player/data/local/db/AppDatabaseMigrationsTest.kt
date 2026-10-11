@@ -15,6 +15,46 @@ import java.io.File
 @Config(application = Application::class, sdk = [34])
 class AppDatabaseMigrationsTest {
     @Test
+    fun migration31To32_preservesFavoritesAndAddsEmptySubtitleSources() {
+        val context = RuntimeEnvironment.getApplication()
+        val dbName = "migration-test-${System.nanoTime()}.db"
+        val helper = FrameworkSQLiteOpenHelperFactory().create(
+            androidx.sqlite.db.SupportSQLiteOpenHelper.Configuration.builder(context)
+                .name(dbName)
+                .callback(object : androidx.sqlite.db.SupportSQLiteOpenHelper.Callback(31) {
+                    override fun onCreate(db: androidx.sqlite.db.SupportSQLiteDatabase) {
+                        db.execSQL(
+                            "CREATE TABLE playlist_items (playlistId INTEGER NOT NULL, mediaId TEXT NOT NULL, " +
+                                "title TEXT NOT NULL, itemOrder INTEGER NOT NULL, PRIMARY KEY(playlistId, mediaId))"
+                        )
+                        db.execSQL("INSERT INTO playlist_items VALUES(1, 'https://example.com/01.mp3', '晚安音声', 7)")
+                    }
+
+                    override fun onUpgrade(
+                        db: androidx.sqlite.db.SupportSQLiteDatabase,
+                        oldVersion: Int,
+                        newVersion: Int
+                    ) = Unit
+                })
+                .build()
+        )
+        try {
+            val db = helper.writableDatabase
+            AppDatabaseMigrations.MIGRATION_31_32.migrate(db)
+            db.query("SELECT mediaId, title, itemOrder, remoteSubtitleSources FROM playlist_items WHERE playlistId = 1").use {
+                assertTrue(it.moveToFirst())
+                assertEquals("https://example.com/01.mp3", it.getString(0))
+                assertEquals("晚安音声", it.getString(1))
+                assertEquals(7, it.getInt(2))
+                assertEquals("", it.getString(3))
+            }
+        } finally {
+            helper.close()
+            context.deleteDatabase(dbName)
+        }
+    }
+
+    @Test
     fun migration30To31_scopesLegacyTaskToDefaultDownloadRoot() {
         val context = RuntimeEnvironment.getApplication()
         val dbName = "migration-test-${System.nanoTime()}.db"

@@ -4,6 +4,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -30,20 +32,17 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
-import androidx.compose.ui.unit.IntRect
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupPositionProvider
 import androidx.compose.ui.window.PopupProperties
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import com.asmr.player.translation.PageTranslationLanguages
 import com.asmr.player.translation.PageTranslationSettings
 import com.asmr.player.translation.rememberPageTranslationServices
+import com.asmr.player.ui.common.ThemedDropdownMenuPositionProvider
 import com.asmr.player.ui.theme.AsmrTheme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
@@ -122,104 +121,133 @@ internal fun PageTranslationLanguageSelector(
     onSelect: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    SettingsDropdownSelector(label, value, PageTranslationLanguages, onSelect, modifier, tagPrefix = "page_translation")
+}
+
+@Composable
+internal fun SettingsDropdownSelector(
+    label: String,
+    value: String,
+    options: Map<String, String>,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    tagPrefix: String = "settings_dropdown",
+    showLabel: Boolean = true,
+    flatTrigger: Boolean = false,
+    lazyOptions: Boolean = false,
+    singleLineOptions: Boolean = false,
+) {
     val colors = AsmrTheme.colorScheme
     var expanded by remember { mutableStateOf(false) }
     var anchorWidth by remember { mutableIntStateOf(0) }
     val density = LocalDensity.current
+    val textStyle = if (flatTrigger) MaterialTheme.typography.bodySmall else MaterialTheme.typography.bodyMedium
+    val fieldHorizontalPadding = if (flatTrigger) 8.dp else 12.dp
+    val optionsWidthModifier = if (singleLineOptions) {
+        val textMeasurer = rememberTextMeasurer()
+        val optionsWidth = remember(options, textMeasurer, textStyle, density, fieldHorizontalPadding) {
+            val labelWidth = options.values.maxOfOrNull { name ->
+                maxOf(
+                    textMeasurer.measure(name, textStyle, softWrap = false, maxLines = 1).size.width,
+                    textMeasurer.measure(name, textStyle.copy(fontWeight = FontWeight.SemiBold),
+                        softWrap = false, maxLines = 1).size.width,
+                )
+            } ?: 0
+            with(density) {
+                val fieldPadding = fieldHorizontalPadding.roundToPx() * 2 + 8.dp.roundToPx() + 20.dp.roundToPx()
+                val menuPadding = 4.dp.roundToPx() * 2 + 8.dp.roundToPx() * 2 + 8.dp.roundToPx() + 18.dp.roundToPx()
+                (labelWidth + maxOf(fieldPadding, menuPadding)).toDp()
+            }
+        }
+        Modifier.width(optionsWidth)
+    } else Modifier
     val shape = RoundedCornerShape(10.dp)
     val fieldColor = lerp(colors.surface, colors.primarySoft, if (colors.isDark) 0.18f else 0.24f)
     val menuColor = lerp(colors.surface, colors.primarySoft, if (colors.isDark) 0.24f else 0.46f)
     val selectedColor = lerp(colors.surface, colors.primarySoft, if (colors.isDark) 0.52f else 0.88f)
     val menuPosition = remember(density) {
-        PageTranslationMenuPositionProvider(with(density) { 4.dp.roundToPx() }, with(density) { 8.dp.roundToPx() })
+        ThemedDropdownMenuPositionProvider(with(density) { 4.dp.roundToPx() }, with(density) { 8.dp.roundToPx() })
     }
-    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        Text(label, color = colors.textSecondary, style = MaterialTheme.typography.labelMedium)
+    Column(modifier.then(optionsWidthModifier), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        if (showLabel) Text(label, color = colors.textSecondary, style = MaterialTheme.typography.labelMedium)
         Box(Modifier.fillMaxWidth().onSizeChanged { anchorWidth = it.width }) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .heightIn(min = 48.dp)
+                    .heightIn(min = if (flatTrigger) 36.dp else 48.dp)
                     .clip(shape)
-                    .background(fieldColor)
-                    .border(1.dp, colors.primaryStrong.copy(alpha = if (expanded) 0.7f else 0.22f), shape)
-                    .clickable(role = Role.DropdownList) { expanded = !expanded }
+                    .then(if (flatTrigger) Modifier else Modifier
+                        .background(fieldColor)
+                        .border(1.dp, colors.primaryStrong.copy(alpha = if (expanded) 0.7f else 0.22f), shape))
+                    .clickable(enabled = enabled, role = Role.DropdownList) { expanded = !expanded }
                     .semantics { stateDescription = if (expanded) "已展开" else "已收起" }
-                    .testTag("page_translation_$label")
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .testTag("${tagPrefix}_$label")
+                    .padding(horizontal = fieldHorizontalPadding, vertical = if (flatTrigger) 6.dp else 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Text(PageTranslationLanguages.getValue(value), modifier = Modifier.weight(1f),
-                    style = MaterialTheme.typography.bodyMedium, color = colors.textPrimary,
+                Text(options.getValue(value), modifier = Modifier.weight(1f),
+                    style = textStyle,
+                    color = if (enabled) colors.textPrimary else colors.textTertiary,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Icon(if (expanded) Icons.Rounded.ArrowDropUp else Icons.Rounded.ArrowDropDown,
-                    contentDescription = null, tint = colors.primaryStrong, modifier = Modifier.size(20.dp))
+                    contentDescription = null, tint = if (enabled) colors.primaryStrong else colors.textTertiary, modifier = Modifier.size(20.dp))
             }
-            if (expanded && anchorWidth > 0) {
+            if (expanded && enabled && anchorWidth > 0) {
                 Popup(
                     popupPositionProvider = menuPosition,
                     onDismissRequest = { expanded = false },
                     properties = PopupProperties(focusable = true),
                 ) {
-                    Column(
-                        modifier = Modifier
-                            .width(with(density) { anchorWidth.toDp() })
-                            .heightIn(max = 320.dp)
-                            .clip(shape)
-                            .background(menuColor)
-                            .border(1.dp, colors.primaryStrong.copy(alpha = 0.24f), shape)
-                            .testTag("page_translation_menu_$label")
-                            .verticalScroll(rememberScrollState())
-                            .selectableGroup()
-                            .padding(4.dp),
-                    ) {
-                        PageTranslationLanguages.forEach { (code, name) ->
-                            val selected = code == value
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .heightIn(min = 44.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(if (selected) selectedColor else Color.Transparent)
-                                    .selectable(selected = selected, role = Role.RadioButton) {
-                                        expanded = false
-                                        onSelect(code)
-                                    }
-                                    .testTag("page_translation_option_${label}_$code")
-                                    .padding(horizontal = 8.dp, vertical = 10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            ) {
-                                Text(name, modifier = Modifier.weight(1f),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = if (selected) colors.primaryStrong else colors.textPrimary,
-                                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal)
-                                if (selected) Icon(Icons.Rounded.Check, contentDescription = null,
-                                    tint = colors.primaryStrong, modifier = Modifier.size(18.dp))
-                            }
+                    val menuModifier = Modifier
+                        .width(with(density) { anchorWidth.toDp() })
+                        .heightIn(max = 320.dp)
+                        .clip(shape)
+                        .background(menuColor)
+                        .border(1.dp, colors.primaryStrong.copy(alpha = 0.24f), shape)
+                        .testTag("${tagPrefix}_menu_$label")
+                        .selectableGroup()
+                    val optionContent: @Composable (String, String) -> Unit = { code, name ->
+                        val selected = code == value
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .heightIn(min = 44.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(if (selected) selectedColor else Color.Transparent)
+                                .selectable(selected = selected, role = Role.RadioButton) {
+                                    expanded = false
+                                    onSelect(code)
+                                }
+                                .testTag("${tagPrefix}_option_${label}_$code")
+                                .padding(horizontal = 8.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        ) {
+                            Text(name, modifier = Modifier.weight(1f),
+                                style = textStyle,
+                                color = if (selected) colors.primaryStrong else colors.textPrimary,
+                                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                                maxLines = if (singleLineOptions) 1 else Int.MAX_VALUE,
+                                softWrap = !singleLineOptions,
+                                overflow = if (singleLineOptions) TextOverflow.Ellipsis else TextOverflow.Clip)
+                            if (selected) Icon(Icons.Rounded.Check, contentDescription = null,
+                                tint = colors.primaryStrong, modifier = Modifier.size(18.dp))
+                        }
+                    }
+                    if (lazyOptions) {
+                        val entries = remember(options) { options.entries.toList() }
+                        LazyColumn(modifier = menuModifier, contentPadding = PaddingValues(4.dp)) {
+                            items(entries, key = { it.key }) { optionContent(it.key, it.value) }
+                        }
+                    } else {
+                        Column(menuModifier.verticalScroll(rememberScrollState()).padding(4.dp)) {
+                            options.forEach { (code, name) -> optionContent(code, name) }
                         }
                     }
                 }
             }
         }
-    }
-}
-
-private class PageTranslationMenuPositionProvider(private val gap: Int, private val margin: Int) : PopupPositionProvider {
-    override fun calculatePosition(
-        anchorBounds: IntRect,
-        windowSize: IntSize,
-        layoutDirection: LayoutDirection,
-        popupContentSize: IntSize,
-    ): IntOffset {
-        val start = if (layoutDirection == LayoutDirection.Ltr) anchorBounds.left else anchorBounds.right - popupContentSize.width
-        val below = anchorBounds.bottom + gap
-        val above = anchorBounds.top - popupContentSize.height - gap
-        val top = if (below + popupContentSize.height <= windowSize.height - margin) below else above
-        return IntOffset(
-            start.coerceIn(margin, (windowSize.width - popupContentSize.width - margin).coerceAtLeast(margin)),
-            top.coerceIn(margin, (windowSize.height - popupContentSize.height - margin).coerceAtLeast(margin)),
-        )
     }
 }

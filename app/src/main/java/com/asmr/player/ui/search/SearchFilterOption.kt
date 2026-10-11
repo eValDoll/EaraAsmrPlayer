@@ -7,6 +7,7 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.ShoppingBag
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.asmr.player.R
+import com.asmr.player.domain.model.CollectedSearchSource
 
 sealed class SearchFilterIcon {
     data class Vector(val imageVector: ImageVector) : SearchFilterIcon()
@@ -20,7 +21,12 @@ enum class SearchFilterOption(
     val mode: SearchFilterMode
 ) {
     Collected(
-        label = "已收录",
+        label = "asmr.one",
+        icon = SearchFilterIcon.Drawable(R.drawable.ic_search_collected_library),
+        mode = SearchFilterMode.CollectedOnly
+    ),
+    JapaneseAsmr(
+        label = "jp-asmr",
         icon = SearchFilterIcon.Drawable(R.drawable.ic_search_collected_library),
         mode = SearchFilterMode.CollectedOnly
     ),
@@ -60,6 +66,15 @@ enum class SearchFilterOption(
     val supportsWorkFilters: Boolean
         get() = mode == SearchFilterMode.CollectedOnly || mode == SearchFilterMode.Standard
 
+    val collectedSource: CollectedSearchSource
+        get() = if (this == JapaneseAsmr) CollectedSearchSource.JapaneseAsmr else CollectedSearchSource.AsmrOne
+
+    val supportsSubtitleFilter: Boolean
+        get() = supportsWorkFilters && this != JapaneseAsmr
+
+    val collectedSortOptions: List<SearchCollectedSortOption>
+        get() = if (this == JapaneseAsmr) listOf(SearchCollectedSortOption.ReleaseNew) else SearchCollectedSortOption.entries
+
     val supportsSortAndLanguageOptions: Boolean
         get() = mode != SearchFilterMode.PurchasedOnly && mode != SearchFilterMode.PresaleOnly
 
@@ -68,12 +83,14 @@ enum class SearchFilterOption(
             purchasedOnly: Boolean,
             presaleOnly: Boolean,
             chineseTranslatedOnly: Boolean,
-            collectedOnly: Boolean
+            collectedOnly: Boolean,
+            collectedSourceName: String? = null
         ): SearchFilterOption {
             return when {
                 purchasedOnly -> PurchasedOnly
                 chineseTranslatedOnly -> ChineseTranslated
                 presaleOnly -> Presale
+                collectedOnly && CollectedSearchSource.fromName(collectedSourceName) == CollectedSearchSource.JapaneseAsmr -> JapaneseAsmr
                 collectedOnly -> Collected
                 else -> Standard
             }
