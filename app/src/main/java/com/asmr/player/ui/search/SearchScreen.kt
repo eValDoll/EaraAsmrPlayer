@@ -469,6 +469,10 @@ private fun SearchScreenContent(
         if (isDataActive) viewModel.ensureHotKeywordTermsLoaded()
     }
 
+    LaunchedEffect(isDataActive, success?.resultRevision, viewModel) {
+        if (isDataActive) viewModel.refreshCollectionAvailability()
+    }
+
     LaunchedEffect(success?.keyword) {
         val state = success ?: return@LaunchedEffect
         if (!keywordSyncedFromState) {

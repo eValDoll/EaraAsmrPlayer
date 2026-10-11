@@ -14,6 +14,7 @@ import com.asmr.player.data.remote.dlsite.DlsitePlayLibraryClient
 import com.asmr.player.data.remote.scraper.DLSiteScraper
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.domain.model.Album
+import com.asmr.player.domain.model.CollectionAvailability
 import com.asmr.player.hotlistening.HotListeningApi
 import com.asmr.player.util.AppErrorMessageFormatter
 import com.asmr.player.util.DlsiteWorkNo
@@ -88,13 +89,13 @@ class SearchViewModel @Inject constructor(
     private var hasSubtitle: Boolean = false
     private var allAges: Boolean = false
     private var enrichJob: Job? = null
-    private var asmrOneJob: Job? = null
+    private var availabilityJob: Job? = null
     private var collectedWorkNoJob: Job? = null
     private var cacheWriteJob: Job? = null
     private val dlsiteDetailCache = BoundedLruCache<DlsiteDetailCacheKey, Album>(maxEntries = 180)
     private val enrichDispatcher = Dispatchers.IO
-    private val asmrOneAvailabilityCache =
-        BoundedLruCache<String, CachedAsmrOneAvailability>(maxEntries = 1_000)
+    private val availabilityCache =
+        BoundedLruCache<String, CachedCollectionAvailability>(maxEntries = 1_000)
     private val asmrOneCollectedWorkNoCache = BoundedLruCache<Int, String>(maxEntries = 300)
     private val bootstrapped = AtomicBoolean(false)
     private val hotKeywordsRequested = AtomicBoolean(false)
@@ -189,6 +190,17 @@ class SearchViewModel @Inject constructor(
                 asmrOneTotal = 0
             )
         }
+    }
+
+    fun refreshCollectionAvailability() {
+        val current = _uiState.value as? SearchUiState.Success ?: return
+        if (current.purchasedOnly || current.collectedOnly || current.isBusy || availabilityJob?.isActive == true) return
+        startMarkCollectionAvailability(
+            keyword = current.keyword,
+            page = current.page,
+            baseItems = current.results,
+            resultRevision = current.resultRevision
+        )
     }
 
     fun search(keyword: String): Boolean {
@@ -468,7 +480,7 @@ class SearchViewModel @Inject constructor(
                             chineseTranslatedOnly = chineseTranslatedOnly
                         )
                     )
-                    startMarkAsmrOneAvailability(
+                    startMarkCollectionAvailability(
                         keyword = normalizedKeyword,
                         page = page,
                         baseItems = pageResult.items,
@@ -544,7 +556,7 @@ class SearchViewModel @Inject constructor(
 
     private fun cancelBackgroundJobs() {
         enrichJob?.cancel()
-        asmrOneJob?.cancel()
+        availabilityJob?.cancel()
         collectedWorkNoJob?.cancel()
     }
 
@@ -1077,14 +1089,14 @@ class SearchViewModel @Inject constructor(
         if (changed) scheduleCacheWrite()
     }
 
-    private fun startMarkAsmrOneAvailability(
+    private fun startMarkCollectionAvailability(
         keyword: String,
         page: Int,
         baseItems: List<Album>,
         resultRevision: Long,
     ) {
-        asmrOneJob?.cancel()
-        asmrOneJob = viewModelScope.launch(Dispatchers.IO) {
+        availabilityJob?.cancel()
+        availabilityJob = viewModelScope.launch(Dispatchers.IO) {
             val startedAt = SystemClock.elapsedRealtime()
             val cur0 = _uiState.value as? SearchUiState.Success ?: return@launch
             if (
@@ -1097,7 +1109,9 @@ class SearchViewModel @Inject constructor(
 
             val indexByRj = linkedMapOf<String, MutableList<Int>>()
             baseItems.forEachIndexed { idx, a ->
-                val rj = extractAsmrOneWorkNo(a) ?: return@forEachIndexed
+                val rj = sequenceOf(a.rjCode, a.workId)
+                    .map { AlbumWorkNo.normalizeWorkNo(it, minimumDigits = 6) }
+                    .firstOrNull { it.isNotBlank() } ?: return@forEachIndexed
                 val list = indexByRj.getOrPut(rj) { mutableListOf() }
                 list.add(idx)
             }
@@ -1118,17 +1132,17 @@ class SearchViewModel @Inject constructor(
             try {
                 val cacheReadAt = SystemClock.elapsedRealtime()
                 val cachedAvailability = indexByRj.keys.associateWith { rj ->
-                    asmrOneAvailabilityCache[rj]
+                    availabilityCache[rj]
                 }
-                val cachedTrue = cachedAvailability
-                    .filterValues { cached -> cached?.collected == true }
-                    .keys
-                if (cachedTrue.isNotEmpty()) {
-                    updateAsmrOneAvailability(
+                val known = cachedAvailability.mapNotNull { (rj, cached) ->
+                    cached?.let { rj to it.availability }
+                }.toMap()
+                if (known.isNotEmpty()) {
+                    updateCollectionAvailability(
                         keyword = keyword,
                         page = page,
                         resultRevision = resultRevision,
-                        rjs = cachedTrue.toSet(),
+                        availability = known,
                         indexByRj = indexByRj
                     )
                 }
@@ -1136,28 +1150,24 @@ class SearchViewModel @Inject constructor(
                 val unknown = cachedAvailability
                     .filterValues { cached ->
                         cached == null ||
-                            (!cached.collected &&
-                                cacheReadAt - cached.checkedAtElapsedMs >= ASMR_ONE_NEGATIVE_CACHE_TTL_MS)
+                            cacheReadAt - cached.checkedAtElapsedMs >= COLLECTION_AVAILABILITY_CACHE_TTL_MS
                     }
                     .keys
                     .toList()
                 val availability = asmrOneAvailabilityApi.check(unknown)
                 val checkedAt = SystemClock.elapsedRealtime()
-                availability.forEach { (rj, collected) ->
-                    asmrOneAvailabilityCache[rj] = CachedAsmrOneAvailability(
-                        collected = collected,
+                availability.forEach { (rj, status) ->
+                    availabilityCache[rj] = CachedCollectionAvailability(
+                        availability = status,
                         checkedAtElapsedMs = checkedAt,
                     )
                 }
-                val newlyCollected = availability
-                    .filterValues { collected -> collected }
-                    .keys
-                if (newlyCollected.isNotEmpty()) {
-                    updateAsmrOneAvailability(
+                if (availability.isNotEmpty()) {
+                    updateCollectionAvailability(
                         keyword = keyword,
                         page = page,
                         resultRevision = resultRevision,
-                        rjs = newlyCollected,
+                        availability = availability,
                         indexByRj = indexByRj
                     )
                 }
@@ -1166,7 +1176,7 @@ class SearchViewModel @Inject constructor(
                     val dt = (SystemClock.elapsedRealtime() - startedAt).coerceAtLeast(0L)
                     Log.d(
                         "SearchViewModel",
-                        "asmrOne availability page done keyword=${keyword.trim()} page=$page " +
+                        "collection availability page done keyword=${keyword.trim()} page=$page " +
                             "rjCount=${indexByRj.size} dt=${dt}ms"
                     )
                 }
@@ -1186,11 +1196,11 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    private fun updateAsmrOneAvailability(
+    private fun updateCollectionAvailability(
         keyword: String,
         page: Int,
         resultRevision: Long,
-        rjs: Set<String>,
+        availability: Map<String, CollectionAvailability>,
         indexByRj: Map<String, List<Int>>
     ) {
         var changed = false
@@ -1204,16 +1214,17 @@ class SearchViewModel @Inject constructor(
                 cur.collectedOnly
             ) return@update state
 
-            val indices = rjs.flatMap { rj -> indexByRj[rj].orEmpty() }
-            if (indices.isEmpty()) return@update state
-
             val list = cur.results.toMutableList()
-            indices.forEach { idx ->
-                if (idx !in list.indices) return@forEach
-                val old = list[idx]
-                if (!old.hasAsmrOne) {
-                    list[idx] = old.copy(hasAsmrOne = true)
-                    changed = true
+            availability.forEach { (rj, status) ->
+                indexByRj[rj].orEmpty().forEach { idx ->
+                    if (idx in list.indices) {
+                        val old = list[idx]
+                        val updated = old.withCollectionAvailability(status)
+                        if (old != updated) {
+                            list[idx] = updated
+                            changed = true
+                        }
+                    }
                 }
             }
             if (!changed) cur else cur.copy(results = list)
@@ -1224,7 +1235,7 @@ class SearchViewModel @Inject constructor(
     }
 
     private companion object {
-        private const val ASMR_ONE_NEGATIVE_CACHE_TTL_MS = 5 * 60 * 1_000L
+        private const val COLLECTION_AVAILABILITY_CACHE_TTL_MS = 5 * 60 * 1_000L
         private const val COLLECTED_WORK_NO_RESOLVE_TIMEOUT_MS = 3_000L
     }
 }
@@ -1312,8 +1323,16 @@ internal suspend fun resolveOptionalCollectedWorkNo(
     }
 }
 
-private data class CachedAsmrOneAvailability(
-    val collected: Boolean,
+internal fun Album.withCollectionAvailability(availability: CollectionAvailability): Album = copy(
+    hasAsmrOne = availability.hasAsmrOne,
+    collectionAvailability = availability,
+    asmrOneWorkId = availability.asmrOneWorkId ?: asmrOneWorkId.takeIf { availability.hasAsmrOne },
+    collectedSourceName = availability.preferredSource?.name,
+    collectedPageUrl = availability.japaneseAsmrPageUrl.takeIf { availability.hasJapaneseAsmr == true }
+)
+
+private data class CachedCollectionAvailability(
+    val availability: CollectionAvailability,
     val checkedAtElapsedMs: Long,
 )
 
