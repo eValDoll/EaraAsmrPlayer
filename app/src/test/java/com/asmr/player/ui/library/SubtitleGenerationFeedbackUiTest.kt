@@ -95,7 +95,7 @@ class SubtitleGenerationFeedbackUiTest {
     ) {
         compose.setContent {
             AsmrPlayerTheme {
-                DirectoryBrowserPanelV4(
+                DirectoryBrowserPanel(
                     panelKey = "test",
                     currentPath = "",
                     breadcrumbs = emptyList(),

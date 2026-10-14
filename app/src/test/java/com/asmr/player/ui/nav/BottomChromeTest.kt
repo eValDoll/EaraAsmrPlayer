@@ -12,7 +12,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
-import androidx.compose.ui.test.junit4.createComposeRule
+import com.asmr.player.ui.createEaraComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -34,7 +34,7 @@ private const val BOTTOM_CHROME_ROOT_TAG = "bottomChromeRoot"
 @RunWith(AndroidJUnit4::class)
 class BottomChromeTest {
     @get:Rule
-    val composeRule = createComposeRule()
+    val composeRule = createEaraComposeRule()
 
     @Test
     fun blankAreaTap_doesNotPassThroughToUnderlyingContent() {

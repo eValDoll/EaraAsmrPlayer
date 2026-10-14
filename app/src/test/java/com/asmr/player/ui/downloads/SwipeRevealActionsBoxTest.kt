@@ -18,7 +18,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
-import androidx.compose.ui.test.junit4.createComposeRule
+import com.asmr.player.ui.createEaraComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipe
@@ -41,7 +41,7 @@ import androidx.test.core.app.ApplicationProvider
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [28])
 class SwipeRevealActionsBoxTest {
-    val composeRule = createComposeRule()
+    val composeRule = createEaraComposeRule()
     @get:Rule val rules: RuleChain = RuleChain.outerRule(object : ExternalResource() {
         override fun before() {
             val context = ApplicationProvider.getApplicationContext<Application>()

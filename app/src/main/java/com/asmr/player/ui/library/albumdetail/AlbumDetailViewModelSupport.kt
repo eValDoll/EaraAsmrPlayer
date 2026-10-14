@@ -1,5 +1,7 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.util.sanitizeFolderName
+
 import com.asmr.player.data.remote.crawler.AlbumResourceSource
 import com.asmr.player.util.AlbumWorkNo
 
@@ -816,13 +818,10 @@ private fun inferDlsiteTrialDownloadExtension(url: String, mediaType: TreeFileTy
 
 internal fun flattenAsmrOneLeafDownloads(tree: List<AsmrOneTrackNodeResponse>): List<AsmrOneLeafDownload> {
     val out = mutableListOf<AsmrOneLeafDownload>()
-    fun sanitizeSegment(name: String): String {
-        return name.trim().ifEmpty { "item" }.replace(Regex("""[\\/:*?"<>|]"""), "_")
-    }
     fun walk(nodes: List<AsmrOneTrackNodeResponse>, parentPath: String) {
         nodes.forEach { node ->
             val title = node.title?.trim().orEmpty().ifBlank { "item" }
-            val safeTitle = sanitizeSegment(title)
+            val safeTitle = sanitizeFolderName(title)
             val path = if (parentPath.isBlank()) safeTitle else "$parentPath/$safeTitle"
             val children = node.children.orEmpty()
             val url = node.downloadUrl
