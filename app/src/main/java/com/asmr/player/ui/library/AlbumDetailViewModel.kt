@@ -1,5 +1,10 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.data.repository.AlbumTagRepository
+import com.asmr.player.util.isLikelyPlaceholderCover
+
+import com.asmr.player.util.sanitizeFolderName
+
 import com.asmr.player.util.ChapterMediaReference
 import com.asmr.player.data.remote.crawler.JapaneseAsmrClient
 import com.asmr.player.data.remote.crawler.AlbumResourceSource
@@ -32,7 +37,6 @@ import com.asmr.player.data.local.db.dao.TagWithCount
 import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.AlbumFtsEntity
-import com.asmr.player.data.local.db.entities.AlbumTagEntity
 import com.asmr.player.data.local.db.entities.OnlineSavedResourceEntity
 import com.asmr.player.data.local.db.entities.RemoteSubtitleSourceEntity
 import com.asmr.player.data.local.db.entities.TagEntity
@@ -42,7 +46,6 @@ import com.asmr.player.data.local.db.entities.TrackTagEntity
 import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.data.local.library.deleteLibraryAlbum
 import com.asmr.player.data.lyrics.LyricsLoader
-import com.asmr.player.data.lyrics.deriveLyricsRelativePathNoExt
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.ONLINE_DIRECTORY_REQUEST_TIMEOUT_MS
 import com.asmr.player.data.remote.api.AsmrOneAvailabilityApi
@@ -131,7 +134,6 @@ import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.Response
 
 private const val LISTEN_TOGETHER_RJ_SUMMARY_POLL_INTERVAL_MS = 60_000L
 
@@ -143,6 +145,7 @@ internal fun albumDetailAsmrOneFailureMessage(isLocalLibraryDetail: Boolean): St
 class AlbumDetailViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val database: AppDatabase,
+    private val albumTagRepository: AlbumTagRepository,
     private val albumDao: AlbumDao,
     private val trackDao: TrackDao,
     private val asmrOneCrawler: AsmrOneCrawler,
@@ -892,8 +895,8 @@ class AlbumDetailViewModel @Inject constructor(
         )
         withContext(Dispatchers.IO) {
             albumDao.updateAlbum(updated)
-            upsertAlbumFtsIndex(updated.id, updated)
-            upsertAlbumTagsFromCsv(updated.id, updated.tags, TagSource.AUTO)
+            albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
+            albumTagRepository.upsertAlbumTagsFromCsv(updated.id, updated.tags, TagSource.AUTO)
             if (updated.coverPath.trim().isBlank() && updated.coverThumbPath.trim().isBlank()) {
                 runCatching {
                     ensureAlbumCoverSaved(updated.id, updated.coverPath, updated.coverUrl)
@@ -1200,69 +1203,9 @@ class AlbumDetailViewModel @Inject constructor(
             .enqueueUniqueWork("album_cover_thumb_$albumId", ExistingWorkPolicy.REPLACE, request)
     }
 
-    private fun buildTagsToken(tagsCsv: String): String {
-        return tagsCsv.split(",")
-            .map { TagNormalizer.normalize(it) }
-            .filter { it.isNotBlank() }
-            .distinct()
-            .joinToString(" ")
-    }
 
-    private fun parseAlbumTags(tagsCsv: String): List<Pair<String, String>> {
-        return tagsCsv.split(",")
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .map { it to TagNormalizer.normalize(it) }
-            .filter { it.second.isNotBlank() }
-            .distinctBy { it.second }
-    }
 
-    private suspend fun upsertAlbumFtsIndex(albumId: Long, entity: AlbumEntity) {
-        val userTagsCsv = database.tagDao().getAlbumTagsCsvOnce(albumId, TagSource.USER).orEmpty()
-        val combinedTagsCsv = buildString {
-            append(entity.tags)
-            if (userTagsCsv.isNotBlank()) {
-                if (isNotEmpty() && last() != ',') append(',')
-                append(userTagsCsv)
-            }
-        }
-        val tagsToken = buildTagsToken(combinedTagsCsv)
-        database.albumFtsDao().upsert(
-            listOf(
-                AlbumFtsEntity(
-                    albumId = albumId,
-                    title = entity.title,
-                    circle = entity.circle,
-                    cv = entity.cv,
-                    rjCode = entity.rjCode,
-                    workId = entity.workId,
-                    tagsToken = tagsToken
-                )
-            )
-        )
-    }
 
-    private suspend fun upsertAlbumTagsFromCsv(albumId: Long, tagsCsv: String, source: Int) {
-        val tags = parseAlbumTags(tagsCsv)
-        if (tags.isEmpty()) return
-
-        val tagEntities = tags.map { (name, normalized) ->
-            TagEntity(name = name, nameNormalized = normalized)
-        }
-        val tagDao = database.tagDao()
-        tagDao.insertTags(tagEntities)
-
-        val normalizedList = tags.map { it.second }
-        val persisted = tagDao.getTagsByNormalized(normalizedList)
-        val idByNormalized = persisted.associateBy({ it.nameNormalized }, { it.id })
-
-        tagDao.deleteAlbumTagsByAlbumIdExceptSource(albumId, TagSource.USER)
-        val refs = normalizedList.mapNotNull { normalized ->
-            val tagId = idByNormalized[normalized] ?: return@mapNotNull null
-            AlbumTagEntity(albumId = albumId, tagId = tagId, source = source)
-        }
-        if (refs.isNotEmpty()) tagDao.insertAlbumTags(refs)
-    }
 
     private suspend fun resolveInitialDlsiteLoadTarget(
         model: AlbumDetailModel
@@ -2679,16 +2622,6 @@ class AlbumDetailViewModel @Inject constructor(
         val resourceSavedCount: Int
     )
 
-    private fun isLikelyPlaceholderCover(url: String): Boolean {
-        val s = url.trim().lowercase()
-        if (!s.startsWith("http")) return true
-        return s.contains("noimage") ||
-            s.contains("no_image") ||
-            s.contains("no-image") ||
-            s.contains("placeholder") ||
-            s.endsWith("/0.jpg") ||
-            s.endsWith("/0.png")
-    }
 
     private suspend fun ensureAlbumCoverSaved(
         albumId: Long,
@@ -2858,7 +2791,6 @@ class AlbumDetailViewModel @Inject constructor(
 
     private fun flattenOnlineSaveLeaves(tree: List<AsmrOneTrackNodeResponse>): List<OnlineSaveLeaf> {
         val out = mutableListOf<OnlineSaveLeaf>()
-        fun sanitize(name: String): String = name.trim().ifEmpty { "item" }.replace(Regex("""[\\/:*?"<>|]"""), "_")
         val subtitleExts = setOf("lrc", "srt", "vtt")
 
         data class LeafFile(
@@ -2881,7 +2813,7 @@ class AlbumDetailViewModel @Inject constructor(
                 val children = node.children.orEmpty()
                 val rawTitle = node.title?.trim().orEmpty().ifBlank { "item" }
                 val url = node.playbackUrl
-                val safeTitle = sanitize(rawTitle)
+                val safeTitle = sanitizeFolderName(rawTitle)
                 val path = if (parentPath.isBlank()) safeTitle else "$parentPath/$safeTitle"
                 if (children.isNotEmpty() || url.isNullOrBlank()) {
                     if (children.isNotEmpty()) collectSubtitleCandidates(children, path)
@@ -2908,7 +2840,7 @@ class AlbumDetailViewModel @Inject constructor(
                 val rawTitle = node.title?.trim().orEmpty().ifBlank { "item" }
                 val url = node.playbackUrl
                 if (children.isNotEmpty() || url.isNullOrBlank()) return@mapNotNull null
-                val safeTitle = sanitize(rawTitle)
+                val safeTitle = sanitizeFolderName(rawTitle)
                 val fileType = treeFileTypeForNode(rawTitle, url, node.type)
                 if (!isLibraryResourceSavableTreeFileType(fileType)) return@mapNotNull null
                 LeafFile(
@@ -2958,7 +2890,7 @@ class AlbumDetailViewModel @Inject constructor(
                 val children = node.children.orEmpty()
                 if (children.isEmpty()) return@forEach
                 val rawTitle = node.title?.trim().orEmpty().ifBlank { "item" }
-                val safeTitle = sanitize(rawTitle)
+                val safeTitle = sanitizeFolderName(rawTitle)
                 val path = if (parentPath.isBlank()) safeTitle else "$parentPath/$safeTitle"
                 walk(children, path)
             }

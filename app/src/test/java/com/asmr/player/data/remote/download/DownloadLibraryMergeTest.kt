@@ -37,6 +37,29 @@ class DownloadLibraryMergeTest {
     }
 
     @Test
+    fun failedSubtitleMigrationPreservesOnlineTrackAndItsSubtitles() = runBlocking {
+        val albumId = db.albumDao().insertAlbum(AlbumEntity(title = "Album", path = "/album"))
+        val onlineId = db.trackDao().insertTrack(TrackEntity(albumId = albumId, title = "Track A",
+            path = "https://example.com/TrackA.mp3", group = "disc1"))
+        val localId = db.trackDao().insertTrack(TrackEntity(albumId = albumId, title = "Track A",
+            path = "/downloads/disc1/TrackA.mp3", group = "disc1"))
+        db.trackDao().insertSubtitle(SubtitleEntity(trackId = onlineId, startMs = 100L, endMs = 200L, text = "保留字幕"))
+        db.openHelper.writableDatabase.execSQL(
+            "CREATE TRIGGER reject_subtitle_migration BEFORE INSERT ON subtitles WHEN NEW.trackId = $localId " +
+                "BEGIN SELECT RAISE(ABORT, 'test failure'); END"
+        )
+
+        val failure = runCatching {
+            replaceMatchedOnlineTracksWithLocalTracks(db, albumId, "/downloads/")
+        }.exceptionOrNull()
+
+        org.junit.Assert.assertNotNull(failure)
+        assertEquals(setOf(onlineId, localId), db.trackDao().getTracksForAlbumOnce(albumId).map { it.id }.toSet())
+        assertEquals("保留字幕", db.trackDao().getSubtitlesForTrack(onlineId).single().text)
+        assertTrue(db.trackDao().getSubtitlesForTrack(localId).isEmpty())
+    }
+
+    @Test
     fun japaneseAsmrDownloadsReplaceOnlyTheirOwnSavedChapters() = runBlocking {
         val albumId = db.albumDao().insertAlbum(AlbumEntity(title = "Album", path = "web://rj/RJ123456"))
         val otherId = db.trackDao().insertTrack(TrackEntity(albumId = albumId, title = "導入",

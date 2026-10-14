@@ -1,5 +1,10 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.data.repository.AlbumTagRepository
+import com.asmr.player.util.isLikelyPlaceholderCover
+
+import com.asmr.player.data.repository.parseAlbumTags
+
 import com.asmr.player.util.LocalFileScopes
 import com.asmr.player.data.remote.download.DownloadStorageGateway
 import com.asmr.player.util.LocalFileOperation
@@ -30,12 +35,10 @@ import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.asmr.player.data.local.db.AppDatabase
 import com.asmr.player.data.local.db.dao.AlbumDao
-import com.asmr.player.data.local.db.dao.LibraryTrackAlbumHeaderRow
 import com.asmr.player.data.local.db.dao.LibraryTrackRow
 import com.asmr.player.data.local.db.dao.TagWithCount
 import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.local.db.entities.AlbumEntity
-import com.asmr.player.data.local.db.entities.AlbumFtsEntity
 import com.asmr.player.data.local.db.entities.AlbumTagEntity
 import com.asmr.player.data.local.db.entities.LocalTreeCacheEntity
 import com.asmr.player.data.local.db.entities.SubtitleEntity
@@ -59,7 +62,6 @@ import com.asmr.player.data.remote.download.DownloadDestination
 import com.asmr.player.data.remote.download.DownloadDestinationStore
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.domain.model.Album
-import com.asmr.player.domain.model.Track
 import com.asmr.player.playback.PlayerConnection
 import com.asmr.player.ui.common.queryTrackFileSize
 import com.asmr.player.util.GlobalSyncState
@@ -71,7 +73,6 @@ import com.asmr.player.util.SubtitleParser
 import com.asmr.player.util.MessageManager
 import com.asmr.player.util.SyncCoordinator
 import com.asmr.player.util.TagNormalizer
-import com.asmr.player.util.TrackKeyNormalizer
 import com.asmr.player.util.isOnlineTrackPath
 import com.asmr.player.util.isScannableLocalDirectoryName
 import com.asmr.player.util.isVirtualAlbumPath
@@ -138,6 +139,7 @@ data class BulkProgress(
 @HiltViewModel
 class LibraryViewModel @Inject constructor(
     private val database: AppDatabase,
+    private val albumTagRepository: AlbumTagRepository,
     private val albumDao: AlbumDao,
     private val trackDao: TrackDao,
     private val dlsiteScraper: DLSiteScraper,
@@ -255,7 +257,7 @@ class LibraryViewModel @Inject constructor(
     init {
         viewModelScope.launch(Dispatchers.IO) {
             _scanRoots.value = runCatching { scanRootsStore.getRoots() }.getOrDefault(emptySet())
-            ensureTagTablesInitialized()
+            albumTagRepository.ensureTagTablesInitialized()
             restoreLibraryPreferences()
             backfillLegacyOnlineSavedAlbumRoots()
         }
@@ -570,7 +572,7 @@ class LibraryViewModel @Inject constructor(
                     if (refs.isNotEmpty()) tagDao.insertAlbumTags(refs)
                 }
             }
-            upsertAlbumFtsIndex(albumId, entity)
+            albumTagRepository.upsertAlbumFtsIndex(albumId, entity)
         }
     }
 
@@ -623,7 +625,7 @@ class LibraryViewModel @Inject constructor(
             }
             albumIds.forEach { albumId ->
                 val entity = albumDao.getAlbumById(albumId) ?: return@forEach
-                upsertAlbumFtsIndex(albumId, entity)
+                albumTagRepository.upsertAlbumFtsIndex(albumId, entity)
             }
         }
     }
@@ -648,7 +650,7 @@ class LibraryViewModel @Inject constructor(
             }
             albumIds.forEach { albumId ->
                 val entity = albumDao.getAlbumById(albumId) ?: return@forEach
-                upsertAlbumFtsIndex(albumId, entity)
+                albumTagRepository.upsertAlbumFtsIndex(albumId, entity)
             }
         }
     }
@@ -1020,7 +1022,7 @@ class LibraryViewModel @Inject constructor(
                                 coverPath = if (entity.coverPath.startsWith(uriString)) "" else entity.coverPath
                             )
                             albumDao.updateAlbum(updated)
-                            upsertAlbumFtsIndex(updated.id, updated)
+                            albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
                         }
                     } else {
                         val tracks = trackDao.getTracksForAlbumOnce(entity.id)
@@ -1035,7 +1037,7 @@ class LibraryViewModel @Inject constructor(
                             coverPath = if (entity.coverPath.startsWith(uriString)) "" else entity.coverPath
                         )
                         albumDao.updateAlbum(updated)
-                        upsertAlbumFtsIndex(updated.id, updated)
+                        albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
                     }
                 }
             } finally {
@@ -1404,8 +1406,8 @@ class LibraryViewModel @Inject constructor(
             rjCode = resolvedWorkno
         )
         albumDao.updateAlbum(updated)
-        upsertAlbumFtsIndex(updated.id, updated)
-        upsertAlbumTagsFromCsv(updated.id, updated.tags, TagSource.AUTO)
+        albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
+        albumTagRepository.upsertAlbumTagsFromCsv(updated.id, updated.tags, TagSource.AUTO)
         if (updated.coverPath.trim().isBlank() && updated.coverThumbPath.trim().isBlank()) {
             runCatching {
                 ensureAlbumCoverSaved(updated.id, updated.coverPath, updated.coverUrl)
@@ -1518,16 +1520,6 @@ class LibraryViewModel @Inject constructor(
         }
     }
 
-    private fun isLikelyPlaceholderCover(url: String): Boolean {
-        val s = url.trim().lowercase()
-        if (!s.startsWith("http")) return true
-        return s.contains("noimage") ||
-            s.contains("no_image") ||
-            s.contains("no-image") ||
-            s.contains("placeholder") ||
-            s.endsWith("/0.jpg") ||
-            s.endsWith("/0.png")
-    }
 
     private suspend fun ensureAlbumCoverSaved(
         albumId: Long,
@@ -1728,7 +1720,7 @@ class LibraryViewModel @Inject constructor(
                                 coverPath = entity.coverPath.takeIf { cp -> prefixes.none { pfx -> cp.startsWith(pfx) } }.orEmpty()
                             )
                             albumDao.updateAlbum(updated)
-                            upsertAlbumFtsIndex(updated.id, updated)
+                            albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
                         }
                     }
                 }
@@ -2120,111 +2112,15 @@ class LibraryViewModel @Inject constructor(
                 val updated = entity.copy(localPath = albumDir.absolutePath)
                 albumDao.updateAlbum(updated)
                 runCatching { database.localTreeCacheDao().deleteByAlbum(entity.id) }
-                upsertAlbumFtsIndex(updated.id, updated)
+                albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
             }
         }
     }
 
-    private fun buildTagsToken(tagsCsv: String): String {
-        return tagsCsv.split(",")
-            .map { TagNormalizer.normalize(it) }
-            .filter { it.isNotBlank() }
-            .distinct()
-            .joinToString(" ")
-    }
 
-    private suspend fun upsertAlbumFtsIndex(albumId: Long, entity: AlbumEntity) {
-        val userTagsCsv = database.tagDao().getAlbumTagsCsvOnce(albumId, TagSource.USER).orEmpty()
-        val combinedTagsCsv = buildString {
-            append(entity.tags)
-            if (userTagsCsv.isNotBlank()) {
-                if (isNotEmpty() && last() != ',') append(',')
-                append(userTagsCsv)
-            }
-        }
-        val tagsToken = buildTagsToken(combinedTagsCsv)
-        database.albumFtsDao().upsert(
-            listOf(
-                AlbumFtsEntity(
-                    albumId = albumId,
-                    title = entity.title,
-                    circle = entity.circle,
-                    cv = entity.cv,
-                    rjCode = entity.rjCode,
-                    workId = entity.workId,
-                    tagsToken = tagsToken
-                )
-            )
-        )
-    }
 
-    private fun parseAlbumTags(tagsCsv: String): List<Pair<String, String>> {
-        return tagsCsv.split(",")
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .map { it to TagNormalizer.normalize(it) }
-            .filter { it.second.isNotBlank() }
-            .distinctBy { it.second }
-    }
 
-    private suspend fun upsertAlbumTagsFromCsv(albumId: Long, tagsCsv: String, source: Int) {
-        val tags = parseAlbumTags(tagsCsv)
-        if (tags.isEmpty()) return
 
-        val tagEntities = tags.map { (name, normalized) ->
-            TagEntity(name = name, nameNormalized = normalized)
-        }
-        val tagDao = database.tagDao()
-        tagDao.insertTags(tagEntities)
-
-        val normalizedList = tags.map { it.second }
-        val persisted = tagDao.getTagsByNormalized(normalizedList)
-        val idByNormalized = persisted.associateBy({ it.nameNormalized }, { it.id })
-
-        tagDao.deleteAlbumTagsByAlbumIdExceptSource(albumId, TagSource.USER)
-        val refs = normalizedList.mapNotNull { normalized ->
-            val tagId = idByNormalized[normalized] ?: return@mapNotNull null
-            AlbumTagEntity(albumId = albumId, tagId = tagId, source = source)
-        }
-        if (refs.isNotEmpty()) tagDao.insertAlbumTags(refs)
-    }
-
-    private suspend fun ensureTagTablesInitialized() {
-        val tagDao = database.tagDao()
-        val tagCount = runCatching { tagDao.countTags() }.getOrDefault(0L)
-        if (tagCount > 0L) return
-
-        val albums = runCatching { albumDao.getAllAlbumsOnce() }.getOrDefault(emptyList())
-        val allPairs = albums.flatMap { parseAlbumTags(it.tags) }
-        if (allPairs.isEmpty()) return
-
-        val firstNameByNormalized = LinkedHashMap<String, String>()
-        allPairs.forEach { (name, normalized) ->
-            if (!firstNameByNormalized.containsKey(normalized)) firstNameByNormalized[normalized] = name
-        }
-
-        val tagEntities = firstNameByNormalized.map { (normalized, name) ->
-            TagEntity(name = name, nameNormalized = normalized)
-        }
-        tagDao.insertTags(tagEntities)
-        val persisted = tagDao.getTagsByNormalized(firstNameByNormalized.keys.toList())
-        val idByNormalized = persisted.associateBy({ it.nameNormalized }, { it.id })
-
-        database.withTransaction {
-            albums.forEach { album ->
-                val pairs = parseAlbumTags(album.tags)
-                if (pairs.isEmpty()) return@forEach
-                val refs = pairs.mapNotNull { (_, normalized) ->
-                    val tagId = idByNormalized[normalized] ?: return@mapNotNull null
-                    AlbumTagEntity(albumId = album.id, tagId = tagId, source = TagSource.AUTO)
-                }
-                if (refs.isNotEmpty()) {
-                    tagDao.deleteAlbumTagsByAlbumIdExceptSource(album.id, TagSource.USER)
-                    tagDao.insertAlbumTags(refs)
-                }
-            }
-        }
-    }
 
     private suspend fun scanFromDownloadedDir(
         importAll: Boolean = false,
@@ -2292,8 +2188,8 @@ class LibraryViewModel @Inject constructor(
                 audioTotalSizeBytes = aggregate.totalSizeBytes,
             )
             val albumId = albumDao.insertAlbum(entity)
-            upsertAlbumFtsIndex(albumId, entity.copy(id = albumId))
-            upsertAlbumTagsFromCsv(albumId, entity.tags, TagSource.SCAN)
+            albumTagRepository.upsertAlbumFtsIndex(albumId, entity.copy(id = albumId))
+            albumTagRepository.upsertAlbumTagsFromCsv(albumId, entity.tags, TagSource.SCAN)
             if (entity.coverPath.isBlank()) {
                 val audio = albumDir.walkTopDown()
                     .onEnter { directory -> directory == albumDir || isScannableLocalDirectoryName(directory.name) }
@@ -2351,7 +2247,7 @@ class LibraryViewModel @Inject constructor(
                         coverPath = if (entity.coverPath.startsWith(dl)) "" else entity.coverPath
                     )
                     albumDao.updateAlbum(updated)
-                    upsertAlbumFtsIndex(updated.id, updated)
+                    albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
                 }
             }
         }
@@ -2639,8 +2535,8 @@ class LibraryViewModel @Inject constructor(
                     description = existing?.description ?: ""
                 )
                 insertedAlbumId = albumDao.insertAlbum(entity)
-                upsertAlbumFtsIndex(insertedAlbumId, entity.copy(id = insertedAlbumId))
-                upsertAlbumTagsFromCsv(insertedAlbumId, entity.tags, TagSource.SCAN)
+                albumTagRepository.upsertAlbumFtsIndex(insertedAlbumId, entity.copy(id = insertedAlbumId))
+                albumTagRepository.upsertAlbumTagsFromCsv(insertedAlbumId, entity.tags, TagSource.SCAN)
 
                 val allExistingTracks = trackDao.getTracksForAlbumOnce(insertedAlbumId)
                 val existingUnderRoot = allExistingTracks
@@ -2844,7 +2740,7 @@ class LibraryViewModel @Inject constructor(
                             coverPath = if (entity.coverPath.startsWith(root)) "" else entity.coverPath
                         )
                         albumDao.updateAlbum(updated)
-                        upsertAlbumFtsIndex(updated.id, updated)
+                        albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
                     }
                 } else {
                     val root = rootUriString.trim()
@@ -2860,7 +2756,7 @@ class LibraryViewModel @Inject constructor(
                         coverPath = if (entity.coverPath.startsWith(root)) "" else entity.coverPath
                     )
                     albumDao.updateAlbum(updated)
-                    upsertAlbumFtsIndex(updated.id, updated)
+                    albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
                 }
             }
         }
@@ -2988,7 +2884,7 @@ class LibraryViewModel @Inject constructor(
 
                 if (updated != entity) {
                     albumDao.updateAlbum(updated)
-                    upsertAlbumFtsIndex(updated.id, updated)
+                    albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
                 }
             }
         }

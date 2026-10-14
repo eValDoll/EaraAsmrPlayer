@@ -26,6 +26,8 @@ jobs:
           set -euo pipefail
           sed -i 's/\r$//' gradlew
           chmod +x gradlew
+      - name: Run release unit tests
+        run: ./gradlew :app:testReleaseUnitTest
       - name: Prepare release signing keystore
         shell: bash
         env:

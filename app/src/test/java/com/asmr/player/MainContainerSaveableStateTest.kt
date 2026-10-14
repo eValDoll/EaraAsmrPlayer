@@ -15,7 +15,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.assertTextContains
-import androidx.compose.ui.test.junit4.createComposeRule
+import com.asmr.player.ui.createEaraComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import androidx.compose.material3.Text
@@ -29,7 +29,7 @@ private const val PRIMARY_PAGE_POSITION_TAG = "primary_page_position"
 @RunWith(AndroidJUnit4::class)
 class MainContainerSaveableStateTest {
     @get:Rule
-    val composeRule = createComposeRule()
+    val composeRule = createEaraComposeRule()
 
     @Test
     fun primaryPagerSaveableHost_restoresLazyListStateAfterRemount() {

@@ -340,7 +340,7 @@ internal fun AlbumLocalBreadcrumbTabV2(
             }
         } else {
             item {
-                DirectoryBrowserPanelV4(
+                DirectoryBrowserPanel(
                     panelKey = stateKey,
                     currentPath = currentPath,
                     breadcrumbs = browserValue.breadcrumbs,

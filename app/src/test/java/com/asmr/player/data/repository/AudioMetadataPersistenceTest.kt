@@ -58,6 +58,8 @@ class AudioMetadataPersistenceTest {
                 db.playlistItemDao().upsertItems(listOf(favorite))
                 // Recreate the previous schema; reopening exercises Room's actual upgrade and validation.
                 db.openHelper.writableDatabase.execSQL("DROP TABLE audio_metadata")
+                db.openHelper.writableDatabase.execSQL("DROP TABLE subtitle_import_blocks")
+                db.openHelper.writableDatabase.execSQL("DROP INDEX index_tracks_path")
                 db.openHelper.writableDatabase.version = 33
             }
             open().useDatabase { db ->
@@ -145,7 +147,7 @@ class AudioMetadataPersistenceTest {
         try {
             block {
                 Room.databaseBuilder(context, AppDatabase::class.java, name)
-                    .addMigrations(AppDatabaseMigrations.MIGRATION_33_34)
+                    .addMigrations(AppDatabaseMigrations.MIGRATION_33_34, AppDatabaseMigrations.MIGRATION_34_35)
                     .allowMainThreadQueries()
                     .build()
             }
