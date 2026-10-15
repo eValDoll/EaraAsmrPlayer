@@ -1672,7 +1672,7 @@ class AlbumDetailViewModel @Inject constructor(
             }
             _uiState.value = AlbumDetailUiState.Success(
                 model = latestBefore.model.copy(
-                    resourceSource = resolveAlbumResourceSource(keyRj, selectedResourceSource, preferred),
+                    resourceSource = resolveAlbumResourceSource(keyRj, selectedResourceSource, preferred, latestBefore.model.localAlbum),
                     isLoadingAsmrOne = true,
                     hasResolvedAsmrOneContent = false
                 )
@@ -2071,7 +2071,7 @@ class AlbumDetailViewModel @Inject constructor(
             asmrOneWorkId = null,
             asmrOneSite = null,
             asmrOneTree = emptyList(),
-            resourceSource = resolveAlbumResourceSource(rj, selectedResourceSource, preferredResourceSource),
+            resourceSource = resolveAlbumResourceSource(rj, selectedResourceSource, preferredResourceSource, localAlbum),
             dlsitePlayTree = emptyList(),
             isLoadingDlsite = false,
             isLoadingDlsiteTrial = false,

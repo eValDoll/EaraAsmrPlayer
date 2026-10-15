@@ -4,6 +4,7 @@ import com.asmr.player.util.sanitizeFolderName
 
 import com.asmr.player.data.remote.crawler.AlbumResourceSource
 import com.asmr.player.util.AlbumWorkNo
+import com.asmr.player.util.isJapaneseAsmrResource
 
 import android.content.Context
 import android.util.Log
@@ -292,11 +293,16 @@ internal fun resolveAlbumDetailRj(routeRj: String?, localAlbum: Album?): String 
 internal fun resolveAlbumResourceSource(
     workNo: String,
     selected: AlbumResourceSource?,
-    preferred: AlbumResourceSource?
-): AlbumResourceSource = selected ?: if (AlbumWorkNo.isJapaneseAsmrOnlyWork(workNo)) {
-    AlbumResourceSource.JapaneseAsmr
-} else {
-    preferred ?: AlbumResourceSource.AsmrOne
+    preferred: AlbumResourceSource?,
+    localAlbum: Album? = null
+): AlbumResourceSource {
+    if (selected != null) return selected
+    if (AlbumWorkNo.isJapaneseAsmrOnlyWork(workNo) ||
+        localAlbum?.tracks?.any { isJapaneseAsmrResource(it.path, it.group) } == true
+    ) {
+        return AlbumResourceSource.JapaneseAsmr
+    }
+    return preferred ?: AlbumResourceSource.AsmrOne
 }
 
 internal fun albumDetailRequestKey(albumId: Long?, rjCode: String?): String {
