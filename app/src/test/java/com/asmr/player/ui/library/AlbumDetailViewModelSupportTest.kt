@@ -9,6 +9,7 @@ import com.asmr.player.data.remote.api.WorkDetailsResponse
 import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.domain.model.Album
+import com.asmr.player.domain.model.Track
 import com.asmr.player.ui.nav.AlbumCoverHint
 import com.asmr.player.data.remote.crawler.AlbumResourceSource
 import org.junit.Assert.assertEquals
@@ -18,6 +19,78 @@ import org.junit.Test
 import java.io.FileNotFoundException
 
 class AlbumDetailViewModelSupportTest {
+    @Test
+    fun savedJapaneseAsmrRjAlbum_reopensWithItsSourceBeforeGlobalPreference() {
+        val album = Album(
+            id = 7L,
+            title = "已保存作品",
+            path = "web://rj/RJ01707048",
+            rjCode = "RJ01707048",
+            tracks = listOf(
+                Track(
+                    albumId = 7L,
+                    title = "本編",
+                    path = "https://audio.example/stream.m3u8#eara-chapter=0,&file=本編.m4a"
+                )
+            )
+        )
+
+        assertEquals(
+            AlbumResourceSource.JapaneseAsmr,
+            resolveAlbumResourceSource(resolveAlbumDetailRj(null, album), null, AlbumResourceSource.AsmrOne, album)
+        )
+    }
+
+    @Test
+    fun downloadedJapaneseAsmrRjAlbum_recognizesFileAndDocumentTracks() {
+        val tracks = listOf(
+            Track(albumId = 7L, title = "本編", path = "/albums/RJ01707048/japaneseasmr.com/本編.m4a"),
+            Track(albumId = 7L, title = "本編", path = "D:\\albums\\RJ01707048\\japaneseasmr.com\\本編.m4a"),
+            Track(albumId = 7L, title = "本編", path = "content://library/document/audio", group = "japaneseasmr.com"),
+            Track(albumId = 7L, title = "本編", path = "https://audio.example/本編.mp3", group = "japaneseasmr.com/本編")
+        )
+
+        tracks.forEach { track ->
+            val album = Album(title = "已下载作品", path = "/albums/RJ01707048", rjCode = "RJ01707048", tracks = listOf(track))
+
+            assertEquals(
+                track.path,
+                AlbumResourceSource.JapaneseAsmr,
+                resolveAlbumResourceSource(resolveAlbumDetailRj(null, album), null, AlbumResourceSource.AsmrOne, album)
+            )
+        }
+    }
+
+    @Test
+    fun localJapaneseAsmrSource_keepsExplicitSourceChoice() {
+        val album = Album(
+            title = "已保存作品",
+            path = "web://rj/RJ01707048",
+            tracks = listOf(Track(albumId = 7L, title = "本編", path = "https://audio.example/本編.mp3", group = "japaneseasmr.com"))
+        )
+
+        assertEquals(
+            AlbumResourceSource.AsmrOne,
+            resolveAlbumResourceSource("RJ01707048", AlbumResourceSource.AsmrOne, AlbumResourceSource.JapaneseAsmr, album)
+        )
+    }
+
+    @Test
+    fun importedAndAsmrOneAlbums_keepGlobalSourcePreference() {
+        val tracks = listOf(
+            Track(albumId = 7L, title = "本編", path = "/albums/RJ01707048/本編.m4a"),
+            Track(albumId = 7L, title = "本編", path = "https://asmr.one/media/本編.mp3")
+        )
+
+        tracks.forEach { track ->
+            val album = Album(title = "本地作品", path = "/albums/RJ01707048", tracks = listOf(track))
+            assertEquals(AlbumResourceSource.AsmrOne, resolveAlbumResourceSource("RJ01707048", null, null, album))
+            AlbumResourceSource.values().forEach { preferred ->
+                assertEquals(preferred, resolveAlbumResourceSource("RJ01707048", null, preferred, album))
+            }
+        }
+    }
+
     @Test fun dmmLocalAlbumReopensWithJapaneseAsmrAndKeepsExplicitSourceChoice() {
         val album = Album(title = "DMM 作品", path = "web://rj/UND353674", workId = "UND353674", rjCode = "UND353674")
         assertEquals("UND353674", resolveAlbumDetailRj(null, album))
