@@ -2,6 +2,7 @@ package com.asmr.player.baselineprofile
 
 import android.content.Intent
 import android.os.SystemClock
+import android.os.Trace
 import androidx.benchmark.macro.CompilationMode
 import androidx.benchmark.macro.ExperimentalMacrobenchmarkApi
 import androidx.benchmark.macro.ExperimentalMetricApi
@@ -58,6 +59,27 @@ class FlowingBackgroundPerformanceBenchmark {
         SystemClock.sleep(1_000)
         startFlowingBackgroundActivity(reset = false)
         SystemClock.sleep(1_000)
+    }
+
+    @Test fun independentCoverAndDynamicSwitches() = measure {
+        clickControl("透明度 100%")
+        SystemClock.sleep(600)
+        clickControl("关闭封面")
+        recordFlowingState("coverOffDynamicOn")
+        clickControl("关闭动态流光")
+        recordFlowingState("coverOffDynamicOff")
+        clickControl("开启动态流光")
+        recordFlowingState("coverOffDynamicResumed")
+    }
+
+    private fun recordFlowingState(name: String) {
+        SystemClock.sleep(600)
+        Trace.beginSection("benchmark.flow.$name")
+        try {
+            SystemClock.sleep(2_000)
+        } finally {
+            Trace.endSection()
+        }
     }
 
     private fun measure(light: Boolean = false, action: MacrobenchmarkScope.() -> Unit) {

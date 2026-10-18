@@ -212,6 +212,9 @@ class SettingsViewModel @Inject constructor(
     val coverBackgroundEnabled: StateFlow<Boolean> = settingsDataStore.coverBackgroundEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
+    val dynamicFlowingBackgroundEnabled: StateFlow<Boolean> = settingsDataStore.dynamicFlowingBackgroundEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
     val coverBackgroundClarity: StateFlow<Float> = settingsDataStore.coverBackgroundClarity
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0.35f)
 
@@ -317,6 +320,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setCoverBackgroundEnabled(enabled: Boolean) {
         viewModelScope.launch { settingsDataStore.setCoverBackgroundEnabled(enabled) }
+    }
+
+    fun setDynamicFlowingBackgroundEnabled(enabled: Boolean) {
+        viewModelScope.launch { settingsDataStore.setDynamicFlowingBackgroundEnabled(enabled) }
     }
 
     fun setCoverBackgroundClarity(clarity: Float) {

@@ -7,6 +7,15 @@ import org.junit.Test
 
 class CoverArtworkBackgroundStyleTest {
     @Test
+    fun disablingTheCoverKeepsFlowVisibleAtEveryClarity() {
+        for (clarity in listOf(0f, 0.35f, 1f, Float.NaN)) {
+            val style = coverArtworkBackdropStyle(clarity, coverEnabled = false)
+            assertTrue(style.flowingVisible)
+            assertEquals(0f, style.artworkAlpha, 0f)
+        }
+    }
+
+    @Test
     fun zeroClarityShowsFlowWithoutTheStaticCover() {
         val style = coverArtworkBackdropStyle(0f)
         assertTrue(style.flowingVisible)

@@ -38,6 +38,7 @@ class SettingsDataStore @Inject constructor(
     private val lastDynamicHueSourceKeyKey = stringPreferencesKey("last_dynamic_hue_source_key")
     private val lastDynamicHueSeedArgbKey = intPreferencesKey("last_dynamic_hue_seed_argb")
     private val coverBackgroundEnabledKey = booleanPreferencesKey("cover_background_enabled")
+    private val dynamicFlowingBackgroundEnabledKey = booleanPreferencesKey("dynamic_flowing_background_enabled")
     private val coverBackgroundClarityKey = floatPreferencesKey("cover_background_clarity")
     private val coverPreviewModeKey = stringPreferencesKey("cover_preview_mode")
     private val nowPlayingHomeLayoutModeKey = stringPreferencesKey("now_playing_home_layout_mode")
@@ -88,6 +89,9 @@ class SettingsDataStore @Inject constructor(
         )
     }
     val coverBackgroundEnabled: Flow<Boolean> = context.settingsDataStore.data.map { it[coverBackgroundEnabledKey] ?: true }
+    val dynamicFlowingBackgroundEnabled: Flow<Boolean> = context.settingsDataStore.data.map {
+        it[dynamicFlowingBackgroundEnabledKey] ?: true
+    }
     val coverBackgroundClarity: Flow<Float> = context.settingsDataStore.data.map { it[coverBackgroundClarityKey] ?: 0.35f }
     val coverPreviewMode: Flow<CoverPreviewMode> = context.settingsDataStore.data.map {
         CoverPreviewMode.fromStorageValue(it[coverPreviewModeKey])
@@ -176,6 +180,10 @@ class SettingsDataStore @Inject constructor(
 
     suspend fun setCoverBackgroundEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { it[coverBackgroundEnabledKey] = enabled }
+    }
+
+    suspend fun setDynamicFlowingBackgroundEnabled(enabled: Boolean) {
+        context.settingsDataStore.edit { it[dynamicFlowingBackgroundEnabledKey] = enabled }
     }
 
     suspend fun setCoverBackgroundClarity(clarity: Float) {

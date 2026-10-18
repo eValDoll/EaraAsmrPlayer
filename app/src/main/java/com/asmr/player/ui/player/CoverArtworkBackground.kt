@@ -19,13 +19,13 @@ import kotlin.math.pow
 @Composable
 fun CoverArtworkBackground(
     artworkModel: Any?,
-    enabled: Boolean,
+    coverEnabled: Boolean,
     clarity: Float,
     artworkAlignment: Alignment = Alignment.Center,
     isPlaying: Boolean = true,
-    isActive: Boolean = true
+    isActive: Boolean = true,
+    dynamicEnabled: Boolean = true
 ) {
-    if (!enabled) return
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val resumed = remember(lifecycle) {
         mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
@@ -37,7 +37,7 @@ fun CoverArtworkBackground(
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
-    val style = remember(clarity) { coverArtworkBackdropStyle(clarity) }
+    val style = remember(clarity, coverEnabled) { coverArtworkBackdropStyle(clarity, coverEnabled) }
     val artwork by rememberPlayerCoverBitmap(artworkModel, isActive && resumed.value)
     Box(Modifier.fillMaxSize().background(PlayerBackdropBaseColor))
     artwork?.let { bitmap ->
@@ -45,7 +45,8 @@ fun CoverArtworkBackground(
             FlowingArtworkBackground(
                 artwork = bitmap,
                 isPlaying = isPlaying,
-                isActive = isActive && resumed.value
+                isActive = isActive && resumed.value,
+                dynamicEnabled = dynamicEnabled
             )
         }
     }
@@ -69,7 +70,9 @@ internal data class BackdropStyle(
     val flowingVisible: Boolean
 )
 
-internal fun coverArtworkBackdropStyle(clarity: Float): BackdropStyle {
-    val alpha = (clarity.takeIf { it.isFinite() } ?: 0f).coerceIn(0f, 1f).pow(2.15f)
+internal fun coverArtworkBackdropStyle(clarity: Float, coverEnabled: Boolean = true): BackdropStyle {
+    val alpha = if (coverEnabled) {
+        (clarity.takeIf { it.isFinite() } ?: 0f).coerceIn(0f, 1f).pow(2.15f)
+    } else 0f
     return BackdropStyle(artworkAlpha = alpha, flowingVisible = alpha < 1f)
 }

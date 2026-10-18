@@ -29,6 +29,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import com.asmr.player.ui.player.CoverArtworkBackground
+import com.asmr.player.ui.player.playerSurfaceColors
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.theme.ThemeMode
@@ -48,17 +49,21 @@ internal fun FlowingBackgroundBenchmarkScreen() {
     var clarity by remember { mutableFloatStateOf(0.5f) }
     var playing by remember { mutableStateOf(true) }
     var visible by remember { mutableStateOf(true) }
+    var coverEnabled by remember { mutableStateOf(true) }
+    var dynamicEnabled by remember { mutableStateOf(true) }
 
     AsmrPlayerTheme(mode = if (dark) ThemeMode.Dark else ThemeMode.Light) {
-        val colors = AsmrTheme.colorScheme
+        val appColors = AsmrTheme.colorScheme
+        val colors = remember(appColors) { playerSurfaceColors(appColors) }
         Box(Modifier.fillMaxSize().background(colors.background)) {
             Box(Modifier.fillMaxSize().graphicsLayer { alpha = if (visible) 1f else 0f }) {
                 CoverArtworkBackground(
                     artworkModel = covers.getOrNull(coverIndex),
-                    enabled = true,
+                    coverEnabled = coverEnabled,
                     clarity = clarity,
                     isPlaying = playing,
-                    isActive = visible
+                    isActive = visible,
+                    dynamicEnabled = dynamicEnabled
                 )
             }
             Column(
@@ -93,6 +98,14 @@ internal fun FlowingBackgroundBenchmarkScreen() {
                     }
                     TextButton(onClick = { visible = !visible }, colors = buttonColors) {
                         Text(if (visible) "隐藏背景" else "显示背景")
+                    }
+                }
+                Row {
+                    TextButton(onClick = { coverEnabled = !coverEnabled }, colors = buttonColors) {
+                        Text(if (coverEnabled) "关闭封面" else "开启封面")
+                    }
+                    TextButton(onClick = { dynamicEnabled = !dynamicEnabled }, colors = buttonColors) {
+                        Text(if (dynamicEnabled) "关闭动态流光" else "开启动态流光")
                     }
                 }
             }

@@ -48,6 +48,7 @@ internal fun LyricsPage(
     coverPreviewMode: CoverPreviewMode,
     lyricsPageSettings: LyricsPageSettings,
     renderBackdrop: Boolean = true,
+    dynamicFlowingBackgroundEnabled: Boolean = true,
     sharedArtworkAlignment: Alignment? = null,
     sharedCoverDragPreviewState: CoverDragPreviewState? = null,
     viewModel: LyricsViewModel = hiltViewModel()
@@ -96,10 +97,11 @@ internal fun LyricsPage(
         if (renderBackdrop) {
             CoverArtworkBackground(
                 artworkModel = artwork,
-                enabled = coverBackgroundEnabled,
+                coverEnabled = coverBackgroundEnabled,
                 clarity = coverBackgroundClarity,
                 artworkAlignment = artworkAlignment,
-                isPlaying = playback.isPlaying
+                isPlaying = playback.isPlaying,
+                dynamicEnabled = dynamicFlowingBackgroundEnabled
             )
         }
 

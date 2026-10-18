@@ -865,6 +865,7 @@ fun MainContainer(
     onContentReady: () -> Unit,
     showMiniPlayerBar: Boolean,
     coverBackgroundEnabled: Boolean,
+    dynamicFlowingBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
     coverPreviewMode: CoverPreviewMode,
     nowPlayingHomeLayoutMode: NowPlayingHomeLayoutMode,
@@ -3192,11 +3193,12 @@ fun MainContainer(
                 ) {
                     PlayerSharedBackdrop(
                         mediaItem = sharedPlayerItem,
-                        enabled = coverBackgroundEnabled,
+                        coverEnabled = coverBackgroundEnabled,
                         clarity = coverBackgroundClarity,
                         artworkAlignment = sharedPlayerBackdropAlignment,
                         isPlaying = backdropIsPlaying,
-                        isActive = nowPlayingBackdropActive
+                        isActive = nowPlayingBackdropActive,
+                        dynamicEnabled = dynamicFlowingBackgroundEnabled
                     )
                 }
                 NowPlayingScreen(
@@ -3222,6 +3224,7 @@ fun MainContainer(
                     },
                     viewModel = playerViewModel,
                     coverBackgroundEnabled = coverBackgroundEnabled,
+                    dynamicFlowingBackgroundEnabled = dynamicFlowingBackgroundEnabled,
                     coverBackgroundClarity = coverBackgroundClarity,
                     coverPreviewMode = coverPreviewMode,
                     nowPlayingHomeLayoutMode = nowPlayingHomeLayoutMode,

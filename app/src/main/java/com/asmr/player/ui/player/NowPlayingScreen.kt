@@ -1185,6 +1185,7 @@ internal fun NowPlayingScreen(
     audioOutputRouteKind: AudioOutputRouteKind,
     warningSessionState: AppVolumeWarningSessionState,
     renderBackdrop: Boolean = true,
+    dynamicFlowingBackgroundEnabled: Boolean = true,
     sharedArtworkAlignment: Alignment? = null,
     sharedCoverDragPreviewState: CoverDragPreviewState? = null,
     enableStaggeredRouteEntry: Boolean = true,
@@ -1572,10 +1573,11 @@ internal fun NowPlayingScreen(
         if (renderBackdrop && !isVideo) {
             CoverArtworkBackground(
                 artworkModel = artworkModel,
-                enabled = coverBackgroundEnabled,
+                coverEnabled = coverBackgroundEnabled,
                 clarity = coverBackgroundClarity,
                 artworkAlignment = coverPreviewAlignment,
-                isPlaying = playback.isPlaying
+                isPlaying = playback.isPlaying,
+                dynamicEnabled = dynamicFlowingBackgroundEnabled
             )
         }
         if (isLandscape && surfaceMode == NowPlayingSurfaceMode.PLAYER && !isVideo) {

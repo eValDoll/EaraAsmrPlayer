@@ -210,6 +210,7 @@ fun SettingsScreen(
     val staticHueArgbLight by viewModel.staticHueArgbLight.collectAsStateWhileActive(appearanceDataActive)
     val staticHueArgbDark by viewModel.staticHueArgbDark.collectAsStateWhileActive(appearanceDataActive)
     val coverBackgroundEnabled by viewModel.coverBackgroundEnabled.collectAsStateWhileActive(appearanceDataActive)
+    val dynamicFlowingBackgroundEnabled by viewModel.dynamicFlowingBackgroundEnabled.collectAsStateWhileActive(appearanceDataActive)
     val coverBackgroundClarity by viewModel.coverBackgroundClarity.collectAsStateWhileActive(appearanceDataActive)
     val coverPreviewMode by viewModel.coverPreviewMode.collectAsStateWhileActive(appearanceDataActive)
     val pauseOnOutputDisconnect by viewModel.pauseOnOutputDisconnect.collectAsStateWhileActive(playbackDataActive)
@@ -713,6 +714,11 @@ fun SettingsScreen(
                             text = "播放页/歌词页封面背景",
                             checked = coverBackgroundEnabled,
                             onCheckedChange = viewModel::setCoverBackgroundEnabled
+                        )
+                        SettingsToggleRow(
+                            text = "动态流光背景",
+                            checked = dynamicFlowingBackgroundEnabled,
+                            onCheckedChange = viewModel::setDynamicFlowingBackgroundEnabled
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth(),

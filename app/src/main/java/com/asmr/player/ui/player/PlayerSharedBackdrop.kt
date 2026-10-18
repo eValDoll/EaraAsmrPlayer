@@ -10,14 +10,13 @@ import com.asmr.player.ui.theme.AsmrTheme
 @Composable
 internal fun PlayerSharedBackdrop(
     mediaItem: MediaItem?,
-    enabled: Boolean,
+    coverEnabled: Boolean,
     clarity: Float,
     artworkAlignment: Alignment,
     isPlaying: Boolean = true,
-    isActive: Boolean = true
+    isActive: Boolean = true,
+    dynamicEnabled: Boolean = true
 ) {
-    if (!enabled) return
-
     val appColors = AsmrTheme.colorScheme
     val colorScheme = remember(appColors) { playerSurfaceColors(appColors) }
     val metadata = mediaItem?.mediaMetadata
@@ -35,13 +34,13 @@ internal fun PlayerSharedBackdrop(
         val playerThemeColors = rememberPlayerThemeColors(
             mediaItem = mediaItem,
             colorScheme = colorScheme,
-            coverBackgroundEnabled = enabled,
+            coverBackgroundEnabled = coverEnabled,
             transitionDurationMs = 0,
             cachedTransitionDurationMs = 0
         )
         VideoArtworkBackground(
             artworkModel = artworkModel,
-            enabled = enabled,
+            enabled = coverEnabled,
             clarity = clarity,
             overlayBaseColor = colorScheme.background,
             tintBaseColor = playerThemeColors.videoBackdropColor,
@@ -52,11 +51,12 @@ internal fun PlayerSharedBackdrop(
     }
     CoverArtworkBackground(
         artworkModel = artworkModel,
-        enabled = enabled,
+        coverEnabled = coverEnabled,
         clarity = clarity,
         artworkAlignment = artworkAlignment,
         isPlaying = isPlaying,
-        isActive = isActive
+        isActive = isActive,
+        dynamicEnabled = dynamicEnabled
     )
 }
 

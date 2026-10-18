@@ -290,6 +290,8 @@ class MainActivity : ComponentActivity() {
                 staticHueArgbDark = themeBootstrap.staticHueArgbDark
             )
             val coverBackgroundEnabled by settingsDataStore.coverBackgroundEnabled.collectAsStateWithLifecycle(initialValue = true)
+            val dynamicFlowingBackgroundEnabled by settingsDataStore.dynamicFlowingBackgroundEnabled
+                .collectAsStateWithLifecycle(initialValue = true)
             val coverBackgroundClarity by settingsDataStore.coverBackgroundClarity.collectAsStateWithLifecycle(initialValue = 0.35f)
             val coverPreviewMode by settingsDataStore.coverPreviewMode.collectAsStateWithLifecycle(initialValue = CoverPreviewMode.Disabled)
             val nowPlayingHomeLayoutMode by settingsDataStore.nowPlayingHomeLayoutMode.collectAsStateWithLifecycle(
@@ -594,6 +596,7 @@ class MainActivity : ComponentActivity() {
                         onContentReady = { contentReady = true },
                         showMiniPlayerBar = showMiniPlayerBar,
                         coverBackgroundEnabled = coverBackgroundEnabled,
+                        dynamicFlowingBackgroundEnabled = dynamicFlowingBackgroundEnabled,
                         coverBackgroundClarity = coverBackgroundClarity,
                         coverPreviewMode = coverPreviewMode,
                         nowPlayingHomeLayoutMode = nowPlayingHomeLayoutMode,

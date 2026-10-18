@@ -49,12 +49,13 @@ private class FlowingArtworkFrame(
 internal fun FlowingArtworkBackground(
     artwork: Bitmap,
     isPlaying: Boolean,
-    isActive: Boolean
+    isActive: Boolean,
+    dynamicEnabled: Boolean
 ) {
     val size = remember { mutableStateOf(IntSize.Zero) }
     val frame = remember { mutableStateOf<FlowingArtworkFrame?>(null) }
     val clock = remember { FlowingArtworkClock() }
-    val latestPlaying by rememberUpdatedState(isPlaying)
+    val latestAnimating by rememberUpdatedState(isPlaying && dynamicEnabled)
     val densityDpi = LocalConfiguration.current.densityDpi
     val downsample = if (densityDpi >= 420) 32 else 20
     val paint = remember { Paint(Paint.FILTER_BITMAP_FLAG) }
@@ -83,7 +84,7 @@ internal fun FlowingArtworkBackground(
         try {
             while (currentCoroutineContext().isActive) {
                 val frameTime = withFrameNanos { it }
-                if (lastFrameTime != 0L && latestPlaying) {
+                if (lastFrameTime != 0L && latestAnimating) {
                     clock.elapsedNanos += (frameTime - lastFrameTime).coerceIn(0L, 50_000_000L)
                 }
                 lastFrameTime = frameTime
@@ -109,8 +110,8 @@ internal fun FlowingArtworkBackground(
                 }
                 frame.value = FlowingArtworkFrame(next, artwork, previous.takeIf { alpha < 1f }, alpha)
                 index = (index + 1) % buffers.size
-                if (!latestPlaying && alpha >= 1f) {
-                    snapshotFlow { latestPlaying }.first { it }
+                if (!latestAnimating && alpha >= 1f) {
+                    snapshotFlow { latestAnimating }.first { it }
                     lastFrameTime = 0L
                 }
             }

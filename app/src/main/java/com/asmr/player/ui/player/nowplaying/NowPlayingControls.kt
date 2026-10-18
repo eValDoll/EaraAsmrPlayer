@@ -61,6 +61,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -361,7 +364,7 @@ private fun PlaybackActionButtons(
         Icon(
             imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Outlined.FavoriteBorder,
             contentDescription = if (isFavorite) "取消收藏" else "收藏",
-            tint = contentColor.copy(alpha = if (isFavorite) 1f else 0.8f),
+            tint = if (isFavorite) Color.Red else contentColor.copy(alpha = 0.8f),
             modifier = Modifier.size(actionIconSize)
         )
     }
@@ -412,23 +415,40 @@ private fun PlaybackActionButtons(
 
     if (!landscapeControls) {
         val sliceEnabled = sliceUiState.sliceModeEnabled
-        val baseTint = contentColor.copy(alpha = 0.8f)
         val tint by animateColorAsState(
-            targetValue = if (sliceEnabled) contentColor else baseTint,
+            targetValue = contentColor.copy(alpha = if (sliceEnabled) 1f else 0.55f),
             animationSpec = tween(240, easing = FastOutSlowInEasing),
             label = "sliceModeTint"
         )
         IconButton(
             onClick = { viewModel.toggleSliceMode() },
-            modifier = Modifier.size(actionButtonSize),
+            modifier = Modifier
+                .size(actionButtonSize)
+                .semantics {
+                    selected = sliceEnabled
+                    stateDescription = if (sliceEnabled) "已开启" else "已关闭"
+                },
             colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
         ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_segment),
-                contentDescription = "切片播放",
-                tint = tint,
-                modifier = Modifier.size(actionIconSize)
-            )
+            Box(
+                modifier = Modifier.size(actionIconSize + 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_segment),
+                    contentDescription = "切片播放",
+                    tint = tint,
+                    modifier = Modifier.size(actionIconSize)
+                )
+                if (sliceEnabled) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .size(width = 12.dp, height = 2.dp)
+                            .background(contentColor, RoundedCornerShape(1.dp))
+                    )
+                }
+            }
         }
     }
 }
