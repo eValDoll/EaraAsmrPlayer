@@ -6,95 +6,29 @@ import com.asmr.player.data.remote.crawler.AlbumResourceSource
 import com.asmr.player.util.AlbumWorkNo
 import com.asmr.player.util.isJapaneseAsmrResource
 
-import android.content.Context
-import android.util.Log
 import androidx.compose.runtime.Immutable
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
-import androidx.room.withTransaction
-import com.asmr.player.data.local.db.AppDatabase
-import com.asmr.player.data.local.db.dao.AlbumDao
-import com.asmr.player.data.local.db.dao.TagWithCount
-import com.asmr.player.data.local.db.dao.TrackDao
-import com.asmr.player.data.local.db.entities.AlbumEntity
-import com.asmr.player.data.local.db.entities.AlbumFtsEntity
-import com.asmr.player.data.local.db.entities.AlbumTagEntity
-import com.asmr.player.data.local.db.entities.RemoteSubtitleSourceEntity
-import com.asmr.player.data.local.db.entities.TrackEntity
-import com.asmr.player.data.local.db.entities.TagEntity
-import com.asmr.player.data.local.db.entities.TagSource
-import com.asmr.player.data.local.db.entities.TrackTagEntity
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.api.AsmrOneRecommendationItem
 import com.asmr.player.data.remote.api.AsmrOneRecommendationSeedFeatures
 import com.asmr.player.data.remote.api.WorkDetailsResponse
-import com.asmr.player.data.remote.crawler.AsmrOneCrawler
-import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
-import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncResolveResult
-import com.asmr.player.data.remote.dlsite.DlsitePlayWorkClient
-import com.asmr.player.data.remote.dlsite.DlsitePlayTreeResult
 import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
-import com.asmr.player.data.remote.dlsite.DlsiteProductInfoClient
-import com.asmr.player.data.remote.dlsite.resolveCloudSyncWorkId
-import com.asmr.player.data.remote.dlsite.resolveDlsiteCloudSync
-import com.asmr.player.data.remote.dlsite.resolveSelectedDlsiteCloudSync
 import com.asmr.player.data.remote.dlsite.parseDlsitePlayImageSeed
-import com.asmr.player.data.remote.download.DownloadManager
-import com.asmr.player.data.remote.scraper.DLSiteScraper
-import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
 import com.asmr.player.data.remote.scraper.DlsiteRecommendations
 import com.asmr.player.data.remote.NetworkHeaders
-import com.asmr.player.data.lyrics.LyricsLoader
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.ui.nav.AlbumCoverHint
-import com.asmr.player.util.OnlineLyricsStore
-import com.asmr.player.util.RemoteSubtitleSource
-import com.asmr.player.util.SyncCoordinator
-import com.asmr.player.util.TrackKeyNormalizer
 import com.asmr.player.util.DlsiteWorkNo
-import com.asmr.player.data.remote.crawler.asmrOneWorkMatchesRj
-import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.flowOn
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
-import java.io.File
-import java.io.FileOutputStream
-import javax.inject.Inject
 
-import com.asmr.player.util.MessageManager
-import com.asmr.player.util.TagNormalizer
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Rect
-import android.os.SystemClock
-import androidx.work.ExistingWorkPolicy
-import androidx.work.OneTimeWorkRequestBuilder
-import androidx.work.WorkManager
-import androidx.work.workDataOf
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
-import javax.inject.Named
-import com.asmr.player.BuildConfig
-import com.asmr.player.work.AlbumCoverThumbWorker
 
 internal fun centerCropSquare(src: Bitmap, size: Int): Bitmap {
     val w = src.width
@@ -698,18 +632,6 @@ internal data class AsmrOneLeafDownload(
 )
 
 internal const val DlsiteTrialDownloadDirectoryName = "体验版"
-
-internal fun flattenAsmrOneTracks(tree: List<AsmrOneTrackNodeResponse>): List<Track> {
-    val leaves = flattenAsmrOneLeafDownloads(tree)
-    return leaves.map {
-        Track(
-            albumId = 0,
-            title = it.relativePath.substringAfterLast('/'),
-            path = it.url,
-            duration = it.duration ?: 0.0
-        )
-    }
-}
 
 internal fun filterDownloadableMediaTree(tree: List<AsmrOneTrackNodeResponse>): List<AsmrOneTrackNodeResponse> {
     return tree.mapNotNull { node ->

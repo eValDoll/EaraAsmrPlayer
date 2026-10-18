@@ -196,9 +196,7 @@ class StereoFftAnalyzer(
             tmpBins[b] = if (v < 0.02f) 0f else v.coerceIn(0f, 1f)
         }
 
-        // REMOVED: Redundant smoothing (Attack/Decay) in data layer.
-        // We pass raw FFT energy to the View layer to preserve transient punch.
-        // The View layer (ChannelSpectrumView) already has its own sophisticated physics model.
+        // 将 FFT 能量直接交给显示层，保留瞬态变化。
         for (b in 0 until binCount) {
              smooth[b] = tmpBins[b]
         }

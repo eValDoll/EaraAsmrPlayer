@@ -131,10 +131,10 @@ class PlaylistSubtitlePersistenceTest {
     }
 
     @Test
-    fun replacingCustomPlaylist_preservesSourcesAndPrefersItemMetadata() = runBlocking {
+    fun addingToCustomPlaylist_preservesSourcesAndPrefersItemMetadata() = runBlocking {
         val playlistId = repository.createUserPlaylist("睡前听")!!
         OnlineLyricsStore.set(mediaId, listOf(sources.first()))
-        repository.replacePlaylistWithMediaItems(playlistId, listOf(onlineItem(sources), otherItem()))
+        repository.addItemsToPlaylist(playlistId, listOf(onlineItem(sources), otherItem()))
 
         restartStorage()
 

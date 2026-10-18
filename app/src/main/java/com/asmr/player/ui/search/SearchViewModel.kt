@@ -4,7 +4,7 @@ import com.asmr.player.domain.model.CollectedSearchSource
 import android.os.SystemClock
 import android.util.Log
 import com.asmr.player.BuildConfig
-import com.asmr.player.data.local.datastore.LastSearchStateV1
+import com.asmr.player.data.local.datastore.LastSearchState
 import com.asmr.player.data.local.datastore.SearchCacheStore
 import com.asmr.player.data.remote.api.AsmrOneAvailabilityApi
 import com.asmr.player.data.remote.api.AsmrOneCollectedSearchItem
@@ -176,22 +176,6 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    fun stopBackgroundLoading() {
-        cancelBackgroundJobs()
-        _uiState.update { state ->
-            val cur = state as? SearchUiState.Success ?: return@update state
-            cur.copy(
-                isEnriching = false,
-                enrichingRjCodes = emptySet(),
-                isRefreshingLocalizedText = false,
-                resolvingCollectedWorkIds = emptySet(),
-                isAsmrOneChecking = false,
-                asmrOneChecked = 0,
-                asmrOneTotal = 0
-            )
-        }
-    }
-
     fun refreshCollectionAvailability() {
         val current = _uiState.value as? SearchUiState.Success ?: return
         if (current.purchasedOnly || current.collectedOnly || current.isBusy || availabilityJob?.isActive == true) return
@@ -261,22 +245,6 @@ class SearchViewModel @Inject constructor(
         lastRequestedKeyword = normalizedKeyword
         requestPage(normalizedKeyword, 1, SearchPendingRequestKind.Search)
         return true
-    }
-
-    fun setOrder(order: SearchSortOption) {
-        updateSearchOptions(order = order)
-    }
-
-    fun setPurchasedOnly(enabled: Boolean) {
-        updateSearchOptions(purchasedOnly = enabled)
-    }
-
-    fun setPresaleOnly(enabled: Boolean) {
-        updateSearchOptions(presaleOnly = enabled)
-    }
-
-    fun setLocale(locale: String?) {
-        updateSearchOptions(locale = locale)
     }
 
     fun updateSearchOptions(
@@ -841,7 +809,7 @@ class SearchViewModel @Inject constructor(
         }
     }
 
-    private fun applyCachedState(cached: LastSearchStateV1) {
+    private fun applyCachedState(cached: LastSearchState) {
         val order = SearchSortOption.values()
             .firstOrNull { it.name == cached.orderName }
             ?: SearchSortOption.Trend
@@ -917,7 +885,7 @@ class SearchViewModel @Inject constructor(
             if (latest.isBusy) return@launch
             runCatching {
                 searchCacheStore.writeLast(
-                    LastSearchStateV1(
+                    LastSearchState(
                         savedAtMs = System.currentTimeMillis(),
                         keyword = latest.keyword,
                         orderName = latest.order.name,

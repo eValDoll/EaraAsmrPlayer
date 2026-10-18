@@ -448,12 +448,6 @@ class SettingsRepository private constructor(
         }
     }
 
-    suspend fun setEqEnabled(enabled: Boolean) {
-        withContext(Dispatchers.IO) {
-            context.settingsDataStore.edit { it[SettingsKeys.EQ_ENABLED] = enabled }
-        }
-    }
-
     suspend fun setBandLevel(index: Int, level: Int) {
         withContext(Dispatchers.IO) {
             context.settingsDataStore.edit { it[SettingsKeys.eqBandLevel(index)] = level }

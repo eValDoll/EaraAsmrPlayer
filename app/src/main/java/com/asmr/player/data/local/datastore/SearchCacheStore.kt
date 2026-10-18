@@ -18,7 +18,7 @@ import javax.inject.Singleton
 private val Context.searchCacheDataStore by preferencesDataStore(name = "search_cache")
 private const val SearchHistoryLimit = 50
 
-data class LastSearchStateV1(
+data class LastSearchState(
     val savedAtMs: Long,
     val keyword: String,
     val orderName: String,
@@ -36,7 +36,7 @@ data class LastSearchStateV1(
     val results: List<Album>
 )
 
-internal fun LastSearchStateV1.restoreCollectedSource(): LastSearchStateV1 {
+internal fun LastSearchState.restoreCollectedSource(): LastSearchState {
     val source = CollectedSearchSource.fromName(collectedSourceName)
     return copy(
         collectedSourceName = source.name,
@@ -58,15 +58,15 @@ class SearchCacheStore internal constructor(
     private val gson = Gson()
     private val historyListType = object : TypeToken<List<String>>() {}.type
 
-    suspend fun readLast(): LastSearchStateV1? {
+    suspend fun readLast(): LastSearchState? {
         val raw = dataStore.data.first()[key].orEmpty()
         if (raw.isBlank()) return null
         return runCatching {
-            gson.fromJson(raw, LastSearchStateV1::class.java).restoreCollectedSource()
+            gson.fromJson(raw, LastSearchState::class.java).restoreCollectedSource()
         }.getOrNull()
     }
 
-    suspend fun writeLast(state: LastSearchStateV1) {
+    suspend fun writeLast(state: LastSearchState) {
         dataStore.edit { prefs ->
             prefs[key] = gson.toJson(state)
         }

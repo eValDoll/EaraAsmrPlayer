@@ -27,9 +27,6 @@ interface TrackPlaybackProgressDao {
     @Query("DELETE FROM track_playback_progress WHERE albumId = :albumId")
     suspend fun deleteByAlbumId(albumId: Long)
 
-    @Query("SELECT * FROM track_playback_progress WHERE albumId IN (:albumIds) ORDER BY albumId ASC, updatedAt DESC")
-    fun observeProgressForAlbums(albumIds: List<Long>): Flow<List<TrackPlaybackProgressEntity>>
-
     @Query(
         """
         SELECT
@@ -46,33 +43,7 @@ interface TrackPlaybackProgressDao {
     )
     fun observeLastPlayedRowsForAlbums(albumIds: List<Long>): Flow<List<AlbumLastPlayedRow>>
 
-    @Query(
-        """
-        SELECT albumId AS albumId,
-               SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) AS completedCount
-        FROM track_playback_progress
-        WHERE albumId IN (:albumIds)
-        GROUP BY albumId
-        """
-    )
-    suspend fun getCompletedCountsForAlbums(albumIds: List<Long>): List<AlbumCompletedCountRow>
-
-    @Query(
-        """
-        SELECT albumId AS albumId,
-               SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END) AS completedCount
-        FROM track_playback_progress
-        WHERE albumId IN (:albumIds)
-        GROUP BY albumId
-        """
-    )
-    fun observeCompletedCountsForAlbums(albumIds: List<Long>): Flow<List<AlbumCompletedCountRow>>
 }
-
-data class AlbumCompletedCountRow(
-    val albumId: Long,
-    val completedCount: Long
-)
 
 data class AlbumLastPlayedRow(
     val albumId: Long?,

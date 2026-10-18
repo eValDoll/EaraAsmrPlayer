@@ -7,20 +7,10 @@ import android.graphics.BitmapFactory
 import android.os.Build
 import android.os.Trace
 import android.util.Log
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.MutableState
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.painter.BitmapPainter
-import androidx.compose.ui.graphics.painter.ColorPainter
-import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.IntSize
 import com.asmr.player.performance.UiFrameWorkCoordinator
-import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
@@ -360,8 +350,6 @@ class ImageCacheManager(
         }
     }
 
-    fun statsSnapshot(): CacheStats.Snapshot = stats.snapshot()
-
     fun updateDiskMaxSizeBytes(maxSizeBytes: Long) {
         diskCache.updateMaxSizeBytes(maxSizeBytes)
     }
@@ -455,24 +443,4 @@ class ImageCacheManager(
 @InstallIn(SingletonComponent::class)
 interface ImageCacheEntryPoint {
     fun imageCacheManager(): ImageCacheManager
-}
-
-@Composable
-@Suppress("UNUSED_PARAMETER")
-fun rememberCachedImage(
-    model: Any,
-    modifier: androidx.compose.ui.Modifier = androidx.compose.ui.Modifier
-): Painter {
-    val ctx = LocalContext.current.applicationContext
-    val manager = remember(ctx) {
-        EntryPointAccessors.fromApplication(ctx, ImageCacheEntryPoint::class.java).imageCacheManager()
-    }
-    val state: MutableState<Painter> = remember(model) { mutableStateOf(ColorPainter(androidx.compose.ui.graphics.Color.Transparent)) }
-    LaunchedEffect(model) {
-        runCatching {
-            val img = manager.loadImage(model = model, size = null, cachePolicy = CachePolicy.DEFAULT)
-            state.value = BitmapPainter(img)
-        }
-    }
-    return state.value
 }

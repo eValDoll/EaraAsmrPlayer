@@ -95,7 +95,6 @@ import com.asmr.player.util.RemoteSubtitleSource
 import com.asmr.player.util.SubtitleMatchSupport
 import com.asmr.player.util.SyncCoordinator
 import com.asmr.player.util.TagNormalizer
-import com.asmr.player.util.TrackKeyNormalizer
 import com.asmr.player.util.isOnlineTrackPath
 import com.asmr.player.work.AlbumCoverThumbWorker
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -255,8 +254,6 @@ class AlbumDetailViewModel @Inject constructor(
     private val asmrOneResolutionInFlight = mutableMapOf<String, Deferred<Pair<String, Int?>?>>()
     private val asmrOneTracksCache = linkedMapOf<String, Pair<Long, AsmrOneTracksResult>>()
 
-    private val treeExpandedByKey = linkedMapOf<String, List<String>>()
-    private val treeInitializedKeys = linkedSetOf<String>()
     private val listScrollByKey = linkedMapOf<String, Pair<Int, Int>>()
     private val treeCurrentPathByKey = linkedMapOf<String, String>()
     private val remoteFileSizeCache = linkedMapOf<String, Long?>()
@@ -475,22 +472,7 @@ class AlbumDetailViewModel @Inject constructor(
         return workId to tree
     }
 
-    fun getTreeExpanded(stateKey: String): List<String> {
-        return treeExpandedByKey[stateKey].orEmpty()
-    }
-
-    fun isTreeInitialized(stateKey: String): Boolean {
-        return treeInitializedKeys.contains(stateKey)
-    }
-
-    fun persistTreeState(stateKey: String, expanded: List<String>) {
-        treeExpandedByKey[stateKey] = expanded.distinct()
-        treeInitializedKeys.add(stateKey)
-    }
-
     fun clearTreeState(stateKey: String) {
-        treeExpandedByKey.remove(stateKey)
-        treeInitializedKeys.remove(stateKey)
         treeCurrentPathByKey.remove(stateKey)
     }
 
@@ -1372,12 +1354,12 @@ class AlbumDetailViewModel @Inject constructor(
                     return@launch
                 }
                 val locale = dlsiteLocaleForLang(loadModel.dlsiteSelectedLang)
-                val (dlsiteInitialDetail, dlsiteRecommendationsFromV2) = coroutineScope {
+                val (dlsiteInitialDetail, dlsiteRecommendations) = coroutineScope {
                     val initialDeferred = async {
                         runCatching { dlsiteScraper.getInitialWorkDetail(workno, locale = locale) }.getOrNull()
                     }
                     val recDeferred = async {
-                        runCatching { dlsiteScraper.getRecommendationsDetailV2(workno, locale = locale) }
+                        runCatching { dlsiteScraper.getRecommendations(workno, locale = locale) }
                             .getOrDefault(DlsiteRecommendations())
                     }
                     initialDeferred.await() to recDeferred.await()
@@ -1413,9 +1395,9 @@ class AlbumDetailViewModel @Inject constructor(
                 }
 
                 val fallbackRecs = dlsiteWorkInfo?.recommendations ?: DlsiteRecommendations()
-                val circleWorks = mergePreferNonBlank(dlsiteRecommendationsFromV2.circleWorks, fallbackRecs.circleWorks)
-                val sameVoiceWorks = mergePreferNonBlank(dlsiteRecommendationsFromV2.sameVoiceWorks, fallbackRecs.sameVoiceWorks)
-                val alsoBoughtWorks = mergePreferNonBlank(dlsiteRecommendationsFromV2.alsoBoughtWorks, fallbackRecs.alsoBoughtWorks)
+                val circleWorks = mergePreferNonBlank(dlsiteRecommendations.circleWorks, fallbackRecs.circleWorks)
+                val sameVoiceWorks = mergePreferNonBlank(dlsiteRecommendations.sameVoiceWorks, fallbackRecs.sameVoiceWorks)
+                val alsoBoughtWorks = mergePreferNonBlank(dlsiteRecommendations.alsoBoughtWorks, fallbackRecs.alsoBoughtWorks)
                 
                 val dlsiteRecommendationsRaw = DlsiteRecommendations(
                     circleWorks = circleWorks,
@@ -2208,63 +2190,6 @@ class AlbumDetailViewModel @Inject constructor(
             rjCode = entity.rjCode.ifBlank { entity.workId },
             description = entity.description,
             tracks = tracks
-        )
-    }
-
-    fun downloadAlbum() {
-        val current = _uiState.value as? AlbumDetailUiState.Success ?: return
-        val model = current.model
-        val album = model.displayAlbum
-
-        val existingLocalKeys = LinkedHashSet<String>()
-        val existingLocalKeysNoGroup = LinkedHashSet<String>()
-        model.localAlbum?.tracks
-            ?.filter { !it.path.trim().startsWith("http", ignoreCase = true) }
-            ?.forEach { t ->
-                existingLocalKeys.add(TrackKeyNormalizer.buildKey(t.title, t.group, null))
-                existingLocalKeysNoGroup.add(TrackKeyNormalizer.buildKey(t.title, "", null))
-            }
-        
-        val folderName = safeFolderName(album.rjCode.ifBlank { album.workId }.ifBlank { album.title })
-        val items = mutableListOf<RelativeDownloadItem>()
-        val coverUrl = album.coverUrl.trim()
-        if (coverUrl.startsWith("http", ignoreCase = true)) {
-            val ext = coverUrl.substringBefore('?').substringAfterLast('.', "").takeIf { it.length in 2..5 } ?: "jpg"
-            items += RelativeDownloadItem(url = coverUrl, relativePath = "cover.$ext")
-        }
-
-        album.tracks.forEachIndexed { index, track ->
-            val url = track.path.trim()
-            if (!url.startsWith("http", ignoreCase = true)) return@forEachIndexed
-            val key = TrackKeyNormalizer.buildKey(track.title, track.group, null)
-            val keyNoGroup = TrackKeyNormalizer.buildKey(track.title, "", null)
-            if (existingLocalKeys.contains(key) || existingLocalKeysNoGroup.contains(keyNoGroup)) {
-                return@forEachIndexed
-            }
-            val chapter = ChapterMediaReference.parse(url)?.takeIf { it.isHls }
-            val ext = url.substringBefore('?').substringAfterLast('.', "").takeIf { it.length in 2..6 } ?: "mp3"
-            val relativePath = if (chapter != null) {
-                "${track.group.ifBlank { "japaneseasmr.com" }}/${safeFileName(chapter.fileName)}"
-            } else {
-                "${(index + 1).toString().padStart(2, '0')}_${safeFileName(track.title)}.$ext"
-            }
-            items += RelativeDownloadItem(url = url, relativePath = relativePath)
-        }
-        if (items.isEmpty()) return
-        downloadPreparation.enqueue(
-            DownloadBatchRequest(
-                albumDirectoryName = folderName,
-                logicalTaskKey = "album:$folderName",
-                items = items,
-                taskSubtitle = album.title,
-                albumTitle = album.title,
-                albumCircle = album.circle,
-                albumCv = album.cv,
-                albumTagsCsv = album.tags.joinToString(","),
-                albumCoverUrl = album.coverUrl,
-                albumWorkId = album.workId,
-                albumRjCode = album.rjCode,
-            ),
         )
     }
 

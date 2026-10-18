@@ -317,8 +317,8 @@ class DownloadWorker(context: Context, parameters: WorkerParameters) : Coroutine
                         else -> -1L
                     }
                     val buffer = ByteArray(DOWNLOAD_BUFFER_SIZE)
-                    @Suppress("UNUSED_VARIABLE") var progressBaselineBytes = 0L
-                    @Suppress("UNUSED_VARIABLE") var progressBaselineTs = System.currentTimeMillis()
+                    var progressBaselineBytes = 0L
+                    var progressBaselineTs = System.currentTimeMillis()
 
                     kotlinx.coroutines.currentCoroutineContext().ensureActive()
                     if (dao.updateRunningItemProgress(

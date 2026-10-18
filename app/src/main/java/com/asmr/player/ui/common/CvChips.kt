@@ -4,8 +4,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
@@ -38,33 +36,6 @@ fun CvChipsSingleLine(
             .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically,
-    ) {
-        if (showLabel) {
-            CvLabelChip()
-        }
-        cvs.forEach { cv ->
-            CvValueChip(text = cv, onClick = { onCvClick?.invoke(cv) })
-        }
-    }
-}
-
-@OptIn(ExperimentalLayoutApi::class)
-@Composable
-fun CvChipsFlow(
-    cvText: String,
-    modifier: Modifier = Modifier,
-    horizontalArrangement: Arrangement.Horizontal = Arrangement.spacedBy(4.dp),
-    verticalArrangement: Arrangement.Vertical = Arrangement.spacedBy(4.dp),
-    showLabel: Boolean = true,
-    onCvClick: ((String) -> Unit)? = null,
-) {
-    val cvs = remember(cvText) { parseCvNames(cvText) }
-    if (cvs.isEmpty()) return
-
-    FlowRow(
-        modifier = modifier,
-        horizontalArrangement = horizontalArrangement,
-        verticalArrangement = verticalArrangement,
     ) {
         if (showLabel) {
             CvLabelChip()

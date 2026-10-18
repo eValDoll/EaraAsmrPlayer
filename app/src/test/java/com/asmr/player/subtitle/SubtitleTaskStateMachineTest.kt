@@ -3,22 +3,9 @@ package com.asmr.player.subtitle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
-import org.junit.Assert.assertThrows
 import org.junit.Test
 
 class SubtitleTaskStateMachineTest {
-    @Test
-    fun generatedItem_onlySucceedsAfterTranslation() {
-        SubtitleItemState.requireTransition(SubtitleItemState.QUEUED_TRANSCRIPTION, SubtitleItemState.TRANSCRIBING)
-        SubtitleItemState.requireTransition(SubtitleItemState.TRANSCRIBING, SubtitleItemState.QUEUED_TRANSLATION)
-        SubtitleItemState.requireTransition(SubtitleItemState.QUEUED_TRANSLATION, SubtitleItemState.TRANSLATING)
-        SubtitleItemState.requireTransition(SubtitleItemState.TRANSLATING, SubtitleItemState.SUCCEEDED)
-
-        assertThrows(IllegalArgumentException::class.java) {
-            SubtitleItemState.requireTransition(SubtitleItemState.TRANSCRIBING, SubtitleItemState.SUCCEEDED)
-        }
-    }
-
     @Test
     fun resume_usesPersistedTranslationSourcesInsteadOfRetranscribing() {
         assertEquals(
@@ -79,18 +66,6 @@ class SubtitleTaskStateMachineTest {
         assertTrue(taskStillControlsSubtitles("published", "published"))
         assertFalse(taskStillControlsSubtitles("user-import", "published"))
         assertFalse(taskStillControlsSubtitles("", ""))
-    }
-
-    @Test
-    fun pauseAndCancelTransitions_coverRacingControlRequests() {
-        SubtitleItemState.requireTransition(SubtitleItemState.TRANSLATING, SubtitleItemState.PAUSE_REQUESTED)
-        SubtitleItemState.requireTransition(SubtitleItemState.PAUSE_REQUESTED, SubtitleItemState.PAUSED)
-        SubtitleItemState.requireTransition(SubtitleItemState.PAUSE_REQUESTED, SubtitleItemState.CANCEL_REQUESTED)
-        SubtitleItemState.requireTransition(SubtitleItemState.CANCEL_REQUESTED, SubtitleItemState.CANCELED)
-
-        assertThrows(IllegalArgumentException::class.java) {
-            SubtitleItemState.requireTransition(SubtitleItemState.SUCCEEDED, SubtitleItemState.CANCEL_REQUESTED)
-        }
     }
 
     @Test

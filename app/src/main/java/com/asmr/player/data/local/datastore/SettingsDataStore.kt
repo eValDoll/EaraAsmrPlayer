@@ -30,8 +30,6 @@ class SettingsDataStore @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
     private val themeKey = stringPreferencesKey("theme")
-    private val sfwModeKey = booleanPreferencesKey("sfw_mode")
-    private val libraryRootsKey = stringSetPreferencesKey("library_roots")
     private val dynamicPlayerHueEnabledKey = booleanPreferencesKey("dynamic_player_hue_enabled")
     private val staticHueArgbLightKey = intPreferencesKey("static_hue_argb_light")
     private val staticHueArgbDarkKey = intPreferencesKey("static_hue_argb_dark")
@@ -52,13 +50,10 @@ class SettingsDataStore @Inject constructor(
     private val lyricsPageDisplayAreaModeKey = intPreferencesKey("lyrics_page_display_area_mode")
     private val recentAlbumsPanelExpandedKey = booleanPreferencesKey("recent_albums_panel_expanded")
     private val miniPlayerDisplayModeKey = stringPreferencesKey("mini_player_display_mode")
-    private val bottomChromePinnedRouteKey = stringPreferencesKey("bottom_chrome_pinned_route")
     private val autoUpdateCheckEnabledKey = booleanPreferencesKey("auto_update_check_enabled")
     private val lastHandledClipboardEventKey = stringPreferencesKey("last_handled_clipboard_event")
 
     val theme: Flow<String> = context.settingsDataStore.data.map { it[themeKey] ?: "system" }
-    val sfwMode: Flow<Boolean> = context.settingsDataStore.data.map { it[sfwModeKey] ?: false }
-    val libraryRoots: Flow<Set<String>> = context.settingsDataStore.data.map { it[libraryRootsKey] ?: emptySet() }
     val dynamicPlayerHueEnabled: Flow<Boolean> = context.settingsDataStore.data.map { it[dynamicPlayerHueEnabledKey] ?: false }
     val staticHueArgbLight: Flow<Int?> = context.settingsDataStore.data.map { prefs ->
         if (prefs.contains(staticHueArgbLightKey)) prefs[staticHueArgbLightKey] else null
@@ -121,9 +116,6 @@ class SettingsDataStore @Inject constructor(
     val miniPlayerDisplayMode: Flow<String> = context.settingsDataStore.data.map { prefs ->
         prefs[miniPlayerDisplayModeKey] ?: "CoverOnly"
     }
-    val bottomChromePinnedRoute: Flow<String?> = context.settingsDataStore.data.map { prefs ->
-        prefs[bottomChromePinnedRouteKey]
-    }
     val autoUpdateCheckEnabled: Flow<Boolean> = context.settingsDataStore.data.map { prefs ->
         prefs[autoUpdateCheckEnabledKey] ?: true
     }
@@ -133,10 +125,6 @@ class SettingsDataStore @Inject constructor(
 
     suspend fun setTheme(theme: String) {
         context.settingsDataStore.edit { it[themeKey] = theme }
-    }
-
-    suspend fun setSfwMode(enabled: Boolean) {
-        context.settingsDataStore.edit { it[sfwModeKey] = enabled }
     }
 
     suspend fun setDynamicPlayerHueEnabled(enabled: Boolean) {
@@ -235,16 +223,6 @@ class SettingsDataStore @Inject constructor(
         context.settingsDataStore.edit { it[miniPlayerDisplayModeKey] = mode }
     }
 
-    suspend fun setBottomChromePinnedRoute(route: String?) {
-        context.settingsDataStore.edit { prefs ->
-            if (route.isNullOrBlank()) {
-                prefs.remove(bottomChromePinnedRouteKey)
-            } else {
-                prefs[bottomChromePinnedRouteKey] = route
-            }
-        }
-    }
-
     suspend fun setAutoUpdateCheckEnabled(enabled: Boolean) {
         context.settingsDataStore.edit { prefs ->
             prefs[autoUpdateCheckEnabledKey] = enabled
@@ -259,17 +237,4 @@ class SettingsDataStore @Inject constructor(
         }
     }
 
-    suspend fun addLibraryRoot(path: String) {
-        context.settingsDataStore.edit {
-            val current = it[libraryRootsKey] ?: emptySet()
-            it[libraryRootsKey] = current + path
-        }
-    }
-
-    suspend fun removeLibraryRoot(path: String) {
-        context.settingsDataStore.edit {
-            val current = it[libraryRootsKey] ?: emptySet()
-            it[libraryRootsKey] = current - path
-        }
-    }
 }

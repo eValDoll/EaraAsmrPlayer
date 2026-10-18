@@ -2,7 +2,6 @@ package com.asmr.player.data.remote.download
 
 import android.content.ContentResolver
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import android.provider.DocumentsContract
 import androidx.datastore.preferences.core.edit
@@ -105,14 +104,6 @@ class DownloadStorageGateway @Inject constructor(
             permission.uri == uri && permission.isReadPermission && permission.isWritePermission
         }
     }
-
-    fun takePersistablePermission(uri: Uri): Boolean = runCatching {
-        resolver.takePersistableUriPermission(
-            uri,
-            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
-        )
-        true
-    }.getOrDefault(false)
 
     fun displayName(uri: Uri): String {
         val projection = arrayOf(DocumentsContract.Document.COLUMN_DISPLAY_NAME)

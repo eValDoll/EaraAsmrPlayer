@@ -44,7 +44,7 @@ class AlbumDetailLandscapeLayoutTest {
     fun landscapeArtwork_keepsInteractiveContentOutsideCoverBounds() {
         val artworkSize = 384.dp
 
-        assertTrue(albumLandscapeHeaderStart(artworkSize) > albumLandscapeArtworkRight(artworkSize))
+        assertEquals(464.dp, albumLandscapeHeaderStart(artworkSize))
     }
 
     @Test

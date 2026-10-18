@@ -43,7 +43,6 @@ internal object NowPlayingMotionSpec {
     const val ExitDurationMs = 140
     const val ExitStepDelayMs = 45
 
-    const val RouteFadeDurationMs = 120
 
     const val PlayerForegroundEnterDurationMs = 180
     const val PlayerForegroundExitDurationMs = 130

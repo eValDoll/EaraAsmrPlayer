@@ -21,7 +21,7 @@ import javax.inject.Inject
 
 internal data class RestoredPlaybackQueue(
     val items: List<MediaItem>,
-    val state: PersistedPlaybackStateV2,
+    val state: PersistedPlaybackState,
 )
 
 @androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)

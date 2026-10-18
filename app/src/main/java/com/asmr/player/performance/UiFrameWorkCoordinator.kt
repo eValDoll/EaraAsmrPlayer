@@ -22,10 +22,6 @@ object UiFrameWorkCoordinator {
         }
     }
 
-    fun isFrameCritical(): Boolean {
-        return criticalUntilNanos.get() > SystemClock.elapsedRealtimeNanos()
-    }
-
     suspend fun awaitFrameQuiet() {
         while (true) {
             val remainingNanos = criticalUntilNanos.get() - SystemClock.elapsedRealtimeNanos()

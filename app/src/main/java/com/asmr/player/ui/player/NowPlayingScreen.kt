@@ -16,17 +16,12 @@ import androidx.compose.foundation.*
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
@@ -40,22 +35,16 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.key.KeyEventType
@@ -82,8 +71,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.MediaItem
-import androidx.media3.common.Player
-import androidx.media3.common.VideoSize
 import com.asmr.player.R
 import com.asmr.player.HardwareVolumeOverlay
 import com.asmr.player.cache.CachePolicy
@@ -93,34 +80,24 @@ import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
 import com.asmr.player.data.settings.NowPlayingLyricsSettings
-import com.asmr.player.ui.common.AsmrAsyncImage
-import com.asmr.player.ui.common.AudioOutputRouteIcon
 import com.asmr.player.ui.common.HorizontalStereoSpectrum
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
-import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
-import com.asmr.player.ui.common.AppVolumeSlider
 import com.asmr.player.ui.common.AppVolumeWarningSessionState
 import com.asmr.player.playback.AppVolume
 import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.ui.common.EqualizerPanel
 import com.asmr.player.ui.common.PlayerModalSheet
-import com.asmr.player.ui.common.rememberProtectedAppVolumeChangeState
-import com.asmr.player.ui.common.DiscPlaceholder
-import com.asmr.player.ui.common.smoothScrollToIndex
 import com.asmr.player.ui.library.TagAssignDialog
 import com.asmr.player.service.AudioOutputRouteKind
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.theme.LocalAsmrColorScheme
 import com.asmr.player.util.Formatting
-import com.asmr.player.util.SubtitleEntry
-import com.asmr.player.util.SubtitleIndexFinder
 import com.asmr.player.listentogether.ListenTogetherStatus
 import com.asmr.player.listentogether.ListenTogetherUiState
 import dagger.hilt.android.EntryPointAccessors
 import kotlin.math.abs
 import kotlin.math.roundToInt
-import kotlin.math.roundToLong
 
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -864,40 +841,6 @@ internal fun nowPlayingLandscapeIdentityTypography(
             titleLineHeightSp = 21,
             artistInfoFontSizeSp = 12,
             artistInfoLineHeightSp = 15
-        )
-    }
-}
-
-@Composable
-private fun ArtistWithListenTogetherInfo(
-    artist: String,
-    listenTogetherState: ListenTogetherUiState,
-    style: androidx.compose.ui.text.TextStyle,
-    color: Color,
-    modifier: Modifier = Modifier,
-    textAlign: TextAlign = TextAlign.Start,
-    badgeAlignment: Alignment = Alignment.TopStart,
-    textAlignment: Alignment = Alignment.CenterStart,
-    accentColor: Color = AsmrTheme.colorScheme.primary,
-    pageEntranceSettled: Boolean = true
-) {
-    Box(modifier = modifier.fillMaxWidth()) {
-        ListenTogetherAudienceLine(
-            state = listenTogetherState,
-            modifier = Modifier
-                .align(badgeAlignment)
-                .offset(y = (-18).dp),
-            accentColor = accentColor,
-            pageEntranceSettled = pageEntranceSettled
-        )
-        Text(
-            text = artist,
-            modifier = Modifier.align(textAlignment),
-            style = style,
-            color = color,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            textAlign = textAlign
         )
     }
 }

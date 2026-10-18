@@ -117,10 +117,6 @@ internal object TranslationPromptsEncoded {
         "rm67Dk//Vj9fsg8/XitrCkrLf1f3MlPfGlsDltdX0ltn+y/zMi+jpnMrkt8DRic/aycy1o/zThtrdhcLTi/XRgPS3tvDHkd7" +
         "RieDnndP2lMyjvpfEiPXsp+Xdle/Xidb0lLvnnd/civTu" +
         "\n" +
-        "subtitle_polish_progress_instruction=rc7FhvrUisn9isL5g+2LtszUk9vKiNr+ltfmlMyusLj8hN/2pMr4nez3hPz" +
-        "tmp7QkvbcgdvXgN/kitrVkavh19rElf3KltDhteXsnu/EyNP0jcjlkerotfT2iPXRyfefoM/oiN3zhdTRiN7Xg+aXtO/mkvT" +
-        "Vi/7+ke/v" +
-        "\n" +
         "subtitle_polish_system_prompt=odzSh9ncicrQifH0gcq9t834k/PwivL1msDAUDV9G2NlhN/2pMr4lujBh+/ilZztkd" +
         "3aSRULAD4GjO3ykZPF1Mzsltzdlv7ztenQn/n7DigONiYoNyc6Ez06IyQJU3bV/cub/vKb0Nqz7OACHjFvAyErOycrLyoFPD" +
         "sQDVTIy5Cg1sCG/siF3cGJzO6Ay7uw9eCS4PSK+dmb8N6YyYaxq8GH5cSn5eqX3vOH7+KWlt2R2tmP4uuA/eWK1OWRs9HU8t" +

@@ -30,8 +30,6 @@ class MemoryCache(
         cache.trimToSize(sizeBytes.coerceAtLeast(0))
     }
 
-    fun snapshotSizeBytes(): Int = cache.size()
-
     fun snapshotKeys(): Set<String> = cache.snapshot().keys
 
     fun maxSizeBytes(): Int = cache.maxSize()

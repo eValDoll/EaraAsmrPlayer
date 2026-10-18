@@ -8,7 +8,7 @@ import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.lifecycle.ViewModelStore
 import com.asmr.player.data.local.datastore.SearchCacheStore
-import com.asmr.player.data.local.datastore.LastSearchStateV1
+import com.asmr.player.data.local.datastore.LastSearchState
 import com.asmr.player.data.remote.api.Asmr100Api
 import com.asmr.player.data.remote.api.Asmr200Api
 import com.asmr.player.data.remote.api.Asmr300Api
@@ -79,7 +79,7 @@ class JpAsmrSearchFlowTest {
         try {
             val workNos = listOf("RJ123456", "RJ654321", "UN124393", "UND124393")
             runBlocking {
-                cache.writeLast(LastSearchStateV1(
+                cache.writeLast(LastSearchState(
                     savedAtMs = 1L, keyword = "耳", orderName = "Trend", purchasedOnly = false,
                     locale = "ja_JP", page = 1, canGoNext = false,
                     results = workNos.map { Album(title = "作品", path = "", rjCode = it, workId = it, hasAsmrOne = true) }

@@ -37,15 +37,6 @@ class StereoPcmRingBuffer(
         }
     }
 
-    fun copyLatestTo(outLeft: FloatArray, outRight: FloatArray): Long {
-        val seq = publishedSeq
-        if (seq == 0L) return 0L
-        val slot = publishedSlot
-        leftSlots[slot].copyInto(outLeft)
-        rightSlots[slot].copyInto(outRight)
-        return seq
-    }
-
     fun copyDelayedTo(outLeft: FloatArray, outRight: FloatArray, delaySlots: Int): Long {
         val seq = publishedSeq
         if (seq == 0L) return 0L

@@ -16,10 +16,6 @@ internal fun AudioDeviceInfo.isResumeEligibleOutputDevice(): Boolean {
     return isResumeEligibleOutputDeviceType(type)
 }
 
-internal fun AudioDeviceInfo.outputRouteKind(): AudioOutputRouteKind? {
-    return audioOutputRouteKindForDeviceType(type)
-}
-
 internal fun isDisconnectSensitiveOutputDeviceType(type: Int): Boolean {
     return when (type) {
         AudioDeviceInfo.TYPE_WIRED_HEADSET,

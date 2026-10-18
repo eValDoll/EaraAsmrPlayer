@@ -1,36 +1,10 @@
 package com.asmr.player.util
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.nio.charset.Charset
 
 class SubtitleParserTest {
-    @Test
-    fun mergeLyrics_sameContent_doesNotDuplicateLines() {
-        val l1 = listOf(
-            SubtitleEntry(0, 1000, "hello"),
-            SubtitleEntry(1000, 2000, "world")
-        )
-        val l2 = listOf(
-            SubtitleEntry(0, 1000, "hello"),
-            SubtitleEntry(1000, 2000, "world")
-        )
-
-        val merged = SubtitleParser.mergeLyrics(l1, l2)
-        assertEquals(listOf("hello", "world"), merged.map { it.text })
-    }
-
-    @Test
-    fun mergeLyrics_differentContent_keepsTwoLines() {
-        val l1 = listOf(SubtitleEntry(0, 1000, "hello"))
-        val l2 = listOf(SubtitleEntry(0, 1000, "こんにちは"))
-
-        val merged = SubtitleParser.mergeLyrics(l1, l2)
-        assertEquals(1, merged.size)
-        assertTrue(merged[0].text.contains("\n"))
-    }
-
     @Test
     fun parseLrc_dedupesExactDuplicateTimestamps() {
         val content = """

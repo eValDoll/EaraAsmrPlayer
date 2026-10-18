@@ -45,7 +45,6 @@ import javax.inject.Inject
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
-import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.data.local.db.entities.titleForDisplay
 import androidx.core.net.toUri
 import androidx.media3.common.Player
@@ -122,12 +121,6 @@ class PlayerViewModel @Inject constructor(
 
     val queue: StateFlow<List<MediaItem>> = playerConnection.queue
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    val allPlaylists = playlistRepository.observeAllPlaylists()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
-
-    val floatingLyricsEnabled: StateFlow<Boolean> = settingsRepository.floatingLyricsEnabled
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
     val sleepTimerEndAtMs: StateFlow<Long> = settingsRepository.sleepTimerEndAtMs
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0L)
@@ -321,14 +314,6 @@ class PlayerViewModel @Inject constructor(
         playerConnection.adjustAppVolumePercent(deltaPercent)
     }
 
-    fun toggleFloatingLyrics() {
-        viewModelScope.launch {
-            val enabled = !floatingLyricsEnabled.value
-            settingsRepository.setFloatingLyricsEnabled(enabled)
-            messageManager.showInfo(if (enabled) "悬浮歌词已开启" else "悬浮歌词已关闭")
-        }
-    }
-
     fun showOnlineTagManageUnsupported() {
         messageManager.showInfo("在线音频暂不支持标签管理")
     }
@@ -363,11 +348,6 @@ class PlayerViewModel @Inject constructor(
         messageManager.showInfo("仅支持 LRC、SRT、VTT 歌词文件")
     }
 
-    fun addToQueue() {
-        val item = playback.value.currentMediaItem ?: return
-        showQueueAddSummary(playerConnection.addMediaItems(listOf(item)))
-    }
-
     fun addTrackToQueue(album: Album, track: Track): Boolean {
         val item = MediaItemFactory.fromTrack(album, track)
         val summary = playerConnection.addMediaItems(listOf(item))
@@ -377,17 +357,6 @@ class PlayerViewModel @Inject constructor(
 
     fun addMediaItemsToQueue(items: List<MediaItem>) {
         showQueueAddSummary(playerConnection.addMediaItems(items))
-    }
-
-    suspend fun addToPlaylist(playlistId: Long): Boolean {
-        val item = playback.value.currentMediaItem ?: return false
-        val added = playlistRepository.addItemToPlaylist(playlistId, item)
-        if (added) {
-            messageManager.showSuccess("已添加到播放列表")
-        } else {
-            messageManager.showInfo("已在播放列表中")
-        }
-        return added
     }
 
     private fun showQueueAddSummary(summary: com.asmr.player.playback.QueueAddSummary) {

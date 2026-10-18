@@ -41,7 +41,7 @@ class GitHubUpdateClientTest {
     fun `v1_1_6 legacy picker accepts the new single universal APK`() {
         val assets = listOf(asset("AsmrPlayer-v1.2.0-universal.apk"))
 
-        val selected = legacyV116PickApkAsset(assets)
+        val selected = pickApkAssetForLegacyClient(assets)
 
         assertEquals("AsmrPlayer-v1.2.0-universal.apk", selected?.name)
     }
@@ -51,7 +51,7 @@ class GitHubUpdateClientTest {
         browserDownloadUrl = "https://example.com/$name"
     )
 
-    private fun legacyV116PickApkAsset(
+    private fun pickApkAssetForLegacyClient(
         assets: List<GitHubReleaseAsset>
     ): GitHubReleaseAsset? {
         val apks = assets.filter { it.name.orEmpty().lowercase().endsWith(".apk") }

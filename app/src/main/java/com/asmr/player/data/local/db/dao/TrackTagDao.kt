@@ -24,9 +24,6 @@ interface TrackTagDao {
     @Query("DELETE FROM track_tag WHERE trackId = :trackId AND source = :source")
     suspend fun deleteTrackTagsByTrackIdAndSource(trackId: Long, source: Int)
 
-    @Query("DELETE FROM track_tag WHERE trackId = :trackId AND source != :keepSource")
-    suspend fun deleteTrackTagsByTrackIdExceptSource(trackId: Long, keepSource: Int)
-
     @Query("DELETE FROM track_tag WHERE tagId = :tagId")
     suspend fun deleteTrackTagsByTagId(tagId: Long)
 

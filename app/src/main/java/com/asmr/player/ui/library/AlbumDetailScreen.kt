@@ -14,7 +14,6 @@ import android.graphics.RenderEffect
 import android.graphics.Shader
 import android.net.Uri
 import android.os.Build
-import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -36,9 +35,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
@@ -51,12 +48,10 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
@@ -82,7 +77,6 @@ import androidx.compose.ui.graphics.asAndroidPath
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.CompositingStrategy as LayerCompositingStrategy
@@ -98,10 +92,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.Role
-import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -118,46 +109,23 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.core.net.toUri
 import androidx.media3.common.MediaItem
-import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.ui.PlayerView
-import com.asmr.player.data.local.db.AppDatabaseProvider
-import com.asmr.player.data.local.db.entities.LocalTreeCacheEntity
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.remote.api.AsmrOneTrackNodeResponse
 import com.asmr.player.data.remote.scraper.DLSITE_DOMAIN
 import com.asmr.player.data.remote.scraper.DlsiteRecommendedWork
-import com.asmr.player.data.remote.scraper.DlsiteRecommendations
 import com.asmr.player.data.remote.scraper.storeSegment
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.playback.MediaItemFactory
 import com.asmr.player.ui.common.HorizontalStereoSpectrum
-import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.data.remote.dlsite.DlsiteLanguageEdition
-import com.asmr.player.ui.dlsite.DlsitePlayViewModel
 import com.asmr.player.util.DlsiteAntiHotlink
-import com.asmr.player.util.SmartSortKey
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
-import android.webkit.CookieManager
-import android.webkit.URLUtil
-import android.webkit.WebChromeClient
-import android.webkit.WebSettings
-import android.webkit.WebView
-import android.webkit.WebViewClient
-import androidx.compose.material.icons.automirrored.rounded.Label
-import androidx.compose.material.icons.automirrored.rounded.PlaylistAdd
-import androidx.compose.material.icons.automirrored.rounded.PlaylistPlay
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import java.io.File
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -168,11 +136,9 @@ import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.draw.BlurredEdgeTreatment
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.zIndex
 import com.asmr.player.data.lyrics.deriveLyricsRelativePathNoExt
-import com.asmr.player.ui.common.SubtitleStamp
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AsmrImageLoadingPlaceholder
@@ -190,9 +156,7 @@ import com.asmr.player.ui.playlists.PlaylistsViewModel
 import com.asmr.player.ui.player.PlayerViewModel
 import com.asmr.player.ui.settings.SettingsViewModel
 import com.asmr.player.ui.theme.AsmrTheme
-import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
-import com.asmr.player.util.Formatting
 import com.asmr.player.util.MessageManager
 import com.asmr.player.util.RemoteSubtitleSource
 import java.util.UUID
@@ -293,10 +257,6 @@ internal fun shouldUseAlbumDetailLandscapeLayout(
 
 internal fun albumLandscapeHeaderStart(artworkSize: Dp): Dp {
     return AlbumLandscapeArtworkStartPadding + artworkSize + AlbumLandscapeArtworkContentGap
-}
-
-internal fun albumLandscapeArtworkRight(artworkSize: Dp): Dp {
-    return AlbumLandscapeArtworkStartPadding + artworkSize
 }
 
 internal fun albumLandscapeCollapseDistance(artworkSize: Dp): Dp {
@@ -734,7 +694,7 @@ fun AlbumDetailScreen(
                     val shouldAnimateHeaderIntro = true
                     var showTagManager by remember { mutableStateOf(false) }
                     var tagManageTrack by remember { mutableStateOf<Track?>(null) }
-                    var localPreviewFile by remember { mutableStateOf<LocalTreeUiEntry.File?>(null) }
+                    var localPreviewFile by remember { mutableStateOf<DirectoryFileItem?>(null) }
                     var onlinePreviewFile by remember { mutableStateOf<AsmrTreeUiEntry.File?>(null) }
                     var imagePreviewRequest by remember { mutableStateOf<ImagePreviewRequest?>(null) }
                     var landscapeActiveListState by remember(screenKey, useLandscapeArtworkTide) {
@@ -1315,7 +1275,7 @@ fun AlbumDetailScreen(
                                                     else -> "localTree:localId:${local.id}"
                                                 }
                                             }
-                                            AlbumLocalBreadcrumbTabV2(
+                                            AlbumLocalBreadcrumbTab(
                                                 stateKey = localTreeStateKey,
                                                 initialCurrentPath = viewModel.getPreferredTreeCurrentPath(localTreeStateKey)
                                                     .ifBlank { viewModel.getTreeCurrentPath(localTreeStateKey) },
@@ -1390,7 +1350,7 @@ fun AlbumDetailScreen(
                                             }
                                         }
                                     }
-                                    1 -> AlbumDlsiteInfoBreadcrumbTabV2(
+                                    1 -> AlbumDlsiteInfoBreadcrumbTab(
                                         album = album,
                                         header = { listHeaderContent(1) },
                                         galleryUrls = model.dlsiteGalleryUrls,
@@ -1425,7 +1385,7 @@ fun AlbumDetailScreen(
                                             viewModel.downloadAsmrOneSelected(setOf(relPath))
                                         },
                                         onAddToPlaylistOne = { relPath ->
-                                            val target = PlaylistAddTarget.fromAsmrOne(album, asmrOneTree, relPath) ?: return@AlbumDlsiteInfoBreadcrumbTabV2
+                                            val target = PlaylistAddTarget.fromAsmrOne(album, asmrOneTree, relPath) ?: return@AlbumDlsiteInfoBreadcrumbTab
                                             onOpenPlaylistPicker(target.toMediaItem())
                                         },
                                         onAddToPlaylist = { track ->
@@ -1460,7 +1420,7 @@ fun AlbumDetailScreen(
                                         onOpenAlbumByRj = onOpenAlbumByRj,
                                         loadRemoteFileSize = { viewModel.loadRemoteFileSize(it) }
                                     )
-                                    else -> AlbumDlsitePlayBreadcrumbTabV2(
+                                    else -> AlbumDlsitePlayBreadcrumbTab(
                                         header = { listHeaderContent(2) },
                                         album = album,
                                         rjCode = model.rjCode,

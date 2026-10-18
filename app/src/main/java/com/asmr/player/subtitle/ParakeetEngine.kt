@@ -202,8 +202,6 @@ internal class SherpaOnnxTranscriptionEngine(
     }
 
     private companion object {
-        const val MODEL_FILE_NAME = "model.int8.onnx"
-        const val TOKENS_FILE_NAME = "tokens.txt"
         const val VAD_ASSET_PATH = "subtitle/silero_vad.onnx"
         const val VAD_THRESHOLD = 0.15f
         const val VAD_MIN_SILENCE_SECONDS = 0.2f
