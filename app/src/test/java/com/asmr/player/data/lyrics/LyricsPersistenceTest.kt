@@ -1,12 +1,12 @@
 package com.asmr.player.data.lyrics
 
 import android.app.Application
-import android.database.sqlite.SQLiteDatabase
 import androidx.media3.common.MediaItem
 import androidx.room.Room
 import androidx.room.withTransaction
 import com.asmr.player.data.local.db.AppDatabase
 import com.asmr.player.data.local.db.AppDatabaseMigrations
+import com.asmr.player.data.local.db.removeManualCoverColumnForLegacySchema
 import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.SubtitleEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
@@ -272,13 +272,14 @@ class LyricsPersistenceTest {
     @Test
     fun upgradingVersion34_preservesSubtitlesAndValidatesNewRoomSchema() = runBlocking {
         database.trackDao().insertSubtitles(listOf(caption("升级前的字幕").copy(japaneseText = "日本語")))
-        database.close()
         // 还原 34 版结构，再让 Room 执行真实升级并校验所有表和索引。
-        SQLiteDatabase.openDatabase(context.getDatabasePath(databaseName).absolutePath, null, SQLiteDatabase.OPEN_READWRITE).use {
+        database.openHelper.writableDatabase.let {
             it.execSQL("DROP TABLE subtitle_import_blocks")
             it.execSQL("DROP INDEX index_tracks_path")
+            removeManualCoverColumnForLegacySchema(it)
             it.version = 34
         }
+        database.close()
         openDatabase()
 
         assertEquals("日本語", database.trackDao().getSubtitlesForTrack(trackId).single().japaneseText)
@@ -290,7 +291,7 @@ class LyricsPersistenceTest {
 
     private fun openDatabase() {
         database = Room.databaseBuilder(context, AppDatabase::class.java, databaseName)
-            .allowMainThreadQueries().addMigrations(AppDatabaseMigrations.MIGRATION_34_35).build()
+            .allowMainThreadQueries().addMigrations(AppDatabaseMigrations.MIGRATION_34_35, AppDatabaseMigrations.MIGRATION_35_36).build()
         loader = LyricsLoader(database, database.trackDao(), database.albumDao(), database.remoteSubtitleSourceDao(),
             ManualLyricsSourceRepository(database.manualLyricsSourceDao(), context),
             OkHttpClient.Builder().addInterceptor { error("本地字幕测试不应访问网络") }.build(), context)

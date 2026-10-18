@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.room.Room
 import com.asmr.player.data.local.db.AppDatabase
 import com.asmr.player.data.local.db.AppDatabaseMigrations
+import com.asmr.player.data.local.db.removeManualCoverColumnForLegacySchema
 import com.asmr.player.data.local.db.dao.AudioMetadataDao
 import com.asmr.player.data.local.db.entities.AudioMetadataEntity
 import com.asmr.player.data.local.db.entities.PlaylistEntity
@@ -60,6 +61,7 @@ class AudioMetadataPersistenceTest {
                 db.openHelper.writableDatabase.execSQL("DROP TABLE audio_metadata")
                 db.openHelper.writableDatabase.execSQL("DROP TABLE subtitle_import_blocks")
                 db.openHelper.writableDatabase.execSQL("DROP INDEX index_tracks_path")
+                removeManualCoverColumnForLegacySchema(db.openHelper.writableDatabase)
                 db.openHelper.writableDatabase.version = 33
             }
             open().useDatabase { db ->
@@ -147,7 +149,7 @@ class AudioMetadataPersistenceTest {
         try {
             block {
                 Room.databaseBuilder(context, AppDatabase::class.java, name)
-                    .addMigrations(AppDatabaseMigrations.MIGRATION_33_34, AppDatabaseMigrations.MIGRATION_34_35)
+                    .addMigrations(AppDatabaseMigrations.MIGRATION_33_34, AppDatabaseMigrations.MIGRATION_34_35, AppDatabaseMigrations.MIGRATION_35_36)
                     .allowMainThreadQueries()
                     .build()
             }

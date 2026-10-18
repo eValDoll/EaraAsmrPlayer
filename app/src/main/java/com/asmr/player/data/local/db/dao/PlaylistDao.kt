@@ -21,6 +21,7 @@ interface PlaylistDao {
             (SELECT COUNT(*) FROM playlist_items i WHERE i.playlistId = p.id) AS itemCount,
             (
                 SELECT COALESCE(
+                    NULLIF(a.manualCoverPath, ''),
                     NULLIF(a.coverThumbPath, ''),
                     NULLIF(a.coverPath, ''),
                     NULLIF(a.coverUrl, ''),

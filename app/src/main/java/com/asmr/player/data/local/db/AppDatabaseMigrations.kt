@@ -635,6 +635,12 @@ object AppDatabaseMigrations {
         }
     }
 
+    val MIGRATION_35_36: Migration = object : Migration(35, 36) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL("ALTER TABLE albums ADD COLUMN `manualCoverPath` TEXT NOT NULL DEFAULT ''")
+        }
+    }
+
     private fun createItemChildTable(
         db: SupportSQLiteDatabase,
         table: String,

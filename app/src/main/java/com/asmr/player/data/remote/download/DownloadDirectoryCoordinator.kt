@@ -220,13 +220,15 @@ class DownloadDirectoryCoordinator @Inject constructor(
                 deleteAlbumCompletely(album, remainingTracks)
             } else {
                 val removedCover = removableRoots.any { root -> storage.isSameOrDescendant(album.coverPath, root) }
+                val removedManualCover = removableRoots.any { root -> storage.isSameOrDescendant(album.manualCoverPath, root) }
                 val updated = album.copy(
                     path = retainedPath,
                     localPath = localPath,
                     downloadPath = downloadPath,
                     coverPath = album.coverPath.takeUnless { removedCover }.orEmpty(),
+                    manualCoverPath = album.manualCoverPath.takeUnless { removedManualCover }.orEmpty(),
                     coverThumbPath = album.coverThumbPath
-                        .takeUnless { removedCover || storage.isSameOrDescendant(it, oldRoot) }
+                        .takeUnless { removedCover || removedManualCover || storage.isSameOrDescendant(it, oldRoot) }
                         .orEmpty(),
                     audioTrackCount = remainingTracks.count { !isOnlineTrackPath(it.path) },
                     audioTotalDuration = remainingTracks.sumOf { it.duration },

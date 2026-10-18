@@ -16,6 +16,7 @@ data class Album(
     val tags: List<String> = emptyList(),
     val coverUrl: String = "",
     val coverPath: String = "",
+    val manualCoverPath: String = "",
     val coverThumbPath: String = "",
     val workId: String = "",
     val rjCode: String = "",

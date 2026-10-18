@@ -15,7 +15,6 @@ import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioFocusRequest
 import android.media.AudioManager
-import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
 import android.util.Log
@@ -61,6 +60,7 @@ import com.asmr.player.playback.FadingPlayer
 import com.asmr.player.playback.AppVolumeBoostController
 import com.asmr.player.playback.GraphicEqualizerAudioProcessor
 import com.asmr.player.playback.PlaybackMediaCache
+import com.asmr.player.playback.PlaybackArtworkResolver
 import com.asmr.player.playback.PlaybackConnectionLifecycle
 import com.asmr.player.playback.PlaybackRecoveryPolicy
 import com.asmr.player.playback.PlaybackStateStore
@@ -78,7 +78,7 @@ import com.asmr.player.playback.VolumeFader
 import com.asmr.player.playback.isRecoverableRemotePlaybackFailure
 import com.asmr.player.playback.capturePersistedPlaybackState
 import com.asmr.player.playback.spectrumVisualDelayMillis
-import com.asmr.player.util.EmbeddedMediaExtractor
+import com.asmr.player.playback.withPlaybackArtwork
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.SubtitleIndexFinder
 import dagger.hilt.android.AndroidEntryPoint
@@ -153,6 +153,10 @@ class PlaybackService : MediaSessionService() {
     
     private var currentLyrics: List<SubtitleEntry> = emptyList()
     private var lyricsLoadJob: Job? = null
+    private var artworkObservationJob: Job? = null
+    private var artworkResolveJob: Job? = null
+    private var artworkObservedItem: MediaItem? = null
+    private var artworkObservedIndex: Int = C.INDEX_UNSET
     private var lyricsIndexFinder: SubtitleIndexFinder? = null
     private var lastLyricIndex: Int = Int.MIN_VALUE
     private var floatingLyricsEnabled: Boolean = false
@@ -234,6 +238,9 @@ class PlaybackService : MediaSessionService() {
 
     @Inject
     lateinit var database: AppDatabase
+
+    @Inject
+    lateinit var playbackArtworkResolver: PlaybackArtworkResolver
 
     @Inject
     lateinit var statisticsRepository: StatisticsRepository
@@ -453,7 +460,7 @@ class PlaybackService : MediaSessionService() {
 
             override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
                 cancelPlaybackRecovery(resetPolicy = true)
-                serviceScope.launch { updateArtworkForCurrentMedia() }
+                observeArtworkForCurrentMedia()
                 serviceScope.launch { loadLyricsForCurrentMedia() }
                 applyVideoOutputEnabled()
                 if (exoPlayer.isPlaying) {
@@ -494,6 +501,7 @@ class PlaybackService : MediaSessionService() {
                     events.contains(Player.EVENT_TIMELINE_CHANGED) ||
                     events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION)
                 ) {
+                    observeArtworkForCurrentMedia()
                     syncMediaNotificationControllerState()
                     refreshMediaNotification()
                 }
@@ -636,7 +644,6 @@ class PlaybackService : MediaSessionService() {
         }
         serviceScope.launch(Dispatchers.Default) {
             loadLyricsForCurrentMedia()
-            updateArtworkForCurrentMedia()
             while (isActive) {
                 val nextDelayMs = updateLyricsTick()
                 delay(nextDelayMs)
@@ -644,43 +651,31 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    private suspend fun updateArtworkForCurrentMedia() {
-        val (index, item) = withContext(Dispatchers.Main.immediate) {
-            exoPlayer.currentMediaItemIndex to exoPlayer.currentMediaItem
-        }
-        if (index < 0) return
-        if (item == null) return
+    private fun observeArtworkForCurrentMedia() {
+        val index = exoPlayer.currentMediaItemIndex
+        val item = exoPlayer.currentMediaItem
+        if (artworkObservedIndex == index && artworkObservedItem === item && artworkObservationJob?.isActive == true) return
+        artworkObservationJob?.cancel()
+        artworkResolveJob?.cancel()
+        artworkObservedIndex = index
+        artworkObservedItem = item
+        if (index < 0 || item == null) return
 
-        val uriString = item.localConfiguration?.uri?.toString().orEmpty().trim()
-        if (uriString.isBlank()) return
-        if (uriString.startsWith("http", ignoreCase = true)) return
-
-        val mime = item.localConfiguration?.mimeType.orEmpty()
-        val ext = uriString.substringBefore('#').substringBefore('?').substringAfterLast('.', "").lowercase()
-        val isVideo = item.mediaMetadata.extras?.getBoolean("is_video") == true ||
-            mime.startsWith("video/") ||
-            ext in setOf("mp4", "m4v", "webm", "mkv", "mov")
-        if (isVideo) return
-
-        val cacheKey = "track:" + (item.mediaId.ifBlank { uriString })
-        val file = EmbeddedMediaExtractor.getArtworkCacheFile(applicationContext, cacheKey)
-
-        if (!file.exists() || file.length() <= 0L) {
-            val bmp = EmbeddedMediaExtractor.extractArtwork(applicationContext, uriString) ?: return
-            val saved = EmbeddedMediaExtractor.saveArtworkToCache(applicationContext, cacheKey, bmp) ?: return
-            if (saved.isBlank()) return
-        }
-        if (!file.exists() || file.length() <= 0L) return
-
-        val newUri = Uri.fromFile(file)
-        val oldUri = item.mediaMetadata.artworkUri
-        if (oldUri != null && oldUri.toString() == newUri.toString()) return
-
-        val updatedMeta = item.mediaMetadata.buildUpon().setArtworkUri(newUri).build()
-        val updatedItem = item.buildUpon().setMediaMetadata(updatedMeta).build()
-        withContext(Dispatchers.Main.immediate) {
-            if (exoPlayer.currentMediaItemIndex == index) {
-                exoPlayer.replaceMediaItem(index, updatedItem)
+        artworkObservationJob = serviceScope.launch {
+            playbackArtworkResolver.observeSource(item).collect { source ->
+                artworkResolveJob?.cancel()
+                val target = exoPlayer.currentMediaItem ?: return@collect
+                if (exoPlayer.currentMediaItemIndex != index || target !== artworkObservedItem) return@collect
+                artworkResolveJob = serviceScope.launch resolveArtwork@{
+                    val artworkUri = playbackArtworkResolver.resolve(target, source)
+                    if (!playbackArtworkResolver.isCurrentSource(source)) return@resolveArtwork
+                    val updated = target.withPlaybackArtwork(artworkUri)
+                    if (updated === target) return@resolveArtwork
+                    if (exoPlayer.currentMediaItemIndex == index && exoPlayer.currentMediaItem === target) {
+                        artworkObservedItem = updated
+                        exoPlayer.replaceMediaItem(index, updated)
+                    }
+                }
             }
         }
     }
@@ -1407,6 +1402,8 @@ class PlaybackService : MediaSessionService() {
     override fun onDestroy() {
         overlay?.hide()
         lyricsLoadJob?.cancel()
+        artworkObservationJob?.cancel()
+        artworkResolveJob?.cancel()
         statsJob?.cancel()
         runBlocking(Dispatchers.IO) {
             flushPendingNetworkTraffic()

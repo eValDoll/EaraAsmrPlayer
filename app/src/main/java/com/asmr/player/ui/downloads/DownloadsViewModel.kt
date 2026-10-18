@@ -825,10 +825,21 @@ class DownloadsViewModel @Inject constructor(
         val clearedCoverPath = if (
             deletedRootDir.isNotBlank() && downloadStorage.isSameOrDescendant(album.coverPath, deletedRootDir)
         ) "" else album.coverPath
+        val clearedManualCoverPath = if (
+            deletedRootDir.isNotBlank() && downloadStorage.isSameOrDescendant(album.manualCoverPath, deletedRootDir)
+        ) "" else album.manualCoverPath
+        val clearedCoverThumbPath = album.coverThumbPath.takeIf {
+            clearedCoverPath == album.coverPath && clearedManualCoverPath == album.manualCoverPath
+        }.orEmpty()
+        val updatedCover = album.copy(
+            coverPath = clearedCoverPath,
+            manualCoverPath = clearedManualCoverPath,
+            coverThumbPath = clearedCoverThumbPath,
+        )
 
         if (remainingTracks.isEmpty()) {
             if (hasLocal) {
-                albumDao.updateAlbum(album.copy(path = localPath, downloadPath = null, coverPath = clearedCoverPath))
+                albumDao.updateAlbum(updatedCover.copy(path = localPath, downloadPath = null))
             } else {
                 runCatching { trackDao.deleteSubtitlesForAlbum(albumId) }
                 runCatching { tagDao.deleteAlbumTagsByAlbumId(albumId) }
@@ -841,9 +852,9 @@ class DownloadsViewModel @Inject constructor(
 
         if (album.downloadPath == deletedRootDir) {
             val newPath = if (hasLocal) localPath else album.path
-            albumDao.updateAlbum(album.copy(path = newPath, downloadPath = null, coverPath = clearedCoverPath))
-        } else if (clearedCoverPath != album.coverPath) {
-            albumDao.updateAlbum(album.copy(coverPath = clearedCoverPath))
+            albumDao.updateAlbum(updatedCover.copy(path = newPath, downloadPath = null))
+        } else if (updatedCover != album) {
+            albumDao.updateAlbum(updatedCover)
         }
     }
 

@@ -1325,8 +1325,8 @@ fun AlbumDetailScreen(
                                                         onComplete = onComplete,
                                                     )
                                                 },
-                                                onSetCoverFromImage = { pathOrUri ->
-                                                    viewModel.setLocalCoverPath(pathOrUri)
+                                                onToggleCoverFromImage = { pathOrUri ->
+                                                    viewModel.toggleLocalCoverPath(pathOrUri)
                                                 },
                                                 onPreviewImages = { request -> imagePreviewRequest = request },
                                                 onPreviewFile = { localPreviewFile = it },
@@ -3139,7 +3139,7 @@ private fun rememberStableAlbumHeroIdentity(album: Album, identitySessionKey: St
 private fun rememberStableAlbumHeroCoverSource(album: Album, coverSessionKey: String): String {
     val currentLocal = album.coverPath.trim()
     val current = currentLocal.ifEmpty { album.coverUrl.trim() }
-    var stable by remember(coverSessionKey) { mutableStateOf(current) }
+    var stable by remember(coverSessionKey, album.manualCoverPath) { mutableStateOf(current) }
     LaunchedEffect(currentLocal, current) {
         stable = resolveStableAlbumHeroCoverSource(
             stable = stable,

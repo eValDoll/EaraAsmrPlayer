@@ -58,7 +58,7 @@ internal fun AlbumLocalBreadcrumbTab(
     onManageTrackTags: (Track) -> Unit,
     onRemoveTrack: (Track) -> Unit,
     onDeleteTreeEntry: (LocalTreeDeletionTarget, (Boolean) -> Unit) -> Unit,
-    onSetCoverFromImage: (String) -> Unit,
+    onToggleCoverFromImage: (String) -> Unit,
     onPreviewImages: (ImagePreviewRequest) -> Unit,
     onPreviewFile: (DirectoryFileItem) -> Unit,
     onSubtitleGenerationError: (String) -> Unit,
@@ -383,8 +383,9 @@ internal fun AlbumLocalBreadcrumbTab(
                             selectedPosition = selectedPosition,
                             onEnterSelectionMode = enterSelectionMode,
                             onSelectedChange = onSelectedChange,
-                            onSetAsCover = if (canSetDirectoryImageAsLocalCover(file)) {
-                                { onSetCoverFromImage(file.absolutePath) }
+                            isCoverSelected = album.manualCoverPath.isNotBlank() && album.manualCoverPath == file.absolutePath,
+                            onToggleCover = if (canSetDirectoryImageAsLocalCover(file)) {
+                                { onToggleCoverFromImage(file.absolutePath) }
                             } else {
                                 null
                             },

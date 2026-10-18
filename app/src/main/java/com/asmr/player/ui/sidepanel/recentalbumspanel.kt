@@ -572,7 +572,8 @@ private fun albumDomain(album: AlbumEntity): Album {
         circle = album.circle,
         cv = album.cv,
         coverUrl = album.coverUrl,
-        coverPath = album.coverPath,
+        coverPath = album.manualCoverPath.ifBlank { album.coverPath },
+        manualCoverPath = album.manualCoverPath,
         coverThumbPath = album.coverThumbPath,
         workId = album.workId,
         rjCode = album.rjCode,
@@ -581,7 +582,8 @@ private fun albumDomain(album: AlbumEntity): Album {
 }
 
 private fun albumThumb(album: AlbumEntity): String? {
-    return album.coverThumbPath.takeIf { it.isNotBlank() }
+    return album.manualCoverPath.takeIf { it.isNotBlank() }
+        ?: album.coverThumbPath.takeIf { it.isNotBlank() }
         ?: album.coverPath.takeIf { it.isNotBlank() }
         ?: album.coverUrl.takeIf { it.isNotBlank() }
 }

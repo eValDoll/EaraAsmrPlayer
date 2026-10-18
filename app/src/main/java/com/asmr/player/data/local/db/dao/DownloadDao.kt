@@ -22,8 +22,8 @@ interface DownloadDao {
         """
         SELECT d.id AS taskId,
                a.coverUrl AS coverUrl,
-               a.coverPath AS coverPath,
-               a.coverThumbPath AS coverThumbPath
+               COALESCE(NULLIF(a.manualCoverPath, ''), a.coverPath) AS coverPath,
+               CASE WHEN a.manualCoverPath != '' THEN '' ELSE a.coverThumbPath END AS coverThumbPath
         FROM download_tasks d
         INNER JOIN albums a ON
             (

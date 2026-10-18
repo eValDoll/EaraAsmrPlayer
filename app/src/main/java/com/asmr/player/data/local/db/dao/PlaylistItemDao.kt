@@ -25,6 +25,7 @@ interface PlaylistItemDao {
             pi.uri,
             COALESCE(t.duration, 0) AS duration,
             COALESCE(
+                NULLIF(a.manualCoverPath, ''),
                 NULLIF(a.coverThumbPath, ''),
                 NULLIF(a.coverPath, ''),
                 NULLIF(a.coverUrl, ''),
@@ -32,6 +33,7 @@ interface PlaylistItemDao {
                 ''
             ) AS artworkUri,
             COALESCE(
+                NULLIF(a.manualCoverPath, ''),
                 NULLIF(a.coverPath, ''),
                 NULLIF(a.coverUrl, ''),
                 NULLIF(pi.artworkUri, ''),

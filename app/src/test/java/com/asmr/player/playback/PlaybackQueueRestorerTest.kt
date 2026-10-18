@@ -184,6 +184,41 @@ class PlaybackQueueRestorerTest {
     }
 
     @Test
+    fun restoredLibraryAndAlbumOnlyItemsUseCurrentManualCoverAndItsCancellation() = runBlocking {
+        val audio = localFile()
+        val automatic = localFile()
+        val manual = localFile()
+        val albumId = database.albumDao().insertAlbum(
+            AlbumEntity(
+                title = "本地作品", path = audio.parent!!,
+                coverPath = automatic.path, manualCoverPath = manual.path,
+            )
+        )
+        val trackId = database.trackDao().insertTrack(
+            TrackEntity(albumId = albumId, title = "音频", path = audio.path)
+        )
+        stateStore.save(
+            state(
+                listOf(
+                    item(audio.path).copy(albumId = albumId, trackId = trackId, artworkUri = automatic.path),
+                    item("https://example.com/audio.mp3").copy(albumId = albumId, artworkUri = automatic.path),
+                )
+            )
+        )
+        assertEquals(
+            List(2) { Uri.fromFile(manual) },
+            restorer.restore()?.items?.map { it.mediaMetadata.artworkUri },
+        )
+
+        val album = requireNotNull(database.albumDao().getAlbumById(albumId))
+        database.albumDao().updateAlbum(album.copy(manualCoverPath = ""))
+        assertEquals(
+            List(2) { Uri.fromFile(automatic) },
+            restorer.restore()?.items?.map { it.mediaMetadata.artworkUri },
+        )
+    }
+
+    @Test
     fun deletedDatabaseEntriesAreStillPrunedWithoutAffectingSurvivorSelection() = runBlocking {
         val first = item(localFile().absolutePath).copy(trackId = 999L)
         val second = item(localFile().absolutePath).copy(albumId = 999L)
