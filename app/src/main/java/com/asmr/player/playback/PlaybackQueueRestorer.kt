@@ -94,12 +94,11 @@ class PlaybackQueueRestorer @Inject constructor(
             return null
         }
         val persistedAlbumId = persisted.albumId
-        if (track == null && persistedAlbumId != null && persistedAlbumId > 0L) {
-            val albumExists = runCatching {
-                albumDao.getAlbumById(persistedAlbumId) != null
-            }.getOrDefault(true)
-            if (!albumExists) return null
-        }
+        val persistedAlbumResult = if (track == null && persistedAlbumId != null && persistedAlbumId > 0L) {
+            runCatching { albumDao.getAlbumById(persistedAlbumId) }
+        } else null
+        val persistedAlbum = persistedAlbumResult?.getOrNull()
+        if (persistedAlbumResult?.isSuccess == true && persistedAlbum == null) return null
         return if (track != null) {
             val albumEntity = runCatching { albumDao.getAlbumById(track.albumId) }.getOrNull()
             val album = Album(
@@ -112,7 +111,8 @@ class PlaybackQueueRestorer @Inject constructor(
                 cv = albumEntity?.cv.orEmpty(),
                 tags = albumEntity?.tags?.split(",")?.filter { it.isNotBlank() }.orEmpty(),
                 coverUrl = albumEntity?.coverUrl.orEmpty(),
-                coverPath = albumEntity?.coverPath.orEmpty(),
+                coverPath = albumEntity?.manualCoverPath.orEmpty().ifBlank { albumEntity?.coverPath.orEmpty() },
+                manualCoverPath = albumEntity?.manualCoverPath.orEmpty(),
                 coverThumbPath = albumEntity?.coverThumbPath.orEmpty(),
                 workId = albumEntity?.workId.orEmpty(),
                 rjCode = albumEntity?.rjCode.orEmpty().ifBlank { albumEntity?.workId.orEmpty() }
@@ -148,12 +148,19 @@ class PlaybackQueueRestorer @Inject constructor(
             }
             val uri = MediaItemFactory.toPlayableUri(persisted.uri.ifBlank { id })
             val title = persisted.title.orEmpty().ifBlank { deriveTitleFromId(id) }
+            val artworkUri = if (persistedAlbum != null) {
+                MediaItemFactory.toArtworkUri(
+                    persistedAlbum.manualCoverPath.ifBlank { persistedAlbum.coverPath }.ifBlank { persistedAlbum.coverUrl }
+                )
+            } else {
+                parsePossiblyEncodedUri(persisted.artworkUri)
+            }
             val meta = MediaMetadata.Builder()
                 .setTitle(title)
                 .setArtist(persisted.artist.orEmpty())
                 .setDurationMs(persisted.durationMs)
                 .setAlbumTitle(persisted.albumTitle.orEmpty())
-                .setArtworkUri(parsePossiblyEncodedUri(persisted.artworkUri))
+                .setArtworkUri(artworkUri)
                 .setExtras(
                     android.os.Bundle().apply {
                         persisted.albumCv?.let { putString(EXTRA_ALBUM_CV, it) }

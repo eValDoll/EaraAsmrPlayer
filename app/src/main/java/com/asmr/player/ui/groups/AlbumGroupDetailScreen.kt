@@ -1,9 +1,8 @@
 package com.asmr.player.ui.groups
 
 import com.asmr.player.ui.common.formatCvNames
-import com.asmr.player.playback.EXTRA_ALBUM_CV
+import com.asmr.player.playback.MediaItemFactory
 
-import android.net.Uri
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -56,10 +55,8 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.MediaItem
-import androidx.media3.common.MediaMetadata
 import com.asmr.player.data.local.db.dao.AlbumGroupTrackRow
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AudioItemMenuAction
@@ -603,50 +600,23 @@ private fun SnapshotStateList<GroupDetailListRow>.moveTrackRows(
 }
 
 private fun AlbumGroupTrackRow.toMediaItem(): MediaItem {
-    val uri = toPlayableUri(trackPath)
     val artwork = albumCoverPath.orEmpty()
         .ifBlank { albumCoverUrl.orEmpty() }
         .ifBlank { albumCoverThumbPath.orEmpty() }
         .trim()
-    val metadata = MediaMetadata.Builder()
-        .setTitle(trackTitle)
-        .setArtist(formatCvNames(albumCv.orEmpty()))
-        .setDurationMs(trackDuration.takeIf { it > 0 }?.let { (it * 1000).toLong() })
-        .setExtras(android.os.Bundle().apply { putString(EXTRA_ALBUM_CV, albumCv.orEmpty()) })
-        .setAlbumTitle(albumTitle.orEmpty())
-        .setArtworkUri(artwork.toArtworkUriOrNull())
-        .build()
-    return MediaItem.Builder()
-        .setMediaId(trackPath)
-        .setUri(uri)
-        .setMediaMetadata(metadata)
-        .build()
-}
-
-private fun toPlayableUri(path: String): Uri {
-    val trimmed = path.trim()
-    return if (
-        trimmed.startsWith("http", ignoreCase = true) ||
-        trimmed.startsWith("content://", ignoreCase = true) ||
-        trimmed.startsWith("file://", ignoreCase = true)
-    ) {
-        trimmed.toUri()
-    } else {
-        Uri.fromFile(java.io.File(trimmed))
-    }
-}
-
-private fun String.toArtworkUriOrNull(): Uri? {
-    val trimmed = trim()
-    if (trimmed.isBlank()) return null
-    return if (
-        trimmed.startsWith("http", ignoreCase = true) ||
-        trimmed.startsWith("content://", ignoreCase = true) ||
-        trimmed.startsWith("file://", ignoreCase = true)
-    ) {
-        trimmed.toUri()
-    } else {
-        val file = java.io.File(trimmed)
-        if (file.exists()) Uri.fromFile(file) else null
-    }
+    return MediaItemFactory.fromDetails(
+        mediaId = trackPath,
+        uri = trackPath,
+        title = trackTitle,
+        artist = formatCvNames(albumCv.orEmpty()),
+        albumTitle = albumTitle.orEmpty(),
+        artworkUri = artwork,
+        albumId = albumId,
+        trackId = trackId,
+        rjCode = albumRjCode.orEmpty(),
+        albumWorkId = albumWorkId.orEmpty(),
+        trackGroup = trackGroup,
+        albumCv = albumCv.orEmpty(),
+        durationSeconds = trackDuration,
+    )
 }

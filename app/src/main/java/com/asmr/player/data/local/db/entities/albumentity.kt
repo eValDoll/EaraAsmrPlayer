@@ -1,5 +1,6 @@
 package com.asmr.player.data.local.db.entities
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -16,6 +17,7 @@ data class AlbumEntity(
     val tags: String = "",
     val coverUrl: String = "",
     val coverPath: String = "",
+    @ColumnInfo(defaultValue = "''") val manualCoverPath: String = "",
     val coverThumbPath: String = "",
     val workId: String = "",
     val rjCode: String = "",

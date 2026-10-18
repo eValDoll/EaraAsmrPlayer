@@ -10,6 +10,7 @@ import com.asmr.player.data.local.db.entities.AlbumFtsEntity
 import com.asmr.player.data.local.db.entities.RemoteSubtitleSourceEntity
 import com.asmr.player.data.local.db.entities.SubtitleEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
+import com.asmr.player.data.local.library.refreshScannedAlbumCover
 import com.asmr.player.data.local.library.LocalAlbumMergeService
 import com.asmr.player.data.local.library.deleteLibraryTracks
 import com.asmr.player.util.SubtitleEntry
@@ -141,6 +142,7 @@ internal suspend fun upsertDownloadedAlbumToLibrary(
             existingCoverPath = existingCoverPath,
             downloadedCoverPath = cover?.absolutePath
         ),
+        manualCoverPath = existing?.manualCoverPath.orEmpty(),
         coverThumbPath = if (existingCoverPath != null) existing.coverThumbPath else "",
         workId = existing?.workId?.takeIf { it.isNotBlank() }
             ?: albumWorkId.trim().ifBlank { rj },
@@ -149,20 +151,8 @@ internal suspend fun upsertDownloadedAlbumToLibrary(
         description = existing?.description?.takeIf { it.isNotBlank() } ?: albumDescription.trim()
     )
 
-    val albumId = if (existing == null) {
-        albumDao.insertAlbum(entity)
-    } else {
-        albumDao.updateAlbum(entity)
-        entity.id
-    }
+    val albumId = albumDao.upsertImportedAlbum(entity)
     if (albumId <= 0L) return
-
-    val coverThumbWork = OneTimeWorkRequestBuilder<AlbumCoverThumbWorker>()
-        .setInputData(workDataOf(AlbumCoverThumbWorker.KEY_ALBUM_ID to albumId))
-        .addTag("album_cover_thumb")
-        .build()
-    WorkManager.getInstance(appContext)
-        .enqueueUniqueWork("album_cover_thumb_$albumId", ExistingWorkPolicy.REPLACE, coverThumbWork)
 
     val fts = AlbumFtsEntity(
         albumId = albumId,
@@ -181,6 +171,20 @@ internal suspend fun upsertDownloadedAlbumToLibrary(
         .filter { it.isFile && audioExtensions.contains(it.extension.lowercase()) }
         .toList()
         .sortedBy { it.absolutePath.lowercase() }
+    refreshScannedAlbumCover(
+        context = appContext,
+        albumDao = albumDao,
+        albumId = albumId,
+        firstAudioPath = audioFiles.firstOrNull()?.absolutePath,
+        directoryCoverPath = cover?.absolutePath.orEmpty(),
+    )
+    val coverThumbWork = OneTimeWorkRequestBuilder<AlbumCoverThumbWorker>()
+        .setInputData(workDataOf(AlbumCoverThumbWorker.KEY_ALBUM_ID to albumId))
+        .addTag("album_cover_thumb")
+        .build()
+    WorkManager.getInstance(appContext)
+        .enqueueUniqueWork("album_cover_thumb_$albumId", ExistingWorkPolicy.REPLACE, coverThumbWork)
+
     val subtitleCandidates = dir.walkTopDown()
         .onEnter { directory -> directory == dir || isScannableLocalDirectoryName(directory.name) }
         .filter { it.isFile && SubtitleMatchSupport.SubtitleExtensions.contains(it.extension.lowercase()) }
@@ -320,12 +324,16 @@ private suspend fun upsertDownloadedDocumentAlbumToLibrary(
         audioTrackCount = audioEntries.size,
         audioTotalSizeBytes = audioEntries.sumOf { it.sizeBytes },
     )
-    val albumId = if (existing == null) albumDao.insertAlbum(entity) else {
-        albumDao.updateAlbum(entity)
-        entity.id
-    }
+    val albumId = albumDao.upsertImportedAlbum(entity)
     if (albumId <= 0L) return
 
+    refreshScannedAlbumCover(
+        context = appContext,
+        albumDao = albumDao,
+        albumId = albumId,
+        firstAudioPath = audioEntries.firstOrNull()?.reference,
+        directoryCoverPath = cover?.reference.orEmpty(),
+    )
     val existingTracks = trackDao.getTracksForAlbumOnce(albumId)
     val audioIdentities = audioEntries.map { storage.stableIdentity(it.reference) }.toSet()
     val existingIdentities = existingTracks.associateBy { storage.stableIdentity(it.path) }

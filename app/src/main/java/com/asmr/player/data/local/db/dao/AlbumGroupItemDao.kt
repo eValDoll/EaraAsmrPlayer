@@ -30,8 +30,8 @@ interface AlbumGroupItemDao {
             a.cv AS albumCv,
             a.rjCode AS albumRjCode,
             a.workId AS albumWorkId,
-            a.coverThumbPath AS albumCoverThumbPath,
-            a.coverPath AS albumCoverPath,
+            CASE WHEN a.manualCoverPath != '' THEN '' ELSE a.coverThumbPath END AS albumCoverThumbPath,
+            COALESCE(NULLIF(a.manualCoverPath, ''), a.coverPath) AS albumCoverPath,
             a.coverUrl AS albumCoverUrl
         FROM album_group_items i
         INNER JOIN tracks t ON t.path = i.mediaId

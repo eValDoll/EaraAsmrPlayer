@@ -99,6 +99,7 @@ class LocalAlbumMergeServiceTest {
                     downloadPath = downloadRoot,
                     workId = "rj12345678",
                     rjCode = "rj12345678",
+                    manualCoverPath = File(downloadRoot, "custom.png").absolutePath,
                 ),
             )
             val earlierTrackId = trackDao.insertTrack(
@@ -123,6 +124,7 @@ class LocalAlbumMergeServiceTest {
             assertEquals(1, albumDao.getAlbumsByWorkIdOnce("RJ12345678").size)
             assertEquals(importRoot, merged?.localPath)
             assertEquals(downloadRoot, merged?.downloadPath)
+            assertEquals(File(downloadRoot, "custom.png").absolutePath, merged?.manualCoverPath)
             val tracks = trackDao.getTracksForAlbumOrderedOnce(requireNotNull(merged).id)
             assertEquals(listOf(earlierTrackId), tracks.map { it.id })
             assertEquals("保留字幕", trackDao.getSubtitlesForTrack(earlierTrackId).single().text)

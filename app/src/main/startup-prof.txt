@@ -46933,7 +46933,6 @@ SPLcom/asmr/player/service/PlaybackService;->access$setSfwHideSystemControlsEnab
 SPLcom/asmr/player/service/PlaybackService;->access$setSleepTimerJob$p(Lcom/asmr/player/service/PlaybackService;Lkotlinx/coroutines/Job;)V
 SPLcom/asmr/player/service/PlaybackService;->access$syncMediaNotificationControllerState(Lcom/asmr/player/service/PlaybackService;)V
 SPLcom/asmr/player/service/PlaybackService;->access$syncMediaNotificationControllerState(Lcom/asmr/player/service/PlaybackService;Landroidx/media3/session/MediaSession;Landroidx/media3/session/MediaSession$ControllerInfo;)V
-SPLcom/asmr/player/service/PlaybackService;->access$updateArtworkForCurrentMedia(Lcom/asmr/player/service/PlaybackService;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 SPLcom/asmr/player/service/PlaybackService;->access$updateLyricsTick(Lcom/asmr/player/service/PlaybackService;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 SPLcom/asmr/player/service/PlaybackService;->applyPlaybackRuntimeSettings(Lcom/asmr/player/data/settings/PlaybackRuntimeSettings;)V
 SPLcom/asmr/player/service/PlaybackService;->buildMediaSession()Landroidx/media3/session/MediaSession;
@@ -46952,7 +46951,6 @@ SPLcom/asmr/player/service/PlaybackService;->registerPlaybackRouteListeners()V
 SPLcom/asmr/player/service/PlaybackService;->startEffectLoops()V
 SPLcom/asmr/player/service/PlaybackService;->syncMediaNotificationControllerState()V
 SPLcom/asmr/player/service/PlaybackService;->syncMediaNotificationControllerState(Landroidx/media3/session/MediaSession;Landroidx/media3/session/MediaSession$ControllerInfo;)V
-SPLcom/asmr/player/service/PlaybackService;->updateArtworkForCurrentMedia(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 SPLcom/asmr/player/service/PlaybackService;->updateLyricsTick(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
 Lcom/asmr/player/service/PlaybackService$$ExternalSyntheticLambda0;
 SPLcom/asmr/player/service/PlaybackService$$ExternalSyntheticLambda0;-><init>(Lcom/asmr/player/data/remote/auth/DlsiteAuthStore;)V
@@ -47106,13 +47104,6 @@ Lcom/asmr/player/service/PlaybackService$startEffectLoops$2$1;
 SPLcom/asmr/player/service/PlaybackService$startEffectLoops$2$1;-><init>(Lkotlin/jvm/internal/Ref$ObjectRef;Lcom/asmr/player/service/PlaybackService;)V
 SPLcom/asmr/player/service/PlaybackService$startEffectLoops$2$1;->emit(ILkotlin/coroutines/Continuation;)Ljava/lang/Object;
 SPLcom/asmr/player/service/PlaybackService$startEffectLoops$2$1;->emit(Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Ljava/lang/Object;
-Lcom/asmr/player/service/PlaybackService$updateArtworkForCurrentMedia$1;
-SPLcom/asmr/player/service/PlaybackService$updateArtworkForCurrentMedia$1;-><init>(Lcom/asmr/player/service/PlaybackService;Lkotlin/coroutines/Continuation;)V
-SPLcom/asmr/player/service/PlaybackService$updateArtworkForCurrentMedia$1;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;
-Lcom/asmr/player/service/PlaybackService$updateArtworkForCurrentMedia$2;
-SPLcom/asmr/player/service/PlaybackService$updateArtworkForCurrentMedia$2;-><init>(Lcom/asmr/player/service/PlaybackService;Lkotlin/coroutines/Continuation;)V
-SPLcom/asmr/player/service/PlaybackService$updateArtworkForCurrentMedia$2;->create(Ljava/lang/Object;Lkotlin/coroutines/Continuation;)Lkotlin/coroutines/Continuation;
-SPLcom/asmr/player/service/PlaybackService$updateArtworkForCurrentMedia$2;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;
 Lcom/asmr/player/service/PlaybackService$updateLyricsTick$1;
 SPLcom/asmr/player/service/PlaybackService$updateLyricsTick$1;-><init>(Lcom/asmr/player/service/PlaybackService;Lkotlin/coroutines/Continuation;)V
 SPLcom/asmr/player/service/PlaybackService$updateLyricsTick$1;->invokeSuspend(Ljava/lang/Object;)Ljava/lang/Object;

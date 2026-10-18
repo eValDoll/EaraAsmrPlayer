@@ -281,7 +281,8 @@ internal fun AlbumDetailModel.withPreservedListenTogetherListenerCount(
 internal fun AlbumDetailModel.withUpdatedLocalCover(
     albumId: Long,
     coverPath: String,
-    coverThumbPath: String
+    coverThumbPath: String,
+    manualCoverPath: String
 ): AlbumDetailModel {
     val localMatches = localAlbum?.id == albumId
     val displayMatches = displayAlbum.id == albumId || localMatches
@@ -289,12 +290,12 @@ internal fun AlbumDetailModel.withUpdatedLocalCover(
 
     return copy(
         localAlbum = if (localMatches) {
-            localAlbum?.copy(coverPath = coverPath, coverThumbPath = coverThumbPath)
+            localAlbum?.copy(coverPath = coverPath, coverThumbPath = coverThumbPath, manualCoverPath = manualCoverPath)
         } else {
             localAlbum
         },
         displayAlbum = if (displayMatches) {
-            displayAlbum.copy(coverPath = coverPath, coverThumbPath = coverThumbPath)
+            displayAlbum.copy(coverPath = coverPath, coverThumbPath = coverThumbPath, manualCoverPath = manualCoverPath)
         } else {
             displayAlbum
         }
@@ -315,6 +316,17 @@ internal fun resolveStableAlbumHeroCoverSource(
     }
 }
 
+internal fun Album.withCurrentLocalCover(localAlbum: Album?): Album {
+    if (localAlbum == null) return this
+    val manualCoverPath = localAlbum.manualCoverPath
+    if (manualCoverPath.isBlank() && this.manualCoverPath.isBlank()) return this
+    return copy(
+        manualCoverPath = manualCoverPath,
+        coverPath = manualCoverPath.ifBlank { localAlbum.coverPath },
+        coverThumbPath = localAlbum.coverThumbPath
+    )
+}
+
 internal fun buildDisplayAlbum(
     rjCode: String,
     localAlbum: Album?,
@@ -333,7 +345,7 @@ internal fun buildDisplayAlbum(
         cv = base.cv.ifBlank { fallbackCv },
         // 网络解析尚未返回封面时，保留列表种入/上一帧的 coverUrl，避免 hero 先空白再加载。
         coverUrl = base.coverUrl.ifBlank { fallbackCoverUrl }
-    )
+    ).withCurrentLocalCover(localAlbum)
 }
 
 internal fun Album.withResolvedWorkIdentity(
@@ -355,7 +367,7 @@ internal fun mergeDetailHeaderAlbum(
     preserveHeaderAlbumMetadata: Boolean
 ): Album {
     if (preserveHeaderAlbumMetadata) {
-        return currentDisplayAlbum.withResolvedWorkIdentity(
+        return currentDisplayAlbum.withCurrentLocalCover(localAlbum).withResolvedWorkIdentity(
             rjCode = rjCode,
             asmrOneWorkId = asmrOneWorkId
         )
@@ -391,7 +403,7 @@ internal fun mergeDetailHeaderAlbum(
             fallbackCoverUrl = currentDisplayAlbum.coverUrl
         )
     } else {
-        currentDisplayAlbum.withResolvedWorkIdentity(
+        currentDisplayAlbum.withCurrentLocalCover(localAlbum).withResolvedWorkIdentity(
             rjCode = rjCode,
             asmrOneWorkId = asmrOneWorkId
         )

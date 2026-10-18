@@ -6,6 +6,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.RawQuery
+import androidx.room.Transaction
 import androidx.room.Update
 import androidx.paging.PagingSource
 import androidx.sqlite.db.SupportSQLiteQuery
@@ -45,6 +46,9 @@ interface AlbumDao {
     @Query("SELECT * FROM albums WHERE id = :albumId LIMIT 1")
     suspend fun getAlbumById(albumId: Long): AlbumEntity?
 
+    @Query("SELECT * FROM albums WHERE id = :albumId LIMIT 1")
+    fun observeAlbumById(albumId: Long): Flow<AlbumEntity?>
+
     @Query("SELECT * FROM albums WHERE workId = :workId COLLATE NOCASE OR rjCode = :workId COLLATE NOCASE ORDER BY id ASC")
     suspend fun getAlbumsByWorkIdOnce(workId: String): List<AlbumEntity>
 
@@ -59,11 +63,59 @@ interface AlbumDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertAlbum(album: AlbumEntity): Long
 
+    @Transaction
+    suspend fun upsertImportedAlbum(album: AlbumEntity): Long {
+        val current = if (album.id > 0L) getAlbumById(album.id) else null
+        val updated = if (current == null) album else {
+            val currentSource = current.manualCoverPath.ifBlank { current.coverPath.ifBlank { current.coverUrl } }
+            val importedSource = current.manualCoverPath.ifBlank { album.coverPath.ifBlank { album.coverUrl } }
+            album.copy(
+                manualCoverPath = current.manualCoverPath,
+                coverThumbPath = current.coverThumbPath.takeIf { currentSource == importedSource }.orEmpty(),
+            )
+        }
+        return insertAlbum(updated)
+    }
+
     @Update
     suspend fun updateAlbum(album: AlbumEntity)
 
     @Query("UPDATE albums SET displayTitle = :displayTitle WHERE id = :albumId")
     suspend fun updateAlbumDisplayTitle(albumId: Long, displayTitle: String)
+
+    @Query(
+        "UPDATE albums SET audioTrackCount = :trackCount, audioTotalDuration = :totalDuration, " +
+            "audioTotalSizeBytes = :totalSizeBytes WHERE id = :albumId"
+    )
+    suspend fun updateAlbumAudioAggregate(albumId: Long, trackCount: Int, totalDuration: Double, totalSizeBytes: Long)
+
+    @Query("UPDATE albums SET manualCoverPath = :manualCoverPath, coverThumbPath = '' WHERE id = :albumId")
+    suspend fun setManualCoverPath(albumId: Long, manualCoverPath: String)
+
+    @Query(
+        "UPDATE albums SET coverPath = :coverPath, " +
+            "coverThumbPath = CASE WHEN manualCoverPath = '' THEN :coverThumbPath ELSE coverThumbPath END " +
+            "WHERE id = :albumId AND coverPath = :expectedCoverPath AND coverUrl = :expectedCoverUrl"
+    )
+    suspend fun updateAutomaticCoverIfSourceMatches(
+        albumId: Long,
+        expectedCoverPath: String,
+        expectedCoverUrl: String,
+        coverPath: String,
+        coverThumbPath: String,
+    ): Int
+
+    @Query(
+        "UPDATE albums SET coverThumbPath = :coverThumbPath WHERE id = :albumId " +
+            "AND manualCoverPath = :manualCoverPath AND coverPath = :coverPath AND coverUrl = :coverUrl"
+    )
+    suspend fun updateAlbumCoverThumbIfSourceMatches(
+        albumId: Long,
+        manualCoverPath: String,
+        coverPath: String,
+        coverUrl: String,
+        coverThumbPath: String,
+    ): Int
 
     @Delete
     suspend fun deleteAlbum(album: AlbumEntity)

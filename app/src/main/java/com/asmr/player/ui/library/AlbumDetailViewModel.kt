@@ -127,6 +127,8 @@ import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
@@ -188,15 +190,13 @@ class AlbumDetailViewModel @Inject constructor(
 
     private suspend fun refreshAlbumAudioAggregate(albumId: Long) {
         if (albumId <= 0L) return
-        val entity = albumDao.getAlbumById(albumId) ?: return
         val tracks = trackDao.getTracksForAlbumOnce(albumId)
         val aggregate = computeAlbumAudioAggregate(tracks)
-        albumDao.updateAlbum(
-            entity.copy(
-                audioTrackCount = aggregate.trackCount,
-                audioTotalDuration = aggregate.totalDuration,
-                audioTotalSizeBytes = aggregate.totalSizeBytes,
-            )
+        albumDao.updateAlbumAudioAggregate(
+            albumId = albumId,
+            trackCount = aggregate.trackCount,
+            totalDuration = aggregate.totalDuration,
+            totalSizeBytes = aggregate.totalSizeBytes,
         )
     }
 
@@ -257,6 +257,7 @@ class AlbumDetailViewModel @Inject constructor(
     private val listScrollByKey = linkedMapOf<String, Pair<Int, Int>>()
     private val treeCurrentPathByKey = linkedMapOf<String, String>()
     private val remoteFileSizeCache = linkedMapOf<String, Long?>()
+    private val coverSelectionMutex = Mutex()
     private var listenTogetherRjSummaryJob: Job? = null
     private val listenTogetherRjSummaryInFlight = AtomicBoolean(false)
     private val listenTogetherRjSummaryPollingEnabled = MutableStateFlow(false)
@@ -858,25 +859,27 @@ class AlbumDetailViewModel @Inject constructor(
     ): String {
         val resolvedWorkno = result.workno
         val details = result.details
-        val oldTitle = entity.title.trim()
-        val newTitle = details.title.trim()
-        val finalTitle = when {
-            oldTitle.isNotBlank() && newTitle.isBlank() -> oldTitle
-            oldTitle.isNotBlank() && newTitle.isNotBlank() && oldTitle.contains(newTitle) && oldTitle.length > newTitle.length -> oldTitle
-            else -> newTitle.ifBlank { oldTitle }
-        }
-        val updated = entity.copy(
-            title = finalTitle,
-            circle = details.circle.ifBlank { entity.circle },
-            cv = details.cv.ifBlank { entity.cv },
-            tags = if (details.tags.isNotEmpty()) details.tags.joinToString(",") else entity.tags,
-            coverUrl = details.coverUrl.ifBlank { entity.coverUrl },
-            description = details.description.ifBlank { entity.description },
-            workId = resolveCloudSyncWorkId(updatedWorkId, resolvedWorkno),
-            rjCode = resolvedWorkno
-        )
         withContext(Dispatchers.IO) {
-            albumDao.updateAlbum(updated)
+            val updated = database.withTransaction {
+                val latest = albumDao.getAlbumById(entity.id) ?: return@withTransaction null
+                val oldTitle = latest.title.trim()
+                val newTitle = details.title.trim()
+                val finalTitle = when {
+                    oldTitle.isNotBlank() && newTitle.isBlank() -> oldTitle
+                    oldTitle.isNotBlank() && newTitle.isNotBlank() && oldTitle.contains(newTitle) && oldTitle.length > newTitle.length -> oldTitle
+                    else -> newTitle.ifBlank { oldTitle }
+                }
+                latest.copy(
+                    title = finalTitle,
+                    circle = details.circle.ifBlank { latest.circle },
+                    cv = details.cv.ifBlank { latest.cv },
+                    tags = if (details.tags.isNotEmpty()) details.tags.joinToString(",") else latest.tags,
+                    coverUrl = details.coverUrl.ifBlank { latest.coverUrl },
+                    description = details.description.ifBlank { latest.description },
+                    workId = resolveCloudSyncWorkId(updatedWorkId, resolvedWorkno),
+                    rjCode = resolvedWorkno
+                ).also { albumDao.updateAlbum(it) }
+            } ?: return@withContext
             albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
             albumTagRepository.upsertAlbumTagsFromCsv(updated.id, updated.tags, TagSource.AUTO)
             if (updated.coverPath.trim().isBlank() && updated.coverThumbPath.trim().isBlank()) {
@@ -1141,7 +1144,7 @@ class AlbumDetailViewModel @Inject constructor(
         }
     }
 
-    fun setLocalCoverPath(pathOrUri: String) {
+    fun toggleLocalCoverPath(pathOrUri: String) {
         val value = pathOrUri.trim()
         if (value.isBlank()) return
         val current = _uiState.value as? AlbumDetailUiState.Success ?: return
@@ -1149,28 +1152,36 @@ class AlbumDetailViewModel @Inject constructor(
         if (local.id <= 0L) return
 
         viewModelScope.launch {
-            try {
-                withContext(Dispatchers.IO) {
-                    val entity = albumDao.getAlbumById(local.id) ?: return@withContext
-                    albumDao.updateAlbum(entity.copy(coverPath = value, coverThumbPath = ""))
-                    runCatching { database.localTreeCacheDao().deleteByAlbum(entity.id) }
+            coverSelectionMutex.withLock {
+                try {
+                    val updated = withContext(Dispatchers.IO) {
+                        database.withTransaction {
+                            val entity = albumDao.getAlbumById(local.id) ?: return@withTransaction null
+                            val manualCoverPath = if (entity.manualCoverPath == value) "" else value
+                            albumDao.setManualCoverPath(entity.id, manualCoverPath)
+                            entity.copy(manualCoverPath = manualCoverPath, coverThumbPath = "")
+                        }
+                    } ?: return@withLock
+                    updateCurrentCoverState(updated)
+                    enqueueAlbumCoverThumbWork(local.id)
+                    messageManager.showSuccess(if (updated.manualCoverPath.isBlank()) "已取消指定封面" else "已设置封面")
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    messageManager.showError("设置封面失败，请检查后重试")
                 }
-                updateCurrentCoverState(local.id, value, "")
-                enqueueAlbumCoverThumbWork(local.id)
-                messageManager.showSuccess("已设置封面")
-            } catch (e: Exception) {
-                messageManager.showError("设置封面失败，请检查后重试")
             }
         }
     }
 
-    private fun updateCurrentCoverState(albumId: Long, coverPath: String, coverThumbPath: String) {
+    private fun updateCurrentCoverState(album: AlbumEntity) {
         val cur = _uiState.value as? AlbumDetailUiState.Success ?: return
         _uiState.value = AlbumDetailUiState.Success(
             model = cur.model.withUpdatedLocalCover(
-                albumId = albumId,
-                coverPath = coverPath,
-                coverThumbPath = coverThumbPath
+                albumId = album.id,
+                coverPath = album.manualCoverPath.ifBlank { album.coverPath },
+                coverThumbPath = album.coverThumbPath,
+                manualCoverPath = album.manualCoverPath
             )
         )
     }
@@ -2034,7 +2045,7 @@ class AlbumDetailViewModel @Inject constructor(
             baseRjCode = rj,
             rjCode = rj,
             listenTogetherRjListenerCount = null,
-            displayAlbum = displayAlbum,
+            displayAlbum = displayAlbum.withCurrentLocalCover(localAlbum),
             localAlbum = localAlbum,
             dlsiteInfo = dlsiteInfo,
             dlsiteGalleryUrls = emptyList(),
@@ -2184,7 +2195,8 @@ class AlbumDetailViewModel @Inject constructor(
             cv = entity.cv,
             tags = entity.tags.split(",").filter { it.isNotBlank() },
             coverUrl = entity.coverUrl,
-            coverPath = entity.coverPath,
+            coverPath = entity.manualCoverPath.ifBlank { entity.coverPath },
+            manualCoverPath = entity.manualCoverPath,
             coverThumbPath = entity.coverThumbPath,
             workId = entity.workId,
             rjCode = entity.rjCode.ifBlank { entity.workId },
@@ -2418,6 +2430,7 @@ class AlbumDetailViewModel @Inject constructor(
                         tags = existing?.tags?.takeIf { it.isNotBlank() } ?: tagsCsv,
                         coverUrl = existing?.coverUrl?.takeIf { it.isNotBlank() } ?: displayAlbum.coverUrl,
                         coverPath = existing?.coverPath.orEmpty(),
+                        manualCoverPath = existing?.manualCoverPath.orEmpty(),
                         coverThumbPath = existing?.coverThumbPath.orEmpty(),
                         workId = existing?.workId?.takeIf { it.isNotBlank() } ?: displayAlbum.workId.trim().ifBlank { workKey },
                         rjCode = existing?.rjCode?.takeIf { it.isNotBlank() } ?: displayAlbum.rjCode.trim().ifBlank { rj },
@@ -2594,7 +2607,13 @@ class AlbumDetailViewModel @Inject constructor(
             }
             if (entity != null && (entity.coverPath != coverFile.absolutePath || entity.coverThumbPath != thumbFile.absolutePath)) {
                 try {
-                    albumDao.updateAlbum(entity.copy(coverPath = coverFile.absolutePath, coverThumbPath = thumbFile.absolutePath))
+                    albumDao.updateAutomaticCoverIfSourceMatches(
+                        albumId = albumId,
+                        expectedCoverPath = coverPath,
+                        expectedCoverUrl = coverUrl,
+                        coverPath = coverFile.absolutePath,
+                        coverThumbPath = thumbFile.absolutePath
+                    )
                 } catch (_: Exception) {
                 }
             }
@@ -2695,8 +2714,13 @@ class AlbumDetailViewModel @Inject constructor(
         }
 
         return try {
-            val entity = albumDao.getAlbumById(albumId) ?: return true
-            albumDao.updateAlbum(entity.copy(coverPath = coverFile.absolutePath, coverThumbPath = thumbFile.absolutePath))
+            albumDao.updateAutomaticCoverIfSourceMatches(
+                albumId = albumId,
+                expectedCoverPath = coverPath,
+                expectedCoverUrl = coverUrl,
+                coverPath = coverFile.absolutePath,
+                coverThumbPath = thumbFile.absolutePath
+            )
             debugLog("ensureAlbumCoverSaved ok albumId=$albumId cover=${coverFile.length()} thumb=${thumbFile.length()}")
             true
         } catch (e: Exception) {

@@ -214,7 +214,7 @@ class PlaylistRepository @Inject constructor(
 
     private fun albumArtworkOrEmpty(album: AlbumEntity?): String? {
         if (album == null) return null
-        val local = album.coverPath.trim()
+        val local = album.manualCoverPath.ifBlank { album.coverPath }.trim()
         if (local.isNotBlank()) return local
         val url = album.coverUrl.trim()
         return url.takeIf { it.isNotBlank() }

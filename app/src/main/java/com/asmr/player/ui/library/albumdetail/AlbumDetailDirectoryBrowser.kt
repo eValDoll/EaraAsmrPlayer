@@ -732,7 +732,8 @@ internal fun DirectoryFileRow(
     selectedPosition: DirectoryFolderPosition = DirectoryFolderPosition.Single,
     onEnterSelectionMode: (() -> Unit)? = null,
     onSelectedChange: ((Boolean) -> Unit)? = null,
-    onSetAsCover: (() -> Unit)? = null,
+    isCoverSelected: Boolean = false,
+    onToggleCover: (() -> Unit)? = null,
     onDownload: (() -> Unit)? = null,
     onAddToQueue: (() -> Unit)? = null,
     onAddToPlaylist: (() -> Unit)? = null,
@@ -770,7 +771,7 @@ internal fun DirectoryFileRow(
 
     val showPrimaryAction = file.isPlayable
     val showMenu = showPrimaryAction || onDownload != null || onAddToQueue != null || onAddToPlaylist != null || onGenerateSubtitles != null || onManageTags != null || onRemoveFromAlbum != null || onDelete != null
-    val showTrailing = selectionMode || onSetAsCover != null || file.showSubtitleStamp || showMenu
+    val showTrailing = selectionMode || onToggleCover != null || file.showSubtitleStamp || showMenu
     val rowContainerColor = if (selected) {
         colorScheme.primary.copy(alpha = if (colorScheme.isDark) 0.18f else 0.09f)
     } else {
@@ -906,15 +907,23 @@ internal fun DirectoryFileRow(
                                 }
                             }
                         }
-                    } else if (onSetAsCover != null) {
-                        IconButton(
-                            onClick = onSetAsCover,
-                            modifier = Modifier.size(32.dp)
+                    } else if (onToggleCover != null) {
+                        IconToggleButton(
+                            checked = isCoverSelected,
+                            onCheckedChange = { onToggleCover() },
+                            modifier = Modifier.size(32.dp),
+                            colors = IconButtonDefaults.iconToggleButtonColors(
+                                containerColor = Color.Transparent,
+                                contentColor = colorScheme.textSecondary,
+                                checkedContainerColor = Color.Transparent,
+                                checkedContentColor = colorScheme.primary,
+                                disabledContainerColor = Color.Transparent,
+                                disabledContentColor = colorScheme.textTertiary
+                            )
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.Photo,
-                                contentDescription = "设为封面",
-                                tint = colorScheme.textSecondary,
+                                contentDescription = if (isCoverSelected) "取消指定封面" else "设为封面",
                                 modifier = Modifier.size(20.dp)
                             )
                         }

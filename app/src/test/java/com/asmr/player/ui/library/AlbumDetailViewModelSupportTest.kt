@@ -291,6 +291,99 @@ class AlbumDetailViewModelSupportTest {
         assertTrue(result.rjCode.isNotBlank())
     }
     @Test
+    fun withCurrentLocalCover_appliesManualCoverToAnOnlineEntryHint() {
+        val hint = Album(
+            title = "在线列表标题",
+            path = "",
+            cv = "在线CV",
+            coverUrl = "https://example.com/list.jpg"
+        )
+        val local = Album(
+            id = 42L,
+            title = "本地标题",
+            path = "/albums/RJ123456",
+            coverPath = "/albums/RJ123456/cover.jpg",
+            manualCoverPath = "/albums/RJ123456/cover.jpg"
+        )
+
+        val result = hint.withCurrentLocalCover(local)
+
+        assertEquals(hint.title, result.title)
+        assertEquals(hint.cv, result.cv)
+        assertEquals(hint.coverUrl, result.coverUrl)
+        assertEquals(local.manualCoverPath, result.coverPath)
+        assertEquals(local.manualCoverPath, result.manualCoverPath)
+    }
+
+    @Test
+    fun mergeDetailHeaderAlbum_preservesOnlineMetadataWhileApplyingManualCover() {
+        val hint = Album(
+            title = "在线列表标题",
+            path = "",
+            cv = "在线CV",
+            coverUrl = "https://example.com/list.jpg"
+        )
+        val local = Album(
+            id = 42L,
+            title = "本地标题",
+            path = "/albums/RJ123456",
+            coverPath = "/albums/RJ123456/cover.jpg",
+            manualCoverPath = "/albums/RJ123456/cover.jpg"
+        )
+
+        val result = mergeDetailHeaderAlbum(
+            currentDisplayAlbum = hint,
+            localAlbum = local,
+            fetchedDlsiteInfo = hint.copy(title = "抓取标题"),
+            rjCode = "RJ123456",
+            asmrOneWorkId = null,
+            preserveHeaderAlbumMetadata = true
+        )
+
+        assertEquals(hint.title, result.title)
+        assertEquals(hint.cv, result.cv)
+        assertEquals(hint.coverUrl, result.coverUrl)
+        assertEquals(local.manualCoverPath, result.coverPath)
+        assertEquals(local.manualCoverPath, result.manualCoverPath)
+    }
+
+    @Test
+    fun mergeDetailHeaderAlbum_restoresDefaultCoverWhenAHintHasACancelledSelection() {
+        val staleHint = Album(
+            title = "在线列表标题",
+            path = "",
+            coverPath = "/albums/manual.jpg",
+            manualCoverPath = "/albums/manual.jpg",
+            coverThumbPath = "/thumbs/manual_v2.jpg",
+            coverUrl = "https://example.com/list.jpg"
+        )
+
+        listOf("/albums/cover.jpg", "").forEach { defaultCover ->
+            val local = Album(
+                id = 42L,
+                title = "本地标题",
+                path = "/albums/RJ123456",
+                coverPath = defaultCover
+            )
+            listOf(false, true).forEach { preserveMetadata ->
+                val result = mergeDetailHeaderAlbum(
+                    currentDisplayAlbum = staleHint,
+                    localAlbum = local,
+                    fetchedDlsiteInfo = null,
+                    rjCode = "RJ123456",
+                    asmrOneWorkId = null,
+                    preserveHeaderAlbumMetadata = preserveMetadata
+                )
+
+                assertEquals(defaultCover, result.coverPath)
+                assertEquals("", result.manualCoverPath)
+                assertEquals("", result.coverThumbPath)
+                assertEquals(staleHint.coverUrl, result.coverUrl)
+            }
+        }
+    }
+
+    @Test
     fun mergeDetailHeaderAlbum_preservesListMetadataWhenRequested() {
         val listAlbum = Album(
             title = "列表标题",
@@ -567,13 +660,47 @@ class AlbumDetailViewModelSupportTest {
         val result = model.withUpdatedLocalCover(
             albumId = 42L,
             coverPath = "/new/cover.jpg",
-            coverThumbPath = ""
+            coverThumbPath = "",
+            manualCoverPath = "/new/cover.jpg"
         )
 
         assertEquals("/new/cover.jpg", result.localAlbum?.coverPath)
         assertEquals("", result.localAlbum?.coverThumbPath)
         assertEquals("/new/cover.jpg", result.displayAlbum.coverPath)
         assertEquals("", result.displayAlbum.coverThumbPath)
+        assertEquals("/new/cover.jpg", result.localAlbum?.manualCoverPath)
+        assertEquals("/new/cover.jpg", result.displayAlbum.manualCoverPath)
+
+        val restored = result.withUpdatedLocalCover(
+            albumId = 42L,
+            coverPath = "",
+            coverThumbPath = "",
+            manualCoverPath = ""
+        )
+        assertEquals("", restored.localAlbum?.manualCoverPath)
+        assertEquals("", restored.localAlbum?.coverPath)
+        assertEquals("", restored.displayAlbum.manualCoverPath)
+        assertEquals("", restored.displayAlbum.coverPath)
+    }
+
+    @Test
+    fun buildDisplayAlbum_keepsManualCoverWhenOnlineMetadataArrives() {
+        val localAlbum = Album(
+            id = 42L,
+            title = "本地作品",
+            path = "/albums/RJ123456",
+            coverPath = "/albums/RJ123456/cover.jpg",
+            manualCoverPath = "/albums/RJ123456/cover.jpg"
+        )
+        val result = buildDisplayAlbum(
+            rjCode = "RJ123456",
+            localAlbum = localAlbum,
+            dlsiteInfo = Album(title = "在线作品", path = "", coverUrl = "https://example.com/online.jpg"),
+            asmrOneWorkId = null
+        )
+
+        assertEquals(localAlbum.manualCoverPath, result.manualCoverPath)
+        assertEquals(localAlbum.manualCoverPath, result.coverPath)
     }
 
     @Test

@@ -30,7 +30,9 @@ class AlbumCoverThumbWorker(
         val albumDao = database.albumDao()
         val entity = albumDao.getAlbumById(albumId) ?: return Result.success()
 
-        val source = entity.coverPath.takeIf { it.isNotBlank() && it != "null" } ?: entity.coverUrl
+        val source = entity.manualCoverPath.takeIf { it.isNotBlank() && it != "null" }
+            ?: entity.coverPath.takeIf { it.isNotBlank() && it != "null" }
+            ?: entity.coverUrl
         if (source.isBlank()) return Result.success()
 
         val sourceHash = source.trim().hashCode().toString()
@@ -54,8 +56,13 @@ class AlbumCoverThumbWorker(
             thumb.compress(Bitmap.CompressFormat.JPEG, 95, out)
         }
 
-        val updated = entity.copy(coverThumbPath = target.absolutePath)
-        albumDao.updateAlbum(updated)
+        albumDao.updateAlbumCoverThumbIfSourceMatches(
+            albumId = albumId,
+            manualCoverPath = entity.manualCoverPath,
+            coverPath = entity.coverPath,
+            coverUrl = entity.coverUrl,
+            coverThumbPath = target.absolutePath,
+        )
         return Result.success()
     }
 

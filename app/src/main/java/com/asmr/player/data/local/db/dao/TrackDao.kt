@@ -169,8 +169,8 @@ interface TrackDao {
                a.workId AS workId,
                COALESCE(NULLIF(a.displayTitle, ''), a.title) AS albumTitle,
                a.coverUrl AS coverUrl,
-               a.coverPath AS coverPath,
-               a.coverThumbPath AS coverThumbPath,
+               COALESCE(NULLIF(a.manualCoverPath, ''), a.coverPath) AS coverPath,
+               CASE WHEN a.manualCoverPath != '' THEN '' ELSE a.coverThumbPath END AS coverThumbPath,
                COUNT(s.id) AS subtitleCount
         FROM tracks t
         INNER JOIN subtitles s ON s.trackId = t.id
@@ -185,8 +185,8 @@ interface TrackDao {
         """
         SELECT t.id AS trackId,
                a.coverUrl AS coverUrl,
-               a.coverPath AS coverPath,
-               a.coverThumbPath AS coverThumbPath
+               COALESCE(NULLIF(a.manualCoverPath, ''), a.coverPath) AS coverPath,
+               CASE WHEN a.manualCoverPath != '' THEN '' ELSE a.coverThumbPath END AS coverThumbPath
         FROM tracks t
         INNER JOIN albums a ON a.id = t.albumId
         WHERE t.id IN (:trackIds)

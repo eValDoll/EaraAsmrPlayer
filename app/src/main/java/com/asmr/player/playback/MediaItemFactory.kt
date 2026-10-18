@@ -58,7 +58,7 @@ object MediaItemFactory {
                 durationSeconds = track.duration,
                 artist = artist,
                 albumTitle = album.title,
-                artworkUri = album.coverPath.ifBlank { album.coverUrl },
+                artworkUri = album.manualCoverPath.ifBlank { album.coverPath }.ifBlank { album.coverUrl },
                 albumId = album.id,
                 trackId = track.id,
                 rjCode = album.rjCode,
