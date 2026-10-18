@@ -29,24 +29,18 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-internal fun dynamicHueCacheKeyForArtwork(
-    artworkModel: Any?,
-    centerRegionRatio: Float = 0.62f
-): String? {
-    val baseKey = artworkModel?.toString().orEmpty().trim()
-    if (baseKey.isBlank()) return null
-    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
-    return "hue:cw:$regionKey:$baseKey"
-}
+internal const val COVER_THEME_COLOR_VERSION = "cover-hsl-v1"
 
-internal fun dynamicHueCacheKeyForVideo(
-    videoUri: Uri?,
-    centerRegionRatio: Float = 0.62f
-): String? {
-    val baseKey = videoUri?.toString().orEmpty().trim()
+internal fun dynamicHueCacheKeyForArtwork(artworkModel: Any?): String? =
+    dynamicHueCacheKey("artwork", artworkModel)
+
+internal fun dynamicHueCacheKeyForVideo(videoUri: Uri?): String? =
+    dynamicHueCacheKey("video", videoUri)
+
+private fun dynamicHueCacheKey(sourceType: String, model: Any?): String? {
+    val baseKey = model?.toString().orEmpty().trim()
     if (baseKey.isBlank()) return null
-    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
-    return "hue:vf:cw:$regionKey:$baseKey"
+    return "hue:$COVER_THEME_COLOR_VERSION:$sourceType:$baseKey"
 }
 
 internal fun peekDynamicHueSeedColor(cacheKey: String?): Color? {
@@ -58,8 +52,7 @@ internal fun peekDynamicHueSeedColor(cacheKey: String?): Color? {
 fun PrewarmDynamicHuePalette(
     artworkModel: Any?,
     fallbackHue: HuePalette,
-    imageSizePx: Int = 256,
-    centerRegionRatio: Float = 0.62f
+    imageSizePx: Int = 256
 ) {
     val context = LocalContext.current
     val app = context.applicationContext
@@ -72,8 +65,7 @@ fun PrewarmDynamicHuePalette(
         lastNonBlankBaseKeyState.value = rawBaseKey
     }
     val baseKey = if (rawBaseKey.isNotBlank()) rawBaseKey else lastNonBlankBaseKeyState.value
-    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
-    val seedKey = "hue:cw:$regionKey:$baseKey"
+    val seedKey = dynamicHueCacheKeyForArtwork(baseKey).orEmpty()
 
     LaunchedEffect(seedKey, baseKey) {
         if (baseKey.isBlank()) return@LaunchedEffect
@@ -92,10 +84,9 @@ fun PrewarmDynamicHuePalette(
                 val bitmap = image.asAndroidBitmap()
                 if (bitmap.width < 10 || bitmap.height < 10) return@withContext null
 
-                monetSeedColorFromBitmap(
+                coverThemeSeedColorFromBitmap(
                     bitmap = bitmap,
-                    fallbackColor = fallbackHue.primary,
-                    centerRegionRatio = centerRegionRatio
+                    fallbackColor = fallbackHue.primary
                 )
             }
         }
@@ -107,7 +98,6 @@ fun PrewarmDynamicHuePaletteFromVideoFrame(
     videoUri: Uri?,
     fallbackHue: HuePalette,
     imageSizePx: Int = 256,
-    centerRegionRatio: Float = 0.62f,
     timeoutMs: Long = 2_500L
 ) {
     val context = LocalContext.current
@@ -117,8 +107,7 @@ fun PrewarmDynamicHuePaletteFromVideoFrame(
         lastNonBlankBaseKeyState.value = rawBaseKey
     }
     val baseKey = if (rawBaseKey.isNotBlank()) rawBaseKey else lastNonBlankBaseKeyState.value
-    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
-    val seedKey = "hue:vf:cw:$regionKey:$baseKey"
+    val seedKey = dynamicHueCacheKey("video", baseKey).orEmpty()
 
     LaunchedEffect(seedKey, baseKey, videoUri) {
         if (baseKey.isBlank() || videoUri == null) return@LaunchedEffect
@@ -128,10 +117,9 @@ fun PrewarmDynamicHuePaletteFromVideoFrame(
             withContext(Dispatchers.Default) {
                 withTimeoutOrNull(timeoutMs) {
                     val bitmap = extractMeaningfulVideoFrameBitmap(context, videoUri, imageSizePx) ?: return@withTimeoutOrNull null
-                    monetSeedColorFromBitmap(
+                    coverThemeSeedColorFromBitmap(
                         bitmap = bitmap,
-                        fallbackColor = fallbackHue.primary,
-                        centerRegionRatio = centerRegionRatio
+                        fallbackColor = fallbackHue.primary
                     )
                 }
             }
@@ -146,7 +134,6 @@ fun rememberDynamicHuePalette(
     neutral: NeutralPalette,
     fallbackHue: HuePalette,
     imageSizePx: Int = 256,
-    centerRegionRatio: Float = 0.62f,
     transitionDurationMs: Int = 520,
     cachedTransitionDurationMs: Int = 260
 ): State<HuePalette> {
@@ -161,8 +148,7 @@ fun rememberDynamicHuePalette(
         lastNonBlankBaseKeyState.value = rawBaseKey
     }
     val baseKey = if (rawBaseKey.isNotBlank()) rawBaseKey else lastNonBlankBaseKeyState.value
-    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
-    val seedKey = "hue:cw:$regionKey:$baseKey"
+    val seedKey = dynamicHueCacheKeyForArtwork(baseKey).orEmpty()
 
     // Rebuilding a full Material tonal scheme from the interpolated seed on every animation
     // frame is the main-thread hotspot during the cover color transition. Instead we keep the
@@ -204,10 +190,9 @@ fun rememberDynamicHuePalette(
 
                     if (bitmap.width < 10 || bitmap.height < 10) return@withContext null
 
-                    monetSeedColorFromBitmap(
+                    coverThemeSeedColorFromBitmap(
                         bitmap = bitmap,
-                        fallbackColor = fallbackHue.primary,
-                        centerRegionRatio = centerRegionRatio
+                        fallbackColor = fallbackHue.primary
                     )
                 }
             }
@@ -246,7 +231,6 @@ fun rememberDynamicHuePaletteFromVideoFrame(
     neutral: NeutralPalette,
     fallbackHue: HuePalette,
     imageSizePx: Int = 256,
-    centerRegionRatio: Float = 0.62f,
     timeoutMs: Long = 2_500L,
     transitionDurationMs: Int = 520,
     cachedTransitionDurationMs: Int = 260
@@ -258,8 +242,7 @@ fun rememberDynamicHuePaletteFromVideoFrame(
         lastNonBlankBaseKeyState.value = rawBaseKey
     }
     val baseKey = if (rawBaseKey.isNotBlank()) rawBaseKey else lastNonBlankBaseKeyState.value
-    val regionKey = (centerRegionRatio * 100).toInt().coerceIn(10, 100)
-    val seedKey = "hue:vf:cw:$regionKey:$baseKey"
+    val seedKey = dynamicHueCacheKey("video", baseKey).orEmpty()
 
     val progress = remember { Animatable(1f) }
     var fromSeed by remember { mutableStateOf(DynamicHueCache.get(seedKey) ?: fallbackHue.primary) }
@@ -279,10 +262,9 @@ fun rememberDynamicHuePaletteFromVideoFrame(
             withContext(Dispatchers.Default) {
                 withTimeoutOrNull(timeoutMs) {
                     val bitmap = extractMeaningfulVideoFrameBitmap(context, videoUri, imageSizePx) ?: return@withTimeoutOrNull null
-                    monetSeedColorFromBitmap(
+                    coverThemeSeedColorFromBitmap(
                         bitmap = bitmap,
-                        fallbackColor = fallbackHue.primary,
-                        centerRegionRatio = centerRegionRatio
+                        fallbackColor = fallbackHue.primary
                     )
                 }
             }

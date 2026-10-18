@@ -6,6 +6,7 @@ import android.graphics.LinearGradient
 import android.graphics.Paint
 import android.graphics.RadialGradient
 import android.graphics.Shader
+import android.os.Trace
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -32,7 +34,13 @@ import com.asmr.player.ui.player.CoverArtworkBackground
 import com.asmr.player.ui.player.playerSurfaceColors
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.AsmrTheme
+import com.asmr.player.ui.theme.DefaultBrandPrimaryDark
+import com.asmr.player.ui.theme.DefaultBrandPrimaryLight
+import com.asmr.player.ui.theme.HuePalette
 import com.asmr.player.ui.theme.ThemeMode
+import com.asmr.player.ui.theme.coverThemeSeedColorFromBitmap
+import com.asmr.player.ui.theme.deriveHuePalette
+import com.asmr.player.ui.theme.neutralPaletteForMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -51,14 +59,49 @@ internal fun FlowingBackgroundBenchmarkScreen() {
     var visible by remember { mutableStateOf(true) }
     var coverEnabled by remember { mutableStateOf(true) }
     var dynamicEnabled by remember { mutableStateOf(true) }
+    var themeExtractionEnabled by remember { mutableStateOf(false) }
+    val mode = if (dark) ThemeMode.Dark else ThemeMode.Light
+    val artwork = covers.getOrNull(coverIndex)
+    val coverTheme by produceState<BenchmarkCoverTheme?>(
+        initialValue = null,
+        key1 = themeExtractionEnabled,
+        key2 = artwork,
+        key3 = mode
+    ) {
+        if (!themeExtractionEnabled || artwork == null) {
+            value = null
+            return@produceState
+        }
+        value = withContext(Dispatchers.Default) {
+            val fallback = if (mode.isDark) DefaultBrandPrimaryDark else DefaultBrandPrimaryLight
+            val seed = run {
+                Trace.beginSection("theme.cover.extract")
+                try {
+                    coverThemeSeedColorFromBitmap(artwork, fallback)
+                } finally {
+                    Trace.endSection()
+                }
+            }
+            BenchmarkCoverTheme(
+                artwork = artwork,
+                mode = mode,
+                hue = deriveHuePalette(
+                    primary = seed,
+                    mode = mode,
+                    neutral = neutralPaletteForMode(mode),
+                    fallbackOnPrimary = if (mode.isDark) Color.White else Color.Black
+                )
+            )
+        }
+    }
 
-    AsmrPlayerTheme(mode = if (dark) ThemeMode.Dark else ThemeMode.Light) {
+    AsmrPlayerTheme(mode = mode, hue = coverTheme?.hue.takeIf { themeExtractionEnabled }) {
         val appColors = AsmrTheme.colorScheme
         val colors = remember(appColors) { playerSurfaceColors(appColors) }
         Box(Modifier.fillMaxSize().background(colors.background)) {
             Box(Modifier.fillMaxSize().graphicsLayer { alpha = if (visible) 1f else 0f }) {
                 CoverArtworkBackground(
-                    artworkModel = covers.getOrNull(coverIndex),
+                    artworkModel = artwork,
                     coverEnabled = coverEnabled,
                     clarity = clarity,
                     isPlaying = playing,
@@ -108,10 +151,27 @@ internal fun FlowingBackgroundBenchmarkScreen() {
                         Text(if (dynamicEnabled) "关闭动态流光" else "开启动态流光")
                     }
                 }
+                TextButton(
+                    onClick = { themeExtractionEnabled = !themeExtractionEnabled },
+                    colors = buttonColors,
+                    modifier = Modifier.semantics {
+                        if (themeExtractionEnabled && coverTheme?.artwork === artwork && coverTheme?.mode == mode) {
+                            contentDescription = "benchmark-ready:cover-theme:$coverIndex"
+                        }
+                    }
+                ) {
+                    Text(if (themeExtractionEnabled) "关闭主题取色" else "封面主题取色")
+                }
             }
         }
     }
 }
+
+private data class BenchmarkCoverTheme(
+    val artwork: Bitmap,
+    val mode: ThemeMode,
+    val hue: HuePalette
+)
 
 private fun createFlowingBackgroundSample(alternate: Boolean): Bitmap {
     val bitmap = Bitmap.createBitmap(256, 256, Bitmap.Config.ARGB_8888)

@@ -72,6 +72,16 @@ class FlowingBackgroundPerformanceBenchmark {
         recordFlowingState("coverOffDynamicResumed")
     }
 
+    @Test fun coverThemeChanges() = measure {
+        clickControl("封面主题取色")
+        waitForCoverTheme(0)
+        repeat(6) { index ->
+            clickControl("切换封面")
+            waitForCoverTheme(1 - index % 2)
+            SystemClock.sleep(600)
+        }
+    }
+
     private fun recordFlowingState(name: String) {
         SystemClock.sleep(600)
         Trace.beginSection("benchmark.flow.$name")
@@ -122,5 +132,11 @@ class FlowingBackgroundPerformanceBenchmark {
         checkNotNull(device.wait(Until.findObject(By.text(label)), 5_000)) {
             "未找到流光基准控件：$label"
         }.click()
+    }
+
+    private fun MacrobenchmarkScope.waitForCoverTheme(coverIndex: Int) {
+        check(device.wait(Until.hasObject(By.desc("benchmark-ready:cover-theme:$coverIndex")), 5_000)) {
+            "封面主题色未就绪：$coverIndex"
+        }
     }
 }
