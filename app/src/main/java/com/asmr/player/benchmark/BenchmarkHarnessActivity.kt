@@ -44,6 +44,7 @@ import com.asmr.player.ui.settings.SettingsScreen
 import com.asmr.player.ui.common.DiscPlaceholderBitmapCache
 import com.asmr.player.ui.theme.AsmrPlayerTheme
 import dagger.hilt.android.AndroidEntryPoint
+import dagger.Lazy
 import javax.inject.Inject
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.Dispatchers
@@ -53,13 +54,13 @@ import kotlinx.coroutines.withContext
 @AndroidEntryPoint
 class BenchmarkHarnessActivity : ComponentActivity() {
     @Inject
-    lateinit var benchmarkDataSeeder: BenchmarkDataSeeder
+    lateinit var benchmarkDataSeeder: Lazy<BenchmarkDataSeeder>
 
     @Inject
-    lateinit var playlistRepository: PlaylistRepository
+    lateinit var playlistRepository: Lazy<PlaylistRepository>
 
     @Inject
-    lateinit var albumGroupRepository: AlbumGroupRepository
+    lateinit var albumGroupRepository: Lazy<AlbumGroupRepository>
 
     private var uiState by mutableStateOf<BenchmarkHarnessUiState>(BenchmarkHarnessUiState.Loading)
 
@@ -67,6 +68,12 @@ class BenchmarkHarnessActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val scenario = BenchmarkScenario.fromIntent(intent)
+
+        if (scenario == BenchmarkScenario.FlowingBackground) {
+            window.attributes = window.attributes.apply { preferredRefreshRate = 120f }
+            setContent { FlowingBackgroundBenchmarkScreen() }
+            return
+        }
 
         setContent {
             val windowSizeClass = calculateWindowSizeClass(this@BenchmarkHarnessActivity)
@@ -77,8 +84,8 @@ class BenchmarkHarnessActivity : ComponentActivity() {
                             scenario = scenario,
                             windowSizeClass = windowSizeClass,
                             uiState = uiState,
-                            playlistRepository = playlistRepository,
-                            albumGroupRepository = albumGroupRepository
+                            playlistRepository = playlistRepository.get(),
+                            albumGroupRepository = albumGroupRepository.get()
                         )
                     }
                 }
@@ -100,7 +107,7 @@ class BenchmarkHarnessActivity : ComponentActivity() {
                 )
             }
             uiState = runCatching {
-                BenchmarkHarnessUiState.Ready(benchmarkDataSeeder.prepareScenario(scenario))
+                BenchmarkHarnessUiState.Ready(benchmarkDataSeeder.get().prepareScenario(scenario))
             }.getOrElse { throwable ->
                 BenchmarkHarnessUiState.Error(
                     throwable.stackTraceToString().lineSequence().firstOrNull().orEmpty()
@@ -180,6 +187,7 @@ private fun BenchmarkScenarioScreen(
     albumGroupRepository: AlbumGroupRepository
 ) {
     when (scenario) {
+        BenchmarkScenario.FlowingBackground -> FlowingBackgroundBenchmarkScreen()
         BenchmarkScenario.MultilineLyrics -> MultilineLyricsBenchmarkScreen()
         BenchmarkScenario.FloatingMultilineLyrics -> MultilineLyricsBenchmarkScreen(floating = true)
 

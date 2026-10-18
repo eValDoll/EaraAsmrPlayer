@@ -111,6 +111,7 @@ import com.asmr.player.ui.common.smoothScrollToIndex
 import com.asmr.player.ui.library.TagAssignDialog
 import com.asmr.player.service.AudioOutputRouteKind
 import com.asmr.player.ui.theme.AsmrTheme
+import com.asmr.player.ui.theme.LocalAsmrColorScheme
 import com.asmr.player.util.Formatting
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.SubtitleIndexFinder
@@ -1204,6 +1205,7 @@ internal fun NowPlayingScreen(
     val metadata = item?.mediaMetadata
     val canBindManualLyrics = lyricsTargetContextFromMediaItem(item) != null
     val colorScheme = AsmrTheme.colorScheme
+    val playerContentColors = remember(colorScheme) { playerSurfaceColors(colorScheme) }
     val uriText = item?.localConfiguration?.uri?.toString().orEmpty()
     val isOnlineMedia = remember(uriText, item?.mediaId) { item.isOnlineMedia() }
     val artworkModel = remember(metadata?.artworkUri) {
@@ -1227,16 +1229,13 @@ internal fun NowPlayingScreen(
         artworkBackdropEnabled = playerArtworkBackdropEnabled
     )
     val accentColor = playerThemeColors.accentColor
-    val playerPageAccentColor = playerThemeColors.coverAccentColor
-    val lyricColors = rememberLyricReadableColors(
-        accentColor = accentColor
-    )
+    val playerPageAccentColor = playerContentColors.onSurface
     val lyricsPageColors = rememberLyricReadableColors(
-        accentColor = accentColor,
-        useReadablePageInactiveText = true
+        accentColor = playerContentColors.onSurface,
+        useReadablePageInactiveText = true,
+        colorScheme = playerContentColors
     )
-    val onAccentColor = playerThemeColors.onAccentColor
-    val videoBackdropColor = if (isVideo) playerThemeColors.videoBackdropColor else Color.Transparent
+    val videoBackdropColor = if (isVideo) playerContentColors.background else Color.Transparent
     val progressDurationMs = when {
         playback.durationMs > 0L && resolvedDurationMs > 0L -> maxOf(playback.durationMs, resolvedDurationMs)
         playback.durationMs > 0L -> playback.durationMs
@@ -1398,6 +1397,11 @@ internal fun NowPlayingScreen(
         else -> Alignment.Center
     }
     var surfaceMode by rememberSaveable { mutableStateOf(NowPlayingSurfaceMode.PLAYER) }
+    val playerAccentColor = playerContentColors.onSurface
+    val lyricColors = rememberLyricReadableColors(
+        accentColor = playerAccentColor,
+        colorScheme = playerContentColors
+    )
     var tabletQueueExpanded by rememberSaveable { mutableStateOf(true) }
     var tabletQueueInteractionTick by remember { mutableIntStateOf(0) }
     var landscapeArtistBottom by remember { mutableFloatStateOf(Float.NaN) }
@@ -1570,10 +1574,8 @@ internal fun NowPlayingScreen(
                 artworkModel = artworkModel,
                 enabled = coverBackgroundEnabled,
                 clarity = coverBackgroundClarity,
-                overlayBaseColor = colorScheme.background,
-                tintBaseColor = playerThemeColors.backdropTintColor,
                 artworkAlignment = coverPreviewAlignment,
-                isDark = colorScheme.isDark
+                isPlaying = playback.isPlaying
             )
         }
         if (isLandscape && surfaceMode == NowPlayingSurfaceMode.PLAYER && !isVideo) {
@@ -1608,6 +1610,10 @@ internal fun NowPlayingScreen(
                     .then(spectrumMotion)
             )
         }
+        CompositionLocalProvider(
+            LocalAsmrColorScheme provides playerContentColors,
+            androidx.compose.material3.LocalContentColor provides playerContentColors.onSurface
+        ) {
         Column(modifier = Modifier.fillMaxSize()) {
             PlayerSurfaceHeader(
                 title = sharedHeaderTitle,
@@ -1719,7 +1725,7 @@ internal fun NowPlayingScreen(
                                     onOpenVideoFullscreen = { videoFullscreen = true },
                                     onOpenLyrics = showLyricsSurface,
                                     edgeBlendEnabled = false,
-                                    edgeBlendColor = if (playerArtworkBackdropEnabled) playerThemeColors.backdropTintColor else colorScheme.background,
+                                    edgeBlendColor = playerContentColors.background,
                                     videoBackdropColor = videoBackdropColor,
                                     artworkAlignment = coverPreviewAlignment,
                                     artworkCornerRadius = landscapeLayoutMetrics.artworkCornerRadius,
@@ -1734,7 +1740,7 @@ internal fun NowPlayingScreen(
                                 viewModel = viewModel,
                                 currentMediaId = item?.mediaId.orEmpty(),
                                 isPlaying = playback.isPlaying,
-                                activeColor = playerPageAccentColor,
+                                activeColor = playerAccentColor,
                                 expanded = tabletQueueExpanded,
                                 onExpandedChange = { tabletQueueExpanded = it },
                                 modifier = Modifier
@@ -1768,8 +1774,8 @@ internal fun NowPlayingScreen(
                                         onUpdateSliceRange = { sliceId, startMs, endMs ->
                                             viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
                                         },
-                                        activeColor = accentColor,
-                                        inactiveColor = accentColor.copy(alpha = 0.2f)
+                                        activeColor = playerAccentColor,
+                                        inactiveColor = playerAccentColor.copy(alpha = 0.2f)
                                     )
                                 }
                             }
@@ -1786,7 +1792,7 @@ internal fun NowPlayingScreen(
                             title = playerHeaderTitle,
                             artistMeta = playerArtistMeta,
                             listenTogetherState = listenTogetherUiState,
-                            accentColor = accentColor,
+                            accentColor = playerAccentColor,
                             pageEntranceSettled = pageEntranceSettled,
                             compactHeight = false,
                             tabletLayout = true,
@@ -1852,8 +1858,7 @@ internal fun NowPlayingScreen(
                             landscapeControls = true,
                             actionRowModifier = controlsMotion,
                             coreControlsModifier = controlsMotion,
-                            primaryColor = accentColor,
-                            onPrimaryColor = onAccentColor
+                            contentColor = playerAccentColor
                         )
                     }
                 }
@@ -1945,8 +1950,8 @@ internal fun NowPlayingScreen(
                                     onUpdateSliceRange = { sliceId, startMs, endMs ->
                                         viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
                                     },
-                                    activeColor = accentColor,
-                                    inactiveColor = accentColor.copy(alpha = 0.2f),
+                                    activeColor = playerAccentColor,
+                                    inactiveColor = playerAccentColor.copy(alpha = 0.2f),
                                     compactLayout = true
                                 )
                             }
@@ -1964,7 +1969,7 @@ internal fun NowPlayingScreen(
                         title = playerHeaderTitle,
                         artistMeta = playerArtistMeta,
                         listenTogetherState = listenTogetherUiState,
-                        accentColor = accentColor,
+                        accentColor = playerAccentColor,
                         pageEntranceSettled = pageEntranceSettled,
                         compactHeight = landscapeLayoutMetrics.compactHeight,
                         tabletLayout = false,
@@ -2031,8 +2036,7 @@ internal fun NowPlayingScreen(
                         compactLayout = true,
                         actionRowModifier = controlsMotion,
                         coreControlsModifier = controlsMotion,
-                        primaryColor = accentColor,
-                        onPrimaryColor = onAccentColor
+                        contentColor = playerAccentColor
                     )
                 }
             }
@@ -2230,8 +2234,8 @@ internal fun NowPlayingScreen(
                                 ListenTogetherAudienceLine(
                                     state = listenTogetherUiState,
                                     modifier = Modifier.fillMaxWidth(),
-                                    accentColor = accentColor,
-                                    textColor = colorScheme.textTertiary,
+                                    accentColor = playerAccentColor,
+                                    textColor = playerContentColors.textTertiary,
                                     pageEntranceSettled = pageEntranceSettled
                                 )
                             }
@@ -2318,7 +2322,7 @@ internal fun NowPlayingScreen(
                                             onOpenVideoFullscreen = { videoFullscreen = true },
                                             onOpenLyrics = showLyricsSurface,
                                             edgeBlendEnabled = false,
-                                            edgeBlendColor = if (playerArtworkBackdropEnabled) playerThemeColors.backdropTintColor else colorScheme.background,
+                                            edgeBlendColor = playerContentColors.background,
                                             videoBackdropColor = videoBackdropColor,
                                             artworkAlignment = coverPreviewAlignment,
                                             artworkContentScale = ContentScale.Crop,
@@ -2377,9 +2381,7 @@ internal fun NowPlayingScreen(
                                                     playbackPositionMs = progress.positionMs,
                                                     lyrics = lyricsState.lyrics,
                                                     lyricColors = lyricColors,
-                                                    accentColor = accentColor,
                                                     spectrumColor = playerPageAccentColor,
-                                                    onAccentColor = onAccentColor,
                                                     lyricsPageSettings = expandedHomeLyricsSettings,
                                                     onSeekTo = { viewModel.seekTo(it) },
                                                     onTimelinePlay = { targetMs ->
@@ -2387,6 +2389,7 @@ internal fun NowPlayingScreen(
                                                         viewModel.play()
                                                     },
                                                     onAddLyrics = openManualLyricsAction,
+                                                    transparentTimelineControls = true,
                                                     interactionEnabled = lyricsExpandedInteractionEnabled,
                                                     stableFocusAnchor = true,
                                                     expandedHomeVisualEffects = true,
@@ -2466,8 +2469,8 @@ internal fun NowPlayingScreen(
                                         onUpdateSliceRange = { sliceId, startMs, endMs ->
                                             viewModel.updateSliceRange(sliceId, startMs, endMs, progressDurationMs)
                                         },
-                                        activeColor = accentColor,
-                                        inactiveColor = accentColor.copy(alpha = 0.2f),
+                                        activeColor = playerAccentColor,
+                                        inactiveColor = playerAccentColor.copy(alpha = 0.2f),
                                         compactLayout = portraitLayoutMetrics.compact
                                     )
                                 }
@@ -2492,8 +2495,7 @@ internal fun NowPlayingScreen(
                             modifier = Modifier.padding(horizontal = portraitContentHorizontalPadding),
                             actionRowModifier = actionRowMotion,
                             coreControlsModifier = controlsMotion,
-                            primaryColor = accentColor,
-                            onPrimaryColor = onAccentColor,
+                            contentColor = playerAccentColor,
                             compactLayout = portraitLayoutMetrics.compact
                         )
 
@@ -2505,14 +2507,15 @@ internal fun NowPlayingScreen(
                                 .onGloballyPositioned { coordinates ->
                                     volumeControlBounds = coordinates.boundsInRoot()
                                 },
-                            accentColor = accentColor,
+                            accentColor = playerAccentColor,
                             viewModel = viewModel,
                             hardwareVolumeEventTick = hardwareVolumeEventTick,
                             audioOutputRouteKind = audioOutputRouteKind,
                             warningSessionState = warningSessionState,
                             expanded = volumeControlExpanded,
                             onExpandedChange = { volumeControlExpanded = it },
-                            compactLayout = portraitLayoutMetrics.compact
+                            compactLayout = portraitLayoutMetrics.compact,
+                            dialogColorScheme = colorScheme
                         )
                     }
                 }
@@ -2526,9 +2529,7 @@ internal fun NowPlayingScreen(
                         playbackPositionMs = progress.positionMs,
                         lyrics = lyricsState.lyrics,
                         lyricColors = lyricsPageColors,
-                        accentColor = accentColor,
                         spectrumColor = playerPageAccentColor,
-                        onAccentColor = onAccentColor,
                         lyricsPageSettings = lyricsPageSettings,
                         onSeekTo = { viewModel.seekTo(it) },
                         onTimelinePlay = { targetMs ->
@@ -2536,6 +2537,7 @@ internal fun NowPlayingScreen(
                             viewModel.play()
                         },
                         onAddLyrics = openManualLyricsAction,
+                        transparentTimelineControls = true,
                         contentKey = lyricsState.contentKey,
                         contentVisible = !lyricsState.isLoading,
                         modifier = Modifier
@@ -2546,6 +2548,8 @@ internal fun NowPlayingScreen(
             }
                 }
             }
+        }
+
         }
 
         if (videoFullscreen && isVideo) {

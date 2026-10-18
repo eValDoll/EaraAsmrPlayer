@@ -33,5 +33,8 @@
 -keep class com.asmr.player.util.ChapterMediaReference { *; }
 -keep interface com.asmr.player.data.remote.download.DownloadWorker$DownloadWorkerEntryPoint { *; }
 -keep class dagger.hilt.android.EntryPointAccessors { *; }
+
+# 原生流光像素测试只创建内存位图，不访问应用数据库或播放服务。
+-keep class com.asmr.player.ui.player.FlowingArtworkRenderer { *; }
 -keep class okhttp3.** { *; }
 -keep class okio.** { *; }

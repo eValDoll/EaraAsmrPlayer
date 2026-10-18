@@ -17,6 +17,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.runtime.CompositionLocalProvider
+import com.asmr.player.ui.theme.LocalAsmrColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -53,16 +55,13 @@ internal fun LyricsPage(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val playback by playerViewModel.playback.collectAsStateWithLifecycle()
     val position = playback.positionMs
-    val colorScheme = AsmrTheme.colorScheme
+    val appColors = AsmrTheme.colorScheme
+    val colorScheme = remember(appColors) { playerSurfaceColors(appColors) }
     val artwork = playback.currentMediaItem?.mediaMetadata?.artworkUri
-    val playerThemeColors = rememberPlayerThemeColors(
-        mediaItem = playback.currentMediaItem,
-        colorScheme = colorScheme,
-        coverBackgroundEnabled = coverBackgroundEnabled
-    )
     val lyricColors = rememberLyricReadableColors(
-        accentColor = playerThemeColors.accentColor,
-        useReadablePageInactiveText = true
+        accentColor = colorScheme.onSurface,
+        useReadablePageInactiveText = true,
+        colorScheme = colorScheme
     )
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -99,13 +98,15 @@ internal fun LyricsPage(
                 artworkModel = artwork,
                 enabled = coverBackgroundEnabled,
                 clarity = coverBackgroundClarity,
-                overlayBaseColor = colorScheme.background,
-                tintBaseColor = playerThemeColors.backdropTintColor,
                 artworkAlignment = artworkAlignment,
-                isDark = colorScheme.isDark
+                isPlaying = playback.isPlaying
             )
         }
 
+        CompositionLocalProvider(
+            LocalAsmrColorScheme provides colorScheme,
+            androidx.compose.material3.LocalContentColor provides colorScheme.onSurface
+        ) {
         Column(modifier = Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier
@@ -156,6 +157,7 @@ internal fun LyricsPage(
                     contentVisible = !uiState.isLoading
                 )
             }
+        }
         }
     }
 }

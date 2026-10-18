@@ -12,11 +12,14 @@ internal fun PlayerSharedBackdrop(
     mediaItem: MediaItem?,
     enabled: Boolean,
     clarity: Float,
-    artworkAlignment: Alignment
+    artworkAlignment: Alignment,
+    isPlaying: Boolean = true,
+    isActive: Boolean = true
 ) {
     if (!enabled) return
 
-    val colorScheme = AsmrTheme.colorScheme
+    val appColors = AsmrTheme.colorScheme
+    val colorScheme = remember(appColors) { playerSurfaceColors(appColors) }
     val metadata = mediaItem?.mediaMetadata
     val uriText = mediaItem?.localConfiguration?.uri?.toString().orEmpty()
     val mimeType = mediaItem?.localConfiguration?.mimeType.orEmpty()
@@ -28,22 +31,32 @@ internal fun PlayerSharedBackdrop(
     val artworkModel = remember(metadata?.artworkUri) {
         sanitizeBackdropArtworkModel(metadata?.artworkUri)
     }
-    val playerThemeColors = rememberPlayerThemeColors(
-        mediaItem = mediaItem,
-        colorScheme = colorScheme,
-        coverBackgroundEnabled = enabled,
-        transitionDurationMs = 0,
-        cachedTransitionDurationMs = 0
-    )
-
+    if (isVideo) {
+        val playerThemeColors = rememberPlayerThemeColors(
+            mediaItem = mediaItem,
+            colorScheme = colorScheme,
+            coverBackgroundEnabled = enabled,
+            transitionDurationMs = 0,
+            cachedTransitionDurationMs = 0
+        )
+        VideoArtworkBackground(
+            artworkModel = artworkModel,
+            enabled = enabled,
+            clarity = clarity,
+            overlayBaseColor = colorScheme.background,
+            tintBaseColor = playerThemeColors.videoBackdropColor,
+            artworkAlignment = artworkAlignment,
+            isDark = colorScheme.isDark
+        )
+        return
+    }
     CoverArtworkBackground(
         artworkModel = artworkModel,
         enabled = enabled,
         clarity = clarity,
-        overlayBaseColor = colorScheme.background,
-        tintBaseColor = if (isVideo) playerThemeColors.videoBackdropColor else playerThemeColors.backdropTintColor,
         artworkAlignment = artworkAlignment,
-        isDark = colorScheme.isDark
+        isPlaying = isPlaying,
+        isActive = isActive
     )
 }
 

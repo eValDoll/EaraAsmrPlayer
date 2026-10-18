@@ -195,13 +195,12 @@ internal fun NowPlayingLyricsSurface(
     playbackPositionMs: Long,
     lyrics: List<SubtitleEntry>,
     lyricColors: LyricReadableColors,
-    accentColor: Color,
     spectrumColor: Color,
-    onAccentColor: Color,
     lyricsPageSettings: LyricsPageSettings,
     onSeekTo: (Long) -> Unit,
     onTimelinePlay: ((Long) -> Unit)? = null,
     onAddLyrics: (() -> Unit)? = null,
+    transparentTimelineControls: Boolean = false,
     interactionEnabled: Boolean = true,
     stableFocusAnchor: Boolean = false,
     expandedHomeVisualEffects: Boolean = false,
@@ -247,14 +246,22 @@ internal fun NowPlayingLyricsSurface(
                 )
                 if (onAddLyrics != null) {
                     Spacer(modifier = Modifier.height(14.dp))
-                    Button(
+                    TextButton(
                         onClick = onAddLyrics,
                         enabled = effectiveInteractionEnabled,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = accentColor,
-                            contentColor = onAccentColor
+                        colors = ButtonDefaults.textButtonColors(
+                            containerColor = Color.Transparent,
+                            contentColor = AsmrTheme.colorScheme.onSurface,
+                            disabledContainerColor = Color.Transparent,
+                            disabledContentColor = AsmrTheme.colorScheme.onSurface.copy(alpha = 0.38f)
                         )
                     ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Add,
+                            contentDescription = null,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
                         Text("添加歌词")
                     }
                 }
@@ -265,6 +272,7 @@ internal fun NowPlayingLyricsSurface(
                 currentPosition = playbackPositionMs,
                 onSeekTo = onSeekTo,
                 onTimelinePlay = onTimelinePlay,
+                transparentTimelineControls = transparentTimelineControls,
                 showPlaybackTimeline = true,
                 colors = lyricColors,
                 modifier = Modifier.fillMaxSize(),
