@@ -1,6 +1,7 @@
 package com.asmr.player
 
 import com.asmr.player.ui.theme.ThemeMode
+import com.asmr.player.ui.theme.COVER_THEME_COLOR_VERSION
 
 internal fun resolveThemeMode(themePref: String, systemDark: Boolean): ThemeMode {
     return when (themePref.trim().lowercase()) {
@@ -24,12 +25,12 @@ internal fun resolveStaticHueArgb(
 
 internal fun ThemeMediaSource.dynamicThemeSourceKey(): String? {
     val artwork = artworkUri?.toString().orEmpty().trim()
-    if (artwork.isNotBlank()) return "artwork:$artwork"
+    if (artwork.isNotBlank()) return "$COVER_THEME_COLOR_VERSION:artwork:$artwork"
 
     if (!isVideo) return null
     val video = videoUri?.toString().orEmpty().trim()
     if (video.isBlank()) return null
-    return "video:$video"
+    return "$COVER_THEME_COLOR_VERSION:video:$video"
 }
 
 internal fun resolveBootstrapDynamicHueSeedArgb(
@@ -42,6 +43,8 @@ internal fun resolveBootstrapDynamicHueSeedArgb(
     val seedArgb = persistedSeedArgb ?: return null
     val sourceKey = persistedSourceKey?.trim().takeUnless { it.isNullOrBlank() } ?: return null
     if (!dynamicHueEnabled) return null
+    if (!sourceKey.startsWith("$COVER_THEME_COLOR_VERSION:artwork:") &&
+        !sourceKey.startsWith("$COVER_THEME_COLOR_VERSION:video:")) return null
 
     return when {
         currentSourceKey == null && !playbackRestoreResolved -> seedArgb

@@ -237,7 +237,6 @@ dependencies {
 
     // Coil (Image Loading)
     implementation("io.coil-kt:coil-compose:2.5.0")
-    implementation("androidx.palette:palette-ktx:1.0.0")
 
     // Unit Testing
     testImplementation(platform("androidx.compose:compose-bom:2024.02.00"))

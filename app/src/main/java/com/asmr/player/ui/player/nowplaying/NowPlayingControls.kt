@@ -13,12 +13,10 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.*
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.Label
@@ -63,6 +61,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -95,6 +96,8 @@ import com.asmr.player.ui.common.smoothScrollToIndex
 import com.asmr.player.ui.library.TagAssignDialog
 import com.asmr.player.service.AudioOutputRouteKind
 import com.asmr.player.ui.theme.AsmrTheme
+import com.asmr.player.ui.theme.AsmrColorScheme
+import com.asmr.player.ui.theme.LocalAsmrColorScheme
 import com.asmr.player.util.Formatting
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.SubtitleIndexFinder
@@ -120,8 +123,7 @@ internal fun PlaybackControls(
     actionRowModifier: Modifier = Modifier,
     coreControlsModifier: Modifier = Modifier,
     landscapeControls: Boolean = false,
-    primaryColor: Color = AsmrTheme.colorScheme.primary,
-    onPrimaryColor: Color = AsmrTheme.colorScheme.onPrimary,
+    contentColor: Color = AsmrTheme.colorScheme.onSurface,
     compactLayout: Boolean = false
 ) {
     val actionButtonSize = if (compactLayout) 40.dp else 48.dp
@@ -151,10 +153,10 @@ internal fun PlaybackControls(
         else -> 72.dp
     }
     val playIconSize = when {
-        landscapeControls && compactLayout -> 36.dp
-        landscapeControls -> 40.dp
-        compactLayout -> 30.dp
-        else -> 36.dp
+        landscapeControls && compactLayout -> 60.dp
+        landscapeControls -> 68.dp
+        compactLayout -> 52.dp
+        else -> 64.dp
     }
     val currentMediaId = playback.currentMediaItem?.mediaId
     var optimisticIsPlaying by remember { mutableStateOf<Boolean?>(null) }
@@ -217,7 +219,7 @@ internal fun PlaybackControls(
                         actionButtonSize = actionButtonSize,
                         actionIconSize = actionIconSize,
                         landscapeControls = true,
-                        primaryColor = primaryColor
+                        contentColor = contentColor
                     )
                 }
                 Spacer(modifier = Modifier.weight(1f))
@@ -240,14 +242,12 @@ internal fun PlaybackControls(
                             optimisticIsPlaying = shouldPlay
                             if (shouldPlay) viewModel.play() else viewModel.pause()
                         },
-                        compactLayout = compactLayout,
                         coreButtonSize = coreButtonSize,
                         modeIconSize = modeIconSize,
                         skipIconSize = skipIconSize,
                         playButtonSize = playButtonSize,
                         playIconSize = playIconSize,
-                        primaryColor = primaryColor,
-                        onPrimaryColor = onPrimaryColor
+                        contentColor = contentColor
                     )
                 }
             }
@@ -283,7 +283,7 @@ internal fun PlaybackControls(
                         actionButtonSize = actionButtonSize,
                         actionIconSize = actionIconSize,
                         landscapeControls = false,
-                        primaryColor = primaryColor
+                        contentColor = contentColor
                     )
                 }
             }
@@ -315,14 +315,12 @@ internal fun PlaybackControls(
                         optimisticIsPlaying = shouldPlay
                         if (shouldPlay) viewModel.play() else viewModel.pause()
                     },
-                    compactLayout = compactLayout,
                     coreButtonSize = coreButtonSize,
                     modeIconSize = modeIconSize,
                     skipIconSize = skipIconSize,
                     playButtonSize = playButtonSize,
                     playIconSize = playIconSize,
-                    primaryColor = primaryColor,
-                    onPrimaryColor = onPrimaryColor
+                    contentColor = contentColor
                 )
             }
         }
@@ -356,29 +354,30 @@ private fun PlaybackActionButtons(
     actionButtonSize: Dp,
     actionIconSize: Dp,
     landscapeControls: Boolean,
-    primaryColor: Color
+    contentColor: Color
 ) {
-    val colorScheme = AsmrTheme.colorScheme
     IconButton(
         onClick = { viewModel.toggleFavorite() },
-        modifier = Modifier.size(actionButtonSize)
+        modifier = Modifier.size(actionButtonSize),
+        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
     ) {
         Icon(
             imageVector = if (isFavorite) Icons.Rounded.Favorite else Icons.Outlined.FavoriteBorder,
             contentDescription = if (isFavorite) "取消收藏" else "收藏",
-            tint = if (isFavorite) Color.Red else colorScheme.onSurface.copy(alpha = 0.8f),
+            tint = if (isFavorite) Color.Red else contentColor.copy(alpha = 0.8f),
             modifier = Modifier.size(actionIconSize)
         )
     }
 
     IconButton(
         onClick = onShowPlaylistPicker,
-        modifier = Modifier.size(actionButtonSize)
+        modifier = Modifier.size(actionButtonSize),
+        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
     ) {
         Icon(
             Icons.AutoMirrored.Outlined.PlaylistAdd,
             contentDescription = "添加到播放列表",
-            tint = colorScheme.onSurface.copy(alpha = 0.8f),
+            tint = contentColor.copy(alpha = 0.8f),
             modifier = Modifier.size(actionIconSize)
         )
     }
@@ -389,12 +388,13 @@ private fun PlaybackActionButtons(
             onClick = {
                 if (isOnlineMedia) viewModel.showOnlineTagManageUnsupported() else onManageTags()
             },
-            modifier = Modifier.size(actionButtonSize)
+            modifier = Modifier.size(actionButtonSize),
+            colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
         ) {
             Icon(
                 imageVector = if (isOnlineMedia) Icons.AutoMirrored.Outlined.LabelOff else Icons.AutoMirrored.Rounded.Label,
                 contentDescription = "标签管理",
-                tint = colorScheme.onSurface.copy(alpha = if (isOnlineMedia) 0.38f else 0.8f),
+                tint = contentColor.copy(alpha = if (isOnlineMedia) 0.38f else 0.8f),
                 modifier = Modifier.size(actionIconSize)
             )
         }
@@ -402,34 +402,53 @@ private fun PlaybackActionButtons(
 
     IconButton(
         onClick = onShowEqualizer,
-        modifier = Modifier.size(actionButtonSize)
+        modifier = Modifier.size(actionButtonSize),
+        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
     ) {
         Icon(
             imageVector = Icons.Rounded.Tune,
             contentDescription = "音效面板",
-            tint = colorScheme.onSurface.copy(alpha = 0.8f),
+            tint = contentColor.copy(alpha = 0.8f),
             modifier = Modifier.size(actionIconSize)
         )
     }
 
     if (!landscapeControls) {
         val sliceEnabled = sliceUiState.sliceModeEnabled
-        val baseTint = colorScheme.onSurface.copy(alpha = 0.8f)
         val tint by animateColorAsState(
-            targetValue = if (sliceEnabled) primaryColor else baseTint,
+            targetValue = contentColor.copy(alpha = if (sliceEnabled) 1f else 0.55f),
             animationSpec = tween(240, easing = FastOutSlowInEasing),
             label = "sliceModeTint"
         )
         IconButton(
             onClick = { viewModel.toggleSliceMode() },
-            modifier = Modifier.size(actionButtonSize)
+            modifier = Modifier
+                .size(actionButtonSize)
+                .semantics {
+                    selected = sliceEnabled
+                    stateDescription = if (sliceEnabled) "已开启" else "已关闭"
+                },
+            colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
         ) {
-            Icon(
-                painter = painterResource(R.drawable.ic_segment),
-                contentDescription = "切片播放",
-                tint = tint,
-                modifier = Modifier.size(actionIconSize)
-            )
+            Box(
+                modifier = Modifier.size(actionIconSize + 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_segment),
+                    contentDescription = "切片播放",
+                    tint = tint,
+                    modifier = Modifier.size(actionIconSize)
+                )
+                if (sliceEnabled) {
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .size(width = 12.dp, height = 2.dp)
+                            .background(contentColor, RoundedCornerShape(1.dp))
+                    )
+                }
+            }
         }
     }
 }
@@ -445,19 +464,17 @@ private fun PlaybackCoreButtons(
     viewModel: PlayerViewModel,
     isPlaying: Boolean,
     onTogglePlay: () -> Unit,
-    compactLayout: Boolean,
     coreButtonSize: Dp,
     modeIconSize: Dp,
     skipIconSize: Dp,
     playButtonSize: Dp,
     playIconSize: Dp,
-    primaryColor: Color,
-    onPrimaryColor: Color
+    contentColor: Color
 ) {
-    val colorScheme = AsmrTheme.colorScheme
     IconButton(
         onClick = { viewModel.cyclePlayMode() },
-        modifier = Modifier.size(coreButtonSize)
+        modifier = Modifier.size(coreButtonSize),
+        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
     ) {
         val icon = when {
             playback.shuffleEnabled -> Icons.Rounded.Shuffle
@@ -467,86 +484,68 @@ private fun PlaybackCoreButtons(
         Icon(
             icon,
             contentDescription = "播放模式",
-            tint = colorScheme.onSurface,
+            tint = contentColor,
             modifier = Modifier.size(modeIconSize)
         )
     }
 
     IconButton(
         onClick = { viewModel.previous() },
-        modifier = Modifier.size(coreButtonSize)
+        modifier = Modifier.size(coreButtonSize),
+        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
     ) {
         Icon(
             Icons.Rounded.SkipPrevious,
             contentDescription = "上一首",
-            tint = colorScheme.onSurface,
+            tint = contentColor,
             modifier = Modifier.size(skipIconSize)
         )
     }
 
-    val playButtonCorner by animateDpAsState(
-        targetValue = if (isPlaying) {
-            if (compactLayout) 20.dp else 24.dp
-        } else {
-            if (compactLayout) 30.dp else 36.dp
-        },
-        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
-        label = "playButtonCorner"
-    )
-    val playButtonInteractionSource = remember { MutableInteractionSource() }
-    Surface(
+    IconButton(
+        onClick = onTogglePlay,
         modifier = Modifier.size(playButtonSize),
-        shape = RoundedCornerShape(playButtonCorner),
-        color = primaryColor,
-        contentColor = onPrimaryColor
+        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable(
-                    interactionSource = playButtonInteractionSource,
-                    indication = null,
-                    onClick = onTogglePlay
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            AnimatedContent(
-                targetState = isPlaying,
-                transitionSpec = {
-                    (fadeIn(tween(durationMillis = 120)) + scaleIn(tween(durationMillis = 120), initialScale = 0.9f)) togetherWith
-                        (fadeOut(tween(durationMillis = 90)) + scaleOut(tween(durationMillis = 90), targetScale = 1.05f))
-                },
-                label = "play_pause_icon"
-            ) { playing ->
-                Icon(
-                    imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                    contentDescription = "播放/暂停",
-                    modifier = Modifier.size(playIconSize)
-                )
-            }
+        AnimatedContent(
+            targetState = isPlaying,
+            transitionSpec = {
+                (fadeIn(tween(durationMillis = 120)) + scaleIn(tween(durationMillis = 120), initialScale = 0.9f)) togetherWith
+                    (fadeOut(tween(durationMillis = 90)) + scaleOut(tween(durationMillis = 90), targetScale = 1.05f))
+            },
+            label = "play_pause_icon"
+        ) { playing ->
+            Icon(
+                imageVector = if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                contentDescription = if (playing) "暂停" else "播放",
+                tint = contentColor,
+                modifier = Modifier.size(playIconSize)
+            )
         }
     }
 
     IconButton(
         onClick = { viewModel.next() },
-        modifier = Modifier.size(coreButtonSize)
+        modifier = Modifier.size(coreButtonSize),
+        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
     ) {
         Icon(
             Icons.Rounded.SkipNext,
             contentDescription = "下一首",
-            tint = colorScheme.onSurface,
+            tint = contentColor,
             modifier = Modifier.size(skipIconSize)
         )
     }
 
     IconButton(
         onClick = { viewModel.seekForward10s() },
-        modifier = Modifier.size(coreButtonSize)
+        modifier = Modifier.size(coreButtonSize),
+        colors = IconButtonDefaults.iconButtonColors(contentColor = contentColor)
     ) {
         Icon(
             Icons.Rounded.FastForward,
             contentDescription = "快进10秒",
-            tint = colorScheme.onSurface,
+            tint = contentColor,
             modifier = Modifier.size(modeIconSize)
         )
     }
@@ -1175,7 +1174,8 @@ internal fun VolumeControl(
     warningSessionState: AppVolumeWarningSessionState,
     expanded: Boolean,
     onExpandedChange: (Boolean) -> Unit,
-    compactLayout: Boolean = false
+    compactLayout: Boolean = false,
+    dialogColorScheme: AsmrColorScheme = AsmrTheme.colorScheme
 ) {
     val volume by viewModel.appVolumePercent.collectAsStateWithLifecycle()
     var lastNonZeroVolume by remember { mutableIntStateOf(AppVolume.DefaultPercent) }
@@ -1338,7 +1338,12 @@ internal fun VolumeControl(
             }
         }
     }
-    AppVolumeHearingWarningDialog(state = protectedVolumeChangeState)
+    androidx.compose.runtime.CompositionLocalProvider(
+        LocalAsmrColorScheme provides dialogColorScheme,
+        androidx.compose.material3.LocalContentColor provides dialogColorScheme.onSurface
+    ) {
+        AppVolumeHearingWarningDialog(state = protectedVolumeChangeState)
+    }
 }
 
 // AdaptiveLyricsView has been replaced by AppleLyricsView

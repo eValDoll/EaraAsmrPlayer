@@ -98,6 +98,7 @@ import com.asmr.player.ui.player.NowPlayingMotionLayout
 import com.asmr.player.ui.player.NowPlayingMotionSpec
 import com.asmr.player.ui.player.NowPlayingScreen
 import com.asmr.player.ui.player.PlayerSharedBackdrop
+import com.asmr.player.ui.player.PlayerBackdropBaseColor
 import com.asmr.player.ui.player.PlayerViewModel
 import com.asmr.player.ui.player.rememberCoverDragPreviewState
 import com.asmr.player.ui.player.rememberCoverMotionState
@@ -864,6 +865,7 @@ fun MainContainer(
     onContentReady: () -> Unit,
     showMiniPlayerBar: Boolean,
     coverBackgroundEnabled: Boolean,
+    dynamicFlowingBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
     coverPreviewMode: CoverPreviewMode,
     nowPlayingHomeLayoutMode: NowPlayingHomeLayoutMode,
@@ -3162,6 +3164,9 @@ fun MainContainer(
         }
 
         if (nowPlayingVisible) {
+            val backdropIsPlaying by remember(playerViewModel) {
+                playerViewModel.playback.map { it.isPlaying }.distinctUntilChanged()
+            }.collectAsStateWithLifecycle(initialValue = false)
             Box(
                 modifier = Modifier.fillMaxSize()
             ) {
@@ -3178,15 +3183,8 @@ fun MainContainer(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(colorScheme.background)
+                            .background(PlayerBackdropBaseColor)
                     )
-                    if (!colorScheme.isDark) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(colorScheme.primarySoft.copy(alpha = 0.14f))
-                        )
-                    }
                 }
                 Box(
                     modifier = Modifier
@@ -3195,9 +3193,12 @@ fun MainContainer(
                 ) {
                     PlayerSharedBackdrop(
                         mediaItem = sharedPlayerItem,
-                        enabled = coverBackgroundEnabled,
+                        coverEnabled = coverBackgroundEnabled,
                         clarity = coverBackgroundClarity,
-                        artworkAlignment = sharedPlayerBackdropAlignment
+                        artworkAlignment = sharedPlayerBackdropAlignment,
+                        isPlaying = backdropIsPlaying,
+                        isActive = nowPlayingBackdropActive,
+                        dynamicEnabled = dynamicFlowingBackgroundEnabled
                     )
                 }
                 NowPlayingScreen(
@@ -3223,6 +3224,7 @@ fun MainContainer(
                     },
                     viewModel = playerViewModel,
                     coverBackgroundEnabled = coverBackgroundEnabled,
+                    dynamicFlowingBackgroundEnabled = dynamicFlowingBackgroundEnabled,
                     coverBackgroundClarity = coverBackgroundClarity,
                     coverPreviewMode = coverPreviewMode,
                     nowPlayingHomeLayoutMode = nowPlayingHomeLayoutMode,

@@ -31,7 +31,7 @@ class ThemeStartupSupportTest {
             isVideo = true
         )
 
-        assertEquals("artwork:https://example.com/cover.jpg", source.dynamicThemeSourceKey())
+        assertEquals("cover-hsl-v1:artwork:https://example.com/cover.jpg", source.dynamicThemeSourceKey())
     }
 
     @Test
@@ -40,7 +40,7 @@ class ThemeStartupSupportTest {
             dynamicHueEnabled = true,
             playbackRestoreResolved = false,
             currentSourceKey = null,
-            persistedSourceKey = "artwork:https://example.com/cover.jpg",
+            persistedSourceKey = "cover-hsl-v1:artwork:https://example.com/cover.jpg",
             persistedSeedArgb = 0xFF336699.toInt()
         )
 
@@ -52,12 +52,38 @@ class ThemeStartupSupportTest {
         val result = resolveBootstrapDynamicHueSeedArgb(
             dynamicHueEnabled = true,
             playbackRestoreResolved = true,
-            currentSourceKey = "artwork:https://example.com/cover.jpg",
-            persistedSourceKey = "artwork:https://example.com/cover.jpg",
+            currentSourceKey = "cover-hsl-v1:artwork:https://example.com/cover.jpg",
+            persistedSourceKey = "cover-hsl-v1:artwork:https://example.com/cover.jpg",
             persistedSeedArgb = 0xFF663399.toInt()
         )
 
         assertEquals(0xFF663399.toInt(), result)
+    }
+
+    @Test
+    fun resolveBootstrapDynamicHueSeedArgb_rejectsPreviousExtractorBeforeAndAfterRestore() {
+        for (restored in listOf(false, true)) {
+            assertNull(
+                resolveBootstrapDynamicHueSeedArgb(
+                    dynamicHueEnabled = true,
+                    playbackRestoreResolved = restored,
+                    currentSourceKey = if (restored) "cover-hsl-v1:artwork:https://example.com/cover.jpg" else null,
+                    persistedSourceKey = "artwork:https://example.com/cover.jpg",
+                    persistedSeedArgb = 0xFF336699.toInt()
+                )
+            )
+        }
+    }
+
+    @Test
+    fun dynamicThemeSourceKey_versionsVideoSourcesWithoutArtwork() {
+        val source = ThemeMediaSource(
+            artworkUri = null,
+            videoUri = Uri.parse("file:///sample.mp4"),
+            isVideo = true
+        )
+
+        assertEquals("cover-hsl-v1:video:file:///sample.mp4", source.dynamicThemeSourceKey())
     }
 
     @Test
@@ -66,7 +92,7 @@ class ThemeStartupSupportTest {
             dynamicHueEnabled = true,
             playbackRestoreResolved = true,
             currentSourceKey = null,
-            persistedSourceKey = "artwork:https://example.com/cover.jpg",
+            persistedSourceKey = "cover-hsl-v1:artwork:https://example.com/cover.jpg",
             persistedSeedArgb = 0xFF663399.toInt()
         )
 
@@ -80,7 +106,7 @@ class ThemeStartupSupportTest {
                 dynamicHueEnabled = true,
                 playbackRestoreResolved = false,
                 currentSourceKey = null,
-                persistedSourceKey = "artwork:https://example.com/cover.jpg",
+                persistedSourceKey = "cover-hsl-v1:artwork:https://example.com/cover.jpg",
                 persistedSeedArgb = 0xFF336699.toInt()
             )
         )
@@ -90,7 +116,7 @@ class ThemeStartupSupportTest {
                 dynamicHueEnabled = true,
                 playbackRestoreResolved = true,
                 currentSourceKey = null,
-                persistedSourceKey = "artwork:https://example.com/cover.jpg",
+                persistedSourceKey = "cover-hsl-v1:artwork:https://example.com/cover.jpg",
                 persistedSeedArgb = 0xFF336699.toInt()
             )
         )
@@ -102,8 +128,8 @@ class ThemeStartupSupportTest {
             shouldClearPersistedDynamicHueSeed(
                 dynamicHueEnabled = false,
                 playbackRestoreResolved = false,
-                currentSourceKey = "artwork:https://example.com/cover.jpg",
-                persistedSourceKey = "artwork:https://example.com/cover.jpg",
+                currentSourceKey = "cover-hsl-v1:artwork:https://example.com/cover.jpg",
+                persistedSourceKey = "cover-hsl-v1:artwork:https://example.com/cover.jpg",
                 persistedSeedArgb = 0xFF336699.toInt()
             )
         )
