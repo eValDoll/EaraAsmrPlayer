@@ -12,7 +12,6 @@ import com.asmr.player.data.local.db.dao.AlbumDao
 import com.asmr.player.data.local.db.dao.RemoteSubtitleSourceDao
 import com.asmr.player.data.local.db.dao.TrackDao
 import com.asmr.player.data.local.db.entities.LocalTreeCacheEntity
-import com.asmr.player.data.local.db.entities.RemoteSubtitleSourceEntity
 import com.asmr.player.data.local.db.entities.SubtitleEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.data.local.db.entities.titleForDisplay
@@ -149,17 +148,6 @@ class LyricsLoader @Inject constructor(
         }
 
         return subtitleResult(title, subs)
-    }
-
-    suspend fun saveManualLyrics(target: LyricsTargetContext, sourceUri: String): LyricsResult = withContext(Dispatchers.IO) {
-        manualLyricsSourceRepository.upsert(target, sourceUri)
-        val entries = readLyricsFromUri(sourceUri)
-        if (entries.isNotEmpty()) {
-            val track = trackDao.getTrackByPathOnce(target.mediaId)
-                ?: target.trackId.takeIf { it > 0 }?.let { trackDao.getTrackByIdOnce(it) }
-            trackDao.allowSubtitleAutoImport(track?.path ?: target.mediaId)
-        }
-        LyricsResult(title = target.title.ifBlank { target.mediaId }, lyrics = entries)
     }
 
     suspend fun fetchTextForPreview(url: String): String? {

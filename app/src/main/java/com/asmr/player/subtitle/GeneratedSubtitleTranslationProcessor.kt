@@ -17,27 +17,6 @@ internal data class GeneratedSubtitleCaption(
     @SerializedName("text") val chineseText: String
 )
 
-internal fun validateGeneratedSubtitleCaptions(
-    captions: List<GeneratedSubtitleCaption>,
-    expectedSources: List<GeneratedSubtitleSource>
-): List<GeneratedSubtitleCaption> {
-    require(expectedSources.isNotEmpty())
-    val expectedIndices = expectedSources.map(GeneratedSubtitleSource::index)
-    require(expectedIndices.distinct().size == expectedIndices.size)
-    require(expectedIndices.zipWithNext().all { (left, right) -> right == left + 1 }) {
-        "目标字幕片段索引必须连续递增"
-    }
-    val normalized = validateSubtitleCaptionBatch(
-        captions = captions,
-        expectedRemainingSources = expectedSources,
-        allowMerging = true
-    )
-    require(normalized.flatMap(GeneratedSubtitleCaption::sourceIndices) == expectedIndices) {
-        "字幕重组索引未覆盖全部目标片段"
-    }
-    return normalized
-}
-
 internal fun validateSubtitleCaptionBatch(
     captions: List<GeneratedSubtitleCaption>,
     expectedRemainingSources: List<GeneratedSubtitleSource>,

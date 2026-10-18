@@ -2,7 +2,6 @@ package com.asmr.player.subtitle
 
 import android.content.Context
 import java.io.Closeable
-import java.io.File
 
 internal data class SubtitleModelArtifact(
     val fileName: String,

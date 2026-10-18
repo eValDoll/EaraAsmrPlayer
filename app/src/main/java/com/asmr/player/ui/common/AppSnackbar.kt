@@ -19,8 +19,6 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SnackbarHost
-import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
@@ -155,36 +153,5 @@ fun AppSnackbar(
                 )
             }
         }
-    }
-}
-
-@Composable
-fun AppSnackbarHost(
-    hostState: SnackbarHostState,
-    modifier: Modifier = Modifier
-) {
-    SnackbarHost(
-        hostState = hostState,
-        modifier = modifier,
-        snackbar = { data ->
-            val (message, type) = parseSnackbarMessage(data.visuals.message)
-            AppSnackbar(
-                messageId = 0L,
-                message = message,
-                type = type,
-                count = 1,
-                durationMs = 2_000L
-            )
-        }
-    )
-}
-
-private fun parseSnackbarMessage(rawMessage: String): Pair<String, MessageType> {
-    return when {
-        rawMessage.startsWith("[SUCCESS]") -> rawMessage.removePrefix("[SUCCESS]") to MessageType.Success
-        rawMessage.startsWith("[ERROR]") -> rawMessage.removePrefix("[ERROR]") to MessageType.Error
-        rawMessage.startsWith("[WARNING]") -> rawMessage.removePrefix("[WARNING]") to MessageType.Warning
-        rawMessage.startsWith("[INFO]") -> rawMessage.removePrefix("[INFO]") to MessageType.Info
-        else -> rawMessage to MessageType.Info
     }
 }

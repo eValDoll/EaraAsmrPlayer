@@ -7,18 +7,12 @@ import com.asmr.player.translation.PageTranslationAction
 import com.asmr.player.translation.PageTranslationHeaderAction
 import com.asmr.player.translation.PageTranslationHeaderState
 import com.asmr.player.translation.PageTranslationHost
-import android.os.Bundle
-import android.view.KeyEvent
 import android.view.Choreographer
 import android.view.View
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
-import androidx.activity.compose.setContent
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.pager.HorizontalPager
@@ -33,12 +27,7 @@ import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ViewList
 import androidx.compose.material.icons.rounded.*
-import androidx.compose.material.icons.rounded.AccessTime
 import androidx.compose.material.icons.rounded.Audiotrack
-import androidx.compose.material.icons.rounded.CloudDownload
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
 import android.content.res.Configuration
 import android.net.Uri
 import androidx.compose.ui.platform.LocalConfiguration
@@ -48,11 +37,8 @@ import androidx.core.view.WindowInsetsAnimationCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
 import androidx.compose.material3.*
-import androidx.compose.material3.windowsizeclass.ExperimentalMaterial3WindowSizeClassApi
-import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
-import androidx.compose.material3.windowsizeclass.calculateWindowSizeClass
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -64,16 +50,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAlignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.zIndex
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.util.UnstableApi
-import androidx.navigation.NavHostController
 import androidx.navigation.NavBackStackEntry
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -93,7 +76,6 @@ import com.asmr.player.ui.library.LibraryViewModel
 import com.asmr.player.ui.library.BulkPhase
 import com.asmr.player.data.remote.scraper.resolveRecommendedWorkHeroCoverUrl
 import com.asmr.player.performance.UiFrameWorkCoordinator
-import com.asmr.player.ui.player.MiniPlayer
 import com.asmr.player.ui.player.NowPlayingMotionLayout
 import com.asmr.player.ui.player.NowPlayingMotionSpec
 import com.asmr.player.ui.player.NowPlayingScreen
@@ -156,8 +138,6 @@ import com.asmr.player.ui.common.EaraTopBarIconButton
 import com.asmr.player.ui.common.resolveMainPageBackgroundColor
 import com.asmr.player.ui.common.glassMenu
 import com.asmr.player.ui.drawer.DrawerStatusViewModel
-import com.asmr.player.ui.drawer.SiteStatus
-import com.asmr.player.ui.drawer.SiteStatusType
 import com.asmr.player.ui.nav.AlbumCoverHintStore
 import com.asmr.player.ui.nav.AppNavigator
 import com.asmr.player.ui.nav.BottomChrome
@@ -169,10 +149,7 @@ import com.asmr.player.ui.nav.isPrimaryRoute
 import com.asmr.player.ui.nav.resolvePrimaryRoute
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
-import com.asmr.player.ui.splash.EaraSplashOverlay
-import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
-import java.net.URLDecoder
 import java.net.URLEncoder
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 
@@ -180,17 +157,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import com.asmr.player.ui.theme.AsmrPlayerTheme
 import com.asmr.player.ui.theme.AsmrTheme
-import androidx.compose.ui.draw.blur
 import android.os.Build
-import android.graphics.RenderEffect
-import android.graphics.Shader
-import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.animation.*
@@ -210,11 +181,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.material.icons.automirrored.rounded.QueueMusic
-import com.asmr.player.ui.player.QueueSheetContent
-import com.asmr.player.ui.player.SleepTimerSheetContent
 import com.asmr.player.ui.player.MiniPlayerDisplayMode
 
 import com.asmr.player.data.local.datastore.SettingsDataStore
@@ -224,52 +191,29 @@ import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
 import com.asmr.player.data.settings.NowPlayingLyricsSettings
 import com.asmr.player.util.MessageManager
 import com.asmr.player.ui.common.StableWindowInsets
-import com.asmr.player.ui.theme.HuePalette
-import com.asmr.player.ui.theme.PlayerTheme
-import com.asmr.player.ui.theme.ThemeMode
-import com.asmr.player.ui.theme.DefaultBrandPrimaryDark
-import com.asmr.player.ui.theme.DefaultBrandPrimaryLight
-import com.asmr.player.ui.theme.deriveHuePalette
-import kotlin.math.roundToInt
-import com.asmr.player.ui.theme.neutralPaletteForMode
-import com.asmr.player.ui.theme.rememberDynamicHuePalette
-import com.asmr.player.ui.theme.rememberDynamicHuePaletteFromVideoFrame
 import com.asmr.player.ui.theme.dynamicPageContainerColor
 import com.asmr.player.ui.update.AppUpdateInstallResult
 import com.asmr.player.ui.update.launchDownloadedApkInstall
 import com.asmr.player.ui.update.openUpdateReleasePage
-import com.asmr.player.ui.common.AppVolumeHearingWarningDialog
-import com.asmr.player.ui.common.AppVolumeWarningSessionState
 import com.asmr.player.ui.common.rememberAppVolumeWarningSessionState
 import com.asmr.player.ui.common.rememberCurrentAudioOutputRouteKind
-import com.asmr.player.ui.common.rememberProtectedAppVolumeChangeState
-import com.asmr.player.ui.common.AudioOutputRouteIcon
 import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
-import com.asmr.player.service.AudioOutputRouteKind
 import com.asmr.player.service.PlaybackService
-import javax.inject.Inject
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 import androidx.compose.foundation.border
-import androidx.compose.foundation.BorderStroke
 import androidx.media3.common.MediaItem
-import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.playback.AppVolume
-import com.asmr.player.ui.common.AppVolumeVerticalSlider
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.asStateFlow
 
 internal data class PlaylistPickerRequest(
     val items: List<MediaItem>

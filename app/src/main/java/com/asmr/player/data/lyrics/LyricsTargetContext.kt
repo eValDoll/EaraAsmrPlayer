@@ -1,9 +1,6 @@
 package com.asmr.player.data.lyrics
 
 import androidx.media3.common.MediaItem
-import com.asmr.player.domain.model.Album
-import com.asmr.player.domain.model.Track
-import com.asmr.player.playback.MediaItemRequest
 import com.asmr.player.util.RemoteSubtitleSource
 import com.asmr.player.util.decodeRemoteSubtitleSources
 import com.asmr.player.util.TrackKeyNormalizer
@@ -51,42 +48,6 @@ fun lyricsTargetContextFromMediaItem(item: MediaItem?): LyricsTargetContext? {
         albumIdentity = albumIdentity,
         relativePathNoExt = relativePathNoExt,
         remoteSubtitleSources = remoteSubtitleSources
-    )
-}
-
-fun lyricsTargetContextFromTrack(album: Album, track: Track): LyricsTargetContext? {
-    val mediaId = track.path.trim()
-    if (mediaId.isBlank()) return null
-    val albumIdentity = album.rjCode.trim().ifBlank { album.workId.trim() }
-    val relativePathNoExt = deriveLyricsRelativePathNoExt(
-        mediaPath = mediaId,
-        albumRoots = album.getAllLocalPaths()
-    )
-    return buildLyricsTargetContext(
-        mediaId = mediaId,
-        title = track.title,
-        group = track.group,
-        trackId = track.id,
-        albumId = album.id,
-        albumIdentity = albumIdentity,
-        relativePathNoExt = relativePathNoExt,
-        remoteSubtitleSources = emptyList()
-    )
-}
-
-fun lyricsTargetContextFromRequest(request: MediaItemRequest): LyricsTargetContext? {
-    val mediaId = request.mediaId.trim().ifBlank { request.uri.trim() }
-    if (mediaId.isBlank()) return null
-    val albumIdentity = request.rjCode.trim().ifBlank { request.albumWorkId.trim() }
-    return buildLyricsTargetContext(
-        mediaId = mediaId,
-        title = request.title,
-        group = request.trackGroup,
-        trackId = request.trackId,
-        albumId = request.albumId,
-        albumIdentity = albumIdentity,
-        relativePathNoExt = request.lyricsRelativePathNoExt,
-        remoteSubtitleSources = request.remoteSubtitleSources
     )
 }
 

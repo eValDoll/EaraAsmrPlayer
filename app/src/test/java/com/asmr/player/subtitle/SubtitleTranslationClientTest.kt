@@ -570,7 +570,6 @@ class SubtitleTranslationClientTest {
         assert(TranslationPrompts.subtitlePolishToolReadDescription().isNotBlank())
         assert(TranslationPrompts.subtitlePolishToolWriteDescription().isNotBlank())
         assert(TranslationPrompts.subtitlePolishInitialUserMessage().isNotBlank())
-        assert(TranslationPrompts.subtitlePolishProgressInstruction().isNotBlank())
         assert(TranslationPrompts.subtitlePolishContinueMessageGeneric().isNotBlank())
     }
 
@@ -697,10 +696,10 @@ class SubtitleTranslationClientTest {
 
     @Test
     fun base64_decodesKnownVectors() {
-        assertEquals("你好", String(TranslationPromptsCodec.decodeBase64("5L2g5aW9"), Charsets.UTF_8))
-        assertEquals("Hello", String(TranslationPromptsCodec.decodeBase64("SGVsbG8="), Charsets.UTF_8))
-        assertEquals("a", String(TranslationPromptsCodec.decodeBase64("YQ=="), Charsets.UTF_8))
-        assertEquals("", String(TranslationPromptsCodec.decodeBase64(""), Charsets.UTF_8))
+        assertEquals("你好", String(Base64Utils.decode("5L2g5aW9"), Charsets.UTF_8))
+        assertEquals("Hello", String(Base64Utils.decode("SGVsbG8="), Charsets.UTF_8))
+        assertEquals("a", String(Base64Utils.decode("YQ=="), Charsets.UTF_8))
+        assertEquals("", String(Base64Utils.decode(""), Charsets.UTF_8))
     }
 
     @Test

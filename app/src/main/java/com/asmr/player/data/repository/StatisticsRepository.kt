@@ -16,11 +16,6 @@ class StatisticsRepository @Inject constructor(
     // "今天"以凌晨 5 点为重置点（[ListeningDay]），凌晨的收听仍归属前一天。
     private fun getTodayDate(): String = ListeningDay.currentDate()
 
-    fun observeTodayStats(): Flow<DailyStatEntity?> {
-        val today = getTodayDate()
-        return db.dailyStatDao().observeDailyStat(today)
-    }
-
     /** 区间内每日统计（含端点），用于收听热度图。 */
     fun observeStatsBetween(startDate: String, endDate: String): Flow<List<DailyStatEntity>> =
         db.dailyStatDao().observeStatsBetween(startDate, endDate)

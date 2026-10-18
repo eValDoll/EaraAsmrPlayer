@@ -90,27 +90,6 @@ internal fun directorySelectedItemPosition(
     }
 }
 
-internal sealed class LocalTreeUiEntry {
-    abstract val path: String
-    abstract val title: String
-    abstract val depth: Int
-
-    data class Folder(
-        override val path: String,
-        override val title: String,
-        override val depth: Int
-    ) : LocalTreeUiEntry()
-
-    data class File(
-        override val path: String,
-        override val title: String,
-        override val depth: Int,
-        val absolutePath: String,
-        val fileType: TreeFileType,
-        val track: Track?
-    ) : LocalTreeUiEntry()
-}
-
 internal enum class TreeFileType {
     Audio,
     Video,
@@ -432,25 +411,9 @@ internal fun albumArtworkLabel(album: Album): String {
     return album.coverPath.ifBlank { album.coverUrl }
 }
 
-internal data class LocalTreeUiResult(
-    val entries: List<LocalTreeUiEntry>
-)
-
 internal data class AsmrTreeUiResult(
     val entries: List<AsmrTreeUiEntry>
 )
-
-internal fun folderPathPrefixes(path: String): List<String> {
-    val segs = path.split('/').filter { it.isNotBlank() }
-    if (segs.isEmpty()) return emptyList()
-    val out = ArrayList<String>(segs.size)
-    var cur = ""
-    for (seg in segs) {
-        cur = if (cur.isBlank()) seg else "$cur/$seg"
-        out.add(cur)
-    }
-    return out
-}
 
 internal class LocalTreeNode(
     val name: String,
@@ -462,16 +425,8 @@ internal class LocalTreeNode(
     var sizeBytes: Long? = null
 )
 
-internal data class LocalFolderStats(
-    var audioCount: Int = 0,
-    var videoCount: Int = 0,
-    var hasWav: Boolean = false,
-    var hasMp4: Boolean = false
-)
-
 internal data class LocalTreeIndex(
-    val root: LocalTreeNode,
-    val folderStats: Map<String, LocalFolderStats>
+    val root: LocalTreeNode
 )
 
 internal data class RemoteSelectionFileRef(
@@ -716,17 +671,6 @@ private fun collectLocalTreeLeafNodes(root: LocalTreeNode): List<LocalTreeNode> 
     return leaves
 }
 
-internal fun siblingAudioTracksForEntry(index: LocalTreeIndex, entryPath: String): List<Track> {
-    val folderPath = entryPath.substringBeforeLast('/', "")
-    val node = findLocalTreeNode(index.root, folderPath) ?: index.root
-    return node.children.values
-        .asSequence()
-        .filter { it.children.isEmpty() && it.absolutePath != null && it.fileType == TreeFileType.Audio && it.track != null }
-        .sortedBy { SmartSortKey.of(it.name) }
-        .mapNotNull { it.track }
-        .toList()
-}
-
 internal fun siblingPlayableNodesForEntry(index: LocalTreeIndex, entryPath: String): List<LocalTreeNode> {
     val folderPath = entryPath.substringBeforeLast('/', "")
     val node = findLocalTreeNode(index.root, folderPath) ?: index.root
@@ -790,21 +734,6 @@ internal fun collectSubtitleGenerationTracks(
 
     collect(currentNode)
     return tracks.distinctBy { it.id }
-}
-
-internal fun subtitleTranslationTrackForFile(
-    file: DirectoryFileItem,
-    localSubtitleTrackIds: Set<Long>
-): Track? {
-    val track = file.track ?: return null
-    return track.takeIf {
-        file.fileType == TreeFileType.Audio &&
-            it.id > 0L &&
-            it.id in localSubtitleTrackIds &&
-            !file.isOnline &&
-            file.sizeSource is FileSizeSource.Local &&
-            !isOnlineTrackPath(it.path)
-    }
 }
 
 internal fun buildLocalDirectoryBrowser(
@@ -1448,29 +1377,6 @@ internal fun buildLocalTreeIndexByScanning(
 ): LocalTreeIndexBuildResult {
     val root = LocalTreeNode(name = "", path = "")
     val trackByAbsolutePath = tracks.associateBy { it.path }
-    val folderStats = linkedMapOf<String, LocalFolderStats>()
-
-    fun updateFolderStats(segments: List<String>, type: TreeFileType, extLower: String) {
-        val folderSegs = segments.dropLast(1)
-        if (folderSegs.isEmpty()) return
-        var cur = ""
-        folderSegs.forEach { seg ->
-            cur = if (cur.isBlank()) seg else "$cur/$seg"
-            val st = folderStats.getOrPut(cur) { LocalFolderStats() }
-            when (type) {
-                TreeFileType.Audio -> {
-                    st.audioCount += 1
-                    if (extLower == "wav") st.hasWav = true
-                }
-                TreeFileType.Video -> {
-                    st.videoCount += 1
-                    if (extLower == "mp4") st.hasMp4 = true
-                }
-                else -> Unit
-            }
-        }
-    }
-
     albumPaths.forEach { albumPath ->
         if (albumPath.startsWith("content://")) {
             val uri = Uri.parse(albumPath)
@@ -1517,9 +1423,6 @@ internal fun buildLocalTreeIndexByScanning(
                                         child.track = track
                                         child.sizeBytes = sizeBytes.takeIf { it > 0L }
                                     }
-                                    if (ft == TreeFileType.Video || (ft == TreeFileType.Audio && track != null)) {
-                                        updateFolderStats(segments, ft, name.substringAfterLast('.', "").lowercase())
-                                    }
                                 } else {
                                     child.absolutePath = null
                                     child.track = null
@@ -1561,9 +1464,6 @@ internal fun buildLocalTreeIndexByScanning(
                             child.fileType = type
                             child.track = track
                             child.sizeBytes = file.length().takeIf { it > 0L }
-                            if (type == TreeFileType.Audio || type == TreeFileType.Video) {
-                                updateFolderStats(segments, type, file.extension.lowercase())
-                            }
                         }
                         cur = child
                     }
@@ -1590,7 +1490,7 @@ internal fun buildLocalTreeIndexByScanning(
     val leaves = mutableListOf<LocalTreeLeafCacheEntry>()
     collectLeaves(root, leaves)
     return LocalTreeIndexBuildResult(
-        index = LocalTreeIndex(root = root, folderStats = folderStats),
+        index = LocalTreeIndex(root = root),
         leaves = leaves
     )
 }
@@ -1624,44 +1524,7 @@ internal fun buildLocalTreeIndexFromLeaves(
         }
     }
 
-    return LocalTreeIndex(root = root, folderStats = emptyMap())
-}
-
-internal fun flattenLocalTreeIndex(
-    index: LocalTreeIndex,
-    expanded: Set<String>
-): LocalTreeUiResult {
-    fun nodeSortKey(n: LocalTreeNode): SmartSortKey = SmartSortKey.of(n.name)
-    val out = mutableListOf<LocalTreeUiEntry>()
-
-    fun flatten(node: LocalTreeNode, depth: Int) {
-        val folders = node.children.values.filter { it.children.isNotEmpty() }.sortedBy(::nodeSortKey)
-        val files = node.children.values.filter { it.children.isEmpty() && it.absolutePath != null }.sortedBy(::nodeSortKey)
-
-        folders.forEach { child ->
-            out.add(LocalTreeUiEntry.Folder(path = child.path, title = child.name, depth = depth))
-            if (expanded.contains(child.path)) {
-                flatten(child, depth + 1)
-            }
-        }
-        files.forEach { child ->
-            val title = child.track?.title?.ifBlank { child.name.substringBeforeLast('.') }
-                ?: child.name.substringBeforeLast('.')
-            out.add(
-                LocalTreeUiEntry.File(
-                    path = child.path,
-                    title = title,
-                    depth = depth,
-                    absolutePath = child.absolutePath ?: return@forEach,
-                    fileType = child.fileType,
-                    track = child.track
-                )
-            )
-        }
-    }
-
-    flatten(index.root, 0)
-    return LocalTreeUiResult(entries = out)
+    return LocalTreeIndex(root = root)
 }
 
 internal data class AsmrOneLeafUi(
@@ -1778,99 +1641,6 @@ internal fun flattenAsmrOneTreeForUi(
 ): AsmrTreeUiResult {
     val out = mutableListOf<AsmrTreeUiEntry>()
 
-    data class FolderStats(
-        var audioCount: Int = 0,
-        var videoCount: Int = 0,
-        var hasWav: Boolean = false,
-        var hasMp4: Boolean = false
-    )
-    val folderStats = linkedMapOf<String, FolderStats>()
-    fun updateFolderStats(parentPath: String, type: TreeFileType, extLower: String) {
-        if (parentPath.isBlank()) return
-        folderPathPrefixes(parentPath).forEach { folder ->
-            val st = folderStats.getOrPut(folder) { FolderStats() }
-            when (type) {
-                TreeFileType.Audio -> {
-                    st.audioCount += 1
-                    if (extLower == "wav") st.hasWav = true
-                }
-                TreeFileType.Video -> {
-                    st.videoCount += 1
-                    if (extLower == "mp4") st.hasMp4 = true
-                }
-                else -> Unit
-            }
-        }
-    }
-
-    fun chooseRecommendedExpand(): String? {
-        val entries = folderStats.entries.filter { it.value.audioCount > 0 || it.value.videoCount > 0 }
-        if (entries.isEmpty()) return null
-
-        fun bestAudio(): Map.Entry<String, FolderStats>? {
-            val audioEntries = entries.filter { it.value.audioCount > 0 }
-            if (audioEntries.isEmpty()) return null
-            val maxAudio = audioEntries.maxOf { it.value.audioCount }
-            val threshold = maxOf(1, (maxAudio * 0.7f).toInt())
-            val candidates = audioEntries.filter { it.value.audioCount >= threshold }.ifEmpty { audioEntries }
-            return candidates
-                .sortedWith(
-                    compareByDescending<Map.Entry<String, FolderStats>> { it.key.count { ch -> ch == '/' } }
-                        .thenByDescending { it.value.audioCount }
-                        .thenByDescending { it.value.hasWav }
-                        .thenBy { it.key }
-                )
-                .firstOrNull()
-        }
-
-        fun bestVideo(): Map.Entry<String, FolderStats>? {
-            val videoEntries = entries.filter { it.value.videoCount > 0 }
-            if (videoEntries.isEmpty()) return null
-            val maxVideo = videoEntries.maxOf { it.value.videoCount }
-            val threshold = maxOf(1, (maxVideo * 0.7f).toInt())
-            val candidates = videoEntries.filter { it.value.videoCount >= threshold }.ifEmpty { videoEntries }
-            return candidates
-                .sortedWith(
-                    compareByDescending<Map.Entry<String, FolderStats>> { it.key.count { ch -> ch == '/' } }
-                        .thenByDescending { it.value.videoCount }
-                        .thenByDescending { it.value.hasMp4 }
-                        .thenBy { it.key }
-                )
-                .firstOrNull()
-        }
-
-        val a = bestAudio()
-        val v = bestVideo()
-        val aCount = a?.value?.audioCount ?: 0
-        val vCount = v?.value?.videoCount ?: 0
-        return when {
-            vCount > aCount -> v?.key
-            aCount > vCount -> a?.key
-            else -> v?.key ?: a?.key
-        }
-    }
-
-    fun collectFolderStatsFromFullTree() {
-        fun walkAll(nodes: List<AsmrOneTrackNodeResponse>, parentPath: String) {
-            nodes.forEach { node ->
-                val title = node.title?.trim().orEmpty().ifBlank { "item" }
-                val safeTitle = sanitizeFolderName(title)
-                val path = if (parentPath.isBlank()) safeTitle else "$parentPath/$safeTitle"
-                val children = node.children.orEmpty()
-                val url = node.playbackUrl
-                if (children.isEmpty()) {
-                    val type = treeFileTypeForNode(title, url, node.type)
-                    if (type == TreeFileType.Other || type == TreeFileType.Subtitle) return@forEach
-                    val extLower = title.substringAfterLast('.', "").lowercase()
-                    updateFolderStats(parentPath = parentPath, type = type, extLower = extLower)
-                } else {
-                    walkAll(children, path)
-                }
-            }
-        }
-        walkAll(tree, "")
-    }
-
     fun walk(nodes: List<AsmrOneTrackNodeResponse>, parentPath: String, depth: Int) {
         nodes.forEach { node ->
             val title = node.title?.trim().orEmpty().ifBlank { "item" }
@@ -1899,7 +1669,6 @@ internal fun flattenAsmrOneTreeForUi(
             }
         }
     }
-    collectFolderStatsFromFullTree()
     walk(tree, "", 0)
     return AsmrTreeUiResult(entries = out)
 }

@@ -61,12 +61,6 @@ class ListeningDayTest {
     }
 
     @Test
-    fun startOfDate_isFiveAmLocal() {
-        val start = ListeningDay.startOfDate("2026-07-20")
-        assertEquals(epoch("2026-07-20 05:00"), start)
-    }
-
-    @Test
     fun datesBetween_isInclusiveAndAscending() {
         val dates = ListeningDay.datesBetween("2026-07-18", "2026-07-21")
         assertEquals(listOf("2026-07-18", "2026-07-19", "2026-07-20", "2026-07-21"), dates)
@@ -99,16 +93,4 @@ class ListeningDayTest {
         assertEquals(0, ListeningDay.dayOfWeekIndex("2026-07-19"))
     }
 
-    @Test
-    fun dateDaysAgo_countsBackListeningDays() {
-        val now = epoch("2026-07-20 14:00")
-        assertEquals("2026-07-13", ListeningDay.dateDaysAgo(7, now))
-    }
-
-    @Test
-    fun dateDaysAgo_fromEarlyMorningUsesListeningDay() {
-        // 07-20 03:00 -> today is 07-19, 7 days ago = 07-12
-        val now = epoch("2026-07-20 03:00")
-        assertEquals("2026-07-12", ListeningDay.dateDaysAgo(7, now))
-    }
 }

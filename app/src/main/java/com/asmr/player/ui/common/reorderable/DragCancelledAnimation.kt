@@ -4,7 +4,6 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.AnimationVector2D
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.TwoWayConverter
-import androidx.compose.animation.core.VisibilityThreshold
 import androidx.compose.animation.core.spring
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -15,12 +14,6 @@ interface DragCancelledAnimation {
     suspend fun dragCancelled(position: ItemPosition, offset: Offset)
     val position: ItemPosition?
     val offset: Offset
-}
-
-class NoDragCancelledAnimation : DragCancelledAnimation {
-    override suspend fun dragCancelled(position: ItemPosition, offset: Offset) = Unit
-    override val position: ItemPosition? = null
-    override val offset: Offset = Offset.Zero
 }
 
 class SpringDragCancelledAnimation(

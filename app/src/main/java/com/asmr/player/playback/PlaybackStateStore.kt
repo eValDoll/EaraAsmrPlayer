@@ -19,7 +19,7 @@ import javax.inject.Singleton
 
 private val Context.playbackStateDataStore by preferencesDataStore(name = "playback_state")
 
-data class PersistedPlaybackStateV1(
+private data class LegacyMediaIdPlaybackState(
     val queueMediaIds: List<String>,
     val currentIndex: Int,
     val positionMs: Long,
@@ -53,7 +53,7 @@ data class PersistedRemoteSubtitleSource(
     val ext: String?
 )
 
-data class PersistedPlaybackStateV2(
+data class PersistedPlaybackState(
     val queue: List<PersistedPlaybackQueueItem>,
     val currentIndex: Int,
     val positionMs: Long,
@@ -68,7 +68,7 @@ data class PersistedPlaybackStateV2(
 internal fun capturePersistedPlaybackState(
     player: Player,
     preferredItems: List<MediaItem> = emptyList()
-): PersistedPlaybackStateV2? {
+): PersistedPlaybackState? {
     val items = preferredItems.ifEmpty {
         (0 until player.mediaItemCount).map { index -> player.getMediaItemAt(index) }
     }
@@ -104,7 +104,7 @@ internal fun capturePersistedPlaybackState(
         ?: 0
     val speed = player.playbackParameters.speed.takeIf { it.isFinite() }?.coerceIn(0.5f, 2f) ?: 1f
     val pitch = player.playbackParameters.pitch.takeIf { it.isFinite() }?.coerceIn(0.5f, 2f) ?: 1f
-    return PersistedPlaybackStateV2(
+    return PersistedPlaybackState(
         queue = persistedQueue,
         currentIndex = currentIndex,
         positionMs = player.currentPosition.coerceAtLeast(0L),
@@ -140,37 +140,37 @@ class PlaybackStateStore internal constructor(
     constructor(@ApplicationContext context: Context) : this(context.playbackStateDataStore)
 
     private val gson: Gson = Gson()
-    private val keyV1: Preferences.Key<String> = stringPreferencesKey("persisted_playback_state_v1")
-    private val keyV2: Preferences.Key<String> = stringPreferencesKey("persisted_playback_state_v2")
+    private val legacyStateKey: Preferences.Key<String> = stringPreferencesKey("persisted_playback_state_v1")
+    private val stateKey: Preferences.Key<String> = stringPreferencesKey("persisted_playback_state_v2")
 
-    suspend fun save(state: PersistedPlaybackStateV2) {
+    suspend fun save(state: PersistedPlaybackState) {
         withContext(Dispatchers.IO) {
             dataStore.edit { prefs ->
-                prefs[keyV2] = gson.toJson(state)
-                prefs.remove(keyV1)
+                prefs[stateKey] = gson.toJson(state)
+                prefs.remove(legacyStateKey)
             }
         }
     }
 
-    suspend fun load(): PersistedPlaybackStateV2? {
+    suspend fun load(): PersistedPlaybackState? {
         return withContext(Dispatchers.IO) {
             val prefs = dataStore.data.first()
-            val jsonV2 = prefs[keyV2].orEmpty()
-            if (jsonV2.isNotBlank()) {
+            val stateJson = prefs[stateKey].orEmpty()
+            if (stateJson.isNotBlank()) {
                 return@withContext runCatching {
-                    gson.fromJson(jsonV2, PersistedPlaybackStateV2::class.java)
+                    gson.fromJson(stateJson, PersistedPlaybackState::class.java)
                 }.getOrNull()
             }
 
-            val jsonV1 = prefs[keyV1].orEmpty()
-            if (jsonV1.isBlank()) return@withContext null
+            val legacyStateJson = prefs[legacyStateKey].orEmpty()
+            if (legacyStateJson.isBlank()) return@withContext null
 
-            val v1 = runCatching {
-                gson.fromJson(jsonV1, PersistedPlaybackStateV1::class.java)
+            val legacyState = runCatching {
+                gson.fromJson(legacyStateJson, LegacyMediaIdPlaybackState::class.java)
             }.getOrNull() ?: return@withContext null
 
-            PersistedPlaybackStateV2(
-                queue = v1.queueMediaIds.mapNotNull { id ->
+            PersistedPlaybackState(
+                queue = legacyState.queueMediaIds.mapNotNull { id ->
                     val trimmed = id.trim()
                     if (trimmed.isBlank()) return@mapNotNull null
                     PersistedPlaybackQueueItem(
@@ -187,14 +187,14 @@ class PlaybackStateStore internal constructor(
                         remoteSubtitleSources = emptyList()
                     )
                 },
-                currentIndex = v1.currentIndex,
-                positionMs = v1.positionMs,
-                playWhenReady = v1.playWhenReady,
-                repeatMode = v1.repeatMode,
-                shuffleEnabled = v1.shuffleEnabled,
-                speed = v1.speed,
-                pitch = v1.pitch,
-                savedAtEpochMs = v1.savedAtEpochMs
+                currentIndex = legacyState.currentIndex,
+                positionMs = legacyState.positionMs,
+                playWhenReady = legacyState.playWhenReady,
+                repeatMode = legacyState.repeatMode,
+                shuffleEnabled = legacyState.shuffleEnabled,
+                speed = legacyState.speed,
+                pitch = legacyState.pitch,
+                savedAtEpochMs = legacyState.savedAtEpochMs
             )
         }
     }
@@ -202,8 +202,8 @@ class PlaybackStateStore internal constructor(
     suspend fun clear() {
         withContext(Dispatchers.IO) {
             dataStore.edit { prefs ->
-                prefs.remove(keyV2)
-                prefs.remove(keyV1)
+                prefs.remove(stateKey)
+                prefs.remove(legacyStateKey)
             }
         }
     }

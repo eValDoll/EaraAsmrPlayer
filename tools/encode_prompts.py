@@ -3,6 +3,7 @@
 
 Workflow:
     - Edit plaintext prompts under the gitignored `prompts/` directory (UTF-8).
+      Only keys declared in TranslationPrompts.kt are generated.
     - Run this script to regenerate:
         app/src/main/java/com/asmr/player/subtitle/TranslationPromptsEncoded.kt
     - The generated file is committed to the repo and contains NO plaintext:
@@ -13,6 +14,7 @@ app/src/main/java/com/asmr/player/subtitle/TranslationPrompts.kt.
 """
 import base64
 import pathlib
+import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -29,6 +31,7 @@ OUTPUT_FILE = (
     / "subtitle"
     / "TranslationPromptsEncoded.kt"
 )
+PROMPT_DEFINITIONS_FILE = OUTPUT_FILE.with_name("TranslationPrompts.kt")
 
 # Must match TranslationPromptsCodec.SUBTITLE_PROMPTS_XOR_KEY.
 XOR_KEY = "EaraAsmrPlayer.SubtitlePrompt.V1"
@@ -48,9 +51,17 @@ def main() -> int:
     if not PROMPTS_DIR.is_dir():
         print(f"error: {PROMPTS_DIR} not found", file=sys.stderr)
         return 1
-    files = sorted(PROMPTS_DIR.glob("*.txt"))
-    if not files:
-        print(f"error: no *.txt files under {PROMPTS_DIR}", file=sys.stderr)
+    keys = sorted(set(re.findall(
+        r'internal const val KEY_\w+\s*=\s*"([a-z0-9_]+)"',
+        PROMPT_DEFINITIONS_FILE.read_text(encoding="utf-8"),
+    )))
+    if not keys:
+        print(f"error: no prompt keys declared in {PROMPT_DEFINITIONS_FILE}", file=sys.stderr)
+        return 1
+    files = [PROMPTS_DIR / f"{key}.txt" for key in keys]
+    missing = [path.name for path in files if not path.is_file()]
+    if missing:
+        print(f"error: missing prompt files: {', '.join(missing)}", file=sys.stderr)
         return 1
 
     entries = []

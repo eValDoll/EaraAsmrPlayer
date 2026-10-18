@@ -7,9 +7,6 @@ import kotlinx.coroutines.flow.Flow
 @Dao
 interface DailyStatDao {
     @Query("SELECT * FROM daily_stats WHERE date = :date")
-    fun observeDailyStat(date: String): Flow<DailyStatEntity?>
-
-    @Query("SELECT * FROM daily_stats WHERE date = :date")
     suspend fun getDailyStat(date: String): DailyStatEntity?
 
     /** 区间内（含端点）的每日统计，按日期升序。用于收听热度图。 */

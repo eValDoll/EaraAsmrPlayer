@@ -60,9 +60,6 @@ interface DownloadDao {
     @Query("SELECT * FROM download_tasks WHERE rootDir = :rootDir LIMIT 1")
     suspend fun getTaskByRootDir(rootDir: String): DownloadTaskEntity?
 
-    @Query("UPDATE download_tasks SET subtitle = :subtitle, updatedAt = :updatedAt WHERE id = :taskId")
-    suspend fun updateTaskSubtitle(taskId: Long, subtitle: String, updatedAt: Long)
-
     @Query(
         "UPDATE download_tasks SET " +
             "subtitle = :subtitle, " +
@@ -96,9 +93,6 @@ interface DownloadDao {
 
     @Query("SELECT * FROM download_items WHERE workId = :workId LIMIT 1")
     suspend fun getItemByWorkId(workId: String): DownloadItemEntity?
-
-    @Query("SELECT * FROM download_items WHERE filePath = :filePath LIMIT 1")
-    suspend fun getItemByFilePath(filePath: String): DownloadItemEntity?
 
     @Query("SELECT * FROM download_items WHERE taskId = :taskId AND relativePath = :relativePath LIMIT 1")
     suspend fun getItemByTaskAndRelativePath(taskId: Long, relativePath: String): DownloadItemEntity?
@@ -209,9 +203,6 @@ interface DownloadDao {
 
     @Query("SELECT COUNT(*) FROM download_items WHERE state IN ('RUNNING', 'ENQUEUED', 'BLOCKED')")
     suspend fun countActiveItems(): Int
-
-    @Query("SELECT COUNT(*) FROM download_items WHERE state = 'PAUSED'")
-    suspend fun countPausedItems(): Int
 
     @Query("SELECT COUNT(*) FROM download_items WHERE state != 'SUCCEEDED'")
     suspend fun countUnfinishedItems(): Int

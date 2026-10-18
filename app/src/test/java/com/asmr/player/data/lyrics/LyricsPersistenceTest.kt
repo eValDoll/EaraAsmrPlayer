@@ -203,12 +203,26 @@ class LyricsPersistenceTest {
     }
 
     @Test
-    fun choosingManualSubtitleAfterDeletion_restoresUserSelectedSource() = runBlocking {
+    fun manualSourceBinding_persistsAndTakesPriorityAfterExplicitRescanAndReopen() = runBlocking {
         database.trackDao().deleteSubtitlesByUser(listOf(trackId))
         val chosen = temporaryFolder.newFile("chosen.lrc").apply { writeText("[00:00.00]我选择的字幕", Charsets.UTF_8) }
-        loader.saveManualLyrics(lyricsTargetContextFromMediaItem(item)!!, chosen.absolutePath)
+        val target = lyricsTargetContextFromMediaItem(item)!!
+        ManualLyricsSourceRepository(database.manualLyricsSourceDao(), context)
+            .upsert(target, chosen.absolutePath)
 
+        assertTrue(database.trackDao().isSubtitleAutoImportBlocked(audio.absolutePath))
+        assertTrue(loader.load(item).lyrics.isEmpty())
+        assertTrue(database.trackDao().importScannedSubtitles(
+            listOf(caption("主动重扫读到的字幕")), restoreDeleted = true))
         assertFalse(database.trackDao().isSubtitleAutoImportBlocked(audio.absolutePath))
+        assertEquals(listOf("主动重扫读到的字幕"), database.trackDao().getSubtitlesForTrack(trackId).map { it.text })
+        assertEquals(listOf("我选择的字幕"), loader.load(item).lyrics.map { it.text })
+
+        database.close()
+        openDatabase()
+
+        assertEquals(chosen.absolutePath,
+            ManualLyricsSourceRepository(database.manualLyricsSourceDao(), context).findBestMatch(target)?.sourceUri)
         assertEquals(listOf("我选择的字幕"), loader.load(item).lyrics.map { it.text })
     }
 

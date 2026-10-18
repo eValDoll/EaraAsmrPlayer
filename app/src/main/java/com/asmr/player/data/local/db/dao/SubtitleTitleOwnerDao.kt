@@ -14,9 +14,6 @@ interface SubtitleTitleOwnerDao {
     @Query("SELECT * FROM subtitle_title_owners WHERE taskId = :taskId")
     suspend fun getByTask(taskId: String): List<SubtitleTitleOwnerEntity>
 
-    @Query("SELECT * FROM subtitle_title_owners WHERE displayTitle = '' ORDER BY createdAt ASC")
-    suspend fun getPendingOwners(): List<SubtitleTitleOwnerEntity>
-
     @Query("SELECT DISTINCT taskId FROM subtitle_title_owners WHERE displayTitle = ''")
     suspend fun getPendingTaskIds(): List<String>
 

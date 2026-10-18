@@ -52,9 +52,6 @@ interface PlaylistDao {
     @Query("SELECT * FROM playlists WHERE name = :name COLLATE NOCASE LIMIT 1")
     fun getPlaylistByName(name: String): Flow<PlaylistEntity?>
 
-    @Query("SELECT * FROM playlists WHERE category = :category")
-    fun getPlaylistsByCategory(category: String): Flow<List<PlaylistEntity>>
-
     @Query("SELECT * FROM playlists WHERE id = :id LIMIT 1")
     suspend fun getPlaylistByIdOnce(id: Long): PlaylistEntity?
 
@@ -81,9 +78,6 @@ interface PlaylistDao {
 
     @Query("DELETE FROM playlist_track_cross_ref WHERE trackId IN (:trackIds)")
     suspend fun deleteTrackReferences(trackIds: List<Long>)
-
-    @Query("DELETE FROM playlist_track_cross_ref WHERE playlistId = :playlistId AND trackId = :trackId")
-    suspend fun deleteTrackFromPlaylist(playlistId: Long, trackId: Long)
 
     @Transaction
     @Query("""

@@ -237,7 +237,7 @@ class DLSiteScraper @Inject constructor(
         return null
     }
 
-    suspend fun getRecommendationsDetailV2(workId: String, locale: String? = null): DlsiteRecommendations =
+    suspend fun getRecommendations(workId: String, locale: String? = null): DlsiteRecommendations =
         withContext(Dispatchers.IO) {
             val clean = workId.trim().uppercase()
             if (clean.isBlank()) return@withContext DlsiteRecommendations()

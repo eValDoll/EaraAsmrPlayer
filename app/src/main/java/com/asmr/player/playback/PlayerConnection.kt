@@ -477,10 +477,6 @@ class PlayerConnection @Inject constructor(
         _queue.value = items
     }
 
-    fun addMediaItem(item: androidx.media3.common.MediaItem): Boolean {
-        return addMediaItems(listOf(item)).addedCount > 0
-    }
-
     fun addMediaItems(items: List<androidx.media3.common.MediaItem>): QueueAddSummary {
         val c = controller ?: return QueueAddSummary(addedCount = 0, skippedCount = items.size)
         if (items.isEmpty()) return QueueAddSummary(addedCount = 0, skippedCount = 0)

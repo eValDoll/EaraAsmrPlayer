@@ -8,7 +8,6 @@ import com.asmr.player.util.LocalFileOperationCoordinator
 import android.content.Context
 import androidx.room.withTransaction
 import androidx.work.WorkManager
-import com.asmr.player.data.local.db.AppDatabase
 import com.asmr.player.data.local.db.AppDatabaseProvider
 import com.asmr.player.data.local.db.dao.SubtitleTaskWithItems
 import com.asmr.player.data.local.db.entities.SubtitleEntity

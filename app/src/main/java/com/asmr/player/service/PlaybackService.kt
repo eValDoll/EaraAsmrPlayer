@@ -18,7 +18,6 @@ import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
-import android.provider.Settings
 import android.util.Log
 import androidx.core.app.TaskStackBuilder
 import androidx.media3.common.AudioAttributes
@@ -59,7 +58,6 @@ import com.asmr.player.playback.BalanceAudioProcessor
 import com.asmr.player.playback.ChannelModeAudioProcessor
 import com.asmr.player.playback.DefaultSpectrumAudioTrackBufferDurationMillis
 import com.asmr.player.playback.FadingPlayer
-import com.asmr.player.playback.AppVolume
 import com.asmr.player.playback.AppVolumeBoostController
 import com.asmr.player.playback.GraphicEqualizerAudioProcessor
 import com.asmr.player.playback.PlaybackMediaCache
@@ -1418,7 +1416,6 @@ class PlaybackService : MediaSessionService() {
         sleepTimerJob?.cancel()
         unregisterPlaybackRouteListeners()
         abandonPlaybackAudioFocus()
-        appVolumeBoostController.release()
         spectrumAnalyzer.stop()
         releaseMediaSession()
         notificationProvider = null

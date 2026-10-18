@@ -39,8 +39,6 @@ internal object TranslationPrompts {
 
     internal fun subtitlePolishInitialUserMessage(): String = raw(KEY_SUBTITLE_POLISH_INITIAL_USER_MESSAGE)
 
-    internal fun subtitlePolishProgressInstruction(): String = raw(KEY_SUBTITLE_POLISH_PROGRESS_INSTRUCTION)
-
     internal fun subtitlePolishContinueMessageGeneric(): String = raw(KEY_SUBTITLE_POLISH_CONTINUE_MESSAGE_GENERIC)
 
     internal fun subtitleStyleGuide(): String = raw(KEY_SUBTITLE_STYLE_GUIDE)
@@ -79,7 +77,6 @@ internal object TranslationPrompts {
     internal const val KEY_SUBTITLE_POLISH_TOOL_READ_DESCRIPTION = "subtitle_polish_tool_read_description"
     internal const val KEY_SUBTITLE_POLISH_TOOL_WRITE_DESCRIPTION = "subtitle_polish_tool_write_description"
     internal const val KEY_SUBTITLE_POLISH_INITIAL_USER_MESSAGE = "subtitle_polish_initial_user_message"
-    internal const val KEY_SUBTITLE_POLISH_PROGRESS_INSTRUCTION = "subtitle_polish_progress_instruction"
     internal const val KEY_SUBTITLE_POLISH_CONTINUE_MESSAGE_GENERIC = "subtitle_polish_continue_message_generic"
     internal const val KEY_SUBTITLE_STYLE_GUIDE = "subtitle_style_guide"
     internal const val KEY_SUBTITLE_REFERENCE_TABLE = "subtitle_reference_table"
@@ -116,7 +113,6 @@ internal object TranslationPromptsCodec {
         return String(decoded, Charsets.UTF_8)
     }
 
-    internal fun decodeBase64(input: String): ByteArray = Base64Utils.decode(input)
 }
 
 /**

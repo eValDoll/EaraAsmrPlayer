@@ -18,9 +18,6 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface AlbumDao {
-    @Query("SELECT * FROM albums ORDER BY id DESC")
-    fun getAllAlbums(): Flow<List<AlbumEntity>>
-
     @Query("SELECT DISTINCT circle FROM albums WHERE circle != '' ORDER BY circle COLLATE NOCASE ASC")
     fun getDistinctCircles(): Flow<List<String>>
 

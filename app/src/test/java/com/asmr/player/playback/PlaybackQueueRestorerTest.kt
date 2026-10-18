@@ -143,7 +143,7 @@ class PlaybackQueueRestorerTest {
         val gson = Gson()
         val json = gson.toJsonTree(state(listOf(item(""), current), 1, 987L)).asJsonObject
         json.getAsJsonArray("queue").set(0, JsonNull.INSTANCE)
-        stateStore.save(gson.fromJson(json, PersistedPlaybackStateV2::class.java))
+        stateStore.save(gson.fromJson(json, PersistedPlaybackState::class.java))
         assertEquals(987L, restorer.restore()?.state?.positionMs)
 
         stateStore.save(state(emptyList(), -1))
@@ -252,7 +252,7 @@ class PlaybackQueueRestorerTest {
     )
 
     private fun state(queue: List<PersistedPlaybackQueueItem>, index: Int = 0, positionMs: Long = 0L) =
-        PersistedPlaybackStateV2(
+        PersistedPlaybackState(
             queue, index, positionMs, true, Player.REPEAT_MODE_ONE, true, 1.25f, 0.9f, 123L
         )
 
