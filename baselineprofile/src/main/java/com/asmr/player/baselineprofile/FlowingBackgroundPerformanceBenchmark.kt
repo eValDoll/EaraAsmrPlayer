@@ -29,7 +29,8 @@ class FlowingBackgroundPerformanceBenchmark {
 
     @Test fun lightSteadyFlow() = measure(light = true) { SystemClock.sleep(8_000) }
 
-    @Test fun opacityAndCoverTransitions() = measure {
+    @Test fun solidArtworkAndClarityTransitions() = measure {
+        clickControl("纯色背景")
         repeat(2) {
             for (opacity in listOf(0, 50, 100)) {
                 clickControl("透明度 $opacity%")
@@ -38,8 +39,24 @@ class FlowingBackgroundPerformanceBenchmark {
                 SystemClock.sleep(800)
             }
         }
-        clickControl("透明度 0%")
+        clickControl("关闭封面")
+        SystemClock.sleep(800)
+        clickControl("开启封面")
+        SystemClock.sleep(800)
+    }
+
+    @Test fun backgroundModeTransitions() = measure {
         repeat(3) {
+            clickControl("纯色背景")
+            clickControl("透明度 100%")
+            SystemClock.sleep(800)
+            clickControl("流光背景")
+            SystemClock.sleep(800)
+        }
+    }
+
+    @Test fun rapidCoverChanges() = measure {
+        repeat(12) {
             clickControl("切换封面")
             SystemClock.sleep(120)
         }
@@ -61,15 +78,12 @@ class FlowingBackgroundPerformanceBenchmark {
         SystemClock.sleep(1_000)
     }
 
-    @Test fun independentCoverAndDynamicSwitches() = measure {
-        clickControl("透明度 100%")
-        SystemClock.sleep(600)
-        clickControl("关闭封面")
-        recordFlowingState("coverOffDynamicOn")
+    @Test fun flowingDynamicSwitches() = measure {
+        recordFlowingState("dynamicOn")
         clickControl("关闭动态流光")
-        recordFlowingState("coverOffDynamicOff")
+        recordFlowingState("dynamicOff")
         clickControl("开启动态流光")
-        recordFlowingState("coverOffDynamicResumed")
+        recordFlowingState("dynamicResumed")
     }
 
     @Test fun coverThemeChanges() = measure {

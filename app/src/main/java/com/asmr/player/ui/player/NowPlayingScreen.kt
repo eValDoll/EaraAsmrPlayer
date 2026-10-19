@@ -77,6 +77,7 @@ import com.asmr.player.cache.CachePolicy
 import com.asmr.player.cache.ImageCacheEntryPoint
 import com.asmr.player.data.lyrics.lyricsTargetContextFromMediaItem
 import com.asmr.player.data.settings.CoverPreviewMode
+import com.asmr.player.data.settings.PlayerBackgroundMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
 import com.asmr.player.data.settings.NowPlayingLyricsSettings
@@ -1116,6 +1117,7 @@ internal fun NowPlayingScreen(
     onShowSleepTimer: () -> Unit,
     onOpenPlaylistPicker: (MediaItem) -> Unit,
     viewModel: PlayerViewModel,
+    playerBackgroundMode: PlayerBackgroundMode,
     coverBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
     coverPreviewMode: CoverPreviewMode,
@@ -1149,7 +1151,9 @@ internal fun NowPlayingScreen(
     val metadata = item?.mediaMetadata
     val canBindManualLyrics = lyricsTargetContextFromMediaItem(item) != null
     val colorScheme = AsmrTheme.colorScheme
-    val playerContentColors = remember(colorScheme) { playerSurfaceColors(colorScheme) }
+    val playerContentColors = remember(colorScheme, playerBackgroundMode, coverBackgroundEnabled) {
+        playerSurfaceColors(colorScheme, playerBackgroundMode, coverBackgroundEnabled)
+    }
     val uriText = item?.localConfiguration?.uri?.toString().orEmpty()
     val isOnlineMedia = remember(uriText, item?.mediaId) { item.isOnlineMedia() }
     val artworkModel = remember(metadata?.artworkUri) {
@@ -1165,11 +1169,12 @@ internal fun NowPlayingScreen(
     val tagViewModel: NowPlayingTagViewModel = hiltViewModel()
     val tagDialog by tagViewModel.dialogState.collectAsStateWithLifecycle()
     val availableTags by tagViewModel.availableTags.collectAsStateWithLifecycle()
-    val playerArtworkBackdropEnabled = coverBackgroundEnabled && !isVideo
+    val playerCoverBackgroundEnabled = playerBackgroundMode == PlayerBackgroundMode.Solid && coverBackgroundEnabled
+    val playerArtworkBackdropEnabled = playerCoverBackgroundEnabled && !isVideo
     val playerThemeColors = rememberPlayerThemeColors(
         mediaItem = item,
         colorScheme = colorScheme,
-        coverBackgroundEnabled = coverBackgroundEnabled,
+        coverBackgroundEnabled = playerCoverBackgroundEnabled,
         artworkBackdropEnabled = playerArtworkBackdropEnabled
     )
     val accentColor = playerThemeColors.accentColor
@@ -1322,8 +1327,8 @@ internal fun NowPlayingScreen(
         onDispose { videoPlayerCoordinator.release() }
     }
     val videoAspectRatio = rememberPlayerVideoAspectRatio(player)
-    val useDragPreview = coverPreviewMode == CoverPreviewMode.Drag && !isVideo
-    val useMotionPreview = coverPreviewMode == CoverPreviewMode.Motion && !isVideo
+    val useDragPreview = playerCoverBackgroundEnabled && coverPreviewMode == CoverPreviewMode.Drag && !isVideo
+    val useMotionPreview = playerCoverBackgroundEnabled && coverPreviewMode == CoverPreviewMode.Motion && !isVideo
     val ownsMotionPreview = sharedArtworkAlignment == null
     val ownsDragPreview = sharedCoverDragPreviewState == null
     val localCoverMotionState = rememberCoverMotionState(
@@ -1513,9 +1518,10 @@ internal fun NowPlayingScreen(
             .fillMaxSize()
             .then(tabletQueueInteractionModifier)
     ) {
-        if (renderBackdrop && !isVideo) {
-            CoverArtworkBackground(
-                artworkModel = artworkModel,
+        if (renderBackdrop) {
+            PlayerSharedBackdrop(
+                mediaItem = item,
+                backgroundMode = playerBackgroundMode,
                 coverEnabled = coverBackgroundEnabled,
                 clarity = coverBackgroundClarity,
                 artworkAlignment = coverPreviewAlignment,
@@ -1861,7 +1867,9 @@ internal fun NowPlayingScreen(
                                 onOpenVideoFullscreen = { videoFullscreen = true },
                                 onOpenLyrics = showLyricsSurface,
                                 edgeBlendEnabled = false,
-                                edgeBlendColor = playerThemeColors.backdropTintColor,
+                                edgeBlendColor = if (playerCoverBackgroundEnabled) {
+                                    playerThemeColors.backdropTintColor
+                                } else playerContentColors.background,
                                 videoBackdropColor = videoBackdropColor,
                                 artworkAlignment = coverPreviewAlignment,
                                 artworkCornerRadius = landscapeLayoutMetrics.artworkCornerRadius,

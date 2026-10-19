@@ -6,6 +6,7 @@ import com.asmr.player.data.settings.CoverPreviewMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
 import com.asmr.player.data.settings.NowPlayingLyricsSettings
+import com.asmr.player.data.settings.PlayerBackgroundMode
 import com.asmr.player.data.settings.settingsDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
@@ -35,6 +36,7 @@ class SettingsDataStore @Inject constructor(
     private val staticHueArgbDarkKey = intPreferencesKey("static_hue_argb_dark")
     private val lastDynamicHueSourceKeyKey = stringPreferencesKey("last_dynamic_hue_source_key")
     private val lastDynamicHueSeedArgbKey = intPreferencesKey("last_dynamic_hue_seed_argb")
+    private val playerBackgroundModeKey = stringPreferencesKey("player_background_mode")
     private val coverBackgroundEnabledKey = booleanPreferencesKey("cover_background_enabled")
     private val dynamicFlowingBackgroundEnabledKey = booleanPreferencesKey("dynamic_flowing_background_enabled")
     private val coverBackgroundClarityKey = floatPreferencesKey("cover_background_clarity")
@@ -82,6 +84,9 @@ class SettingsDataStore @Inject constructor(
             lastDynamicHueSourceKey = prefs[lastDynamicHueSourceKeyKey],
             lastDynamicHueSeedArgb = if (prefs.contains(lastDynamicHueSeedArgbKey)) prefs[lastDynamicHueSeedArgbKey] else null
         )
+    }
+    val playerBackgroundMode: Flow<PlayerBackgroundMode> = context.settingsDataStore.data.map {
+        PlayerBackgroundMode.fromStorageValue(it[playerBackgroundModeKey])
     }
     val coverBackgroundEnabled: Flow<Boolean> = context.settingsDataStore.data.map { it[coverBackgroundEnabledKey] ?: true }
     val dynamicFlowingBackgroundEnabled: Flow<Boolean> = context.settingsDataStore.data.map {
@@ -164,6 +169,10 @@ class SettingsDataStore @Inject constructor(
             prefs.remove(lastDynamicHueSourceKeyKey)
             prefs.remove(lastDynamicHueSeedArgbKey)
         }
+    }
+
+    suspend fun setPlayerBackgroundMode(mode: PlayerBackgroundMode) {
+        context.settingsDataStore.edit { it[playerBackgroundModeKey] = mode.storageValue }
     }
 
     suspend fun setCoverBackgroundEnabled(enabled: Boolean) {

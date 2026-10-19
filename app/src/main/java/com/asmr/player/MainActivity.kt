@@ -40,6 +40,7 @@ import com.asmr.player.ui.player.SleepTimerSheetContent
 import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.data.local.datastore.ThemeBootstrapPreferences
 import com.asmr.player.data.settings.CoverPreviewMode
+import com.asmr.player.data.settings.PlayerBackgroundMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
 import com.asmr.player.data.settings.NowPlayingLyricsSettings
@@ -160,6 +161,8 @@ class MainActivity : ComponentActivity() {
                 staticHueArgbLight = themeBootstrap.staticHueArgbLight,
                 staticHueArgbDark = themeBootstrap.staticHueArgbDark
             )
+            val playerBackgroundMode by settingsDataStore.playerBackgroundMode
+                .collectAsStateWithLifecycle(initialValue = PlayerBackgroundMode.Solid)
             val coverBackgroundEnabled by settingsDataStore.coverBackgroundEnabled.collectAsStateWithLifecycle(initialValue = true)
             val dynamicFlowingBackgroundEnabled by settingsDataStore.dynamicFlowingBackgroundEnabled
                 .collectAsStateWithLifecycle(initialValue = true)
@@ -466,6 +469,7 @@ class MainActivity : ComponentActivity() {
                         onShowSleepTimer = { overlaySheet = OverlaySheet.SleepTimer },
                         onContentReady = { contentReady = true },
                         showMiniPlayerBar = showMiniPlayerBar,
+                        playerBackgroundMode = playerBackgroundMode,
                         coverBackgroundEnabled = coverBackgroundEnabled,
                         dynamicFlowingBackgroundEnabled = dynamicFlowingBackgroundEnabled,
                         coverBackgroundClarity = coverBackgroundClarity,
