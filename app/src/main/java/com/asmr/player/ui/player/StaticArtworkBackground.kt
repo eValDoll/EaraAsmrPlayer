@@ -22,19 +22,19 @@ import com.asmr.player.ui.common.AsmrAsyncImage
 import kotlin.math.pow
 
 @Composable
-internal fun VideoArtworkBackground(
+internal fun StaticArtworkBackground(
     artworkModel: Any?,
     enabled: Boolean,
     clarity: Float,
     overlayBaseColor: Color,
     tintBaseColor: Color,
     artworkAlignment: Alignment = Alignment.Center,
-    isDark: Boolean = true
+    isDark: Boolean
 ) {
     if (!enabled) return
 
     val style = remember(clarity, isDark) {
-        videoArtworkBackdropStyle(clarity = clarity, isDark = isDark)
+        staticArtworkBackdropStyle(clarity = clarity, isDark = isDark)
     }
 
     Box(modifier = Modifier.fillMaxSize().background(overlayBaseColor))
@@ -70,6 +70,9 @@ internal fun VideoArtworkBackground(
             contentScale = ContentScale.Crop,
             alignment = artworkAlignment,
             alpha = style.artworkAlpha,
+            peekAnySizeForInitial = true,
+            retainPainterDuringReload = true,
+            loadAtOriginalSize = true,
             placeholder = {},
             empty = {},
             loading = {},
@@ -88,7 +91,7 @@ internal fun VideoArtworkBackground(
     }
 }
 
-internal data class VideoBackdropStyle(
+internal data class StaticBackdropStyle(
     val blurDp: Dp,
     val baseTintAlpha: Float,
     val artworkAlpha: Float,
@@ -97,14 +100,14 @@ internal data class VideoBackdropStyle(
     val scrimAlpha: Float
 )
 
-internal fun videoArtworkBackdropStyle(
+internal fun staticArtworkBackdropStyle(
     clarity: Float,
     isDark: Boolean
-): VideoBackdropStyle {
-    val normalized = clarity.coerceIn(0f, 1f)
+): StaticBackdropStyle {
+    val normalized = (clarity.takeIf { it.isFinite() } ?: 0f).coerceIn(0f, 1f)
     // Lower clarity should change gently; higher clarity should open up faster.
     val reveal = normalized.pow(2.15f)
-    return VideoBackdropStyle(
+    return StaticBackdropStyle(
         blurDp = lerpFloat(
             start = if (isDark) 30f else 28f,
             end = 0f,

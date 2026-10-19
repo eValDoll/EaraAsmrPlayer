@@ -91,6 +91,7 @@ import com.asmr.player.data.settings.DeepSeekReasoningEffort
 import com.asmr.player.data.settings.DeepSeekTranslationSettings
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.NowPlayingLyricsSettings
+import com.asmr.player.data.settings.PlayerBackgroundMode
 import com.asmr.player.subtitle.SubtitleDeviceCapability
 import com.asmr.player.subtitle.SubtitleModelDownloadSource
 import com.asmr.player.subtitle.SubtitleModelInstallationState
@@ -201,6 +202,7 @@ fun SettingsScreen(
     val themeMode by viewModel.themeMode.collectAsStateWhileActive(appearanceDataActive)
     val staticHueArgbLight by viewModel.staticHueArgbLight.collectAsStateWhileActive(appearanceDataActive)
     val staticHueArgbDark by viewModel.staticHueArgbDark.collectAsStateWhileActive(appearanceDataActive)
+    val playerBackgroundMode by viewModel.playerBackgroundMode.collectAsStateWhileActive(appearanceDataActive)
     val coverBackgroundEnabled by viewModel.coverBackgroundEnabled.collectAsStateWhileActive(appearanceDataActive)
     val dynamicFlowingBackgroundEnabled by viewModel.dynamicFlowingBackgroundEnabled.collectAsStateWhileActive(appearanceDataActive)
     val coverBackgroundClarity by viewModel.coverBackgroundClarity.collectAsStateWhileActive(appearanceDataActive)
@@ -702,67 +704,98 @@ fun SettingsScreen(
                             onCheckedChange = viewModel::setDynamicPlayerHueEnabled
                         )
 
-                        SettingsToggleRow(
-                            text = "播放页/歌词页封面背景",
-                            checked = coverBackgroundEnabled,
-                            onCheckedChange = viewModel::setCoverBackgroundEnabled
-                        )
-                        SettingsToggleRow(
-                            text = "动态流光背景",
-                            checked = dynamicFlowingBackgroundEnabled,
-                            onCheckedChange = viewModel::setDynamicFlowingBackgroundEnabled
-                        )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("背景封面预览方式", style = MaterialTheme.typography.bodyMedium)
-                            PreviewModeInfoTip(
-                                active = activeTipKey == "cover_preview_mode",
-                                onToggle = {
-                                    activeTipKey = if (activeTipKey == "cover_preview_mode") null else "cover_preview_mode"
-                                }
-                            )
+                            Text("播放页/歌词页背景模式", style = MaterialTheme.typography.bodyMedium)
                             Spacer(modifier = Modifier.weight(1f))
                             SingleChoiceSegmentedButtonRow {
                                 SegmentedButton(
-                                    selected = coverPreviewMode == CoverPreviewMode.Disabled,
-                                    onClick = { viewModel.setCoverPreviewMode(CoverPreviewMode.Disabled) },
-                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                                    selected = playerBackgroundMode == PlayerBackgroundMode.Solid,
+                                    onClick = { viewModel.setPlayerBackgroundMode(PlayerBackgroundMode.Solid) },
+                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
                                     colors = segmentedButtonColors,
                                     icon = {},
-                                    label = { Text("关闭") }
+                                    label = { Text("纯色") }
                                 )
                                 SegmentedButton(
-                                    selected = coverPreviewMode == CoverPreviewMode.Drag,
-                                    onClick = { viewModel.setCoverPreviewMode(CoverPreviewMode.Drag) },
-                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                                    selected = playerBackgroundMode == PlayerBackgroundMode.Flowing,
+                                    onClick = {
+                                        if (activeTipKey == "cover_preview_mode") activeTipKey = null
+                                        viewModel.setPlayerBackgroundMode(PlayerBackgroundMode.Flowing)
+                                    },
+                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
                                     colors = segmentedButtonColors,
                                     icon = {},
-                                    label = { Text("滑动") }
-                                )
-                                SegmentedButton(
-                                    selected = coverPreviewMode == CoverPreviewMode.Motion,
-                                    onClick = { viewModel.setCoverPreviewMode(CoverPreviewMode.Motion) },
-                                    shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
-                                    colors = segmentedButtonColors,
-                                    icon = {},
-                                    label = { Text("转动") }
+                                    label = { Text("流光") }
                                 )
                             }
                         }
-                        if (coverBackgroundEnabled) {
-                            key("cover_background_clarity_slider") {
-                                DeferredCommitSettingsSliderRow(
-                                    committedValue = coverBackgroundClarity,
-                                    range = 0f..1f,
-                                    stepSize = 0.05f,
-                                    textForValue = { value ->
-                                        "封面背景清晰度：${(value.coerceIn(0f, 1f) * 100).toInt()}%"
-                                    },
-                                    onValueCommitted = viewModel::setCoverBackgroundClarity,
-                                    onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
+                        if (playerBackgroundMode == PlayerBackgroundMode.Flowing) {
+                            SettingsToggleRow(
+                                text = "动态流光背景",
+                                checked = dynamicFlowingBackgroundEnabled,
+                                onCheckedChange = viewModel::setDynamicFlowingBackgroundEnabled
+                            )
+                        } else {
+                            SettingsToggleRow(
+                                text = "播放页/歌词页封面背景",
+                                checked = coverBackgroundEnabled,
+                                onCheckedChange = viewModel::setCoverBackgroundEnabled
+                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("背景封面预览方式", style = MaterialTheme.typography.bodyMedium)
+                                PreviewModeInfoTip(
+                                    active = activeTipKey == "cover_preview_mode",
+                                    onToggle = {
+                                        activeTipKey = if (activeTipKey == "cover_preview_mode") null else "cover_preview_mode"
+                                    }
                                 )
+                                Spacer(modifier = Modifier.weight(1f))
+                                SingleChoiceSegmentedButtonRow {
+                                    SegmentedButton(
+                                        selected = coverPreviewMode == CoverPreviewMode.Disabled,
+                                        onClick = { viewModel.setCoverPreviewMode(CoverPreviewMode.Disabled) },
+                                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                                        colors = segmentedButtonColors,
+                                        icon = {},
+                                        label = { Text("关闭") }
+                                    )
+                                    SegmentedButton(
+                                        selected = coverPreviewMode == CoverPreviewMode.Drag,
+                                        onClick = { viewModel.setCoverPreviewMode(CoverPreviewMode.Drag) },
+                                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
+                                        colors = segmentedButtonColors,
+                                        icon = {},
+                                        label = { Text("滑动") }
+                                    )
+                                    SegmentedButton(
+                                        selected = coverPreviewMode == CoverPreviewMode.Motion,
+                                        onClick = { viewModel.setCoverPreviewMode(CoverPreviewMode.Motion) },
+                                        shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
+                                        colors = segmentedButtonColors,
+                                        icon = {},
+                                        label = { Text("转动") }
+                                    )
+                                }
+                            }
+                            if (coverBackgroundEnabled) {
+                                key("cover_background_clarity_slider") {
+                                    DeferredCommitSettingsSliderRow(
+                                        committedValue = coverBackgroundClarity,
+                                        range = 0f..1f,
+                                        stepSize = 0.05f,
+                                        textForValue = { value ->
+                                            "封面背景清晰度：${(value.coerceIn(0f, 1f) * 100).toInt()}%"
+                                        },
+                                        onValueCommitted = viewModel::setCoverBackgroundClarity,
+                                        onHorizontalControlInteractionChanged = onHorizontalControlInteractionChanged
+                                    )
+                                }
                             }
                         }
                     }

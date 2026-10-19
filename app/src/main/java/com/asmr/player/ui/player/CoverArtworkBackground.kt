@@ -10,22 +10,42 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.asmr.player.ui.common.AsmrAsyncImage
-import kotlin.math.pow
+import com.asmr.player.data.settings.PlayerBackgroundMode
 
 @Composable
 fun CoverArtworkBackground(
     artworkModel: Any?,
+    backgroundMode: PlayerBackgroundMode,
     coverEnabled: Boolean,
     clarity: Float,
     artworkAlignment: Alignment = Alignment.Center,
     isPlaying: Boolean = true,
     isActive: Boolean = true,
-    dynamicEnabled: Boolean = true
+    dynamicEnabled: Boolean = true,
+    overlayBaseColor: Color,
+    tintBaseColor: Color = overlayBaseColor,
+    isDark: Boolean
 ) {
+    if (backgroundMode == PlayerBackgroundMode.Flowing || !coverEnabled) {
+        Box(Modifier.fillMaxSize().background(overlayBaseColor))
+    }
+    if (backgroundMode == PlayerBackgroundMode.Solid) {
+        StaticArtworkBackground(
+            artworkModel = artworkModel,
+            enabled = coverEnabled,
+            clarity = clarity,
+            overlayBaseColor = overlayBaseColor,
+            tintBaseColor = tintBaseColor,
+            artworkAlignment = artworkAlignment,
+            isDark = isDark
+        )
+        return
+    }
+
     val lifecycle = LocalLifecycleOwner.current.lifecycle
     val resumed = remember(lifecycle) {
         mutableStateOf(lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED))
@@ -37,42 +57,13 @@ fun CoverArtworkBackground(
         lifecycle.addObserver(observer)
         onDispose { lifecycle.removeObserver(observer) }
     }
-    val style = remember(clarity, coverEnabled) { coverArtworkBackdropStyle(clarity, coverEnabled) }
     val artwork by rememberPlayerCoverBitmap(artworkModel, isActive && resumed.value)
-    Box(Modifier.fillMaxSize().background(PlayerBackdropBaseColor))
     artwork?.let { bitmap ->
-        if (style.flowingVisible) {
-            FlowingArtworkBackground(
-                artwork = bitmap,
-                isPlaying = isPlaying,
-                isActive = isActive && resumed.value,
-                dynamicEnabled = dynamicEnabled
-            )
-        }
-    }
-    if (artworkModel != null && style.artworkAlpha > 0f) {
-        AsmrAsyncImage(
-            model = artworkModel,
-            contentDescription = null,
-            modifier = Modifier.fillMaxSize(),
-            alignment = artworkAlignment,
-            alpha = style.artworkAlpha,
-            placeholder = {},
-            empty = {},
-            loading = {},
-            retainPainterDuringReload = true
+        FlowingArtworkBackground(
+            artwork = bitmap,
+            isPlaying = isPlaying,
+            isActive = isActive && resumed.value,
+            dynamicEnabled = dynamicEnabled
         )
     }
-}
-
-internal data class BackdropStyle(
-    val artworkAlpha: Float,
-    val flowingVisible: Boolean
-)
-
-internal fun coverArtworkBackdropStyle(clarity: Float, coverEnabled: Boolean = true): BackdropStyle {
-    val alpha = if (coverEnabled) {
-        (clarity.takeIf { it.isFinite() } ?: 0f).coerceIn(0f, 1f).pow(2.15f)
-    } else 0f
-    return BackdropStyle(artworkAlpha = alpha, flowingVisible = alpha < 1f)
 }

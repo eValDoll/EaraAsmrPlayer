@@ -30,6 +30,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.asmr.player.data.settings.PlayerBackgroundMode
 import com.asmr.player.ui.player.CoverArtworkBackground
 import com.asmr.player.ui.player.playerSurfaceColors
 import com.asmr.player.ui.theme.AsmrPlayerTheme
@@ -57,6 +58,7 @@ internal fun FlowingBackgroundBenchmarkScreen() {
     var clarity by remember { mutableFloatStateOf(0.5f) }
     var playing by remember { mutableStateOf(true) }
     var visible by remember { mutableStateOf(true) }
+    var backgroundMode by remember { mutableStateOf(PlayerBackgroundMode.Flowing) }
     var coverEnabled by remember { mutableStateOf(true) }
     var dynamicEnabled by remember { mutableStateOf(true) }
     var themeExtractionEnabled by remember { mutableStateOf(false) }
@@ -97,16 +99,21 @@ internal fun FlowingBackgroundBenchmarkScreen() {
 
     AsmrPlayerTheme(mode = mode, hue = coverTheme?.hue.takeIf { themeExtractionEnabled }) {
         val appColors = AsmrTheme.colorScheme
-        val colors = remember(appColors) { playerSurfaceColors(appColors) }
+        val colors = remember(appColors, backgroundMode, coverEnabled) {
+            playerSurfaceColors(appColors, backgroundMode, coverEnabled)
+        }
         Box(Modifier.fillMaxSize().background(colors.background)) {
             Box(Modifier.fillMaxSize().graphicsLayer { alpha = if (visible) 1f else 0f }) {
                 CoverArtworkBackground(
                     artworkModel = artwork,
+                    backgroundMode = backgroundMode,
                     coverEnabled = coverEnabled,
                     clarity = clarity,
                     isPlaying = playing,
                     isActive = visible,
-                    dynamicEnabled = dynamicEnabled
+                    dynamicEnabled = dynamicEnabled,
+                    overlayBaseColor = colors.background,
+                    isDark = colors.isDark
                 )
             }
             Column(
@@ -124,15 +131,36 @@ internal fun FlowingBackgroundBenchmarkScreen() {
                     }
                 }
                 Row {
-                    for (value in listOf(0f, 0.5f, 1f)) {
+                    for (value in PlayerBackgroundMode.entries) {
                         TextButton(
-                            onClick = { clarity = value },
+                            onClick = { backgroundMode = value },
                             colors = ButtonDefaults.textButtonColors(
-                                contentColor = if (clarity == value) colors.primaryStrong else colors.textSecondary
+                                contentColor = if (backgroundMode == value) colors.primaryStrong else colors.textSecondary
                             )
                         ) {
-                            Text("透明度 ${(value * 100).toInt()}%")
+                            Text(if (value == PlayerBackgroundMode.Solid) "纯色背景" else "流光背景")
                         }
+                    }
+                }
+                if (backgroundMode == PlayerBackgroundMode.Solid) {
+                    Row {
+                        for (value in listOf(0f, 0.5f, 1f)) {
+                            TextButton(
+                                onClick = { clarity = value },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = if (clarity == value) colors.primaryStrong else colors.textSecondary
+                                )
+                            ) {
+                                Text("透明度 ${(value * 100).toInt()}%")
+                            }
+                        }
+                    }
+                    TextButton(onClick = { coverEnabled = !coverEnabled }, colors = buttonColors) {
+                        Text(if (coverEnabled) "关闭封面" else "开启封面")
+                    }
+                } else {
+                    TextButton(onClick = { dynamicEnabled = !dynamicEnabled }, colors = buttonColors) {
+                        Text(if (dynamicEnabled) "关闭动态流光" else "开启动态流光")
                     }
                 }
                 Row {
@@ -141,14 +169,6 @@ internal fun FlowingBackgroundBenchmarkScreen() {
                     }
                     TextButton(onClick = { visible = !visible }, colors = buttonColors) {
                         Text(if (visible) "隐藏背景" else "显示背景")
-                    }
-                }
-                Row {
-                    TextButton(onClick = { coverEnabled = !coverEnabled }, colors = buttonColors) {
-                        Text(if (coverEnabled) "关闭封面" else "开启封面")
-                    }
-                    TextButton(onClick = { dynamicEnabled = !dynamicEnabled }, colors = buttonColors) {
-                        Text(if (dynamicEnabled) "关闭动态流光" else "开启动态流光")
                     }
                 }
                 TextButton(

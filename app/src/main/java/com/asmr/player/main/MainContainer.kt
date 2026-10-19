@@ -80,7 +80,7 @@ import com.asmr.player.ui.player.NowPlayingMotionLayout
 import com.asmr.player.ui.player.NowPlayingMotionSpec
 import com.asmr.player.ui.player.NowPlayingScreen
 import com.asmr.player.ui.player.PlayerSharedBackdrop
-import com.asmr.player.ui.player.PlayerBackdropBaseColor
+import com.asmr.player.ui.player.playerSurfaceColors
 import com.asmr.player.ui.player.PlayerViewModel
 import com.asmr.player.ui.player.rememberCoverDragPreviewState
 import com.asmr.player.ui.player.rememberCoverMotionState
@@ -186,6 +186,7 @@ import com.asmr.player.ui.player.MiniPlayerDisplayMode
 
 import com.asmr.player.data.local.datastore.SettingsDataStore
 import com.asmr.player.data.settings.CoverPreviewMode
+import com.asmr.player.data.settings.PlayerBackgroundMode
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.NowPlayingHomeLayoutMode
 import com.asmr.player.data.settings.NowPlayingLyricsSettings
@@ -808,6 +809,7 @@ fun MainContainer(
     onShowSleepTimer: () -> Unit,
     onContentReady: () -> Unit,
     showMiniPlayerBar: Boolean,
+    playerBackgroundMode: PlayerBackgroundMode,
     coverBackgroundEnabled: Boolean,
     dynamicFlowingBackgroundEnabled: Boolean,
     coverBackgroundClarity: Float,
@@ -1102,10 +1104,12 @@ fun MainContainer(
         }
     }
     val sharedUseDragPreview = playerBackdropVisible &&
+        playerBackgroundMode == PlayerBackgroundMode.Solid &&
         coverBackgroundEnabled &&
         coverPreviewMode == CoverPreviewMode.Drag &&
         !sharedPlayerIsVideo
     val sharedUseMotionPreview = playerBackdropVisible &&
+        playerBackgroundMode == PlayerBackgroundMode.Solid &&
         coverBackgroundEnabled &&
         coverPreviewMode == CoverPreviewMode.Motion &&
         !sharedPlayerIsVideo
@@ -3108,6 +3112,9 @@ fun MainContainer(
         }
 
         if (nowPlayingVisible) {
+            val playerBackdropColors = remember(colorScheme, playerBackgroundMode, coverBackgroundEnabled) {
+                playerSurfaceColors(colorScheme, playerBackgroundMode, coverBackgroundEnabled)
+            }
             val backdropIsPlaying by remember(playerViewModel) {
                 playerViewModel.playback.map { it.isPlaying }.distinctUntilChanged()
             }.collectAsStateWithLifecycle(initialValue = false)
@@ -3127,7 +3134,7 @@ fun MainContainer(
                     Box(
                         modifier = Modifier
                             .fillMaxSize()
-                            .background(PlayerBackdropBaseColor)
+                            .background(playerBackdropColors.background)
                     )
                 }
                 Box(
@@ -3137,6 +3144,7 @@ fun MainContainer(
                 ) {
                     PlayerSharedBackdrop(
                         mediaItem = sharedPlayerItem,
+                        backgroundMode = playerBackgroundMode,
                         coverEnabled = coverBackgroundEnabled,
                         clarity = coverBackgroundClarity,
                         artworkAlignment = sharedPlayerBackdropAlignment,
@@ -3167,6 +3175,7 @@ fun MainContainer(
                         nowPlayingPlaylistPickerRequest = PlaylistPickerRequest(items = listOf(item))
                     },
                     viewModel = playerViewModel,
+                    playerBackgroundMode = playerBackgroundMode,
                     coverBackgroundEnabled = coverBackgroundEnabled,
                     dynamicFlowingBackgroundEnabled = dynamicFlowingBackgroundEnabled,
                     coverBackgroundClarity = coverBackgroundClarity,

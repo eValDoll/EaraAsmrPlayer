@@ -24,6 +24,7 @@ import com.asmr.player.data.settings.FloatingLyricsSettings
 import com.asmr.player.data.settings.LyricsPageSettings
 import com.asmr.player.data.settings.NetworkRouteSettings
 import com.asmr.player.data.settings.NowPlayingLyricsSettings
+import com.asmr.player.data.settings.PlayerBackgroundMode
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.subtitle.SubtitleModelDownloadSource
 import com.asmr.player.subtitle.SubtitleModelRepository
@@ -209,6 +210,9 @@ class SettingsViewModel @Inject constructor(
     val staticHueArgbDark: StateFlow<Int?> = settingsDataStore.staticHueArgbDark
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
+    val playerBackgroundMode: StateFlow<PlayerBackgroundMode> = settingsDataStore.playerBackgroundMode
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlayerBackgroundMode.Solid)
+
     val coverBackgroundEnabled: StateFlow<Boolean> = settingsDataStore.coverBackgroundEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
 
@@ -316,6 +320,10 @@ class SettingsViewModel @Inject constructor(
 
     fun setStaticHueArgb(argb: Int?) {
         viewModelScope.launch { settingsDataStore.setStaticHueArgb(argb) }
+    }
+
+    fun setPlayerBackgroundMode(mode: PlayerBackgroundMode) {
+        viewModelScope.launch { settingsDataStore.setPlayerBackgroundMode(mode) }
     }
 
     fun setCoverBackgroundEnabled(enabled: Boolean) {
