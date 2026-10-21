@@ -1104,12 +1104,12 @@ fun MainContainer(
         }
     }
     val sharedUseDragPreview = playerBackdropVisible &&
-        playerBackgroundMode == PlayerBackgroundMode.Solid &&
+        playerBackgroundMode == PlayerBackgroundMode.Theme &&
         coverBackgroundEnabled &&
         coverPreviewMode == CoverPreviewMode.Drag &&
         !sharedPlayerIsVideo
     val sharedUseMotionPreview = playerBackdropVisible &&
-        playerBackgroundMode == PlayerBackgroundMode.Solid &&
+        playerBackgroundMode == PlayerBackgroundMode.Theme &&
         coverBackgroundEnabled &&
         coverPreviewMode == CoverPreviewMode.Motion &&
         !sharedPlayerIsVideo

@@ -34,7 +34,7 @@ internal fun PlayerSharedBackdrop(
     val artworkModel = remember(metadata?.artworkUri) {
         sanitizeBackdropArtworkModel(metadata?.artworkUri)
     }
-    val tintBaseColor = if (backgroundMode == PlayerBackgroundMode.Solid && coverEnabled) {
+    val tintBaseColor = if (backgroundMode == PlayerBackgroundMode.Theme && coverEnabled) {
         val playerThemeColors = rememberPlayerThemeColors(
             mediaItem = mediaItem,
             colorScheme = colorScheme,

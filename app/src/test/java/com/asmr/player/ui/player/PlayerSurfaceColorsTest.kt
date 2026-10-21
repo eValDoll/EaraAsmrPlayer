@@ -1,23 +1,26 @@
 package com.asmr.player.ui.player
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import com.asmr.player.data.settings.PlayerBackgroundMode
 import com.asmr.player.ui.theme.AsmrColorScheme
 import com.asmr.player.ui.theme.ThemeMode
+import com.asmr.player.ui.theme.neutralPaletteForMode
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PlayerSurfaceColorsTest {
 
     @Test
-    fun solidWithoutCover_usesBlueAndRedThemePrimaryInEveryGlobalMode() {
+    fun themeWithoutCover_usesBlueAndRedThemePrimaryInEveryGlobalMode() {
         ThemeMode.entries.forEach { mode ->
             primaryCases.forEach { primaryCase ->
                 val base = testColorScheme(mode, primaryCase)
 
-                val result = playerSurfaceColors(base, PlayerBackgroundMode.Solid, false)
+                val result = playerSurfaceColors(base, PlayerBackgroundMode.Theme, false)
 
                 assertEquals("${primaryCase.name} in $mode", base.primary, result.background)
             }
@@ -25,12 +28,12 @@ class PlayerSurfaceColorsTest {
     }
 
     @Test
-    fun solidWithoutCover_keepsTextReadableAndLocalModeFollowsPrimarySurface() {
+    fun themeWithoutCover_keepsTextReadableAndLocalModeFollowsPrimarySurface() {
         ThemeMode.entries.forEach { mode ->
             primaryCases.forEach { primaryCase ->
                 val base = testColorScheme(mode, primaryCase)
 
-                val result = playerSurfaceColors(base, PlayerBackgroundMode.Solid, false)
+                val result = playerSurfaceColors(base, PlayerBackgroundMode.Theme, false)
 
                 val context = "${primaryCase.name} in $mode"
                 assertEquals(context, primaryCase.foreground, result.onSurface)
@@ -43,14 +46,75 @@ class PlayerSurfaceColorsTest {
     }
 
     @Test
-    fun solidWithCover_preservesExistingThemeColors() {
+    fun themeWithCover_preservesExistingThemeColors() {
         ThemeMode.entries.forEach { mode ->
             primaryCases.forEach { primaryCase ->
                 val base = testColorScheme(mode, primaryCase)
 
-                val result = playerSurfaceColors(base, PlayerBackgroundMode.Solid, true)
+                val result = playerSurfaceColors(base, PlayerBackgroundMode.Theme, true)
 
                 assertEquals("${primaryCase.name} in $mode", base, result)
+            }
+        }
+    }
+
+    @Test
+    fun solid_followsGlobalModeWithoutPureWhiteOrBlackRegardlessOfThemeHueAndCover() {
+        ThemeMode.entries.forEach { mode ->
+            val neutral = neutralPaletteForMode(mode)
+            val expectedBackground = when (mode) {
+                ThemeMode.Light -> Color(0xFFDEE0DE)
+                ThemeMode.Dark -> Color(0xFF282A2C)
+                ThemeMode.SoftDark -> Color(0xFF303337)
+            }
+            primaryCases.forEach { primaryCase ->
+                val base = testColorScheme(mode, primaryCase)
+                val withoutCover = playerSurfaceColors(base, PlayerBackgroundMode.Solid, false)
+                val withCover = playerSurfaceColors(base, PlayerBackgroundMode.Solid, true)
+
+                val context = "${primaryCase.name} in $mode"
+                assertEquals(context, withoutCover, withCover)
+                assertEquals(context, expectedBackground, withoutCover.background)
+                assertTrue(
+                    context,
+                    if (mode.isDark) {
+                        withoutCover.background.luminance() > neutral.background.luminance()
+                    } else {
+                        withoutCover.background.luminance() < neutral.background.luminance()
+                    }
+                )
+                assertNotEquals(context, Color.White, withoutCover.background)
+                assertNotEquals(context, Color.Black, withoutCover.background)
+                assertEquals(context, mode, withoutCover.mode)
+                assertEquals(context, mode.isDark, withoutCover.isDark)
+                assertEquals(context, mode.isDark, withoutCover.background.luminance() < 0.5f)
+            }
+        }
+    }
+
+    @Test
+    fun solid_usesReadableNeutralTextAndSurfacesWhilePreservingThemeAccents() {
+        ThemeMode.entries.forEach { mode ->
+            val neutral = neutralPaletteForMode(mode)
+            primaryCases.forEach { primaryCase ->
+                val base = testColorScheme(mode, primaryCase)
+                val result = playerSurfaceColors(base, PlayerBackgroundMode.Solid, true)
+
+                val context = "${primaryCase.name} in $mode"
+                assertEquals(context, neutral.onBackground, result.onBackground)
+                assertEquals(context, neutral.surface, result.surface)
+                assertEquals(context, neutral.onSurface, result.onSurface)
+                assertEquals(context, neutral.surfaceVariant, result.surfaceVariant)
+                assertEquals(context, neutral.onSurfaceVariant, result.onSurfaceVariant)
+                assertEquals(context, neutral.textPrimary, result.textPrimary)
+                assertEquals(context, neutral.textSecondary, result.textSecondary)
+                assertEquals(context, neutral.textTertiary, result.textTertiary)
+                assertTrue(context, contrastRatio(result.textPrimary, result.background) >= 4.5f)
+                assertTrue(context, contrastRatio(result.textSecondary, result.background) >= 4.5f)
+                assertEquals(context, base.primary, result.primary)
+                assertEquals(context, base.onPrimary, result.onPrimary)
+                assertEquals(context, base.accent, result.accent)
+                assertEquals(context, base.danger, result.danger)
             }
         }
     }
@@ -76,7 +140,7 @@ class PlayerSurfaceColorsTest {
     }
 
     private fun contrastRatio(foreground: Color, background: Color): Float {
-        val foregroundLuminance = foreground.luminance()
+        val foregroundLuminance = foreground.compositeOver(background).luminance()
         val backgroundLuminance = background.luminance()
         return (maxOf(foregroundLuminance, backgroundLuminance) + 0.05f) /
             (minOf(foregroundLuminance, backgroundLuminance) + 0.05f)

@@ -13,7 +13,25 @@ internal fun playerSurfaceColors(
     backgroundMode: PlayerBackgroundMode,
     coverEnabled: Boolean
 ): AsmrColorScheme {
-    if (backgroundMode == PlayerBackgroundMode.Solid && coverEnabled) return base
+    if (backgroundMode == PlayerBackgroundMode.Solid) {
+        val neutral = neutralPaletteForMode(base.mode)
+        return base.copy(
+            background = when (base.mode) {
+                ThemeMode.Light -> Color(0xFFDEE0DE)
+                ThemeMode.Dark -> Color(0xFF282A2C)
+                ThemeMode.SoftDark -> Color(0xFF303337)
+            },
+            onBackground = neutral.onBackground,
+            surface = neutral.surface,
+            onSurface = neutral.onSurface,
+            surfaceVariant = neutral.surfaceVariant,
+            onSurfaceVariant = neutral.onSurfaceVariant,
+            textPrimary = neutral.textPrimary,
+            textSecondary = neutral.textSecondary,
+            textTertiary = neutral.textTertiary
+        )
+    }
+    if (backgroundMode == PlayerBackgroundMode.Theme && coverEnabled) return base
 
     val flowing = backgroundMode == PlayerBackgroundMode.Flowing
     val neutral = neutralPaletteForMode(ThemeMode.Dark)

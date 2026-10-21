@@ -30,10 +30,11 @@ fun CoverArtworkBackground(
     tintBaseColor: Color = overlayBaseColor,
     isDark: Boolean
 ) {
-    if (backgroundMode == PlayerBackgroundMode.Flowing || !coverEnabled) {
+    if (backgroundMode != PlayerBackgroundMode.Theme || !coverEnabled) {
         Box(Modifier.fillMaxSize().background(overlayBaseColor))
     }
-    if (backgroundMode == PlayerBackgroundMode.Solid) {
+    if (backgroundMode == PlayerBackgroundMode.Solid) return
+    if (backgroundMode == PlayerBackgroundMode.Theme) {
         StaticArtworkBackground(
             artworkModel = artworkModel,
             enabled = coverEnabled,
