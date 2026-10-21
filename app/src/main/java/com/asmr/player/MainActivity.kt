@@ -162,7 +162,7 @@ class MainActivity : ComponentActivity() {
                 staticHueArgbDark = themeBootstrap.staticHueArgbDark
             )
             val playerBackgroundMode by settingsDataStore.playerBackgroundMode
-                .collectAsStateWithLifecycle(initialValue = PlayerBackgroundMode.Solid)
+                .collectAsStateWithLifecycle(initialValue = PlayerBackgroundMode.Theme)
             val coverBackgroundEnabled by settingsDataStore.coverBackgroundEnabled.collectAsStateWithLifecycle(initialValue = true)
             val dynamicFlowingBackgroundEnabled by settingsDataStore.dynamicFlowingBackgroundEnabled
                 .collectAsStateWithLifecycle(initialValue = true)

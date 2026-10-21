@@ -211,7 +211,7 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
 
     val playerBackgroundMode: StateFlow<PlayerBackgroundMode> = settingsDataStore.playerBackgroundMode
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlayerBackgroundMode.Solid)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlayerBackgroundMode.Theme)
 
     val coverBackgroundEnabled: StateFlow<Boolean> = settingsDataStore.coverBackgroundEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)

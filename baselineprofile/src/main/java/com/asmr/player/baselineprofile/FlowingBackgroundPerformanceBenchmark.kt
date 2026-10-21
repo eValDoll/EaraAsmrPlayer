@@ -17,6 +17,7 @@ import androidx.test.uiautomator.Until
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
+import java.io.ByteArrayOutputStream
 
 /** 显式启动无数据准备的内存场景；不清数据、不强停用户应用、不操作真实播放。 */
 @RunWith(AndroidJUnit4::class)
@@ -29,8 +30,8 @@ class FlowingBackgroundPerformanceBenchmark {
 
     @Test fun lightSteadyFlow() = measure(light = true) { SystemClock.sleep(8_000) }
 
-    @Test fun solidArtworkAndClarityTransitions() = measure {
-        clickControl("纯色背景")
+    @Test fun themeArtworkAndClarityTransitions() = measure {
+        clickControl("主题色背景")
         repeat(2) {
             for (opacity in listOf(0, 50, 100)) {
                 clickControl("透明度 $opacity%")
@@ -47,10 +48,29 @@ class FlowingBackgroundPerformanceBenchmark {
 
     @Test fun backgroundModeTransitions() = measure {
         repeat(3) {
-            clickControl("纯色背景")
+            clickControl("主题色背景")
             clickControl("透明度 100%")
             SystemClock.sleep(800)
+            clickControl("纯色背景")
+            SystemClock.sleep(800)
             clickControl("流光背景")
+            SystemClock.sleep(800)
+        }
+    }
+
+    @Test fun solidThemeAndCoverChanges() = measure {
+        clickControl("纯色背景")
+        check(device.wait(Until.gone(By.text("关闭动态流光")), 5_000)) {
+            "纯色背景未就绪：${windowHierarchy()}"
+        }
+        repeat(3) {
+            clickControl("浅色主题", expectedLabel = "深色主题")
+            SystemClock.sleep(800)
+            clickControl("切换封面")
+            SystemClock.sleep(800)
+            clickControl("深色主题", expectedLabel = "浅色主题")
+            SystemClock.sleep(800)
+            clickControl("切换封面")
             SystemClock.sleep(800)
         }
     }
@@ -142,10 +162,22 @@ class FlowingBackgroundPerformanceBenchmark {
         }
     }
 
-    private fun MacrobenchmarkScope.clickControl(label: String) {
+    private fun MacrobenchmarkScope.clickControl(label: String, expectedLabel: String? = null) {
         checkNotNull(device.wait(Until.findObject(By.text(label)), 5_000)) {
-            "未找到流光基准控件：$label"
+            "未找到流光基准控件：$label；${windowHierarchy()}"
         }.click()
+        if (expectedLabel != null) {
+            check(device.wait(Until.hasObject(By.text(expectedLabel)), 5_000)) {
+                "基准操作未完成：$label → $expectedLabel；${windowHierarchy()}"
+            }
+        }
+    }
+
+    private fun MacrobenchmarkScope.windowHierarchy(): String {
+        return ByteArrayOutputStream().use { output ->
+            device.dumpWindowHierarchy(output)
+            output.toString(Charsets.UTF_8.name())
+        }
     }
 
     private fun MacrobenchmarkScope.waitForCoverTheme(coverIndex: Int) {

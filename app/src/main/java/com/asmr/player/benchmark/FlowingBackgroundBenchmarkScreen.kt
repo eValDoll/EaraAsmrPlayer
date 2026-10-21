@@ -138,11 +138,15 @@ internal fun FlowingBackgroundBenchmarkScreen() {
                                 contentColor = if (backgroundMode == value) colors.primaryStrong else colors.textSecondary
                             )
                         ) {
-                            Text(if (value == PlayerBackgroundMode.Solid) "纯色背景" else "流光背景")
+                            Text(when (value) {
+                                PlayerBackgroundMode.Theme -> "主题色背景"
+                                PlayerBackgroundMode.Solid -> "纯色背景"
+                                PlayerBackgroundMode.Flowing -> "流光背景"
+                            })
                         }
                     }
                 }
-                if (backgroundMode == PlayerBackgroundMode.Solid) {
+                if (backgroundMode == PlayerBackgroundMode.Theme) {
                     Row {
                         for (value in listOf(0f, 0.5f, 1f)) {
                             TextButton(
@@ -158,7 +162,7 @@ internal fun FlowingBackgroundBenchmarkScreen() {
                     TextButton(onClick = { coverEnabled = !coverEnabled }, colors = buttonColors) {
                         Text(if (coverEnabled) "关闭封面" else "开启封面")
                     }
-                } else {
+                } else if (backgroundMode == PlayerBackgroundMode.Flowing) {
                     TextButton(onClick = { dynamicEnabled = !dynamicEnabled }, colors = buttonColors) {
                         Text(if (dynamicEnabled) "关闭动态流光" else "开启动态流光")
                     }

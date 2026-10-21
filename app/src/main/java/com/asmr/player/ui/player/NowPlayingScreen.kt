@@ -1169,15 +1169,17 @@ internal fun NowPlayingScreen(
     val tagViewModel: NowPlayingTagViewModel = hiltViewModel()
     val tagDialog by tagViewModel.dialogState.collectAsStateWithLifecycle()
     val availableTags by tagViewModel.availableTags.collectAsStateWithLifecycle()
-    val playerCoverBackgroundEnabled = playerBackgroundMode == PlayerBackgroundMode.Solid && coverBackgroundEnabled
+    val playerCoverBackgroundEnabled = playerBackgroundMode == PlayerBackgroundMode.Theme && coverBackgroundEnabled
     val playerArtworkBackdropEnabled = playerCoverBackgroundEnabled && !isVideo
-    val playerThemeColors = rememberPlayerThemeColors(
-        mediaItem = item,
-        colorScheme = colorScheme,
-        coverBackgroundEnabled = playerCoverBackgroundEnabled,
-        artworkBackdropEnabled = playerArtworkBackdropEnabled
-    )
-    val accentColor = playerThemeColors.accentColor
+    val playerThemeColors = if (playerCoverBackgroundEnabled) {
+        rememberPlayerThemeColors(
+            mediaItem = item,
+            colorScheme = colorScheme,
+            coverBackgroundEnabled = true,
+            artworkBackdropEnabled = playerArtworkBackdropEnabled
+        )
+    } else null
+    val accentColor = playerThemeColors?.accentColor ?: colorScheme.primary
     val playerPageAccentColor = playerContentColors.onSurface
     val lyricsPageColors = rememberLyricReadableColors(
         accentColor = playerContentColors.onSurface,
@@ -1868,7 +1870,7 @@ internal fun NowPlayingScreen(
                                 onOpenLyrics = showLyricsSurface,
                                 edgeBlendEnabled = false,
                                 edgeBlendColor = if (playerCoverBackgroundEnabled) {
-                                    playerThemeColors.backdropTintColor
+                                    playerThemeColors?.backdropTintColor ?: playerContentColors.background
                                 } else playerContentColors.background,
                                 videoBackdropColor = videoBackdropColor,
                                 artworkAlignment = coverPreviewAlignment,

@@ -5,15 +5,25 @@ import org.junit.Test
 
 class PlayerBackgroundModeTest {
     @Test
-    fun fromStorageValue_defaultsToSolid() {
-        assertEquals(PlayerBackgroundMode.Solid, PlayerBackgroundMode.fromStorageValue(null))
-        assertEquals(PlayerBackgroundMode.Solid, PlayerBackgroundMode.fromStorageValue(""))
-        assertEquals(PlayerBackgroundMode.Solid, PlayerBackgroundMode.fromStorageValue("unknown"))
+    fun fromStorageValue_defaultsToTheme() {
+        assertEquals(PlayerBackgroundMode.Theme, PlayerBackgroundMode.fromStorageValue(null))
+        assertEquals(PlayerBackgroundMode.Theme, PlayerBackgroundMode.fromStorageValue(""))
+        assertEquals(PlayerBackgroundMode.Theme, PlayerBackgroundMode.fromStorageValue("unknown"))
     }
 
     @Test
-    fun fromStorageValue_readsPersistedModeValues() {
-        assertEquals(PlayerBackgroundMode.Solid, PlayerBackgroundMode.fromStorageValue("solid"))
+    fun fromStorageValue_preservesExistingThemeAndFlowingPreferences() {
+        assertEquals(PlayerBackgroundMode.Theme, PlayerBackgroundMode.fromStorageValue("solid"))
         assertEquals(PlayerBackgroundMode.Flowing, PlayerBackgroundMode.fromStorageValue("flowing"))
+    }
+
+    @Test
+    fun storageValues_keepNeutralSeparateAndRoundTripAllModes() {
+        assertEquals("solid", PlayerBackgroundMode.Theme.storageValue)
+        assertEquals("neutral", PlayerBackgroundMode.Solid.storageValue)
+        assertEquals(PlayerBackgroundMode.Solid, PlayerBackgroundMode.fromStorageValue("neutral"))
+        PlayerBackgroundMode.entries.forEach { mode ->
+            assertEquals(mode, PlayerBackgroundMode.fromStorageValue(mode.storageValue))
+        }
     }
 }

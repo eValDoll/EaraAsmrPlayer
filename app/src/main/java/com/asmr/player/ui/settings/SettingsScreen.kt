@@ -704,17 +704,27 @@ fun SettingsScreen(
                             onCheckedChange = viewModel::setDynamicPlayerHueEnabled
                         )
 
-                        Row(
+                        Column(
                             modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text("播放页/歌词页背景模式", style = MaterialTheme.typography.bodyMedium)
-                            Spacer(modifier = Modifier.weight(1f))
-                            SingleChoiceSegmentedButtonRow {
+                            SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                                SegmentedButton(
+                                    selected = playerBackgroundMode == PlayerBackgroundMode.Theme,
+                                    onClick = { viewModel.setPlayerBackgroundMode(PlayerBackgroundMode.Theme) },
+                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 3),
+                                    colors = segmentedButtonColors,
+                                    icon = {},
+                                    label = { Text("主题色") }
+                                )
                                 SegmentedButton(
                                     selected = playerBackgroundMode == PlayerBackgroundMode.Solid,
-                                    onClick = { viewModel.setPlayerBackgroundMode(PlayerBackgroundMode.Solid) },
-                                    shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                                    onClick = {
+                                        if (activeTipKey == "cover_preview_mode") activeTipKey = null
+                                        viewModel.setPlayerBackgroundMode(PlayerBackgroundMode.Solid)
+                                    },
+                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 3),
                                     colors = segmentedButtonColors,
                                     icon = {},
                                     label = { Text("纯色") }
@@ -725,7 +735,7 @@ fun SettingsScreen(
                                         if (activeTipKey == "cover_preview_mode") activeTipKey = null
                                         viewModel.setPlayerBackgroundMode(PlayerBackgroundMode.Flowing)
                                     },
-                                    shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                                    shape = SegmentedButtonDefaults.itemShape(index = 2, count = 3),
                                     colors = segmentedButtonColors,
                                     icon = {},
                                     label = { Text("流光") }
@@ -738,7 +748,7 @@ fun SettingsScreen(
                                 checked = dynamicFlowingBackgroundEnabled,
                                 onCheckedChange = viewModel::setDynamicFlowingBackgroundEnabled
                             )
-                        } else {
+                        } else if (playerBackgroundMode == PlayerBackgroundMode.Theme) {
                             SettingsToggleRow(
                                 text = "播放页/歌词页封面背景",
                                 checked = coverBackgroundEnabled,
