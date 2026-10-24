@@ -23,6 +23,8 @@ data class SubtitleTaskWithItems(
     val items: List<SubtitleTaskItemEntity>
 )
 
+data class SubtitleTrackDisplayTitle(val id: Long, val displayTitle: String)
+
 @Dao
 interface SubtitleTaskDao {
     @Transaction
@@ -52,6 +54,9 @@ interface SubtitleTaskDao {
 
     @Query("SELECT DISTINCT trackId FROM subtitle_task_items")
     fun observeTaskTrackIds(): Flow<List<Long>>
+
+    @Query("SELECT id, displayTitle FROM tracks WHERE id IN (:trackIds)")
+    fun observeTrackDisplayTitles(trackIds: List<Long>): Flow<List<SubtitleTrackDisplayTitle>>
 
     @Query(
         "SELECT * FROM subtitle_task_items WHERE state = 'QUEUED_TRANSCRIPTION' " +

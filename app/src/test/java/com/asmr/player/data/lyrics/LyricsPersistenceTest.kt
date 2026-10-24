@@ -11,6 +11,8 @@ import com.asmr.player.data.local.db.entities.AlbumEntity
 import com.asmr.player.data.local.db.entities.SubtitleEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.subtitle.GeneratedSubtitleFileExporter
+import com.asmr.player.playback.MediaItemFactory
+import com.asmr.player.playback.withExactTrackTitle
 import com.asmr.player.util.SubtitleParser
 import java.io.File
 import kotlinx.coroutines.Dispatchers
@@ -80,6 +82,47 @@ class LyricsPersistenceTest {
             assertTrue(updates.next().lyrics.isEmpty())
         } finally {
             job.cancelAndJoin()
+        }
+    }
+
+    @Test
+    fun observingCurrentAudioUpdatesExactTrackTitleAfterTranslationAndReversion() = runBlocking {
+        database.trackDao().insertSubtitles(listOf(caption("保留字幕")))
+        val updates = Channel<LyricsResult>(Channel.UNLIMITED)
+        val job = launch(Dispatchers.Default) { loader.observe(item).collect { updates.send(it) } }
+        try {
+            val initial = updates.next()
+            assertEquals("音轨", initial.exactTrackTitle)
+
+            database.trackDao().updateTrackDisplayTitle(trackId, "翻译后的音轨")
+            val translated = updates.next()
+            assertEquals("翻译后的音轨", translated.exactTrackTitle)
+            assertEquals(initial.lyrics, translated.lyrics)
+
+            database.trackDao().updateTrackDisplayTitle(trackId, "")
+            val restored = updates.next()
+            assertEquals("音轨", restored.exactTrackTitle)
+            assertEquals(initial.lyrics, restored.lyrics)
+        } finally {
+            job.cancelAndJoin()
+        }
+    }
+
+    @Test
+    fun unmatchedRemoteAndChapterReferencesKeepTheirQueueTitlesDespiteTrackIdFallback() = runBlocking {
+        database.trackDao().insertSubtitles(listOf(caption("保留字幕")))
+        database.trackDao().updateTrackDisplayTitle(trackId, "本地翻译标题")
+        val streamUrl = "https://example.test/audio.mp3"
+        listOf(streamUrl, "$streamUrl#eara-chapter=1000,4000&file=01.mp3").forEach { mediaId ->
+            val queued = MediaItemFactory.fromDetails(
+                mediaId = mediaId, uri = streamUrl, title = "在线播放标题", trackId = trackId,
+            )
+
+            val result = loader.load(queued)
+
+            assertEquals("本地翻译标题", result.title)
+            assertNull(result.exactTrackTitle)
+            assertSame(queued, queued.withExactTrackTitle(result.exactTrackTitle))
         }
     }
 

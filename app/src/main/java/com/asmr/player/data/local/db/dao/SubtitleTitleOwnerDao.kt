@@ -8,8 +8,8 @@ import com.asmr.player.data.local.db.entities.SubtitleTitleOwnerEntity
 
 @Dao
 interface SubtitleTitleOwnerDao {
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsertAll(owners: List<SubtitleTitleOwnerEntity>)
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertMissing(owners: List<SubtitleTitleOwnerEntity>)
 
     @Query("SELECT * FROM subtitle_title_owners WHERE taskId = :taskId")
     suspend fun getByTask(taskId: String): List<SubtitleTitleOwnerEntity>
@@ -23,6 +23,9 @@ interface SubtitleTitleOwnerDao {
     )
     suspend fun updateDisplayTitle(taskId: String, kind: String, targetId: Long, displayTitle: String)
 
-    @Query("DELETE FROM subtitle_title_owners WHERE taskId = :taskId AND displayTitle = ''")
-    suspend fun deletePendingForTask(taskId: String)
+    @Query(
+        "DELETE FROM subtitle_title_owners WHERE taskId = :taskId AND kind = :kind " +
+            "AND targetId IN (:targetIds) AND displayTitle = ''"
+    )
+    suspend fun deletePendingOwners(taskId: String, kind: String, targetIds: List<Long>)
 }

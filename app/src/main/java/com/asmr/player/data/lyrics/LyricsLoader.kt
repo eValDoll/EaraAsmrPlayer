@@ -48,7 +48,8 @@ import javax.inject.Singleton
 
 data class LyricsResult(
     val title: String,
-    val lyrics: List<SubtitleEntry>
+    val lyrics: List<SubtitleEntry>,
+    val exactTrackTitle: String? = null
 )
 
 @Singleton
@@ -101,15 +102,16 @@ class LyricsLoader @Inject constructor(
         val trackById = target.trackId.takeIf { it > 0L }?.let { id -> trackDao.getTrackByIdOnce(id) }
         val track = trackByPath ?: trackById
         val title = track?.titleForDisplay?.takeIf { it.isNotBlank() } ?: fallbackTitle.ifBlank { target.mediaId }
+        val exactTrackTitle = trackByPath?.takeIf { it.path == target.mediaId }?.titleForDisplay
 
         if (trackDao.isSubtitleAutoImportBlocked(track?.path ?: target.mediaId)) {
             // 删除后不自动加载旧文件；主动重扫、选择字幕或重新生成仍可恢复。
-            return subtitleResult(title, track?.let { trackDao.getSubtitlesForTrack(it.id) }.orEmpty())
+            return subtitleResult(title, track?.let { trackDao.getSubtitlesForTrack(it.id) }.orEmpty(), exactTrackTitle)
         }
 
         val manualLyrics = loadManualLyrics(target, cache)
         if (manualLyrics.isNotEmpty()) {
-            return LyricsResult(title = title, lyrics = manualLyrics)
+            return LyricsResult(title = title, lyrics = manualLyrics, exactTrackTitle = exactTrackTitle)
         }
 
         if (track == null) {
@@ -123,7 +125,7 @@ class LyricsLoader @Inject constructor(
                 cache?.embedded = track.path to it
             }
         if (embedded.isNotEmpty()) {
-            return LyricsResult(title = title, lyrics = embedded)
+            return LyricsResult(title = title, lyrics = embedded, exactTrackTitle = exactTrackTitle)
         }
 
         var subs = trackDao.getSubtitlesForTrack(track.id)
@@ -147,7 +149,7 @@ class LyricsLoader @Inject constructor(
             }
         }
 
-        return subtitleResult(title, subs)
+        return subtitleResult(title, subs, exactTrackTitle)
     }
 
     suspend fun fetchTextForPreview(url: String): String? {
@@ -261,10 +263,11 @@ class LyricsLoader @Inject constructor(
         }
     }
 
-    private fun subtitleResult(title: String, subtitles: List<SubtitleEntity>): LyricsResult = LyricsResult(
+    private fun subtitleResult(title: String, subtitles: List<SubtitleEntity>, exactTrackTitle: String?): LyricsResult = LyricsResult(
         title = title,
         lyrics = normalizeAndDistinct(subtitles).sortedBy { it.startMs }
-            .map { SubtitleEntry(it.startMs, it.endMs, it.text) }
+            .map { SubtitleEntry(it.startMs, it.endMs, it.text) },
+        exactTrackTitle = exactTrackTitle
     )
 
     private fun normalizeAndDistinct(subs: List<SubtitleEntity>): List<SubtitleEntity> {
