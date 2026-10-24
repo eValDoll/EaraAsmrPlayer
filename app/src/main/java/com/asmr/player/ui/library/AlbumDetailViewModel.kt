@@ -45,6 +45,8 @@ import com.asmr.player.data.local.db.entities.TrackEntity
 import com.asmr.player.data.local.db.entities.TrackTagEntity
 import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.data.local.library.deleteLibraryAlbum
+import com.asmr.player.data.local.library.LocalAlbumWorkBindingResult
+import com.asmr.player.data.local.library.bindLocalAlbumWorkNumber
 import com.asmr.player.data.lyrics.LyricsLoader
 import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.ONLINE_DIRECTORY_REQUEST_TIMEOUT_MS
@@ -68,7 +70,6 @@ import com.asmr.player.data.remote.dlsite.DlsitePlayWorkClient
 import com.asmr.player.data.remote.dlsite.DlsiteProductInfoClient
 import com.asmr.player.data.remote.dlsite.descrambleDlsitePlayBitmap
 import com.asmr.player.data.remote.dlsite.parseDlsitePlayImageSeed
-import com.asmr.player.data.remote.dlsite.resolveCloudSyncWorkId
 import com.asmr.player.data.remote.dlsite.resolveCloudSyncRjCode
 import com.asmr.player.data.remote.dlsite.resolveSelectedDlsiteCloudSync
 import com.asmr.player.data.remote.download.DownloadPreparationCoordinator
@@ -994,17 +995,30 @@ class AlbumDetailViewModel @Inject constructor(
                 messageManager.showInfo("请先完成或取消本地文件任务，再同步")
                 return@launch
             }
-            _uiState.value = AlbumDetailUiState.Loading
             try {
-                val entity = withContext(Dispatchers.IO) { albumDao.getAlbumById(local.id) } ?: run {
-                    messageManager.showError("专辑不存在")
-                    loadAlbum(local.id, normalized, force = true)
-                    return@launch
+                val binding = withContext(Dispatchers.IO) {
+                    bindLocalAlbumWorkNumber(database, local.id, normalized)
                 }
+                val bound = when (binding) {
+                    is LocalAlbumWorkBindingResult.Bound -> binding
+                    LocalAlbumWorkBindingResult.Conflict -> {
+                        messageManager.showError("本地库已存在 $normalized")
+                        return@launch
+                    }
+                    LocalAlbumWorkBindingResult.Missing -> {
+                        messageManager.showError("专辑不存在")
+                        return@launch
+                    }
+                }
+                val entity = bound.album
 
-                val updatedWorkId = resolveCloudSyncWorkId(entity.workId, normalized)
+                AlbumCoverHintStore.invalidateAlbum(
+                    local.id,
+                    listOf(bound.previous.rjCode, bound.previous.workId, normalized)
+                )
+                _uiState.value = AlbumDetailUiState.Loading
                 withContext(Dispatchers.IO) {
-                    albumDao.updateAlbum(entity.copy(workId = updatedWorkId, rjCode = normalized))
+                    albumTagRepository.upsertAlbumFtsIndex(entity.id, entity)
                 }
 
                 val result = withContext(Dispatchers.IO) {
@@ -1012,19 +1026,29 @@ class AlbumDetailViewModel @Inject constructor(
                 }
                 if (result is DlsiteCloudSyncResolveResult.Success) {
                     val resolvedWorkno = applyManualCloudSyncSuccess(entity, result)
+                    refreshLocalAlbumCoverHint(local.id)
                     messageManager.showSuccess("已绑定 $resolvedWorkno 并完成云同步")
                     loadAlbum(local.id, resolvedWorkno, force = true)
                 } else {
+                    refreshLocalAlbumCoverHint(local.id)
                     messageManager.showError("同步失败：未找到专辑信息")
                     loadAlbum(local.id, normalized, force = true)
                 }
+            } catch (e: CancellationException) {
+                throw e
             } catch (e: Exception) {
+                AlbumCoverHintStore.invalidateAlbum(local.id, listOf(local.rjCode, local.workId, normalized))
                 messageManager.showError("同步失败，请稍后重试")
                 loadAlbum(local.id, normalized, force = true)
             } finally {
                 syncCoordinator.end(token)
             }
         }
+    }
+
+    private suspend fun refreshLocalAlbumCoverHint(albumId: Long) = withContext(Dispatchers.IO) {
+        val latest = albumDao.getAlbumById(albumId) ?: return@withContext
+        AlbumCoverHintStore.recordLocalAlbum(entityToDomain(latest))
     }
 
     fun toggleLocalCoverPath(pathOrUri: String) {

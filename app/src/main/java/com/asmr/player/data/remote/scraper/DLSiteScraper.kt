@@ -5,6 +5,7 @@ import android.util.Log
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.remote.auth.buildDlsiteCookieHeader
 import com.asmr.player.data.remote.NetworkHeaders
+import com.asmr.player.data.remote.dlsite.DlsiteProductInfoClient
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.util.DlsiteWorkNo
@@ -20,6 +21,7 @@ import org.jsoup.Connection
 import org.jsoup.nodes.Document
 import org.jsoup.nodes.Element
 import java.net.URI
+import java.net.URLDecoder
 import java.net.URLEncoder
 import kotlin.math.absoluteValue
 import javax.inject.Inject
@@ -35,18 +37,70 @@ private val DLSITE_WORK_URL_NUMBER_REGEX = Regex(
     RegexOption.IGNORE_CASE
 )
 
-internal fun matchesDlsiteWorkDocument(workId: String, doc: Document): Boolean {
+private data class DlsiteWorkUrlIdentity(
+    val productWorkNo: String,
+    val selectedWorkNo: String?
+)
+
+private fun parseDlsiteWorkUrlIdentity(url: String): DlsiteWorkUrlIdentity? {
+    val cleanUrl = url.trim()
+    val uri = runCatching { URI(cleanUrl) }.getOrNull()
+    val path = uri?.path ?: runCatching {
+        URI(cleanUrl.substringBefore('?').substringBefore('#')).path
+    }.getOrNull().orEmpty()
+    val productWorkNo = DLSITE_WORK_URL_NUMBER_REGEX.find(path)
+        ?.groupValues?.get(1)?.uppercase() ?: return null
+    if (uri == null) return DlsiteWorkUrlIdentity(productWorkNo, selectedWorkNo = null)
+
+    var selectedWorkNo = productWorkNo
+    var hasTranslation = false
+    for (parameter in uri.rawQuery.orEmpty().split('&')) {
+        val separator = parameter.indexOf('=')
+        val rawName = if (separator >= 0) parameter.substring(0, separator) else parameter
+        val name = runCatching { URLDecoder.decode(rawName, "UTF-8") }.getOrNull()
+            ?: return DlsiteWorkUrlIdentity(productWorkNo, selectedWorkNo = null)
+        if (name != "translation") continue
+        if (hasTranslation) return DlsiteWorkUrlIdentity(productWorkNo, selectedWorkNo = null)
+        hasTranslation = true
+        val rawValue = if (separator >= 0) parameter.substring(separator + 1) else ""
+        val value = runCatching { URLDecoder.decode(rawValue, "UTF-8") }.getOrNull().orEmpty()
+        selectedWorkNo = DlsiteWorkNo.normalizeWorkNo(value)
+        if (selectedWorkNo.isBlank()) return DlsiteWorkUrlIdentity(productWorkNo, selectedWorkNo = null)
+    }
+    return DlsiteWorkUrlIdentity(productWorkNo, selectedWorkNo)
+}
+
+internal fun dlsiteTranslationParentWorkNo(workId: String, doc: Document): String? {
+    val expectedWorkNo = DlsiteWorkNo.normalizeWorkNo(workId)
+    val identity = parseDlsiteWorkUrlIdentity(doc.location()) ?: return null
+    return identity.productWorkNo.takeIf {
+        identity.selectedWorkNo == expectedWorkNo && it != expectedWorkNo
+    }
+}
+
+internal fun matchesDlsiteWorkDocument(
+    workId: String,
+    doc: Document,
+    verifiedTranslationParentWorkNo: String? = null
+): Boolean {
     val expectedWorkno = DlsiteWorkNo.normalizeWorkNo(workId)
     if (expectedWorkno.isBlank()) return true
 
+    val locationIdentity = parseDlsiteWorkUrlIdentity(doc.location())
+    if (locationIdentity != null && locationIdentity.selectedWorkNo != expectedWorkno) return false
+
+    val verifiedParentWorkNo = verifiedTranslationParentWorkNo
+        ?.let { DlsiteWorkNo.normalizeWorkNo(it) }
+        ?.takeIf { it.isNotBlank() && it == dlsiteTranslationParentWorkNo(expectedWorkno, doc) }
+    val allowedProductWorkNos = setOfNotNull(expectedWorkno, verifiedParentWorkNo)
     val identityUrls = sequenceOf(doc.location()) +
         doc.select("link[rel=canonical][href]").asSequence().map { it.attr("href") } +
         doc.select("meta[property=og:url][content]").asSequence().map { it.attr("content") }
 
-    return identityUrls.mapNotNull { url ->
-        val path = runCatching { URI(url.trim()).path }.getOrNull().orEmpty()
-        DLSITE_WORK_URL_NUMBER_REGEX.find(path)?.groupValues?.get(1)?.uppercase()
-    }.all { it == expectedWorkno }
+    return identityUrls.mapNotNull(::parseDlsiteWorkUrlIdentity).all { identity ->
+        identity.productWorkNo in allowedProductWorkNos &&
+            (identity.selectedWorkNo == expectedWorkno || identity.selectedWorkNo == identity.productWorkNo)
+    }
 }
 
 private fun appendLocaleQuery(url: String, locale: String?): String {
@@ -199,13 +253,17 @@ internal fun parseCvNames(doc: Document): List<String> {
 
 @Singleton
 class DLSiteScraper @Inject constructor(
-    @ApplicationContext context: Context
+    @ApplicationContext context: Context,
+    private val productInfoClient: DlsiteProductInfoClient
 ) {
     private val workBaseUrl = "$DLSITE_DOMAIN${storeSegment()}/work/=/product_id/"
     private val announceBaseUrl = "$DLSITE_DOMAIN${storeSegment()}/announce/=/product_id/"
     
     private val authStore = DlsiteAuthStore(context)
     private val gson = Gson()
+    private val verifiedTranslationParents = object : LinkedHashMap<String, String>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, String>?): Boolean = size > 64
+    }
 
     private fun normalizeUrl(src: String, baseUrl: String): String {
         val trimmed = src.trim()
@@ -251,7 +309,17 @@ class DLSiteScraper @Inject constructor(
         )
         for (url in candidates) {
             val doc = runCatching { runInterruptible { connect(url, locale = locale).get() } }.getOrNull() ?: continue
-            if (doc.selectFirst("#work_name") != null && matchesDlsiteWorkDocument(clean, doc)) return doc
+            if (doc.selectFirst("#work_name") == null) continue
+            if (matchesDlsiteWorkDocument(clean, doc)) return doc
+            val parentCandidate = dlsiteTranslationParentWorkNo(clean, doc) ?: continue
+            val cachedParent = synchronized(verifiedTranslationParents) { verifiedTranslationParents[clean] }
+            val verifiedParent = cachedParent?.takeIf { it == parentCandidate }
+                ?: runCatching { productInfoClient.fetchTranslationParentWorkNo(clean) }.getOrNull()
+                    ?.takeIf { it == parentCandidate }
+                    ?.also { parent ->
+                        synchronized(verifiedTranslationParents) { verifiedTranslationParents[clean] = parent }
+                    }
+            if (matchesDlsiteWorkDocument(clean, doc, verifiedParent)) return doc
         }
         return null
     }

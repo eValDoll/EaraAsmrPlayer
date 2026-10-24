@@ -50,6 +50,7 @@ import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.data.local.library.LocalAlbumMergeService
 import com.asmr.player.data.local.library.deleteLibraryAlbum
 import com.asmr.player.data.local.library.deleteLibraryTracks
+import com.asmr.player.data.local.library.isLocalWorkNumberAvailable
 import com.asmr.player.data.remote.api.AsmrOneApi
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncResolveResult
@@ -1359,6 +1360,9 @@ class LibraryViewModel @Inject constructor(
         val details = result.details
         val updated = database.withTransaction {
             val current = albumDao.getAlbumById(entity.id) ?: return@withTransaction null
+            require(albumDao.isLocalWorkNumberAvailable(current.id, resolvedWorkno)) {
+                "本地库已存在 $resolvedWorkno"
+            }
             current.copy(
                 title = details.title.ifBlank { current.title },
                 circle = details.circle.ifBlank { current.circle },
