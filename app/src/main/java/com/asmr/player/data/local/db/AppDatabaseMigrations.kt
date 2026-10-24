@@ -641,6 +641,31 @@ object AppDatabaseMigrations {
         }
     }
 
+    val MIGRATION_36_37: Migration = object : Migration(36, 37) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                """
+                CREATE TABLE IF NOT EXISTS `playlist_playback` (
+                    `playlistId` INTEGER NOT NULL,
+                    `mediaId` TEXT NOT NULL,
+                    `positionMs` INTEGER NOT NULL,
+                    `durationMs` INTEGER NOT NULL,
+                    `isCompleted` INTEGER NOT NULL,
+                    `updatedAt` INTEGER NOT NULL,
+                    PRIMARY KEY(`playlistId`),
+                    FOREIGN KEY(`playlistId`, `mediaId`)
+                        REFERENCES `playlist_items`(`playlistId`, `mediaId`)
+                        ON UPDATE NO ACTION ON DELETE CASCADE
+                )
+                """.trimIndent()
+            )
+            db.execSQL(
+                "CREATE INDEX IF NOT EXISTS `index_playlist_playback_playlistId_mediaId` " +
+                    "ON `playlist_playback` (`playlistId`, `mediaId`)"
+            )
+        }
+    }
+
     private fun createItemChildTable(
         db: SupportSQLiteDatabase,
         table: String,

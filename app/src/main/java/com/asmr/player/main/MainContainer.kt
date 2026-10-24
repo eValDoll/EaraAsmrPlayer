@@ -129,6 +129,10 @@ import com.asmr.player.ui.common.RoundedTopSheet
 import com.asmr.player.ui.common.EaraTopBarContainer
 import com.asmr.player.ui.common.ProgressiveHeaderBlurState
 import com.asmr.player.ui.common.LocalMainHeaderPadding
+import com.asmr.player.performance.tracePrimaryPagePreloadEvent
+import com.asmr.player.ui.common.DeferredPageContentState
+import com.asmr.player.ui.common.LocalDeferredPageContent
+import com.asmr.player.ui.common.LocalPageAnimationsActive
 import com.asmr.player.ui.common.LocalProgressiveHeaderBlur
 import com.asmr.player.ui.common.progressiveHeaderContent
 import com.asmr.player.ui.common.hasProgressiveMainHeader
@@ -201,6 +205,7 @@ import com.asmr.player.ui.common.rememberCurrentAudioOutputRouteKind
 import com.asmr.player.ui.common.DismissOutsideBoundsOverlay
 import com.asmr.player.service.PlaybackService
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
@@ -229,10 +234,8 @@ private const val SecondaryPageExitDurationMs = 420
 private const val SecondaryPageTouchBlockDurationMs = 320
 private const val AlbumDetailPresentedStateKey = "album_detail_presented"
 private const val PrimaryPagerSnapThreshold = 0.16f
-private const val PrimaryPageSwitchDurationMs = 320
-private const val PrimaryPageSwitchQuietTailMs = 120L
+private const val PrimaryPageSelectionQuietWindowMs = 200L
 private val SecondaryPageSlideEasing = CubicBezierEasing(0.215f, 0.61f, 0.355f, 1f)
-private val PrimaryPageSwitchEasing = CubicBezierEasing(0.4f, 0f, 0.2f, 1f)
 private val PrimaryPageParallaxOffset = 120.dp
 private val AlbumDetailTopBarButtonShape = CircleShape
 private val AlbumDetailBackTouchPassThroughWidth = 88.dp
@@ -780,6 +783,7 @@ private fun PrimaryBottomChrome(
     BottomChrome(
         activeRoute = activeRoute,
         selectionProgresses = selectionProgresses,
+        animateSelection = !pagerState.isScrollInProgress || lockedRoute != null,
         miniPlayerVisible = miniPlayerVisible,
         miniPlayerDisplayMode = miniPlayerDisplayMode,
         miniPlayerPlayFeedbackSignal = miniPlayerPlayFeedbackSignal,
@@ -895,9 +899,10 @@ fun MainContainer(
         miniPlayerPlayFeedbackSignal += 1L
     }
     val primaryPagerRoutes = remember(bottomNavItems) { bottomNavItems.map { it.route } }
-    val primaryPagerBeyondBoundsPageCount = remember(primaryPagerRoutes) {
-        resolvePrimaryPagerBeyondBoundsPageCount(primaryPagerRoutes.size)
+    val primaryPagePreloadState = remember(primaryPagerRoutes) {
+        PrimaryPagePreloadState(primaryPagerRoutes.size)
     }
+    val initialLibraryContentReady = remember(libraryViewModel) { kotlinx.coroutines.CompletableDeferred<Unit>() }
     val initialPrimaryPage = remember(initialDestination, primaryPagerRoutes) {
         primaryPagerRoutes.indexOf(initialDestination).takeIf { it >= 0 } ?: 0
     }
@@ -1150,7 +1155,17 @@ fun MainContainer(
         label = "nowPlayingBackdropAlpha"
     )
     val currentPrimaryRouteState = rememberUpdatedState(currentPrimaryRoute)
-    val pendingPrimaryNavigationRouteState = rememberUpdatedState(pendingPrimaryNavigationRoute)
+    val primaryPagePreloadEnabled = currentPrimaryRoute != null &&
+        !albumDetailExitInProgress && !nowPlayingBackdropActive &&
+        !pendingDetailNavigation && pendingPrimaryNavigationRoute == null &&
+        !primaryPagerState.isScrollInProgress && !blockNavTouches &&
+        !settingsDetailPageVisible && !primaryPagerScrollLocked && !primaryPagePreloadState.interactionActive
+    PreloadPrimaryPages(
+        state = primaryPagePreloadState,
+        pagerState = primaryPagerState,
+        routes = primaryPagerRoutes,
+        enabled = primaryPagePreloadEnabled,
+    )
     var primaryNavigationJob by remember { mutableStateOf<Job?>(null) }
     var primaryNavigationRequestId by remember { mutableLongStateOf(0L) }
     DisposableEffect(Unit) {
@@ -1166,46 +1181,31 @@ fun MainContainer(
         val requestId = primaryNavigationRequestId
         if (targetPage >= 0 && currentPrimaryRoute != null) {
             pendingPrimaryNavigationRoute = route
-            UiFrameWorkCoordinator.markFrameCritical(
-                PrimaryPageSwitchDurationMs + PrimaryPageSwitchQuietTailMs
-            )
-            primaryNavigationJob = scope.launch {
+            UiFrameWorkCoordinator.markFrameCritical(PrimaryPageSelectionQuietWindowMs)
+            primaryNavigationJob = scope.launch(start = CoroutineStart.LAZY) {
                 var completed = false
                 try {
                     primaryPagerState.stopScroll(MutatePriority.PreventUserInput)
-                    // 相邻页已由 Pager 保留在屏外。先提交 active/data-active 状态，让它在
-                    // 可见动画前完成一次状态恢复，避免数据订阅与动画首帧争抢主线程。
-                    withFrameNanos { }
-                    val currentPage = primaryPagerState.currentPage
-                    resolvePrimaryPagerApproachPage(
-                        currentPage = currentPage,
-                        targetPage = targetPage
-                    )?.let { approachPage ->
-                        primaryPagerState.scrollToPage(approachPage)
-                    }
-                    UiFrameWorkCoordinator.markFrameCritical(
-                        PrimaryPageSwitchDurationMs + PrimaryPageSwitchQuietTailMs
+                    primaryPagerState.scrollToPage(targetPage)
+                    val currentEntry = navController.currentBackStackEntry
+                    val currentDestination = resolveCurrentPrimaryDestinationRoute(
+                        currentRoute = currentEntry?.destination?.route,
+                        playlistSystemType = currentEntry?.arguments?.getString("type"),
                     )
-                    primaryPagerState.animateScrollToPage(
-                        page = targetPage,
-                        animationSpec = tween(
-                            durationMillis = PrimaryPageSwitchDurationMs,
-                            easing = PrimaryPageSwitchEasing
-                        )
-                    )
-                    if (currentPrimaryRouteState.value != route) {
+                    if (currentDestination != route) {
                         navController.navigatePrimaryRoute(route)
                     }
                     completed = true
                 } finally {
                     if (primaryNavigationRequestId == requestId) {
                         primaryNavigationJob = null
-                        if (!completed && pendingPrimaryNavigationRouteState.value == route) {
+                        if (!completed && pendingPrimaryNavigationRoute == route) {
                             pendingPrimaryNavigationRoute = null
                         }
                     }
                 }
             }
+            primaryNavigationJob?.start()
         } else {
             primaryNavigationJob = null
             pendingPrimaryNavigationRoute = null
@@ -1399,7 +1399,7 @@ fun MainContainer(
         snapshotFlow { primaryPagerState.settledPage }
             .distinctUntilChanged()
             .collect { page ->
-                if (pendingPrimaryNavigationRouteState.value != null) return@collect
+                if (pendingPrimaryNavigationRoute != null) return@collect
                 val currentPrimary = currentPrimaryRouteState.value ?: return@collect
                 val targetRoute = primaryPagerRoutes.getOrNull(page) ?: return@collect
                 if (targetRoute != currentPrimary) {
@@ -1755,6 +1755,11 @@ fun MainContainer(
         val showPrimaryBrand = currentScreenIsPrimary
         val hasOverlayRoute = currentPrimaryRoute == null && !albumDetailExitInProgress
         val albumDetailTransitionActive = isAlbumDetailRoute || albumDetailExitInProgress
+        val primaryPageExposed by remember(albumDetailTransitionActive, albumDetailPageOffsetReader) {
+            derivedStateOf {
+                !albumDetailTransitionActive || (albumDetailPageOffsetReader?.invoke() ?: 1f) > 0.5f
+            }
+        }
         val primaryPageParallaxActive = hasOverlayRoute && !albumDetailTransitionActive
         val primaryPageParallaxOffset = animateDpAsState(
             targetValue = if (primaryPageParallaxActive) -PrimaryPageParallaxOffset else 0.dp,
@@ -2126,6 +2131,7 @@ fun MainContainer(
                                     state = primaryPagerState,
                                     modifier = Modifier
                                         .fillMaxSize()
+                                        .observePrimaryPagePreloadInteractions(primaryPagePreloadState)
                                         .padding(top = if (headerBlur == null) topContentPadding else 0.dp)
                                         .graphicsLayer {
                                             translationX = if (albumDetailTransitionActive) {
@@ -2134,7 +2140,7 @@ fun MainContainer(
                                                 primaryPageParallaxOffset.value.toPx()
                                             }
                                         },
-                                    beyondViewportPageCount = primaryPagerBeyondBoundsPageCount,
+                                    beyondViewportPageCount = primaryPagePreloadState.beyondBoundsPageCount,
                                     flingBehavior = primaryPagerFlingBehavior,
                                     userScrollEnabled = !primaryPagerScrollLocked && !hasOverlayRoute,
                                     key = { primaryPagerRoutes[it] }
@@ -2148,11 +2154,31 @@ fun MainContainer(
                                             )
                                     val primaryRouteImmediatelyActive = !hasOverlayRoute &&
                                         (primaryRouteActive || pagerRouteVisible)
-                                    // ViewModel 的 StateFlow 已经持有最新页面数据；隐藏页面无需继续
-                                    // 收集、排序和转换数据。目标页在横向手势开始时会立即恢复收集。
+                                    val pageActuallyVisible by remember(page, primaryPagerState) {
+                                        derivedStateOf {
+                                            val layout = primaryPagerState.layoutInfo
+                                            layout.visiblePagesInfo.any {
+                                                it.index == page && it.offset < layout.viewportEndOffset &&
+                                                    it.offset + layout.pageSize > layout.viewportStartOffset
+                                            }
+                                        }
+                                    }
+                                    val primaryPageContentVisible = primaryPageExposed &&
+                                        (pageActuallyVisible || primaryRouteActive || pagerRouteVisible)
+                                    val primaryRouteVisibleState = rememberUpdatedState(primaryPageContentVisible)
+                                    val deferredPageContent = remember(route) {
+                                        DeferredPageContentState(primaryRouteVisibleState, route)
+                                    }
+                                    LaunchedEffect(route, primaryPageContentVisible) {
+                                        tracePrimaryPagePreloadEvent("visible:$route:$primaryPageContentVisible")
+                                    }
+                                    val primaryRouteWarming = primaryPagePreloadEnabled &&
+                                        primaryPagePreloadState.requestedRoute == route &&
+                                        !primaryPagePreloadState.isComplete(route)
+                                    // 空闲期先让隐藏页消费首份真实数据并完成布局，再冻结订阅。
                                     // 详情页退出动画中使用已保留的主页面快照状态；等详情真正弹栈后再恢复
                                     // 数据流，避免在返回手势首帧同时启动查询、排序和列表状态转换。
-                                    val primaryRouteDataActive = primaryRouteImmediatelyActive &&
+                                    val primaryRouteDataActive = (primaryRouteImmediatelyActive || primaryRouteWarming) &&
                                         !isAlbumDetailRoute
                                     val primaryRouteDataActiveState = rememberUpdatedState(
                                         primaryRouteDataActive
@@ -2162,7 +2188,9 @@ fun MainContainer(
                                     } else 0.dp
                                     val pageHeaderBlur = if (overlayHeaderPadding > 0.dp) rememberProgressiveHeaderBlur() else null
                                     CompositionLocalProvider(
+                                        LocalDeferredPageContent provides deferredPageContent,
                                         LocalMainHeaderPadding provides overlayHeaderPadding,
+                                        LocalPageAnimationsActive provides primaryPageContentVisible,
                                         LocalProgressiveHeaderBlur provides pageHeaderBlur,
                                     ) {
                                     Box(
@@ -2181,11 +2209,15 @@ fun MainContainer(
                                         primaryContentStateHolder.SaveableStateProvider("primary_route:$route") {
                                             when (route) {
                                         Routes.Library -> {
+                                            PrimaryPagePreloadEffect(primaryPagePreloadState, route, primaryRouteWarming) {
+                                                initialLibraryContentReady.await()
+                                            }
                                             LibraryScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
                                                 isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = libraryScrollToTopSignal,
+                                                onInitialContentReady = { initialLibraryContentReady.complete(Unit) },
                                                 onAlbumClick = { album ->
                                                     AlbumCoverHintStore.recordLocalAlbum(album)
                                                     navigator.openAlbumDetail(
@@ -2214,6 +2246,12 @@ fun MainContainer(
 
                                         Routes.Search -> {
                                             val searchViewModel: SearchViewModel = hiltViewModel(activityViewModelStoreOwner)
+                                            PrimaryPagePreloadEffect(primaryPagePreloadState, route, primaryRouteWarming) {
+                                                searchViewModel.uiState.first {
+                                                    it is com.asmr.player.ui.search.SearchUiState.Success ||
+                                                        it is com.asmr.player.ui.search.SearchUiState.Error
+                                                }
+                                            }
                                             SearchScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
@@ -2271,6 +2309,11 @@ fun MainContainer(
 
                                         Routes.HotListening -> {
                                             val hotListeningViewModel: HotListeningViewModel = hiltViewModel(activityViewModelStoreOwner)
+                                            PrimaryPagePreloadEffect(primaryPagePreloadState, route, primaryRouteWarming) {
+                                                hotListeningViewModel.uiState.first {
+                                                    it !is com.asmr.player.ui.hotlistening.HotListeningUiState.Loading
+                                                }
+                                            }
                                             HotListeningScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
@@ -2303,11 +2346,23 @@ fun MainContainer(
 
                                         "playlist_system/favorites" -> {
                                             val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
+                                            val playlistDetailViewModel: com.asmr.player.ui.playlists.PlaylistDetailViewModel =
+                                                hiltViewModel(activityViewModelStoreOwner)
+                                            PrimaryPagePreloadEffect(primaryPagePreloadState, route, primaryRouteWarming) {
+                                                playlistsViewModel.awaitInitialContent()
+                                                playlistDetailViewModel.awaitInitialContent()
+                                            }
                                             SystemPlaylistScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
                                                 isDataActive = primaryRouteDataActive,
                                                 scrollToTopSignal = favoritesScrollToTopSignal,
+                                                playback = playerViewModel.playlistPlayback,
+                                                onResumeAll = { items, startItem, positionMs ->
+                                                    playerViewModel.resumePlaylistItems(items, startItem, positionMs)
+                                                    if (startItem.isVideoPlaybackItem()) openNowPlaying()
+                                                    else requestMiniPlayerPlayFeedback()
+                                                },
                                                 onPlayAll = { items, startItem ->
                                                     playerViewModel.playPlaylistItems(items, startItem)
                                                     if (startItem.isVideoPlaybackItem()) {
@@ -2316,12 +2371,16 @@ fun MainContainer(
                                                         requestMiniPlayerPlayFeedback()
                                                     }
                                                 },
-                                                viewModel = playlistsViewModel
+                                                viewModel = playlistsViewModel,
+                                                playlistDetailViewModel = playlistDetailViewModel,
                                             )
                                         }
 
                                         "playlists" -> {
                                             val playlistsViewModel: PlaylistsViewModel = hiltViewModel(activityViewModelStoreOwner)
+                                            PrimaryPagePreloadEffect(primaryPagePreloadState, route, primaryRouteWarming) {
+                                                playlistsViewModel.awaitInitialContent()
+                                            }
                                             PlaylistsScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
@@ -2337,6 +2396,9 @@ fun MainContainer(
 
                                         "groups" -> {
                                             val albumGroupsViewModel: AlbumGroupsViewModel = hiltViewModel(activityViewModelStoreOwner)
+                                            PrimaryPagePreloadEffect(primaryPagePreloadState, route, primaryRouteWarming) {
+                                                albumGroupsViewModel.awaitInitialContent()
+                                            }
                                             com.asmr.player.ui.groups.AlbumGroupsScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
@@ -2351,6 +2413,7 @@ fun MainContainer(
                                         }
 
                                         "settings" -> {
+                                            PrimaryPagePreloadEffect(primaryPagePreloadState, route, primaryRouteWarming)
                                             SettingsScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
@@ -2370,6 +2433,9 @@ fun MainContainer(
                                         "listening_calendar" -> {
                                             val listeningCalendarViewModel: com.asmr.player.ui.calendar.ListeningCalendarViewModel =
                                                 hiltViewModel(activityViewModelStoreOwner)
+                                            PrimaryPagePreloadEffect(primaryPagePreloadState, route, primaryRouteWarming) {
+                                                listeningCalendarViewModel.awaitInitialContent()
+                                            }
                                             com.asmr.player.ui.calendar.ListeningCalendarScreen(
                                                 windowSizeClass = windowSizeClass,
                                                 isActive = primaryRouteActive,
@@ -2909,6 +2975,12 @@ fun MainContainer(
                             windowSizeClass = windowSizeClass,
                             playlistId = playlistId,
                             title = playlistName,
+                            playback = playerViewModel.playlistPlayback,
+                            onResumeAll = { items, startItem, positionMs ->
+                                playerViewModel.resumePlaylistItems(items, startItem, positionMs)
+                                if (startItem.isVideoPlaybackItem()) openNowPlaying()
+                                else requestMiniPlayerPlayFeedback()
+                            },
                             onPlayAll = { items, startItem ->
                                 playerViewModel.playPlaylistItems(items, startItem)
                                 if (startItem.isVideoPlaybackItem()) {
@@ -2929,6 +3001,12 @@ fun MainContainer(
                         SecondaryPageBackground(topPadding = secondaryPageTopPadding) {
                             SystemPlaylistScreen(
                                 windowSizeClass = windowSizeClass,
+                                playback = playerViewModel.playlistPlayback,
+                                onResumeAll = { items, startItem, positionMs ->
+                                    playerViewModel.resumePlaylistItems(items, startItem, positionMs)
+                                    if (startItem.isVideoPlaybackItem()) openNowPlaying()
+                                    else requestMiniPlayerPlayFeedback()
+                                },
                                 onPlayAll = { items, startItem ->
                                     playerViewModel.playPlaylistItems(items, startItem)
                                     if (startItem.isVideoPlaybackItem()) {

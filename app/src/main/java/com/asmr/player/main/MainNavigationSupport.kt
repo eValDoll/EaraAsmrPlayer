@@ -91,14 +91,6 @@ internal fun resolvePrimaryNavVisualRoute(
     return pendingRoute?.takeIf { it in pagerRoutes } ?: activeRoute
 }
 
-internal fun resolvePrimaryPagerApproachPage(
-    currentPage: Int,
-    targetPage: Int
-): Int? {
-    if (kotlin.math.abs(targetPage - currentPage) <= 1) return null
-    return targetPage + if (targetPage > currentPage) -1 else 1
-}
-
 internal fun shouldSyncPrimaryPagerToRoute(
     targetPage: Int,
     settledPage: Int
@@ -117,7 +109,7 @@ internal fun shouldClearPendingPrimaryNavigationRoute(
 }
 
 internal fun resolvePrimaryPagerBeyondBoundsPageCount(pageCount: Int): Int {
-    return (pageCount - 1).coerceIn(0, 1)
+    return (pageCount - 1).coerceAtLeast(0)
 }
 
 internal fun resolveCurrentPrimaryDestinationRoute(

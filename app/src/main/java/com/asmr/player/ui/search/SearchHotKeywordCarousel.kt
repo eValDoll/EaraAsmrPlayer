@@ -44,7 +44,8 @@ internal fun buildSearchHotKeywordTerms(
 @Composable
 internal fun rememberSearchHotKeywordCarouselItem(
     terms: List<SearchHotKeywordTerm>,
-    showFallback: Boolean
+    showFallback: Boolean,
+    isActive: Boolean = true,
 ): SearchHotKeywordCarouselItem {
     val keywords = remember(terms) {
         terms.map { term -> term.value.trim() }
@@ -58,8 +59,8 @@ internal fun rememberSearchHotKeywordCarouselItem(
         mutableStateOf(SearchHotKeywordCarouselState(queue = keywords.shuffledAvoidingFirst()))
     }
 
-    LaunchedEffect(signature) {
-        if (keywords.size <= 1) return@LaunchedEffect
+    LaunchedEffect(signature, isActive) {
+        if (!isActive || keywords.size <= 1) return@LaunchedEffect
         while (true) {
             delay(SearchPlaceholderCarouselIntervalMs)
             carouselState = carouselState.next()

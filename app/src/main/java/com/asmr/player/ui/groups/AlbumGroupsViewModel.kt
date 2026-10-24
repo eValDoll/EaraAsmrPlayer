@@ -6,6 +6,7 @@ import com.asmr.player.data.local.db.dao.AlbumGroupStatsRow
 import com.asmr.player.data.local.db.entities.AlbumGroupEntity
 import com.asmr.player.data.repository.AlbumGroupRepository
 import com.asmr.player.data.repository.RenameAlbumGroupResult
+import com.asmr.player.ui.common.InitialContentReadiness
 import com.asmr.player.util.MessageManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -20,8 +21,15 @@ class AlbumGroupsViewModel @Inject constructor(
     private val groupRepository: AlbumGroupRepository,
     private val messageManager: MessageManager
 ) : ViewModel() {
+    private val initialContentReadiness = InitialContentReadiness()
+
     val groups: StateFlow<List<AlbumGroupStatsRow>> = groupRepository.observeGroupsWithStats()
+        .let(initialContentReadiness::track)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    suspend fun awaitInitialContent() {
+        initialContentReadiness.awaitReady()
+    }
 
     fun createGroup(name: String) {
         val trimmed = name.trim()

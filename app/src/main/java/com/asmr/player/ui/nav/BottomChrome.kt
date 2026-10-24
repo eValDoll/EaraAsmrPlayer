@@ -5,6 +5,7 @@ import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -382,6 +383,7 @@ fun BottomChrome(
     largeLayout: Boolean = false,
     modifier: Modifier = Modifier,
     navItems: List<BottomChromeNavItem> = bottomChromeNavItems(),
+    animateSelection: Boolean = false,
     miniPlayerContent: (@Composable (Modifier) -> Unit)? = null
 ) {
     BoxWithConstraints(modifier = modifier) {
@@ -480,6 +482,7 @@ fun BottomChrome(
                     navItems = navItems,
                     activeRoute = activeRoute,
                     selectionProgresses = selectionProgresses,
+                    animateSelection = animateSelection,
                     expanded = navExpanded,
                     availableWidth = expandedNavWidth,
                     targetWidth = navWidthTarget,
@@ -523,6 +526,7 @@ private fun BottomNavigationPill(
     navItems: List<BottomChromeNavItem>,
     activeRoute: String,
     selectionProgresses: Map<String, Float>,
+    animateSelection: Boolean,
     expanded: Boolean,
     availableWidth: Dp,
     targetWidth: Dp,
@@ -699,6 +703,7 @@ private fun BottomNavigationPill(
                     BottomNavItemChip(
                         item = entry.item,
                         selectedProgress = selectedProgress,
+                        animateSelection = animateSelection,
                         collapseProgress = collapseProgress,
                         metrics = metrics,
                         enabled = if (entry.isGroupToggle) {
@@ -745,6 +750,7 @@ private fun BottomNavigationPill(
 private fun BottomNavItemChip(
     item: BottomChromeNavItem,
     selectedProgress: Float,
+    animateSelection: Boolean,
     collapseProgress: Float,
     metrics: BottomChromeMetrics,
     enabled: Boolean = true,
@@ -752,7 +758,17 @@ private fun BottomNavItemChip(
     modifier: Modifier = Modifier
 ) {
     val colorScheme = AsmrTheme.colorScheme
-    val resolvedSelectedProgress = selectedProgress.coerceIn(0f, 1f)
+    val targetSelectedProgress = selectedProgress.coerceIn(0f, 1f)
+    val resolvedSelectedProgress = if (animateSelection) {
+        val progress by animateFloatAsState(
+            targetValue = targetSelectedProgress,
+            animationSpec = tween(durationMillis = 120),
+            label = "bottomNavSelection",
+        )
+        progress
+    } else {
+        targetSelectedProgress
+    }
     val activeContainer = colorScheme.primarySoft.copy(alpha = if (colorScheme.isDark) 0.52f else 0.95f)
     val contentColor = lerp(colorScheme.textSecondary, colorScheme.primaryStrong, resolvedSelectedProgress)
     val containerColor = resolveBottomNavItemContainerColor(

@@ -16,6 +16,7 @@ import com.asmr.player.data.local.db.dao.ManualLyricsSourceDao
 import com.asmr.player.data.local.db.dao.OnlineSavedResourceDao
 import com.asmr.player.data.local.db.dao.PlaylistDao
 import com.asmr.player.data.local.db.dao.PlaylistItemDao
+import com.asmr.player.data.local.db.dao.PlaylistPlaybackDao
 import com.asmr.player.data.local.db.dao.PlayStatDao
 import com.asmr.player.data.local.db.dao.TagDao
 import com.asmr.player.data.local.db.dao.TrackTagDao
@@ -40,6 +41,7 @@ import com.asmr.player.data.local.db.entities.ManualLyricsSourceEntity
 import com.asmr.player.data.local.db.entities.OnlineSavedResourceEntity
 import com.asmr.player.data.local.db.entities.PlaylistEntity
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
+import com.asmr.player.data.local.db.entities.PlaylistPlaybackEntity
 import com.asmr.player.data.local.db.entities.PlaylistTrackCrossRef
 import com.asmr.player.data.local.db.entities.SubtitleEntity
 import com.asmr.player.data.local.db.entities.SubtitleImportBlockEntity
@@ -71,6 +73,7 @@ import com.asmr.player.data.local.db.entities.TrackPlaybackProgressEntity
         TrackEntity::class,
         PlaylistEntity::class,
         PlaylistItemEntity::class,
+        PlaylistPlaybackEntity::class,
         PlaylistTrackCrossRef::class,
         AlbumGroupEntity::class,
         AlbumGroupItemEntity::class,
@@ -94,7 +97,7 @@ import com.asmr.player.data.local.db.entities.TrackPlaybackProgressEntity
         SubtitleTitleOwnerEntity::class,
         SubtitleImportBlockEntity::class
     ],
-    version = 36,
+    version = 37,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -108,6 +111,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun trackDao(): TrackDao
     abstract fun playlistDao(): PlaylistDao
     abstract fun playlistItemDao(): PlaylistItemDao
+    abstract fun playlistPlaybackDao(): PlaylistPlaybackDao
     abstract fun albumGroupDao(): AlbumGroupDao
     abstract fun albumGroupItemDao(): AlbumGroupItemDao
     abstract fun downloadDao(): DownloadDao

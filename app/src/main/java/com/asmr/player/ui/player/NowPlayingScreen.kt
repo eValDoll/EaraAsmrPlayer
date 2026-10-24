@@ -691,7 +691,7 @@ private fun ListenTogetherAudienceLine(
     state: ListenTogetherUiState,
     modifier: Modifier = Modifier,
     accentColor: Color = AsmrTheme.colorScheme.primary,
-    textColor: Color = AsmrTheme.colorScheme.textTertiary,
+    textColor: Color = playerSupportingTextColor(AsmrTheme.colorScheme.isDark),
     textShadow: Shadow? = null,
     contentAlignment: Alignment = Alignment.Center,
     pageEntranceSettled: Boolean = true
@@ -778,7 +778,7 @@ private fun LandscapePlayerIdentity(
             state = listenTogetherState,
             modifier = Modifier.fillMaxWidth(),
             accentColor = accentColor,
-            textColor = colorScheme.textTertiary,
+            textColor = playerSupportingTextColor(colorScheme.isDark),
             contentAlignment = Alignment.CenterStart,
             pageEntranceSettled = pageEntranceSettled
         )
@@ -806,7 +806,7 @@ private fun LandscapePlayerIdentity(
                 lineHeight = typography.artistInfoLineHeightSp.sp,
                 fontWeight = FontWeight.Medium
             ),
-            color = colorScheme.textSecondary,
+            color = playerSupportingTextColor(colorScheme.isDark),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis
         )
@@ -925,7 +925,7 @@ private fun ClassicPlayerIdentity(
                     fontWeight = FontWeight.Medium,
                     shadow = textShadow
                 ),
-                color = colorScheme.textSecondary,
+                color = playerSupportingTextColor(colorScheme.isDark),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
                 textAlign = TextAlign.Center
@@ -975,7 +975,7 @@ private fun ExpandedPlayerIdentityOverlay(
                 state = listenTogetherState,
                 modifier = Modifier.fillMaxWidth(),
                 accentColor = Color.White.copy(alpha = 0.68f),
-                textColor = Color.White.copy(alpha = 0.68f),
+                textColor = playerSupportingTextColor(isDark = true),
                 textShadow = overlayShadow,
                 pageEntranceSettled = pageEntranceSettled
             )
@@ -1000,7 +1000,7 @@ private fun ExpandedPlayerIdentityOverlay(
                         lineHeight = 16.sp,
                         shadow = overlayShadow
                     ),
-                    color = Color.White.copy(alpha = 0.66f),
+                    color = playerSupportingTextColor(isDark = true),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     textAlign = TextAlign.Center
@@ -1094,7 +1094,7 @@ private fun NowPlayingHomeLayoutSwipeHint(
                 fontWeight = FontWeight.SemiBold,
                 shadow = textShadow
             ),
-            color = Color.White.copy(alpha = 0.86f),
+            color = playerSupportingTextColor(isDark = true),
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
             textAlign = TextAlign.Center
@@ -2190,7 +2190,7 @@ internal fun NowPlayingScreen(
                                     state = listenTogetherUiState,
                                     modifier = Modifier.fillMaxWidth(),
                                     accentColor = playerAccentColor,
-                                    textColor = playerContentColors.textTertiary,
+                                    textColor = playerSupportingTextColor(playerContentColors.isDark),
                                     pageEntranceSettled = pageEntranceSettled
                                 )
                             }

@@ -8,6 +8,7 @@ import com.asmr.player.data.local.db.entities.PlaylistEntity
 import com.asmr.player.data.repository.PlaylistAddSummary
 import com.asmr.player.data.repository.PlaylistRepository
 import com.asmr.player.data.repository.RenamePlaylistResult
+import com.asmr.player.ui.common.InitialContentReadiness
 import com.asmr.player.util.MessageManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
@@ -22,8 +23,15 @@ class PlaylistsViewModel @Inject constructor(
     private val playlistRepository: PlaylistRepository,
     private val messageManager: MessageManager
 ) : ViewModel() {
+    private val initialContentReadiness = InitialContentReadiness()
+
     val playlists: StateFlow<List<PlaylistStatsRow>> = playlistRepository.observePlaylistsWithStats()
+        .let(initialContentReadiness::track)
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    suspend fun awaitInitialContent() {
+        initialContentReadiness.awaitReady()
+    }
 
     init {
         viewModelScope.launch {

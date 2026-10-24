@@ -91,6 +91,7 @@ fun AsmrAsyncImage(
     val crossfadeRunning = remember(normalizedModel, reloadKey) { mutableStateOf(false) }
     val resolvedFadeIn = fadeInState?.value ?: fadeIn
     val latestFadeIn by rememberUpdatedState(resolvedFadeIn)
+    val pageAnimationsActive = rememberUpdatedState(LocalPageAnimationsActive.current)
     val containerModifier = if (requestSize == null) {
         modifier.onSizeChanged { sz ->
             if (sz.width > 0 && sz.height > 0) measuredSize.value = IntSize(sz.width, sz.height)
@@ -151,7 +152,9 @@ fun AsmrAsyncImage(
             if (latestFadeIn && !shouldRetainPainter) {
                 crossfadeRunning.value = true
                 try {
-                    crossfade.animateTo(1f, tween(durationMillis = fadeInMillis))
+                    withPageAnimationClock(pageAnimationsActive) {
+                        crossfade.animateTo(1f, tween(durationMillis = fadeInMillis))
+                    }
                 } finally {
                     crossfadeRunning.value = false
                 }

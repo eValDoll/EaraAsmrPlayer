@@ -1,9 +1,7 @@
 package com.asmr.player.ui.common
 
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
@@ -35,14 +33,10 @@ private const val ShimmerSweepFraction =
 
 @Composable
 fun rememberAsmrShimmerProgress(): State<Float> {
-    val transition = rememberInfiniteTransition(label = "asmrShimmer")
-    return transition.animateFloat(
-        initialValue = 0f,
-        targetValue = 1f,
+    return rememberPageAnimationProgress(
         animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = ShimmerCycleDurationMillis, easing = LinearEasing)
-        ),
-        label = "asmrShimmerT"
+        )
     )
 }
 

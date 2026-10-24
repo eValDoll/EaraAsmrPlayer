@@ -2,6 +2,7 @@ package com.asmr.player.ui.library
 
 import com.asmr.player.ui.common.formatCvNames
 import com.asmr.player.ui.common.LocalMainHeaderPadding
+import com.asmr.player.ui.common.LocalPageAnimationsActive
 import com.asmr.player.ui.common.progressiveHeaderContent
 
 import com.asmr.player.translation.PageTranslationHost
@@ -79,13 +80,13 @@ import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -137,11 +138,10 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextOverflow
 import com.asmr.player.ui.common.AsmrAsyncImage
 import androidx.paging.LoadState
-import androidx.paging.compose.collectAsLazyPagingItems
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.ui.graphics.graphicsLayer
@@ -160,6 +160,7 @@ import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
 import com.asmr.player.ui.common.collectAsStateWhileActive
+import com.asmr.player.ui.common.collectAsLazyPagingItemsWhileActive
 import com.asmr.player.ui.common.StableWindowInsets
 import com.asmr.player.playback.MediaItemFactory
 
@@ -188,6 +189,7 @@ fun LibraryScreen(
     windowSizeClass: WindowSizeClass,
     isActive: Boolean = true,
     isDataActive: Boolean = isActive,
+    onInitialContentReady: () -> Unit = {},
     onAlbumClick: (Album) -> Unit,
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
     onOpenPlaylistPicker: (MediaItem) -> Unit = {},
@@ -202,6 +204,7 @@ fun LibraryScreen(
             windowSizeClass = windowSizeClass,
             isActive = isActive,
             isDataActive = isDataActive,
+            onInitialContentReady = onInitialContentReady,
             onAlbumClick = onAlbumClick,
             onPlayTracks = onPlayTracks,
             onOpenPlaylistPicker = onOpenPlaylistPicker,
@@ -220,6 +223,7 @@ private fun LibraryScreenContent(
     windowSizeClass: WindowSizeClass,
     isActive: Boolean = true,
     isDataActive: Boolean = isActive,
+    onInitialContentReady: () -> Unit = {},
     onAlbumClick: (Album) -> Unit,
     onPlayTracks: (Album, List<Track>, Track) -> Unit,
     onOpenPlaylistPicker: (MediaItem) -> Unit = {},
@@ -283,13 +287,22 @@ private fun LibraryScreenContent(
     val isGrid = mode == 1
     val isTrackList = mode == 2
     var lastChromeResetMode by rememberSaveable { mutableStateOf(mode) }
-    val pagedAlbums = viewModel.pagedAlbums.collectAsLazyPagingItems()
-    val pagedTrackAlbumHeaders = viewModel.pagedTrackAlbumHeaders.collectAsLazyPagingItems()
+    val pagedAlbums = viewModel.pagedAlbums.collectAsLazyPagingItemsWhileActive(isDataActive)
+    val pagedTrackAlbumHeaders = viewModel.pagedTrackAlbumHeaders.collectAsLazyPagingItemsWhileActive(isDataActive)
+    val latestOnInitialContentReady = rememberUpdatedState(onInitialContentReady)
+    LaunchedEffect(isDataActive, viewMode, pagedAlbums, pagedTrackAlbumHeaders) {
+        if (!isDataActive || viewMode == null) return@LaunchedEffect
+        snapshotFlow {
+            val refresh = if (isTrackList) pagedTrackAlbumHeaders.loadState.refresh else pagedAlbums.loadState.refresh
+            refresh !is LoadState.Loading
+        }.first { it }
+        latestOnInitialContentReady.value()
+    }
     val pagedAlbumSnapshot = pagedAlbums.itemSnapshotList
     val pagedAlbumIndices = remember(pagedAlbumSnapshot.items.size) { List(pagedAlbumSnapshot.items.size) { it } }
     val loadedTrackAlbumHeaders = pagedTrackAlbumHeaders.itemSnapshotList.items
-    val expandedAlbumTracks by (if (isTrackList) viewModel.expandedTrackAlbumTracks else flowOf(emptyMap()))
-        .collectAsStateWithLifecycle(initialValue = emptyMap())
+    val expandedAlbumTracks by viewModel.expandedTrackAlbumTracks
+        .collectAsStateWhileActive(isDataActive && isTrackList)
     val expandedAlbumIds by viewModel.expandedTrackAlbumIds.collectAsStateWhileActive(isDataActive)
     var actionAlbum by remember { mutableStateOf<Album?>(null) }
     var showAlbumActions by remember { mutableStateOf(false) }
@@ -457,8 +470,10 @@ private fun LibraryScreenContent(
                                     progress = { progress.fraction },
                                     modifier = Modifier.fillMaxWidth()
                                 )
-                            } else {
+                            } else if (LocalPageAnimationsActive.current) {
                                 LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                            } else {
+                                LinearProgressIndicator(progress = { 0f }, modifier = Modifier.fillMaxWidth())
                             }
                             Spacer(modifier = Modifier.height(10.dp))
                             Text(
@@ -600,7 +615,8 @@ private fun LibraryScreenContent(
                                                     key = "trackPagingHint:${pagingHintHeader.albumId}:$headerCount",
                                                     contentType = "trackPagingHint"
                                                 ) {
-                                                    LaunchedEffect(pagingHintHeader.albumId, headerCount, querySpec) {
+                                                    LaunchedEffect(pagingHintHeader.albumId, headerCount, querySpec, isDataActive) {
+                                                        if (!isDataActive) return@LaunchedEffect
                                                         val hintIndex = headerCount - 1
                                                         if (hintIndex in 0 until pagedTrackAlbumHeaders.itemCount) {
                                                             pagedTrackAlbumHeaders[hintIndex]
@@ -805,7 +821,8 @@ private fun LibraryScreenContent(
                                             key = { idx -> pagedAlbumSnapshot.items.getOrNull(idx)?.id?.takeIf { it > 0L } ?: idx },
                                             contentType = { "albumGridItem" },
                                         ) { idx ->
-                                            val album = pagedAlbums[idx] ?: return@staggeredItems
+                                            val album = (if (isDataActive) pagedAlbums[idx] else pagedAlbums.peek(idx))
+                                                ?: return@staggeredItems
                                             val userTags = userTagsByAlbumId[album.id].orEmpty()
                                             val mergedAlbum = remember(album, userTags) {
                                                 album.withUserTags(userTags)
@@ -879,7 +896,8 @@ private fun LibraryScreenContent(
                                             key = { idx -> pagedAlbums.itemSnapshotList.getOrNull(idx)?.id?.takeIf { it > 0L } ?: idx },
                                             contentType = { "albumListItem" }
                                         ) { idx ->
-                                            val album = pagedAlbums[idx] ?: return@items
+                                            val album = (if (isDataActive) pagedAlbums[idx] else pagedAlbums.peek(idx))
+                                                ?: return@items
                                             val userTags = userTagsByAlbumId[album.id].orEmpty()
                                             val mergedAlbum = remember(album, userTags) {
                                                 album.withUserTags(userTags)

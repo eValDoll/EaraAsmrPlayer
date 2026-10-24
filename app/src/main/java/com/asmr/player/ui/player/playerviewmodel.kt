@@ -10,6 +10,8 @@ import com.asmr.player.data.lyrics.lyricsTargetContextFromMediaItem
 import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.playback.MediaItemFactory
 import com.asmr.player.playback.PlayerConnection
+import com.asmr.player.playback.sourcePlaylistId
+import com.asmr.player.playback.withSourcePlaylist
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
 import com.asmr.player.data.local.db.dao.TrackDao
@@ -30,6 +32,7 @@ import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -41,6 +44,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withTimeoutOrNull
 import javax.inject.Inject
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
@@ -76,6 +81,12 @@ private const val ONLINE_MANUAL_LYRICS_MESSAGE = "在线音频如需替换歌词
 private const val LISTEN_TOGETHER_POLL_INTERVAL_MS = 60_000L
 private const val LISTEN_TOGETHER_MIN_POLL_INTERVAL_MS = 5_000L
 
+private data class PlaylistPlaybackTarget(
+    val playlistId: Long,
+    val mediaId: String,
+    val playWhenReady: Boolean,
+)
+
 internal fun resolveListenTogetherHeartbeatDelayMs(response: ListenTogetherPresenceResponse?): Long {
     val requestedInterval = response?.heartbeatIntervalMs
         ?.takeIf { it > 0L }
@@ -105,8 +116,24 @@ class PlayerViewModel @Inject constructor(
     private val listenTogetherRepository: ListenTogetherRepository,
     private val messageManager: MessageManager
 ) : ViewModel() {
+    private val playlistPlaybackTarget = MutableStateFlow<PlaylistPlaybackTarget?>(null)
+    private var playlistPlaybackTargetResetJob: Job? = null
+    private var playlistQueuePreparationJob: Job? = null
+    private var playbackRequestVersion = 0L
+
     val playback: StateFlow<PlaybackSnapshot> = playerConnection.snapshot
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlaybackSnapshot())
+
+    val playlistPlayback: StateFlow<PlaybackSnapshot> = combine(
+        playerConnection.snapshot,
+        playlistPlaybackTarget,
+    ) { snapshot, target ->
+        if (
+            target != null &&
+            snapshot.currentMediaItem?.mediaId == target.mediaId &&
+            snapshot.currentMediaItem.sourcePlaylistId() == target.playlistId
+        ) snapshot.copy(playWhenReady = target.playWhenReady) else snapshot
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), PlaybackSnapshot())
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val resolvedDurationMs: StateFlow<Long> = playback
@@ -371,13 +398,28 @@ class PlayerViewModel @Inject constructor(
         }
     }
 
-    fun play() = playerConnection.play()
-    fun pause() = playerConnection.pause()
+    fun play() {
+        beginPlaybackRequest()
+        playerConnection.play()
+    }
+    fun pause() {
+        beginPlaybackRequest()
+        playerConnection.pause()
+    }
     fun seekTo(positionMs: Long) = playerConnection.seekTo(positionMs)
     fun seekForward10s() = playerConnection.seekBy(10_000L)
-    fun next() = playerConnection.skipToNext()
-    fun previous() = playerConnection.skipToPrevious()
-    fun playQueueIndex(index: Int) = playerConnection.seekToQueueIndex(index)
+    fun next() {
+        beginPlaybackRequest()
+        playerConnection.skipToNext()
+    }
+    fun previous() {
+        beginPlaybackRequest()
+        playerConnection.skipToPrevious()
+    }
+    fun playQueueIndex(index: Int) {
+        beginPlaybackRequest()
+        playerConnection.seekToQueueIndex(index)
+    }
     fun removeFromQueue(index: Int) = playerConnection.removeMediaItem(index)
     fun removeAlbumFromQueue(albumId: Long, mediaIds: Set<String>) =
         playerConnection.removeMediaItemsForAlbum(albumId, mediaIds)
@@ -581,8 +623,10 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun playAlbumResume(album: Album, resumeMediaId: String?, startPositionMs: Long) {
+        val requestVersion = beginPlaybackRequest()
         viewModelScope.launch {
             val trackEntities = runCatching { trackDao.getTracksForAlbumOnce(album.id) }.getOrNull().orEmpty()
+            if (requestVersion != playbackRequestVersion) return@launch
             val allTracks = trackEntities.map {
                 Track(
                     id = it.id,
@@ -654,6 +698,7 @@ class PlayerViewModel @Inject constructor(
     }
 
     fun playTracks(album: Album, tracks: List<Track>, startTrack: Track, startPositionMs: Long) {
+        beginPlaybackRequest()
         if (playerConnection.getControllerOrNull() == null) {
             messageManager.showError("播放器未连接")
             return
@@ -669,6 +714,7 @@ class PlayerViewModel @Inject constructor(
         startTrack: Track,
         startPositionMs: Long
     ): Boolean {
+        val requestVersion = beginPlaybackRequest()
         if (playerConnection.getControllerOrNull() == null) {
             messageManager.showError("播放器未连接")
             return false
@@ -678,6 +724,7 @@ class PlayerViewModel @Inject constructor(
             val preparedIndex = tracks.indexOfFirst { it.path == startTrack.path }.coerceAtLeast(0)
             preparedItems to preparedIndex
         }
+        if (requestVersion != playbackRequestVersion) return false
         if (playerConnection.getControllerOrNull() == null) {
             messageManager.showError("播放器未连接")
             return false
@@ -729,6 +776,7 @@ class PlayerViewModel @Inject constructor(
             .setMimeType(mimeType)
             .setMediaMetadata(metadata)
             .build()
+        beginPlaybackRequest()
         playerConnection.setQueue(listOf(item), 0, playWhenReady = true)
     }
 
@@ -738,17 +786,99 @@ class PlayerViewModel @Inject constructor(
             return
         }
         if (items.isEmpty()) return
+        beginPlaybackRequest()
         val safeIndex = startIndex.coerceIn(0, items.lastIndex)
         playerConnection.setQueue(items, safeIndex, playWhenReady = true)
     }
 
     fun playPlaylistItems(items: List<PlaylistItemEntity>, startItem: PlaylistItemEntity) {
-        val mapped = items.mapNotNull { it.toMediaItemOrNull()?.let { mi -> it to mi } }
-        if (mapped.isEmpty()) return
-        val mediaItems = mapped.map { it.second }
-        val index = mapped.indexOfFirst { (entity, _) -> entity.mediaId == startItem.mediaId }
-            .takeIf { it >= 0 } ?: 0
-        playerConnection.setQueue(mediaItems, index, playWhenReady = true)
+        setPlaylistQueue(items, startItem, startPositionMs = 0L)
+    }
+
+    fun resumePlaylistItems(
+        items: List<PlaylistItemEntity>,
+        startItem: PlaylistItemEntity,
+        startPositionMs: Long,
+    ) {
+        val controller = playerConnection.getControllerOrNull()
+        if (controller == null) {
+            messageManager.showError("播放器未连接")
+            return
+        }
+        val current = controller.currentMediaItem
+        if (
+            current?.mediaId == startItem.mediaId &&
+            current.sourcePlaylistId() == startItem.playlistId &&
+            controller.playbackState != Player.STATE_IDLE &&
+            controller.playbackState != Player.STATE_ENDED &&
+            controller.playerError == null
+        ) {
+            val previousTarget = playlistPlaybackTarget.value?.takeIf {
+                it.playlistId == startItem.playlistId && it.mediaId == startItem.mediaId
+            }
+            val shouldPlay = !(previousTarget?.playWhenReady ?: controller.playWhenReady)
+            beginPlaybackRequest()
+            setPlaylistPlaybackTarget(startItem, shouldPlay)
+            if (shouldPlay) controller.play() else controller.pause()
+            return
+        }
+        setPlaylistQueue(items, startItem, startPositionMs)
+    }
+
+    private fun setPlaylistQueue(
+        items: List<PlaylistItemEntity>,
+        startItem: PlaylistItemEntity,
+        startPositionMs: Long,
+    ) {
+        if (playerConnection.getControllerOrNull() == null) {
+            messageManager.showError("播放器未连接")
+            return
+        }
+        val requestVersion = beginPlaybackRequest()
+        playlistQueuePreparationJob = viewModelScope.launch {
+            val (mediaItems, startIndex) = withContext(Dispatchers.Default) {
+                val prepared = ArrayList<MediaItem>(items.size)
+                var index = 0
+                items.forEachIndexed { itemIndex, entity ->
+                    if (itemIndex % 64 == 0) currentCoroutineContext().ensureActive()
+                    val item = entity.toMediaItemOrNull() ?: return@forEachIndexed
+                    if (entity.mediaId == startItem.mediaId) index = prepared.size
+                    prepared += item.withSourcePlaylist(startItem.playlistId)
+                }
+                prepared to index
+            }
+            if (requestVersion != playbackRequestVersion || mediaItems.isEmpty()) return@launch
+            if (playerConnection.getControllerOrNull() == null) {
+                messageManager.showError("播放器未连接")
+                return@launch
+            }
+            playerConnection.setQueue(mediaItems, startIndex, startPositionMs.coerceAtLeast(0L), playWhenReady = true)
+        }
+    }
+
+    private fun beginPlaybackRequest(): Long {
+        playbackRequestVersion += 1L
+        playlistQueuePreparationJob?.cancel()
+        playlistQueuePreparationJob = null
+        playlistPlaybackTargetResetJob?.cancel()
+        playlistPlaybackTargetResetJob = null
+        playlistPlaybackTarget.value = null
+        return playbackRequestVersion
+    }
+
+    private fun setPlaylistPlaybackTarget(item: PlaylistItemEntity, playWhenReady: Boolean) {
+        val target = PlaylistPlaybackTarget(item.playlistId, item.mediaId, playWhenReady)
+        playlistPlaybackTarget.value = target
+        playlistPlaybackTargetResetJob = viewModelScope.launch {
+            withTimeoutOrNull(3_500L) {
+                playerConnection.snapshot.first { snapshot ->
+                    snapshot.currentMediaItem?.mediaId != target.mediaId ||
+                        snapshot.currentMediaItem.sourcePlaylistId() != target.playlistId ||
+                        snapshot.playWhenReady == target.playWhenReady
+                }
+            }
+            if (playlistPlaybackTarget.value == target) playlistPlaybackTarget.value = null
+        }
     }
 
     fun playerOrNull(): Player? = playerConnection.getControllerOrNull()

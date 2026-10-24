@@ -195,7 +195,7 @@ internal fun NowPlayingLyricsSurface(
                 Text(
                     text = "暂无歌词",
                     style = MaterialTheme.typography.titleMedium,
-                    color = AsmrTheme.colorScheme.textSecondary
+                    color = playerSupportingTextColor(AsmrTheme.colorScheme.isDark)
                 )
                 if (onAddLyrics != null) {
                     Spacer(modifier = Modifier.height(14.dp))

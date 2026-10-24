@@ -654,6 +654,12 @@ internal fun NowPlayingLyricsPreview(
             upcoming = upcoming
         )
     }
+    val isDark = AsmrTheme.colorScheme.isDark
+    val previewColors = remember(colors, sourceContent.current, emptyText, isDark) {
+        if (sourceContent.current == emptyText) {
+            colors.copy(activeText = playerSupportingTextColor(isDark))
+        } else colors
+    }
     val typographyMetrics = remember(largeTypography, highlightFontSizeSp) {
         nowPlayingLyricTypographyMetrics(largeTypography, highlightFontSizeSp)
     }
@@ -677,7 +683,7 @@ internal fun NowPlayingLyricsPreview(
             text = sourceContent.current,
             cueKey = sortedLyrics.getOrNull(activeIndex),
             style = currentStyle,
-            colors = colors,
+            colors = previewColors,
             centered = centered,
             interactionEnabled = interactionEnabled,
             onOpenLyrics = onOpenLyrics,
@@ -998,7 +1004,7 @@ internal fun NowPlayingLyricsPreview(
                             text = line.text,
                             durationMs = line.durationMs,
                             style = currentStyle,
-                            colors = colors,
+                            colors = previewColors,
                             fontWeight = currentFontWeight,
                             modifier = lineModifier
                         )
@@ -1006,7 +1012,7 @@ internal fun NowPlayingLyricsPreview(
                         Text(
                             text = line.text,
                             style = if (renderAsCurrent) currentStyle else upcomingStyle,
-                            color = if (renderAsCurrent) colors.activeText else colors.inactiveText,
+                            color = if (renderAsCurrent) previewColors.activeText else colors.inactiveText,
                             modifier = lineModifier,
                             textAlign = textAlign,
                             maxLines = if (renderAsCurrent) currentMaxLines else upcomingMaxLines,
@@ -1218,7 +1224,7 @@ internal fun VolumeControl(
                 Text(
                     text = "长按调整音量",
                     style = if (compactLayout) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
-                    color = colorScheme.textTertiary
+                    color = playerSupportingTextColor(colorScheme.isDark)
                 )
             }
         } else {
@@ -1258,13 +1264,13 @@ internal fun VolumeControl(
                     Text(
                         text = "音量",
                         style = if (compactLayout) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
-                        color = colorScheme.textTertiary
+                        color = playerSupportingTextColor(colorScheme.isDark)
                     )
                     Spacer(modifier = Modifier.weight(1f))
                     Text(
                         text = "${AppVolume.clampPercent(volume)}%",
                         style = if (compactLayout) MaterialTheme.typography.labelSmall else MaterialTheme.typography.bodySmall,
-                        color = colorScheme.textTertiary
+                        color = playerSupportingTextColor(colorScheme.isDark)
                     )
                 }
 

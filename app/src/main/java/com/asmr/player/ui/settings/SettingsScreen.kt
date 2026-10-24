@@ -1,6 +1,7 @@
 package com.asmr.player.ui.settings
 
 import com.asmr.player.ui.common.LocalMainHeaderPadding
+import com.asmr.player.ui.common.DeferredPageItem
 
 import android.content.Intent
 import android.net.Uri
@@ -131,17 +132,19 @@ private val SettingsDetailSlideEasing = CubicBezierEasing(0.215f, 0.61f, 0.355f,
 private enum class SettingsSection(
     val title: String,
     val description: String,
-    val icon: ImageVector,
+    private val iconProvider: () -> ImageVector,
 ) {
-    LocalLibrary("本地库", "管理扫描目录、刷新本地内容与同步元数据", Icons.Rounded.Folder),
-    BlockedKeywords("屏蔽词", "过滤搜索结果中不想看到的关键词", Icons.Rounded.Block),
-    Appearance("外观", "调整主题、主题色与播放页背景", Icons.Rounded.Palette),
-    Playback("播放设置", "管理迷你播放栏、音频输出与淡入淡出", Icons.Rounded.Headphones),
-    Lyrics("歌词", "配置歌词页与悬浮歌词的显示效果", Icons.Rounded.Lyrics),
-    Translation("翻译配置", "管理页面翻译、字幕模型与翻译 API", Icons.Rounded.Translate),
-    SupportStatus("服务状态与代理", "测试服务连通性并配置代理与 DNS", Icons.Rounded.Router),
-    AppCache("APP 缓存", "设置缓存容量上限并清理缓存", Icons.Rounded.Storage),
-    About("关于", "查看版本信息并检查应用更新", Icons.Rounded.Info),
+    LocalLibrary("本地库", "管理扫描目录、刷新本地内容与同步元数据", { Icons.Rounded.Folder }),
+    BlockedKeywords("屏蔽词", "过滤搜索结果中不想看到的关键词", { Icons.Rounded.Block }),
+    Appearance("外观", "调整主题、主题色与播放页背景", { Icons.Rounded.Palette }),
+    Playback("播放设置", "管理迷你播放栏、音频输出与淡入淡出", { Icons.Rounded.Headphones }),
+    Lyrics("歌词", "配置歌词页与悬浮歌词的显示效果", { Icons.Rounded.Lyrics }),
+    Translation("翻译配置", "管理页面翻译、字幕模型与翻译 API", { Icons.Rounded.Translate }),
+    SupportStatus("服务状态与代理", "测试服务连通性并配置代理与 DNS", { Icons.Rounded.Router }),
+    AppCache("APP 缓存", "设置缓存容量上限并清理缓存", { Icons.Rounded.Storage }),
+    About("关于", "查看版本信息并检查应用更新", { Icons.Rounded.Info });
+
+    val icon: ImageVector get() = iconProvider()
 }
 
 private fun settingsDetailEnterTransition() = slideInHorizontally(
@@ -2350,10 +2353,14 @@ private fun SettingsSectionsPanel(
     ) {
         Column {
             SettingsSection.entries.forEachIndexed { index, section ->
-                SettingsSectionOption(
-                    section = section,
-                    onClick = { onSectionClick(section) },
-                )
+                DeferredPageItem(
+                    placeholder = { Spacer(Modifier.fillMaxWidth().height(64.dp)) },
+                ) {
+                    SettingsSectionOption(
+                        section = section,
+                        onClick = { onSectionClick(section) },
+                    )
+                }
                 if (index < SettingsSection.entries.lastIndex) {
                     HorizontalDivider(
                         modifier = Modifier.padding(start = 58.dp, end = 14.dp),

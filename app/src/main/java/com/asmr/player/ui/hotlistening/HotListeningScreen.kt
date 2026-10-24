@@ -14,8 +14,11 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.gestures.stopScroll
@@ -65,6 +68,7 @@ import com.asmr.player.domain.model.Album
 import com.asmr.player.hotlistening.HotListeningSortMode
 import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
+import com.asmr.player.ui.common.DeferredPageItem
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.albumStableKey
@@ -473,21 +477,27 @@ private fun HotListeningListItem(
     onMetaLongClick: (String) -> Unit,
     coverFadeInState: State<Boolean>? = null,
 ) {
-    val album = entry.album
-    val coverBadge = remember(entry) { entry.toCoverBadge() }
-    AlbumItem(
-        album = album,
-        onClick = { onAlbumClick(album) },
-        coverRetainPainterDuringReload = true,
-        coverBadge = coverBadge,
-        animateOnlineDetails = false,
-        coverFadeInState = coverFadeInState,
-        cacheRenderLayer = true,
-        onRjLongClick = onMetaLongClick,
-        onCircleLongClick = onMetaLongClick,
-        onCvLongClick = onMetaLongClick,
-        onTagLongClick = onMetaLongClick,
-    )
+    DeferredPageItem(placeholder = {
+        Spacer(Modifier.fillMaxWidth().height(
+            albumListCoverSize(LocalConfiguration.current.screenWidthDp) + 12.dp
+        ))
+    }) {
+        val album = entry.album
+        val coverBadge = remember(entry) { entry.toCoverBadge() }
+        AlbumItem(
+            album = album,
+            onClick = { onAlbumClick(album) },
+            coverRetainPainterDuringReload = true,
+            coverBadge = coverBadge,
+            animateOnlineDetails = false,
+            coverFadeInState = coverFadeInState,
+            cacheRenderLayer = true,
+            onRjLongClick = onMetaLongClick,
+            onCircleLongClick = onMetaLongClick,
+            onCvLongClick = onMetaLongClick,
+            onTagLongClick = onMetaLongClick,
+        )
+    }
 }
 
 @Composable
@@ -497,20 +507,27 @@ private fun HotListeningGridItem(
     onMetaLongClick: (String) -> Unit,
     coverFadeInState: State<Boolean>? = null,
 ) {
-    val album = entry.album
-    val coverBadge = remember(entry) { entry.toCoverBadge() }
-    AlbumGridItem(
-        album = album,
-        onClick = { onAlbumClick(album) },
-        coverRetainPainterDuringReload = true,
-        coverBadge = coverBadge,
-        animateOnlineDetails = false,
-        coverFadeInState = coverFadeInState,
-        onRjLongClick = onMetaLongClick,
-        onCircleLongClick = onMetaLongClick,
-        onCvLongClick = onMetaLongClick,
-        onTagLongClick = onMetaLongClick,
-    )
+    DeferredPageItem(placeholder = {
+        Column {
+            Spacer(Modifier.fillMaxWidth().aspectRatio(1f))
+            Spacer(Modifier.height(168.dp))
+        }
+    }) {
+        val album = entry.album
+        val coverBadge = remember(entry) { entry.toCoverBadge() }
+        AlbumGridItem(
+            album = album,
+            onClick = { onAlbumClick(album) },
+            coverRetainPainterDuringReload = true,
+            coverBadge = coverBadge,
+            animateOnlineDetails = false,
+            coverFadeInState = coverFadeInState,
+            onRjLongClick = onMetaLongClick,
+            onCircleLongClick = onMetaLongClick,
+            onCvLongClick = onMetaLongClick,
+            onTagLongClick = onMetaLongClick,
+        )
+    }
 }
 
 @Composable

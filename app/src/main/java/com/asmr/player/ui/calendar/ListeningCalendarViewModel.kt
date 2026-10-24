@@ -10,6 +10,7 @@ import com.asmr.player.data.local.db.entities.ListeningSessionEntity
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.repository.ListeningRecordRepository
 import com.asmr.player.data.repository.StatisticsRepository
+import com.asmr.player.ui.common.InitialContentReadiness
 import com.asmr.player.util.ListeningDay
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -95,6 +96,7 @@ class ListeningCalendarViewModel @Inject constructor(
     private val currentDate = ListeningDay.currentDate()
     private val currentYear = yearOf(currentDate) ?: 0
     private val _comparisonGranularity = MutableStateFlow(ListeningComparisonGranularity.Day)
+    private val initialContentReadiness = InitialContentReadiness()
 
     init {
         authStore.registerListener(authPreferenceListener)
@@ -114,6 +116,7 @@ class ListeningCalendarViewModel @Inject constructor(
         }
             .debounce(SUMMARY_UPDATE_DEBOUNCE_MS)
             .flowOn(Dispatchers.Default)
+            .let(initialContentReadiness::track)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ListeningSummary())
 
     /** 可切换的年份列表，默认包含当前年，按新到旧排序。 */
@@ -121,6 +124,7 @@ class ListeningCalendarViewModel @Inject constructor(
         statisticsRepository.observeAllStats()
             .map { stats -> availableYearsForDates(stats.map { it.date }, currentYear) }
             .flowOn(Dispatchers.Default)
+            .let(initialContentReadiness::track)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), listOf(currentYear))
 
     private val _selectedYear = MutableStateFlow(currentYear)
@@ -141,6 +145,7 @@ class ListeningCalendarViewModel @Inject constructor(
                     }
             }
             .flowOn(Dispatchers.Default)
+            .let(initialContentReadiness::track)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _selectedDate = MutableStateFlow<String?>(currentDate)
@@ -157,6 +162,7 @@ class ListeningCalendarViewModel @Inject constructor(
                     .map { row -> row?.toSummaryArtwork() }
             }
             .flowOn(Dispatchers.Default)
+            .let(initialContentReadiness::track)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     private val _isDlsiteLoggedIn = MutableStateFlow(authStore.isLoggedIn())
@@ -177,6 +183,7 @@ class ListeningCalendarViewModel @Inject constructor(
         }
             .debounce(SUMMARY_UPDATE_DEBOUNCE_MS)
             .flowOn(Dispatchers.Default)
+            .let(initialContentReadiness::track)
             .stateIn(
                 viewModelScope,
                 SharingStarted.WhileSubscribed(5000),
@@ -195,7 +202,12 @@ class ListeningCalendarViewModel @Inject constructor(
             }
             .map { sessions -> mergeAdjacentListeningSessions(sessions) }
             .flowOn(Dispatchers.Default)
+            .let(initialContentReadiness::track)
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    suspend fun awaitInitialContent() {
+        initialContentReadiness.awaitReady()
+    }
 
     fun selectDate(date: String?) {
         _selectedDate.value = date
