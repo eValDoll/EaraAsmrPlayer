@@ -30,6 +30,25 @@ internal fun storeSegment(): String = String.format("%s%s", "ma", "niax")
 
 internal const val DLSITE_DOMAIN = "https://www.dlsite.com/"
 
+private val DLSITE_WORK_URL_NUMBER_REGEX = Regex(
+    """(?:^|/)product_id/((?:RJ|BJ|VJ)\d+)(?:\.html)?(?:/|$)""",
+    RegexOption.IGNORE_CASE
+)
+
+internal fun matchesDlsiteWorkDocument(workId: String, doc: Document): Boolean {
+    val expectedWorkno = DlsiteWorkNo.normalizeWorkNo(workId)
+    if (expectedWorkno.isBlank()) return true
+
+    val identityUrls = sequenceOf(doc.location()) +
+        doc.select("link[rel=canonical][href]").asSequence().map { it.attr("href") } +
+        doc.select("meta[property=og:url][content]").asSequence().map { it.attr("content") }
+
+    return identityUrls.mapNotNull { url ->
+        val path = runCatching { URI(url.trim()).path }.getOrNull().orEmpty()
+        DLSITE_WORK_URL_NUMBER_REGEX.find(path)?.groupValues?.get(1)?.uppercase()
+    }.all { it == expectedWorkno }
+}
+
 private fun appendLocaleQuery(url: String, locale: String?): String {
     val normalizedLocale = locale?.trim().takeIf { !it.isNullOrBlank() } ?: "ja_JP"
     val separator = if ('?' in url) '&' else '?'
@@ -232,7 +251,7 @@ class DLSiteScraper @Inject constructor(
         )
         for (url in candidates) {
             val doc = runCatching { runInterruptible { connect(url, locale = locale).get() } }.getOrNull() ?: continue
-            if (doc.selectFirst("#work_name") != null) return doc
+            if (doc.selectFirst("#work_name") != null && matchesDlsiteWorkDocument(clean, doc)) return doc
         }
         return null
     }
