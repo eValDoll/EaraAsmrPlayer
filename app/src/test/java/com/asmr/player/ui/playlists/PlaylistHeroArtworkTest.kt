@@ -392,8 +392,10 @@ class PlaylistHeroArtworkTest {
             assertEquals(0f, artwork.incomingAlpha.value, 0f)
             assertNotNull(artwork.incomingFrame?.painter)
         }
-        compose.mainClock.advanceTimeByFrame()
-        compose.mainClock.advanceTimeBy(96L)
+        compose.waitUntil(5_000L) {
+            compose.mainClock.advanceTimeByFrame()
+            compose.runOnIdle { artwork.incomingAlpha.value >= 0.4f }
+        }
         compose.runOnIdle {
             assertEquals(previous, artwork.settledFrame?.model)
             assertEquals(replacement, artwork.incomingFrame?.model)
