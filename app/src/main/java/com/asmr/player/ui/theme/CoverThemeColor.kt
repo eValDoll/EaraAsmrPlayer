@@ -12,6 +12,9 @@ import kotlin.math.roundToInt
 private const val COLOR_BUCKET_COUNT = 4_096
 private const val TARGET_SAMPLE_COUNT = 22_500
 private const val MIN_VISIBLE_ALPHA = 125
+private const val MAX_NEUTRAL_CHANNEL_RANGE = 8
+private const val MIN_SEED_LIGHTNESS = 0.30
+private const val MAX_SEED_LIGHTNESS = 0.70
 
 internal fun coverThemeSeedColorFromBitmap(bitmap: Bitmap, fallbackColor: Color): Color {
     if (bitmap.isRecycled) return fallbackColor
@@ -26,7 +29,7 @@ internal fun coverThemeSeedColorFromBitmap(bitmap: Bitmap, fallbackColor: Color)
     return Color(coverThemeSeedColorFromPixels(pixels, fallbackColor.toArgb()))
 }
 
-/** 以椒盐的分箱与候选评分提取主题种子；文字对比度交给现有主题色板处理。 */
+/** 以椒盐的分箱与候选评分提取主题种子，并限制极端亮度以保持主题控件可辨。 */
 internal fun coverThemeSeedColorFromPixels(pixels: IntArray, fallbackArgb: Int): Int {
     if (pixels.isEmpty()) return fallbackArgb
 
@@ -112,7 +115,7 @@ internal fun coverThemeSeedColorFromPixels(pixels: IntArray, fallbackArgb: Int):
         reference.saturation >= 0.15 -> reference.hue
         background.saturation >= 0.10 -> background.hue
         // 黑白与灰阶封面保持中性，不凭空补出一个蓝色主题。
-        else -> return reference.argb
+        else -> return coverSeedArgb(reference.hue, reference.saturation, reference.lightness)
     }
     val saturation = when {
         selected.saturation >= 0.30 -> selected.saturation
@@ -120,8 +123,11 @@ internal fun coverThemeSeedColorFromPixels(pixels: IntArray, fallbackArgb: Int):
         background.saturation >= 0.15 -> background.saturation * 0.75
         else -> 0.30
     }.coerceIn(0.30, 0.60)
-    return hslToArgb(hue, saturation, selected.lightness)
+    return coverSeedArgb(hue, saturation, selected.lightness)
 }
+
+private fun coverSeedArgb(hue: Double, saturation: Double, lightness: Double): Int =
+    hslToArgb(hue, saturation, lightness.coerceIn(MIN_SEED_LIGHTNESS, MAX_SEED_LIGHTNESS))
 
 private data class CoverSwatch(
     val argb: Int,
@@ -137,11 +143,18 @@ private fun coverSwatch(red: Int, green: Int, blue: Int, population: Int): Cover
     val r = red / 255.0
     val g = green / 255.0
     val b = blue / 255.0
-    val maximum = max(r, max(g, b))
-    val minimum = min(r, min(g, b))
+    val maximumChannel = max(red, max(green, blue))
+    val minimumChannel = min(red, min(green, blue))
+    val maximum = maximumChannel / 255.0
+    val minimum = minimumChannel / 255.0
     val delta = maximum - minimum
     val lightness = (maximum + minimum) / 2.0
-    val saturation = if (delta == 0.0) 0.0 else delta / (1.0 - abs(2.0 * lightness - 1.0))
+    // 极黑或极白的量化噪声也可能具有很高的 HSL 饱和度，不能据此放大成彩色主题。
+    val saturation = if (maximumChannel - minimumChannel <= MAX_NEUTRAL_CHANNEL_RANGE) {
+        0.0
+    } else {
+        delta / (1.0 - abs(2.0 * lightness - 1.0))
+    }
     val hue = when {
         delta == 0.0 -> 0.0
         maximum == r -> ((g - b) / delta + if (g < b) 6.0 else 0.0) * 60.0

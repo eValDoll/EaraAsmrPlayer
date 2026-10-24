@@ -4,6 +4,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.ColorUtils
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -32,7 +33,8 @@ class HueDerivationAndroidTest {
         ColorUtils.colorToHSL(hue.background.toArgb(), bgHsl)
 
         assertTrue(hsl[1] <= 0.12f)
-        assertTrue(colorDistanceLab(hue.primaryStrong.toArgb(), primary.toArgb()) < 18.0)
+        assertEquals(primary, hue.primary)
+        assertTrue(ColorUtils.calculateContrast(hue.primaryStrong.toArgb(), hue.primarySoft.toArgb()) >= 3.0)
         assertTrue(colorDistanceLab(hue.primarySoft.toArgb(), neutral.surface.toArgb()) > 3.0)
         assertTrue(bgHsl[1] <= 0.10f)
         assertTrue(colorDistanceLab(hue.background.toArgb(), neutral.background.toArgb()) < 10.0)

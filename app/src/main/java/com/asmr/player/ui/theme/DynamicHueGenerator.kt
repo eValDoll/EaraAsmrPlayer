@@ -29,7 +29,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 
-internal const val COVER_THEME_COLOR_VERSION = "cover-hsl-v1"
+internal const val COVER_THEME_COLOR_VERSION = "cover-hsl-readable"
 
 internal fun dynamicHueCacheKeyForArtwork(artworkModel: Any?): String? =
     dynamicHueCacheKey("artwork", artworkModel)

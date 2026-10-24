@@ -1,6 +1,8 @@
 package com.asmr.player.ui.theme
 
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.compositeOver
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.toArgb
 import androidx.core.graphics.ColorUtils
 import org.junit.Assert.assertEquals
@@ -67,6 +69,62 @@ class HueDerivationTest {
         assertFalse(colorDistanceLab(hue.secondary.toArgb(), hue.primaryStrong.toArgb()) < 1.0)
         assertFalse(colorDistanceLab(hue.background.toArgb(), neutral.background.toArgb()) < 1.0)
         assertFalse(colorDistanceLab(hue.surfaceVariant.toArgb(), neutral.surfaceVariant.toArgb()) < 1.0)
+    }
+
+    @Test
+    fun neutralArtworkKeepsNavigationAndButtonColorsReadableInEveryMode() {
+        val artworkColors = intArrayOf(
+            0xFF000000.toInt(), 0xFF010101.toInt(), 0xFF2A2A2A.toInt(),
+            0xFF808080.toInt(), 0xFFFAFAFA.toInt(), 0xFFFFFFFF.toInt(),
+            0xFF000001.toInt(), 0xFF020001.toInt(), 0xFF7C8084.toInt()
+        )
+        for (mode in ThemeMode.entries) {
+            for (artworkColor in artworkColors) {
+                val seed = coverThemeSeedColorFromPixels(IntArray(100) { artworkColor }, 0)
+                // 同时覆盖新提取的种子及尚未重新提取的旧种子。
+                for (primary in listOf(Color(seed), Color(artworkColor))) {
+                    val hue = deriveHuePalette(primary, mode, neutralPaletteForMode(mode), Color.White)
+                    val context = "$mode seed=${primary.toArgb().toUInt().toString(16)}"
+                    assertEquals(context, primary, hue.primary)
+                    assertContrast(context, hue.onPrimary, hue.primaryStrong, 4.5)
+                    assertContrast(context, hue.onPrimaryContainer, hue.primarySoft, 4.5)
+                    assertContrast(context, hue.onSecondary, hue.secondary, 4.5)
+                    assertNavigationContrast(context, hue, mode)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun darkChromaticArtworkKeepsItsColorAndReadableNavigationInEveryMode() {
+        for (artworkColor in intArrayOf(0xFF401010.toInt(), 0xFF104010.toInt(), 0xFF101040.toInt())) {
+            val seed = coverThemeSeedColorFromPixels(IntArray(100) { artworkColor }, 0)
+            for (mode in ThemeMode.entries) {
+                val hue = deriveHuePalette(Color(seed), mode, neutralPaletteForMode(mode), Color.White)
+                val hsl = FloatArray(3)
+                ColorUtils.colorToHSL(hue.primaryStrong.toArgb(), hsl)
+                assertTrue("$mode seed=$seed", hsl[1] > 0.10f)
+                assertNavigationContrast("$mode seed=$seed", hue, mode)
+            }
+        }
+    }
+
+    private fun assertNavigationContrast(context: String, hue: HuePalette, mode: ThemeMode) {
+        val bar = hue.primarySoft.copy(alpha = if (mode.isDark) 0.05f else 0.08f)
+            .compositeOver(hue.surface)
+        for (progress in listOf(0f, 0.25f, 0.5f, 0.75f, 1f)) {
+            val glow = hue.primaryStrong.copy(alpha = (if (mode.isDark) 0.22f else 0.18f) * progress)
+                .compositeOver(bar)
+            val chip = hue.primarySoft.copy(alpha = (if (mode.isDark) 0.52f else 0.95f) * progress)
+                .compositeOver(glow)
+            val icon = lerp(hue.textSecondary, hue.primaryStrong, progress)
+            assertContrast("$context progress=$progress", icon, chip, 3.0)
+        }
+    }
+
+    private fun assertContrast(context: String, foreground: Color, background: Color, minimum: Double) {
+        val contrast = ColorUtils.calculateContrast(foreground.toArgb(), background.toArgb())
+        assertTrue("$context contrast=$contrast expected>=$minimum", contrast >= minimum)
     }
 
     private fun colorDistanceLab(a: Int, b: Int): Double {
