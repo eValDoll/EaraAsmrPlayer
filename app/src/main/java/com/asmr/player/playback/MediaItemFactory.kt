@@ -207,3 +207,10 @@ object MediaItemFactory {
         }
     }
 }
+
+internal fun MediaItem.withExactTrackTitle(title: String?): MediaItem {
+    if (title.isNullOrBlank() || mediaMetadata.title?.toString() == title) return this
+    return buildUpon()
+        .setMediaMetadata(mediaMetadata.buildUpon().setTitle(title).build())
+        .build()
+}

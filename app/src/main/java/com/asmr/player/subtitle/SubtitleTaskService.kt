@@ -32,6 +32,7 @@ import com.asmr.player.data.local.db.entities.SubtitleEntity
 import com.asmr.player.data.local.db.entities.SubtitleFallbackCaptionEntity
 import com.asmr.player.data.local.db.entities.SubtitleTaskItemEntity
 import com.asmr.player.data.local.db.entities.SubtitleTranscriptionChunkEntity
+import com.asmr.player.data.local.db.entities.SubtitleTitleOwnerEntity
 import com.asmr.player.data.local.db.entities.SubtitleTitleOwnerKind
 import com.asmr.player.data.local.db.entities.SubtitleTranslationSourceEntity
 import com.asmr.player.data.local.db.entities.TrackEntity
@@ -317,15 +318,16 @@ internal class SubtitleTaskService : Service() {
             if (items.none { it.state !in TITLE_TRANSLATION_BLOCKED_STATES }) return@forEach
             val job = serviceScope.launch(start = CoroutineStart.LAZY) {
                 try {
+                    val attemptedOwners = ownerDao.getByTask(taskId).filter { it.displayTitle.isBlank() }
                     try {
                         // 客户端已限制请求次数；耗尽后保留原名，结束这次标题翻译。
-                        translateDisplayNamesForTask(taskId)
+                        translateDisplayNamesForTask(taskId, attemptedOwners)
                     } catch (cancelled: CancellationException) {
                         throw cancelled
                     } catch (error: Exception) {
                         Log.w(TAG, "作品显示名翻译失败 taskId=$taskId", error)
                     }
-                    repository.finishTitleTranslation(taskId)
+                    repository.finishTitleTranslation(taskId, attemptedOwners)
                 } finally {
                     titleTranslationJobs.remove(taskId)
                     signalWake()
@@ -340,19 +342,18 @@ internal class SubtitleTaskService : Service() {
      * 把一个字幕任务涉及的作品标题与音轨标题翻译成中文，写入 displayTitle。
      * 只在任务仍处于翻译阶段（未取消/未删除）时提交结果。
      */
-    private suspend fun translateDisplayNamesForTask(taskId: String) {
-        val trackIds = database.subtitleTaskDao().getItemsForTask(taskId).map { it.trackId }
+    private suspend fun translateDisplayNamesForTask(taskId: String, attemptedOwners: List<SubtitleTitleOwnerEntity>) {
+        val trackIds = attemptedOwners.filter { it.kind == SubtitleTitleOwnerKind.TRACK }.map { it.targetId }
         database.withSubtitleFileAccess(fileScopes, fileScopes.tracks(trackIds)) {
-            translateDisplayNamesForTaskLocked(taskId)
+            translateDisplayNamesForTaskLocked(taskId, attemptedOwners)
         }
     }
 
-    private suspend fun translateDisplayNamesForTaskLocked(taskId: String) {
+    private suspend fun translateDisplayNamesForTaskLocked(taskId: String, registeredOwners: List<SubtitleTitleOwnerEntity>) {
         val ownerDao = database.subtitleTitleOwnerDao()
-        val registeredOwners = ownerDao.getByTask(taskId)
         if (registeredOwners.none { owner -> owner.displayTitle.isBlank() }) return
-        val albumOwners = registeredOwners.filter { it.kind == SubtitleTitleOwnerKind.ALBUM }
-        val trackOwners = registeredOwners.filter { it.kind == SubtitleTitleOwnerKind.TRACK }
+        val albumOwners = registeredOwners.filter { it.kind == SubtitleTitleOwnerKind.ALBUM && it.displayTitle.isBlank() }
+        val trackOwners = registeredOwners.filter { it.kind == SubtitleTitleOwnerKind.TRACK && it.displayTitle.isBlank() }
         val allTracks = database.trackDao()
             .getTracksByIdsOnce(trackOwners.map { it.targetId })
             .associateBy { it.id }
@@ -360,8 +361,7 @@ internal class SubtitleTaskService : Service() {
             .distinct()
         val albums = albumIds.mapNotNull { albumId -> database.albumDao().getAlbumById(albumId) }
         if (albums.isEmpty()) {
-            // 任务涉及的作品行已全部失效（例如已被删除），清除未完成的登记，避免无限重试
-            ownerDao.deletePendingForTask(taskId)
+            // 失效登记由本轮收尾清理，保留请求期间新登记的音轨。
             return
         }
         val tracksByAlbum = allTracks.values.groupBy { it.albumId }
@@ -376,6 +376,11 @@ internal class SubtitleTaskService : Service() {
                     cv = album.cv,
                     trackTitles = albumTracks.map { it.id to it.title }
                 )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w(TAG, "作品显示名翻译失败 taskId=$taskId albumId=${album.id}", error)
+                return@forEach
             } finally {
                 requestBalanceRefresh()
             }
@@ -383,7 +388,7 @@ internal class SubtitleTaskService : Service() {
                 database.subtitleTaskDao().getTask(taskId) ?: return@withTransaction
                 val items = database.subtitleTaskDao().getItemsForTask(taskId)
                 if (items.none { it.state !in TITLE_TRANSLATION_BLOCKED_STATES }) return@withTransaction
-                if (translated.albumTitle.isNotBlank()) {
+                if (albumOwners.any { it.targetId == album.id } && translated.albumTitle.isNotBlank()) {
                     database.albumDao().updateAlbumDisplayTitle(album.id, translated.albumTitle)
                     ownerDao.updateDisplayTitle(
                         taskId, SubtitleTitleOwnerKind.ALBUM, album.id, translated.albumTitle

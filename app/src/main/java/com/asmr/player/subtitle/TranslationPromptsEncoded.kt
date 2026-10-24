@@ -28,6 +28,14 @@ internal object TranslationPromptsEncoded {
         "IrOtFkOQAMGBgc6JBsbARVWFHTW+tqaztCW/fy39uWd2O7LwPSE1O6dzv1yXk0ZAhVNPUJnWykaYwcfEzMHPhABUBRjWUAAA" +
         "AAAAHJITYrPz8b5oKDx/Ibb94Tt44Tc0YPSqbrX+lYUKRE=" +
         "\n" +
+        "display_name_tool_instruction=odn4h+3Si9LXhcPhgsm9tev+kvXeheXKmtDqltSPv5vJgvLjp9PUlN3Cicf2l6v2kd" +
+        "rZju7oRSYTAwQUFVo/Xis+FxMzHB9StNPPn8jRyejmhOr1m9DptM73iPX8xuayovXaQTYBBAY1MxULBBxdPxQWEQ0rCAwjAg" +
+        "MMCStAN1wgElKHzuOJyPSJz/WD55q07+aQ0dmK89eW0vGV56+wkcKI0Pmk/OeU2eyH5eybseCd39yP1OuM8uqA0euSg/LX0t" +
+        "dSKxI8I1K1w9iR1NPH0++Ky+6R28C199iI//bIw4Gj7uKF+9eCztyK9tmM7q626cqSxNeK89eb6OCV0KO1sceEzeSo0taW7/" +
+        "GG7PyakMCQ59GNzMGCyvaJwv+QlvwRMRMTAiosBBa/0O2d3f/G0MiF4MFUBQs0FxdNlu+Rsormjs7tpcrylujhifrYm6/Ek9" +
+        "77j/z6g8bCis/unbHl2fjJkeHDm+bXt/fVn+vXy8/dhNnKkvriuM37iOvqweq9odr/iODIicr1isHFjPObttvqkefrivnZUi" +
+        "U+PzoOsJH5hM7uovPv" +
+        "\n" +
         "subtitle_agent_system_prompt_template=odzSh9ncicrQifH0gcq9t834k/PwivL1msDAUDV9G2NlhN/2pMr4lPDNhN" +
         "bclpbdkt3Pgdv9RTEVCgMEl67U1Pjyl+jMmvLBuNHJnODDyM/8Qg8SJyMwAjEqMjM7exhlOBxShfnZi8jAi9XbgM67sPXgnN" +
         "btiv3/ltftltiPsKjriPL7punpmu/yhsLIUk80EAwASZHD3Ljd8oLM+MrrkaDu3YX61ovS6Yrs14zurrvT45zu3oTE3Jfp3p" +

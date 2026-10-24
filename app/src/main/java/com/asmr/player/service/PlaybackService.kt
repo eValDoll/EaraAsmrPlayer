@@ -82,6 +82,7 @@ import com.asmr.player.playback.isRecoverableRemotePlaybackFailure
 import com.asmr.player.playback.capturePersistedPlaybackState
 import com.asmr.player.playback.spectrumVisualDelayMillis
 import com.asmr.player.playback.withPlaybackArtwork
+import com.asmr.player.playback.withExactTrackTitle
 import com.asmr.player.playback.sourcePlaylistId
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.SubtitleIndexFinder
@@ -1329,6 +1330,15 @@ class PlaybackService : MediaSessionService() {
             lyricsLoader.observe(item).collect { result ->
                 val indexFinder = withContext(Dispatchers.Default) {
                     if (result.lyrics.isNotEmpty()) SubtitleIndexFinder(result.lyrics) else null
+                }
+                val currentItem = exoPlayer.currentMediaItem
+                val currentIndex = exoPlayer.currentMediaItemIndex
+                if (
+                    item != null && currentItem != null &&
+                    currentIndex in 0 until exoPlayer.mediaItemCount && currentItem.mediaId == item.mediaId
+                ) {
+                    val updated = currentItem.withExactTrackTitle(result.exactTrackTitle)
+                    if (updated !== currentItem) exoPlayer.replaceMediaItem(currentIndex, updated)
                 }
                 currentLyrics = result.lyrics
                 lyricsIndexFinder = indexFinder

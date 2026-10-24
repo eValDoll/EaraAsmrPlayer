@@ -186,6 +186,36 @@ class PlaybackQueueRestorerTest {
     }
 
     @Test
+    fun restoredLibraryItemsUseCurrentDisplayTitlesAndFallBackToOriginalTitles() = runBlocking {
+        val audio = localFile()
+        val albumId = database.albumDao().insertAlbum(
+            AlbumEntity(title = "添い寝", displayTitle = "陪睡", path = audio.parent!!)
+        )
+        val trackId = database.trackDao().insertTrack(
+            TrackEntity(albumId = albumId, title = "囁き", displayTitle = "耳语", path = audio.path)
+        )
+        stateStore.save(
+            state(listOf(item(audio.path).copy(albumId = albumId, trackId = trackId)))
+        )
+
+        val translated = requireNotNull(restorer.restore()).items.single().mediaMetadata
+        assertEquals("耳语", translated.title.toString())
+        assertEquals("陪睡", translated.albumTitle.toString())
+
+        database.trackDao().updateTrackDisplayTitle(trackId, "晚安耳语")
+        database.albumDao().updateAlbumDisplayTitle(albumId, "晚安陪睡")
+        val updated = requireNotNull(restorer.restore()).items.single().mediaMetadata
+        assertEquals("晚安耳语", updated.title.toString())
+        assertEquals("晚安陪睡", updated.albumTitle.toString())
+
+        database.trackDao().updateTrackDisplayTitle(trackId, "")
+        database.albumDao().updateAlbumDisplayTitle(albumId, "")
+        val original = requireNotNull(restorer.restore()).items.single().mediaMetadata
+        assertEquals("囁き", original.title.toString())
+        assertEquals("添い寝", original.albumTitle.toString())
+    }
+
+    @Test
     fun restoredLibraryAndAlbumOnlyItemsUseCurrentManualCoverAndItsCancellation() = runBlocking {
         val audio = localFile()
         val automatic = localFile()

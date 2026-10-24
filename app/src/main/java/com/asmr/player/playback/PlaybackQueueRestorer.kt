@@ -7,6 +7,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import com.asmr.player.data.local.db.dao.AlbumDao
 import com.asmr.player.data.local.db.dao.TrackDao
+import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.data.lyrics.EXTRA_REMOTE_SUBTITLE_SOURCES_JSON
 import com.asmr.player.domain.model.Album
 import com.asmr.player.domain.model.Track
@@ -103,7 +104,7 @@ class PlaybackQueueRestorer @Inject constructor(
             val albumEntity = runCatching { albumDao.getAlbumById(track.albumId) }.getOrNull()
             val album = Album(
                 id = albumEntity?.id ?: 0L,
-                title = albumEntity?.title.orEmpty(),
+                title = albumEntity?.titleForDisplay.orEmpty(),
                 path = albumEntity?.path.orEmpty(),
                 localPath = albumEntity?.localPath,
                 downloadPath = albumEntity?.downloadPath,
@@ -120,7 +121,7 @@ class PlaybackQueueRestorer @Inject constructor(
             val t = Track(
                 id = track.id,
                 albumId = track.albumId,
-                title = track.title,
+                title = track.titleForDisplay,
                 path = track.path,
                 duration = track.duration,
                 group = track.group,

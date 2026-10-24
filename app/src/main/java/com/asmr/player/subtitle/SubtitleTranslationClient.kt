@@ -356,20 +356,28 @@ internal class SubtitleTranslationClient(
         require(trackTitles.map(Pair<Long, String>::first).distinct().size == trackTitles.size) {
             "音轨 id 不能重复"
         }
-        val requestBody = buildDeepSeekTitleTranslationRequest(
-            gson = gson,
-            albumTitle = albumTitle,
-            circle = circle,
-            cv = cv,
-            trackTitles = trackTitles,
-            settings = settings,
-            apiConfig = apiConfig
-        )
         val expectedTrackIds = trackTitles.map(Pair<Long, String>::first)
-        return retrySubtitleTranslation(maxAttempts = maxAttempts, onAttempt = { _, _ -> }, onRetry = { _, _, _ -> }) {
+        return retrySubtitleTranslation(maxAttempts = maxAttempts, onAttempt = { _, _ -> }, onRetry = { _, _, _ -> }) { previousError ->
+            val validationError = (previousError?.cause as? IllegalArgumentException)?.message
+            val requestBody = buildDeepSeekTitleTranslationRequest(
+                gson = gson,
+                albumTitle = albumTitle,
+                circle = circle,
+                cv = cv,
+                trackTitles = trackTitles,
+                settings = settings,
+                apiConfig = apiConfig,
+                validationError = validationError
+            )
             executeTranslationRequest(requestBody, emptyList()) { message, finishReason ->
                 require(finishReason != "length") { "作品显示名翻译输出达到长度限制" }
-                val content = message.content.orEmpty()
+                val content = if (!apiConfig.isDeepSeek && validationError != null && !message.toolCalls.isNullOrEmpty()) {
+                    val call = message.toolCalls.singleOrNull()
+                    require(call != null && call.function.name == TITLE_WRITE_TOOL_NAME) { "作品显示名翻译工具调用不匹配" }
+                    call.function.arguments.orEmpty()
+                } else {
+                    message.content.orEmpty()
+                }
                 require(content.isNotBlank()) { "作品显示名翻译模型返回了空内容" }
                 parseDisplayNameTranslationResponse(content, expectedTrackIds)
             }
@@ -725,6 +733,7 @@ internal fun parseRetryAfterMillis(
 }
 
 internal const val DEEPSEEK_SUBTITLE_MODEL = "deepseek-flash"
+internal const val TITLE_WRITE_TOOL_NAME = "write_translated_display_names"
 internal const val SUBTITLE_READ_TOOL_NAME = "read_subtitle_translation_state"
 internal const val SUBTITLE_WRITE_TOOL_NAME = "write_timed_chinese_subtitles"
 internal const val POLISH_READ_TOOL_NAME = "read_subtitle_polish_state"
@@ -799,7 +808,8 @@ internal fun buildDeepSeekTitleTranslationRequest(
     cv: String,
     trackTitles: List<Pair<Long, String>>,
     settings: DeepSeekTranslationSettings = DeepSeekTranslationSettings(),
-    apiConfig: TranslationApiConfig = TranslationApiConfig(apiKey = "")
+    apiConfig: TranslationApiConfig = TranslationApiConfig(apiKey = ""),
+    validationError: String? = null
 ): String {
     require(albumTitle.isNotBlank())
     require(trackTitles.isNotEmpty())
@@ -807,18 +817,26 @@ internal fun buildDeepSeekTitleTranslationRequest(
         put("work_title", albumTitle)
         put("circle", circle)
         put("cv", cv)
+        validationError?.let { put("validation_error", it) }
         put("tracks", trackTitles.mapIndexed { index, (trackId, title) ->
             mapOf("track_id" to trackId, "index" to index, "title" to title)
         })
     }
+    val useTitleTool = !apiConfig.isDeepSeek && validationError != null
+    val systemPrompt = if (useTitleTool) {
+        displayNameTranslationSystemPrompt() + "\n\n" + TranslationPrompts.displayNameToolInstruction()
+    } else {
+        displayNameTranslationSystemPrompt()
+    }
     return gson.toJson(
         DeepSeekChatRequest(
             messages = listOf(
-                DeepSeekChatMessage(role = "system", content = displayNameTranslationSystemPrompt()),
+                DeepSeekChatMessage(role = "system", content = systemPrompt),
                 DeepSeekChatMessage(role = "user", content = gson.toJson(userPayload))
             ),
             thinking = DeepSeekThinking(type = if (settings.thinkingEnabled) "enabled" else "disabled"),
-            reasoningEffort = settings.reasoningEffort.wireValue.takeIf { settings.thinkingEnabled }
+            reasoningEffort = settings.reasoningEffort.wireValue.takeIf { settings.thinkingEnabled },
+            tools = if (useTitleTool) displayNameTranslationTools() else null
         ).forApi(apiConfig)
     )
 }
@@ -858,6 +876,36 @@ internal fun parseDisplayNameTranslationResponse(
 
 private fun displayNameTranslationSystemPrompt(): String =
     TranslationPrompts.displayNameSystemPrompt()
+
+private fun displayNameTranslationTools(): List<DeepSeekToolDefinition> = listOf(
+    DeepSeekToolDefinition(
+        function = DeepSeekFunctionDefinition(
+            name = TITLE_WRITE_TOOL_NAME,
+            description = TranslationPrompts.displayNameToolInstruction(),
+            parameters = mapOf(
+                "type" to "object",
+                "properties" to mapOf(
+                    "work_title" to mapOf("type" to "string", "minLength" to 1),
+                    "tracks" to mapOf(
+                        "type" to "array",
+                        "minItems" to 1,
+                        "items" to mapOf(
+                            "type" to "object",
+                            "properties" to mapOf(
+                                "track_id" to mapOf("type" to "integer"),
+                                "title" to mapOf("type" to "string", "minLength" to 1)
+                            ),
+                            "required" to listOf("track_id", "title"),
+                            "additionalProperties" to false
+                        )
+                    )
+                ),
+                "required" to listOf("work_title", "tracks"),
+                "additionalProperties" to false
+            )
+        )
+    )
+)
 
 internal fun buildSubtitleAgentInitialMessages(
     gson: Gson,

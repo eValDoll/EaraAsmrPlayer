@@ -29,6 +29,8 @@ internal object TranslationPrompts {
 
     internal fun displayNameSystemPrompt(): String = raw(KEY_DISPLAY_NAME_SYSTEM_PROMPT)
 
+    internal fun displayNameToolInstruction(): String = raw(KEY_DISPLAY_NAME_TOOL_INSTRUCTION)
+
     internal fun subtitleAgentSystemPromptTemplate(): String = raw(KEY_SUBTITLE_AGENT_SYSTEM_PROMPT_TEMPLATE)
 
     internal fun subtitlePolishSystemPromptTemplate(): String = raw(KEY_SUBTITLE_POLISH_SYSTEM_PROMPT)
@@ -72,6 +74,7 @@ internal object TranslationPrompts {
     internal fun subtitleScriptReadToolDescription(): String = raw(KEY_SUBTITLE_SCRIPT_READ_TOOL_DESCRIPTION)
 
     internal const val KEY_DISPLAY_NAME_SYSTEM_PROMPT = "display_name_system_prompt"
+    internal const val KEY_DISPLAY_NAME_TOOL_INSTRUCTION = "display_name_tool_instruction"
     internal const val KEY_SUBTITLE_AGENT_SYSTEM_PROMPT_TEMPLATE = "subtitle_agent_system_prompt_template"
     internal const val KEY_SUBTITLE_POLISH_SYSTEM_PROMPT = "subtitle_polish_system_prompt"
     internal const val KEY_SUBTITLE_POLISH_TOOL_READ_DESCRIPTION = "subtitle_polish_tool_read_description"
