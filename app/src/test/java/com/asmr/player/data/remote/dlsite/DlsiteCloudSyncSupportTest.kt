@@ -4,18 +4,16 @@ import com.asmr.player.domain.model.Album
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class DlsiteCloudSyncSupportTest {
-    private val leftBracket = "\u3010"
-    private val rightBracket = "\u3011"
-
     @Test
     fun sanitizeDlsiteCloudSyncKeyword_removesSingleBracketBlock() {
         assertEquals(
             "title rest",
-            sanitizeDlsiteCloudSyncKeyword("title ${leftBracket}tag${rightBracket} rest")
+            sanitizeDlsiteCloudSyncKeyword("title 【tag】 rest")
         )
     }
 
@@ -24,7 +22,7 @@ class DlsiteCloudSyncSupportTest {
         assertEquals(
             "alpha beta gamma",
             sanitizeDlsiteCloudSyncKeyword(
-                " alpha ${leftBracket}first${rightBracket} beta  ${leftBracket}second${rightBracket}   gamma "
+                " alpha 【first】 beta  【second】   gamma "
             )
         )
     }
@@ -34,60 +32,6 @@ class DlsiteCloudSyncSupportTest {
         assertEquals(
             "plain title",
             sanitizeDlsiteCloudSyncKeyword(" plain title ")
-        )
-    }
-
-    @Test
-    fun buildDlsiteCloudSyncAttempts_prefersHansThenHantThenJpn() {
-        val attempts = buildDlsiteCloudSyncAttempts(
-            baseWorkno = "RJ000001",
-            editions = listOf(
-                DlsiteLanguageEdition(workno = "RJ000003", lang = "JPN", label = "jp", displayOrder = 3),
-                DlsiteLanguageEdition(workno = "RJ000001", lang = "CHI_HANS", label = "zh-cn", displayOrder = 1),
-                DlsiteLanguageEdition(workno = "RJ000002", lang = "CHI_HANT", label = "zh-tw", displayOrder = 2)
-            )
-        )
-
-        assertEquals(
-            listOf(
-                DlsiteCloudSyncAttempt("RJ000001", CLOUD_SYNC_LOCALE_ZH_CN),
-                DlsiteCloudSyncAttempt("RJ000002", CLOUD_SYNC_LOCALE_ZH_TW),
-                DlsiteCloudSyncAttempt("RJ000003", CLOUD_SYNC_LOCALE_JA_JP)
-            ),
-            attempts
-        )
-    }
-
-    @Test
-    fun buildDlsiteCloudSyncAttempts_skipsMissingLanguages() {
-        val attempts = buildDlsiteCloudSyncAttempts(
-            baseWorkno = "RJ000001",
-            editions = listOf(
-                DlsiteLanguageEdition(workno = "RJ000002", lang = "CHI_HANT", label = "zh-tw", displayOrder = 1),
-                DlsiteLanguageEdition(workno = "RJ000003", lang = "JPN", label = "jp", displayOrder = 2)
-            )
-        )
-
-        assertEquals(
-            listOf(
-                DlsiteCloudSyncAttempt("RJ000002", CLOUD_SYNC_LOCALE_ZH_TW),
-                DlsiteCloudSyncAttempt("RJ000003", CLOUD_SYNC_LOCALE_JA_JP)
-            ),
-            attempts
-        )
-    }
-
-    @Test
-    fun buildDlsiteCloudSyncAttempts_fallsBackToBaseWorknoWhenEditionsEmpty() {
-        val attempts = buildDlsiteCloudSyncAttempts(baseWorkno = "RJ000001", editions = emptyList())
-
-        assertEquals(
-            listOf(
-                DlsiteCloudSyncAttempt("RJ000001", CLOUD_SYNC_LOCALE_ZH_CN),
-                DlsiteCloudSyncAttempt("RJ000001", CLOUD_SYNC_LOCALE_ZH_TW),
-                DlsiteCloudSyncAttempt("RJ000001", CLOUD_SYNC_LOCALE_JA_JP)
-            ),
-            attempts
         )
     }
 
@@ -166,7 +110,7 @@ class DlsiteCloudSyncSupportTest {
         val keywords = mutableListOf<String>()
 
         val result = searchDlsiteWorknoWithLocaleFallback(
-            "alpha ${leftBracket}first${rightBracket} beta ${leftBracket}second${rightBracket} gamma"
+            "alpha 【first】 beta 【second】 gamma"
         ) { keyword, locale ->
             keywords += "$locale:$keyword"
             when (locale) {
@@ -187,7 +131,7 @@ class DlsiteCloudSyncSupportTest {
         var called = false
 
         val result = searchDlsiteWorknoWithLocaleFallback(
-            "${leftBracket}tag1${rightBracket} ${leftBracket}tag2${rightBracket}"
+            "【tag1】 【tag2】"
         ) { _, _ ->
             called = true
             emptyList()
@@ -198,87 +142,344 @@ class DlsiteCloudSyncSupportTest {
     }
 
     @Test
-    fun fetchDlsiteDetailsWithLocaleFallback_fallsBackToBaseWorknoWhenLanguageEditionsFail() = runBlocking {
-        val attempts = mutableListOf<DlsiteCloudSyncAttempt>()
+    fun searchDlsiteWorknoWithLocaleFallback_ignoresNumericAndCustomWorkIds() = runBlocking {
+        val result = searchDlsiteWorknoWithLocaleFallback("test") { _, _ ->
+            listOf(
+                albumOf("").copy(workId = "1706426"),
+                albumOf("").copy(workId = "custom-id"),
+                albumOf("").copy(workId = "folder-RJ01706426")
+            )
+        }
 
-        val result = fetchDlsiteDetailsWithLocaleFallback(
-            baseWorkno = "RJ000777",
-            fetchLanguageEditions = { error("boom") },
+        assertEquals(DlsiteCloudSyncSearchResult.NotFound, result)
+    }
+
+    @Test
+    fun searchDlsiteWorknoWithLocaleFallback_usesValidWorkIdWhenRjCodeMissing() = runBlocking {
+        val result = searchDlsiteWorknoWithLocaleFallback("test") { _, _ ->
+            listOf(albumOf("").copy(workId = " rj01706426 "))
+        }
+
+        assertEquals(
+            DlsiteCloudSyncSearchResult.Unique("RJ01706426", CLOUD_SYNC_LOCALE_ZH_CN),
+            result
+        )
+    }
+
+    @Test
+    fun resolveDlsiteCloudSync_keepsExistingRjInsteadOfSearchingAnotherEdition() = runBlocking {
+        var searchCalled = false
+        val detailAttempts = mutableListOf<Pair<String, String>>()
+
+        val result = resolveDlsiteCloudSync(
+            keyword = "album title",
+            baseWorkno = "RJ01706426",
+            search = { _, _ ->
+                searchCalled = true
+                listOf(albumOf("RJ01718403"))
+            },
             fetchDetails = { workno, locale ->
-                attempts += DlsiteCloudSyncAttempt(workno, locale)
-                if (workno == "RJ000777" && locale == CLOUD_SYNC_LOCALE_ZH_TW) albumOf(workno, "Traditional") else null
+                detailAttempts += workno to locale
+                albumOf(workno, "Resolved")
+            }
+        )
+
+        assertTrue(result is DlsiteCloudSyncResolveResult.Success)
+        result as DlsiteCloudSyncResolveResult.Success
+        assertEquals("RJ01706426", result.workno)
+        assertEquals("RJ01706426", result.details.rjCode)
+        assertEquals(listOf("RJ01706426" to CLOUD_SYNC_LOCALE_ZH_CN), detailAttempts)
+        assertFalse(searchCalled)
+    }
+
+    @Test
+    fun resolveDlsiteCloudSync_doesNotSearchByTitleWhenKnownWorknoFails() = runBlocking {
+        var searchCalled = false
+        val detailAttempts = mutableListOf<Pair<String, String>>()
+
+        val result = resolveDlsiteCloudSync(
+            keyword = "album title",
+            baseWorkno = "RJ01706426",
+            search = { _, _ ->
+                searchCalled = true
+                listOf(albumOf("RJ01718403"))
+            },
+            fetchDetails = { workno, locale ->
+                detailAttempts += workno to locale
+                null
+            }
+        )
+
+        assertEquals(DlsiteCloudSyncResolveResult.NotFound, result)
+        assertFalse(searchCalled)
+        assertEquals(
+            listOf(
+                "RJ01706426" to CLOUD_SYNC_LOCALE_ZH_CN,
+                "RJ01706426" to CLOUD_SYNC_LOCALE_ZH_TW,
+                "RJ01706426" to CLOUD_SYNC_LOCALE_JA_JP
+            ),
+            detailAttempts
+        )
+    }
+
+    @Test
+    fun resolveDlsiteCloudSync_usesSameNormalizedWorknoAcrossLocaleFallback() = runBlocking {
+        val detailAttempts = mutableListOf<Pair<String, String>>()
+
+        val result = resolveDlsiteCloudSync(
+            keyword = "album title",
+            baseWorkno = " rj01706426 ",
+            search = { _, _ -> error("Known work number must not trigger search") },
+            fetchDetails = { workno, locale ->
+                detailAttempts += workno to locale
+                when (locale) {
+                    CLOUD_SYNC_LOCALE_ZH_CN -> error("network")
+                    CLOUD_SYNC_LOCALE_ZH_TW -> null
+                    else -> albumOf(workno, "Japanese")
+                }
+            }
+        )
+
+        assertTrue(result is DlsiteCloudSyncResolveResult.Success)
+        result as DlsiteCloudSyncResolveResult.Success
+        assertEquals("RJ01706426", result.workno)
+        assertEquals(CLOUD_SYNC_LOCALE_JA_JP, result.locale)
+        assertEquals("Japanese", result.details.title)
+        assertEquals(
+            listOf(
+                "RJ01706426" to CLOUD_SYNC_LOCALE_ZH_CN,
+                "RJ01706426" to CLOUD_SYNC_LOCALE_ZH_TW,
+                "RJ01706426" to CLOUD_SYNC_LOCALE_JA_JP
+            ),
+            detailAttempts
+        )
+    }
+
+    @Test
+    fun resolveDlsiteCloudSync_searchesTitleWhenNoValidWorknoExists() = runBlocking {
+        for (baseWorkno in listOf("", "1706426", "custom-id", "folder-RJ01706426")) {
+            val searchedKeywords = mutableListOf<String>()
+            val detailAttempts = mutableListOf<Pair<String, String>>()
+
+            val result = resolveDlsiteCloudSync(
+                keyword = "album 【tag】 title",
+                baseWorkno = baseWorkno,
+                search = { keyword, _ ->
+                    searchedKeywords += keyword
+                    listOf(albumOf("RJ01706426"))
+                },
+                fetchDetails = { workno, locale ->
+                    detailAttempts += workno to locale
+                    albumOf(workno, "Resolved")
+                }
+            )
+
+            assertTrue(result is DlsiteCloudSyncResolveResult.Success)
+            result as DlsiteCloudSyncResolveResult.Success
+            assertEquals("RJ01706426", result.workno)
+            assertEquals("Resolved", result.details.title)
+            assertEquals(listOf("album title"), searchedKeywords)
+            assertEquals(listOf("RJ01706426" to CLOUD_SYNC_LOCALE_ZH_CN), detailAttempts)
+        }
+    }
+
+    @Test
+    fun resolveDlsiteCloudSync_returnsAmbiguousWithoutFetchingUnselectedCandidate() = runBlocking {
+        var fetchCalled = false
+        val candidates = listOf(albumOf("RJ01706426"), albumOf("RJ01718403"))
+
+        val result = resolveDlsiteCloudSync(
+            keyword = "album title",
+            baseWorkno = "",
+            search = { _, _ -> candidates },
+            fetchDetails = { _, _ ->
+                fetchCalled = true
+                null
             }
         )
 
         assertEquals(
-            listOf(
-                DlsiteCloudSyncAttempt("RJ000777", CLOUD_SYNC_LOCALE_ZH_CN),
-                DlsiteCloudSyncAttempt("RJ000777", CLOUD_SYNC_LOCALE_ZH_TW)
+            DlsiteCloudSyncResolveResult.Ambiguous(
+                locale = CLOUD_SYNC_LOCALE_ZH_CN,
+                candidates = listOf(
+                    DlsiteCloudSyncCandidate("RJ01706426", "RJ01706426", "", ""),
+                    DlsiteCloudSyncCandidate("RJ01718403", "RJ01718403", "", "")
+                )
             ),
-            attempts
+            result
         )
-        assertEquals("RJ000777", result?.workno)
-        assertEquals(CLOUD_SYNC_LOCALE_ZH_TW, result?.locale)
-        assertEquals("Traditional", result?.details?.title)
+        assertFalse(fetchCalled)
     }
 
     @Test
-    fun resolveDlsiteCloudSync_fallsBackToKeywordSearchWhenKnownWorknoFails() = runBlocking {
-        val detailAttempts = mutableListOf<DlsiteCloudSyncAttempt>()
+    fun resolveDlsiteCloudSync_returnsNotFoundWhenTitleSearchHasNoCandidates() = runBlocking {
+        var fetchCalled = false
 
         val result = resolveDlsiteCloudSync(
             keyword = "album title",
-            baseWorkno = "RJ000100",
-            search = { _, locale ->
-                when (locale) {
-                    CLOUD_SYNC_LOCALE_ZH_CN -> listOf(albumOf("RJ000200"))
-                    else -> emptyList()
-                }
-            },
-            fetchLanguageEditions = { emptyList() },
-            fetchDetails = { workno, locale ->
-                detailAttempts += DlsiteCloudSyncAttempt(workno, locale)
-                if (workno == "RJ000200" && locale == CLOUD_SYNC_LOCALE_ZH_CN) albumOf(workno, "Resolved") else null
+            baseWorkno = "",
+            search = { _, _ -> emptyList() },
+            fetchDetails = { _, _ ->
+                fetchCalled = true
+                null
             }
         )
 
-        assertTrue(result is DlsiteCloudSyncResolveResult.Success)
-        result as DlsiteCloudSyncResolveResult.Success
-        assertEquals("RJ000200", result.workno)
-        assertEquals(CLOUD_SYNC_LOCALE_ZH_CN, result.locale)
-        assertEquals("Resolved", result.details.title)
-        assertTrue(detailAttempts.take(3).all { it.workno == "RJ000100" })
+        assertEquals(DlsiteCloudSyncResolveResult.NotFound, result)
+        assertFalse(fetchCalled)
     }
 
     @Test
-    fun resolveSelectedDlsiteCloudSync_usesLocaleFallbackForChosenCandidate() = runBlocking {
-        val detailAttempts = mutableListOf<DlsiteCloudSyncAttempt>()
+    fun resolveDlsiteCloudSync_doesNotRepeatTitleSearchWhenCandidateDetailsMissing() = runBlocking {
+        var searchCalls = 0
+
+        val result = resolveDlsiteCloudSync(
+            keyword = "album title",
+            baseWorkno = "",
+            search = { _, _ ->
+                searchCalls++
+                listOf(albumOf("RJ01706426"))
+            },
+            fetchDetails = { _, _ -> null }
+        )
+
+        assertEquals(DlsiteCloudSyncResolveResult.NotFound, result)
+        assertEquals(1, searchCalls)
+    }
+
+    @Test
+    fun resolveSelectedDlsiteCloudSync_usesSameWorknoForChosenCandidateAcrossLocales() = runBlocking {
+        val detailAttempts = mutableListOf<Pair<String, String>>()
 
         val result = resolveSelectedDlsiteCloudSync(
-            workno = "RJ000555",
-            fetchLanguageEditions = { emptyList() },
+            workno = " rj01718403 ",
             fetchDetails = { workno, locale ->
-                detailAttempts += DlsiteCloudSyncAttempt(workno, locale)
-                if (workno == "RJ000555" && locale == CLOUD_SYNC_LOCALE_ZH_TW) {
-                    albumOf(workno, title = "Chosen")
-                } else {
-                    null
-                }
+                detailAttempts += workno to locale
+                if (locale == CLOUD_SYNC_LOCALE_ZH_TW) albumOf(workno, "Chosen") else null
             }
         )
 
         assertTrue(result is DlsiteCloudSyncResolveResult.Success)
         result as DlsiteCloudSyncResolveResult.Success
-        assertEquals("RJ000555", result.workno)
+        assertEquals("RJ01718403", result.workno)
         assertEquals(CLOUD_SYNC_LOCALE_ZH_TW, result.locale)
         assertEquals("Chosen", result.details.title)
         assertEquals(
             listOf(
-                DlsiteCloudSyncAttempt("RJ000555", CLOUD_SYNC_LOCALE_ZH_CN),
-                DlsiteCloudSyncAttempt("RJ000555", CLOUD_SYNC_LOCALE_ZH_TW)
+                "RJ01718403" to CLOUD_SYNC_LOCALE_ZH_CN,
+                "RJ01718403" to CLOUD_SYNC_LOCALE_ZH_TW
             ),
             detailAttempts
         )
+    }
+
+    @Test
+    fun resolveSelectedDlsiteCloudSync_rejectsInvalidCandidateWithoutFetching() = runBlocking {
+        for (workno in listOf("", "1706426", "custom-id", "folder-RJ01706426")) {
+            var fetchCalled = false
+
+            val result = resolveSelectedDlsiteCloudSync(workno) { _, _ ->
+                fetchCalled = true
+                null
+            }
+
+            assertEquals(DlsiteCloudSyncResolveResult.NotFound, result)
+            assertFalse(fetchCalled)
+        }
+    }
+
+    @Test
+    fun resolveSelectedDlsiteCloudSync_rejectsDifferentRjCodeInDetails() = runBlocking {
+        val result = resolveSelectedDlsiteCloudSync("RJ01706426") { _, _ ->
+            albumOf("RJ01718403").copy(workId = "RJ01706426")
+        }
+
+        assertEquals(DlsiteCloudSyncResolveResult.NotFound, result)
+    }
+
+    @Test
+    fun resolveSelectedDlsiteCloudSync_rejectsDifferentWorkIdInDetails() = runBlocking {
+        val result = resolveSelectedDlsiteCloudSync("RJ01706426") { _, _ ->
+            albumOf("RJ01706426").copy(workId = "RJ01718403")
+        }
+
+        assertEquals(DlsiteCloudSyncResolveResult.NotFound, result)
+    }
+
+    @Test
+    fun resolveSelectedDlsiteCloudSync_continuesSameNumberAfterMismatchedDetails() = runBlocking {
+        val detailAttempts = mutableListOf<Pair<String, String>>()
+
+        val result = resolveSelectedDlsiteCloudSync("RJ01706426") { workno, locale ->
+            detailAttempts += workno to locale
+            if (locale == CLOUD_SYNC_LOCALE_ZH_CN) albumOf("RJ01718403") else albumOf(workno)
+        }
+
+        assertTrue(result is DlsiteCloudSyncResolveResult.Success)
+        result as DlsiteCloudSyncResolveResult.Success
+        assertEquals("RJ01706426", result.workno)
+        assertEquals(CLOUD_SYNC_LOCALE_ZH_TW, result.locale)
+        assertEquals(
+            listOf(
+                "RJ01706426" to CLOUD_SYNC_LOCALE_ZH_CN,
+                "RJ01706426" to CLOUD_SYNC_LOCALE_ZH_TW
+            ),
+            detailAttempts
+        )
+    }
+
+    @Test
+    fun resolveCloudSyncRjCode_preservesOriginalMatchingRjCode() {
+        assertEquals(
+            " rj01706426 ",
+            resolveCloudSyncRjCode(" rj01706426 ", "custom-id", "RJ01706426")
+        )
+    }
+
+    @Test
+    fun resolveCloudSyncRjCode_prefersExistingRjCodeOverWorkId() {
+        assertEquals(
+            "RJ01706426",
+            resolveCloudSyncRjCode("RJ01706426", "RJ01718403", "RJ01706426")
+        )
+    }
+
+    @Test
+    fun resolveCloudSyncRjCode_fillsMissingRjCodeFromMatchingResolvedWorkno() {
+        for (existingWorkId in listOf("", "1706426", "custom-id", " rj01706426 ")) {
+            assertEquals(
+                "RJ01706426",
+                resolveCloudSyncRjCode("", existingWorkId, " rj01706426 ")
+            )
+        }
+    }
+
+    @Test
+    fun resolveCloudSyncRjCode_fillsInvalidRjCodeAfterTitleSearch() {
+        assertEquals("RJ01706426", resolveCloudSyncRjCode("unknown", "custom-id", "RJ01706426"))
+    }
+
+    @Test
+    fun resolveCloudSyncRjCode_rejectsChangingExistingRjCodeToAnotherEdition() {
+        assertThrows(IllegalArgumentException::class.java) {
+            resolveCloudSyncRjCode("RJ01706426", "custom-id", "RJ01718403")
+        }
+    }
+
+    @Test
+    fun resolveCloudSyncRjCode_rejectsStaleResultAfterExistingWorkIdChanges() {
+        assertThrows(IllegalArgumentException::class.java) {
+            resolveCloudSyncRjCode("", "RJ01718403", "RJ01706426")
+        }
+    }
+
+    @Test
+    fun resolveCloudSyncRjCode_rejectsInvalidResolvedWorkno() {
+        for (resolvedWorkno in listOf("", "1706426", "custom-id")) {
+            assertThrows(IllegalArgumentException::class.java) {
+                resolveCloudSyncRjCode("", "", resolvedWorkno)
+            }
+        }
     }
 
     @Test

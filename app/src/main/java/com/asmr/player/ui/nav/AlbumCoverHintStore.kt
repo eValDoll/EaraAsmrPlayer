@@ -120,6 +120,20 @@ object AlbumCoverHintStore {
         }
     }
 
+    fun invalidateAlbum(albumId: Long, workNos: List<String>) {
+        val workNoKeys = workNos.asSequence()
+            .map { it.trim().uppercase() }
+            .filter { it.isNotBlank() }
+            .map { "rj:$it" }
+            .toSet()
+        synchronized(lock) {
+            hints.entries.removeAll { (key, hint) ->
+                key in workNoKeys ||
+                    (albumId > 0L && (key == "id:$albumId" || hint.localAlbum?.id == albumId))
+            }
+        }
+    }
+
     fun peek(albumId: Long?, rjCode: String?): String? {
         return peekHint(albumId, rjCode)?.coverUrl
     }

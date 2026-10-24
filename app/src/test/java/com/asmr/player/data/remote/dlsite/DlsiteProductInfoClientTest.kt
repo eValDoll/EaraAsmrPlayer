@@ -1,7 +1,14 @@
 package com.asmr.player.data.remote.dlsite
 
+import kotlinx.coroutines.runBlocking
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
+import okhttp3.Protocol
+import okhttp3.Request
+import okhttp3.Response
+import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -148,5 +155,131 @@ class DlsiteProductInfoClientTest {
             editions
         )
     }
+
+    @Test
+    fun parseTranslationParentWorkNo_returnsDirectParentInsteadOfOriginalWork() {
+        val client = DlsiteProductInfoClient(OkHttpClient())
+        val json = translationChildJson(
+            translationInfo = """
+                {
+                  "is_child": true,
+                  "original_workno": "RJ01279210",
+                  "parent_workno": "RJ01287594",
+                  "lang": "KOR"
+                }
+            """.trimIndent(),
+        )
+
+        assertEquals("RJ01287594", client.parseTranslationParentWorkNo("RJ01287595", json))
+    }
+
+    @Test
+    fun parseTranslationParentWorkNo_acceptsCaseAndOuterWhitespace() {
+        val client = DlsiteProductInfoClient(OkHttpClient())
+        val json = translationChildJson(
+            responseKey = " rj01287595 ",
+            responseProductId = " rj01287595 ",
+            translationInfo = """{"is_child": true, "parent_workno": " rj01287594 "}""",
+        )
+
+        assertEquals("RJ01287594", client.parseTranslationParentWorkNo(" rj01287595 ", json))
+    }
+
+    @Test
+    fun parseTranslationParentWorkNo_rejectsMismatchedResponseIdentity() {
+        val client = DlsiteProductInfoClient(OkHttpClient())
+        val responses = listOf(
+            translationChildJson(responseKey = "RJ01287594"),
+            translationChildJson(responseProductId = "RJ01287594"),
+            """{"RJ01287595": {"translation_info": {"is_child": true, "parent_workno": "RJ01287594"}}}""",
+        )
+
+        responses.forEach { json ->
+            assertNull(client.parseTranslationParentWorkNo("RJ01287595", json))
+        }
+    }
+
+    @Test
+    fun parseTranslationParentWorkNo_requiresExplicitChildFlag() {
+        val client = DlsiteProductInfoClient(OkHttpClient())
+        val translationInfos = listOf(
+            """{"is_child": false, "parent_workno": "RJ01287594"}""",
+            """{"is_child": null, "parent_workno": "RJ01287594"}""",
+            """{"is_child": "true", "parent_workno": "RJ01287594"}""",
+            """{"parent_workno": "RJ01287594"}""",
+        )
+
+        translationInfos.forEach { translationInfo ->
+            assertNull(client.parseTranslationParentWorkNo("RJ01287595", translationChildJson(translationInfo = translationInfo)))
+        }
+    }
+
+    @Test
+    fun parseTranslationParentWorkNo_rejectsMissingInvalidAndSelfParent() {
+        val client = DlsiteProductInfoClient(OkHttpClient())
+        val translationInfos = listOf(
+            """{"is_child": true, "original_workno": "RJ01279210"}""",
+            """{"is_child": true, "parent_workno": null}""",
+            """{"is_child": true, "parent_workno": ""}""",
+            """{"is_child": true, "parent_workno": "作品 RJ01287594"}""",
+            """{"is_child": true, "parent_workno": "RJinvalid"}""",
+            """{"is_child": true, "parent_workno": "RJ01287595"}""",
+        )
+
+        translationInfos.forEach { translationInfo ->
+            assertNull(client.parseTranslationParentWorkNo("RJ01287595", translationChildJson(translationInfo = translationInfo)))
+        }
+    }
+
+    @Test
+    fun parseTranslationParentWorkNo_rejectsInvalidInputAndJson() {
+        val client = DlsiteProductInfoClient(OkHttpClient())
+
+        assertNull(client.parseTranslationParentWorkNo("", translationChildJson()))
+        assertNull(client.parseTranslationParentWorkNo("invalid", translationChildJson(responseKey = "invalid", responseProductId = "invalid")))
+        assertNull(client.parseTranslationParentWorkNo("RJ01287595", "not json"))
+        assertNull(client.parseTranslationParentWorkNo("RJ01287595", "null"))
+    }
+
+    @Test
+    fun fetchTranslationParentWorkNo_requestsExactProductAndRejectsUnsuccessfulResponse() = runBlocking {
+        val requests = mutableListOf<Request>()
+        val httpClient = OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                requests += chain.request()
+                Response.Builder()
+                    .request(chain.request())
+                    .protocol(Protocol.HTTP_1_1)
+                    .code(if (requests.size == 1) 200 else 503)
+                    .message("test response")
+                    .body(translationChildJson().toResponseBody("application/json".toMediaType()))
+                    .build()
+            }
+            .build()
+        val client = DlsiteProductInfoClient(httpClient)
+
+        assertEquals("RJ01287594", client.fetchTranslationParentWorkNo(" rj01287595 "))
+        assertNull(client.fetchTranslationParentWorkNo("RJ01287595"))
+        assertEquals(2, requests.size)
+        requests.forEach { request ->
+            assertEquals("www.dlsite.com", request.url.host)
+            assertEquals("/maniax/product/info/ajax", request.url.encodedPath)
+            assertEquals("RJ01287595", request.url.queryParameter("product_id"))
+            assertEquals("1", request.url.queryParameter("cdn_cache_min"))
+        }
+    }
+
+    private fun translationChildJson(
+        responseKey: String = "RJ01287595",
+        responseProductId: String = "RJ01287595",
+        translationInfo: String = """{"is_child": true, "parent_workno": "RJ01287594"}""",
+    ): String = """
+        {
+          "$responseKey": {
+            "product_id": "$responseProductId",
+            "translation_info": $translationInfo
+          }
+        }
+    """.trimIndent()
 }
 

@@ -4,6 +4,7 @@ import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.awaitResponse
 import com.asmr.player.data.remote.scraper.DLSITE_DOMAIN
 import com.asmr.player.data.remote.scraper.storeSegment
+import com.asmr.player.util.DlsiteWorkNo
 import com.google.gson.Gson
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -28,14 +29,11 @@ class DlsiteProductInfoClient @Inject constructor(
 
     internal fun parseLanguageEditions(productId: String, json: String): List<DlsiteLanguageEdition> {
         val clean = productId.trim().uppercase()
-        if (clean.isBlank() || json.isBlank()) return emptyList()
+        val workObj = parseProductInfo(clean, json) ?: return emptyList()
+        return parseLanguageEditions(clean, workObj)
+    }
 
-        val root = runCatching { gson.fromJson(json, Map::class.java) }.getOrNull() ?: return emptyList()
-        val workObj = (root[clean] as? Map<*, *>)
-            ?: (root.entries.firstOrNull { (k, _) ->
-                (k as? String)?.trim()?.equals(clean, ignoreCase = true) == true
-            }?.value as? Map<*, *>)
-            ?: return emptyList()
+    private fun parseLanguageEditions(clean: String, workObj: Map<*, *>): List<DlsiteLanguageEdition> {
         val rawItems = workObj["dl_count_items"] as? List<*> ?: emptyList<Any?>()
 
         val listedEditions = rawItems.mapNotNull { it as? Map<*, *> }
@@ -75,6 +73,31 @@ class DlsiteProductInfoClient @Inject constructor(
             .sortedWith(compareBy({ it.displayOrder }, { it.lang }))
     }
 
+    internal fun parseTranslationParentWorkNo(productId: String, json: String): String? {
+        val clean = productId.trim().uppercase()
+        val workObj = parseProductInfo(clean, json) ?: return null
+        return parseTranslationParentWorkNo(clean, workObj)
+    }
+
+    private fun parseTranslationParentWorkNo(clean: String, workObj: Map<*, *>): String? {
+        if (clean.isBlank() || DlsiteWorkNo.normalizeWorkNo(clean) != clean) return null
+        if ((workObj["product_id"] as? String)?.trim()?.uppercase() != clean) return null
+        val translationInfo = workObj["translation_info"] as? Map<*, *> ?: return null
+        if (translationInfo["is_child"] != true) return null
+        val parent = DlsiteWorkNo.normalizeWorkNo((translationInfo["parent_workno"] as? String).orEmpty())
+        return parent.takeIf { it.isNotBlank() && it != clean }
+    }
+
+    private fun parseProductInfo(productId: String, json: String): Map<*, *>? {
+        val clean = productId.trim().uppercase()
+        if (clean.isBlank() || json.isBlank()) return null
+        val root = runCatching { gson.fromJson(json, Map::class.java) }.getOrNull() ?: return null
+        return (root[clean] as? Map<*, *>)
+            ?: (root.entries.firstOrNull { (key, _) ->
+                (key as? String)?.trim()?.equals(clean, ignoreCase = true) == true
+            }?.value as? Map<*, *>)
+    }
+
     private fun defaultLanguageLabel(lang: String): String {
         return when (lang) {
             "CHI_HANS" -> "简体中文"
@@ -94,10 +117,21 @@ class DlsiteProductInfoClient @Inject constructor(
     suspend fun fetchLanguageEditions(productId: String): List<DlsiteLanguageEdition> = withContext(Dispatchers.IO) {
         val clean = productId.trim().uppercase()
         if (clean.isBlank()) return@withContext emptyList()
+        val workObj = fetchProductInfo(clean) ?: return@withContext emptyList()
+        parseLanguageEditions(clean, workObj)
+    }
 
+    suspend fun fetchTranslationParentWorkNo(productId: String): String? = withContext(Dispatchers.IO) {
+        val clean = productId.trim().uppercase()
+        if (clean.isBlank() || DlsiteWorkNo.normalizeWorkNo(clean) != clean) return@withContext null
+        val workObj = fetchProductInfo(clean) ?: return@withContext null
+        parseTranslationParentWorkNo(clean, workObj)
+    }
+
+    private suspend fun fetchProductInfo(productId: String): Map<*, *>? {
         val url = "$DLSITE_DOMAIN${storeSegment()}/product/info/ajax".toHttpUrl()
             .newBuilder()
-            .addQueryParameter("product_id", clean)
+            .addQueryParameter("product_id", productId)
             .addQueryParameter("cdn_cache_min", "1")
             .build()
 
@@ -110,10 +144,10 @@ class DlsiteProductInfoClient @Inject constructor(
             .get()
             .build()
 
-        okHttpClient.newCall(request).awaitResponse().use { resp ->
+        return okHttpClient.newCall(request).awaitResponse().use { resp ->
             val body = resp.body?.string().orEmpty()
-            if (!resp.isSuccessful || body.isBlank()) return@withContext emptyList()
-            parseLanguageEditions(clean, body)
+            if (!resp.isSuccessful || body.isBlank()) return@use null
+            parseProductInfo(productId, body)
         }
     }
 

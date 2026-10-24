@@ -502,7 +502,6 @@ fun AlbumDetailScreen(
     viewModel: AlbumDetailViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val cloudSyncSelectionDialogState by viewModel.cloudSyncSelectionDialogState.collectAsStateWithLifecycle()
     val colorScheme = AsmrTheme.colorScheme
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -1751,14 +1750,6 @@ fun AlbumDetailScreen(
                     }
                 }
             }
-        }
-
-        cloudSyncSelectionDialogState?.let { dialogState ->
-            CloudSyncSelectionDialog(
-                state = dialogState,
-                onSelect = viewModel::confirmCloudSyncSelection,
-                onCancel = viewModel::cancelCloudSyncSelection
-            )
         }
     }
 }

@@ -1,11 +1,80 @@
 package com.asmr.player
 
+import androidx.lifecycle.Lifecycle
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ClipboardRjNavigationTest {
+    @Test
+    fun entryInspection_checksColdEntryOnceAfterResumeAndFocus() {
+        val inspection = ClipboardEntryInspection()
+
+        assertFalse(inspection.consumeIfReady(true, true, Lifecycle.State.STARTED))
+        inspection.onLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        assertFalse(inspection.consumeIfReady(true, false, Lifecycle.State.RESUMED))
+        assertTrue(inspection.consumeIfReady(true, true, Lifecycle.State.RESUMED))
+        assertFalse(inspection.consumeIfReady(true, true, Lifecycle.State.RESUMED))
+    }
+
+    @Test
+    fun entryInspection_doesNotCheckAgainAfterInAppCopyOrWindowFocusChange() {
+        val inspection = ClipboardEntryInspection()
+        assertTrue(inspection.consumeIfReady(true, true, Lifecycle.State.RESUMED))
+
+        assertFalse(inspection.consumeIfReady(true, false, Lifecycle.State.RESUMED))
+        val inAppCopyEvent = clipboardEventKey("RJ123456", timestampMillis = 100L)
+        assertFalse(inspection.consumeIfReady(true, true, Lifecycle.State.RESUMED))
+        assertFalse(
+            shouldShowClipboardRjPrompt(
+                detectedRj = "RJ123456",
+                eventKey = inAppCopyEvent,
+                lastHandledEventKey = inAppCopyEvent,
+                currentPromptEventKey = null
+            )
+        )
+    }
+
+    @Test
+    fun entryInspection_doesNotTreatTemporaryPauseAsBackgroundEntry() {
+        val inspection = ClipboardEntryInspection()
+        assertTrue(inspection.consumeIfReady(true, true, Lifecycle.State.RESUMED))
+
+        inspection.onLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+        assertFalse(inspection.consumeIfReady(true, false, Lifecycle.State.STARTED))
+        inspection.onLifecycleEvent(Lifecycle.Event.ON_RESUME)
+
+        assertFalse(inspection.consumeIfReady(true, true, Lifecycle.State.RESUMED))
+    }
+
+    @Test
+    fun entryInspection_checksOnceAfterReturningFromBackground() {
+        val inspection = ClipboardEntryInspection()
+        assertTrue(inspection.consumeIfReady(true, true, Lifecycle.State.RESUMED))
+
+        inspection.onLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+        inspection.onLifecycleEvent(Lifecycle.Event.ON_STOP)
+        assertFalse(inspection.consumeIfReady(true, false, Lifecycle.State.CREATED))
+        inspection.onLifecycleEvent(Lifecycle.Event.ON_START)
+        assertFalse(inspection.consumeIfReady(true, true, Lifecycle.State.STARTED))
+        inspection.onLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        assertFalse(inspection.consumeIfReady(true, false, Lifecycle.State.RESUMED))
+
+        assertTrue(inspection.consumeIfReady(true, true, Lifecycle.State.RESUMED))
+        assertFalse(inspection.consumeIfReady(true, true, Lifecycle.State.RESUMED))
+    }
+
+    @Test
+    fun entryInspection_waitsWhileDisabledWithoutRearmingConsumedEntry() {
+        val inspection = ClipboardEntryInspection()
+
+        assertFalse(inspection.consumeIfReady(false, true, Lifecycle.State.RESUMED))
+        assertTrue(inspection.consumeIfReady(true, true, Lifecycle.State.RESUMED))
+        assertFalse(inspection.consumeIfReady(false, true, Lifecycle.State.RESUMED))
+        assertFalse(inspection.consumeIfReady(true, true, Lifecycle.State.RESUMED))
+    }
+
     @Test
     fun extractClipboardRjCode_returnsFirstCode() {
         assertEquals(

@@ -16,6 +16,7 @@ import com.asmr.player.data.remote.api.AsmrOneApi
 import com.asmr.player.data.remote.api.AsmrOneAvailabilityApi
 import com.asmr.player.data.remote.crawler.AsmrOneCrawler
 import com.asmr.player.data.remote.dlsite.DlsitePlayLibraryClient
+import com.asmr.player.data.remote.dlsite.DlsiteProductInfoClient
 import com.asmr.player.data.remote.scraper.DLSiteScraper
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.domain.model.Album
@@ -70,7 +71,7 @@ class JpAsmrSearchFlowTest {
         val retrofit = Retrofit.Builder().baseUrl(server.url("/"))
             .addConverterFactory(GsonConverterFactory.create()).build()
         val vm = SearchViewModel(
-            DLSiteScraper(context), DlsitePlayLibraryClient(client, context),
+            DLSiteScraper(context, DlsiteProductInfoClient(client)), DlsitePlayLibraryClient(client, context),
             AsmrOneAvailabilityApi(client, gson) { server.url("/").toString() },
             AsmrOneCrawler(retrofit.create(AsmrOneApi::class.java), retrofit.create(Asmr100Api::class.java),
                 retrofit.create(Asmr200Api::class.java), retrofit.create(Asmr300Api::class.java), settings),
@@ -138,7 +139,7 @@ class JpAsmrSearchFlowTest {
         val retrofit = Retrofit.Builder().baseUrl(server.url("/"))
             .addConverterFactory(GsonConverterFactory.create()).build()
         fun newViewModel(key: String): SearchViewModel = SearchViewModel(
-            DLSiteScraper(context), DlsitePlayLibraryClient(client, context),
+            DLSiteScraper(context, DlsiteProductInfoClient(client)), DlsitePlayLibraryClient(client, context),
             AsmrOneAvailabilityApi(client, gson) { server.url("/").toString() },
             AsmrOneCrawler(retrofit.create(AsmrOneApi::class.java), retrofit.create(Asmr100Api::class.java),
                 retrofit.create(Asmr200Api::class.java), retrofit.create(Asmr300Api::class.java), settings),

@@ -50,11 +50,11 @@ import com.asmr.player.data.local.db.entities.titleForDisplay
 import com.asmr.player.data.local.library.LocalAlbumMergeService
 import com.asmr.player.data.local.library.deleteLibraryAlbum
 import com.asmr.player.data.local.library.deleteLibraryTracks
+import com.asmr.player.data.local.library.isLocalWorkNumberAvailable
 import com.asmr.player.data.remote.api.AsmrOneApi
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncResolveResult
-import com.asmr.player.data.remote.dlsite.DlsiteProductInfoClient
-import com.asmr.player.data.remote.dlsite.resolveCloudSyncWorkId
+import com.asmr.player.data.remote.dlsite.resolveCloudSyncRjCode
 import com.asmr.player.data.remote.dlsite.resolveDlsiteCloudSync
 import com.asmr.player.data.remote.dlsite.resolveSelectedDlsiteCloudSync
 import com.asmr.player.data.remote.scraper.DLSiteScraper
@@ -66,6 +66,7 @@ import com.asmr.player.playback.PlayerConnection
 import com.asmr.player.ui.common.queryTrackFileSize
 import com.asmr.player.util.GlobalSyncState
 import com.asmr.player.util.AlbumWorkNo
+import com.asmr.player.util.DlsiteWorkNo
 import com.asmr.player.util.ScanRootsStore
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.SubtitleMatchSupport
@@ -142,7 +143,6 @@ class LibraryViewModel @Inject constructor(
     private val albumDao: AlbumDao,
     private val trackDao: TrackDao,
     private val dlsiteScraper: DLSiteScraper,
-    private val dlsiteProductInfoClient: DlsiteProductInfoClient,
     private val asmrOneApi: AsmrOneApi,
     private val settingsRepository: SettingsRepository,
     private val downloadDestinationStore: DownloadDestinationStore,
@@ -1332,12 +1332,10 @@ class LibraryViewModel @Inject constructor(
     private suspend fun resolveAlbumCloudSync(entity: AlbumEntity): DlsiteCloudSyncResolveResult {
         return resolveDlsiteCloudSync(
             keyword = entity.title.trim(),
-            baseWorkno = entity.rjCode.ifBlank { entity.workId }.trim().uppercase(),
+            baseWorkno = DlsiteWorkNo.normalizeWorkNo(entity.rjCode)
+                .ifBlank { DlsiteWorkNo.normalizeWorkNo(entity.workId) },
             search = { searchKeyword, locale ->
                 dlsiteScraper.search(searchKeyword, page = 1, order = "trend", locale = locale).items
-            },
-            fetchLanguageEditions = { productId ->
-                dlsiteProductInfoClient.fetchLanguageEditions(productId)
             },
             fetchDetails = { workno, locale ->
                 dlsiteScraper.getDetails(workno, locale = locale)
@@ -1348,9 +1346,6 @@ class LibraryViewModel @Inject constructor(
     private suspend fun resolveSelectedAlbumCloudSync(workno: String): DlsiteCloudSyncResolveResult {
         return resolveSelectedDlsiteCloudSync(
             workno = workno,
-            fetchLanguageEditions = { productId ->
-                dlsiteProductInfoClient.fetchLanguageEditions(productId)
-            },
             fetchDetails = { selectedWorkno, locale ->
                 dlsiteScraper.getDetails(selectedWorkno, locale = locale)
             }
@@ -1365,6 +1360,9 @@ class LibraryViewModel @Inject constructor(
         val details = result.details
         val updated = database.withTransaction {
             val current = albumDao.getAlbumById(entity.id) ?: return@withTransaction null
+            require(albumDao.isLocalWorkNumberAvailable(current.id, resolvedWorkno)) {
+                "本地库已存在 $resolvedWorkno"
+            }
             current.copy(
                 title = details.title.ifBlank { current.title },
                 circle = details.circle.ifBlank { current.circle },
@@ -1372,8 +1370,8 @@ class LibraryViewModel @Inject constructor(
                 tags = if (details.tags.isNotEmpty()) details.tags.joinToString(",") else current.tags,
                 coverUrl = details.coverUrl.ifBlank { current.coverUrl },
                 description = details.description.ifBlank { current.description },
-                workId = resolveCloudSyncWorkId(current.workId, resolvedWorkno),
-                rjCode = resolvedWorkno
+                workId = current.workId.ifBlank { resolvedWorkno },
+                rjCode = resolveCloudSyncRjCode(current.rjCode, current.workId, resolvedWorkno)
             ).also { albumDao.updateAlbum(it) }
         } ?: return
         albumTagRepository.upsertAlbumFtsIndex(updated.id, updated)
