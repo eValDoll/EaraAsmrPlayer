@@ -198,13 +198,6 @@ class MainNavigationSupportTest {
     }
 
     @Test
-    fun resolvePrimaryPagerApproachPage_onlySkipsLongProgrammaticJumps() {
-        assertEquals(null, resolvePrimaryPagerApproachPage(currentPage = 1, targetPage = 2))
-        assertEquals(2, resolvePrimaryPagerApproachPage(currentPage = 0, targetPage = 3))
-        assertEquals(1, resolvePrimaryPagerApproachPage(currentPage = 4, targetPage = 0))
-    }
-
-    @Test
     fun shouldSyncPrimaryPagerToRoute_onlyWhenSettledPageDiffersFromTarget() {
         assertEquals(false, shouldSyncPrimaryPagerToRoute(targetPage = -1, settledPage = 0))
         assertEquals(false, shouldSyncPrimaryPagerToRoute(targetPage = 2, settledPage = 2))
@@ -246,11 +239,11 @@ class MainNavigationSupportTest {
     }
 
     @Test
-    fun resolvePrimaryPagerBeyondBoundsPageCount_keepsOnlyAdjacentPageComposed() {
+    fun resolvePrimaryPagerBeyondBoundsPageCount_canRetainEveryPrimaryPageFromEitherEnd() {
         assertEquals(0, resolvePrimaryPagerBeyondBoundsPageCount(0))
         assertEquals(0, resolvePrimaryPagerBeyondBoundsPageCount(1))
         assertEquals(1, resolvePrimaryPagerBeyondBoundsPageCount(2))
-        assertEquals(1, resolvePrimaryPagerBeyondBoundsPageCount(8))
+        assertEquals(7, resolvePrimaryPagerBeyondBoundsPageCount(8))
     }
 
     @Test

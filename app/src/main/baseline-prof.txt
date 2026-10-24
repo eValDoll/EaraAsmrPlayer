@@ -52982,7 +52982,6 @@ SPLcom/asmr/player/MainNavigationSupportKt;->PrimaryTopBarBrand_3IgeMak$lambda$6
 SPLcom/asmr/player/MainNavigationSupportKt;->PrimaryTopBarBrand-3IgeMak(Ljava/lang/String;JLandroidx/compose/ui/Modifier;Landroidx/compose/runtime/Composer;II)V
 SPLcom/asmr/player/MainNavigationSupportKt;->resolveCurrentPrimaryDestinationRoute(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;
 SPLcom/asmr/player/MainNavigationSupportKt;->resolvePrimaryNavVisualRoute(Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)Ljava/lang/String;
-SPLcom/asmr/player/MainNavigationSupportKt;->resolvePrimaryPagerApproachPage(II)Ljava/lang/Integer;
 SPLcom/asmr/player/MainNavigationSupportKt;->shouldScrollPrimaryRouteToTop(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z
 SPLcom/asmr/player/MainNavigationSupportKt;->toThemeMediaSource(Landroidx/media3/common/MediaItem;)Lcom/asmr/player/ThemeMediaSource;
 SPLcom/asmr/player/PersistedBooleanState;-><clinit>()V

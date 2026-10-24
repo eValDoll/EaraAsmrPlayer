@@ -235,6 +235,13 @@ class LongListPerformanceBenchmark {
             iterations = FrameTimingIterations,
             setupBlock = {
                 startHarnessScenario(scenario)
+                if (scenario == BenchmarkScenarioValue.FavoritesDetail ||
+                    scenario == BenchmarkScenarioValue.PlaylistDetail
+                ) {
+                    check(device.wait(Until.hasObject(By.desc(Pattern.compile("播放|继续播放|暂停"))), 5_000)) {
+                        "Playlist hero playback action is missing"
+                    }
+                }
             }
         ) {
             device.performSlowDragAndFling()

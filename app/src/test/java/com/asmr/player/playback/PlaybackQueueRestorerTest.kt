@@ -168,6 +168,7 @@ class PlaybackQueueRestorerTest {
         val entry = item("https://127.0.0.1:1/audio.mp3").copy(
             albumCv = "测试 CV",
             durationMs = 123_456L,
+            sourcePlaylistId = 42L,
             remoteSubtitleSources = listOf(PersistedRemoteSubtitleSource("https://example.com/a.lrc", "ja", "lrc")),
         )
         stateStore.save(state(listOf(entry), positionMs = 2_000L))
@@ -176,6 +177,7 @@ class PlaybackQueueRestorerTest {
         assertEquals(entry, restored.state.queue.single())
         assertEquals("测试 CV", restored.items.single().mediaMetadata.extras?.getString(EXTRA_ALBUM_CV))
         assertEquals(123_456L, restored.items.single().mediaMetadata.durationMs)
+        assertEquals(42L, restored.items.single().sourcePlaylistId())
         assertFalse(restored.state.playWhenReady)
         assertEquals(Player.REPEAT_MODE_ONE, restored.state.repeatMode)
         assertTrue(restored.state.shuffleEnabled)
@@ -200,7 +202,7 @@ class PlaybackQueueRestorerTest {
         stateStore.save(
             state(
                 listOf(
-                    item(audio.path).copy(albumId = albumId, trackId = trackId, artworkUri = automatic.path),
+                    item(audio.path).copy(albumId = albumId, trackId = trackId, artworkUri = automatic.path, sourcePlaylistId = 17L),
                     item("https://example.com/audio.mp3").copy(albumId = albumId, artworkUri = automatic.path),
                 )
             )
@@ -209,6 +211,8 @@ class PlaybackQueueRestorerTest {
             List(2) { Uri.fromFile(manual) },
             restorer.restore()?.items?.map { it.mediaMetadata.artworkUri },
         )
+        val sources = requireNotNull(restorer.restore()).items.map { it.sourcePlaylistId() }
+        assertEquals(listOf(17L, null), sources)
 
         val album = requireNotNull(database.albumDao().getAlbumById(albumId))
         database.albumDao().updateAlbum(album.copy(manualCoverPath = ""))

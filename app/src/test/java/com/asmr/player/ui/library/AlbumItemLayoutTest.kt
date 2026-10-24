@@ -4,16 +4,20 @@ import android.content.res.Configuration
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import com.asmr.player.ui.createEaraComposeRule
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.asmr.player.domain.model.Album
+import com.asmr.player.ui.common.LocalPageAnimationsActive
 import com.asmr.player.ui.theme.AsmrPlayerTheme
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -25,6 +29,52 @@ import kotlin.math.abs
 class AlbumItemLayoutTest {
     @get:Rule
     val composeRule = createEaraComposeRule()
+
+    @Test
+    fun albumItem_onlineMetadataKeepsItsNodesWhenPageVisibilityChanges() {
+        val animationsActive = mutableStateOf(false)
+        val album = Album(
+            id = 1L,
+            title = "Album title",
+            path = "/tmp/album",
+            circle = "Example Circle",
+            cv = "CV A / CV B",
+            tags = listOf("binaural", "exclusive"),
+            workId = "RJ999999",
+            rjCode = "RJ999999",
+            ratingValue = 4.9,
+            ratingCount = 3210,
+        )
+
+        composeRule.setContent {
+            CompositionLocalProvider(LocalPageAnimationsActive provides animationsActive.value) {
+                AsmrPlayerTheme {
+                    Box(modifier = Modifier.width(310.dp)) {
+                        AlbumItem(
+                            album = album,
+                            onClick = {},
+                            animateOnlineDetails = true,
+                        )
+                    }
+                }
+            }
+        }
+
+        fun metadataNodeIds() = listOf("CV A", "#binaural").associateWith { text ->
+            composeRule.onNodeWithText(text, useUnmergedTree = true)
+                .assertExists()
+                .fetchSemanticsNode().id
+        }
+
+        val initialNodeIds = metadataNodeIds()
+        composeRule.runOnIdle { animationsActive.value = true }
+        composeRule.waitForIdle()
+        assertEquals(initialNodeIds, metadataNodeIds())
+
+        composeRule.runOnIdle { animationsActive.value = false }
+        composeRule.waitForIdle()
+        assertEquals(initialNodeIds, metadataNodeIds())
+    }
 
     @Test
     fun albumItem_expandsHeightSoStatsLineIsNotClippedOnNarrowLayouts() {

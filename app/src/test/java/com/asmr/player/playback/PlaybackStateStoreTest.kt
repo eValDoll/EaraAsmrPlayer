@@ -5,6 +5,9 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.mutablePreferencesOf
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
+import androidx.media3.common.Player
 import com.google.gson.Gson
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -17,6 +20,7 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
+import java.lang.reflect.Proxy
 
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE, application = Application::class, sdk = [34])
@@ -114,6 +118,38 @@ class PlaybackStateStoreTest {
         assertNull(dataStore.data.first()[legacyKey])
         assertNull(dataStore.data.first()[stateKey])
         assertNull(store.load())
+    }
+
+    @Test
+    fun capturedPlaylistSourceSurvivesStorageWithoutMutatingTheOriginalMetadata() = runBlocking {
+        val original = MediaItemFactory.fromDetails(
+            mediaId = "playlist-track", uri = "https://example.com/audio.mp3", title = "音频", albumId = 12L,
+        )
+        val sourced = original.withSourcePlaylist(42L)
+        assertNull(original.sourcePlaylistId())
+        assertEquals(12L, sourced.mediaMetadata.extras?.getLong("album_id"))
+        assertEquals(42L, sourced.sourcePlaylistId())
+        val player = Proxy.newProxyInstance(Player::class.java.classLoader, arrayOf(Player::class.java)) { _, method, _ ->
+            when (method.name) {
+                "getMediaItemCount" -> 1
+                "getMediaItemAt" -> sourced
+                "getCurrentMediaItemIndex" -> 0
+                "getCurrentPosition" -> 4_321L
+                "getPlayWhenReady" -> true
+                "getRepeatMode" -> Player.REPEAT_MODE_OFF
+                "getShuffleModeEnabled" -> false
+                "getPlaybackParameters" -> PlaybackParameters.DEFAULT
+                else -> error("Unexpected player call: ${method.name}")
+            }
+        } as Player
+        val captured = requireNotNull(capturePersistedPlaybackState(player))
+        val store = PlaybackStateStore(InMemoryPreferencesDataStore(mutablePreferencesOf()))
+
+        store.save(captured)
+
+        val restored = requireNotNull(store.load())
+        assertEquals(42L, restored.queue.single().sourcePlaylistId)
+        assertEquals(4_321L, restored.positionMs)
     }
 
     private class InMemoryPreferencesDataStore(initial: Preferences) : DataStore<Preferences> {

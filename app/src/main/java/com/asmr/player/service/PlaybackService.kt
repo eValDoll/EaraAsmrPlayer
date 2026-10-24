@@ -52,6 +52,7 @@ import com.asmr.player.data.settings.PlaybackRuntimeSettings
 import com.asmr.player.data.repository.StatisticsRepository
 import com.asmr.player.data.repository.ListeningRecordRepository
 import com.asmr.player.data.repository.ListeningTrackContext
+import com.asmr.player.data.repository.PlaylistPlaybackRepository
 import com.asmr.player.playback.AsmrRenderersFactory
 import com.asmr.player.playback.BalanceAudioProcessor
 import com.asmr.player.playback.ChannelModeAudioProcessor
@@ -64,6 +65,8 @@ import com.asmr.player.playback.PlaybackArtworkResolver
 import com.asmr.player.playback.PlaybackConnectionLifecycle
 import com.asmr.player.playback.PlaybackRecoveryPolicy
 import com.asmr.player.playback.PlaybackStateStore
+import com.asmr.player.playback.PlaylistPlaybackProgress
+import com.asmr.player.playback.PlaylistPlaybackTracker
 import com.asmr.player.playback.RoutingPlaybackDataSource
 import com.asmr.player.playback.SceneEffectAudioProcessor
 import com.asmr.player.playback.StereoFftAnalyzer
@@ -79,6 +82,7 @@ import com.asmr.player.playback.isRecoverableRemotePlaybackFailure
 import com.asmr.player.playback.capturePersistedPlaybackState
 import com.asmr.player.playback.spectrumVisualDelayMillis
 import com.asmr.player.playback.withPlaybackArtwork
+import com.asmr.player.playback.sourcePlaylistId
 import com.asmr.player.util.SubtitleEntry
 import com.asmr.player.util.SubtitleIndexFinder
 import dagger.hilt.android.AndroidEntryPoint
@@ -86,6 +90,7 @@ import androidx.media3.datasource.TransferListener
 import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.DataSource
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
@@ -100,6 +105,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.channels.Channel
 import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
@@ -254,6 +260,12 @@ class PlaybackService : MediaSessionService() {
     @Inject
     lateinit var playbackStateStore: PlaybackStateStore
 
+    @Inject
+    lateinit var playlistPlaybackRepository: PlaylistPlaybackRepository
+
+    private val playlistPlaybackTracker = PlaylistPlaybackTracker()
+    private val playlistProgressWrites = Channel<PlaylistPlaybackProgress>(Channel.UNLIMITED)
+
     private var lastMarkedMediaId: String? = null
     private var lastMarkedElapsedMs: Long = 0L
 
@@ -281,6 +293,24 @@ class PlaybackService : MediaSessionService() {
     override fun onCreate() {
         super.onCreate()
         ensureNotificationChannel()
+        serviceScope.launch(Dispatchers.IO) {
+            for (progress in playlistProgressWrites) {
+                try {
+                    playlistPlaybackRepository.recordPlayback(
+                        playlistId = progress.playlistId,
+                        mediaId = progress.mediaId,
+                        positionMs = progress.positionMs,
+                        durationMs = progress.durationMs,
+                        isCompleted = progress.isCompleted,
+                        updatedAt = progress.updatedAt,
+                    )
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (error: Exception) {
+                    Log.e("PlaybackService", "保存列表播放进度失败", error)
+                }
+            }
+        }
         appVolumeBoostController =
             AppVolumeBoostController(getSystemService(AUDIO_SERVICE) as AudioManager)
         val runtimeSettings = runBlocking {
@@ -459,6 +489,9 @@ class PlaybackService : MediaSessionService() {
             }
 
             override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
+                if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) {
+                    playlistPlaybackTracker.invalidateCurrentRequest()
+                }
                 cancelPlaybackRecovery(resetPolicy = true)
                 observeArtworkForCurrentMedia()
                 serviceScope.launch { loadLyricsForCurrentMedia() }
@@ -473,6 +506,19 @@ class PlaybackService : MediaSessionService() {
                 currentTrackListenedMs = 0L
                 isCurrentTrackCounted = false
                 lastProgressPersistElapsedMs = 0L
+            }
+
+            override fun onPositionDiscontinuity(
+                oldPosition: Player.PositionInfo,
+                newPosition: Player.PositionInfo,
+                reason: Int,
+            ) {
+                playlistPlaybackTracker.capturePreviousPosition(
+                    playlistId = oldPosition.mediaItem?.sourcePlaylistId(),
+                    mediaId = oldPosition.mediaItem?.mediaId,
+                    positionMs = oldPosition.positionMs,
+                    isCompleted = reason == Player.DISCONTINUITY_REASON_AUTO_TRANSITION,
+                )
             }
 
             override fun onPlaybackStateChanged(playbackState: Int) {
@@ -496,6 +542,12 @@ class PlaybackService : MediaSessionService() {
             }
 
             override fun onEvents(player: Player, events: Player.Events) {
+                updatePlaylistPlaybackProgress(
+                    force = events.contains(Player.EVENT_IS_PLAYING_CHANGED) ||
+                        events.contains(Player.EVENT_MEDIA_ITEM_TRANSITION) ||
+                        events.contains(Player.EVENT_POSITION_DISCONTINUITY) ||
+                        events.contains(Player.EVENT_PLAYBACK_STATE_CHANGED),
+                )
                 if (
                     events.contains(Player.EVENT_AVAILABLE_COMMANDS_CHANGED) ||
                     events.contains(Player.EVENT_TIMELINE_CHANGED) ||
@@ -515,6 +567,7 @@ class PlaybackService : MediaSessionService() {
                     if (!exoPlayer.isPlaying) {
                         null
                     } else {
+                        updatePlaylistPlaybackProgress(force = false)
                         currentTrackListenedMs += 1000L
                         val totalDuration = exoPlayer.duration
                         val shouldIncrementTrackCount =
@@ -726,6 +779,25 @@ class PlaybackService : MediaSessionService() {
         statisticsRepository.addNetworkTraffic(bytes)
         // 音频流量归入当前收听会话（若存在）。
         listeningRecordRepository.addTraffic(bytes)
+    }
+
+    private fun updatePlaylistPlaybackProgress(force: Boolean) {
+        if (!::exoPlayer.isInitialized) return
+        val item = exoPlayer.currentMediaItem
+        val durationMs = exoPlayer.duration.takeIf { it > 0L }
+            ?: item?.mediaMetadata?.durationMs?.takeIf { it > 0L }
+            ?: 0L
+        playlistPlaybackTracker.update(
+            playlistId = item?.sourcePlaylistId(),
+            mediaId = item?.mediaId,
+            positionMs = exoPlayer.currentPosition,
+            durationMs = durationMs,
+            isPlaying = exoPlayer.isPlaying,
+            isEnded = exoPlayer.playbackState == Player.STATE_ENDED,
+            force = force,
+            nowElapsedMs = SystemClock.elapsedRealtime(),
+            nowEpochMs = System.currentTimeMillis(),
+        ).forEach { playlistProgressWrites.trySend(it) }
     }
 
     private suspend fun persistCurrentTrackProgressIfNeeded(force: Boolean) {
@@ -1400,6 +1472,8 @@ class PlaybackService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        updatePlaylistPlaybackProgress(force = true)
+        playlistProgressWrites.close()
         overlay?.hide()
         lyricsLoadJob?.cancel()
         artworkObservationJob?.cancel()

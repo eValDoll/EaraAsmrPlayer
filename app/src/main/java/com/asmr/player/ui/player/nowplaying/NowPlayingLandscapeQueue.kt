@@ -60,6 +60,7 @@ internal fun TabletLandscapeQueuePanel(
 ) {
     val queue by viewModel.queue.collectAsStateWithLifecycle()
     val colorScheme = AsmrTheme.colorScheme
+    val supportingTextColor = playerSupportingTextColor(colorScheme.isDark)
     val listState = rememberLazyListState()
     val currentIndex = remember(queue, currentMediaId) {
         queue.indexOfFirst { it.mediaId == currentMediaId }
@@ -106,7 +107,7 @@ internal fun TabletLandscapeQueuePanel(
                 Text(
                     text = "${queue.size} 首",
                     style = MaterialTheme.typography.labelSmall,
-                    color = colorScheme.textTertiary
+                    color = supportingTextColor
                 )
             }
             Spacer(modifier = Modifier.weight(1f))
@@ -140,7 +141,7 @@ internal fun TabletLandscapeQueuePanel(
                         text = "播放队列为空",
                         modifier = Modifier.padding(horizontal = 32.dp),
                         style = MaterialTheme.typography.bodySmall,
-                        color = colorScheme.textTertiary
+                        color = supportingTextColor
                     )
                 }
             } else {
@@ -185,7 +186,7 @@ internal fun TabletLandscapeQueuePanel(
                                 text = (index + 1).toString().padStart(2, '0'),
                                 modifier = Modifier.width(30.dp),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = if (selected) activeColor else colorScheme.textTertiary
+                                color = if (selected) activeColor else supportingTextColor
                             )
                             Text(
                                 text = title,
@@ -193,7 +194,7 @@ internal fun TabletLandscapeQueuePanel(
                                 style = MaterialTheme.typography.bodySmall.copy(
                                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal
                                 ),
-                                color = if (selected) activeColor else colorScheme.textSecondary,
+                                color = if (selected) activeColor else supportingTextColor,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )

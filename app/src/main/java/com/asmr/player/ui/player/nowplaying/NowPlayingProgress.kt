@@ -142,7 +142,7 @@ internal fun PlayerProgress(
                 Formatting.formatTrackTime(displayPosition),
                 modifier = Modifier.widthIn(min = 45.dp),
                 style = MaterialTheme.typography.labelSmall,
-                color = colorScheme.textTertiary,
+                color = playerSupportingTextColor(colorScheme.isDark),
                 textAlign = TextAlign.Start
             )
             Spacer(modifier = Modifier.weight(1f))
@@ -150,7 +150,7 @@ internal fun PlayerProgress(
                 Formatting.formatTrackTime(rangeDuration),
                 modifier = Modifier.widthIn(min = 45.dp),
                 style = MaterialTheme.typography.labelSmall,
-                color = colorScheme.textTertiary,
+                color = playerSupportingTextColor(colorScheme.isDark),
                 textAlign = TextAlign.End
             )
         }

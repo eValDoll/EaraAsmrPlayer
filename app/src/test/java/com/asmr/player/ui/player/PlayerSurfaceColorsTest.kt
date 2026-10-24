@@ -1,17 +1,24 @@
 package com.asmr.player.ui.player
 
+import android.app.Application
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.luminance
 import com.asmr.player.data.settings.PlayerBackgroundMode
 import com.asmr.player.ui.theme.AsmrColorScheme
 import com.asmr.player.ui.theme.ThemeMode
+import com.asmr.player.ui.theme.deriveHuePalette
 import com.asmr.player.ui.theme.neutralPaletteForMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 
+@RunWith(RobolectricTestRunner::class)
+@Config(application = Application::class, sdk = [28])
 class PlayerSurfaceColorsTest {
 
     @Test
@@ -135,6 +142,66 @@ class PlayerSurfaceColorsTest {
                 assertEquals(context, Color.White, withoutCover.primary)
                 assertEquals(context, ThemeMode.Dark, withoutCover.mode)
                 assertTrue(context, withoutCover.isDark)
+            }
+        }
+    }
+
+    @Test
+    fun supportingText_usesOpaqueNeutralColorsWithReadableContrastForEveryPlayerSurface() {
+        ThemeMode.entries.forEach { globalMode ->
+            primaryCases.forEach { primaryCase ->
+                PlayerBackgroundMode.entries.forEach { backgroundMode ->
+                    listOf(false, true).forEach { coverEnabled ->
+                        val surface = playerSurfaceColors(testColorScheme(globalMode, primaryCase), backgroundMode, coverEnabled)
+                        val color = playerSupportingTextColor(surface.isDark)
+                        val context = "${primaryCase.name}, $globalMode, $backgroundMode, cover=$coverEnabled"
+
+                        assertEquals(context, if (surface.isDark) Color.White else Color.Black, color)
+                        assertEquals(context, 1f, color.alpha, 0f)
+                        assertEquals(context, color.red, color.green, 0f)
+                        assertEquals(context, color.green, color.blue, 0f)
+                        assertTrue(context, contrastRatio(color, surface.background) >= 4.5f)
+                    }
+                }
+            }
+        }
+    }
+
+    @Test
+    fun supportingText_keepsContrastWhenThemeUsesMidTonePrimary() {
+        val base = testColorScheme(
+            ThemeMode.Light,
+            PrimaryCase("mid-tone primary", Color(0xFF5D6670), Color.White, ThemeMode.Dark)
+        )
+        val surface = playerSurfaceColors(base, PlayerBackgroundMode.Theme, coverEnabled = false)
+        val color = playerSupportingTextColor(surface.isDark)
+
+        assertEquals(Color.White, color)
+        assertTrue(contrastRatio(color, surface.background) >= 4.5f)
+        assertTrue(contrastRatio(Color(0xFFE0E0E0), surface.background) < 4.5f)
+    }
+
+    @Test
+    fun supportingText_keepsContrastOnRealDerivedAndMonochromeThemePrimaries() {
+        val seeds = listOf(Color(0xFF5D6670), Color(0xFF6750A4), Color(0xFFFFCC00))
+        ThemeMode.entries.forEach { mode ->
+            val neutral = neutralPaletteForMode(mode)
+            (seeds.map { it to false } + (seeds.first() to true)).forEach { (seed, forceMonochrome) ->
+                val hue = deriveHuePalette(
+                    primary = seed,
+                    mode = mode,
+                    neutral = neutral,
+                    fallbackOnPrimary = if (mode.isDark) Color.White else Color.Black,
+                    forceMonochrome = forceMonochrome
+                )
+                val context = "seed=$seed, mode=$mode, monochrome=$forceMonochrome"
+                val base = testColorScheme(mode, PrimaryCase(context, hue.primaryStrong, hue.onPrimary, mode))
+                val surface = playerSurfaceColors(base, PlayerBackgroundMode.Theme, coverEnabled = false)
+                val color = playerSupportingTextColor(surface.isDark)
+
+                assertEquals(context, hue.primaryStrong, surface.background)
+                assertEquals(context, if (surface.isDark) Color.White else Color.Black, color)
+                assertTrue(context, contrastRatio(color, surface.background) >= 4.5f)
             }
         }
     }

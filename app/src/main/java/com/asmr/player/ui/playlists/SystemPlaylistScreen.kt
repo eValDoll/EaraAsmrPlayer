@@ -10,9 +10,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
 import com.asmr.player.data.repository.PlaylistRepository
+import com.asmr.player.playback.PlaybackSnapshot
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.theme.AsmrTheme
+import kotlinx.coroutines.flow.StateFlow
 
 @Composable
 fun SystemPlaylistScreen(
@@ -20,8 +22,11 @@ fun SystemPlaylistScreen(
     isActive: Boolean = true,
     isDataActive: Boolean = isActive,
     onPlayAll: (List<PlaylistItemEntity>, PlaylistItemEntity) -> Unit,
+    onResumeAll: (List<PlaylistItemEntity>, PlaylistItemEntity, Long) -> Unit,
+    playback: StateFlow<PlaybackSnapshot>,
     scrollToTopSignal: Long = 0L,
-    viewModel: PlaylistsViewModel = hiltViewModel()
+    viewModel: PlaylistsViewModel = hiltViewModel(),
+    playlistDetailViewModel: PlaylistDetailViewModel = hiltViewModel()
 ) {
     val playlists by viewModel.playlists.collectAsStateWhileActive(isDataActive)
     val targetName = PlaylistRepository.PLAYLIST_FAVORITES
@@ -41,6 +46,9 @@ fun SystemPlaylistScreen(
         playlistId = playlist.id,
         title = playlist.name,
         onPlayAll = onPlayAll,
+        onResumeAll = onResumeAll,
+        playback = playback,
         scrollToTopSignal = scrollToTopSignal,
+        viewModel = playlistDetailViewModel,
     )
 }

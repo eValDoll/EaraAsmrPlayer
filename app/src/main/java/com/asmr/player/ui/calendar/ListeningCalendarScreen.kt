@@ -3,7 +3,9 @@ package com.asmr.player.ui.calendar
 import com.asmr.player.ui.common.LocalMainHeaderPadding
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -59,10 +61,13 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import com.asmr.player.ui.common.DeferredPageItem
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.semantics.Role
@@ -78,6 +83,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import com.asmr.player.data.local.db.entities.ListeningSessionEntity
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
+import com.asmr.player.ui.common.LocalPageAnimationsActive
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.theme.AsmrColorScheme
@@ -361,6 +367,7 @@ private fun SummaryArtworkPanel(
     modifier: Modifier = Modifier,
     content: @Composable () -> Unit
 ) {
+    val animationsActive = LocalPageAnimationsActive.current
     val backgroundModel = remember(artwork?.coverThumbPath, artwork?.coverPath, artwork?.coverUrl) {
         artwork?.let {
             albumCoverImageModel(
@@ -384,8 +391,12 @@ private fun SummaryArtworkPanel(
         AnimatedContent(
             targetState = backgroundModel,
             transitionSpec = {
-                fadeIn(animationSpec = tween(260))
-                    .togetherWith(fadeOut(animationSpec = tween(180)))
+                if (animationsActive) {
+                    fadeIn(animationSpec = tween(260))
+                        .togetherWith(fadeOut(animationSpec = tween(180)))
+                } else {
+                    (EnterTransition.None togetherWith ExitTransition.None).using(null)
+                }
             },
             label = "ListeningSummaryArtwork",
             modifier = Modifier.matchParentSize()
@@ -628,14 +639,19 @@ private fun AnimatedComparisonSummary(
     display: SummaryComparisonDisplay,
     modifier: Modifier = Modifier
 ) {
+    val animationsActive = LocalPageAnimationsActive.current
     AnimatedContent(
         targetState = display,
         transitionSpec = {
-            (slideInVertically(animationSpec = tween(220)) { height -> height } + fadeIn(tween(140)))
-                .togetherWith(
-                    slideOutVertically(animationSpec = tween(220)) { height -> -height } + fadeOut(tween(140))
-                )
-                .using(SizeTransform(clip = false))
+            if (animationsActive) {
+                (slideInVertically(animationSpec = tween(220)) { height -> height } + fadeIn(tween(140)))
+                    .togetherWith(
+                        slideOutVertically(animationSpec = tween(220)) { height -> -height } + fadeOut(tween(140))
+                    )
+                    .using(SizeTransform(clip = false))
+            } else {
+                (EnterTransition.None togetherWith ExitTransition.None).using(null)
+            }
         },
         label = "ListeningSummaryComparison",
         modifier = modifier
@@ -713,6 +729,7 @@ private fun HeatmapSection(
             )
         } else {
             val columns = remember(days) { buildHeatmapColumns(days) }
+            val columnGroups = remember(columns) { columns.chunked(4) }
             val monthLabels = remember(columns) { buildHeatmapMonthLabels(columns) }
             val scrollState = rememberScrollState()
             LaunchedEffect(selectedYear, columns.size) {
@@ -729,16 +746,32 @@ private fun HeatmapSection(
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 HeatmapMonthLabelRow(labels = monthLabels, colorScheme = colorScheme)
-                Row(horizontalArrangement = Arrangement.spacedBy(CELL_GAP)) {
-                    columns.forEach { column ->
-                        Column(verticalArrangement = Arrangement.spacedBy(CELL_GAP)) {
-                            column.forEach { day ->
-                                HeatmapCell(
-                                    day = day,
-                                    selected = day?.date == selectedDate,
-                                    colorScheme = colorScheme,
-                                    onDayClick = onDayClick
+                Row(
+                    // 格子与边框均在行内，缓存这一小块纹理供横向页面过渡复用。
+                    modifier = Modifier.graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen },
+                    horizontalArrangement = Arrangement.spacedBy(CELL_GAP),
+                ) {
+                    columnGroups.forEach { group ->
+                        DeferredPageItem(
+                            placeholder = {
+                                Spacer(
+                                    Modifier
+                                        .width(CELL_SIZE * group.size + CELL_GAP * (group.size - 1))
+                                        .height(CELL_SIZE * 7 + CELL_GAP * 6)
                                 )
+                            },
+                        ) {
+                            group.forEach { column ->
+                                Column(verticalArrangement = Arrangement.spacedBy(CELL_GAP)) {
+                                    column.forEach { day ->
+                                        HeatmapCell(
+                                            day = day,
+                                            selected = day?.date == selectedDate,
+                                            colorScheme = colorScheme,
+                                            onDayClick = onDayClick
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

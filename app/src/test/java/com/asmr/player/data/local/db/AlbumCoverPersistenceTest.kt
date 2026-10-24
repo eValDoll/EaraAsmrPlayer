@@ -126,7 +126,8 @@ class AlbumCoverPersistenceTest {
         val context = RuntimeEnvironment.getApplication()
         val name = File.createTempFile("album-migration-", ".db").absolutePath
         fun open() = Room.databaseBuilder(context, AppDatabase::class.java, name)
-            .addMigrations(AppDatabaseMigrations.MIGRATION_35_36).allowMainThreadQueries().build()
+            .addMigrations(AppDatabaseMigrations.MIGRATION_35_36, AppDatabaseMigrations.MIGRATION_36_37)
+            .allowMainThreadQueries().build()
         try {
             val original = AlbumEntity(
                 title = "保留的作品", path = "/albums/work", coverPath = "/albums/work/cover.jpg",

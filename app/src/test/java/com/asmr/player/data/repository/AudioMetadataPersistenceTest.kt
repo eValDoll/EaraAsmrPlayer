@@ -149,7 +149,7 @@ class AudioMetadataPersistenceTest {
         try {
             block {
                 Room.databaseBuilder(context, AppDatabase::class.java, name)
-                    .addMigrations(AppDatabaseMigrations.MIGRATION_33_34, AppDatabaseMigrations.MIGRATION_34_35, AppDatabaseMigrations.MIGRATION_35_36)
+                    .addMigrations(AppDatabaseMigrations.MIGRATION_33_34, AppDatabaseMigrations.MIGRATION_34_35, AppDatabaseMigrations.MIGRATION_35_36, AppDatabaseMigrations.MIGRATION_36_37)
                     .allowMainThreadQueries()
                     .build()
             }

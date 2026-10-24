@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import com.asmr.player.ui.createEaraComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
@@ -475,6 +476,124 @@ class BottomChromeTest {
         assertEquals(activeContainer.blue, partial.blue, 0.0001f)
         assertTrue(abs(partial.alpha - (activeContainer.alpha * 0.5f)) <= 0.0001f)
     }
+
+    @Test
+    fun programmaticSelection_animatesIconScaleBeforeSettling() {
+        val activeRoute = mutableStateOf(Routes.Library)
+        val selection = mutableStateOf(mapOf(Routes.Library to 1f))
+        composeRule.mainClock.autoAdvance = false
+        try {
+            composeRule.setContent {
+                AsmrPlayerTheme {
+                    BottomChrome(
+                        activeRoute = activeRoute.value,
+                        selectionProgresses = selection.value,
+                        animateSelection = true,
+                        miniPlayerVisible = false,
+                        miniPlayerDisplayMode = MiniPlayerDisplayMode.CoverOnly,
+                        onMiniPlayerDisplayModeChange = {},
+                        onOpenNowPlaying = {},
+                        onOpenQueue = {},
+                        onNavigate = {},
+                        modifier = Modifier.size(width = 360.dp, height = 120.dp),
+                    )
+                }
+            }
+            composeRule.waitForIdle()
+            val inactiveWidth = navIconWidth("在线搜索")
+            assertTrue(inactiveWidth > 0f)
+            assertEquals(inactiveWidth * 1.16f, navIconWidth("本地库"), 0.2f)
+
+            composeRule.runOnIdle {
+                activeRoute.value = Routes.Search
+                selection.value = mapOf(Routes.Search to 1f)
+            }
+            composeRule.waitForIdle()
+            assertEquals(inactiveWidth, navIconWidth("在线搜索"), 0.2f)
+
+            composeRule.mainClock.advanceTimeByFrame()
+            composeRule.mainClock.advanceTimeBy(32)
+            val intermediateWidth = navIconWidth("在线搜索")
+            assertTrue(intermediateWidth > inactiveWidth + 0.05f)
+            assertTrue(intermediateWidth < inactiveWidth * 1.16f - 0.05f)
+
+            composeRule.mainClock.advanceTimeBy(160)
+            assertEquals(inactiveWidth * 1.16f, navIconWidth("在线搜索"), 0.2f)
+            assertEquals(inactiveWidth, navIconWidth("本地库"), 0.2f)
+        } finally {
+            composeRule.mainClock.autoAdvance = true
+            composeRule.waitForIdle()
+        }
+    }
+
+    @Test
+    fun gestureSelection_updatesScaleImmediatelyAndResumesFromCurrentProgress() {
+        val activeRoute = mutableStateOf(Routes.Library)
+        val selection = mutableStateOf(mapOf(Routes.Library to 1f))
+        val animateSelection = mutableStateOf(true)
+        composeRule.mainClock.autoAdvance = false
+        try {
+            composeRule.setContent {
+                AsmrPlayerTheme {
+                    BottomChrome(
+                        activeRoute = activeRoute.value,
+                        selectionProgresses = selection.value,
+                        animateSelection = animateSelection.value,
+                        miniPlayerVisible = false,
+                        miniPlayerDisplayMode = MiniPlayerDisplayMode.CoverOnly,
+                        onMiniPlayerDisplayModeChange = {},
+                        onOpenNowPlaying = {},
+                        onOpenQueue = {},
+                        onNavigate = {},
+                        modifier = Modifier.size(width = 360.dp, height = 120.dp),
+                    )
+                }
+            }
+            composeRule.waitForIdle()
+            val inactiveWidth = navIconWidth("在线搜索")
+            composeRule.runOnIdle {
+                activeRoute.value = Routes.Search
+                selection.value = mapOf(Routes.Search to 1f)
+            }
+            composeRule.mainClock.advanceTimeByFrame()
+            composeRule.mainClock.advanceTimeBy(32)
+
+            composeRule.runOnIdle {
+                animateSelection.value = false
+                activeRoute.value = Routes.Library
+                selection.value = mapOf(Routes.Library to 0.75f, Routes.Search to 0.25f)
+            }
+            composeRule.mainClock.advanceTimeByFrame()
+            composeRule.waitForIdle()
+            assertEquals(inactiveWidth * 1.04f, navIconWidth("在线搜索"), 0.2f)
+            assertEquals(inactiveWidth * 1.12f, navIconWidth("本地库"), 0.2f)
+
+            composeRule.runOnIdle {
+                activeRoute.value = Routes.Search
+                selection.value = mapOf(Routes.Library to 0.2f, Routes.Search to 0.8f)
+            }
+            composeRule.mainClock.advanceTimeByFrame()
+            composeRule.waitForIdle()
+            val gestureWidth = inactiveWidth * (1f + 0.16f * 0.8f)
+            assertEquals(gestureWidth, navIconWidth("在线搜索"), 0.2f)
+
+            composeRule.runOnIdle { animateSelection.value = true }
+            composeRule.mainClock.advanceTimeByFrame()
+            composeRule.waitForIdle()
+            assertEquals(gestureWidth, navIconWidth("在线搜索"), 0.2f)
+            composeRule.mainClock.advanceTimeBy(32)
+            assertEquals(gestureWidth, navIconWidth("在线搜索"), 0.2f)
+        } finally {
+            composeRule.mainClock.autoAdvance = true
+            composeRule.waitForIdle()
+        }
+    }
+
+    private fun navIconWidth(label: String): Float = composeRule
+        .onNodeWithContentDescription(label, useUnmergedTree = true)
+        .fetchSemanticsNode()
+        .boundsInRoot
+        .width
 
     private fun compactWidthWithMiniPlayer_scalesChromeWithoutChangingVisibleNavCount(width: Dp) {
         composeRule.setContent {

@@ -99,7 +99,7 @@ class PlaybackQueueRestorer @Inject constructor(
         } else null
         val persistedAlbum = persistedAlbumResult?.getOrNull()
         if (persistedAlbumResult?.isSuccess == true && persistedAlbum == null) return null
-        return if (track != null) {
+        val mediaItem = if (track != null) {
             val albumEntity = runCatching { albumDao.getAlbumById(track.albumId) }.getOrNull()
             val album = Album(
                 id = albumEntity?.id ?: 0L,
@@ -181,6 +181,9 @@ class PlaybackQueueRestorer @Inject constructor(
                 .setClippingConfiguration(MediaItemFactory.chapterClipping(id, persisted.uri))
                 .build()
         }
+        return persisted.sourcePlaylistId?.takeIf { it > 0L }
+            ?.let { mediaItem.withSourcePlaylist(it) }
+            ?: mediaItem
     }
 
     private fun deriveTitleFromId(mediaId: String): String {

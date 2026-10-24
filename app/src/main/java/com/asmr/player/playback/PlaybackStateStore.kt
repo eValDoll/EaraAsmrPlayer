@@ -44,7 +44,8 @@ data class PersistedPlaybackQueueItem(
     val rjCode: String?,
     val remoteSubtitleSources: List<PersistedRemoteSubtitleSource> = emptyList(),
     val albumCv: String? = null,
-    val durationMs: Long? = null
+    val durationMs: Long? = null,
+    val sourcePlaylistId: Long? = null
 )
 
 data class PersistedRemoteSubtitleSource(
@@ -87,6 +88,7 @@ internal fun capturePersistedPlaybackState(
             artist = metadata.artist?.toString(),
             albumCv = extras?.getString(EXTRA_ALBUM_CV),
             durationMs = metadata.durationMs,
+            sourcePlaylistId = item.sourcePlaylistId(),
             albumTitle = metadata.albumTitle?.toString(),
             artworkUri = metadata.artworkUri?.toString(),
             albumId = extras?.takeIf { it.containsKey("album_id") }?.getLong("album_id"),

@@ -8,6 +8,9 @@ import com.asmr.player.ui.theme.AsmrColorScheme
 import com.asmr.player.ui.theme.ThemeMode
 import com.asmr.player.ui.theme.neutralPaletteForMode
 
+internal fun playerSupportingTextColor(isDark: Boolean): Color =
+    themedLyricTextColor(isDark)
+
 internal fun playerSurfaceColors(
     base: AsmrColorScheme,
     backgroundMode: PlayerBackgroundMode,

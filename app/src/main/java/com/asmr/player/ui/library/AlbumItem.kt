@@ -1,9 +1,13 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.ui.common.LocalPageAnimationsActive
+
 import android.os.Build
 import com.asmr.player.translation.translatedPageText
 
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.spring
@@ -769,31 +773,36 @@ private fun AlbumOnlineDetailAnimatedLine(
     modifier: Modifier = Modifier,
     content: @Composable (String) -> Unit,
 ) {
+    val animationsActive = LocalPageAnimationsActive.current
     AnimatedContent(
         targetState = stateKey,
         modifier = modifier
             .fillMaxWidth(),
         transitionSpec = {
-            (
-                fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
-                    slideInVertically(
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessMediumLow
-                        )
-                    ) { height -> height / 3 }
-                ) togetherWith (
-                fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium)) +
-                    slideOutVertically(
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioNoBouncy,
-                            stiffness = Spring.StiffnessMedium
-                        )
-                    ) { height -> -height / 4 }
-                ) using SizeTransform(
-                clip = false,
-                sizeAnimationSpec = { _, _ -> AlbumOnlineDetailResizeSpring }
-            )
+            if (animationsActive) {
+                (
+                    fadeIn(animationSpec = spring(stiffness = Spring.StiffnessMediumLow)) +
+                        slideInVertically(
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = Spring.StiffnessMediumLow
+                            )
+                        ) { height -> height / 3 }
+                    ) togetherWith (
+                    fadeOut(animationSpec = spring(stiffness = Spring.StiffnessMedium)) +
+                        slideOutVertically(
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioNoBouncy,
+                                stiffness = Spring.StiffnessMedium
+                            )
+                        ) { height -> -height / 4 }
+                    ) using SizeTransform(
+                    clip = false,
+                    sizeAnimationSpec = { _, _ -> AlbumOnlineDetailResizeSpring }
+                )
+            } else {
+                (EnterTransition.None togetherWith ExitTransition.None).using(null)
+            }
         },
         label = "albumOnlineDetailLine"
     ) { targetState ->

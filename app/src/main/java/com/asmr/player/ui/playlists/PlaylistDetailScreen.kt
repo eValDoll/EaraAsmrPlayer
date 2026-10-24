@@ -11,11 +11,9 @@ import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -35,6 +33,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -51,7 +50,11 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
 import com.asmr.player.data.local.db.entities.PlaylistItemWithSubtitles
+import com.asmr.player.data.local.db.entities.PlaylistPlaybackEntity
 import com.asmr.player.data.repository.PlaylistRepository
+import com.asmr.player.playback.PlaybackSnapshot
+import com.asmr.player.playback.sourcePlaylistId
+import androidx.media3.common.Player
 import com.asmr.player.ui.common.AsmrAsyncImage
 import com.asmr.player.ui.common.AudioItemMenuAction
 import com.asmr.player.ui.common.AudioItemRow
@@ -70,6 +73,7 @@ import com.asmr.player.ui.common.reorderable.rememberReorderableLazyListState
 import com.asmr.player.ui.common.reorderable.reorderable
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.theme.dynamicPageContainerColor
+import kotlinx.coroutines.flow.StateFlow
 
 private val PlaylistDetailHorizontalPadding = 8.dp
 
@@ -79,7 +83,7 @@ internal const val PLAYLIST_DETAIL_MOVE_TOP_MENU_ITEM_TAG = "playlistDetailMoveT
 internal const val PLAYLIST_DETAIL_MOVE_BOTTOM_MENU_ITEM_TAG = "playlistDetailMoveBottomMenuItem"
 internal const val PLAYLIST_DETAIL_REORDER_DIALOG_TAG = "playlistDetailReorderDialog"
 
-private const val PLAYLIST_DETAIL_REORDER_SENTINEL_KEY = "__playlist_detail_reorder_sentinel__"
+private const val PLAYLIST_DETAIL_HERO_KEY = "__playlist_detail_hero__"
 
 @Composable
 fun PlaylistDetailScreen(
@@ -89,6 +93,8 @@ fun PlaylistDetailScreen(
     playlistId: Long,
     title: String,
     onPlayAll: (List<PlaylistItemEntity>, PlaylistItemEntity) -> Unit,
+    onResumeAll: (List<PlaylistItemEntity>, PlaylistItemEntity, Long) -> Unit,
+    playback: StateFlow<PlaybackSnapshot>,
     scrollToTopSignal: Long = 0L,
     viewModel: PlaylistDetailViewModel = hiltViewModel()
 ) {
@@ -96,31 +102,42 @@ fun PlaylistDetailScreen(
         viewModel.setPlaylistId(playlistId)
     }
     val items by viewModel.items.collectAsStateWhileActive(isDataActive)
-    PlaylistDetailContent(
-        windowSizeClass = windowSizeClass,
-        isActive = isActive,
-        title = title,
-        items = items,
-        onPlayAll = onPlayAll,
-        onRemoveItem = viewModel::removeItem,
-        onMoveItemToTop = viewModel::moveItemToTop,
-        onMoveItemToBottom = viewModel::moveItemToBottom,
-        onSaveManualOrder = viewModel::saveManualOrder,
-        scrollToTopSignal = scrollToTopSignal,
-    )
+    val matchingItems = remember(items, playlistId) { items.filter { it.playlistId == playlistId } }
+    key(playlistId) {
+        PlaylistDetailContent(
+            windowSizeClass = windowSizeClass,
+            isActive = isActive,
+            isDataActive = isDataActive,
+            title = title,
+            items = matchingItems,
+            onPlayAll = onPlayAll,
+            onResumeAll = onResumeAll,
+            playback = playback,
+            playbackHistory = viewModel.recentPlayback,
+            onRemoveItem = viewModel::removeItem,
+            onMoveItemToTop = viewModel::moveItemToTop,
+            onMoveItemToBottom = viewModel::moveItemToBottom,
+            onSaveManualOrder = viewModel::saveManualOrder,
+            scrollToTopSignal = scrollToTopSignal,
+        )
+    }
 }
 
 @Composable
 internal fun PlaylistDetailContent(
     windowSizeClass: WindowSizeClass,
     isActive: Boolean = true,
+    isDataActive: Boolean = isActive,
     title: String,
     items: List<PlaylistItemWithSubtitles>,
     onPlayAll: (List<PlaylistItemEntity>, PlaylistItemEntity) -> Unit,
+    onResumeAll: (List<PlaylistItemEntity>, PlaylistItemEntity, Long) -> Unit,
     onRemoveItem: (String) -> Unit,
     onMoveItemToTop: (String) -> Unit,
     onMoveItemToBottom: (String) -> Unit,
     onSaveManualOrder: (List<String>) -> Unit,
+    playbackHistory: StateFlow<PlaylistPlaybackEntity?>? = null,
+    playback: StateFlow<PlaybackSnapshot>? = null,
     scrollToTopSignal: Long = 0L,
 ) {
     val listState = rememberLazyListState()
@@ -207,10 +224,18 @@ internal fun PlaylistDetailContent(
                     modifier = contentModifier
                         .reorderable(reorderState),
                     flingBehavior = rememberCalmScrollableFlingBehavior(),
-                    contentPadding = PaddingValues(top = LocalMainHeaderPadding.current + 6.dp, bottom = LocalBottomOverlayPadding.current)
+                    contentPadding = PaddingValues(top = LocalMainHeaderPadding.current, bottom = LocalBottomOverlayPadding.current)
                 ) {
-                    item(key = PLAYLIST_DETAIL_REORDER_SENTINEL_KEY) {
-                        Spacer(modifier = Modifier.height(1.dp))
+                    item(key = PLAYLIST_DETAIL_HERO_KEY, contentType = "playlistHero") {
+                        PlaylistDetailHero(
+                            items = localItems,
+                            playbackHistory = playbackHistory,
+                            playback = playback,
+                            isActive = isDataActive,
+                            onPlay = { item, positionMs ->
+                                onResumeAll(playItems, item.toPlaybackEntity(), positionMs)
+                            }
+                        )
                     }
                     itemsIndexed(
                         items = localItems,
@@ -381,13 +406,191 @@ private fun SnapshotStateList<PlaylistItemWithSubtitles>.sync(
     addAll(items)
 }
 
-private fun SnapshotStateList<PlaylistItemWithSubtitles>.movePlaylistItems(
+internal fun SnapshotStateList<PlaylistItemWithSubtitles>.movePlaylistItems(
     from: ItemPosition,
     to: ItemPosition
 ) {
     if (isEmpty()) return
-    val fromIndex = from.index - 1
-    val toIndex = to.index - 1
+    val fromIndex = indexOfFirst { it.mediaId == from.key }
+    val toIndex = indexOfFirst { it.mediaId == to.key }
     if (fromIndex !in indices || toIndex !in indices || fromIndex == toIndex) return
     add(toIndex, removeAt(fromIndex))
+}
+
+internal fun resolvePlaylistHeroItem(
+    items: List<PlaylistItemWithSubtitles>,
+    playback: PlaylistPlaybackEntity?,
+    pendingMediaId: String? = null,
+): PlaylistItemWithSubtitles? = items.firstOrNull { it.mediaId == pendingMediaId }
+    ?: items.firstOrNull {
+        it.playlistId == playback?.playlistId && it.mediaId == playback.mediaId
+    }
+    ?: items.firstOrNull()
+
+internal fun resolveRequestedPlaylistHeroMediaId(playback: PlaybackSnapshot?, playlistId: Long): String? {
+    val item = playback?.currentMediaItem ?: return null
+    return item.mediaId.takeIf {
+        it.isNotBlank() && item.sourcePlaylistId() == playlistId && playback.playWhenReady &&
+            (playback.playbackState == Player.STATE_BUFFERING || playback.playbackState == Player.STATE_READY)
+    }
+}
+
+internal fun resolvePlaylistHeroLivePosition(playback: PlaybackSnapshot?, playlistId: Long, mediaId: String): Long? {
+    val item = playback?.currentMediaItem ?: return null
+    if (item.sourcePlaylistId() != playlistId || item.mediaId != mediaId) return null
+    return playback.positionMs.coerceAtLeast(0L).takeIf {
+        playback.playbackState == Player.STATE_BUFFERING || playback.playbackState == Player.STATE_READY ||
+            playback.playbackState == Player.STATE_ENDED
+    }
+}
+
+internal class PlaylistHeroPlaybackState(
+    private val playlistId: Long,
+    private val nowEpochMs: () -> Long = System::currentTimeMillis,
+) {
+    val snapshot = mutableStateOf<PlaybackSnapshot?>(null)
+    var pendingMediaId by mutableStateOf<String?>(null)
+        private set
+    private var startedMediaId: String? = null
+    private var positionMs = 0L
+    private var durationMs = 0L
+    private var isCompleted = false
+    private var startedAt = 0L
+    private var observedAt = 0L
+    private var playingMediaId: String? = null
+
+    fun activate(history: PlaylistPlaybackEntity?, playback: PlaybackSnapshot) {
+        confirm(history, playback)
+        update(playback, capturePausedTransition = false, startObservation = true)
+    }
+
+    fun update(playback: PlaybackSnapshot) = update(playback, capturePausedTransition = true, startObservation = false)
+
+    private fun update(playback: PlaybackSnapshot, capturePausedTransition: Boolean, startObservation: Boolean) {
+        val previous = snapshot.value
+        val item = playback.currentMediaItem
+        val mediaId = item?.mediaId?.takeIf { it.isNotBlank() }
+        val matchesPlaylist = item?.sourcePlaylistId() == playlistId
+        playingMediaId = mediaId.takeIf { matchesPlaylist && playback.isPlaying }
+        if (playingMediaId != null && (startedMediaId != mediaId || startObservation)) {
+            startedMediaId = mediaId
+            pendingMediaId = mediaId
+            durationMs = 0L
+            startedAt = nowEpochMs()
+        }
+        val hasPreviousTrack = previous?.currentMediaItem?.let {
+            it.sourcePlaylistId() == playlistId && it.mediaId == startedMediaId
+        } == true
+        val pausedAfterPlaying = capturePausedTransition && hasPreviousTrack && previous?.isPlaying == true &&
+            !playback.playWhenReady && playback.playbackState == Player.STATE_READY
+        val ended = capturePausedTransition && playback.playbackState == Player.STATE_ENDED
+        if (matchesPlaylist && mediaId != null && mediaId == startedMediaId &&
+            (playback.isPlaying || pausedAfterPlaying || ended)
+        ) {
+            positionMs = playback.positionMs.coerceAtLeast(0L)
+            durationMs = playback.durationMs.takeIf { it > 0L } ?: durationMs
+            isCompleted = playback.playbackState == Player.STATE_ENDED ||
+                (durationMs > 0L && positionMs >= durationMs)
+            observedAt = nowEpochMs()
+        }
+        snapshot.value = playback
+    }
+
+    fun confirm(history: PlaylistPlaybackEntity?, playback: PlaybackSnapshot? = snapshot.value) {
+        if (history?.playlistId == playlistId && history.mediaId == pendingMediaId && history.updatedAt >= startedAt) {
+            pendingMediaId = null
+        } else if (history?.playlistId == playlistId && pendingMediaId != null && history.updatedAt > startedAt &&
+            !(playback?.isPlaying == true && playback.currentMediaItem?.sourcePlaylistId() == playlistId &&
+                playback.currentMediaItem.mediaId == startedMediaId)
+        ) {
+            pendingMediaId = null
+            startedMediaId = null
+        }
+    }
+
+    fun observedPlayback(mediaId: String, history: PlaylistPlaybackEntity? = null): PlaylistPlaybackEntity? =
+        if (canUseObservedPlayback(mediaId, history)) {
+            PlaylistPlaybackEntity(playlistId, mediaId, positionMs, durationMs, isCompleted, updatedAt = observedAt)
+        } else null
+
+    fun observedPosition(mediaId: String, history: PlaylistPlaybackEntity?): Long? =
+        positionMs.takeIf { canUseObservedPlayback(mediaId, history) }
+
+    private fun canUseObservedPlayback(mediaId: String, history: PlaylistPlaybackEntity?): Boolean {
+        if (mediaId != startedMediaId) return false
+        if (mediaId == playingMediaId) return true
+        val matchingHistory = history?.takeIf { it.playlistId == playlistId && it.mediaId == mediaId }
+        return if (matchingHistory != null) matchingHistory.updatedAt <= observedAt else pendingMediaId == mediaId
+    }
+}
+
+@Composable
+private fun PlaylistDetailHero(
+    items: List<PlaylistItemWithSubtitles>,
+    playbackHistory: StateFlow<PlaylistPlaybackEntity?>?,
+    playback: StateFlow<PlaybackSnapshot>?,
+    isActive: Boolean,
+    onPlay: (PlaylistItemWithSubtitles, Long) -> Unit
+) {
+    val historyState = playbackHistory?.collectAsStateWhileActive(isActive)
+    val history = historyState?.value
+    val playlistId = items.firstOrNull()?.playlistId ?: return
+    val heroPlayback = remember(playback, playlistId) { PlaylistHeroPlaybackState(playlistId) }
+    val liveState = heroPlayback.snapshot
+    LaunchedEffect(heroPlayback, playback, isActive) {
+        if (!isActive || playback == null) return@LaunchedEffect
+        heroPlayback.activate(history, playback.value)
+        playback.collect(heroPlayback::update)
+    }
+    val pendingMediaId = heroPlayback.pendingMediaId
+    LaunchedEffect(heroPlayback, history, pendingMediaId) { heroPlayback.confirm(history) }
+    val requestedMediaId by remember(liveState, playlistId) {
+        derivedStateOf {
+            resolveRequestedPlaylistHeroMediaId(liveState.value, playlistId)
+        }
+    }
+    val item = resolvePlaylistHeroItem(items, history, requestedMediaId ?: pendingMediaId) ?: return
+    val record = heroPlayback.observedPlayback(item.mediaId, history)
+        ?: history?.takeIf { it.playlistId == item.playlistId && it.mediaId == item.mediaId }
+    val isPlaying by remember(liveState, item.playlistId, item.mediaId) {
+        derivedStateOf {
+            val live = liveState.value
+            live?.currentMediaItem?.sourcePlaylistId() == item.playlistId &&
+                live.currentMediaItem.mediaId == item.mediaId && live.playWhenReady &&
+                live.playbackState != Player.STATE_IDLE && live.playbackState != Player.STATE_ENDED
+        }
+    }
+    val liveDuration by remember(liveState, item.playlistId, item.mediaId) {
+        derivedStateOf {
+            val live = liveState.value
+            if (live?.currentMediaItem?.sourcePlaylistId() == item.playlistId &&
+                live.currentMediaItem.mediaId == item.mediaId
+            ) live.durationMs else 0L
+        }
+    }
+    val hasEnded by remember(liveState, item.playlistId, item.mediaId) {
+        derivedStateOf {
+            val live = liveState.value
+            live?.currentMediaItem?.sourcePlaylistId() == item.playlistId &&
+                live.currentMediaItem.mediaId == item.mediaId && live.playbackState == Player.STATE_ENDED
+        }
+    }
+    val heroRecord = if (hasEnded && record != null) record.copy(isCompleted = true) else record
+    val displayPosition = remember(liveState, heroPlayback, item.playlistId, item.mediaId, record, history) {
+        derivedStateOf {
+            resolvePlaylistHeroLivePosition(liveState.value, item.playlistId, item.mediaId)
+                ?: heroPlayback.observedPosition(item.mediaId, history) ?: record?.positionMs ?: 0L
+        }
+    }
+    val positionMs = remember(displayPosition) { { displayPosition.value } }
+    PlaylistTrackHero(
+        item = item,
+        playback = heroRecord,
+        isPlaying = isPlaying,
+        onPlay = { onPlay(item, if (heroRecord?.isCompleted == true) 0L else positionMs()) },
+        positionMs = positionMs,
+        durationMs = liveDuration.takeIf { it > 0L } ?: record?.durationMs ?: 0L,
+        isActive = isActive,
+        modifier = Modifier.fillMaxWidth()
+    )
 }

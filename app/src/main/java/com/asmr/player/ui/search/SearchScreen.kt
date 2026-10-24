@@ -1,5 +1,7 @@
 package com.asmr.player.ui.search
 
+import com.asmr.player.ui.common.LocalPageAnimationsActive
+
 import com.asmr.player.domain.model.CollectedSearchSource
 import com.asmr.player.ui.common.LocalMainHeaderPadding
 import com.asmr.player.ui.common.progressiveHeaderContent
@@ -26,6 +28,7 @@ import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
@@ -124,6 +127,7 @@ import com.asmr.player.ui.library.albumListCoverSize
 import com.asmr.player.cache.LazyStaggeredGridPreloader
 import com.asmr.player.ui.common.ActiveDropdownMenuItem
 import com.asmr.player.ui.common.CustomSearchBar
+import com.asmr.player.ui.common.DeferredPageItem
 import com.asmr.player.ui.common.EaraBrandedEmptyState
 import com.asmr.player.ui.common.EaraLogoLoadingIndicator
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
@@ -425,7 +429,8 @@ private fun SearchScreenContent(
     val showHotKeywordFallback by viewModel.showHotKeywordFallback.collectAsStateWhileActive(isDataActive)
     val hotKeywordCarouselItem = rememberSearchHotKeywordCarouselItem(
         terms = hotKeywordTerms,
-        showFallback = showHotKeywordFallback
+        showFallback = showHotKeywordFallback,
+        isActive = isActive,
     )
     val success = uiState as? SearchUiState.Success
     val resultScrollKey = searchResultScrollKey(success)
@@ -1186,37 +1191,43 @@ private fun SearchScreenContent(
                                             key = { _, album -> searchResultItemKey(album) },
                                             contentType = { _, _ -> "album" }
                                         ) { _, album ->
-                                            val onlineDetailLoading = onlineDetailLoadingFor(album, state)
-                                            val skeletonMode = searchResultSkeletonMode(
-                                                onlineDetailLoading = onlineDetailLoading,
-                                                isRefreshingLocalizedText = state.isRefreshingLocalizedText
-                                            )
-                                            val rj = album.rjCode.ifBlank { album.workId }.trim().uppercase()
-                                            val hasResolvedDetail = rj.isNotBlank() && rj in state.enrichedDetailRjCodes
-                                            AlbumItem(
-                                                album = album,
-                                                onClick = { onAlbumClick(album, state.purchasedOnly, hasResolvedDetail) },
-                                                modifier = Modifier.animateItem(
-                                                    fadeInSpec = null,
-                                                    placementSpec = SearchResultPlacementSpring,
-                                                    fadeOutSpec = null,
-                                                ),
-                                                onlineDetailLoading =
-                                                    skeletonMode == SearchResultSkeletonMode.DetailMetadata,
-                                                onlineTitleLoading =
-                                                    skeletonMode == SearchResultSkeletonMode.LocalizedText,
-                                                onlineCvLoading =
-                                                    skeletonMode == SearchResultSkeletonMode.DetailMetadata,
-                                                onlineTagsLoading = skeletonMode != SearchResultSkeletonMode.None,
-                                                showCollectedIndicator = !state.collectedOnly,
-                                                showStatsPlaceholders = true,
-                                                coverFadeInState = coverFadeInState,
-                                                coverReloadKey = state.resultRevision,
-                                                onRjLongClick = ::openMetaActions,
-                                                onCircleLongClick = ::openMetaActions,
-                                                onCvLongClick = ::openMetaActions,
-                                                onTagLongClick = ::openMetaActions,
-                                            )
+                                            DeferredPageItem(placeholder = {
+                                                Spacer(Modifier.fillMaxWidth().height(
+                                                    albumListCoverSize(LocalConfiguration.current.screenWidthDp) + 12.dp
+                                                ))
+                                            }) {
+                                                val onlineDetailLoading = onlineDetailLoadingFor(album, state)
+                                                val skeletonMode = searchResultSkeletonMode(
+                                                    onlineDetailLoading = onlineDetailLoading,
+                                                    isRefreshingLocalizedText = state.isRefreshingLocalizedText
+                                                )
+                                                val rj = album.rjCode.ifBlank { album.workId }.trim().uppercase()
+                                                val hasResolvedDetail = rj.isNotBlank() && rj in state.enrichedDetailRjCodes
+                                                AlbumItem(
+                                                    album = album,
+                                                    onClick = { onAlbumClick(album, state.purchasedOnly, hasResolvedDetail) },
+                                                    modifier = Modifier.animateItem(
+                                                        fadeInSpec = null,
+                                                        placementSpec = if (LocalPageAnimationsActive.current) SearchResultPlacementSpring else null,
+                                                        fadeOutSpec = null,
+                                                    ),
+                                                    onlineDetailLoading =
+                                                        skeletonMode == SearchResultSkeletonMode.DetailMetadata,
+                                                    onlineTitleLoading =
+                                                        skeletonMode == SearchResultSkeletonMode.LocalizedText,
+                                                    onlineCvLoading =
+                                                        skeletonMode == SearchResultSkeletonMode.DetailMetadata,
+                                                    onlineTagsLoading = skeletonMode != SearchResultSkeletonMode.None,
+                                                    showCollectedIndicator = !state.collectedOnly,
+                                                    showStatsPlaceholders = true,
+                                                    coverFadeInState = coverFadeInState,
+                                                    coverReloadKey = state.resultRevision,
+                                                    onRjLongClick = ::openMetaActions,
+                                                    onCircleLongClick = ::openMetaActions,
+                                                    onCvLongClick = ::openMetaActions,
+                                                    onTagLongClick = ::openMetaActions,
+                                                )
+                                            }
                                         }
                                     }
                                 } else {
@@ -1266,38 +1277,45 @@ private fun SearchScreenContent(
                                             key = { index -> searchResultItemKey(state.results[index]) },
                                             contentType = { "albumGrid" }
                                         ) { index ->
-                                            val album = state.results[index]
-                                            val onlineDetailLoading = onlineDetailLoadingFor(album, state)
-                                            val skeletonMode = searchResultSkeletonMode(
-                                                onlineDetailLoading = onlineDetailLoading,
-                                                isRefreshingLocalizedText = state.isRefreshingLocalizedText
-                                            )
-                                            val rj = album.rjCode.ifBlank { album.workId }.trim().uppercase()
-                                            val hasResolvedDetail = rj.isNotBlank() && rj in state.enrichedDetailRjCodes
-                                            AlbumGridItem(
-                                                album = album,
-                                                onClick = { onAlbumClick(album, state.purchasedOnly, hasResolvedDetail) },
-                                                modifier = Modifier.animateItem(
-                                                    fadeInSpec = null,
-                                                    placementSpec = SearchResultPlacementSpring,
-                                                    fadeOutSpec = null,
-                                                ),
-                                                onlineDetailLoading =
-                                                    skeletonMode == SearchResultSkeletonMode.DetailMetadata,
-                                                onlineTitleLoading =
-                                                    skeletonMode == SearchResultSkeletonMode.LocalizedText,
-                                                onlineCvLoading =
-                                                    skeletonMode == SearchResultSkeletonMode.DetailMetadata,
-                                                onlineTagsLoading = skeletonMode != SearchResultSkeletonMode.None,
-                                                showCollectedIndicator = !state.collectedOnly,
-                                                showStatsPlaceholders = true,
-                                                coverFadeInState = coverFadeInState,
-                                                coverReloadKey = state.resultRevision,
-                                                onRjLongClick = ::openMetaActions,
-                                                onCircleLongClick = ::openMetaActions,
-                                                onCvLongClick = ::openMetaActions,
-                                                onTagLongClick = ::openMetaActions,
-                                            )
+                                            DeferredPageItem(placeholder = {
+                                                Column {
+                                                    Spacer(Modifier.fillMaxWidth().aspectRatio(1f))
+                                                    Spacer(Modifier.height(168.dp))
+                                                }
+                                            }) {
+                                                val album = state.results[index]
+                                                val onlineDetailLoading = onlineDetailLoadingFor(album, state)
+                                                val skeletonMode = searchResultSkeletonMode(
+                                                    onlineDetailLoading = onlineDetailLoading,
+                                                    isRefreshingLocalizedText = state.isRefreshingLocalizedText
+                                                )
+                                                val rj = album.rjCode.ifBlank { album.workId }.trim().uppercase()
+                                                val hasResolvedDetail = rj.isNotBlank() && rj in state.enrichedDetailRjCodes
+                                                AlbumGridItem(
+                                                    album = album,
+                                                    onClick = { onAlbumClick(album, state.purchasedOnly, hasResolvedDetail) },
+                                                    modifier = Modifier.animateItem(
+                                                        fadeInSpec = null,
+                                                        placementSpec = if (LocalPageAnimationsActive.current) SearchResultPlacementSpring else null,
+                                                        fadeOutSpec = null,
+                                                    ),
+                                                    onlineDetailLoading =
+                                                        skeletonMode == SearchResultSkeletonMode.DetailMetadata,
+                                                    onlineTitleLoading =
+                                                        skeletonMode == SearchResultSkeletonMode.LocalizedText,
+                                                    onlineCvLoading =
+                                                        skeletonMode == SearchResultSkeletonMode.DetailMetadata,
+                                                    onlineTagsLoading = skeletonMode != SearchResultSkeletonMode.None,
+                                                    showCollectedIndicator = !state.collectedOnly,
+                                                    showStatsPlaceholders = true,
+                                                    coverFadeInState = coverFadeInState,
+                                                    coverReloadKey = state.resultRevision,
+                                                    onRjLongClick = ::openMetaActions,
+                                                    onCircleLongClick = ::openMetaActions,
+                                                    onCvLongClick = ::openMetaActions,
+                                                    onTagLongClick = ::openMetaActions,
+                                                )
+                                            }
                                         }
                                     }
                                 }

@@ -4,6 +4,8 @@ import androidx.room.Dao
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
+import androidx.room.Transaction
+import androidx.room.Update
 import com.asmr.player.data.local.db.entities.PlaylistItemEntity
 import com.asmr.player.data.local.db.entities.PlaylistItemWithSubtitles
 import kotlinx.coroutines.flow.Flow
@@ -77,8 +79,18 @@ interface PlaylistItemDao {
     @Query("DELETE FROM playlist_items WHERE playlistId = :playlistId")
     suspend fun clearPlaylist(playlistId: Long)
 
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun upsertItems(items: List<PlaylistItemEntity>)
+    @Transaction
+    suspend fun upsertItems(items: List<PlaylistItemEntity>) {
+        val insertedIds = insertMissingItems(items)
+        val existingItems = items.filterIndexed { index, _ -> insertedIds[index] == -1L }
+        if (existingItems.isNotEmpty()) updateItems(existingItems)
+    }
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertMissingItems(items: List<PlaylistItemEntity>): List<Long>
+
+    @Update
+    suspend fun updateItems(items: List<PlaylistItemEntity>)
 
     @Query("UPDATE playlist_items SET remoteSubtitleSources = :sources WHERE playlistId = :playlistId AND mediaId = :mediaId")
     suspend fun updateRemoteSubtitleSources(playlistId: Long, mediaId: String, sources: String)
