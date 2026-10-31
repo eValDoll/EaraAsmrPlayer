@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <instrumentation
+        android:name="androidx.test.runner.AndroidJUnitRunner"
+        android:targetPackage="com.asmr.player" />
+    <instrumentation
+        android:name="com.asmr.player.ui.common.AlbumCoverShadowPixelTestRunner"
+        android:targetPackage="com.asmr.player"
+        android:label="Isolated AlbumItem hardware pixels" />
+    <instrumentation
+        android:name="com.asmr.player.ui.library.AlbumInlineTextPixelTestRunner"
+        android:targetPackage="com.asmr.player"
+        android:label="Isolated album text hardware pixels" />
+    <instrumentation
+        android:name="com.asmr.player.ui.library.PreparedAlbumParagraphTestRunner"
+        android:targetPackage="com.asmr.player"
+        android:label="Isolated prepared paragraph lifecycle" />
+    <instrumentation
+        android:name="com.asmr.player.ui.common.AlbumRowRasterCacheTestRunner"
+        android:targetPackage="com.asmr.player"
+        android:label="Isolated album row rendering lifecycle" />
+    <instrumentation
+        android:name="com.asmr.player.ui.library.SharedAlbumIconPainterTestRunner"
+        android:targetPackage="com.asmr.player"
+        android:label="Isolated shared vector painter hardware pixels" />
+    <instrumentation
+        android:name="com.asmr.player.ui.library.PreparedMetadataLifecycleTestRunner"
+        android:targetPackage="com.asmr.player"
+        android:label="Isolated prepared metadata rendering lifecycle" />
+</manifest>

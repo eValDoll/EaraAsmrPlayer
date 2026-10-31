@@ -36,10 +36,12 @@ import org.junit.rules.RuleChain
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 import androidx.test.core.app.ApplicationProvider
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [28])
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class SwipeRevealActionsBoxTest {
     val composeRule = createEaraComposeRule()
     @get:Rule val rules: RuleChain = RuleChain.outerRule(object : ExternalResource() {

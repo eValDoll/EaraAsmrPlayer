@@ -3,6 +3,9 @@ package com.asmr.player.ui.library
 import com.asmr.player.ui.createEaraComposeRule
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.width
@@ -19,6 +22,25 @@ import org.robolectric.RobolectricTestRunner
 class AlbumMetaLightweightTest {
     @get:Rule
     val composeRule = createEaraComposeRule()
+
+    @Test
+    fun resizedMeta_remainsScrollableWhenContentStartsOverflowing() {
+        val width = mutableStateOf(320.dp)
+        composeRule.setContent {
+            AsmrPlayerTheme {
+                Box(modifier = Modifier.width(width.value)) {
+                    AlbumItemTagsLightweight(tags = listOf("第一", "第二", "第三"))
+                }
+            }
+        }
+
+        composeRule.onNodeWithText("#第三").assertIsDisplayed()
+        composeRule.runOnIdle { width.value = 90.dp }
+        composeRule.onNodeWithText("#第三").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithText("#第一").performScrollTo().assertIsDisplayed()
+        composeRule.runOnIdle { width.value = 320.dp }
+        composeRule.onNodeWithText("#第三").assertIsDisplayed()
+    }
 
     @Test
     fun scrollableMeta_keepsEveryValueAvailableWithoutOverflowSummary() {

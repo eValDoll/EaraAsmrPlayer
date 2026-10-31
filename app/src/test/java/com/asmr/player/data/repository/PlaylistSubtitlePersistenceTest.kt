@@ -11,6 +11,7 @@ import com.asmr.player.playback.MediaItemFactory
 import com.asmr.player.ui.playlists.toPlaybackEntity
 import com.asmr.player.util.OnlineLyricsStore
 import com.asmr.player.util.RemoteSubtitleSource
+import java.io.File
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import okhttp3.OkHttpClient
@@ -32,7 +33,8 @@ import org.robolectric.annotation.Config
 @Config(application = Application::class, sdk = [34])
 class PlaylistSubtitlePersistenceTest {
     private val context get() = RuntimeEnvironment.getApplication()
-    private val databaseName = "playlist-subtitles-${System.nanoTime()}.db"
+    // Keep SQLite's WAL paths below the Windows path limit in Robolectric's method directories.
+    private val databaseName = File.createTempFile("playlist-subtitles-", ".db").absolutePath
     private lateinit var db: AppDatabase
     private lateinit var repository: PlaylistRepository
     private val mediaId = "https://example.com/音频/01.mp3"

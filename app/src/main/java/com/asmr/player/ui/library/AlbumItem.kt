@@ -1,6 +1,9 @@
 package com.asmr.player.ui.library
 
 import com.asmr.player.ui.common.LocalPageAnimationsActive
+import com.asmr.player.ui.common.LocalAlbumRowRasterCacheAllowed
+import com.asmr.player.ui.common.LocalAlbumCoverShadowCache
+import com.asmr.player.ui.common.sharedAlbumCoverShadow
 
 import android.os.Build
 import com.asmr.player.translation.translatedPageText
@@ -40,6 +43,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.GraphicsLayerScope
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
@@ -206,12 +210,34 @@ fun AlbumItem(
     coverFadeInState: State<Boolean>? = null,
     coverReloadKey: Any? = null,
     coverRetainPainterDuringReload: Boolean = false,
-    cacheRenderLayer: Boolean = false,
+    preparedItemKey: Any? = null,
     coverOverlay: @Composable BoxScope.() -> Unit = {},
     showCollectedIndicator: Boolean = true,
     showStatsPlaceholders: Boolean = false,
 ) {
     val colorScheme = AsmrTheme.colorScheme
+    val rowRasterCacheAllowed = LocalAlbumRowRasterCacheAllowed.current
+    val rowRasterLayer = if (rowRasterCacheAllowed == null) {
+        Modifier
+    } else {
+        val shadowRadius = if (colorScheme.isDark) {
+            AlbumListCoverShadowBlurRadius * 1.35f
+        } else {
+            AlbumListCoverShadowBlurRadius
+        }
+        val outset = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            shadowRadius * 3f + 6.dp
+        } else {
+            6.dp
+        }
+        Modifier.outsetAlbumLayer(outset) {
+            compositingStrategy = if (rowRasterCacheAllowed.value) {
+                CompositingStrategy.Offscreen
+            } else {
+                CompositingStrategy.Auto
+            }
+        }
+    }
     val coverShape = remember { RoundedCornerShape(AlbumListItemCornerRadius) }
     val imageModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {
         albumCoverImageModel(album)
@@ -257,16 +283,7 @@ fun AlbumItem(
                 )
             }
             .testTag(ALBUM_ITEM_CARD_TAG)
-            .then(
-                if (cacheRenderLayer) {
-                    Modifier.graphicsLayer {
-                        clip = false
-                        compositingStrategy = CompositingStrategy.Auto
-                    }
-                } else {
-                    Modifier
-                }
-            )
+            .then(rowRasterLayer)
             .combinedClickable(
                 onClick = onClick,
                 onLongClick = onLongClick
@@ -399,6 +416,7 @@ fun AlbumItem(
                     ) {
                         AlbumItemCvLightweight(
                             cvText = album.cv,
+                            preparedItemKey = preparedItemKey,
                             modifier = Modifier.fillMaxWidth(),
                             onClick = onClick,
                             onCvLongClick = onCvLongClick,
@@ -414,6 +432,7 @@ fun AlbumItem(
                     ) {
                         AlbumItemTagsLightweight(
                             tags = album.tags,
+                            preparedItemKey = preparedItemKey,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .testTag(ALBUM_ITEM_TAGS_TAG),
@@ -915,7 +934,7 @@ private fun AlbumStatsLine(
 }
 
 @Composable
-private fun AlbumCoverDepthShadow(
+internal fun AlbumCoverDepthShadow(
     progress: () -> Float,
     isDark: Boolean,
     shape: Shape,
@@ -926,6 +945,12 @@ private fun AlbumCoverDepthShadow(
     if (!isVisible) return
     val layerColor = if (isDark) Color.White else Color.Black
     val resolvedBlurRadius = if (isDark) blurRadius * 1.35f else blurRadius
+    val cache = LocalAlbumCoverShadowCache.current
+    val isSettled by remember(progress) { derivedStateOf { progress() == 1f } }
+    if (cache != null && isSettled) {
+        Box(modifier.sharedAlbumCoverShadow(cache, isDark, shape, resolvedBlurRadius))
+        return
+    }
     Box(
         modifier = modifier
             .cacheAlbumCoverShadow(outset = resolvedBlurRadius * 3f + 6.dp)
@@ -950,18 +975,28 @@ private fun AlbumCoverDepthShadow(
 internal fun Modifier.cacheAlbumCoverShadow(outset: Dp): Modifier {
     // 旧系统的 blur 不会创建 RenderEffect，无需为实色阴影额外分配纹理。
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return this
+    return outsetAlbumLayer(outset) {
+        compositingStrategy = CompositingStrategy.Offscreen
+    }
+}
+
+private fun Modifier.outsetAlbumLayer(
+    outset: Dp,
+    configure: GraphicsLayerScope.() -> Unit,
+): Modifier {
     return layout { measurable, constraints ->
-        val paddingPx = outset.roundToPx()
-        val extra = paddingPx * 2
+        val padding = outset.roundToPx()
+        val extra = padding * 2
         val placeable = measurable.measure(constraints.offset(extra, extra))
         layout(placeable.width - extra, placeable.height - extra) {
-            placeable.place(-paddingPx, -paddingPx)
+            placeable.place(-padding, -padding)
         }
     }
         .graphicsLayer {
-            compositingStrategy = CompositingStrategy.Offscreen
+            clip = false
+            configure()
         }
-        // 离屏纹理会裁剪到自身边界，向外留出模糊及位移空间，但不改变卡片布局尺寸。
+        // 离屏纹理会裁剪到自身边界，留出绘制溢出空间，但不改变卡片布局尺寸。
         .padding(outset)
 }
 

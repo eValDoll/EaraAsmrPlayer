@@ -77,8 +77,11 @@ fun AsmrAsyncImage(
     val measuredSize: MutableState<IntSize?> = remember { mutableStateOf(null) }
     // 跨尺寸即时占位：若该图片已被列表等处加载过，先用任意尺寸的缓存位图立即显示，
     // 同时仍按精确尺寸加载原图并在完成后无缝替换，避免详情大图等待网络重新请求。
+    val seededPreview = remember(normalizedModel, reloadKey) {
+        if (peekAnySizeForInitial) manager.peekAnySizeInMemory(normalizedModel) else null
+    }
     val seededPainter = remember(normalizedModel, reloadKey) {
-        if (peekAnySizeForInitial) manager.peekAnySize(normalizedModel)?.let { BitmapPainter(it) } else null
+        seededPreview?.let { BitmapPainter(it.bitmap) }
     }
     val painter: MutableState<Painter?> = remember(normalizedModel, reloadKey) { mutableStateOf(seededPainter) }
     val seededPlaceholder = remember(normalizedModel, reloadKey) { mutableStateOf(seededPainter != null) }
@@ -104,28 +107,41 @@ fun AsmrAsyncImage(
     val resolvedSize = requestSize ?: measuredSize.value
     val loadSizeKey: Any? = if (loadAtOriginalSize) Unit else resolvedSize
     LaunchedEffect(normalizedModel, loadSizeKey, reloadKey) {
-        val initialSize = requestSize ?: measuredSize.value
-        if (!loadAtOriginalSize && initialSize == null) return@LaunchedEffect
-        if (!loadAtOriginalSize && loadWhenSizeStableForMillis > 0L) {
-            delay(loadWhenSizeStableForMillis)
-        }
-        val sz = requestSize ?: measuredSize.value ?: initialSize ?: IntSize.Zero
-        suspend fun finishWithExistingPainter() {
-            state.value = AsmrAsyncImageState.Success
+        suspend fun discardInvalidSeed() {
+            if (!seededPlaceholder.value || seededPreview == null || manager.isMemoryPreviewValid(normalizedModel, seededPreview)) {
+                return
+            }
+            seededPlaceholder.value = false
+            painter.value = null
+            loadedSize.value = null
+            state.value = AsmrAsyncImageState.Loading
             crossfadeRunning.value = false
-            crossfade.snapTo(1f)
-        }
-        // 原尺寸加载：load key 与显示尺寸无关，尺寸变化（如 hero 折叠）不应触发重载，
-        // 已加载的位图由 ContentScale 重新裁切即可。
-        if (loadAtOriginalSize && painter.value != null && loadedSize.value != null) {
-            finishWithExistingPainter()
-            return@LaunchedEffect
-        }
-        if (retainPainterDuringReload && loadedSize.value == sz && painter.value != null) {
-            finishWithExistingPainter()
-            return@LaunchedEffect
+            crossfade.snapTo(0f)
         }
         try {
+            // 即时占位只查来源身份；文件版本在后台验证，失效后不能被 retain 逻辑永久保留。
+            discardInvalidSeed()
+            val initialSize = requestSize ?: measuredSize.value
+            if (!loadAtOriginalSize && initialSize == null) return@LaunchedEffect
+            if (!loadAtOriginalSize && loadWhenSizeStableForMillis > 0L) {
+                delay(loadWhenSizeStableForMillis)
+            }
+            val sz = requestSize ?: measuredSize.value ?: initialSize ?: IntSize.Zero
+            suspend fun finishWithExistingPainter() {
+                state.value = AsmrAsyncImageState.Success
+                crossfadeRunning.value = false
+                crossfade.snapTo(1f)
+            }
+            // 原尺寸加载：load key 与显示尺寸无关，尺寸变化（如 hero 折叠）不应触发重载，
+            // 已加载的位图由 ContentScale 重新裁切即可。
+            if (loadAtOriginalSize && painter.value != null && loadedSize.value != null) {
+                finishWithExistingPainter()
+                return@LaunchedEffect
+            }
+            if (retainPainterDuringReload && loadedSize.value == sz && painter.value != null) {
+                finishWithExistingPainter()
+                return@LaunchedEffect
+            }
             crossfadeRunning.value = false
             val hasExistingPainter = painter.value != null
             val shouldRetainPainter = (retainPainterDuringReload || loadAtOriginalSize || seededPlaceholder.value) && hasExistingPainter
@@ -164,6 +180,8 @@ fun AsmrAsyncImage(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {
+            // 加载过程中也可能发生本地文件替换或删除。
+            discardInvalidSeed()
             if (painter.value == null) {
                 state.value = AsmrAsyncImageState.Error
                 painter.value = null

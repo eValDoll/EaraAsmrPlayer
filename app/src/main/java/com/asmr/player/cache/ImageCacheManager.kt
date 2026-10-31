@@ -64,6 +64,17 @@ class ImageCacheManager(
         val cachePolicy: CachePolicy,
     )
 
+    private data class MemoryEntry(
+        val dataKey: String,
+        val fullKey: String,
+    )
+
+    class MemoryPreview internal constructor(
+        val bitmap: ImageBitmap,
+        internal val dataKey: String,
+        internal val sourceKey: String,
+    )
+
     private val scope = CoroutineScope(SupervisorJob() + decodeDispatcher)
     private val inFlight = ConcurrentHashMap<InFlightKey, InFlightLoad>()
     // 远程推荐封面在直连较慢时会长时间占用加载许可。独立的本地通道保证文件图片
@@ -77,11 +88,12 @@ class ImageCacheManager(
     private val memoryStateLock = Any()
     private var memoryGeneration = 0L
 
-    // 数据键(忽略尺寸) -> 最近一次写入内存的完整缓存键。
-    // 用于跨尺寸即时复用同一张图片：列表已加载的小图可作为详情大图的瞬时占位。
-    private val dataKeyToLatestFullKey = mutableMapOf<String, String>()
+    // 来源身份不读取文件元数据，组合阶段只查内存；后台仍按文件版本验证精确缓存键。
+    private val sourceToLatestMemoryEntry = mutableMapOf<String, MemoryEntry>()
+    private val fullKeyToMemorySource = mutableMapOf<String, String>()
 
     init {
+        memoryCache.setRemovalListener(::onMemoryEntryRemoved)
         initializedInstance = this
     }
 
@@ -89,37 +101,92 @@ class ImageCacheManager(
         memoryGeneration
     }
 
-    private fun getMemory(fullKey: String, dataKey: String): Bitmap? = synchronized(memoryStateLock) {
+    private fun getMemory(fullKey: String, dataKey: String, sourceKey: String): Bitmap? = synchronized(memoryStateLock) {
+        val previousEntry = sourceToLatestMemoryEntry[sourceKey]
+        if (previousEntry != null && previousEntry.dataKey != dataKey) {
+            removeMemoryEntry(sourceKey)
+        }
         memoryCache.get(fullKey)?.also {
-            dataKeyToLatestFullKey[dataKey] = fullKey
+            recordMemoryEntry(sourceKey, dataKey, fullKey)
         }
     }
 
     private fun putMemory(
         fullKey: String,
         dataKey: String,
+        sourceKey: String,
         bmp: Bitmap,
         expectedGeneration: Long,
     ) = synchronized(memoryStateLock) {
         if (memoryGeneration != expectedGeneration) return@synchronized
         memoryCache.put(fullKey, bmp)
-        dataKeyToLatestFullKey[dataKey] = fullKey
+        // 大于整个 LRU 容量的图片会在 put 中立即被淘汰，不能为它保留占位索引。
+        if (memoryCache.get(fullKey) === bmp) {
+            recordMemoryEntry(sourceKey, dataKey, fullKey)
+        }
+    }
+
+    // 以下索引操作均持有 memoryStateLock，每个来源只为当前占位保留一条反向映射。
+    private fun recordMemoryEntry(sourceKey: String, dataKey: String, fullKey: String) {
+        val previous = sourceToLatestMemoryEntry[sourceKey]
+        if (previous?.dataKey == dataKey && previous.fullKey == fullKey) return
+        previous?.let { fullKeyToMemorySource.remove(it.fullKey) }
+        sourceToLatestMemoryEntry[sourceKey] = MemoryEntry(dataKey, fullKey)
+        fullKeyToMemorySource[fullKey] = sourceKey
+    }
+
+    private fun removeMemoryEntry(sourceKey: String) {
+        val entry = sourceToLatestMemoryEntry.remove(sourceKey) ?: return
+        fullKeyToMemorySource.remove(entry.fullKey)
+    }
+
+    private fun onMemoryEntryRemoved(fullKey: String) = synchronized(memoryStateLock) {
+        val sourceKey = fullKeyToMemorySource.remove(fullKey) ?: return@synchronized
+        if (sourceToLatestMemoryEntry[sourceKey]?.fullKey == fullKey) {
+            sourceToLatestMemoryEntry.remove(sourceKey)
+        }
     }
 
     /**
-     * 同步、仅内存：按图片数据(忽略尺寸)检索任意一张已缓存的位图。
+     * 按图片数据检索任意尺寸的位图，同时验证本地文件元数据。应在后台调用。
      * 命中则可立即作为占位显示，避免详情页等待网络重新请求同一张封面。
      * 未命中返回 null。
      */
     fun peekAnySize(model: Any): ImageBitmap? {
         val dataKey = CacheKeyFactory.createDataKey(appContext, model, config.cacheVersion)
+        val sourceKey = CacheKeyFactory.createMemoryLookupKey(appContext, model, config.cacheVersion)
+        return peekMemory(sourceKey, dataKey)?.bitmap
+    }
+
+    /** 同步、无 IO 的即时占位查找；调用方随后按精确尺寸和文件版本加载。 */
+    fun peekAnySizeInMemory(model: Any): MemoryPreview? {
+        val sourceKey = CacheKeyFactory.createMemoryLookupKey(appContext, model, config.cacheVersion)
+        return peekMemory(sourceKey, expectedDataKey = null)
+    }
+
+    /** 占位的文件版本独立于 LRU 生存期，淘汰缓存不会使已经显示的有效图片失效。 */
+    suspend fun isMemoryPreviewValid(model: Any, preview: MemoryPreview): Boolean {
+        // 不带本地文件元数据的来源两种键相同，无需为远程封面增加一次后台调度。
+        if (preview.dataKey == preview.sourceKey) {
+            return CacheKeyFactory.createMemoryLookupKey(appContext, model, config.cacheVersion) == preview.dataKey
+        }
+        return withContext(decodeDispatcher) {
+            CacheKeyFactory.createDataKey(appContext, model, config.cacheVersion) == preview.dataKey
+        }
+    }
+
+    private fun peekMemory(sourceKey: String, expectedDataKey: String?): MemoryPreview? {
         return synchronized(memoryStateLock) {
-            val fullKey = dataKeyToLatestFullKey[dataKey] ?: return@synchronized null
-            val bitmap = memoryCache.get(fullKey)
-            if (bitmap == null) {
-                dataKeyToLatestFullKey.remove(dataKey)
+            val entry = sourceToLatestMemoryEntry[sourceKey] ?: return@synchronized null
+            if (expectedDataKey != null && expectedDataKey != entry.dataKey) {
+                removeMemoryEntry(sourceKey)
+                return@synchronized null
             }
-            bitmap?.asImageBitmap()
+            val bitmap = memoryCache.get(entry.fullKey)
+            if (bitmap == null) {
+                removeMemoryEntry(sourceKey)
+            }
+            bitmap?.let { MemoryPreview(it.asImageBitmap(), entry.dataKey, sourceKey) }
         }
     }
 
@@ -143,11 +210,12 @@ class ImageCacheManager(
     ): ImageBitmap {
         val key = CacheKeyFactory.createKey(appContext, model, size, config.cacheVersion)
         val dataKey = CacheKeyFactory.createDataKey(appContext, model, config.cacheVersion)
+        val sourceKey = CacheKeyFactory.createMemoryLookupKey(appContext, model, config.cacheVersion)
         val memoryGenerationAtStart = currentMemoryGeneration()
 
         if (cachePolicy.readMemory) {
             Trace.beginSection("img.mem")
-            val cached = getMemory(key, dataKey)
+            val cached = getMemory(key, dataKey, sourceKey)
             if (cached != null) {
                 stats.onMemoryHit()
                 Trace.endSection()
@@ -163,7 +231,7 @@ class ImageCacheManager(
                 deferred = scope.async(start = CoroutineStart.LAZY) {
                     val result = try {
                         val lateMemoryHit = if (cachePolicy.readMemory) {
-                            getMemory(key, dataKey)
+                            getMemory(key, dataKey, sourceKey)
                         } else {
                             null
                         }
@@ -174,6 +242,7 @@ class ImageCacheManager(
                             val diskBitmap = loadImageFromDisk(
                                 key = key,
                                 dataKey = dataKey,
+                                sourceKey = sourceKey,
                                 cachePolicy = cachePolicy,
                                 memoryGenerationAtStart = memoryGenerationAtStart,
                             )
@@ -190,7 +259,7 @@ class ImageCacheManager(
                                     }
                                     stats.onDecode()
                                     if (cachePolicy.writeMemory) {
-                                        putMemory(key, dataKey, bmp, memoryGenerationAtStart)
+                                        putMemory(key, dataKey, sourceKey, bmp, memoryGenerationAtStart)
                                     }
                                     if (cachePolicy.writeDisk) {
                                         writeDiskCacheAsync(key, bmp)
@@ -236,6 +305,7 @@ class ImageCacheManager(
     private suspend fun loadImageFromDisk(
         key: String,
         dataKey: String,
+        sourceKey: String,
         cachePolicy: CachePolicy,
         memoryGenerationAtStart: Long,
     ): ImageBitmap? {
@@ -255,7 +325,7 @@ class ImageCacheManager(
                 Trace.endSection()
             }
             if (cachePolicy.writeMemory) {
-                putMemory(key, dataKey, bmp, memoryGenerationAtStart)
+                putMemory(key, dataKey, sourceKey, bmp, memoryGenerationAtStart)
             }
             return bmp.asImageBitmap()
         } finally {
@@ -270,10 +340,11 @@ class ImageCacheManager(
     ): ImageBitmap? = withContext(decodeDispatcher) {
         val key = CacheKeyFactory.createKey(appContext, model, size, config.cacheVersion)
         val dataKey = CacheKeyFactory.createDataKey(appContext, model, config.cacheVersion)
+        val sourceKey = CacheKeyFactory.createMemoryLookupKey(appContext, model, config.cacheVersion)
         val memoryGenerationAtStart = currentMemoryGeneration()
 
         if (cachePolicy.readMemory) {
-            val cached = getMemory(key, dataKey)
+            val cached = getMemory(key, dataKey, sourceKey)
             if (cached != null) {
                 stats.onMemoryHit()
                 return@withContext cached.asImageBitmap()
@@ -287,7 +358,7 @@ class ImageCacheManager(
                 stats.onDiskHit()
                 val bmp = decodeBytes(entry.bytes)
                 if (cachePolicy.writeMemory) {
-                    putMemory(key, dataKey, bmp, memoryGenerationAtStart)
+                    putMemory(key, dataKey, sourceKey, bmp, memoryGenerationAtStart)
                 }
                 return@withContext bmp.asImageBitmap()
             }
@@ -360,7 +431,8 @@ class ImageCacheManager(
         synchronized(memoryStateLock) {
             memoryGeneration += 1L
             memoryCache.clear()
-            dataKeyToLatestFullKey.clear()
+            sourceToLatestMemoryEntry.clear()
+            fullKeyToMemorySource.clear()
         }
         diskCache.clear()
     }
@@ -378,13 +450,6 @@ class ImageCacheManager(
         synchronized(memoryStateLock) {
             memoryGeneration += 1L
             memoryCache.trimToSize(targetSize)
-            val retainedKeys = memoryCache.snapshotKeys()
-            val iterator = dataKeyToLatestFullKey.iterator()
-            while (iterator.hasNext()) {
-                if (iterator.next().value !in retainedKeys) {
-                    iterator.remove()
-                }
-            }
         }
     }
 

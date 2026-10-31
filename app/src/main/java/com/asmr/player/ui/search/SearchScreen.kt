@@ -1,5 +1,7 @@
 package com.asmr.player.ui.search
 
+import com.asmr.player.ui.common.AlbumRowRasterCacheScope
+
 import com.asmr.player.ui.common.LocalPageAnimationsActive
 
 import com.asmr.player.domain.model.CollectedSearchSource
@@ -21,6 +23,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.stopScroll
+import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -134,6 +137,7 @@ import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.albumStableKey
 import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
+import com.asmr.player.ui.common.interruptOngoingScroll
 import com.asmr.player.ui.common.clearFocusOnTapOutside
 import com.asmr.player.ui.common.CollapsibleHeaderState
 import com.asmr.player.ui.common.collapsibleHeaderUiState
@@ -141,12 +145,15 @@ import com.asmr.player.ui.common.consumeTapThrough
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
+import com.asmr.player.ui.library.prepared.PreparedAlbumParagraphItem
+import com.asmr.player.ui.library.prepared.PreparedAlbumParagraphs
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.library.AlbumGridItem
 import com.asmr.player.ui.library.AlbumGridItemSpacing
 import com.asmr.player.ui.library.AlbumItem
+import com.asmr.player.ui.library.AlbumListIconScope
 import com.asmr.player.ui.library.AlbumMetaActionDialog
 import com.asmr.player.ui.library.rememberAlbumMetaCopyAction
 import com.asmr.player.ui.groups.AlbumGroupsViewModel
@@ -156,7 +163,6 @@ import com.asmr.player.ui.sidepanel.LandscapeRightPanelHost
 import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
 import com.asmr.player.ui.theme.AsmrTheme
 import dagger.hilt.android.EntryPointAccessors
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -436,6 +442,7 @@ private fun SearchScreenContent(
     val resultScrollKey = searchResultScrollKey(success)
     val listState = rememberSaveablePrefetchedLazyListState(stateKey = resultScrollKey)
     val gridState = rememberSaveable(resultScrollKey, saver = LazyStaggeredGridState.Saver) { LazyStaggeredGridState() }
+    val activeScroll: ScrollableState = if (viewMode == 0) listState else gridState
     val colorScheme = AsmrTheme.colorScheme
     val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
     val scope = rememberCoroutineScope()
@@ -529,12 +536,10 @@ private fun SearchScreenContent(
     val topPadding = with(androidx.compose.ui.platform.LocalDensity.current) { chromeReservedHeightPx.toDp() } + SearchChromeContentGap + LocalMainHeaderPadding.current
 
     fun scrollResultsToTop() {
-        scope.launch {
-            runCatching { listState.stopScroll(MutatePriority.PreventUserInput) }
-            runCatching { gridState.stopScroll(MutatePriority.PreventUserInput) }
-            runCatching { listState.scrollToItem(0) }
-            runCatching { gridState.scrollToItem(0) }
-        }
+        activeScroll.interruptOngoingScroll(scope, MutatePriority.PreventUserInput)
+        // 两种布局都保留回顶意图；未挂载的布局在下一次测量直接使用位置 0。
+        listState.requestScrollToItem(0)
+        gridState.requestScrollToItem(0)
     }
 
     fun requestNextPage() {
@@ -706,7 +711,7 @@ private fun SearchScreenContent(
             followRatio = SearchPullNextPageFollowRatio
         )
     }
-    val pullNextPageVisualOffsetPx by animateFloatAsState(
+    val pullNextPageVisualOffsetState = animateFloatAsState(
         targetValue = pullNextPageVisualTargetPx,
         animationSpec = if (pullNextPageGestureActive) {
             snap()
@@ -726,6 +731,7 @@ private fun SearchScreenContent(
         },
         label = "searchPullNextPageOffset"
     )
+    val pullNextPageVisualOffsetPx by pullNextPageVisualOffsetState
     val pullNextPageProgress =
         (pullNextPageVisualOffsetPx / pullNextPageMaxLiftPx).coerceIn(0f, 1f)
     val finishPullNextPageGesture = rememberUpdatedState finish@{
@@ -771,7 +777,7 @@ private fun SearchScreenContent(
         minimumValue = 0f,
         maximumValue = pullRefreshMaxDistancePx
     )
-    val pullContentOffsetPx by animateFloatAsState(
+    val pullContentOffsetState = animateFloatAsState(
         targetValue = pullContentOffsetTargetPx,
         animationSpec = if (
             searchPointerPressed &&
@@ -787,6 +793,7 @@ private fun SearchScreenContent(
         },
         label = "searchPullContentOffset"
     )
+    val pullContentOffsetPx by pullContentOffsetState
     val pullRefreshProgress =
         if (pullToRefreshState.isRefreshing) {
             1f
@@ -799,7 +806,6 @@ private fun SearchScreenContent(
     val pullRefreshArmed = pullToRefreshState.progress >= 1f
     val pullRefreshHintVisible = pullContentOffsetPx > 1f || pullToRefreshState.isRefreshing
     val pullNextPageHintVisible = pullNextPageVisualOffsetPx > 1f
-    val listStretchOffsetPx = pullContentOffsetPx - pullNextPageVisualOffsetPx
     val pullRefreshHintHeightPx = pullContentOffsetPx.coerceIn(0f, pullActionHintHeightPx)
     val pullRefreshHintHeight = with(androidx.compose.ui.platform.LocalDensity.current) {
         pullRefreshHintHeightPx.toDp()
@@ -811,16 +817,13 @@ private fun SearchScreenContent(
     val latestKeyword by rememberUpdatedState(keyword)
     val latestHorizontalPagerScrollLockChanged = rememberUpdatedState(onHorizontalPagerScrollLockChanged)
     fun stopActiveScroll() {
-        scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            if (!pullNextPageReturnInProgress) {
-                pullNextPageDragPx = 0f
-                pullNextPageGestureActive = false
-                pullNextPageRequestAfterReturn = false
-                latestHorizontalPagerScrollLockChanged.value(false)
-            }
-            runCatching { listState.stopScroll(MutatePriority.UserInput) }
-            runCatching { gridState.stopScroll(MutatePriority.UserInput) }
+        if (!pullNextPageReturnInProgress) {
+            pullNextPageDragPx = 0f
+            pullNextPageGestureActive = false
+            pullNextPageRequestAfterReturn = false
+            latestHorizontalPagerScrollLockChanged.value(false)
         }
+        activeScroll.interruptOngoingScroll(scope)
     }
     LaunchedEffect(pullToRefreshState.isRefreshing) {
         if (!pullToRefreshState.isRefreshing) {
@@ -929,10 +932,7 @@ private fun SearchScreenContent(
     }
     LaunchedEffect(isActive, viewMode) {
         if (isActive) return@LaunchedEffect
-        when (viewMode) {
-            0 -> listState.stopScroll(MutatePriority.PreventUserInput)
-            else -> gridState.stopScroll(MutatePriority.PreventUserInput)
-        }
+        activeScroll.interruptOngoingScroll(this, MutatePriority.PreventUserInput)
         pullNextPageDragPx = 0f
         pullNextPageGestureActive = false
         pullNextPageRequestAfterReturn = false
@@ -1121,7 +1121,9 @@ private fun SearchScreenContent(
                             modifier = Modifier
                                 .fillMaxSize()
                                 .clearFocusOnTapOutside()
-                                .graphicsLayer { translationY = listStretchOffsetPx }
+                                .graphicsLayer {
+                                    translationY = pullContentOffsetState.value - pullNextPageVisualOffsetState.value
+                                }
                         ) {
                             when (val state = uiState) {
                             is SearchUiState.Loading -> Column(
@@ -1177,56 +1179,76 @@ private fun SearchScreenContent(
                                             state.results.getOrNull(idx)?.let { albumCoverImageModel(it) }
                                         }
                                     )
-                                    LazyColumn(
-                                        state = listState,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .nestedScroll(chromeState.nestedScrollConnection),
-                                        flingBehavior = rememberCalmScrollableFlingBehavior(),
-                                        contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
-                                            .withAddedBottomPadding(LocalBottomOverlayPadding.current)
+                                    AlbumRowRasterCacheScope(
+                                        transformIsIdentity = { pullContentOffsetState.value - pullNextPageVisualOffsetState.value == 0f },
                                     ) {
-                                        lazyItemsIndexed(
-                                            items = state.results,
-                                            key = { _, album -> searchResultItemKey(album) },
-                                            contentType = { _, _ -> "album" }
-                                        ) { _, album ->
-                                            DeferredPageItem(placeholder = {
-                                                Spacer(Modifier.fillMaxWidth().height(
-                                                    albumListCoverSize(LocalConfiguration.current.screenWidthDp) + 12.dp
-                                                ))
-                                            }) {
-                                                val onlineDetailLoading = onlineDetailLoadingFor(album, state)
-                                                val skeletonMode = searchResultSkeletonMode(
-                                                    onlineDetailLoading = onlineDetailLoading,
-                                                    isRefreshingLocalizedText = state.isRefreshingLocalizedText
-                                                )
-                                                val rj = album.rjCode.ifBlank { album.workId }.trim().uppercase()
-                                                val hasResolvedDetail = rj.isNotBlank() && rj in state.enrichedDetailRjCodes
-                                                AlbumItem(
-                                                    album = album,
-                                                    onClick = { onAlbumClick(album, state.purchasedOnly, hasResolvedDetail) },
-                                                    modifier = Modifier.animateItem(
-                                                        fadeInSpec = null,
-                                                        placementSpec = if (LocalPageAnimationsActive.current) SearchResultPlacementSpring else null,
-                                                        fadeOutSpec = null,
-                                                    ),
-                                                    onlineDetailLoading =
-                                                        skeletonMode == SearchResultSkeletonMode.DetailMetadata,
-                                                    onlineTitleLoading =
-                                                        skeletonMode == SearchResultSkeletonMode.LocalizedText,
-                                                    onlineCvLoading =
-                                                        skeletonMode == SearchResultSkeletonMode.DetailMetadata,
-                                                    onlineTagsLoading = skeletonMode != SearchResultSkeletonMode.None,
-                                                    showCollectedIndicator = !state.collectedOnly,
-                                                    showStatsPlaceholders = true,
-                                                    coverFadeInState = coverFadeInState,
-                                                    coverReloadKey = state.resultRevision,
-                                                    onRjLongClick = ::openMetaActions,
-                                                    onCircleLongClick = ::openMetaActions,
-                                                    onCvLongClick = ::openMetaActions,
-                                                    onTagLongClick = ::openMetaActions,
-                                                )
+                                        AlbumListIconScope {
+                                            PreparedAlbumParagraphs(
+                                                listState = listState,
+                                                active = isActive && isDataActive,
+                                                dataKey = state.results,
+                                                itemAtLazyIndex = { index ->
+                                                    state.results.getOrNull(index)?.let { album ->
+                                                        PreparedAlbumParagraphItem(searchResultItemKey(album), album)
+                                                    }
+                                                },
+                                            ) {
+                                                LazyColumn(
+                                                    state = listState,
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .nestedScroll(chromeState.nestedScrollConnection),
+                                                    flingBehavior = rememberCalmScrollableFlingBehavior(),
+                                                    contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
+                                                        .withAddedBottomPadding(LocalBottomOverlayPadding.current)
+                                                ) {
+                                                    lazyItemsIndexed(
+                                                        items = state.results,
+                                                        key = { _, album -> searchResultItemKey(album) },
+                                                        contentType = { _, _ -> "album" }
+                                                    ) { _, album ->
+                                                        DeferredPageItem(placeholder = {
+                                                            Spacer(Modifier.fillMaxWidth().height(
+                                                                albumListCoverSize(LocalConfiguration.current.screenWidthDp) + 12.dp
+                                                            ))
+                                                        }) {
+                                                            val onlineDetailLoading = onlineDetailLoadingFor(album, state)
+                                                            val skeletonMode = searchResultSkeletonMode(
+                                                                onlineDetailLoading = onlineDetailLoading,
+                                                                isRefreshingLocalizedText = state.isRefreshingLocalizedText
+                                                            )
+                                                            val rj = album.rjCode.ifBlank { album.workId }.trim().uppercase()
+                                                            val hasResolvedDetail = rj.isNotBlank() && rj in state.enrichedDetailRjCodes
+                                                            val itemPurchasedOnly = state.purchasedOnly
+                                                            val preparedItemKey = searchResultItemKey(album)
+                                                            AlbumItem(
+                                                                album = album,
+                                                                preparedItemKey = remember(preparedItemKey) { preparedItemKey },
+                                                                onClick = { onAlbumClick(album, itemPurchasedOnly, hasResolvedDetail) },
+                                                                modifier = Modifier.animateItem(
+                                                                    fadeInSpec = null,
+                                                                    placementSpec = if (LocalPageAnimationsActive.current) SearchResultPlacementSpring else null,
+                                                                    fadeOutSpec = null,
+                                                                ),
+                                                                onlineDetailLoading =
+                                                                    skeletonMode == SearchResultSkeletonMode.DetailMetadata,
+                                                                onlineTitleLoading =
+                                                                    skeletonMode == SearchResultSkeletonMode.LocalizedText,
+                                                                onlineCvLoading =
+                                                                    skeletonMode == SearchResultSkeletonMode.DetailMetadata,
+                                                                onlineTagsLoading = skeletonMode != SearchResultSkeletonMode.None,
+                                                                showCollectedIndicator = !state.collectedOnly,
+                                                                showStatsPlaceholders = true,
+                                                                coverFadeInState = coverFadeInState,
+                                                                coverReloadKey = state.resultRevision,
+                                                                onRjLongClick = ::openMetaActions,
+                                                                onCircleLongClick = ::openMetaActions,
+                                                                onCvLongClick = ::openMetaActions,
+                                                                onTagLongClick = ::openMetaActions,
+                                                            )
+                                                        }
+                                                    }
+                                                }
                                             }
                                         }
                                     }
@@ -1291,9 +1313,10 @@ private fun SearchScreenContent(
                                                 )
                                                 val rj = album.rjCode.ifBlank { album.workId }.trim().uppercase()
                                                 val hasResolvedDetail = rj.isNotBlank() && rj in state.enrichedDetailRjCodes
+                                                val itemPurchasedOnly = state.purchasedOnly
                                                 AlbumGridItem(
                                                     album = album,
-                                                    onClick = { onAlbumClick(album, state.purchasedOnly, hasResolvedDetail) },
+                                                    onClick = { onAlbumClick(album, itemPurchasedOnly, hasResolvedDetail) },
                                                     modifier = Modifier.animateItem(
                                                         fadeInSpec = null,
                                                         placementSpec = if (LocalPageAnimationsActive.current) SearchResultPlacementSpring else null,

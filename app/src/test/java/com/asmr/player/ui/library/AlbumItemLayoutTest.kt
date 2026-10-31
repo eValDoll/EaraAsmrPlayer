@@ -2,33 +2,126 @@ package com.asmr.player.ui.library
 
 import android.content.res.Configuration
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.click
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import com.asmr.player.ui.createEaraComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
 import com.asmr.player.domain.model.Album
 import com.asmr.player.ui.common.LocalPageAnimationsActive
 import com.asmr.player.ui.theme.AsmrPlayerTheme
+import com.asmr.player.ui.theme.ThemeMode
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.annotation.Config
 import kotlin.math.abs
 
 @RunWith(RobolectricTestRunner::class)
 class AlbumItemLayoutTest {
     @get:Rule
     val composeRule = createEaraComposeRule()
+
+    @Test
+    @Config(sdk = [33])
+    fun lightRow_preservesLayoutAndTouchBoundsAcrossVisibilityChanges() {
+        checkRowInteractionBounds(ThemeMode.Light)
+    }
+
+    @Test
+    @Config(sdk = [33])
+    fun darkRow_preservesLayoutAndTouchBoundsAcrossVisibilityChanges() {
+        checkRowInteractionBounds(ThemeMode.Dark)
+    }
+
+    private fun checkRowInteractionBounds(mode: ThemeMode) {
+        val pageActive = mutableStateOf(true)
+        var clicks = 0
+        var longClicks = 0
+        val album = Album(
+            id = 1L,
+            title = "Album row title",
+            path = "/tmp/album",
+            cv = "CV A / CV B",
+            tags = listOf("binaural", "exclusive"),
+            rjCode = "RJ999999",
+        )
+        composeRule.setContent {
+            CompositionLocalProvider(
+                LocalDensity provides Density(1f),
+                LocalPageAnimationsActive provides pageActive.value,
+            ) {
+                AsmrPlayerTheme(mode = mode) {
+                    Box(Modifier.fillMaxSize().padding(32.dp)) {
+                        Box(Modifier.width(240.dp)) {
+                            AlbumItem(
+                                album = album,
+                                onClick = { clicks++ },
+                                onLongClick = { longClicks++ },
+                                animateOnlineDetails = false,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        val row = composeRule.onNodeWithTag(ALBUM_ITEM_CARD_TAG)
+        val initialBounds = row.fetchSemanticsNode().boundsInRoot
+        val initialTagBounds = composeRule.onNodeWithText("#binaural", useUnmergedTree = true)
+            .fetchSemanticsNode().boundsInRoot
+        val initialTagNode = composeRule.onNodeWithText("#binaural", useUnmergedTree = true)
+            .fetchSemanticsNode().id
+        var expectedClicks = 0
+        var expectedLongClicks = 0
+        listOf(false, true, false).forEach { active ->
+            composeRule.runOnIdle {
+                pageActive.value = active
+            }
+            row.assertHasClickAction()
+                .assert(SemanticsMatcher.keyIsDefined(SemanticsActions.OnLongClick))
+            assertEquals(initialBounds, row.fetchSemanticsNode().boundsInRoot)
+            val tag = composeRule.onNodeWithText("#binaural", useUnmergedTree = true).fetchSemanticsNode()
+            assertEquals(initialTagBounds, tag.boundsInRoot)
+            assertEquals(initialTagNode, tag.id)
+
+            row.performTouchInput { click(Offset(20f, center.y)) }
+            expectedClicks++
+            composeRule.runOnIdle { assertEquals(expectedClicks, clicks) }
+            // 卡片外的留白不能扩大实际点击区域。
+            composeRule.onRoot().performTouchInput {
+                click(Offset(initialBounds.left - 8f, initialBounds.center.y))
+            }
+            composeRule.runOnIdle { assertEquals(expectedClicks, clicks) }
+            row.performTouchInput { longClick(Offset(20f, center.y)) }
+            expectedLongClicks++
+            composeRule.runOnIdle {
+                assertEquals(expectedLongClicks, longClicks)
+                assertEquals(expectedClicks, clicks)
+            }
+        }
+    }
 
     @Test
     fun albumItem_onlineMetadataKeepsItsNodesWhenPageVisibilityChanges() {
