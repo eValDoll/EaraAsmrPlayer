@@ -1,5 +1,8 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.ui.common.AlbumRowRasterCacheScope
+import com.asmr.player.ui.common.rememberLightweightVerticalOverscrollState
+
 import com.asmr.player.ui.common.formatCvNames
 import com.asmr.player.ui.common.LocalMainHeaderPadding
 import com.asmr.player.ui.common.LocalPageAnimationsActive
@@ -13,6 +16,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.LocalOverscrollConfiguration
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.gestures.stopScroll
+import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -57,6 +61,7 @@ import com.asmr.player.ui.common.FlatActionDialog
 import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.interruptScrollableFlingOnPointerDown
+import com.asmr.player.ui.common.interruptOngoingScroll
 import com.asmr.player.ui.common.lightweightVerticalStretchOverscroll
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.queryCachedTrackFileSize
@@ -138,7 +143,6 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.style.TextOverflow
 import com.asmr.player.ui.common.AsmrAsyncImage
 import androidx.paging.LoadState
-import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -159,6 +163,8 @@ import com.asmr.player.ui.common.albumCoverImageModel
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.rememberCollapsibleHeaderState
 import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
+import com.asmr.player.ui.library.prepared.PreparedAlbumParagraphItem
+import com.asmr.player.ui.library.prepared.PreparedAlbumParagraphs
 import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.common.collectAsLazyPagingItemsWhileActive
 import com.asmr.player.ui.common.StableWindowInsets
@@ -177,6 +183,9 @@ private val LibraryPageHorizontalPadding = 8.dp
 private val LibraryTrackListHeaderCornerRadius = 10.dp
 private val LibraryTrackListItemCornerRadius = 10.dp
 private const val LibraryTrackPagingHintDistance = 10
+
+private fun libraryAlbumListItemKey(album: Album?, index: Int): Any =
+    album?.id?.takeIf { it > 0L } ?: index
 
 private fun Album.withUserTags(userTags: List<String>): Album {
     if (userTags.isEmpty()) return this
@@ -285,6 +294,7 @@ private fun LibraryScreenContent(
 
     val mode = (viewMode ?: 0).coerceIn(0, 2)
     val isGrid = mode == 1
+    val activeScroll: ScrollableState = if (isGrid) gridState else listState
     val isTrackList = mode == 2
     var lastChromeResetMode by rememberSaveable { mutableStateOf(mode) }
     val pagedAlbums = viewModel.pagedAlbums.collectAsLazyPagingItemsWhileActive(isDataActive)
@@ -310,12 +320,7 @@ private fun LibraryScreenContent(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val chromeState = rememberCollapsibleHeaderState()
     fun stopActiveScroll() {
-        scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            when (mode) {
-                1 -> runCatching { gridState.stopScroll(MutatePriority.UserInput) }
-                else -> runCatching { listState.stopScroll(MutatePriority.UserInput) }
-            }
-        }
+        activeScroll.interruptOngoingScroll(scope)
     }
     val chromeReservedHeightPx = if (chromeState.heightPx > 0f) {
         chromeState.heightPx
@@ -374,10 +379,7 @@ private fun LibraryScreenContent(
     }
     LaunchedEffect(isActive, mode) {
         if (isActive) return@LaunchedEffect
-        when (mode) {
-            1 -> gridState.stopScroll(MutatePriority.PreventUserInput)
-            else -> listState.stopScroll(MutatePriority.PreventUserInput)
-        }
+        activeScroll.interruptOngoingScroll(this, MutatePriority.PreventUserInput)
     }
 
     Scaffold(
@@ -877,52 +879,76 @@ private fun LibraryScreenContent(
                                             pagedAlbums.itemSnapshotList.getOrNull(idx)?.let { albumCoverImageModel(it) }
                                         }
                                     )
-                                    LazyColumn(
-                                        state = listState,
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .lightweightVerticalStretchOverscroll(
-                                                isAtStart = { !listState.canScrollBackward },
-                                                isAtEnd = { !listState.canScrollForward },
-                                            )
-                                            .clearFocusOnTapOutside()
-                                            .nestedScroll(chromeState.nestedScrollConnection),
-                                        flingBehavior = rememberCalmScrollableFlingBehavior(),
-                                        contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
-                                            .withAddedBottomPadding(LocalBottomOverlayPadding.current)
+                                    val rowStretch = rememberLightweightVerticalOverscrollState()
+                                    AlbumRowRasterCacheScope(
+                                        transformIsIdentity = { rowStretch.isTransformIdentity },
                                     ) {
-                                        items(
-                                            count = pagedAlbums.itemCount,
-                                            key = { idx -> pagedAlbums.itemSnapshotList.getOrNull(idx)?.id?.takeIf { it > 0L } ?: idx },
-                                            contentType = { "albumListItem" }
-                                        ) { idx ->
-                                            val album = (if (isDataActive) pagedAlbums[idx] else pagedAlbums.peek(idx))
-                                                ?: return@items
-                                            val userTags = userTagsByAlbumId[album.id].orEmpty()
-                                            val mergedAlbum = remember(album, userTags) {
-                                                album.withUserTags(userTags)
+                                        AlbumListIconScope {
+                                            PreparedAlbumParagraphs(
+                                                listState = listState,
+                                                active = isActive && isDataActive,
+                                                dataKey = pagedAlbums.itemSnapshotList to userTagsByAlbumId,
+                                                itemAtLazyIndex = { index ->
+                                                    pagedAlbums.itemSnapshotList.getOrNull(index)?.let { album ->
+                                                        PreparedAlbumParagraphItem(
+                                                            libraryAlbumListItemKey(album, index),
+                                                            album.withUserTags(userTagsByAlbumId[album.id].orEmpty()),
+                                                        )
+                                                    }
+                                                },
+                                            ) {
+                                                LazyColumn(
+                                                    state = listState,
+                                                    modifier = Modifier
+                                                        .fillMaxSize()
+                                                        .lightweightVerticalStretchOverscroll(
+                                                            state = rowStretch,
+                                                            isAtStart = { !listState.canScrollBackward },
+                                                            isAtEnd = { !listState.canScrollForward },
+                                                        )
+                                                        .clearFocusOnTapOutside()
+                                                        .nestedScroll(chromeState.nestedScrollConnection),
+                                                    flingBehavior = rememberCalmScrollableFlingBehavior(),
+                                                    contentPadding = PaddingValues(top = topPadding, bottom = 8.dp)
+                                                        .withAddedBottomPadding(LocalBottomOverlayPadding.current)
+                                                ) {
+                                                    items(
+                                                        count = pagedAlbums.itemCount,
+                                                        key = { idx -> libraryAlbumListItemKey(pagedAlbums.itemSnapshotList.getOrNull(idx), idx) },
+                                                        contentType = { "albumListItem" }
+                                                    ) { idx ->
+                                                        val album = (if (isDataActive) pagedAlbums[idx] else pagedAlbums.peek(idx))
+                                                            ?: return@items
+                                                        val userTags = userTagsByAlbumId[album.id].orEmpty()
+                                                        val mergedAlbum = remember(album, userTags) {
+                                                            album.withUserTags(userTags)
+                                                        }
+                                                        val preparedItemKey = libraryAlbumListItemKey(mergedAlbum, idx)
+                                                        AlbumItem(
+                                                            album = mergedAlbum,
+                                                            preparedItemKey = remember(preparedItemKey) { preparedItemKey },
+                                                            onClick = { onAlbumClick(mergedAlbum) },
+                                                            onLongClick = {
+                                                                actionAlbum = mergedAlbum
+                                                                showAlbumActions = true
+                                                            },
+                                                            onRjLongClick = ::openMetaActions,
+                                                            onCircleLongClick = ::openMetaActions,
+                                                            onCvLongClick = ::openMetaActions,
+                                                            onTagLongClick = ::openMetaActions,
+                                                            coverFadeInState = coverFadeInState,
+                                                            showCollectedIndicator = false,
+                                                            coverOverlay = {
+                                                                AlbumSyncStatusOverlay(
+                                                                    syncStatus = state.syncingAlbums[album.id] ?: SyncStatus.Idle,
+                                                                    indicatorSize = 16.dp,
+                                                                    blurRadius = 2.dp,
+                                                                )
+                                                            },
+                                                        )
+                                                    }
+                                                }
                                             }
-                                            AlbumItem(
-                                                album = mergedAlbum,
-                                                onClick = { onAlbumClick(mergedAlbum) },
-                                                onLongClick = {
-                                                    actionAlbum = mergedAlbum
-                                                    showAlbumActions = true
-                                                },
-                                                onRjLongClick = ::openMetaActions,
-                                                onCircleLongClick = ::openMetaActions,
-                                                onCvLongClick = ::openMetaActions,
-                                                onTagLongClick = ::openMetaActions,
-                                                coverFadeInState = coverFadeInState,
-                                                showCollectedIndicator = false,
-                                                coverOverlay = {
-                                                    AlbumSyncStatusOverlay(
-                                                        syncStatus = state.syncingAlbums[album.id] ?: SyncStatus.Idle,
-                                                        indicatorSize = 16.dp,
-                                                        blurRadius = 2.dp,
-                                                    )
-                                                },
-                                            )
                                         }
                                     }
                                 }

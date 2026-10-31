@@ -30,9 +30,11 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.GraphicsMode
 
 @RunWith(RobolectricTestRunner::class)
 @Config(application = Application::class, sdk = [28], qualifiers = "w480dp-h960dp-port-mdpi")
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 class AsmrOneDownloadDialogTest {
     private val compose = createAndroidComposeRule<ComponentActivity>()
 

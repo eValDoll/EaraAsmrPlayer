@@ -1,5 +1,7 @@
 package com.asmr.player.ui.library
 
+import com.asmr.player.ui.library.prepared.PreparedParagraphLabel
+import com.asmr.player.ui.library.prepared.PreparedParagraphOccurrence
 import com.asmr.player.ui.common.CvNameSeparator
 
 import com.asmr.player.ui.common.parseCvNames
@@ -255,6 +257,7 @@ internal fun AlbumItemPrimaryMetaLightweight(
 @Composable
 internal fun AlbumItemCvLightweight(
     cvText: String,
+    preparedItemKey: Any? = null,
     modifier: Modifier = Modifier,
     layout: AlbumInlineValuesLayout = AlbumInlineValuesLayout.Scrollable,
     onClick: (() -> Unit)? = null,
@@ -263,6 +266,7 @@ internal fun AlbumItemCvLightweight(
     val cvs = remember(cvText) { parseCvNames(cvText) }
     AlbumItemInlineValuesLightweight(
         values = cvs,
+        preparedItemKey = preparedItemKey,
         iconRes = R.drawable.ic_album_meta_cv,
         layout = layout,
         prominent = true,
@@ -275,6 +279,7 @@ internal fun AlbumItemCvLightweight(
 @Composable
 internal fun AlbumItemTagsLightweight(
     tags: List<String>,
+    preparedItemKey: Any? = null,
     modifier: Modifier = Modifier,
     layout: AlbumInlineValuesLayout = AlbumInlineValuesLayout.Scrollable,
     onClick: (() -> Unit)? = null,
@@ -283,6 +288,7 @@ internal fun AlbumItemTagsLightweight(
     val normalizedTags = remember(tags) { normalizeAlbumTags(tags) }
     AlbumItemInlineValuesLightweight(
         values = normalizedTags,
+        preparedItemKey = preparedItemKey,
         iconRes = R.drawable.ic_album_meta_tags,
         layout = layout,
         modifier = modifier,
@@ -301,6 +307,7 @@ internal enum class AlbumInlineValuesLayout {
 @Composable
 private fun AlbumItemInlineValuesLightweight(
     values: List<String>,
+    preparedItemKey: Any?,
     iconRes: Int,
     layout: AlbumInlineValuesLayout,
     modifier: Modifier = Modifier,
@@ -348,6 +355,7 @@ private fun AlbumItemInlineValuesLightweight(
                 ) {
                     AlbumItemInlineValueItems(
                         values = values,
+                        preparedItemKey = preparedItemKey,
                         valuePrefix = valuePrefix,
                         valueColor = valueColor,
                         prominent = prominent,
@@ -366,6 +374,7 @@ private fun AlbumItemInlineValuesLightweight(
             ) {
                 AlbumItemInlineValueItems(
                     values = values,
+                    preparedItemKey = preparedItemKey,
                     valuePrefix = valuePrefix,
                     valueColor = valueColor,
                     prominent = prominent,
@@ -383,7 +392,7 @@ private fun RowScope.AlbumItemMetaIcon(
     tint: Color,
 ) {
     Icon(
-        painter = painterResource(id = iconRes),
+        painter = rememberAlbumListMetaIconPainter(iconRes),
         contentDescription = null,
         tint = tint,
         modifier = Modifier
@@ -409,6 +418,7 @@ private fun Modifier.albumItemMetaCenterLine(): Modifier = layout { measurable, 
 @Composable
 private fun AlbumItemInlineValueItems(
     values: List<String>,
+    preparedItemKey: Any?,
     valuePrefix: String,
     valueColor: Color,
     prominent: Boolean,
@@ -416,7 +426,10 @@ private fun AlbumItemInlineValueItems(
     onValueLongClick: ((String) -> Unit)?,
 ) {
     values.forEachIndexed { index, value ->
-        Text(
+        AlbumInlineText(
+            preparedOccurrence = preparedItemKey?.let {
+                PreparedParagraphOccurrence(it, if (prominent) PreparedParagraphLabel.Cv else PreparedParagraphLabel.Tag, index)
+            },
             text = valuePrefix + if (valuePrefix == "#") translatedPageText(value.removePrefix(valuePrefix)) else value,
             style = MaterialTheme.typography.labelSmall.copy(
                 fontSize = if (prominent) 13.sp else 12.sp,
@@ -447,7 +460,11 @@ private fun AlbumItemInlineValueItems(
 
 private fun Modifier.horizontalScrollEdgeFade(scrollState: ScrollState): Modifier {
     return graphicsLayer {
-        compositingStrategy = CompositingStrategy.Offscreen
+        compositingStrategy = if (scrollState.maxValue > 0) {
+            CompositingStrategy.Offscreen
+        } else {
+            CompositingStrategy.Auto
+        }
     }.drawWithCache {
         val fadeWidth = 18.dp.toPx().coerceAtMost(size.width / 3f)
         val leftFade = Brush.horizontalGradient(

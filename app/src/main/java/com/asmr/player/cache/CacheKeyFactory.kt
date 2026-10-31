@@ -45,21 +45,45 @@ object CacheKeyFactory {
         return cachedMd5("$version|$dark|$data")
     }
 
-    private fun normalizeModel(model: Any): String {
+    /** 仅内存占位使用的来源身份；文件有效性由后台的精确缓存键验证。 */
+    fun createMemoryLookupKey(
+        context: Context,
+        model: Any,
+        version: String,
+    ): String {
+        val data = normalizeModel(model, includeFileMetadata = false)
+        val dark = isDarkMode(context)
+        return cachedMd5("$version|$dark|$data")
+    }
+
+    private fun normalizeModel(model: Any, includeFileMetadata: Boolean = true): String {
         return when (model) {
-            is CacheImageModel -> "model:${model.keyTag}|${normalizeModelData(model.data)}"
-            is ImageRequest -> "request:${normalizeModelData(model.data)}"
-            else -> normalizeModelData(model)
+            is CacheImageModel -> "model:${model.keyTag}|${normalizeModelData(model.data, includeFileMetadata)}"
+            is ImageRequest -> "request:${normalizeModelData(model.data, includeFileMetadata)}"
+            else -> normalizeModelData(model, includeFileMetadata)
         }
     }
 
-    private fun normalizeModelData(data: Any?): String {
+    private fun normalizeModelData(data: Any?, includeFileMetadata: Boolean): String {
         return when (data) {
             null -> "null"
-            is String -> data.trim()
-            is File -> "file:${data.absolutePath}|${data.length()}|${data.lastModified()}"
+            is String -> {
+                val value = data.trim()
+                val file = File(value)
+                if (value.startsWith('/') || file.isAbsolute) {
+                    normalizeFile(file, includeFileMetadata)
+                } else {
+                    value
+                }
+            }
+            is File -> normalizeFile(data, includeFileMetadata)
             else -> data.toString()
         }
+    }
+
+    private fun normalizeFile(file: File, includeMetadata: Boolean): String {
+        val path = "file:${file.absolutePath}"
+        return if (includeMetadata) "$path|${file.length()}|${file.lastModified()}" else path
     }
 
     private fun isDarkMode(context: Context): Boolean {

@@ -1,5 +1,8 @@
 package com.asmr.player
 
+import com.asmr.player.ui.common.LocalAlbumCoverShadowCache
+import com.asmr.player.ui.common.rememberAlbumCoverShadowCache
+
 import com.asmr.player.data.remote.crawler.AlbumResourceSource
 import com.asmr.player.ui.search.SEARCH_ASSIST_RESULT_COLLECTED_SOURCE_KEY
 import com.asmr.player.translation.LocalPageTranslationHeader
@@ -133,6 +136,9 @@ import com.asmr.player.performance.tracePrimaryPagePreloadEvent
 import com.asmr.player.ui.common.DeferredPageContentState
 import com.asmr.player.ui.common.LocalDeferredPageContent
 import com.asmr.player.ui.common.LocalPageAnimationsActive
+import com.asmr.player.ui.common.LocalAlbumRowRasterCacheAllowed
+import com.asmr.player.ui.common.rememberAlbumRowRasterCachePolicy
+import com.asmr.player.ui.common.rememberAlbumRowRasterCacheTarget
 import com.asmr.player.ui.common.LocalProgressiveHeaderBlur
 import com.asmr.player.ui.common.progressiveHeaderContent
 import com.asmr.player.ui.common.hasProgressiveMainHeader
@@ -917,6 +923,7 @@ fun MainContainer(
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
     val primaryContentStateHolder = rememberSaveableStateHolder()
+    val coverShadowCache = rememberAlbumCoverShadowCache()
     var primaryPagerScrollLocked by remember { mutableStateOf(false) }
     var pendingPrimaryNavigationRoute by remember { mutableStateOf<String?>(null) }
     val visualPrimaryRoute = remember(activePrimaryRoute, pendingPrimaryNavigationRoute, primaryPagerRoutes) {
@@ -1773,6 +1780,17 @@ fun MainContainer(
             ),
             label = "primaryPageParallaxOffset"
         )
+        val rowRasterCacheTarget = rememberAlbumRowRasterCacheTarget(
+            eligiblePage = {
+                val page = primaryPagerState.currentPage
+                val route = primaryPagerRoutes.getOrNull(page)
+                if (primaryPageExposed && !primaryPagerState.isScrollInProgress &&
+                    primaryPagerState.currentPageOffsetFraction == 0f &&
+                    (route == Routes.Library || route == Routes.Search || route == Routes.HotListening)
+                ) page else null
+            },
+            transformIsIdentity = { primaryPageParallaxOffset.value == 0.dp },
+        )
         val useLargeBottomChrome = windowSizeClass.widthSizeClass != WindowWidthSizeClass.Compact && !isPhone
         val navigationBarBottomPadding = StableWindowInsets.navigationBars
             .only(WindowInsetsSides.Bottom)
@@ -2187,7 +2205,17 @@ fun MainContainer(
                                         searchAssistHeaderPadding
                                     } else 0.dp
                                     val pageHeaderBlur = if (overlayHeaderPadding > 0.dp) rememberProgressiveHeaderBlur() else null
+                                    val rowRasterCacheAllowed = when (route) {
+                                        Routes.Library, Routes.Search, Routes.HotListening -> {
+                                            rememberAlbumRowRasterCachePolicy {
+                                                rowRasterCacheTarget.value == page
+                                            }
+                                        }
+                                        else -> null
+                                    }
                                     CompositionLocalProvider(
+                                        LocalAlbumRowRasterCacheAllowed provides rowRasterCacheAllowed,
+                                        LocalAlbumCoverShadowCache provides coverShadowCache,
                                         LocalDeferredPageContent provides deferredPageContent,
                                         LocalMainHeaderPadding provides overlayHeaderPadding,
                                         LocalPageAnimationsActive provides primaryPageContentVisible,

@@ -1,5 +1,8 @@
 package com.asmr.player.ui.hotlistening
 
+import com.asmr.player.ui.common.AlbumRowRasterCacheScope
+import com.asmr.player.ui.common.rememberLightweightVerticalOverscrollState
+
 import com.asmr.player.ui.common.LocalMainHeaderPadding
 import com.asmr.player.ui.common.progressiveHeaderContent
 import androidx.compose.ui.unit.Dp
@@ -21,7 +24,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.gestures.stopScroll
+import androidx.compose.foundation.gestures.ScrollableState
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed as lazyItemsIndexed
 import androidx.compose.foundation.lazy.staggeredgrid.LazyStaggeredGridState
@@ -75,6 +78,8 @@ import com.asmr.player.ui.common.albumStableKey
 import com.asmr.player.ui.common.lightweightVerticalStretchOverscroll
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.rememberSaveablePrefetchedLazyListState
+import com.asmr.player.ui.library.prepared.PreparedAlbumParagraphItem
+import com.asmr.player.ui.library.prepared.PreparedAlbumParagraphs
 import com.asmr.player.ui.common.shouldFadeInCover
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.common.collectAsStateWhileActive
@@ -82,6 +87,7 @@ import com.asmr.player.ui.library.AlbumGridItem
 import com.asmr.player.ui.library.AlbumGridItemSpacing
 import com.asmr.player.ui.library.AlbumCoverBadge
 import com.asmr.player.ui.library.AlbumItem
+import com.asmr.player.ui.library.AlbumListIconScope
 import com.asmr.player.ui.library.AlbumMetaActionDialog
 import com.asmr.player.ui.library.rememberAlbumMetaCopyAction
 import com.asmr.player.ui.groups.AlbumGroupsViewModel
@@ -89,8 +95,7 @@ import com.asmr.player.ui.playlists.PlaylistsViewModel
 import com.asmr.player.ui.settings.SettingsViewModel
 import com.asmr.player.ui.theme.AsmrTheme
 import dagger.hilt.android.EntryPointAccessors
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.launch
+import com.asmr.player.ui.common.interruptOngoingScroll
 
 private fun hotListeningItemKey(section: String, album: Album): String {
     return "hot-listening:$section:${albumStableKey(album)}"
@@ -155,21 +160,15 @@ private fun HotListeningScreenContent(
     val gridState = rememberSaveable(contentScrollKey, saver = LazyStaggeredGridState.Saver) {
         LazyStaggeredGridState()
     }
-
+    val activeScroll: ScrollableState = if (viewMode == 0) listState else gridState
 
     fun stopActiveScroll() {
-        scope.launch(start = CoroutineStart.UNDISPATCHED) {
-            runCatching { listState.stopScroll(MutatePriority.UserInput) }
-            runCatching { gridState.stopScroll(MutatePriority.UserInput) }
-        }
+        activeScroll.interruptOngoingScroll(scope)
     }
 
     fun requestScrollToTop() {
         scrollResetNonce += 1
-        scope.launch {
-            runCatching { listState.stopScroll(MutatePriority.PreventUserInput) }
-            runCatching { gridState.stopScroll(MutatePriority.PreventUserInput) }
-        }
+        activeScroll.interruptOngoingScroll(scope, MutatePriority.PreventUserInput)
     }
 
     fun openMetaActions(value: String) {
@@ -195,10 +194,7 @@ private fun HotListeningScreenContent(
     }
     LaunchedEffect(isActive, viewMode) {
         if (isActive) return@LaunchedEffect
-        when (viewMode) {
-            0 -> listState.stopScroll(MutatePriority.PreventUserInput)
-            else -> gridState.stopScroll(MutatePriority.PreventUserInput)
-        }
+        activeScroll.interruptOngoingScroll(this, MutatePriority.PreventUserInput)
     }
 
     val headerPadding = LocalMainHeaderPadding.current
@@ -264,60 +260,89 @@ private fun HotListeningScreenContent(
                             state.entries.getOrNull(idx)?.album?.let { albumCoverImageModel(it) }
                         }
                     )
-                    CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .lightweightVerticalStretchOverscroll(
-                                    isAtStart = { !listState.canScrollBackward },
-                                    isAtEnd = { !listState.canScrollForward },
-                                )
-                        ) {
-                            LazyColumn(
-                                state = listState,
-                                modifier = Modifier
-                                    .fillMaxSize(),
-                                flingBehavior = rememberCalmScrollableFlingBehavior(),
-                                contentPadding = PaddingValues(top = contentTopPadding, bottom = 8.dp)
-                                    .withAddedBottomPadding(LocalBottomOverlayPadding.current)
-                            ) {
-                                lazyItemsIndexed(
-                                    items = state.entries,
-                                    key = { _, entry -> hotListeningItemKey("visible", entry.album) },
-                                    contentType = { _, _ -> "album" }
-                                ) { _, entry ->
-                                    HotListeningListItem(
-                                        entry = entry,
-                                        onAlbumClick = onAlbumClick,
-                                        onMetaLongClick = ::openMetaActions,
-                                        coverFadeInState = listCoverFadeInState,
-                                    )
-                                }
-                                if (state.blockedEntries.isNotEmpty()) {
-                                    item(
-                                        key = "blocked-footer",
-                                        contentType = "blockedFooter"
-                                    ) {
-                                        BlockedHotListeningFooter(
-                                            blockedCount = state.blockedEntries.size,
-                                            expanded = showBlockedEntries,
-                                            onToggle = { showBlockedEntries = !showBlockedEntries }
-                                        )
+                    val rowStretch = rememberLightweightVerticalOverscrollState()
+                    AlbumRowRasterCacheScope(
+                        transformIsIdentity = { rowStretch.isTransformIdentity },
+                    ) {
+                        AlbumListIconScope {
+                            PreparedAlbumParagraphs(
+                                listState = listState,
+                                active = isActive && isDataActive.value,
+                                dataKey = Triple(state.entries, state.blockedEntries, showBlockedEntries),
+                                itemAtLazyIndex = { index ->
+                                    if (index < state.entries.size) {
+                                        state.entries.getOrNull(index)?.album?.let { album ->
+                                            PreparedAlbumParagraphItem(hotListeningItemKey("visible", album), album)
+                                        }
+                                    } else if (showBlockedEntries) {
+                                        state.blockedEntries.getOrNull(index - state.entries.size - 1)?.album?.let { album ->
+                                            PreparedAlbumParagraphItem(hotListeningItemKey("blocked", album), album)
+                                        }
+                                    } else {
+                                        null
                                     }
-                                    if (showBlockedEntries) {
-                                        lazyItemsIndexed(
-                                            items = state.blockedEntries,
-                                            key = { _, entry ->
-                                                hotListeningItemKey("blocked", entry.album)
-                                            },
-                                            contentType = { _, _ -> "album" }
-                                        ) { _, entry ->
-                                            HotListeningListItem(
-                                                entry = entry,
-                                                onAlbumClick = onAlbumClick,
-                                                onMetaLongClick = ::openMetaActions,
-                                                coverFadeInState = listCoverFadeInState,
+                                },
+                            ) {
+                                CompositionLocalProvider(LocalOverscrollConfiguration provides null) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .lightweightVerticalStretchOverscroll(
+                                                state = rowStretch,
+                                                isAtStart = { !listState.canScrollBackward },
+                                                isAtEnd = { !listState.canScrollForward },
                                             )
+                                    ) {
+                                        LazyColumn(
+                                            state = listState,
+                                            modifier = Modifier
+                                                .fillMaxSize(),
+                                            flingBehavior = rememberCalmScrollableFlingBehavior(),
+                                            contentPadding = PaddingValues(top = contentTopPadding, bottom = 8.dp)
+                                                .withAddedBottomPadding(LocalBottomOverlayPadding.current)
+                                        ) {
+                                            lazyItemsIndexed(
+                                                items = state.entries,
+                                                key = { _, entry -> hotListeningItemKey("visible", entry.album) },
+                                                contentType = { _, _ -> "album" }
+                                            ) { _, entry ->
+                                                HotListeningListItem(
+                                                    entry = entry,
+                                                    itemKey = hotListeningItemKey("visible", entry.album),
+                                                    onAlbumClick = onAlbumClick,
+                                                    onMetaLongClick = ::openMetaActions,
+                                                    coverFadeInState = listCoverFadeInState,
+                                                )
+                                            }
+                                            if (state.blockedEntries.isNotEmpty()) {
+                                                item(
+                                                    key = "blocked-footer",
+                                                    contentType = "blockedFooter"
+                                                ) {
+                                                    BlockedHotListeningFooter(
+                                                        blockedCount = state.blockedEntries.size,
+                                                        expanded = showBlockedEntries,
+                                                        onToggle = { showBlockedEntries = !showBlockedEntries }
+                                                    )
+                                                }
+                                                if (showBlockedEntries) {
+                                                    lazyItemsIndexed(
+                                                        items = state.blockedEntries,
+                                                        key = { _, entry ->
+                                                            hotListeningItemKey("blocked", entry.album)
+                                                        },
+                                                        contentType = { _, _ -> "album" }
+                                                    ) { _, entry ->
+                                                        HotListeningListItem(
+                                                            entry = entry,
+                                                            itemKey = hotListeningItemKey("blocked", entry.album),
+                                                            onAlbumClick = onAlbumClick,
+                                                            onMetaLongClick = ::openMetaActions,
+                                                            coverFadeInState = listCoverFadeInState,
+                                                        )
+                                                    }
+                                                }
+                                            }
                                         }
                                     }
                                 }
@@ -473,6 +498,7 @@ private fun HotListeningScreenContent(
 @Composable
 private fun HotListeningListItem(
     entry: HotListeningEntry,
+    itemKey: String,
     onAlbumClick: (Album) -> Unit,
     onMetaLongClick: (String) -> Unit,
     coverFadeInState: State<Boolean>? = null,
@@ -491,7 +517,7 @@ private fun HotListeningListItem(
             coverBadge = coverBadge,
             animateOnlineDetails = false,
             coverFadeInState = coverFadeInState,
-            cacheRenderLayer = true,
+            preparedItemKey = remember(itemKey) { itemKey },
             onRjLongClick = onMetaLongClick,
             onCircleLongClick = onMetaLongClick,
             onCvLongClick = onMetaLongClick,

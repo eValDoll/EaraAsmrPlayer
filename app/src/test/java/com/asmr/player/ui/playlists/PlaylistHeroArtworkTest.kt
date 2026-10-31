@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.test.ComposeTimeoutException
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -129,6 +131,26 @@ class PlaylistHeroArtworkTest {
                 }
             }
         }
+    }
+
+    @Test
+    fun initialAsyncCover_isPublishedWithoutAdvancingItsFadeClock() {
+        val firstCover = interceptor.hold(FirstCover, Color.RED)
+        memory.remove(CacheKeyFactory.createKey(app, FirstCover, RequestSize, CacheVersion))
+        showArtworkState()
+        await { firstCover.started.count == 0L }
+        val clockAtRelease = compose.mainClock.currentTime
+
+        firstCover.release.countDown()
+        await { artwork.incomingFrame?.model == FirstCover }
+
+        compose.runOnIdle {
+            assertEquals(clockAtRelease, compose.mainClock.currentTime)
+            assertNull(artwork.settledFrame)
+            assertEquals(0f, artwork.incomingAlpha.value, 0f)
+        }
+        finishTransition(FirstCover)
+        assertEquals(1L, stats.snapshot().decodeCount)
     }
 
     @Test
@@ -405,7 +427,18 @@ class PlaylistHeroArtworkTest {
 
     private fun finishTransition(target: String) {
         await { artwork.incomingFrame?.model == target || artwork.settledFrame?.model == target }
-        compose.mainClock.advanceTimeBy(300L)
+        val finishBy = compose.mainClock.currentTime + 300L
+        // 可见性时钟逐帧订阅 snapshotFlow；每帧让主线程处理订阅及动画完成回调。
+        compose.waitUntil(5_000L) {
+            val finished = compose.runOnIdle {
+                artwork.settledFrame?.model == target && artwork.incomingFrame == null
+            }
+            if (!finished && compose.mainClock.currentTime < finishBy) {
+                compose.mainClock.advanceTimeByFrame()
+                shadowOf(Looper.getMainLooper()).idle()
+            }
+            finished || compose.mainClock.currentTime >= finishBy
+        }
         compose.runOnIdle {
             assertEquals(target, artwork.settledFrame?.model)
             assertNull(artwork.incomingFrame)
@@ -413,11 +446,24 @@ class PlaylistHeroArtworkTest {
     }
 
     private fun await(condition: () -> Boolean) {
-        compose.waitUntil(5_000L) {
-            compose.mainClock.advanceTimeBy(0L, ignoreFrameDuration = true)
-            shadowOf(Looper.getMainLooper()).idleFor(16L, TimeUnit.MILLISECONDS)
-            compose.mainClock.advanceTimeBy(0L, ignoreFrameDuration = true)
-            condition()
+        try {
+            compose.waitUntil(5_000L) {
+                compose.mainClock.advanceTimeBy(0L, ignoreFrameDuration = true)
+                shadowOf(Looper.getMainLooper()).idleFor(16L, TimeUnit.MILLISECONDS)
+                // IO 完成后的状态写入可能晚于上一帧；刷新观察者而不推进渐入动画时钟。
+                compose.runOnIdle { Snapshot.sendApplyNotifications() }
+                compose.mainClock.advanceTimeBy(0L, ignoreFrameDuration = true)
+                shadowOf(Looper.getMainLooper()).idle()
+                condition()
+            }
+        } catch (error: ComposeTimeoutException) {
+            throw AssertionError(
+                "封面状态等待超时: target=${model.value}, composed=$composedModel, active=${active.value}, " +
+                    "incoming=${artwork.incomingFrame?.model}, settled=${artwork.settledFrame?.model}, " +
+                    "alpha=${artwork.incomingAlpha.value}, cache=${stats.snapshot()}, " +
+                    "network=${interceptor.requestCount.get()}",
+                error,
+            )
         }
     }
 
