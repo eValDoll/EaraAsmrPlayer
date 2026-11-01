@@ -1,6 +1,8 @@
 package com.asmr.player.playback
 
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import com.asmr.player.util.isOnlineTrackPath
 
 internal data class PlaybackRecoveryAttempt(
     val number: Int,
@@ -46,13 +48,7 @@ internal fun isRecoverableRemotePlaybackFailure(
     errorCode: Int,
     httpStatusCode: Int? = null
 ): Boolean {
-    val normalizedUri = uriText.trim()
-    if (
-        !normalizedUri.startsWith("http://", ignoreCase = true) &&
-        !normalizedUri.startsWith("https://", ignoreCase = true)
-    ) {
-        return false
-    }
+    if (!isOnlineTrackPath(uriText)) return false
 
     return when (errorCode) {
         PlaybackException.ERROR_CODE_TIMEOUT,
@@ -69,4 +65,16 @@ internal fun isRecoverableRemotePlaybackFailure(
 
         else -> false
     }
+}
+
+internal fun shouldPrepareRemotePlayback(
+    uriText: String,
+    playWhenReady: Boolean,
+    playbackState: Int,
+    errorCode: Int?,
+    httpStatusCode: Int? = null,
+): Boolean {
+    if (!playWhenReady || !isOnlineTrackPath(uriText)) return false
+    return playbackState == Player.STATE_IDLE && errorCode != null &&
+        isRecoverableRemotePlaybackFailure(uriText, errorCode, httpStatusCode)
 }
