@@ -26,7 +26,6 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.upstream.DefaultLoadErrorHandlingPolicy
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.FileDataSource
@@ -44,6 +43,7 @@ import com.asmr.player.data.local.db.entities.TrackPlaybackProgressEntity
 import com.asmr.player.data.remote.auth.DlsiteAuthStore
 import com.asmr.player.data.remote.auth.buildDlsiteCookieHeader
 import com.asmr.player.data.remote.NetworkHeaders
+import com.asmr.player.data.remote.NetworkRouteManager
 import com.asmr.player.data.lyrics.LyricsLoader
 import com.asmr.player.data.settings.SettingsRepository
 import com.asmr.player.data.settings.AudioEffectController
@@ -64,6 +64,11 @@ import com.asmr.player.playback.PlaybackMediaCache
 import com.asmr.player.playback.PlaybackArtworkResolver
 import com.asmr.player.playback.PlaybackConnectionLifecycle
 import com.asmr.player.playback.PlaybackRecoveryPolicy
+import com.asmr.player.playback.PlaybackRecoveryLoadControl
+import com.asmr.player.playback.PlaybackLoadErrorHandlingPolicy
+import com.asmr.player.playback.PlaybackNetworkObserver
+import com.asmr.player.playback.PlaybackHttpClientFactory
+import com.asmr.player.playback.shouldPrepareRemotePlayback
 import com.asmr.player.playback.PlaybackStateStore
 import com.asmr.player.playback.PlaylistPlaybackProgress
 import com.asmr.player.playback.PlaylistPlaybackTracker
@@ -259,6 +264,9 @@ class PlaybackService : MediaSessionService() {
     lateinit var okHttpClient: OkHttpClient
 
     @Inject
+    lateinit var networkRouteManager: NetworkRouteManager
+
+    @Inject
     lateinit var playbackStateStore: PlaybackStateStore
 
     @Inject
@@ -272,8 +280,12 @@ class PlaybackService : MediaSessionService() {
 
     private var statsJob: Job? = null
     private var playbackRecoveryJob: Job? = null
+    private var playbackNetworkObserver: PlaybackNetworkObserver? = null
+    private var networkRestartJob: Job? = null
+    private lateinit var playbackHttpClient: PlaybackHttpClientFactory
     private var appExitJob: Job? = null
     private val playbackRecoveryPolicy = PlaybackRecoveryPolicy()
+    private val playbackLoadControl = PlaybackRecoveryLoadControl()
     private var currentTrackListenedMs: Long = 0L
     private var isCurrentTrackCounted: Boolean = false
     private var currentMediaId: String? = null
@@ -334,10 +346,14 @@ class PlaybackService : MediaSessionService() {
         }
         updateSpectrumVisualDelay()
         val authStore = DlsiteAuthStore(applicationContext)
-        val playbackHttpClient = okHttpClient.newBuilder()
-            .connectTimeout(NETWORK_CONNECT_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
-            .readTimeout(NETWORK_READ_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
-            .build()
+        playbackHttpClient = PlaybackHttpClientFactory(
+            baseClient = okHttpClient.newBuilder()
+                .connectTimeout(NETWORK_CONNECT_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
+                .readTimeout(NETWORK_READ_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
+                .build(),
+            register = networkRouteManager::register,
+            unregister = networkRouteManager::unregister,
+        )
         val httpFactory = OkHttpDataSource.Factory(playbackHttpClient)
             .setUserAgent(DLSITE_UA)
         
@@ -397,10 +413,11 @@ class PlaybackService : MediaSessionService() {
         )
         val mediaSourceFactory = DefaultMediaSourceFactory(dataSourceFactory)
             .setLoadErrorHandlingPolicy(
-                DefaultLoadErrorHandlingPolicy(NETWORK_MINIMUM_LOADABLE_RETRY_COUNT)
+                PlaybackLoadErrorHandlingPolicy()
             )
 
         exoPlayer = ExoPlayer.Builder(this)
+            .setLoadControl(playbackLoadControl)
             .setRenderersFactory(
                 AsmrRenderersFactory(
                     this,
@@ -423,6 +440,7 @@ class PlaybackService : MediaSessionService() {
                 false
             )
             .setHandleAudioBecomingNoisy(true)
+            .setWakeMode(C.WAKE_MODE_LOCAL)
             .build()
         applyVideoOutputEnabled()
 
@@ -490,6 +508,9 @@ class PlaybackService : MediaSessionService() {
             }
 
             override fun onMediaItemTransition(mediaItem: androidx.media3.common.MediaItem?, reason: Int) {
+                playbackLoadControl.clearRecovery()
+                updatePlaybackWakeMode()
+                networkRestartJob?.cancel()
                 if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_PLAYLIST_CHANGED) {
                     playlistPlaybackTracker.invalidateCurrentRequest()
                 }
@@ -514,6 +535,7 @@ class PlaybackService : MediaSessionService() {
                 newPosition: Player.PositionInfo,
                 reason: Int,
             ) {
+                if (reason == Player.DISCONTINUITY_REASON_SEEK) playbackLoadControl.clearRecovery()
                 playlistPlaybackTracker.capturePreviousPosition(
                     playlistId = oldPosition.mediaItem?.sourcePlaylistId(),
                     mediaId = oldPosition.mediaItem?.mediaId,
@@ -524,13 +546,18 @@ class PlaybackService : MediaSessionService() {
 
             override fun onPlaybackStateChanged(playbackState: Int) {
                 when (playbackState) {
-                    Player.STATE_READY -> cancelPlaybackRecovery(resetPolicy = true)
+                    Player.STATE_READY -> {
+                        playbackLoadControl.clearRecovery()
+                        cancelPlaybackRecovery(resetPolicy = true)
+                    }
                     Player.STATE_ENDED -> abandonPlaybackAudioFocus()
                 }
             }
 
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 if (!playWhenReady) {
+                    playbackLoadControl.clearRecovery()
+                    networkRestartJob?.cancel()
                     cancelPlaybackRecovery(resetPolicy = true)
                     if (!autoPausedByAudioFocusLoss) {
                         abandonPlaybackAudioFocus()
@@ -561,6 +588,11 @@ class PlaybackService : MediaSessionService() {
             }
         })
         StereoSpectrumBus.playbackActive = exoPlayer.isPlaying
+        playbackNetworkObserver = PlaybackNetworkObserver(
+            context = applicationContext,
+            scope = serviceScope,
+            onNetworkChanged = ::refreshPlaybackNetwork,
+        )
 
         statsJob = serviceScope.launch(Dispatchers.Default) {
             while (isActive) {
@@ -921,6 +953,50 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    private fun updatePlaybackWakeMode() {
+        val uri = exoPlayer.currentMediaItem?.localConfiguration?.uri?.scheme?.lowercase()
+        exoPlayer.setWakeMode(
+            if (uri == "http" || uri == "https") C.WAKE_MODE_NETWORK else C.WAKE_MODE_LOCAL,
+        )
+    }
+
+    private fun refreshPlaybackNetwork() {
+        if (networkRestartJob?.isActive == true || !exoPlayer.playWhenReady) return
+        val item = exoPlayer.currentMediaItem ?: return
+        val uri = item.localConfiguration?.uri?.toString().orEmpty()
+        if (!uri.startsWith("http://", true) && !uri.startsWith("https://", true)) return
+        if (exoPlayer.playbackState != Player.STATE_READY &&
+            exoPlayer.playbackState != Player.STATE_BUFFERING && !canPrepareCurrentRemotePlayback()
+        ) return
+        val index = exoPlayer.currentMediaItemIndex
+        // BUFFERING 中取消旧连接的异常会稍后到达，也必须从新链路的首次重试开始。
+        cancelPlaybackRecovery(resetPolicy = true)
+        Log.i("PlaybackService", "Resetting recovery backoff after network change state=${exoPlayer.playbackState}")
+        if (exoPlayer.playbackState != Player.STATE_READY) playbackLoadControl.beginRecovery()
+        networkRestartJob = serviceScope.launch(Dispatchers.Main.immediate) {
+            // 只替换失效的 HTTP 连接；READY/BUFFERING 的续传交给加载器，保留媒体队列和缓冲。
+            withContext(Dispatchers.IO) { playbackHttpClient.reset() }
+            if (!canPrepareCurrentRemotePlayback() || exoPlayer.currentMediaItemIndex != index ||
+                exoPlayer.currentMediaItem?.mediaId != item.mediaId ||
+                exoPlayer.currentMediaItem?.localConfiguration?.uri?.toString() != uri
+            ) return@launch
+            Log.i("PlaybackService", "Preparing failed playback after network change positionMs=${exoPlayer.currentPosition}")
+            cancelPlaybackRecovery(resetPolicy = true)
+            exoPlayer.prepare()
+        }
+    }
+
+    private fun canPrepareCurrentRemotePlayback(): Boolean {
+        val error = exoPlayer.playerError
+        return shouldPrepareRemotePlayback(
+            uriText = exoPlayer.currentMediaItem?.localConfiguration?.uri?.toString().orEmpty(),
+            playWhenReady = exoPlayer.playWhenReady,
+            playbackState = exoPlayer.playbackState,
+            errorCode = error?.errorCode,
+            httpStatusCode = error?.findHttpStatusCode(),
+        )
+    }
+
     private fun schedulePlaybackRecovery(error: PlaybackException) {
         val item = exoPlayer.currentMediaItem ?: return
         if (!exoPlayer.playWhenReady) return
@@ -947,6 +1023,7 @@ class PlaybackService : MediaSessionService() {
             return
         }
 
+        playbackLoadControl.beginRecovery()
         playbackRecoveryJob?.cancel()
         playbackRecoveryJob = serviceScope.launch(Dispatchers.Main.immediate) {
             Log.w(
@@ -967,8 +1044,6 @@ class PlaybackService : MediaSessionService() {
             }
             if (exoPlayer.playerError !== error || exoPlayer.playbackState != Player.STATE_IDLE) return@launch
 
-            val resumePositionMs = exoPlayer.currentPosition.coerceAtLeast(0L)
-            exoPlayer.seekTo(resumePositionMs)
             exoPlayer.prepare()
         }
     }
@@ -1530,10 +1605,14 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun releaseMediaSession() {
+        playbackNetworkObserver?.close()
+        playbackNetworkObserver = null
+        networkRestartJob?.cancel()
         val session = mediaSession ?: return
         mediaSession = null
         session.player.release()
         session.release()
+        serviceScope.launch(Dispatchers.IO) { playbackHttpClient.close() }
     }
 
     companion object {
@@ -1554,7 +1633,6 @@ class PlaybackService : MediaSessionService() {
         private const val OUTPUT_EVENT_DEBOUNCE_MS = 1200L
         private const val NETWORK_CONNECT_TIMEOUT_MS = 15_000
         private const val NETWORK_READ_TIMEOUT_MS = 30_000
-        private const val NETWORK_MINIMUM_LOADABLE_RETRY_COUNT = 6
     }
 }
 
