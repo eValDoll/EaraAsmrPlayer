@@ -115,6 +115,7 @@ import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.theme.AsmrTheme
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
+import com.asmr.player.ui.common.resolveMainPageBackgroundColor
 import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.withAddedBottomPadding
 import com.asmr.player.ui.common.collectAsStateWhileActive
@@ -405,7 +406,7 @@ fun SettingsScreen(
                     state = detailListState,
                     modifier = Modifier
                         .fillMaxSize()
-                        .background(colorScheme.background),
+                        .background(resolveMainPageBackgroundColor(colorScheme)),
                     flingBehavior = rememberCalmScrollableFlingBehavior(),
                     contentPadding = PaddingValues(start = SettingsPageHorizontalPadding, end = SettingsPageHorizontalPadding, top = LocalMainHeaderPadding.current + 10.dp, bottom = 10.dp)
                         .withAddedBottomPadding(LocalBottomOverlayPadding.current),
