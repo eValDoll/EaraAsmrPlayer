@@ -3200,7 +3200,6 @@ fun MainContainer(
                     )
                 }
                 NowPlayingScreen(
-                    windowSizeClass = windowSizeClass,
                     hardwareVolumeEventTick = nowPlayingVolumeEventTick,
                     onInlineVolumeControlVisibilityChanged = { nowPlayingUsesInlineVolumeControl = it },
                     onEqualizerVisibilityChanged = { nowPlayingEqualizerVisible = it },

@@ -56,7 +56,6 @@ import androidx.compose.material.icons.automirrored.rounded.OpenInNew
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
-import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -89,7 +88,6 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.Role
@@ -248,12 +246,17 @@ private const val AlbumLandscapeSpectrumArtworkOffsetFraction = 0.15f
 private const val AlbumLandscapeSpectrumCollapseFollowFraction = 0.82f
 
 internal fun shouldUseAlbumDetailLandscapeLayout(
-    compactWidth: Boolean,
-    screenWidthDp: Int,
-    screenHeightDp: Int
+    availableWidth: Dp,
+    availableHeight: Dp,
+    fontScale: Float = 1f,
 ): Boolean {
-    return !compactWidth && screenWidthDp > screenHeightDp
+    val artworkSize = albumLandscapeArtworkSize(availableWidth, availableHeight)
+    val headerWidth = availableWidth - albumLandscapeHeaderStart(artworkSize) - AlbumLandscapeHeaderEndPadding
+    return availableWidth > availableHeight && headerWidth >= 360.dp * fontScale.coerceAtLeast(1f)
 }
+
+internal fun albumLandscapeArtworkSize(availableWidth: Dp, availableHeight: Dp): Dp =
+    minOf(availableWidth * 0.30f, availableHeight * 0.56f).coerceIn(300.dp, 460.dp)
 
 internal fun albumLandscapeHeaderStart(artworkSize: Dp): Dp {
     return AlbumLandscapeArtworkStartPadding + artworkSize + AlbumLandscapeArtworkContentGap
@@ -599,18 +602,17 @@ fun AlbumDetailScreen(
         )
     }
 
-    Box(
+    BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(AsmrTheme.colorScheme.background),
         contentAlignment = Alignment.TopCenter
     ) {
-        val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
-        val configuration = LocalConfiguration.current
+        val isCompact = maxWidth < 600.dp
         val useLandscapeArtworkTide = shouldUseAlbumDetailLandscapeLayout(
-            compactWidth = isCompact,
-            screenWidthDp = configuration.screenWidthDp,
-            screenHeightDp = configuration.screenHeightDp
+            availableWidth = maxWidth,
+            availableHeight = maxHeight,
+            fontScale = LocalDensity.current.fontScale,
         )
 
         Column(
@@ -709,10 +711,7 @@ fun AlbumDetailScreen(
                         val heroDensity = LocalDensity.current
                         val landscapePageWidth = maxWidth
                         val pageContainerColor = dynamicPageContainerColor(colorScheme)
-                        val landscapeArtworkSize = minOf(
-                            maxWidth * 0.30f,
-                            maxHeight * 0.56f
-                        ).coerceIn(300.dp, 460.dp)
+                        val landscapeArtworkSize = albumLandscapeArtworkSize(maxWidth, maxHeight)
                         val landscapeContentTop = AlbumLandscapeArtworkTopPadding +
                             landscapeArtworkSize * 0.50f
                         val landscapeContentWaveDepth = (landscapeArtworkSize * 0.50f)

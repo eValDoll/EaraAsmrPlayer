@@ -106,6 +106,15 @@ class AlbumHeaderActionBarTest {
         assertActionsFit(width = 400.dp, secondaryLabel = "保存")
     }
 
+    @Test
+    fun splitWindowUsesFullWidthActionsInsteadOfSqueezedFloatingActions() {
+        val windowWidth = 670.dp
+        val floating = shouldUseAlbumDetailLandscapeLayout(windowWidth, 600.dp, 1.3f)
+        val actionWidth = windowWidth - 32.dp
+        showActionBar(width = actionWidth, floating = floating)
+        assertActionsFit(width = actionWidth, secondaryLabel = "保存")
+    }
+
     private fun showActionBar(
         width: Dp,
         floating: Boolean = true,
