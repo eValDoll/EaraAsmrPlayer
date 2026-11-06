@@ -431,7 +431,8 @@ fun SettingsScreen(
                 Text("下载目录", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
                 Surface(
                     shape = RoundedCornerShape(14.dp),
-                    color = colorScheme.surface.copy(alpha = 0.35f),
+                    color = Color.Transparent,
+                    contentColor = colorScheme.onSurface,
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Column(
@@ -2348,7 +2349,7 @@ private fun SettingsSectionsPanel(
     val colorScheme = AsmrTheme.colorScheme
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = colorScheme.surface.copy(alpha = 0.32f),
+        color = Color.Transparent,
         contentColor = colorScheme.onSurface,
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -2473,7 +2474,7 @@ private fun SettingsDetailCard(
     val colorScheme = AsmrTheme.colorScheme
     Surface(
         shape = RoundedCornerShape(16.dp),
-        color = colorScheme.surface.copy(alpha = 0.5f),
+        color = Color.Transparent,
         contentColor = colorScheme.onSurface,
         modifier = Modifier.fillMaxWidth(),
     ) {

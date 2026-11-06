@@ -383,7 +383,6 @@ private fun AlbumSectionHeader(
             .fillMaxWidth()
             .testTag("$GROUP_DETAIL_SECTION_HEADER_TAG_PREFIX:$albumId")
             .clip(RoundedCornerShape(GroupAlbumHeaderCornerRadius))
-            .background(colorScheme.surface.copy(alpha = 0.5f))
             .clickable { onToggle() }
             .padding(horizontal = GroupDetailHorizontalPadding, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically

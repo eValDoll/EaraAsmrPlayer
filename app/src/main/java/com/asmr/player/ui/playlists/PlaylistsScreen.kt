@@ -49,7 +49,6 @@ import com.asmr.player.ui.common.AsmrAsyncImage
 
 import androidx.compose.ui.text.font.FontWeight
 import com.asmr.player.ui.theme.AsmrTheme
-import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.graphics.Color
 import com.asmr.player.ui.common.FlatActionDialog
@@ -189,7 +188,6 @@ private fun PlaylistRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(colorScheme.surface.copy(alpha = 0.5f))
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
