@@ -640,11 +640,7 @@ private fun LibraryScreenContent(
                                             val isLastAlbumHeader = headerIndex == headerCount - 1
 
                                             item(key = "album:$albumId", contentType = "albumHeader") {
-                                                Column(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .background(colorScheme.background)
-                                                ) {
+                                                Column(modifier = Modifier.fillMaxWidth()) {
                                                     if (headerIndex > 0) {
                                                         HorizontalDivider(
                                                             modifier = Modifier.padding(horizontal = LibraryPageHorizontalPadding),
@@ -1381,7 +1377,6 @@ private fun TrackAlbumHeader(
         modifier = Modifier
             .fillMaxWidth()
             .clip(containerShape)
-            .background(colorScheme.surface)
             .clickable { onToggle() }
             .padding(horizontal = LibraryPageHorizontalPadding, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1460,7 +1455,6 @@ private fun TrackListRow(
     onManageTags: (() -> Unit)? = null,
     onRemove: () -> Unit
 ) {
-    val colorScheme = AsmrTheme.colorScheme
     val rowShape = if (isLastInSection) {
         RoundedCornerShape(
             topStart = 0.dp,
@@ -1487,8 +1481,7 @@ private fun TrackListRow(
         subtitleTextStyle = MaterialTheme.typography.labelSmall.copy(lineHeight = 14.sp),
         modifier = Modifier
             .fillMaxWidth()
-            .clip(rowShape)
-            .background(colorScheme.surface),
+            .clip(rowShape),
         actions = buildList {
             add(
                 AudioItemMenuAction(
