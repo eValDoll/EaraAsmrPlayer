@@ -4,6 +4,7 @@ import com.asmr.player.ui.common.AlbumRowRasterCacheScope
 import com.asmr.player.ui.common.rememberLightweightVerticalOverscrollState
 
 import com.asmr.player.ui.common.formatCvNames
+import com.asmr.player.ui.common.LocalTabletLayout
 import com.asmr.player.ui.common.LocalMainHeaderPadding
 import com.asmr.player.ui.common.LocalPageAnimationsActive
 import com.asmr.player.ui.common.progressiveHeaderContent
@@ -293,7 +294,8 @@ private fun LibraryScreenContent(
     }
 
     val mode = (viewMode ?: 0).coerceIn(0, 2)
-    val isGrid = mode == 1
+    val tabletList = LocalTabletLayout.current.landscape && mode == 0
+    val isGrid = mode == 1 || tabletList
     val activeScroll: ScrollableState = if (isGrid) gridState else listState
     val isTrackList = mode == 2
     var lastChromeResetMode by rememberSaveable { mutableStateOf(mode) }
@@ -345,8 +347,8 @@ private fun LibraryScreenContent(
             lastChromeResetMode = mode
         }
     }
-    LaunchedEffect(listState, mode) {
-        if (mode != 0 && mode != 2) return@LaunchedEffect
+    LaunchedEffect(listState, isGrid) {
+        if (isGrid) return@LaunchedEffect
         snapshotFlow {
             listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
         }
@@ -355,8 +357,8 @@ private fun LibraryScreenContent(
                 if (atTop) chromeState.expand()
             }
     }
-    LaunchedEffect(gridState, mode) {
-        if (mode != 1) return@LaunchedEffect
+    LaunchedEffect(gridState, isGrid) {
+        if (!isGrid) return@LaunchedEffect
         snapshotFlow {
             gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0
         }
@@ -367,17 +369,11 @@ private fun LibraryScreenContent(
     }
     LaunchedEffect(scrollToTopSignal) {
         if (scrollToTopSignal == 0L) return@LaunchedEffect
-        when (mode) {
-            1 -> gridState.stopScroll(MutatePriority.PreventUserInput)
-            else -> listState.stopScroll(MutatePriority.PreventUserInput)
-        }
-        when (mode) {
-            1 -> gridState.scrollToItem(0)
-            else -> listState.scrollToItem(0)
-        }
+        activeScroll.stopScroll(MutatePriority.PreventUserInput)
+        if (isGrid) gridState.scrollToItem(0) else listState.scrollToItem(0)
         chromeState.expand()
     }
-    LaunchedEffect(isActive, mode) {
+    LaunchedEffect(isActive, isGrid) {
         if (isActive) return@LaunchedEffect
         activeScroll.interruptOngoingScroll(this, MutatePriority.PreventUserInput)
     }
@@ -427,7 +423,7 @@ private fun LibraryScreenContent(
                 contentAlignment = if (hasRightPanel) Alignment.TopStart else Alignment.TopCenter
             ) {
                 Column(
-                    modifier = if (isCompact) {
+                    modifier = if (isCompact || LocalTabletLayout.current.isTablet) {
                         Modifier.fillMaxSize()
                     } else if (hasRightPanel) {
                         Modifier.fillMaxSize()
@@ -778,8 +774,8 @@ private fun LibraryScreenContent(
                                             .imageCacheManager()
                                     }
                                     val density = LocalDensity.current
-                                    val gridCellSize = if (isCompact) 150.dp else 200.dp
-                                    val gridCoverPx = remember(gridCellSize, density) { with(density) { gridCellSize.roundToPx() } }
+                                    val gridCellSize = if (tabletList) 360.dp else if (LocalTabletLayout.current.isTablet) 176.dp else if (isCompact) 150.dp else 200.dp
+                                    val gridCoverPx = remember(gridCellSize, density) { with(density) { (if (tabletList) 152.dp else gridCellSize).roundToPx() } }
                                     val gridPreloadSize = remember(gridCoverPx) { IntSize(gridCoverPx, gridCoverPx) }
                                     val coverFadeInState = remember(gridState) {
                                         derivedStateOf {
@@ -826,6 +822,7 @@ private fun LibraryScreenContent(
                                                 album.withUserTags(userTags)
                                             }
                                             AlbumGridItem(
+                                                horizontal = tabletList,
                                                 album = mergedAlbum,
                                                 onClick = { onAlbumClick(mergedAlbum) },
                                                 onLongClick = {

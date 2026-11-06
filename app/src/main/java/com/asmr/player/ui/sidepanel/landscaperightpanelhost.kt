@@ -31,15 +31,25 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 
+import com.asmr.player.ui.common.LocalTabletLayout
 import com.asmr.player.ui.common.ActionButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.rounded.Close
+import androidx.compose.ui.Alignment
+import com.asmr.player.ui.theme.AsmrTheme
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LandscapeRightPanelHost(
     windowSizeClass: WindowSizeClass,
     modifier: Modifier = Modifier,
-    minContentWidth: Dp = 560.dp,
-    maxPanelWidth: Dp = 420.dp,
-    minPanelWidth: Dp = 300.dp,
+    minContentWidth: Dp = 680.dp,
+    maxPanelWidth: Dp = 320.dp,
+    minPanelWidth: Dp = 280.dp,
     panelPadding: Dp = 12.dp,
     topPanel: @Composable () -> Unit,
     bottomPanel: (@Composable () -> Unit)? = null,
@@ -54,7 +64,7 @@ fun LandscapeRightPanelHost(
     val configuration = LocalConfiguration.current
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
     val wantPanel = !isCompact &&
-        configuration.smallestScreenWidthDp >= 600 &&
+        LocalTabletLayout.current.isTablet &&
         configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
     val externalExpandedState = LocalRightPanelExpandedState.current
@@ -71,10 +81,34 @@ fun LandscapeRightPanelHost(
     }
     BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val panelWidth = (maxWidth - minContentWidth).coerceAtMost(maxPanelWidth)
-        val eligible = wantPanel && panelWidth >= minPanelWidth
+        val eligible = wantPanel && maxWidth >= 1128.dp && panelWidth >= minPanelWidth
 
         if (!eligible) {
-            content(Modifier.fillMaxSize(), false, null)
+            var showOverlay by rememberSaveable { mutableStateOf(false) }
+            val overlayToggle: (@Composable (Modifier) -> Unit)? = if (wantPanel) {
+                { toggleModifier ->
+                    ActionButton(icon = Icons.AutoMirrored.Rounded.KeyboardArrowLeft,
+                        onClick = { showOverlay = true }, modifier = toggleModifier)
+                }
+            } else null
+            content(Modifier.fillMaxSize(), false, overlayToggle)
+            if (showOverlay && wantPanel) {
+                val colors = AsmrTheme.colorScheme
+                ModalBottomSheet(
+                    onDismissRequest = { showOverlay = false },
+                    sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+                    sheetMaxWidth = 420.dp,
+                    containerColor = colors.surface,
+                    contentColor = colors.textPrimary,
+                ) {
+                    Column(Modifier.fillMaxWidth().fillMaxHeight(0.85f).padding(16.dp)) {
+                        IconButton(onClick = { showOverlay = false }, modifier = Modifier.align(Alignment.End)) {
+                            Icon(Icons.Rounded.Close, contentDescription = "关闭最近收听", tint = colors.primary)
+                        }
+                        Box(Modifier.weight(1f)) { topPanel() }
+                    }
+                }
+            }
             return@BoxWithConstraints
         }
 

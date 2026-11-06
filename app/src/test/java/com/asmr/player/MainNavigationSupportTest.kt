@@ -18,7 +18,7 @@ import org.robolectric.RobolectricTestRunner
 class MainNavigationSupportTest {
 
     @Test
-    fun resolveMainRequestedOrientation_locksOnlyFullscreenPlayerToLandscape() {
+    fun resolveMainRequestedOrientation_fullscreenPlayerUsesLandscape() {
         assertEquals(
             ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
             resolveMainRequestedOrientation(
@@ -60,7 +60,7 @@ class MainNavigationSupportTest {
             )
         )
         assertEquals(
-            ActivityInfo.SCREEN_ORIENTATION_USER,
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
             resolveMainRequestedOrientation(
                 isPhone = false,
                 nowPlayingVisible = false,
@@ -71,9 +71,9 @@ class MainNavigationSupportTest {
     }
 
     @Test
-    fun resolveMainRequestedOrientation_tabletPlayerRestoresSystemRotationPolicyAfterFullscreen() {
+    fun resolveMainRequestedOrientation_tabletRemainsLandscapeAfterFullscreen() {
         assertEquals(
-            ActivityInfo.SCREEN_ORIENTATION_USER,
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
             resolveMainRequestedOrientation(
                 isPhone = false,
                 nowPlayingVisible = true,
@@ -82,7 +82,7 @@ class MainNavigationSupportTest {
             )
         )
         assertEquals(
-            ActivityInfo.SCREEN_ORIENTATION_USER,
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
             resolveMainRequestedOrientation(
                 isPhone = false,
                 nowPlayingVisible = false,
@@ -104,7 +104,7 @@ class MainNavigationSupportTest {
             )
         )
         assertEquals(
-            ActivityInfo.SCREEN_ORIENTATION_USER,
+            ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE,
             resolveMainRequestedOrientation(
                 isPhone = false,
                 nowPlayingVisible = true,

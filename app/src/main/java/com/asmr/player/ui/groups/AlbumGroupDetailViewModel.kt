@@ -10,10 +10,16 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
+
+data class AlbumGroupDetailState(
+    val groupId: Long,
+    val tracks: List<AlbumGroupTrackRow> = emptyList(),
+)
 
 @HiltViewModel
 class AlbumGroupDetailViewModel @Inject constructor(
@@ -27,12 +33,12 @@ class AlbumGroupDetailViewModel @Inject constructor(
     private val groupIdFlow = MutableStateFlow(groupId)
 
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
-    val tracks: StateFlow<List<AlbumGroupTrackRow>> = groupIdFlow
+    val content: StateFlow<AlbumGroupDetailState> = groupIdFlow
         .flatMapLatest { id ->
-            if (id <= 0L) kotlinx.coroutines.flow.flowOf(emptyList())
-            else groupRepository.observeGroupTracks(id)
+            if (id <= 0L) kotlinx.coroutines.flow.flowOf(AlbumGroupDetailState(id))
+            else groupRepository.observeGroupTracks(id).map { AlbumGroupDetailState(id, it) }
         }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AlbumGroupDetailState(groupId))
 
     fun setGroupId(id: Long) {
         if (groupIdFlow.value != id) {

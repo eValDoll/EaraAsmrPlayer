@@ -131,6 +131,7 @@ fun MiniPlayer(
     onOpenQueue: () -> Unit,
     playFeedbackSignal: Long = 0L,
     largeLayout: Boolean = false,
+    allowCollapse: Boolean = true,
     compactScale: Float = 1f,
     modifier: Modifier = Modifier,
     viewModel: PlayerViewModel = hiltViewModel()
@@ -317,7 +318,7 @@ fun MiniPlayer(
                                         .size(coverSize)
                                         .clip(CircleShape)
                                         .background(colorScheme.surfaceVariant)
-                                        .clickable { onDisplayModeChange(MiniPlayerDisplayMode.CoverOnly) },
+                                        .clickable { if (allowCollapse) onDisplayModeChange(MiniPlayerDisplayMode.CoverOnly) else onOpenNowPlaying() },
                                     contentAlignment = Alignment.Center
                                 ) {
                                     AsmrAsyncImage(

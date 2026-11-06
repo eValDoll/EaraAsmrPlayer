@@ -103,6 +103,14 @@ class PrimaryNavigationPerformanceBenchmark {
     @Test
     fun coldStartupAndExtendedIdlePreload() = measureColdStartupAndIdlePreload(15_000L)
 
+    @Test
+    fun tabletRailRoundTrips() {
+        org.junit.Assume.assumeTrue(
+            InstrumentationRegistry.getInstrumentation().targetContext.resources.configuration.smallestScreenWidthDp >= 600
+        )
+        measureNonAdjacentNavigation(warmPages = true, targetLabels = listOf("设置", "我的收藏"))
+    }
+
     private fun measureColdStartupAndIdlePreload(idleWindowMs: Long) {
         benchmarkRule.measureRepeated(
             packageName = PackageName,
@@ -244,6 +252,12 @@ private fun UiDevice.waitForPrimaryPageContent(label: String) {
 }
 
 private fun UiDevice.showPrimaryNavigationItem(label: String, currentLabel: String) {
+    if (findObject(By.res("tabletNavigation:本地库")) != null) {
+        check(findObject(By.res("tabletNavigation:$label")) != null) {
+            "Tablet navigation item was not visible: $label"
+        }
+        return
+    }
     if (findPrimaryNavigationIcon(currentLabel) != null) {
         // The group toggle does not expand the pill, so always click the current page first.
         ensurePrimaryNavigationExpanded(currentLabel)
@@ -278,6 +292,7 @@ private fun UiDevice.findPrimaryNavigationIcon(label: String): UiObject2? {
         // Discard cached virtual nodes before resolving the current icon group.
         InstrumentationRegistry.getInstrumentation().uiAutomation.clearCache()
     }
+    findObject(By.res("tabletNavigation:$label"))?.let { return it }
     // A collapsed pill exposes its current page while the group toggle is clipped away.
     val direct = try {
         findObject(By.pkg(PackageName).desc(label))?.takeIf {

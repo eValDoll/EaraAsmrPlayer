@@ -5,6 +5,7 @@ import com.asmr.player.ui.common.AlbumRowRasterCacheScope
 import com.asmr.player.ui.common.LocalPageAnimationsActive
 
 import com.asmr.player.domain.model.CollectedSearchSource
+import com.asmr.player.ui.common.LocalTabletLayout
 import com.asmr.player.ui.common.LocalMainHeaderPadding
 import com.asmr.player.ui.common.progressiveHeaderContent
 
@@ -164,7 +165,6 @@ import com.asmr.player.ui.sidepanel.RecentAlbumsPanel
 import com.asmr.player.ui.theme.AsmrTheme
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.runtime.snapshotFlow
 import kotlin.math.absoluteValue
@@ -442,7 +442,9 @@ private fun SearchScreenContent(
     val resultScrollKey = searchResultScrollKey(success)
     val listState = rememberSaveablePrefetchedLazyListState(stateKey = resultScrollKey)
     val gridState = rememberSaveable(resultScrollKey, saver = LazyStaggeredGridState.Saver) { LazyStaggeredGridState() }
-    val activeScroll: ScrollableState = if (viewMode == 0) listState else gridState
+    val tabletList = LocalTabletLayout.current.landscape && viewMode == 0
+    val useSingleColumnList = viewMode == 0 && !tabletList
+    val activeScroll: ScrollableState = if (useSingleColumnList) listState else gridState
     val colorScheme = AsmrTheme.colorScheme
     val copyMeta = rememberAlbumMetaCopyAction(viewModel.messageManager)
     val scope = rememberCoroutineScope()
@@ -693,7 +695,7 @@ private fun SearchScreenContent(
     val pullNextPageGestureEnabled = pullNextPageEnabled && !pullNextPageReturnInProgress
     val latestPullNextPageEnabled = rememberUpdatedState(pullNextPageGestureEnabled)
     val latestIsAtBottom = rememberUpdatedState(
-        if (viewMode == 0) !listState.canScrollForward else !gridState.canScrollForward
+        if (useSingleColumnList) !listState.canScrollForward else !gridState.canScrollForward
     )
     val latestPullNextPageTriggerDistancePx = rememberUpdatedState(pullNextPageTriggerDistancePx)
     val latestPullNextPageMaxDistancePx = rememberUpdatedState(pullNextPageMaxDistancePx)
@@ -892,8 +894,8 @@ private fun SearchScreenContent(
             lastChromeResetKey = chromeResetKey
         }
     }
-    LaunchedEffect(listState, viewMode) {
-        if (viewMode != 0) return@LaunchedEffect
+    LaunchedEffect(listState, useSingleColumnList) {
+        if (!useSingleColumnList) return@LaunchedEffect
         snapshotFlow {
             listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0
         }
@@ -902,8 +904,8 @@ private fun SearchScreenContent(
                 if (atTop) chromeState.expand()
             }
     }
-    LaunchedEffect(gridState, viewMode) {
-        if (viewMode == 0) return@LaunchedEffect
+    LaunchedEffect(gridState, useSingleColumnList) {
+        if (useSingleColumnList) return@LaunchedEffect
         snapshotFlow {
             gridState.firstVisibleItemIndex == 0 && gridState.firstVisibleItemScrollOffset == 0
         }
@@ -918,8 +920,8 @@ private fun SearchScreenContent(
         pullNextPageGestureActive = false
         pullNextPageRequestAfterReturn = false
         pullNextPageReturnInProgress = false
-        when (viewMode) {
-            0 -> {
+        when {
+            useSingleColumnList -> {
                 runCatching { listState.stopScroll(MutatePriority.PreventUserInput) }
                 runCatching { listState.scrollToItem(0) }
             }
@@ -930,7 +932,7 @@ private fun SearchScreenContent(
         }
         chromeState.expand()
     }
-    LaunchedEffect(isActive, viewMode) {
+    LaunchedEffect(isActive, useSingleColumnList) {
         if (isActive) return@LaunchedEffect
         activeScroll.interruptOngoingScroll(this, MutatePriority.PreventUserInput)
         pullNextPageDragPx = 0f
@@ -984,7 +986,7 @@ private fun SearchScreenContent(
                 modifier = contentModifier,
                 contentAlignment = if (hasRightPanel) Alignment.TopStart else Alignment.TopCenter
             ) {
-                val searchContentModifier = if (isCompact || hasRightPanel) {
+                val searchContentModifier = if (isCompact || hasRightPanel || LocalTabletLayout.current.isTablet) {
                     Modifier.fillMaxSize()
                 } else {
                     Modifier
@@ -1152,7 +1154,7 @@ private fun SearchScreenContent(
                                             bottom = LocalBottomOverlayPadding.current + 24.dp
                                         )
                                     )
-                                } else if (viewMode == 0) {
+                                } else if (useSingleColumnList) {
                                     val app = LocalContext.current.applicationContext
                                     val cacheManager = remember(app) {
                                         EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
@@ -1259,8 +1261,8 @@ private fun SearchScreenContent(
                                             .imageCacheManager()
                                     }
                                     val density = LocalDensity.current
-                                    val gridCellSize = if (isCompact) 150.dp else 200.dp
-                                    val gridCoverPx = remember(gridCellSize, density) { with(density) { gridCellSize.roundToPx() } }
+                                    val gridCellSize = if (tabletList) 360.dp else if (LocalTabletLayout.current.isTablet) 176.dp else if (isCompact) 150.dp else 200.dp
+                                    val gridCoverPx = remember(gridCellSize, density) { with(density) { (if (tabletList) 152.dp else gridCellSize).roundToPx() } }
                                     val gridPreloadSize = remember(gridCoverPx) { IntSize(gridCoverPx, gridCoverPx) }
                                     val coverFadeInState = remember(gridState) {
                                         derivedStateOf {
@@ -1315,6 +1317,7 @@ private fun SearchScreenContent(
                                                 val hasResolvedDetail = rj.isNotBlank() && rj in state.enrichedDetailRjCodes
                                                 val itemPurchasedOnly = state.purchasedOnly
                                                 AlbumGridItem(
+                                                    horizontal = tabletList,
                                                     album = album,
                                                     onClick = { onAlbumClick(album, itemPurchasedOnly, hasResolvedDetail) },
                                                     modifier = Modifier.animateItem(

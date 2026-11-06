@@ -36,6 +36,10 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.background
+import com.asmr.player.ui.common.CollectionPaneLayout
+import com.asmr.player.ui.common.LocalTabletLayout
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -77,6 +81,7 @@ fun AlbumGroupsScreen(
     isDataActive: Boolean = isActive,
     onGroupClick: (AlbumGroupEntity) -> Unit,
     scrollToTopSignal: Long = 0L,
+    detailContent: (@Composable (AlbumGroupEntity) -> Unit)? = null,
     viewModel: AlbumGroupsViewModel = hiltViewModel()
 ) {
     val groups by viewModel.groups.collectAsStateWhileActive(isDataActive)
@@ -85,6 +90,9 @@ fun AlbumGroupsScreen(
     var showCreate by remember { mutableStateOf(false) }
 
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
+    val tabletLayout = LocalTabletLayout.current
+    var selectedId by rememberSaveable { mutableStateOf<Long?>(null) }
+    val selected = groups.firstOrNull { it.id == selectedId } ?: groups.firstOrNull()
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         containerColor = Color.Transparent,
@@ -104,7 +112,7 @@ fun AlbumGroupsScreen(
                 .padding(padding),
             contentAlignment = Alignment.TopCenter
         ) {
-            val contentModifier = if (isCompact) {
+            val contentModifier = if (isCompact || tabletLayout.isTablet) {
                 Modifier.fillMaxSize()
             } else {
                 Modifier
@@ -112,7 +120,15 @@ fun AlbumGroupsScreen(
                     .widthIn(max = 760.dp)
                     .fillMaxWidth()
             }
-            Box(modifier = contentModifier) {
+            CollectionPaneLayout(
+                modifier = contentModifier.padding(horizontal = tabletLayout.horizontalPadding),
+                hasDetail = selected != null && detailContent != null,
+                detail = {
+                    selected?.let { selected ->
+                        detailContent?.invoke(AlbumGroupEntity(id = selected.id, name = selected.name, createdAt = selected.createdAt))
+                    }
+                },
+            ) {
                 if (groups.isEmpty()) {
                     EaraBrandedEmptyState(
                         sectionTitle = "我的分组",
@@ -140,7 +156,11 @@ fun AlbumGroupsScreen(
                             }
                             AlbumGroupRow(
                                 group = group,
-                                onClick = { onGroupClick(entity) },
+                                selected = tabletLayout.twoPane && selected?.id == entity.id,
+                                onClick = {
+                                    if (tabletLayout.twoPane && detailContent != null) selectedId = entity.id
+                                    else onGroupClick(entity)
+                                },
                                 onDelete = { viewModel.deleteGroup(entity) },
                                 onRename = { newName -> viewModel.renameGroup(entity.id, newName) }
                             )
@@ -175,6 +195,7 @@ fun AlbumGroupsScreen(
 
 @Composable
 private fun AlbumGroupRow(
+    selected: Boolean = false,
     group: AlbumGroupStatsRow,
     onClick: () -> Unit,
     onDelete: () -> Unit,
@@ -189,6 +210,7 @@ private fun AlbumGroupRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
+            .background(if (selected) colorScheme.primarySoft else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {

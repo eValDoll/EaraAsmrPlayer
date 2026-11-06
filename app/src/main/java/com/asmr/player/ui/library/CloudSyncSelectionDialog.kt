@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -44,6 +45,7 @@ import androidx.compose.ui.graphics.painter.BitmapPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,6 +60,7 @@ import com.asmr.player.data.remote.NetworkHeaders
 import com.asmr.player.data.remote.dlsite.DlsiteCloudSyncCandidate
 import com.asmr.player.data.remote.scraper.dlsiteOriginalCoverUrlForWorkNo
 import com.asmr.player.ui.common.AsmrShimmerPlaceholder
+import com.asmr.player.ui.common.LocalTabletLayout
 import com.asmr.player.ui.common.CvChipsSingleLine
 import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
@@ -118,14 +121,17 @@ internal fun CloudSyncSelectionDialog(
 ) {
     val colorScheme = AsmrTheme.colorScheme
     val listState = rememberLazyListState()
+    val tablet = LocalTabletLayout.current.isTablet
+    val maxHeight = LocalConfiguration.current.screenHeightDp.dp * 0.9f
     Dialog(
         onDismissRequest = onCancel,
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
         Card(
             modifier = Modifier
-                .fillMaxWidth(0.92f)
                 .widthIn(max = 540.dp)
+                .fillMaxWidth(0.92f)
+                .then(if (tablet) Modifier.heightIn(max = maxHeight) else Modifier)
                 .testTag(CLOUD_SYNC_SELECTION_DIALOG_TAG),
             shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(
@@ -185,7 +191,8 @@ internal fun CloudSyncSelectionDialog(
                     state = listState,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(CLOUD_SYNC_SELECTION_LIST_HEIGHT)
+                        .then(if (tablet) Modifier.weight(1f, fill = false).heightIn(max = CLOUD_SYNC_SELECTION_LIST_HEIGHT)
+                            else Modifier.height(CLOUD_SYNC_SELECTION_LIST_HEIGHT))
                         .testTag(CLOUD_SYNC_SELECTION_LIST_TAG),
                     flingBehavior = rememberCalmScrollableFlingBehavior(),
                     verticalArrangement = Arrangement.spacedBy(CLOUD_SYNC_SELECTION_ROW_SPACING)

@@ -521,6 +521,7 @@ internal fun BalancedColumn(
 @OptIn(ExperimentalFoundationApi::class)
 fun AlbumGridItem(
     album: Album,
+    horizontal: Boolean = false,
     onClick: () -> Unit,
     onLongClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
@@ -542,6 +543,32 @@ fun AlbumGridItem(
     showCollectedIndicator: Boolean = true,
     showStatsPlaceholders: Boolean = false,
 ) {
+    if (horizontal) {
+        AlbumItem(
+            album = album,
+            onClick = onClick,
+            onLongClick = onLongClick,
+            modifier = modifier,
+            onRjLongClick = onRjLongClick,
+            onCircleLongClick = onCircleLongClick,
+            onCvLongClick = onCvLongClick,
+            onTagLongClick = onTagLongClick,
+            coverBadge = coverBadge,
+            onlineDetailLoading = onlineDetailLoading,
+            onlineTitleLoading = onlineTitleLoading,
+            onlineCvLoading = onlineCvLoading,
+            onlineTagsLoading = onlineTagsLoading,
+            animateOnlineDetails = animateOnlineDetails,
+            coverFadeIn = coverFadeIn,
+            coverFadeInState = coverFadeInState,
+            coverReloadKey = coverReloadKey,
+            coverRetainPainterDuringReload = coverRetainPainterDuringReload,
+            coverOverlay = coverOverlay,
+            showCollectedIndicator = showCollectedIndicator,
+            showStatsPlaceholders = showStatsPlaceholders,
+        )
+        return
+    }
     val colorScheme = AsmrTheme.colorScheme
     val coverShape = remember { RoundedCornerShape(AlbumGridItemCornerRadius) }
     val imageModel = remember(album.coverThumbPath, album.coverPath, album.coverUrl) {

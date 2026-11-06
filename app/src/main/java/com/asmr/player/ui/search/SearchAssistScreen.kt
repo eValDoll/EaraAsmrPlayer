@@ -17,6 +17,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.lazy.LazyListScope
+import com.asmr.player.ui.common.LocalTabletLayout
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -193,6 +195,8 @@ internal fun SearchAssistContent(
     }
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
+    val tabletLayout = LocalTabletLayout.current
+    val twoPane = tabletLayout.twoPane
     var historyExpanded by rememberSaveable { mutableStateOf(false) }
     var showClearHistoryDialog by rememberSaveable { mutableStateOf(false) }
     var hotCvsExpanded by rememberSaveable { mutableStateOf(false) }
@@ -268,19 +272,7 @@ internal fun SearchAssistContent(
     }
 
     Box(modifier = Modifier.fillMaxSize().progressiveHeaderContent()) {
-        LazyColumn(
-            state = listState,
-            modifier = Modifier
-                .fillMaxSize()
-                .clearFocusOnTapOutside()
-                .nestedScroll(chromeState.nestedScrollConnection),
-            flingBehavior = rememberCalmScrollableFlingBehavior(),
-            contentPadding = PaddingValues(
-                top = topPadding,
-                bottom = 24.dp
-            ).withAddedBottomPadding(LocalBottomOverlayPadding.current),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
-        ) {
+        val suggestionItems: LazyListScope.() -> Unit = {
             item(contentType = "history") {
                 SearchAssistSection(
                     title = "搜索历史",
@@ -356,6 +348,8 @@ internal fun SearchAssistContent(
                 }
             }
 
+        }
+        val recommendationItems: LazyListScope.() -> Unit = {
             if (uiState.isLoadingRecommendations && uiState.suggestions.recommendations.isEmpty()) {
                 item(contentType = "recommendationsLoading") {
                     SearchAssistWorkSectionSkeleton(
@@ -425,6 +419,36 @@ internal fun SearchAssistContent(
                         }
                     }
                 }
+            }
+        }
+        val contentPadding = PaddingValues(
+            top = topPadding,
+            bottom = 24.dp
+        ).withAddedBottomPadding(LocalBottomOverlayPadding.current)
+        Row(
+            modifier = Modifier.fillMaxSize().padding(horizontal = tabletLayout.horizontalPadding),
+            horizontalArrangement = Arrangement.spacedBy(if (twoPane) 24.dp else 0.dp)
+        ) {
+            LazyColumn(
+                state = listState,
+                modifier = Modifier.weight(1f).fillMaxHeight()
+                    .clearFocusOnTapOutside()
+                    .nestedScroll(chromeState.nestedScrollConnection),
+                flingBehavior = rememberCalmScrollableFlingBehavior(),
+                contentPadding = contentPadding,
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                suggestionItems()
+                if (!twoPane) recommendationItems()
+            }
+            if (twoPane) {
+                LazyColumn(
+                    modifier = Modifier.weight(1.2f).fillMaxHeight().clearFocusOnTapOutside(),
+                    flingBehavior = rememberCalmScrollableFlingBehavior(),
+                    contentPadding = contentPadding,
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                    content = recommendationItems
+                )
             }
         }
 

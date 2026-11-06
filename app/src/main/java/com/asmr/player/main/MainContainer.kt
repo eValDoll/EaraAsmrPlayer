@@ -23,8 +23,6 @@ import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.PagerDefaults
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.material.icons.Icons
@@ -45,7 +43,6 @@ import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.Shape
@@ -131,6 +128,13 @@ import com.asmr.player.ui.common.FlatTextFieldDialog
 import com.asmr.player.ui.common.RoundedTopSheet
 import com.asmr.player.ui.common.EaraTopBarContainer
 import com.asmr.player.ui.common.ProgressiveHeaderBlurState
+import com.asmr.player.ui.common.TabletLayout
+import com.asmr.player.ui.common.TabletPage
+import com.asmr.player.ui.common.LocalTabletLayout
+import com.asmr.player.ui.common.rememberIsTabletDevice
+import com.asmr.player.ui.nav.TabletNavigationRail
+import com.asmr.player.ui.nav.TabletNavigationRailWidth
+import com.asmr.player.ui.player.MiniPlayer
 import com.asmr.player.ui.common.LocalMainHeaderPadding
 import com.asmr.player.performance.tracePrimaryPagePreloadEvent
 import com.asmr.player.ui.common.DeferredPageContentState
@@ -146,8 +150,6 @@ import com.asmr.player.ui.common.rememberProgressiveHeaderBlur
 import com.asmr.player.ui.common.EaraMainTopBarHeight
 import com.asmr.player.ui.common.EaraTopBarIconButton
 import com.asmr.player.ui.common.resolveMainPageBackgroundColor
-import com.asmr.player.ui.common.glassMenu
-import com.asmr.player.ui.drawer.DrawerStatusViewModel
 import com.asmr.player.ui.nav.AlbumCoverHintStore
 import com.asmr.player.ui.nav.AppNavigator
 import com.asmr.player.ui.nav.BottomChrome
@@ -158,7 +160,6 @@ import com.asmr.player.ui.nav.bottomChromeOverlayHeight
 import com.asmr.player.ui.nav.isPrimaryRoute
 import com.asmr.player.ui.nav.resolvePrimaryRoute
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
-import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import kotlinx.coroutines.launch
 import java.net.URLEncoder
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -170,7 +171,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import com.asmr.player.ui.theme.AsmrTheme
 import android.os.Build
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
@@ -191,7 +191,6 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 
-import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import com.asmr.player.ui.player.MiniPlayerDisplayMode
 
 import com.asmr.player.data.local.datastore.SettingsDataStore
@@ -351,7 +350,7 @@ private fun AlbumDetailRouteFrame(
     previousBackStackEntry: NavBackStackEntry?,
     stackPopTargetEntryId: String?,
     onPopBackStack: (String?) -> Unit,
-    onPageOffsetReader: (() -> Float) -> Unit,
+    onPageProgressReader: (() -> Float) -> Unit,
     onExitStateChanged: (Boolean) -> Unit,
     onLocalAlbumRemoved: (AlbumDetailUiState.Removed) -> Unit = {},
     onEditRj: (String) -> Unit,
@@ -375,13 +374,11 @@ private fun AlbumDetailRouteFrame(
     val pageOffsetProgress = remember(backStackEntry.id) {
         Animatable(if (skipEnterAnimation) 0f else 1f)
     }
-    val pageOffsetReader = remember(pageOffsetProgress, rootView) {
-        {
-            pageOffsetProgress.value * rootView.width.toFloat().coerceAtLeast(1f)
-        }
+    val pageProgressReader = remember(pageOffsetProgress) {
+        { pageOffsetProgress.value }
     }
     SideEffect {
-        onPageOffsetReader(pageOffsetReader)
+        onPageProgressReader(pageProgressReader)
     }
     var exitRequested by remember(backStackEntry.id) { mutableStateOf(false) }
     val currentPopBackStack by rememberUpdatedState(onPopBackStack)
@@ -573,7 +570,7 @@ private fun SecondaryPageBackground(
     val colorScheme = AsmrTheme.colorScheme
     val pageBackgroundColor = resolveMainPageBackgroundColor(colorScheme)
 
-    Box(
+    TabletPage(
         modifier = modifier
             .fillMaxSize()
             .padding(top = topPadding)
@@ -837,7 +834,7 @@ fun MainContainer(
     val currentRoute = navBackStackEntry?.destination?.route
     val mainRootView = LocalView.current
     var albumDetailStackPopTargetEntryId by remember { mutableStateOf<String?>(null) }
-    var albumDetailPageOffsetReader by remember { mutableStateOf<(() -> Float)?>(null) }
+    var albumDetailPageProgressReader by remember { mutableStateOf<(() -> Float)?>(null) }
     var albumDetailEnterPreparing by remember { mutableStateOf(false) }
     var albumDetailEnterRequestId by remember { mutableLongStateOf(0L) }
     val albumDetailInsetsDispatchSuppressor = remember(mainRootView) {
@@ -892,7 +889,7 @@ fun MainContainer(
         )
         if (!isAlbumDetailRoute(currentRoute)) {
             albumDetailStackPopTargetEntryId = null
-            albumDetailPageOffsetReader = null
+            albumDetailPageProgressReader = null
         }
     }
     val bottomNavItems = remember { bottomChromeNavItems() }
@@ -970,7 +967,6 @@ fun MainContainer(
     var pendingDetailNavigationSeq by remember { mutableIntStateOf(0) }
     var cancelPendingDetailNavigation by remember { mutableStateOf(false) }
     var albumDetailExitInProgress by remember { mutableStateOf(false) }
-    val drawerState = rememberDrawerState(initialValue = DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val downloadsViewModel: DownloadsViewModel = hiltViewModel(activityViewModelStoreOwner)
     val onlineAudioDownloadConfirmation by downloadsViewModel.onlineAudioDownloadConfirmation.collectAsStateWithLifecycle()
@@ -989,7 +985,6 @@ fun MainContainer(
                     old?.mediaMetadata?.artworkUri == new?.mediaMetadata?.artworkUri
             }
     }.collectAsStateWithLifecycle(initialValue = null)
-    val drawerStatusViewModel: DrawerStatusViewModel = hiltViewModel(activityViewModelStoreOwner)
     val bulkProgress by libraryViewModel.bulkProgress.collectAsStateWithLifecycle()
     val cloudSyncSelectionDialogState by libraryViewModel.cloudSyncSelectionDialogState.collectAsStateWithLifecycle()
     val appVolumePercent by playerViewModel.appVolumePercent.collectAsStateWithLifecycle()
@@ -1034,8 +1029,9 @@ fun MainContainer(
     
     val configuration = LocalConfiguration.current
     val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-    // 使用 smallestScreenWidthDp 判定是否为手机 (一般 < 600dp 为手机)
-    val isPhone = configuration.smallestScreenWidthDp < 600
+    val isPhone = !rememberIsTabletDevice()
+    val useTabletRail = !isPhone && isLandscape && configuration.screenWidthDp >= 840
+    val tabletRailInset = if (useTabletRail) TabletNavigationRailWidth else 0.dp
     val context = LocalContext.current
     val activity = remember(context) { context.findActivity() }
     val updateState by settingsViewModel.updateState.collectAsStateWithLifecycle()
@@ -1469,8 +1465,8 @@ fun MainContainer(
         }
     }
 
-    LaunchedEffect(currentPrimaryRoute, hasPreviousBackStackEntry, nowPlayingVisible, drawerState.isOpen) {
-        if (currentPrimaryRoute != Routes.Library || hasPreviousBackStackEntry || nowPlayingVisible || drawerState.isOpen) {
+    LaunchedEffect(currentPrimaryRoute, hasPreviousBackStackEntry, nowPlayingVisible) {
+        if (currentPrimaryRoute != Routes.Library || hasPreviousBackStackEntry || nowPlayingVisible) {
             lastLibraryBackPressElapsedRealtime = 0L
         }
     }
@@ -1500,7 +1496,6 @@ fun MainContainer(
     val dynamicContainerColor = dynamicPageContainerColor(colorScheme)
     val isAlbumDetailRoute = currentRoute?.startsWith("album_detail") == true
     val topBarContentColor = if (isAlbumDetailRoute) Color.White else colorScheme.onSurface
-    val drawerContainerColor = if (colorScheme.isDark) Color(0xFF121212) else Color.White
 
     val defaultSystemUi = remember(activity) {
         activity?.let { act -> captureDefaultSystemUiState(act.window) }
@@ -1541,7 +1536,7 @@ fun MainContainer(
         onDispose { }
     }
 
-    // 普通播放页保持原方向策略，仅视频全屏时锁定横屏。
+    // 手机沿用播放页方向策略，平板所有页面保持横屏。
     LaunchedEffect(
         nowPlayingVisible,
         isPhone,
@@ -1592,10 +1587,6 @@ fun MainContainer(
         }
     }
 
-    BackHandler(drawerState.isOpen) {
-        scope.launch { drawerState.close() }
-    }
-
     BackHandler(pendingDetailNavigation && currentRoute == Routes.Search) {
         pendingDetailNavigation = false
         cancelPendingDetailNavigation = true
@@ -1604,7 +1595,6 @@ fun MainContainer(
     BackHandler(
         enabled = currentPrimaryRoute == Routes.Library &&
             !hasPreviousBackStackEntry &&
-            !drawerState.isOpen &&
             !pendingDetailNavigation &&
             !nowPlayingVisible
     ) {
@@ -1620,129 +1610,9 @@ fun MainContainer(
         }
     }
 
-    val drawerGesturesEnabled = false
-
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        gesturesEnabled = drawerGesturesEnabled,
-        drawerContent = {
-            Box(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(300.dp)
-                    .glassMenu(
-                        shape = RoundedCornerShape(topEnd = 26.dp, bottomEnd = 26.dp),
-                        baseColor = drawerContainerColor,
-                        elevation = if (colorScheme.isDark) 0.dp else 6.dp,
-                        isDark = colorScheme.isDark
-                    )
-            ) {
-                ModalDrawerSheet(
-                    drawerContainerColor = Color.Transparent,
-                    drawerContentColor = colorScheme.onSurface,
-                    modifier = Modifier.fillMaxSize()
-                ) {
-                    val navItems = listOf(
-                        Triple(Icons.Rounded.Home, "本地库", "library"),
-                        Triple(Icons.Rounded.Search, "在线搜索", "search"),
-                        Triple(Icons.Rounded.Favorite, "我的收藏", "playlist_system/favorites"),
-                        Triple(Icons.AutoMirrored.Rounded.QueueMusic, "我的列表", "playlists"),
-                        Triple(Icons.Rounded.Folder, "我的分组", "groups"),
-                        Triple(Icons.Rounded.Sync, "任务管理", "downloads"),
-                        Triple(Icons.Rounded.Route, "ASMR 看板", "listening_calendar"),
-                        Triple(Icons.Rounded.Settings, "设置", "settings")
-                    )
-
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_launcher_foreground),
-                                contentDescription = null,
-                                tint = colorScheme.onSurface,
-                                modifier = Modifier.size(46.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                stringResource(R.string.app_name),
-                                style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
-                                color = colorScheme.onSurface
-                            )
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-
-                        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                flingBehavior = rememberCalmScrollableFlingBehavior(),
-                                contentPadding = PaddingValues(top = 10.dp, bottom = 32.dp)
-                            ) {
-                                items(navItems, key = { it.third }) { (icon, label, route) ->
-                                    val isAlbumDetailFromSearch =
-                                        currentRoute?.startsWith("album_detail_rj") == true ||
-                                            currentRoute?.startsWith("album_detail_online") == true
-                                    val isAlbumDetailFromLibrary =
-                                        currentRoute?.startsWith("album_detail/") == true &&
-                                            !currentRoute.startsWith("album_detail_rj")
-                                    val isSelected = when (route) {
-                                        "library" -> currentRoute == route || isAlbumDetailFromLibrary
-                                        "search" -> currentRoute == route || isAlbumDetailFromSearch
-                                        "groups" -> currentRoute == route ||
-                                            currentRoute?.startsWith("group/") == true
-                                        "playlist_system/favorites" -> {
-                                            currentRoute == "playlist_system/{type}" &&
-                                                navBackStackEntry?.arguments?.getString("type") == "favorites"
-                                        }
-                                        else -> currentRoute == route
-                                    }
-                                    DrawerNavCardItem(
-                                        icon = icon,
-                                        label = label,
-                                        selected = isSelected,
-                                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
-                                        onClick = { openPrimaryRoute(route) }
-                                    )
-                                }
-                            }
-
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.TopCenter)
-                                    .fillMaxWidth()
-                                    .height(18.dp)
-                                    .background(
-                                        Brush.verticalGradient(
-                                            colors = listOf(drawerContainerColor, Color.Transparent)
-                                        )
-                                    )
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .fillMaxWidth()
-                                    .height(28.dp)
-                                    .background(
-                                        Brush.verticalGradient(
-                                            colors = listOf(Color.Transparent, drawerContainerColor)
-                                        )
-                                    )
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-                        DrawerSiteStatusFooter(drawerStatusViewModel, modifier = Modifier.padding(horizontal = 18.dp))
-                        Spacer(modifier = Modifier.height(18.dp))
-                    }
-                }
-            }
-        }
-    ) {
-        val miniPlayerVisible = showMiniPlayerBar &&
-            hasCurrentMediaItem &&
-            !nowPlayingVisible
+    Box(Modifier.fillMaxSize()) {
+        val miniPlayerHasContent = showMiniPlayerBar && hasCurrentMediaItem
+        val miniPlayerVisible = miniPlayerHasContent && !nowPlayingVisible
         val bottomChromeVisible = !nowPlayingVisible
         val rightPanelExpandedFromStore by settingsDataStore.recentAlbumsPanelExpanded
             .collectAsStateWithLifecycle(initialValue = recentAlbumsPanelExpandedInitial)
@@ -1762,9 +1632,9 @@ fun MainContainer(
         val showPrimaryBrand = currentScreenIsPrimary
         val hasOverlayRoute = currentPrimaryRoute == null && !albumDetailExitInProgress
         val albumDetailTransitionActive = isAlbumDetailRoute || albumDetailExitInProgress
-        val primaryPageExposed by remember(albumDetailTransitionActive, albumDetailPageOffsetReader) {
+        val primaryPageExposed by remember(albumDetailTransitionActive, albumDetailPageProgressReader) {
             derivedStateOf {
-                !albumDetailTransitionActive || (albumDetailPageOffsetReader?.invoke() ?: 1f) > 0.5f
+                !albumDetailTransitionActive || (albumDetailPageProgressReader?.invoke() ?: 1f) > 0f
             }
         }
         val primaryPageParallaxActive = hasOverlayRoute && !albumDetailTransitionActive
@@ -1798,6 +1668,8 @@ fun MainContainer(
             .calculateBottomPadding()
         val bottomChromeBottomPadding = 24.dp + navigationBarBottomPadding
         val bottomOverlayPadding = bottomChromeOverlayHeight(useLargeBottomChrome) + navigationBarBottomPadding
+        // 播放页覆盖期间仍保留迷你播放栏占位，避免底层空态在转场中重新居中。
+        val tabletBottomPadding = (if (miniPlayerHasContent) 96.dp else 16.dp) + navigationBarBottomPadding
         var secondaryPageTopPadding by remember { mutableStateOf(0.dp) }
         val pageTranslationHeader = remember { PageTranslationHeaderState() }
         val headerBlur = rememberProgressiveHeaderBlur()
@@ -2097,7 +1969,8 @@ fun MainContainer(
             }
         }
         CompositionLocalProvider(
-            LocalBottomOverlayPadding provides bottomOverlayPadding,
+            LocalBottomOverlayPadding provides (if (useTabletRail) tabletBottomPadding else bottomOverlayPadding),
+            LocalTabletLayout provides TabletLayout(!isPhone, configuration.screenWidthDp.dp - tabletRailInset, configuration.screenHeightDp.dp),
             LocalRightPanelExpandedState provides rightPanelExpandedState,
             LocalPageTranslationHeader provides pageTranslationHeader,
         ) {
@@ -2112,7 +1985,9 @@ fun MainContainer(
                         .graphicsLayer {
                             val width = size.width.toFloat().coerceAtLeast(1f)
                             val visibleRight = if (albumDetailTransitionActive) {
-                                albumDetailPageOffsetReader?.invoke()?.coerceIn(0f, width) ?: width
+                                val contentStart = tabletRailInset.toPx().coerceIn(0f, width)
+                                val progress = (albumDetailPageProgressReader?.invoke() ?: 1f).coerceIn(0f, 1f)
+                                contentStart + (width - contentStart) * progress
                             } else {
                                 width
                             }
@@ -2123,6 +1998,7 @@ fun MainContainer(
                         }
                 ) {
                     Scaffold(
+                        modifier = Modifier.padding(start = tabletRailInset),
                         contentWindowInsets = WindowInsets(0, 0, 0, 0),
                         containerColor = Color.Transparent,
                         contentColor = colorScheme.onBackground,
@@ -2214,6 +2090,7 @@ fun MainContainer(
                                         else -> null
                                     }
                                     CompositionLocalProvider(
+                                        LocalBottomOverlayPadding provides (if (useTabletRail) tabletBottomPadding else bottomOverlayPadding),
                                         LocalAlbumRowRasterCacheAllowed provides rowRasterCacheAllowed,
                                         LocalAlbumCoverShadowCache provides coverShadowCache,
                                         LocalDeferredPageContent provides deferredPageContent,
@@ -2221,7 +2098,7 @@ fun MainContainer(
                                         LocalPageAnimationsActive provides primaryPageContentVisible,
                                         LocalProgressiveHeaderBlur provides pageHeaderBlur,
                                     ) {
-                                    Box(
+                                    TabletPage(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .then(
@@ -2418,6 +2295,27 @@ fun MainContainer(
                                                     val encoded = URLEncoder.encode(playlist.name, "UTF-8")
                                                     navController.navigateSingleTop("playlist/${playlist.id}/$encoded")
                                                 },
+                                                detailContent = { playlist ->
+                                                    val detailViewModel: com.asmr.player.ui.playlists.PlaylistDetailViewModel =
+                                                        hiltViewModel(activityViewModelStoreOwner, key = "tablet_playlist_detail")
+                                                    PlaylistDetailScreen(
+                                                        windowSizeClass = windowSizeClass,
+                                                        playlistId = playlist.id,
+                                                        title = playlist.name,
+                                                        isActive = primaryRouteActive,
+                                                        isDataActive = primaryRouteDataActive,
+                                                        viewModel = detailViewModel,
+                                                        playback = playerViewModel.playlistPlayback,
+                                                        onPlayAll = { items, startItem ->
+                                                            playerViewModel.playPlaylistItems(items, startItem)
+                                                            if (startItem.isVideoPlaybackItem()) openNowPlaying() else requestMiniPlayerPlayFeedback()
+                                                        },
+                                                        onResumeAll = { items, startItem, positionMs ->
+                                                            playerViewModel.resumePlaylistItems(items, startItem, positionMs)
+                                                            if (startItem.isVideoPlaybackItem()) openNowPlaying() else requestMiniPlayerPlayFeedback()
+                                                        },
+                                                    )
+                                                },
                                                 viewModel = playlistsViewModel
                                             )
                                         }
@@ -2435,6 +2333,21 @@ fun MainContainer(
                                                 onGroupClick = { group ->
                                                     val encoded = encodeRouteArg(group.name)
                                                     navController.navigateSingleTop("group/${group.id}/$encoded")
+                                                },
+                                                detailContent = { group ->
+                                                    val detailViewModel: com.asmr.player.ui.groups.AlbumGroupDetailViewModel =
+                                                        hiltViewModel(activityViewModelStoreOwner, key = "tablet_group_detail")
+                                                    com.asmr.player.ui.groups.AlbumGroupDetailScreen(
+                                                        windowSizeClass = windowSizeClass,
+                                                        groupId = group.id,
+                                                        title = group.name,
+                                                        isDataActive = primaryRouteDataActive,
+                                                        viewModel = detailViewModel,
+                                                        onPlayMediaItems = { items, startIndex ->
+                                                            playerViewModel.playMediaItems(items, startIndex)
+                                                            if (items.getOrNull(startIndex).isVideoPlaybackItem()) openNowPlaying() else requestMiniPlayerPlayFeedback()
+                                                        },
+                                                    )
                                                 },
                                                 viewModel = albumGroupsViewModel
                                             )
@@ -2532,6 +2445,7 @@ fun MainContainer(
                                 },
                                 modifier = Modifier
                                     .fillMaxSize()
+                                    .padding(start = tabletRailInset)
                             ) {
 
                 composable("library") {
@@ -2707,9 +2621,9 @@ fun MainContainer(
                             albumDetailStackPopTargetEntryId = targetEntryId
                             navController.popBackStack()
                         },
-                        onPageOffsetReader = { reader ->
+                        onPageProgressReader = { reader ->
                             if (navController.currentBackStackEntry?.id == backStackEntry.id) {
-                                albumDetailPageOffsetReader = reader
+                                albumDetailPageProgressReader = reader
                             }
                         },
                         onExitStateChanged = { albumDetailExitInProgress = it },
@@ -2796,9 +2710,9 @@ fun MainContainer(
                             albumDetailStackPopTargetEntryId = targetEntryId
                             navController.popBackStack()
                         },
-                        onPageOffsetReader = { reader ->
+                        onPageProgressReader = { reader ->
                             if (navController.currentBackStackEntry?.id == backStackEntry.id) {
-                                albumDetailPageOffsetReader = reader
+                                albumDetailPageProgressReader = reader
                             }
                         },
                         onExitStateChanged = { albumDetailExitInProgress = it },
@@ -2881,9 +2795,9 @@ fun MainContainer(
                             albumDetailStackPopTargetEntryId = targetEntryId
                             navController.popBackStack()
                         },
-                        onPageOffsetReader = { reader ->
+                        onPageProgressReader = { reader ->
                             if (navController.currentBackStackEntry?.id == backStackEntry.id) {
-                                albumDetailPageOffsetReader = reader
+                                albumDetailPageProgressReader = reader
                             }
                         },
                         onExitStateChanged = { albumDetailExitInProgress = it },
@@ -3146,7 +3060,33 @@ fun MainContainer(
                 )
             }
 
-        if (bottomChromeVisible) {
+        if (useTabletRail && !nowPlayingVisible) {
+            TabletNavigationRail(
+                activeRoute = visualPrimaryRoute,
+                onNavigate = { route ->
+                    if (route == visualPrimaryRoute && currentPrimaryRoute != null) triggerPrimaryRouteScrollToTop(route)
+                    else openPrimaryRoute(route)
+                },
+                modifier = Modifier.align(Alignment.CenterStart),
+            )
+            if (miniPlayerVisible) {
+                MiniPlayer(
+                    displayMode = MiniPlayerDisplayMode.Expanded,
+                    onDisplayModeChange = {},
+                    allowCollapse = false,
+                    onOpenNowPlaying = openNowPlaying,
+                    onOpenQueue = onShowQueue,
+                    playFeedbackSignal = miniPlayerPlayFeedbackSignal,
+                    largeLayout = true,
+                    viewModel = playerViewModel,
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                        .padding(start = tabletRailInset + 16.dp, end = 16.dp, bottom = 16.dp + navigationBarBottomPadding)
+                        .fillMaxWidth(),
+                )
+            }
+        }
+
+        if (bottomChromeVisible && !useTabletRail) {
             BoxWithConstraints(
                 modifier = Modifier.fillMaxSize()
             ) {
@@ -3157,8 +3097,8 @@ fun MainContainer(
                     isLandscape &&
                     (currentRoute == "library" || currentRoute == "search")
                 val rightPanelExpanded = rightPanelExpandedState.value
-                val rightPanelWidth = (maxWidth - 560.dp).coerceAtMost(420.dp)
-                val showRightPanel = canUseRightPanel && rightPanelWidth >= 300.dp
+                val rightPanelWidth = (maxWidth - 680.dp).coerceAtMost(320.dp)
+                val showRightPanel = canUseRightPanel && maxWidth >= 1128.dp && rightPanelWidth >= 280.dp
                 val reservedRightTarget = if (!showRightPanel) {
                     0.dp
                 } else if (rightPanelExpanded) {

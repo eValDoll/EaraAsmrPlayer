@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.dp
 import com.asmr.player.data.local.db.entities.PlaylistItemWithSubtitles
 import com.asmr.player.data.local.db.entities.PlaylistPlaybackEntity
 import com.asmr.player.translation.translatedPageText
+import com.asmr.player.ui.common.LocalTabletLayout
 import com.asmr.player.ui.common.formatStoredCv
 import com.asmr.player.ui.common.resolveMainPageBackgroundColor
 import com.asmr.player.ui.theme.AsmrTheme
@@ -66,10 +67,12 @@ internal fun PlaylistTrackHero(
 ) {
     val colors = AsmrTheme.colorScheme
     val pageBackground = resolveMainPageBackgroundColor(colors)
+    val embedded = LocalTabletLayout.current.embedded
     val compactHeight = LocalConfiguration.current.screenHeightDp < 500
     val fontScale = LocalDensity.current.fontScale
     val compactTextBackdrop = compactHeight || fontScale > 1.35f
     val artworkGap = when {
+        embedded -> if (compactHeight) 88.dp else 128.dp
         compactHeight -> 36.dp
         fontScale > 1.35f -> 52.dp
         else -> 96.dp
@@ -114,7 +117,16 @@ internal fun PlaylistTrackHero(
         )
         Box(
             modifier = Modifier.matchParentSize().drawWithCache {
-                val gradient = if (compactTextBackdrop) {
+                val gradient = if (embedded) {
+                    val textStart = (artworkGap.toPx() / size.height.coerceAtLeast(1f)).coerceIn(0.001f, 0.99f)
+                    val fadeStart = ((artworkGap - 40.dp).toPx() / size.height.coerceAtLeast(1f)).coerceIn(0f, textStart)
+                    Brush.verticalGradient(
+                        0f to Color.Transparent,
+                        fadeStart to Color.Transparent,
+                        textStart to pageBackground.copy(alpha = 0.94f),
+                        1f to pageBackground,
+                    )
+                } else if (compactTextBackdrop) {
                     val textStart = (artworkGap.toPx() / size.height.coerceAtLeast(1f)).coerceIn(0.001f, 0.99f)
                     Brush.verticalGradient(
                         0f to Color.Transparent,

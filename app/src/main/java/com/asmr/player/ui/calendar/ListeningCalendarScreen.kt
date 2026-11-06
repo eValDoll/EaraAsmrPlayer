@@ -1,5 +1,6 @@
 package com.asmr.player.ui.calendar
 
+import com.asmr.player.ui.common.LocalTabletLayout
 import com.asmr.player.ui.common.LocalMainHeaderPadding
 
 import androidx.compose.animation.AnimatedContent
@@ -121,9 +122,17 @@ fun ListeningCalendarScreen(
     val selectedSessions by viewModel.selectedSessions.collectAsStateWhileActive(isDataActive)
     val isDlsiteLoggedIn by viewModel.isDlsiteLoggedIn.collectAsStateWhileActive(isDataActive)
     val colorScheme = AsmrTheme.colorScheme
+    val twoPane = LocalTabletLayout.current.twoPane
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
     val bottomOverlayPadding = LocalBottomOverlayPadding.current
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    LaunchedEffect(twoPane, isActive, selectedYear, heatmap) {
+        if (twoPane && isActive && selectedDate == null) {
+            heatmap.lastOrNull { it.date.startsWith("$selectedYear-") && it.durationMs > 0 }
+                ?.let { viewModel.selectDate(it.date) }
+        }
+    }
 
     LaunchedEffect(isActive) {
         if (!isActive) return@LaunchedEffect
@@ -145,7 +154,7 @@ fun ListeningCalendarScreen(
         contentAlignment = Alignment.TopCenter
     ) {
         Column(
-            modifier = (if (isCompact) {
+            modifier = (if (isCompact || LocalTabletLayout.current.isTablet) {
                 Modifier.fillMaxSize()
             } else {
                 Modifier
@@ -153,7 +162,7 @@ fun ListeningCalendarScreen(
                     .widthIn(max = 720.dp)
                     .fillMaxWidth()
             })
-                .verticalScroll(rememberScrollState())
+                .then(if (twoPane) Modifier else Modifier.verticalScroll(rememberScrollState()))
                 .padding(
                     start = 16.dp,
                     top = LocalMainHeaderPadding.current + 16.dp,
@@ -168,37 +177,60 @@ fun ListeningCalendarScreen(
                 colorScheme = colorScheme
             )
 
-            SummaryCards(
-                summary = summary,
-                artwork = summaryArtwork,
-                comparison = summaryComparison,
-                selectedGranularity = comparisonGranularity,
-                colorScheme = colorScheme,
-                onGranularitySelected = viewModel::selectComparisonGranularity
-            )
-
-            HeatmapSection(
-                days = heatmap,
-                selectedDate = selectedDate,
-                availableYears = availableYears,
-                selectedYear = selectedYear,
-                colorScheme = colorScheme,
-                onYearSelected = { viewModel.selectYear(it) },
-                onDayClick = { date ->
-                    viewModel.selectDate(date)
-                }
-            )
-
-            selectedDate?.let { date ->
-                DayTimeline(
-                    date = date,
-                    sessions = selectedSessions,
+            val summaryContent: @Composable () -> Unit = {
+                SummaryCards(
+                    summary = summary,
+                    artwork = summaryArtwork,
+                    comparison = summaryComparison,
+                    selectedGranularity = comparisonGranularity,
                     colorScheme = colorScheme,
-                    onOpenAlbum = { session ->
-                        viewModel.selectDate(null)
-                        onOpenAlbum(session)
+                    onGranularitySelected = viewModel::selectComparisonGranularity
+                )
+            }
+
+            val heatmapContent: @Composable () -> Unit = {
+                HeatmapSection(
+                    days = heatmap,
+                    selectedDate = selectedDate,
+                    availableYears = availableYears,
+                    selectedYear = selectedYear,
+                    colorScheme = colorScheme,
+                    onYearSelected = { viewModel.selectYear(it) },
+                    onDayClick = { date ->
+                        viewModel.selectDate(date)
                     }
                 )
+            }
+            val timelineContent: @Composable () -> Unit = {
+                selectedDate?.let { date ->
+                    DayTimeline(
+                        date = date,
+                        sessions = selectedSessions,
+                        colorScheme = colorScheme,
+                        onOpenAlbum = { session ->
+                            if (!twoPane) viewModel.selectDate(null)
+                            onOpenAlbum(session)
+                        }
+                    )
+                }
+            }
+            if (twoPane) {
+                Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
+                    Column(
+                        Modifier.weight(1.2f).fillMaxHeight().verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(16.dp),
+                    ) {
+                        summaryContent()
+                        heatmapContent()
+                    }
+                    Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+                        timelineContent()
+                    }
+                }
+            } else {
+                summaryContent()
+                heatmapContent()
+                timelineContent()
             }
         }
     }
@@ -275,7 +307,7 @@ private fun DlsiteLoginStatusTag(
 }
 
 @Composable
-private fun SummaryCards(
+internal fun SummaryCards(
     summary: ListeningSummary,
     artwork: ListeningSummaryArtwork?,
     comparison: ListeningSummaryComparison,
@@ -729,47 +761,49 @@ private fun HeatmapSection(
             )
         } else {
             val columns = remember(days) { buildHeatmapColumns(days) }
-            val columnGroups = remember(columns) { columns.chunked(4) }
-            val monthLabels = remember(columns) { buildHeatmapMonthLabels(columns) }
-            val scrollState = rememberScrollState()
-            LaunchedEffect(selectedYear, columns.size) {
-                if (columns.isNotEmpty()) {
-                    withFrameNanos { }
-                    scrollState.scrollTo(scrollState.maxValue)
+            BoxWithConstraints(Modifier.fillMaxWidth()) {
+                val wrap = LocalTabletLayout.current.twoPane
+                val weeksPerBand = if (wrap) {
+                    ((maxWidth + CELL_GAP) / (CELL_SIZE + CELL_GAP)).toInt().coerceAtLeast(1)
+                } else columns.size.coerceAtLeast(1)
+                val bands = remember(columns, weeksPerBand) { columns.chunked(weeksPerBand) }
+                val scrollState = rememberScrollState()
+                LaunchedEffect(selectedYear, columns.size, wrap) {
+                    if (!wrap && columns.isNotEmpty()) {
+                        withFrameNanos { }
+                        scrollState.scrollTo(scrollState.maxValue)
+                    }
                 }
-            }
-
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(scrollState),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                HeatmapMonthLabelRow(labels = monthLabels, colorScheme = colorScheme)
-                Row(
-                    // 格子与边框均在行内，缓存这一小块纹理供横向页面过渡复用。
-                    modifier = Modifier.graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen },
-                    horizontalArrangement = Arrangement.spacedBy(CELL_GAP),
+                Column(
+                    modifier = if (wrap) Modifier.fillMaxWidth() else Modifier.horizontalScroll(scrollState),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    columnGroups.forEach { group ->
-                        DeferredPageItem(
-                            placeholder = {
-                                Spacer(
-                                    Modifier
-                                        .width(CELL_SIZE * group.size + CELL_GAP * (group.size - 1))
-                                        .height(CELL_SIZE * 7 + CELL_GAP * 6)
-                                )
-                            },
-                        ) {
-                            group.forEach { column ->
-                                Column(verticalArrangement = Arrangement.spacedBy(CELL_GAP)) {
-                                    column.forEach { day ->
-                                        HeatmapCell(
-                                            day = day,
-                                            selected = day?.date == selectedDate,
-                                            colorScheme = colorScheme,
-                                            onDayClick = onDayClick
-                                        )
+                    bands.forEach { band ->
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            HeatmapMonthLabelRow(
+                                labels = remember(band) { buildHeatmapMonthLabels(band) },
+                                colorScheme = colorScheme
+                            )
+                            Row(
+                                modifier = Modifier.graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen },
+                                horizontalArrangement = Arrangement.spacedBy(CELL_GAP)
+                            ) {
+                                band.chunked(4).forEach { group ->
+                                    DeferredPageItem(
+                                        placeholder = {
+                                            Spacer(Modifier
+                                                .width(CELL_SIZE * group.size + CELL_GAP * (group.size - 1))
+                                                .height(CELL_SIZE * 7 + CELL_GAP * 6))
+                                        }
+                                    ) {
+                                        group.forEach { column ->
+                                            Column(verticalArrangement = Arrangement.spacedBy(CELL_GAP)) {
+                                                column.forEach { day ->
+                                                    HeatmapCell(day = day, selected = day?.date == selectedDate,
+                                                        colorScheme = colorScheme, onDayClick = onDayClick)
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }

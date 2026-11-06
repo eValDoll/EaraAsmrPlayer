@@ -44,6 +44,7 @@ internal fun PlayerModalSheet(
     key(configuration.screenWidthDp, configuration.screenHeightDp) {
         ModalBottomSheet(
             onDismissRequest = onDismissRequest,
+            sheetMaxWidth = if (LocalTabletLayout.current.isTablet) 560.dp else 640.dp,
             sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
             containerColor = containerColor,
             contentColor = contentColor,

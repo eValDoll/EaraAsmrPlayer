@@ -18,9 +18,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.imePadding
+import com.asmr.player.ui.common.LocalTabletLayout
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.rememberLazyGridState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
@@ -102,7 +107,10 @@ fun LibraryFilterScreen(
             onDismissRequest = { showTagManager = false },
             properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
         ) {
-            Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
+            Surface(
+                modifier = if (LocalTabletLayout.current.isTablet) Modifier.widthIn(max = 560.dp).fillMaxWidth().fillMaxHeight(0.9f).imePadding() else Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.background
+            ) {
                 TagManagerSheet(
                     tags = tags,
                     onRename = { tagId, newName -> viewModel.renameUserTag(tagId, newName) },
@@ -131,7 +139,8 @@ fun LibraryFilterSheet(
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val listState = rememberLazyListState()
+    val listState = rememberLazyGridState()
+    val twoPane = LocalTabletLayout.current.twoPane
     var tagSearch by rememberSaveable { mutableStateOf("") }
     var circleSearch by rememberSaveable { mutableStateOf("") }
     var cvSearch by rememberSaveable { mutableStateOf("") }
@@ -141,7 +150,7 @@ fun LibraryFilterSheet(
     val normalizedDraftSpec = remember(draftSpec) { draftSpec.filterOnly() }
     val isDirty = normalizedDraftSpec != normalizedAppliedSpec
 
-    Column(modifier = modifier.fillMaxWidth()) {
+    Column(modifier = modifier.fillMaxWidth().imePadding()) {
         LibraryFilterHeader(
             draftSpec = normalizedDraftSpec,
             isDirty = isDirty,
@@ -149,7 +158,8 @@ fun LibraryFilterSheet(
             onClose = onClose
         )
 
-        LazyColumn(
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(if (twoPane) 2 else 1),
             state = listState,
             modifier = Modifier
                 .weight(1f)
@@ -159,7 +169,7 @@ fun LibraryFilterSheet(
                 .withAddedBottomPadding(LocalBottomOverlayPadding.current),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 FilterSection(
                     title = "来源",
                     subtitle = sourceLabel(normalizedDraftSpec.source)
@@ -292,7 +302,7 @@ fun LibraryFilterSheet(
                 }
             }
 
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 PresetSectionHeader(onSavePreset = { showSavePreset = true })
             }
             if (presets.isEmpty()) {

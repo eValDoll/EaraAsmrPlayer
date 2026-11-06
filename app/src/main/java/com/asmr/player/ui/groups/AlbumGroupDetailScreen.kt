@@ -36,7 +36,6 @@ import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -68,6 +67,8 @@ import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.queryCachedTrackFileSize
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
+import com.asmr.player.ui.common.LocalTabletLayout
+import com.asmr.player.ui.common.collectAsStateWhileActive
 import com.asmr.player.ui.common.smoothScrollToTop
 import com.asmr.player.ui.common.reorderable.ItemPosition
 import com.asmr.player.ui.common.reorderable.ReorderableItem
@@ -126,24 +127,27 @@ fun AlbumGroupDetailScreen(
     title: String,
     onPlayMediaItems: (List<MediaItem>, Int) -> Unit,
     scrollToTopSignal: Long = 0L,
+    isDataActive: Boolean = true,
     viewModel: AlbumGroupDetailViewModel = hiltViewModel()
 ) {
     LaunchedEffect(groupId) {
         viewModel.setGroupId(groupId)
     }
-    val tracks by viewModel.tracks.collectAsStateWithLifecycle()
-    AlbumGroupDetailContent(
-        windowSizeClass = windowSizeClass,
-        title = title,
-        tracks = tracks,
-        onPlayMediaItems = onPlayMediaItems,
-        onRemoveTrack = viewModel::removeTrack,
-        onRemoveAlbum = viewModel::removeAlbum,
-        onMoveTrackToTop = viewModel::moveTrackToTop,
-        onMoveTrackToBottom = viewModel::moveTrackToBottom,
-        onSaveAlbumTrackOrder = viewModel::saveAlbumTrackOrder,
-        scrollToTopSignal = scrollToTopSignal,
-    )
+    val content by viewModel.content.collectAsStateWhileActive(isDataActive)
+    androidx.compose.runtime.key(groupId) {
+        AlbumGroupDetailContent(
+            windowSizeClass = windowSizeClass,
+            title = title,
+            tracks = if (content.groupId == groupId) content.tracks else emptyList(),
+            onPlayMediaItems = onPlayMediaItems,
+            onRemoveTrack = viewModel::removeTrack,
+            onRemoveAlbum = viewModel::removeAlbum,
+            onMoveTrackToTop = viewModel::moveTrackToTop,
+            onMoveTrackToBottom = viewModel::moveTrackToBottom,
+            onSaveAlbumTrackOrder = viewModel::saveAlbumTrackOrder,
+            scrollToTopSignal = scrollToTopSignal,
+        )
+    }
 }
 
 @Composable
@@ -209,7 +213,7 @@ internal fun AlbumGroupDetailContent(
         contentAlignment = Alignment.TopCenter
     ) {
         Column(
-            modifier = if (isCompact) {
+            modifier = if (isCompact || LocalTabletLayout.current.isTablet) {
                 Modifier.fillMaxSize()
             } else {
                 Modifier
@@ -236,7 +240,10 @@ internal fun AlbumGroupDetailContent(
                     contentPadding = PaddingValues(bottom = LocalBottomOverlayPadding.current)
                 ) {
                     item(key = GROUP_DETAIL_REORDER_SENTINEL_KEY) {
-                        Spacer(modifier = Modifier.height(1.dp))
+                        if (LocalTabletLayout.current.embedded) {
+                            Text(title, style = MaterialTheme.typography.titleMedium,
+                                color = colorScheme.textPrimary, modifier = Modifier.padding(16.dp))
+                        } else Spacer(modifier = Modifier.height(1.dp))
                     }
                     itemsIndexed(
                         items = localRows,

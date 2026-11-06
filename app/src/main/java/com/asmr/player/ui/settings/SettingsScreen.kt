@@ -1,5 +1,6 @@
 package com.asmr.player.ui.settings
 
+import com.asmr.player.ui.common.LocalTabletLayout
 import com.asmr.player.ui.common.LocalMainHeaderPadding
 import com.asmr.player.ui.common.DeferredPageItem
 
@@ -10,6 +11,8 @@ import android.provider.Settings
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.EnterTransition
+import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
@@ -176,21 +179,24 @@ fun SettingsScreen(
     onHorizontalControlInteractionChanged: (Boolean) -> Unit = {},
     onDetailPageChanged: (Boolean) -> Unit = {},
 ) {
+    val tabletLayout = LocalTabletLayout.current
+    val twoPane = tabletLayout.twoPane
     var selectedSection by rememberSaveable { mutableStateOf<SettingsSection?>(null) }
+    val effectiveSection = selectedSection ?: if (twoPane) SettingsSection.Appearance else null
     var retainedSection by remember { mutableStateOf(selectedSection) }
     val currentOnDetailPageChanged by rememberUpdatedState(onDetailPageChanged)
-    val localLibraryDataActive = isDataActive && selectedSection == SettingsSection.LocalLibrary
-    val blockedKeywordsDataActive = isDataActive && selectedSection == SettingsSection.BlockedKeywords
-    val appearanceDataActive = isDataActive && selectedSection == SettingsSection.Appearance
-    val playbackDataActive = isDataActive && selectedSection == SettingsSection.Playback
-    val lyricsDataActive = isDataActive && selectedSection == SettingsSection.Lyrics
-    val translationDataActive = isDataActive && selectedSection == SettingsSection.Translation
-    val supportStatusDataActive = isDataActive && selectedSection == SettingsSection.SupportStatus
-    val aboutDataActive = isDataActive && selectedSection == SettingsSection.About
-    val appCacheDataActive = isDataActive && selectedSection == SettingsSection.AppCache
+    val localLibraryDataActive = isDataActive && effectiveSection == SettingsSection.LocalLibrary
+    val blockedKeywordsDataActive = isDataActive && effectiveSection == SettingsSection.BlockedKeywords
+    val appearanceDataActive = isDataActive && effectiveSection == SettingsSection.Appearance
+    val playbackDataActive = isDataActive && effectiveSection == SettingsSection.Playback
+    val lyricsDataActive = isDataActive && effectiveSection == SettingsSection.Lyrics
+    val translationDataActive = isDataActive && effectiveSection == SettingsSection.Translation
+    val supportStatusDataActive = isDataActive && effectiveSection == SettingsSection.SupportStatus
+    val aboutDataActive = isDataActive && effectiveSection == SettingsSection.About
+    val appCacheDataActive = isDataActive && effectiveSection == SettingsSection.AppCache
 
-    LaunchedEffect(isActive, selectedSection) {
-        currentOnDetailPageChanged(isActive && selectedSection != null)
+    LaunchedEffect(isActive, selectedSection, twoPane) {
+        currentOnDetailPageChanged(isActive && !twoPane && selectedSection != null)
     }
     DisposableEffect(Unit) {
         onDispose { currentOnDetailPageChanged(false) }
@@ -236,8 +242,9 @@ fun SettingsScreen(
     val context = LocalContext.current
     val colorScheme = AsmrTheme.colorScheme
     val rootListState = rememberLazyListState()
-    val detailListState = rememberLazyListState()
-    val listState = if (selectedSection == null) rootListState else detailListState
+    val sectionListStates = remember { SettingsSection.entries.associateWith { androidx.compose.foundation.lazy.LazyListState() } }
+    val detailListState = sectionListStates.getValue(effectiveSection ?: retainedSection ?: SettingsSection.Appearance)
+    val listState = if (effectiveSection == null) rootListState else detailListState
     val segmentedButtonColors = SegmentedButtonDefaults.colors(
         activeContainerColor = colorScheme.primarySoft,
         activeContentColor = if (colorScheme.isDark) colorScheme.onPrimaryContainer else colorScheme.primaryStrong,
@@ -333,7 +340,7 @@ fun SettingsScreen(
 
     // 屏幕尺寸判断
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
-    BackHandler(enabled = isActive && selectedSection != null) {
+    BackHandler(enabled = isActive && !twoPane && selectedSection != null) {
         selectedSection = null
     }
     Scaffold(
@@ -343,8 +350,10 @@ fun SettingsScreen(
     ) { padding ->
         LaunchedEffect(isActive) {
             if (isActive) return@LaunchedEffect
-            selectedSection = null
-            retainedSection = null
+            if (!twoPane) {
+                selectedSection = null
+                retainedSection = null
+            }
             deepSeekApiKeyInput = ""
             rootListState.stopScroll(MutatePriority.PreventUserInput)
             detailListState.stopScroll(MutatePriority.PreventUserInput)
@@ -353,7 +362,7 @@ fun SettingsScreen(
             if (appCacheDataActive) viewModel.refreshAppCacheSize()
         }
         LaunchedEffect(selectedSection) {
-            if (selectedSection != null) detailListState.scrollToItem(0)
+            if (selectedSection != null && !twoPane) detailListState.scrollToItem(0)
         }
         LaunchedEffect(scrollToTopSignal) {
             if (scrollToTopSignal == 0L) return@LaunchedEffect
@@ -362,10 +371,11 @@ fun SettingsScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .padding(horizontal = tabletLayout.horizontalPadding),
             contentAlignment = Alignment.TopCenter
         ) {
-            val contentModifier = if (isCompact) {
+            val contentModifier = if (isCompact || tabletLayout.isTablet) {
                 Modifier.fillMaxSize()
             } else {
                 Modifier
@@ -375,7 +385,7 @@ fun SettingsScreen(
             }
             LazyColumn(
                 state = rootListState,
-                modifier = contentModifier,
+                modifier = if (twoPane) Modifier.align(Alignment.TopStart).width(tabletLayout.masterWidth).fillMaxHeight() else contentModifier,
                 flingBehavior = rememberCalmScrollableFlingBehavior(),
                 contentPadding = PaddingValues(start = SettingsPageHorizontalPadding, end = SettingsPageHorizontalPadding, top = LocalMainHeaderPadding.current + 10.dp, bottom = 10.dp)
                     .withAddedBottomPadding(LocalBottomOverlayPadding.current),
@@ -383,6 +393,7 @@ fun SettingsScreen(
             ) {
                 item(key = "settings_sections") {
                     SettingsSectionsPanel(
+                        selectedSection = if (twoPane) effectiveSection else null,
                         onSectionClick = { section ->
                             retainedSection = section
                             selectedSection = section
@@ -395,13 +406,13 @@ fun SettingsScreen(
             }
 
             AnimatedVisibility(
-                visible = selectedSection != null,
-                modifier = contentModifier,
-                enter = settingsDetailEnterTransition(),
-                exit = settingsDetailExitTransition(),
+                visible = effectiveSection != null,
+                modifier = if (twoPane) Modifier.fillMaxSize().padding(start = tabletLayout.masterWidth + 16.dp) else contentModifier,
+                enter = if (twoPane) EnterTransition.None else settingsDetailEnterTransition(),
+                exit = if (twoPane) ExitTransition.None else settingsDetailExitTransition(),
                 label = "settingsDetailTransition",
             ) {
-                val currentSection = retainedSection ?: return@AnimatedVisibility
+                val currentSection = effectiveSection ?: retainedSection ?: return@AnimatedVisibility
                 LazyColumn(
                     state = detailListState,
                     modifier = Modifier
@@ -415,6 +426,7 @@ fun SettingsScreen(
                     item(key = "detail_header:${currentSection.name}") {
                         SettingsDetailHeader(
                             section = currentSection,
+                            showBack = !twoPane,
                             onBack = { selectedSection = null },
                         )
                     }
@@ -2344,6 +2356,7 @@ private fun SearchBlockedKeywordChip(
 
 @Composable
 private fun SettingsSectionsPanel(
+    selectedSection: SettingsSection? = null,
     onSectionClick: (SettingsSection) -> Unit,
 ) {
     val colorScheme = AsmrTheme.colorScheme
@@ -2360,6 +2373,7 @@ private fun SettingsSectionsPanel(
                 ) {
                     SettingsSectionOption(
                         section = section,
+                        selected = section == selectedSection,
                         onClick = { onSectionClick(section) },
                     )
                 }
@@ -2377,12 +2391,15 @@ private fun SettingsSectionsPanel(
 @Composable
 private fun SettingsSectionOption(
     section: SettingsSection,
+    selected: Boolean,
     onClick: () -> Unit,
 ) {
     val colorScheme = AsmrTheme.colorScheme
     Row(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(RoundedCornerShape(10.dp))
+            .background(if (selected) colorScheme.primarySoft else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 14.dp, vertical = 10.dp)
             .testTag("settingsSection:${section.name}"),
@@ -2411,7 +2428,7 @@ private fun SettingsSectionOption(
                 text = section.description,
                 style = MaterialTheme.typography.bodySmall,
                 color = colorScheme.textSecondary,
-                maxLines = 1,
+                maxLines = if (LocalTabletLayout.current.twoPane) 2 else 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
@@ -2428,6 +2445,7 @@ private fun SettingsSectionOption(
 @Composable
 private fun SettingsDetailHeader(
     section: SettingsSection,
+    showBack: Boolean = true,
     onBack: () -> Unit,
 ) {
     val colorScheme = AsmrTheme.colorScheme
@@ -2437,7 +2455,7 @@ private fun SettingsDetailHeader(
             .padding(horizontal = 2.dp, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        IconButton(
+        if (showBack) IconButton(
             onClick = onBack,
             modifier = Modifier.testTag("settingsDetailBack"),
         ) {

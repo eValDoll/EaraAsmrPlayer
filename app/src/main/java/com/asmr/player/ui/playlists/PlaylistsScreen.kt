@@ -30,6 +30,10 @@ import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material3.*
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.background
+import com.asmr.player.ui.common.CollectionPaneLayout
+import com.asmr.player.ui.common.LocalTabletLayout
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -73,6 +77,7 @@ fun PlaylistsScreen(
     isDataActive: Boolean = isActive,
     onPlaylistClick: (PlaylistEntity) -> Unit,
     scrollToTopSignal: Long = 0L,
+    detailContent: (@Composable (PlaylistEntity) -> Unit)? = null,
     viewModel: PlaylistsViewModel = hiltViewModel()
 ) {
     val playlists by viewModel.playlists.collectAsStateWhileActive(isDataActive)
@@ -83,6 +88,9 @@ fun PlaylistsScreen(
 
     // 屏幕尺寸判断
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
+    val tabletLayout = LocalTabletLayout.current
+    var selectedId by rememberSaveable { mutableStateOf<Long?>(null) }
+    val selected = userPlaylists.firstOrNull { it.id == selectedId } ?: userPlaylists.firstOrNull()
 
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
@@ -103,7 +111,7 @@ fun PlaylistsScreen(
                 .padding(padding),
             contentAlignment = Alignment.TopCenter
         ) {
-            val contentModifier = if (isCompact) {
+            val contentModifier = if (isCompact || tabletLayout.isTablet) {
                 Modifier.fillMaxSize()
             } else {
                 Modifier
@@ -111,7 +119,15 @@ fun PlaylistsScreen(
                     .widthIn(max = 760.dp)
                     .fillMaxWidth()
             }
-            Box(modifier = contentModifier) {
+            CollectionPaneLayout(
+                modifier = contentModifier.padding(horizontal = tabletLayout.horizontalPadding),
+                hasDetail = selected != null && detailContent != null,
+                detail = {
+                    selected?.let { selected ->
+                        detailContent?.invoke(PlaylistEntity(id = selected.id, name = selected.name, category = selected.category, createdAt = selected.createdAt))
+                    }
+                },
+            ) {
                 if (userPlaylists.isEmpty()) {
                     EaraBrandedEmptyState(
                         sectionTitle = "我的列表",
@@ -140,7 +156,11 @@ fun PlaylistsScreen(
                             }
                             PlaylistRow(
                                 playlist = playlist,
-                                onClick = { onPlaylistClick(entity) },
+                                selected = tabletLayout.twoPane && selected?.id == entity.id,
+                                onClick = {
+                                    if (tabletLayout.twoPane && detailContent != null) selectedId = entity.id
+                                    else onPlaylistClick(entity)
+                                },
                                 onDelete = { viewModel.deletePlaylist(entity) },
                                 onRename = { newName -> viewModel.renamePlaylist(entity.id, newName) }
                             )
@@ -175,6 +195,7 @@ fun PlaylistsScreen(
 
 @Composable
 private fun PlaylistRow(
+    selected: Boolean = false,
     playlist: PlaylistStatsRow,
     onClick: () -> Unit,
     onDelete: () -> Unit,
@@ -188,6 +209,7 @@ private fun PlaylistRow(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
+            .background(if (selected) colorScheme.primarySoft else Color.Transparent)
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp)
     ) {
