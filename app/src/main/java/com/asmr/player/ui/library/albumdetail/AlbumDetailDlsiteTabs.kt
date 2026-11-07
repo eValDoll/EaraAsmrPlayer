@@ -1192,6 +1192,7 @@ internal fun AlbumDlsiteInfoBreadcrumbTab(
                         onSelect = { name -> onResourceSourceChange(AlbumResourceSource.valueOf(name)) },
                         modifier = Modifier.widthIn(min = 154.dp),
                         showLabel = false, flatTrigger = true, singleLineOptions = true,
+                        valueTextAlign = androidx.compose.ui.text.style.TextAlign.End,
                         tagPrefix = "album_resource_source"
                     )
                     IconButton(

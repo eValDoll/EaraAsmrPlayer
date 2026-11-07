@@ -45968,7 +45968,6 @@ SPLcom/asmr/player/data/settings/SettingsKeys;->getPLAY_MODE()Landroidx/datastor
 SPLcom/asmr/player/data/settings/SettingsKeys;->getRESUME_ON_OUTPUT_CONNECT()Landroidx/datastore/preferences/core/Preferences$Key;
 SPLcom/asmr/player/data/settings/SettingsKeys;->getSEARCH_VIEW_MODE()Landroidx/datastore/preferences/core/Preferences$Key;
 SPLcom/asmr/player/data/settings/SettingsKeys;->getSFW_HIDE_SYSTEM_CONTROLS()Landroidx/datastore/preferences/core/Preferences$Key;
-SPLcom/asmr/player/data/settings/SettingsKeys;->getSHOW_MINI_PLAYER_BAR()Landroidx/datastore/preferences/core/Preferences$Key;
 SPLcom/asmr/player/data/settings/SettingsKeys;->getSLEEP_TIMER_END_AT_MS()Landroidx/datastore/preferences/core/Preferences$Key;
 SPLcom/asmr/player/data/settings/SettingsKeys;->getUI_FX_CHANNEL_EXPANDED()Landroidx/datastore/preferences/core/Preferences$Key;
 SPLcom/asmr/player/data/settings/SettingsKeys;->getUI_FX_EQUALIZER_EXPANDED()Landroidx/datastore/preferences/core/Preferences$Key;
@@ -46000,7 +45999,6 @@ SPLcom/asmr/player/data/settings/SettingsRepository;->getPlayMode()Lkotlinx/coro
 SPLcom/asmr/player/data/settings/SettingsRepository;->getResumeOnOutputConnect()Lkotlinx/coroutines/flow/Flow;
 SPLcom/asmr/player/data/settings/SettingsRepository;->getSearchViewMode()Lkotlinx/coroutines/flow/Flow;
 SPLcom/asmr/player/data/settings/SettingsRepository;->getSfwHideSystemControls()Lkotlinx/coroutines/flow/Flow;
-SPLcom/asmr/player/data/settings/SettingsRepository;->getShowMiniPlayerBar()Lkotlinx/coroutines/flow/Flow;
 SPLcom/asmr/player/data/settings/SettingsRepository;->getSleepTimerEndAtMs()Lkotlinx/coroutines/flow/Flow;
 SPLcom/asmr/player/data/settings/SettingsRepository;->getSleepTimerLastDurationMin()Lkotlinx/coroutines/flow/Flow;
 SPLcom/asmr/player/data/settings/SettingsRepository;->loadPlaybackRuntimeSettings(Lkotlin/coroutines/Continuation;)Ljava/lang/Object;

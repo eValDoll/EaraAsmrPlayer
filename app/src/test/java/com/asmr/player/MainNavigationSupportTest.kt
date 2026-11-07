@@ -115,42 +115,6 @@ class MainNavigationSupportTest {
     }
 
     @Test
-    fun shouldKeepVideoOutputEnabled_keepsDecoderWarmWhilePlaybackUiOwnsVideo() {
-        assertEquals(
-            true,
-            shouldKeepVideoOutputEnabled(
-                currentItemIsVideo = true,
-                miniPlayerEnabled = true,
-                nowPlayingVisible = false
-            )
-        )
-        assertEquals(
-            true,
-            shouldKeepVideoOutputEnabled(
-                currentItemIsVideo = true,
-                miniPlayerEnabled = false,
-                nowPlayingVisible = true
-            )
-        )
-        assertEquals(
-            false,
-            shouldKeepVideoOutputEnabled(
-                currentItemIsVideo = true,
-                miniPlayerEnabled = false,
-                nowPlayingVisible = false
-            )
-        )
-        assertEquals(
-            false,
-            shouldKeepVideoOutputEnabled(
-                currentItemIsVideo = false,
-                miniPlayerEnabled = true,
-                nowPlayingVisible = false
-            )
-        )
-    }
-
-    @Test
     fun computePrimaryNavSelectionProgresses_blendsCurrentAndNeighborPages() {
         val result = computePrimaryNavSelectionProgresses(
             pagerRoutes = listOf("library", "search", "downloads"),

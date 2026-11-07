@@ -174,7 +174,6 @@ class MainActivity : ComponentActivity() {
                 initialValue = NowPlayingLyricsSettings()
             )
             val lyricsPageSettings by settingsDataStore.lyricsPageSettings.collectAsStateWithLifecycle(initialValue = LyricsPageSettings())
-            val showMiniPlayerBar by settingsRepository.showMiniPlayerBar.collectAsStateWithLifecycle(initialValue = true)
             val neutral = remember(mode) { neutralPaletteForMode(mode) }
             val cacheManager = remember(context.applicationContext) {
                 dagger.hilt.android.EntryPointAccessors.fromApplication(
@@ -464,7 +463,6 @@ class MainActivity : ComponentActivity() {
                         onShowQueue = { overlaySheet = OverlaySheet.Queue },
                         onShowSleepTimer = { overlaySheet = OverlaySheet.SleepTimer },
                         onContentReady = { contentReady = true },
-                        showMiniPlayerBar = showMiniPlayerBar,
                         playerBackgroundMode = playerBackgroundMode,
                         coverBackgroundEnabled = coverBackgroundEnabled,
                         dynamicFlowingBackgroundEnabled = dynamicFlowingBackgroundEnabled,

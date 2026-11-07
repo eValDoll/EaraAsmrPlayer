@@ -234,15 +234,6 @@ internal fun resolveMainRequestedOrientation(
     else -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
 }
 
-internal fun shouldKeepVideoOutputEnabled(
-    currentItemIsVideo: Boolean,
-    miniPlayerEnabled: Boolean,
-    nowPlayingVisible: Boolean
-): Boolean {
-    return currentItemIsVideo &&
-        (miniPlayerEnabled || nowPlayingVisible)
-}
-
 internal fun MediaItem?.toThemeMediaSource(): ThemeMediaSource {
     val item = this ?: return ThemeMediaSource()
     val metadata = item.mediaMetadata

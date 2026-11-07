@@ -141,7 +141,7 @@ private enum class SettingsSection(
     LocalLibrary("本地库", "管理扫描目录、刷新本地内容与同步元数据", { Icons.Rounded.Folder }),
     BlockedKeywords("屏蔽词", "过滤搜索结果中不想看到的关键词", { Icons.Rounded.Block }),
     Appearance("外观", "调整主题、主题色与播放页背景", { Icons.Rounded.Palette }),
-    Playback("播放设置", "管理迷你播放栏、音频输出与淡入淡出", { Icons.Rounded.Headphones }),
+    Playback("播放设置", "管理音频输出与淡入淡出", { Icons.Rounded.Headphones }),
     Lyrics("歌词", "配置歌词页与悬浮歌词的显示效果", { Icons.Rounded.Lyrics }),
     Translation("翻译配置", "管理页面翻译、字幕模型与翻译 API", { Icons.Rounded.Translate }),
     SupportStatus("服务状态与代理", "测试服务连通性并配置代理与 DNS", { Icons.Rounded.Router }),
@@ -223,7 +223,6 @@ fun SettingsScreen(
     val playFadeInMs by viewModel.playFadeInMs.collectAsStateWhileActive(playbackDataActive)
     val pauseFadeOutMs by viewModel.pauseFadeOutMs.collectAsStateWhileActive(playbackDataActive)
     val sfwHideSystemControls by viewModel.sfwHideSystemControls.collectAsStateWhileActive(playbackDataActive)
-    val showMiniPlayerBar by viewModel.showMiniPlayerBar.collectAsStateWhileActive(playbackDataActive)
     val searchBlockedKeywords by viewModel.searchBlockedKeywords.collectAsStateWhileActive(blockedKeywordsDataActive)
     val networkRouteSettings by viewModel.networkRouteSettings.collectAsStateWhileActive(supportStatusDataActive)
     val appCacheState by viewModel.appCacheState.collectAsStateWhileActive(appCacheDataActive)
@@ -832,16 +831,6 @@ fun SettingsScreen(
                 if (currentSection == SettingsSection.Playback) {
                     item(key = "group:playback") {
                         SettingsDetailCard {
-                            SettingsToggleRow(
-                                text = "迷你播放栏开关",
-                                checked = showMiniPlayerBar,
-                                onCheckedChange = viewModel::setShowMiniPlayerBar,
-                                infoKey = "show_mini_player_bar",
-                                infoTitle = "迷你播放栏",
-                                infoText = "关闭后，应用底部的迷你播放栏会隐藏，同时页面底部不会再为它预留空白。",
-                                activeTipKey = activeTipKey,
-                                onToggleTip = { key -> activeTipKey = if (activeTipKey == key) null else key }
-                            )
                             SettingsToggleRow(
                                 text = "SFW开关",
                                 checked = sfwHideSystemControls,

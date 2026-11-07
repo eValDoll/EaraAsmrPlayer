@@ -30,6 +30,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -70,6 +71,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.rememberTextMeasurer
+import androidx.compose.ui.text.TextStyle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
@@ -167,7 +172,7 @@ fun ListeningCalendarScreen(
                     start = 16.dp,
                     top = LocalMainHeaderPadding.current + 16.dp,
                     end = 16.dp,
-                    bottom = bottomOverlayPadding + 24.dp
+                    bottom = if (twoPane) 0.dp else bottomOverlayPadding + 24.dp
                 ),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -217,13 +222,19 @@ fun ListeningCalendarScreen(
             if (twoPane) {
                 Row(Modifier.weight(1f).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(24.dp)) {
                     Column(
-                        Modifier.weight(1.2f).fillMaxHeight().verticalScroll(rememberScrollState()),
+                        Modifier.weight(1.2f).fillMaxHeight()
+                            .verticalScroll(rememberScrollState())
+                            .padding(bottom = bottomOverlayPadding + 24.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
                     ) {
                         summaryContent()
                         heatmapContent()
                     }
-                    Column(Modifier.weight(1f).fillMaxHeight().verticalScroll(rememberScrollState())) {
+                    Column(
+                        Modifier.weight(1f).fillMaxHeight()
+                            .verticalScroll(rememberScrollState())
+                            .padding(bottom = bottomOverlayPadding + 24.dp)
+                    ) {
                         timelineContent()
                     }
                 }
@@ -542,19 +553,41 @@ private fun SummaryCell(
         colorScheme.onSurface.copy(alpha = 0.08f)
     }
     val shape = RoundedCornerShape(14.dp)
+    val density = LocalDensity.current
+    val textMeasurer = rememberTextMeasurer()
+    val valueStyle = summaryValueStyle(value)
+    val comparisonStyle = comparisonHeadlineStyle(comparisonDisplay?.headline.orEmpty())
+    val captionStyle = MaterialTheme.typography.labelSmall.copy(fontSize = 9.sp, lineHeight = 11.sp)
+    val labelStyle = MaterialTheme.typography.labelSmall.copy(fontSize = 10.sp)
+    val textWidths = remember(value, label, comparisonDisplay, textMeasurer, valueStyle, comparisonStyle, captionStyle, labelStyle) {
+        fun width(text: String, style: TextStyle) = textMeasurer.measure(
+            text, style, softWrap = false, maxLines = 1
+        ).size.width
+        Triple(
+            width(value, valueStyle),
+            width(label, labelStyle),
+            comparisonDisplay?.let { maxOf(width(it.headline, comparisonStyle), width(it.caption, captionStyle)) } ?: 0
+        )
+    }
+    val valueWidth = with(density) { textWidths.first.toDp() }
+    val labelWidth = with(density) { textWidths.second.toDp() }
+    val comparisonWidth = with(density) { (textWidths.third + 1).toDp() }
     BoxWithConstraints(
         modifier = modifier
+            .testTag("listening_summary_$label")
             .clip(shape)
             .background(containerColor)
             .border(BorderStroke(1.dp, borderColor), shape)
-            .height(72.dp)
-            .padding(horizontal = 8.dp, vertical = 7.dp)
+            .heightIn(min = 72.dp)
+            .padding(horizontal = 8.dp, vertical = 7.dp),
+        contentAlignment = Alignment.CenterStart
     ) {
-        val useStackedLayout = maxWidth < 170.dp
+        val availableWidth = maxWidth
+        val useStackedLayout = availableWidth < 31.dp + maxOf(valueWidth, labelWidth) + comparisonWidth
         if (useStackedLayout) {
             Column(
-                modifier = Modifier.fillMaxSize(),
-                verticalArrangement = Arrangement.SpaceBetween
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -562,27 +595,21 @@ private fun SummaryCell(
                     horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
                     SummaryIcon(icon = icon, colorScheme = colorScheme, size = 15.dp)
-                    SummaryValueText(
-                        value = value,
-                        colorScheme = colorScheme,
-                        modifier = Modifier.weight(1f)
-                    )
+                    SummaryValueText(value = value, colorScheme = colorScheme, modifier = Modifier.weight(1f))
                 }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.Bottom,
-                    horizontalArrangement = Arrangement.spacedBy(5.dp)
-                ) {
-                    SummaryLabelText(
-                        label = label,
-                        colorScheme = colorScheme,
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (comparisonDisplay != null) {
-                        AnimatedComparisonSummary(
-                            display = comparisonDisplay,
-                            modifier = Modifier.widthIn(min = 48.dp, max = 72.dp)
-                        )
+                if (comparisonDisplay != null && labelWidth + 5.dp + comparisonWidth > availableWidth) {
+                    SummaryLabelText(label = label, colorScheme = colorScheme)
+                    AnimatedComparisonSummary(display = comparisonDisplay, modifier = Modifier.fillMaxWidth())
+                } else {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.Bottom,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp)
+                    ) {
+                        SummaryLabelText(label = label, colorScheme = colorScheme, modifier = Modifier.weight(1f))
+                        if (comparisonDisplay != null) {
+                            AnimatedComparisonSummary(display = comparisonDisplay, modifier = Modifier.width(comparisonWidth))
+                        }
                     }
                 }
             }
@@ -598,10 +625,7 @@ private fun SummaryCell(
                     SummaryLabelText(label = label, colorScheme = colorScheme)
                 }
                 if (comparisonDisplay != null) {
-                    AnimatedComparisonSummary(
-                        display = comparisonDisplay,
-                        modifier = Modifier.widthIn(min = 50.dp, max = 74.dp)
-                    )
+                    AnimatedComparisonSummary(display = comparisonDisplay, modifier = Modifier.width(comparisonWidth))
                 }
             }
         }
@@ -623,23 +647,32 @@ private fun SummaryIcon(
 }
 
 @Composable
+private fun summaryValueStyle(value: String): TextStyle = MaterialTheme.typography.titleSmall.copy(
+    fontWeight = FontWeight.Bold,
+    fontSize = when {
+        value.length >= 8 -> 12.sp
+        value.length >= 7 -> 13.sp
+        else -> 14.sp
+    },
+    fontFeatureSettings = "tnum"
+)
+
+@Composable
+private fun comparisonHeadlineStyle(headline: String): TextStyle = MaterialTheme.typography.titleSmall.copy(
+    fontWeight = FontWeight.Bold,
+    fontSize = if (headline.length >= 8) 12.sp else 14.sp,
+    fontFeatureSettings = "tnum"
+)
+
+@Composable
 private fun SummaryValueText(
     value: String,
     colorScheme: AsmrColorScheme,
     modifier: Modifier = Modifier
 ) {
-    val fontSize = when {
-        value.length >= 8 -> 12.sp
-        value.length >= 7 -> 13.sp
-        else -> 14.sp
-    }
     Text(
         text = value,
-        style = MaterialTheme.typography.titleSmall.copy(
-            fontWeight = FontWeight.Bold,
-            fontSize = fontSize,
-            fontFeatureSettings = "tnum"
-        ),
+        style = summaryValueStyle(value),
         color = colorScheme.textPrimary,
         maxLines = 1,
         softWrap = false,
@@ -695,11 +728,7 @@ private fun AnimatedComparisonSummary(
         ) {
             Text(
                 text = targetDisplay.headline,
-                style = MaterialTheme.typography.titleSmall.copy(
-                    fontWeight = FontWeight.Bold,
-                    fontSize = if (targetDisplay.headline.length >= 8) 12.sp else 14.sp,
-                    fontFeatureSettings = "tnum"
-                ),
+                style = comparisonHeadlineStyle(targetDisplay.headline),
                 color = targetDisplay.color,
                 textAlign = TextAlign.End,
                 maxLines = 1,
@@ -725,7 +754,7 @@ private fun AnimatedComparisonSummary(
 }
 
 @Composable
-private fun HeatmapSection(
+internal fun HeatmapSection(
     days: List<HeatmapDay>,
     selectedDate: String?,
     availableYears: List<Int>,
@@ -764,7 +793,9 @@ private fun HeatmapSection(
             BoxWithConstraints(Modifier.fillMaxWidth()) {
                 val wrap = LocalTabletLayout.current.twoPane
                 val weeksPerBand = if (wrap) {
-                    ((maxWidth + CELL_GAP) / (CELL_SIZE + CELL_GAP)).toInt().coerceAtLeast(1)
+                    with(LocalDensity.current) {
+                        ((constraints.maxWidth + CELL_GAP.roundToPx()) / (CELL_SIZE.roundToPx() + CELL_GAP.roundToPx())).coerceAtLeast(1)
+                    }
                 } else columns.size.coerceAtLeast(1)
                 val bands = remember(columns, weeksPerBand) { columns.chunked(weeksPerBand) }
                 val scrollState = rememberScrollState()
@@ -792,8 +823,8 @@ private fun HeatmapSection(
                                     DeferredPageItem(
                                         placeholder = {
                                             Spacer(Modifier
-                                                .width(CELL_SIZE * group.size + CELL_GAP * (group.size - 1))
-                                                .height(CELL_SIZE * 7 + CELL_GAP * 6))
+                                                .width(heatmapSpanWidth(group.size))
+                                                .height(heatmapSpanWidth(7)))
                                         }
                                     ) {
                                         group.forEach { column ->
@@ -963,6 +994,7 @@ private fun HeatmapCell(
         Box(
             modifier = Modifier
                 .size(CELL_SIZE)
+                .testTag("heatmap_day_${day.date}")
                 .clip(shape)
                 .background(color)
                 .then(
@@ -1199,9 +1231,12 @@ internal fun buildHeatmapMonthLabels(columns: List<List<HeatmapDay?>>): List<Hea
     }
 }
 
+@Composable
 private fun heatmapSpanWidth(span: Int): Dp {
     val safeSpan = span.coerceAtLeast(1)
-    return CELL_SIZE * safeSpan.toFloat() + CELL_GAP * (safeSpan - 1).toFloat()
+    return with(LocalDensity.current) {
+        (CELL_SIZE.roundToPx() * safeSpan + CELL_GAP.roundToPx() * (safeSpan - 1)).toDp()
+    }
 }
 
 private fun heatColorForLevel(level: Int, colorScheme: AsmrColorScheme): Color {

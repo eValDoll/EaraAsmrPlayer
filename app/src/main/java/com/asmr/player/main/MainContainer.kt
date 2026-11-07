@@ -814,7 +814,6 @@ fun MainContainer(
     onShowQueue: () -> Unit,
     onShowSleepTimer: () -> Unit,
     onContentReady: () -> Unit,
-    showMiniPlayerBar: Boolean,
     playerBackgroundMode: PlayerBackgroundMode,
     coverBackgroundEnabled: Boolean,
     dynamicFlowingBackgroundEnabled: Boolean,
@@ -1099,11 +1098,7 @@ fun MainContainer(
     }
     val playerBackdropVisible = nowPlayingVisible
     val sharedPlayerIsVideo = sharedPlayerItem.isVideoPlaybackItem()
-    val videoOutputEnabled = shouldKeepVideoOutputEnabled(
-        currentItemIsVideo = sharedPlayerIsVideo,
-        miniPlayerEnabled = showMiniPlayerBar,
-        nowPlayingVisible = nowPlayingVisible
-    )
+    val videoOutputEnabled = sharedPlayerIsVideo
     DisposableEffect(playerViewModel, videoOutputEnabled) {
         playerViewModel.setVideoOutputEnabled(videoOutputEnabled)
         onDispose {
@@ -1610,7 +1605,7 @@ fun MainContainer(
     }
 
     Box(Modifier.fillMaxSize()) {
-        val miniPlayerHasContent = showMiniPlayerBar && hasCurrentMediaItem
+        val miniPlayerHasContent = hasCurrentMediaItem
         val miniPlayerVisible = miniPlayerHasContent && !nowPlayingVisible
         val bottomChromeVisible = !nowPlayingVisible
         // 专辑详情始终覆盖在主页面之上；让底层顶栏/页面 active 标记在整个详情生命周期内
