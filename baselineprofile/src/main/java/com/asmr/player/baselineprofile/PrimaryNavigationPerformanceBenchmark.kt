@@ -208,6 +208,8 @@ private fun UiDevice.preparePrimaryNavigationSource(sourceLabel: String) {
 }
 
 private fun UiDevice.ensurePrimaryNavigationExpanded(currentLabel: String) {
+    // The tablet rail is always expanded; its selected Tab has no accessibility click action.
+    if (findObject(By.res("tabletNavigation:$currentLabel")) != null) return
     val currentPage = waitForPrimaryNavigationIcon(currentLabel)
     // Expands a collapsed pill; an expanded pill returns the current page to its top.
     clickPrimaryNavigationIcon(currentPage)
