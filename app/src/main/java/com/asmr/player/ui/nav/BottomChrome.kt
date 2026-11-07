@@ -34,13 +34,13 @@ import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material.icons.rounded.SwapHoriz
 import androidx.compose.material.icons.rounded.Whatshot
-import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -56,7 +56,6 @@ import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
@@ -760,23 +759,15 @@ private fun BottomNavItemChip(
     val colorScheme = AsmrTheme.colorScheme
     val targetSelectedProgress = selectedProgress.coerceIn(0f, 1f)
     val resolvedSelectedProgress = if (animateSelection) {
-        val progress by animateFloatAsState(
+        animateFloatAsState(
             targetValue = targetSelectedProgress,
-            animationSpec = tween(durationMillis = 120),
+            animationSpec = tween(durationMillis = 280),
             label = "bottomNavSelection",
         )
-        progress
     } else {
-        targetSelectedProgress
+        rememberUpdatedState(targetSelectedProgress)
     }
     val activeContainer = colorScheme.primarySoft.copy(alpha = if (colorScheme.isDark) 0.52f else 0.95f)
-    val contentColor = lerp(colorScheme.textSecondary, colorScheme.primaryStrong, resolvedSelectedProgress)
-    val containerColor = resolveBottomNavItemContainerColor(
-        activeContainer = activeContainer,
-        selectedProgress = resolvedSelectedProgress
-    )
-    val iconScale = 1f + (0.16f * resolvedSelectedProgress)
-    val glowAlpha = resolvedSelectedProgress
     val glowSize = metrics.glowExpandedSize +
         (metrics.glowCollapsedSize - metrics.glowExpandedSize) * collapseProgress.coerceIn(0f, 1f)
     val glowColor = colorScheme.primaryStrong.copy(alpha = if (colorScheme.isDark) 0.22f else 0.18f)
@@ -788,18 +779,18 @@ private fun BottomNavItemChip(
             .testTag("bottomNavItem:${item.route}"),
         contentAlignment = Alignment.Center
     ) {
-        if (glowAlpha > 0.001f) {
-            Box(
-                modifier = Modifier
-                    .size(glowSize)
-                    .graphicsLayer { alpha = glowAlpha }
-                    .background(glowColor, CircleShape)
-            )
-        }
+        Box(
+            modifier = Modifier
+                .size(glowSize)
+                .graphicsLayer { alpha = resolvedSelectedProgress.value }
+                .background(glowColor, CircleShape)
+        )
         Box(
             modifier = Modifier
                 .size(metrics.chipSize)
-                .background(containerColor, CircleShape)
+                .drawBehind {
+                    drawCircle(resolveBottomNavItemContainerColor(activeContainer, resolvedSelectedProgress.value))
+                }
                 .clip(CircleShape)
                 // ElevatedCard's state layer can briefly show a polygonal highlight during
                 // selection transitions on some devices. Use a plain circular surface instead.
@@ -827,16 +818,12 @@ private fun BottomNavItemChip(
                 },
                 label = "bottomNavItemIcon"
             ) { targetItem ->
-                Icon(
-                    imageVector = targetItem.icon,
-                    contentDescription = targetItem.label,
-                    modifier = Modifier
-                        .size(metrics.iconSize)
-                        .graphicsLayer {
-                            scaleX = iconScale
-                            scaleY = iconScale
-                        },
-                    tint = contentColor
+                AnimatedNavigationIcon(
+                    icon = targetItem.icon,
+                    route = targetItem.route,
+                    label = targetItem.label,
+                    selectionProgress = { resolvedSelectedProgress.value },
+                    modifier = Modifier.size(metrics.iconSize),
                 )
             }
         }

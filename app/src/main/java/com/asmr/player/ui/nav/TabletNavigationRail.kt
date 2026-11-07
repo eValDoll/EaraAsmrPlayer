@@ -1,11 +1,12 @@
 package com.asmr.player.ui.nav
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -22,7 +23,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -76,24 +76,30 @@ fun TabletNavigationRail(
             verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.Bottom),
         ) {
             navItems.forEach { item ->
-                RailItem(item.label, item.icon, activeRoute == item.route) { onNavigate(item.route) }
+                RailItem(item, activeRoute == item.route) { onNavigate(item.route) }
             }
         }
     }
 }
 
 @Composable
-private fun RailItem(label: String, icon: ImageVector, selected: Boolean, onClick: () -> Unit) {
+private fun RailItem(item: BottomChromeNavItem, selected: Boolean, onClick: () -> Unit) {
     val colors = AsmrTheme.colorScheme
     val tint = if (selected) colors.primaryStrong else colors.textSecondary
+    val selectionProgress = animateFloatAsState(
+        targetValue = if (selected) 1f else 0f,
+        animationSpec = tween(durationMillis = 280),
+        label = "tabletNavSelection",
+    )
     Column(
         Modifier.fillMaxWidth().heightIn(min = 56.dp)
-            .testTag("tabletNavigation:$label")
+            .testTag("tabletNavigation:${item.label}")
             .semantics { this.selected = selected }
             .clickable(role = Role.Tab, onClick = onClick)
             .drawBehind {
-                if (selected) drawRoundRect(
-                    tint, topLeft = Offset(size.width - 3.dp.toPx(), (size.height - 24.dp.toPx()) / 2),
+                drawRoundRect(
+                    colors.primaryStrong.copy(alpha = selectionProgress.value),
+                    topLeft = Offset(size.width - 3.dp.toPx(), (size.height - 24.dp.toPx()) / 2),
                     size = Size(3.dp.toPx(), 24.dp.toPx()), cornerRadius = CornerRadius(1.5.dp.toPx()),
                 )
             }
@@ -101,8 +107,14 @@ private fun RailItem(label: String, icon: ImageVector, selected: Boolean, onClic
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
-        Text(label, color = tint,
+        AnimatedNavigationIcon(
+            icon = item.icon,
+            route = item.route,
+            label = null,
+            selectionProgress = { selectionProgress.value },
+            modifier = Modifier.size(24.dp),
+        )
+        Text(item.label, color = tint,
             modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
             style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp, lineHeight = 14.sp),
             fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
