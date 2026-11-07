@@ -2,6 +2,9 @@ package com.asmr.player.ui.playlists
 
 import com.asmr.player.ui.common.formatStoredCv
 import com.asmr.player.util.Formatting
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import com.asmr.player.ui.common.LocalTabletLayout
 import com.asmr.player.ui.common.LocalMainHeaderPadding
 
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -9,6 +12,12 @@ import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.stopScroll
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -26,6 +35,7 @@ import androidx.compose.material.icons.automirrored.rounded.QueueMusic
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
@@ -178,6 +188,8 @@ internal fun PlaylistDetailContent(
             localItems.map { item -> item.toPlaybackEntity() }
         }
     }
+    val tabletLayout = LocalTabletLayout.current
+    val twoPane = tabletLayout.twoPane
     val isCompact = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
     val colorScheme = AsmrTheme.colorScheme
     val draggedItemShape = RoundedCornerShape(18.dp)
@@ -202,7 +214,7 @@ internal fun PlaylistDetailContent(
                 .padding(padding),
             contentAlignment = Alignment.TopCenter
         ) {
-            val contentModifier = if (isCompact) {
+            val contentModifier = if (isCompact || LocalTabletLayout.current.isTablet) {
                 Modifier.fillMaxSize()
             } else {
                 Modifier
@@ -219,15 +231,8 @@ internal fun PlaylistDetailContent(
                     contentPadding = PaddingValues(top = LocalMainHeaderPadding.current, bottom = LocalBottomOverlayPadding.current + 88.dp)
                 )
             } else {
-                LazyColumn(
-                    state = listState,
-                    modifier = contentModifier
-                        .reorderable(reorderState),
-                    flingBehavior = rememberCalmScrollableFlingBehavior(),
-                    contentPadding = PaddingValues(top = LocalMainHeaderPadding.current, bottom = LocalBottomOverlayPadding.current)
-                ) {
-                    item(key = PLAYLIST_DETAIL_HERO_KEY, contentType = "playlistHero") {
-                        PlaylistDetailHero(
+                val hero: @Composable () -> Unit = {
+                    PlaylistDetailHero(
                             items = localItems,
                             playbackHistory = playbackHistory,
                             playback = playback,
@@ -236,6 +241,30 @@ internal fun PlaylistDetailContent(
                                 onResumeAll(playItems, item.toPlaybackEntity(), positionMs)
                             }
                         )
+                }
+                Row(contentModifier, horizontalArrangement = Arrangement.spacedBy(if (twoPane) 24.dp else 0.dp)) {
+                    if (twoPane) {
+                        Column(
+                            Modifier.width((tabletLayout.width * 0.34f).coerceIn(260.dp, 380.dp))
+                                .fillMaxHeight().verticalScroll(rememberScrollState())
+                                .padding(top = LocalMainHeaderPadding.current, bottom = LocalBottomOverlayPadding.current),
+                        ) {
+                            if (!isFavorites) {
+                                Text(title, style = MaterialTheme.typography.titleLarge,
+                                    color = colorScheme.textPrimary, modifier = Modifier.padding(16.dp))
+                            }
+                            hero()
+                        }
+                    }
+                LazyColumn(
+                    state = listState,
+                    modifier = Modifier.weight(1f).fillMaxHeight()
+                        .reorderable(reorderState),
+                    flingBehavior = rememberCalmScrollableFlingBehavior(),
+                    contentPadding = PaddingValues(top = LocalMainHeaderPadding.current, bottom = LocalBottomOverlayPadding.current)
+                ) {
+                    item(key = PLAYLIST_DETAIL_HERO_KEY, contentType = "playlistHero") {
+                        if (!twoPane) hero() else Spacer(Modifier.height(1.dp))
                     }
                     itemsIndexed(
                         items = localItems,
@@ -268,6 +297,7 @@ internal fun PlaylistDetailContent(
                             )
                         }
                     }
+                }
                 }
             }
         }

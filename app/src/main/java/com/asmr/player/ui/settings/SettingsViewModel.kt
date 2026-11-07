@@ -246,9 +246,6 @@ class SettingsViewModel @Inject constructor(
     val sfwHideSystemControls: StateFlow<Boolean> = settingsRepository.sfwHideSystemControls
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
 
-    val showMiniPlayerBar: StateFlow<Boolean> = settingsRepository.showMiniPlayerBar
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
-
     val searchBlockedKeywords: StateFlow<List<String>> = settingsRepository.searchBlockedKeywords
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
@@ -370,10 +367,6 @@ class SettingsViewModel @Inject constructor(
 
     fun setSfwHideSystemControls(enabled: Boolean) {
         viewModelScope.launch { settingsRepository.setSfwHideSystemControls(enabled) }
-    }
-
-    fun setShowMiniPlayerBar(enabled: Boolean) {
-        viewModelScope.launch { settingsRepository.setShowMiniPlayerBar(enabled) }
     }
 
     fun addSearchBlockedKeyword(keyword: String) {

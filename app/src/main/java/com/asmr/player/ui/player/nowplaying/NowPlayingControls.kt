@@ -126,148 +126,140 @@ internal fun PlaybackControls(
         }
     }
 
-    val controlsContainerModifier = modifier
-        .fillMaxWidth()
-        .padding(bottom = bottomPadding)
-    val landscapeActionSpacing = if (compactLayout) 2.dp else 4.dp
-    val landscapeCoreSpacing = if (compactLayout) 2.dp else 10.dp
-    val landscapeCoreEndPadding = if (compactLayout) 0.dp else 16.dp
-
-    if (landscapeControls && showActionRow) {
-        BoxWithConstraints(modifier = controlsContainerModifier) {
-            val adaptiveCoreSpacing = if (compactLayout) {
-                phoneLandscapeCoreButtonSpacing(
-                    availableWidth = maxWidth,
-                    actionButtonSize = actionButtonSize,
-                    actionSpacing = landscapeActionSpacing,
-                    coreButtonSize = coreButtonSize,
-                    playButtonSize = playButtonSize
-                )
-            } else {
-                landscapeCoreSpacing
-            }
-            Row(
-                modifier = Modifier.fillMaxSize(),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    modifier = Modifier.then(actionRowModifier),
-                    horizontalArrangement = Arrangement.spacedBy(landscapeActionSpacing),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    PlaybackActionButtons(
-                        playback = playback,
-                        isFavorite = isFavorite,
-                        viewModel = viewModel,
-                        onShowPlaylistPicker = onShowPlaylistPicker,
-                        onShowEqualizer = onShowEqualizer,
-                        onManageTags = onManageTags,
-                        sliceUiState = sliceUiState,
-                        actionButtonSize = actionButtonSize,
-                        actionIconSize = actionIconSize,
-                        landscapeControls = true,
-                        contentColor = contentColor
-                    )
-                }
-                Spacer(modifier = Modifier.weight(1f))
-                Row(
-                    modifier = Modifier
-                        .then(coreControlsModifier)
-                        .padding(end = landscapeCoreEndPadding),
-                    horizontalArrangement = Arrangement.spacedBy(adaptiveCoreSpacing),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    PlaybackCoreButtons(
-                        playback = playback,
-                        viewModel = viewModel,
-                        isPlaying = isPlayingEffective,
-                        onTogglePlay = {
-                            val shouldPlay = nextPlaybackRequest(
-                                optimisticIsPlaying = optimisticIsPlaying,
-                                playWhenReady = playback.playWhenReady
-                            )
-                            optimisticIsPlaying = shouldPlay
-                            if (shouldPlay) viewModel.play() else viewModel.pause()
-                        },
-                        coreButtonSize = coreButtonSize,
-                        modeIconSize = modeIconSize,
-                        skipIconSize = skipIconSize,
-                        playButtonSize = playButtonSize,
-                        playIconSize = playIconSize,
-                        contentColor = contentColor
-                    )
-                }
-            }
-        }
-    } else {
-        Column(
-            modifier = controlsContainerModifier,
-            verticalArrangement = Arrangement.spacedBy(
-                if (showActionRow) {
-                    if (compactLayout) 8.dp else 20.dp
-                } else {
-                    12.dp
-                }
+    PlaybackControlsLayout(
+        modifier = modifier.padding(bottom = bottomPadding),
+        landscapeControls = landscapeControls,
+        compactLayout = compactLayout,
+        showActionRow = showActionRow,
+        actionButtonSize = actionButtonSize,
+        coreButtonSize = coreButtonSize,
+        playButtonSize = playButtonSize,
+        actionRowModifier = actionRowModifier,
+        coreControlsModifier = coreControlsModifier,
+        actions = {
+            PlaybackActionButtons(
+                playback = playback,
+                isFavorite = isFavorite,
+                viewModel = viewModel,
+                onShowPlaylistPicker = onShowPlaylistPicker,
+                onShowEqualizer = onShowEqualizer,
+                onManageTags = onManageTags,
+                sliceUiState = sliceUiState,
+                actionButtonSize = actionButtonSize,
+                actionIconSize = actionIconSize,
+                landscapeControls = landscapeControls,
+                contentColor = contentColor,
             )
-        ) {
-            if (showActionRow) {
+        },
+        core = {
+            PlaybackCoreButtons(
+                playback = playback,
+                viewModel = viewModel,
+                isPlaying = isPlayingEffective,
+                onTogglePlay = {
+                    val shouldPlay = nextPlaybackRequest(
+                        optimisticIsPlaying = optimisticIsPlaying,
+                        playWhenReady = playback.playWhenReady,
+                    )
+                    optimisticIsPlaying = shouldPlay
+                    if (shouldPlay) viewModel.play() else viewModel.pause()
+                },
+                coreButtonSize = coreButtonSize,
+                modeIconSize = modeIconSize,
+                skipIconSize = skipIconSize,
+                playButtonSize = playButtonSize,
+                playIconSize = playIconSize,
+                contentColor = contentColor,
+            )
+        },
+    )
+}
+
+@Composable
+internal fun PlaybackControlsLayout(
+    landscapeControls: Boolean,
+    compactLayout: Boolean,
+    showActionRow: Boolean,
+    actionButtonSize: Dp,
+    coreButtonSize: Dp,
+    playButtonSize: Dp,
+    modifier: Modifier = Modifier,
+    actionRowModifier: Modifier = Modifier,
+    coreControlsModifier: Modifier = Modifier,
+    actions: @Composable RowScope.() -> Unit,
+    core: @Composable RowScope.() -> Unit,
+) {
+    BoxWithConstraints(modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        val availableWidth = maxWidth
+        val actionSpacing = if (compactLayout) 2.dp else 4.dp
+        val coreSpacing = if (compactLayout) 2.dp else 10.dp
+        val density = LocalDensity.current
+        val coreWidthPx = with(density) { coreButtonSize.roundToPx() * 4 + playButtonSize.roundToPx() }
+        val actionWidthPx = with(density) { actionButtonSize.roundToPx() * 3 + actionSpacing.roundToPx() * 2 }
+        val preferredEndPaddingPx = with(density) { if (landscapeControls && !compactLayout) 16.dp.roundToPx() else 0 }
+        val endPaddingPx = minOf(preferredEndPaddingPx, (constraints.maxWidth - coreWidthPx).coerceAtLeast(0))
+        val endPadding = with(density) { endPaddingPx.toDp() }
+        val coreSpacingPx = with(density) { coreSpacing.roundToPx() }
+        val inline = landscapeControls && showActionRow &&
+            constraints.maxWidth >= actionWidthPx + coreWidthPx + coreSpacingPx * 4 + preferredEndPaddingPx
+        // 按整数像素分配间距，避免四个小数 dp 间距分别取整后挤窄末尾按钮。
+        val availableSpacing = with(density) {
+            ((constraints.maxWidth - endPaddingPx - coreWidthPx).coerceAtLeast(0) / 4).toDp()
+        }
+        if (inline) {
+            val spacing = if (compactLayout) {
+                val maximumSpacing = with(density) {
+                    ((constraints.maxWidth - actionWidthPx - coreWidthPx - endPaddingPx).coerceAtLeast(0) / 4).toDp()
+                }
+                minOf(
+                    phoneLandscapeCoreButtonSpacing(availableWidth, actionButtonSize, actionSpacing, coreButtonSize, playButtonSize),
+                    maximumSpacing,
+                )
+            } else coreSpacing
+            Row(
+                modifier = Modifier.fillMaxWidth().heightIn(min = playButtonSize),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = if (compactLayout) 8.dp else 16.dp)
-                        .then(actionRowModifier),
-                    horizontalArrangement = Arrangement.SpaceAround,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    PlaybackActionButtons(
-                        playback = playback,
-                        isFavorite = isFavorite,
-                        viewModel = viewModel,
-                        onShowPlaylistPicker = onShowPlaylistPicker,
-                        onShowEqualizer = onShowEqualizer,
-                        onManageTags = onManageTags,
-                        sliceUiState = sliceUiState,
-                        actionButtonSize = actionButtonSize,
-                        actionIconSize = actionIconSize,
-                        landscapeControls = false,
-                        contentColor = contentColor
+                    modifier = actionRowModifier,
+                    horizontalArrangement = Arrangement.spacedBy(actionSpacing),
+                    verticalAlignment = Alignment.CenterVertically,
+                    content = actions,
+                )
+                Spacer(Modifier.weight(1f))
+                Row(
+                    modifier = coreControlsModifier.padding(end = endPadding),
+                    horizontalArrangement = Arrangement.spacedBy(spacing),
+                    verticalAlignment = Alignment.CenterVertically,
+                    content = core,
+                )
+            }
+        } else {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(
+                    if (!showActionRow) 12.dp else if (compactLayout || landscapeControls) 8.dp else 20.dp
+                ),
+            ) {
+                if (showActionRow) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth()
+                            .padding(horizontal = if (landscapeControls) 0.dp else if (compactLayout) 8.dp else 16.dp)
+                            .then(actionRowModifier),
+                        horizontalArrangement = Arrangement.SpaceAround,
+                        verticalAlignment = Alignment.CenterVertically,
+                        content = actions,
                     )
                 }
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .then(coreControlsModifier)
-                    .padding(end = if (landscapeControls) landscapeCoreEndPadding else 0.dp),
-                horizontalArrangement = when {
-                    landscapeControls -> Arrangement.spacedBy(
-                        space = landscapeCoreSpacing,
-                        alignment = Alignment.End
-                    )
-                    showActionRow -> Arrangement.SpaceBetween
-                    else -> Arrangement.spacedBy(25.dp, Alignment.CenterHorizontally)
-                },
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                PlaybackCoreButtons(
-                    playback = playback,
-                    viewModel = viewModel,
-                    isPlaying = isPlayingEffective,
-                    onTogglePlay = {
-                        val shouldPlay = nextPlaybackRequest(
-                            optimisticIsPlaying = optimisticIsPlaying,
-                            playWhenReady = playback.playWhenReady
-                        )
-                        optimisticIsPlaying = shouldPlay
-                        if (shouldPlay) viewModel.play() else viewModel.pause()
+                Row(
+                    modifier = Modifier.fillMaxWidth().then(coreControlsModifier).padding(end = endPadding),
+                    horizontalArrangement = when {
+                        landscapeControls -> Arrangement.spacedBy(minOf(coreSpacing, availableSpacing), Alignment.End)
+                        showActionRow -> Arrangement.SpaceBetween
+                        else -> Arrangement.spacedBy(minOf(25.dp, availableSpacing), Alignment.CenterHorizontally)
                     },
-                    coreButtonSize = coreButtonSize,
-                    modeIconSize = modeIconSize,
-                    skipIconSize = skipIconSize,
-                    playButtonSize = playButtonSize,
-                    playIconSize = playIconSize,
-                    contentColor = contentColor
+                    verticalAlignment = Alignment.CenterVertically,
+                    content = core,
                 )
             }
         }

@@ -4,7 +4,6 @@ import com.asmr.player.ui.common.parseCvNames
 import com.asmr.player.ui.common.formatArtistMetadata
 import com.asmr.player.ui.common.CvNameSeparator
 
-import android.content.res.Configuration
 import android.content.Intent
 import android.view.KeyEvent as AndroidKeyEvent
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -25,9 +24,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
-import androidx.compose.material3.windowsizeclass.WindowHeightSizeClass
 import androidx.compose.material3.windowsizeclass.WindowWidthSizeClass
-import androidx.compose.material3.windowsizeclass.WindowSizeClass
 import androidx.compose.runtime.*
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -57,7 +54,6 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -238,6 +234,15 @@ internal fun nowPlayingLandscapeLayoutMetrics(
     }
 }
 
+internal fun shouldUseNowPlayingLandscapeLayout(availableWidth: Dp, availableHeight: Dp): Boolean {
+    if (availableWidth <= availableHeight) return false
+    val tabletLayout = availableHeight >= 480.dp
+    val metrics = nowPlayingLandscapeLayoutMetrics(availableHeight, tabletLayout)
+    val controlsWidth = (availableWidth - metrics.horizontalPadding * 2 - metrics.contentSpacing) * metrics.contentWeight
+    // 先保证完整播放控制的宽度，再启用左右双栏；窄分屏沿用上下布局。
+    return controlsWidth >= if (tabletLayout) 284.dp else 228.dp
+}
+
 internal fun landscapeSpectrumCenterY(
     artistInfoBottom: Float,
     currentLyricAnchorTop: Float,
@@ -258,8 +263,7 @@ internal fun nowPlayingPortraitLayoutMetrics(
     screenHeight: Dp,
     widthClass: WindowWidthSizeClass
 ): NowPlayingPortraitLayoutMetrics {
-    val compact = widthClass == WindowWidthSizeClass.Compact &&
-        screenHeight.isFiniteDp() &&
+    val compact = screenHeight.isFiniteDp() &&
         screenHeight <= NowPlayingCompactShortScreenHeight
     if (compact) {
         return NowPlayingPortraitLayoutMetrics(
@@ -1106,7 +1110,6 @@ private fun NowPlayingHomeLayoutSwipeHint(
 @androidx.media3.common.util.UnstableApi
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 internal fun NowPlayingScreen(
-    windowSizeClass: WindowSizeClass,
     hardwareVolumeEventTick: Long,
     onInlineVolumeControlVisibilityChanged: (Boolean) -> Unit = {},
     onEqualizerVisibilityChanged: (Boolean) -> Unit = {},
@@ -1135,7 +1138,9 @@ internal fun NowPlayingScreen(
     sharedCoverDragPreviewState: CoverDragPreviewState? = null,
     enableStaggeredRouteEntry: Boolean = true,
     lyricsViewModel: LyricsViewModel = hiltViewModel()
-) {
+) = BoxWithConstraints(Modifier.fillMaxSize()) {
+    val availableWidth = maxWidth
+    val availableHeight = maxHeight
     val staticPlayback by remember(viewModel) {
         viewModel.playback
             .map { it.toStaticPlayback() }
@@ -1308,20 +1313,16 @@ internal fun NowPlayingScreen(
     val toggleSelectedSlice = { sliceId: Long ->
         viewModel.selectSlice(if (sliceUiState.selectedSliceId == sliceId) null else sliceId)
     }
-    val configuration = LocalConfiguration.current
-    val isLandscape = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
-    val widthClass = windowSizeClass.widthSizeClass
-    val heightClass = windowSizeClass.heightSizeClass
-    
-    // 手机横屏：高度为 Compact
-    val isPhoneLandscape = isLandscape && heightClass == WindowHeightSizeClass.Compact
-    // 平板横屏：高度不为 Compact 且处于横屏状态
-    val useSplitLayout = heightClass != WindowHeightSizeClass.Compact && isLandscape
-    val landscapeLayoutMetrics = remember(configuration.screenHeightDp, useSplitLayout) {
-        nowPlayingLandscapeLayoutMetrics(
-            screenHeight = configuration.screenHeightDp.dp,
-            tabletLayout = useSplitLayout
-        )
+    val widthClass = when {
+        availableWidth < 600.dp -> WindowWidthSizeClass.Compact
+        availableWidth < 840.dp -> WindowWidthSizeClass.Medium
+        else -> WindowWidthSizeClass.Expanded
+    }
+    val isLandscape = shouldUseNowPlayingLandscapeLayout(availableWidth, availableHeight)
+    val isPhoneLandscape = isLandscape && availableHeight < 480.dp
+    val useSplitLayout = isLandscape && !isPhoneLandscape
+    val landscapeLayoutMetrics = remember(availableHeight, useSplitLayout) {
+        nowPlayingLandscapeLayoutMetrics(screenHeight = availableHeight, tabletLayout = useSplitLayout)
     }
     val player = viewModel.playerOrNull()
     val videoPlayerCoordinator = remember { NowPlayingVideoPlayerCoordinator() }
@@ -1539,7 +1540,7 @@ internal fun NowPlayingScreen(
             val spectrumHeight = landscapeLayoutMetrics.spectrumHeight
             val density = LocalDensity.current
             val fallbackCenterY = with(density) {
-                configuration.screenHeightDp.dp.toPx() *
+                availableHeight.toPx() *
                     if (landscapeLayoutMetrics.tabletLayout) 0.28f else 0.34f
             }
             val spectrumCenterY = landscapeSpectrumCenterY(
@@ -1806,7 +1807,7 @@ internal fun NowPlayingScreen(
                                 tagViewModel.openForMediaId(mediaId, fallback)
                             },
                             sliceUiState = sliceUiState,
-                            modifier = Modifier.height(landscapeLayoutMetrics.controlsHeight),
+                            modifier = Modifier.heightIn(min = landscapeLayoutMetrics.controlsHeight),
                             showActionRow = !isVideo,
                             landscapeControls = true,
                             actionRowModifier = controlsMotion,
@@ -1985,7 +1986,7 @@ internal fun NowPlayingScreen(
                             tagViewModel.openForMediaId(mediaId, fallback)
                         },
                         sliceUiState = sliceUiState,
-                        modifier = Modifier.height(landscapeLayoutMetrics.controlsHeight),
+                        modifier = Modifier.heightIn(min = landscapeLayoutMetrics.controlsHeight),
                         showActionRow = !isVideo,
                         landscapeControls = true,
                         compactLayout = true,
@@ -2003,7 +2004,7 @@ internal fun NowPlayingScreen(
             val controlsMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.CONTROLS)
             val volumeMotion = routeTransition.nowPlayingMotionModifier(motionLayout, NowPlayingMotionSlot.VOLUME)
             val expandedHomeLayout = nowPlayingHomeLayoutMode == NowPlayingHomeLayoutMode.Expanded && !isVideo
-            val portraitScreenHeight = configuration.screenHeightDp.dp
+            val portraitScreenHeight = availableHeight
             val portraitLayoutMetrics = remember(portraitScreenHeight, widthClass) {
                 nowPlayingPortraitLayoutMetrics(
                     screenHeight = portraitScreenHeight,

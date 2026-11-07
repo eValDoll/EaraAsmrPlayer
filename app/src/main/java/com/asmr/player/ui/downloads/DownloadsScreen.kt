@@ -74,7 +74,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
@@ -122,6 +121,11 @@ import com.asmr.player.ui.common.DiscPlaceholder
 import com.asmr.player.ui.common.FlatActionDialog
 import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
+import com.asmr.player.ui.common.CollectionPaneLayout
+import com.asmr.player.ui.common.LocalTabletLayout
+import com.asmr.player.ui.common.collectAsStateWhileActive
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import com.asmr.player.ui.common.LocalBottomOverlayPadding
 import com.asmr.player.ui.common.rememberCalmScrollableFlingBehavior
 import com.asmr.player.ui.common.smoothScrollToTop
@@ -157,13 +161,15 @@ fun DownloadsScreen(
     scrollToTopSignal: Long = 0L,
     viewModel: DownloadsViewModel = hiltViewModel()
 ) {
-    val tasks by viewModel.tasks.collectAsStateWithLifecycle()
-    val subtitleTasks by viewModel.subtitleTasks.collectAsStateWithLifecycle()
-    val downloadDestination by viewModel.downloadDestination.collectAsStateWithLifecycle()
-    val polishingRjCodes by viewModel.polishingRjCodes.collectAsStateWithLifecycle()
+    val tasks by viewModel.tasks.collectAsStateWhileActive(isActive)
+    val subtitleTasks by viewModel.subtitleTasks.collectAsStateWhileActive(isActive)
+    val downloadDestination by viewModel.downloadDestination.collectAsStateWhileActive(isActive)
+    val polishingRjCodes by viewModel.polishingRjCodes.collectAsStateWhileActive(isActive)
     val activeDownloadFileCount = remember(tasks) { countActiveDownloadFiles(tasks) }
     val activeTranslationTaskCount = remember(subtitleTasks) { countActiveSubtitleTaskItems(subtitleTasks) }
     val expandedTasks = remember { mutableStateListOf<Long>() }
+    val tabletLayout = LocalTabletLayout.current
+    var selectedTaskId by rememberSaveable { mutableStateOf<Long?>(null) }
     var rjQuery by rememberSaveable { mutableStateOf("") }
     var managementMode by rememberSaveable { mutableStateOf(DownloadManagementMode.Downloads) }
     var pendingDelete by remember { mutableStateOf<PendingDeleteAction?>(null) }
@@ -229,10 +235,10 @@ fun DownloadsScreen(
         contentAlignment = Alignment.TopCenter
     ) {
         Column(
-            modifier = if (isCompact) {
+            modifier = if (isCompact || tabletLayout.isTablet) {
                 Modifier
                     .fillMaxSize()
-                    .padding(horizontal = DownloadsPageHorizontalPadding, vertical = 10.dp)
+                    .padding(horizontal = maxOf(DownloadsPageHorizontalPadding, tabletLayout.horizontalPadding), vertical = 10.dp)
             } else {
                 Modifier
                     .fillMaxHeight()
@@ -268,6 +274,32 @@ fun DownloadsScreen(
                         else tasks.filter { it.title.equals(normalizedQuery, ignoreCase = true) }
                     }
 
+                    val selectedTask = shownTasks.firstOrNull { it.taskId == selectedTaskId }
+                        ?: shownTasks.firstOrNull { it.taskId == expandedTasks.lastOrNull() }
+                        ?: shownTasks.firstOrNull()
+                    CollectionPaneLayout(
+                        hasDetail = selectedTask != null,
+                        modifier = Modifier.weight(1f),
+                        detail = {
+                            selectedTask?.let { task ->
+                                androidx.compose.runtime.key(task.taskId) {
+                                Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                                    DownloadTaskCard(
+                                        task = task,
+                                        expanded = true,
+                                        showHeader = false,
+                                        onToggleExpanded = {},
+                                        onPauseItem = viewModel::pauseItem,
+                                        onResumeItem = viewModel::resumeItem,
+                                        onRetryItem = viewModel::retryItem,
+                                        onDeleteItem = { pendingDelete = PendingDeleteAction.Item(workId = it) },
+                                    )
+                                    Spacer(Modifier.height(LocalBottomOverlayPadding.current + 16.dp))
+                                }
+                                }
+                            }
+                        },
+                    ) {
                     LazyColumn(
                         state = listState,
                         flingBehavior = rememberCalmScrollableFlingBehavior(),
@@ -292,7 +324,7 @@ fun DownloadsScreen(
                         } else {
                             items(shownTasks, key = { it.taskId }) { task ->
                                 val colors = AsmrTheme.colorScheme
-                                val expanded = expandedTasks.contains(task.taskId)
+                                val expanded = !tabletLayout.twoPane && expandedTasks.contains(task.taskId)
                                 val hasFailedItems = task.items.any { it.state == DownloadItemState.FAILED }
                                 val hasActiveItems = task.items.any {
                                     it.state == DownloadItemState.RUNNING || it.state == DownloadItemState.ENQUEUED
@@ -352,9 +384,12 @@ fun DownloadsScreen(
                                 ) {
                                     DownloadTaskCard(
                                         task = task,
+                                        selected = tabletLayout.twoPane && task.taskId == selectedTask?.taskId,
                                         expanded = expanded,
                                         onToggleExpanded = {
-                                            if (expanded) {
+                                            if (tabletLayout.twoPane) {
+                                                selectedTaskId = task.taskId
+                                            } else if (expanded) {
                                                 expandedTasks.remove(task.taskId)
                                             } else {
                                                 revealedDownloadTaskId = null
@@ -382,12 +417,13 @@ fun DownloadsScreen(
                             )
                         }
                     }
+                    }
                 }
 
                 DownloadManagementMode.Translations -> {
                     // 「翻译任务」数据只在切到该 Tab 时才订阅：进入页面默认落在
                     // 「下载任务」，避免转场期间再触发一次 Room 查询并整页重组。
-                    val translationSubtitleGroups by viewModel.translationSubtitleGroups.collectAsStateWithLifecycle()
+                    val translationSubtitleGroups by viewModel.translationSubtitleGroups.collectAsStateWhileActive(isActive)
                     TranslationManagementContent(
                         normalizedQuery = normalizedQuery,
                         listState = listState,
@@ -685,6 +721,8 @@ private fun TranslationManagementContent(
             .toList()
     }
     val expandedGroups = remember { mutableStateListOf<String>() }
+    val tabletLayout = LocalTabletLayout.current
+    var selectedRj by rememberSaveable { mutableStateOf<String?>(null) }
 
     if (groups.isEmpty()) {
         Row(
@@ -699,6 +737,31 @@ private fun TranslationManagementContent(
         return
     }
 
+    val selectedGroup = groups.firstOrNull { it.rjCode == selectedRj }
+        ?: groups.firstOrNull { it.rjCode == expandedGroups.lastOrNull() }
+        ?: groups.first()
+    CollectionPaneLayout(
+        hasDetail = true,
+        detail = {
+            androidx.compose.runtime.key(selectedGroup.rjCode) {
+            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                TranslationTaskGroupCard(
+                    group = selectedGroup,
+                    expanded = true,
+                    showHeader = false,
+                    onToggleExpanded = {},
+                    onDeleteSubtitle = onDeleteSubtitle,
+                    onRetrySubtitle = onRetrySubtitle,
+                    onPauseItem = onPauseItem,
+                    onResumeItem = onResumeItem,
+                    onCancelItem = onCancelItem,
+                    onRetryItem = onRetryItem,
+                )
+                Spacer(Modifier.height(LocalBottomOverlayPadding.current + 16.dp))
+            }
+            }
+        },
+    ) {
     LazyColumn(
         state = listState,
         flingBehavior = rememberCalmScrollableFlingBehavior(),
@@ -710,7 +773,7 @@ private fun TranslationManagementContent(
     ) {
         items(groups, key = { it.rjCode }) { group ->
             val colors = AsmrTheme.colorScheme
-            val expanded = expandedGroups.contains(group.rjCode)
+            val expanded = !tabletLayout.twoPane && expandedGroups.contains(group.rjCode)
             val activeTask = group.tasks.firstOrNull { it.state.isActivelyRunning() }
             val controlledTask = activeTask ?: group.tasks.firstOrNull()
             // 操作列：暂停/继续、润色、（有任务时）取消；（只有字幕时）润色、删除
@@ -796,9 +859,12 @@ private fun TranslationManagementContent(
             ) {
                 TranslationTaskGroupCard(
                     group = group,
+                    selected = tabletLayout.twoPane && group.rjCode == selectedGroup.rjCode,
                     expanded = expanded,
                     onToggleExpanded = {
-                        if (expanded) {
+                        if (tabletLayout.twoPane) {
+                            selectedRj = group.rjCode
+                        } else if (expanded) {
                             expandedGroups.remove(group.rjCode)
                         } else {
                             onRevealedRjChange(null)
@@ -815,12 +881,15 @@ private fun TranslationManagementContent(
             }
         }
     }
+    }
 }
 
 @Composable
 private fun TranslationTaskGroupCard(
     group: TranslationTaskGroupUi,
     expanded: Boolean,
+    showHeader: Boolean = true,
+    selected: Boolean = false,
     onToggleExpanded: () -> Unit,
     onDeleteSubtitle: (trackId: Long, title: String) -> Unit,
     onRetrySubtitle: (trackId: Long, title: String) -> Unit,
@@ -845,13 +914,14 @@ private fun TranslationTaskGroupCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
-            .background(colors.surface.copy(alpha = 0.5f))
+            .background(if (selected) colors.primarySoft else colors.surface.copy(alpha = 0.5f))
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            TaskGroupHeader(
+            if (!showHeader) Text(group.title.ifBlank { group.rjCode }, style = MaterialTheme.typography.titleMedium, color = colors.textPrimary)
+            if (showHeader) TaskGroupHeader(
                 expanded = expanded,
                 title = group.rjCode,
                 subtitle = group.title,
@@ -1454,6 +1524,8 @@ private fun String.translationTaskSortPriority(): Int = when (this) {
 private fun DownloadTaskCard(
     task: DownloadTaskUi,
     expanded: Boolean,
+    showHeader: Boolean = true,
+    selected: Boolean = false,
     onToggleExpanded: () -> Unit,
     onPauseItem: (String) -> Unit,
     onResumeItem: (String) -> Unit,
@@ -1461,8 +1533,8 @@ private fun DownloadTaskCard(
     onDeleteItem: (String) -> Unit
 ) {
     val folderExpanded = remember(task.taskId) { mutableStateListOf<String>() }
-    val treeEntries = remember(task.items, folderExpanded.toList()) {
-        flattenDownloadTreeForUi(task.items, folderExpanded.toSet())
+    val treeEntries = remember(task.items, folderExpanded.toList(), expanded) {
+        if (expanded) flattenDownloadTreeForUi(task.items, folderExpanded.toSet()) else emptyList()
     }
     val hasUnknownTotalRunningItem = remember(task.items) {
         task.items.any { it.state == DownloadItemState.RUNNING && it.total <= 0 }
@@ -1480,13 +1552,14 @@ private fun DownloadTaskCard(
         modifier = Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(6.dp))
-            .background(colors.surface.copy(alpha = 0.5f))
+            .background(if (selected) colors.primarySoft else colors.surface.copy(alpha = 0.5f))
     ) {
         Column(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            TaskGroupHeader(
+            if (!showHeader) Text(task.subtitle.ifBlank { task.title }, style = MaterialTheme.typography.titleMedium, color = colors.textPrimary)
+            if (showHeader) TaskGroupHeader(
                 expanded = expanded,
                 title = task.title,
                 subtitle = task.subtitle,

@@ -94,7 +94,6 @@ object SettingsKeys {
     val PLAY_FADE_IN_MS = intPreferencesKey("play_fade_in_ms")
     val PAUSE_FADE_OUT_MS = intPreferencesKey("pause_fade_out_ms")
     val SFW_HIDE_SYSTEM_CONTROLS = booleanPreferencesKey("sfw_hide_system_controls")
-    val SHOW_MINI_PLAYER_BAR = booleanPreferencesKey("show_mini_player_bar")
 
     val DEEPSEEK_THINKING_ENABLED = booleanPreferencesKey("deepseek_thinking_enabled")
     val DEEPSEEK_REASONING_EFFORT = stringPreferencesKey("deepseek_reasoning_effort")

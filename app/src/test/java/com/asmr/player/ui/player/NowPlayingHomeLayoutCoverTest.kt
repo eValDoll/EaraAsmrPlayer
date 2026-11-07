@@ -7,6 +7,13 @@ import org.junit.Test
 
 class NowPlayingHomeLayoutCoverTest {
     @Test
+    fun shortMediumWidthWindowReservesSpaceForPlaybackControls() {
+        val metrics = nowPlayingPortraitLayoutMetrics(600.dp, WindowWidthSizeClass.Medium)
+        assertEquals(true, metrics.compact)
+        assertEquals(148.dp, metrics.minimumCoverWidth)
+    }
+
+    @Test
     fun multilineReserveBalancesReadingSpaceAndSmallScreens() {
         assertEquals(137.dp, multilineLyricsReserveHeight(600.dp, 31.dp))
         assertEquals(90.dp, multilineLyricsReserveHeight(200.dp, 49.dp))

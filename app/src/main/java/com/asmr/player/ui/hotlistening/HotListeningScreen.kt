@@ -3,6 +3,7 @@ package com.asmr.player.ui.hotlistening
 import com.asmr.player.ui.common.AlbumRowRasterCacheScope
 import com.asmr.player.ui.common.rememberLightweightVerticalOverscrollState
 
+import com.asmr.player.ui.common.LocalTabletLayout
 import com.asmr.player.ui.common.LocalMainHeaderPadding
 import com.asmr.player.ui.common.progressiveHeaderContent
 import androidx.compose.ui.unit.Dp
@@ -160,7 +161,8 @@ private fun HotListeningScreenContent(
     val gridState = rememberSaveable(contentScrollKey, saver = LazyStaggeredGridState.Saver) {
         LazyStaggeredGridState()
     }
-    val activeScroll: ScrollableState = if (viewMode == 0) listState else gridState
+    val tabletList = LocalTabletLayout.current.landscape && viewMode == 0
+    val activeScroll: ScrollableState = if (viewMode == 0 && !tabletList) listState else gridState
 
     fun stopActiveScroll() {
         activeScroll.interruptOngoingScroll(scope)
@@ -192,7 +194,7 @@ private fun HotListeningScreenContent(
         if (scrollToTopSignal == 0L) return@LaunchedEffect
         requestScrollToTop()
     }
-    LaunchedEffect(isActive, viewMode) {
+    LaunchedEffect(isActive, viewMode, tabletList) {
         if (isActive) return@LaunchedEffect
         activeScroll.interruptOngoingScroll(this, MutatePriority.PreventUserInput)
     }
@@ -233,7 +235,7 @@ private fun HotListeningScreenContent(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(top = contentTopPadding, bottom = LocalBottomOverlayPadding.current + 24.dp)
                     )
-                } else if (viewMode == 0) {
+                } else if (viewMode == 0 && !tabletList) {
                     val app = LocalContext.current.applicationContext
                     val cacheManager = remember(app) {
                         EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
@@ -350,14 +352,14 @@ private fun HotListeningScreenContent(
                         }
                     }
                 } else {
-                    val adaptiveCellSize = if (isCompactWidth) 150.dp else 200.dp
+                    val adaptiveCellSize = if (tabletList) 360.dp else if (LocalTabletLayout.current.isTablet) 176.dp else if (isCompactWidth) 150.dp else 200.dp
                     val app = LocalContext.current.applicationContext
                     val cacheManager = remember(app) {
                         EntryPointAccessors.fromApplication(app, ImageCacheEntryPoint::class.java)
                             .imageCacheManager()
                     }
                     val density = LocalDensity.current
-                    val gridCoverPx = remember(adaptiveCellSize, density) { with(density) { adaptiveCellSize.roundToPx() } }
+                    val gridCoverPx = remember(adaptiveCellSize, density) { with(density) { (if (tabletList) 152.dp else adaptiveCellSize).roundToPx() } }
                     val gridPreloadSize = remember(gridCoverPx) { IntSize(gridCoverPx, gridCoverPx) }
                     val gridCoverFadeInState = remember(gridState) {
                         derivedStateOf {
@@ -405,6 +407,7 @@ private fun HotListeningScreenContent(
                                     contentType = { "albumGrid" }
                                 ) { index ->
                                     HotListeningGridItem(
+                                        horizontal = tabletList,
                                         entry = state.entries[index],
                                         onAlbumClick = onAlbumClick,
                                         onMetaLongClick = ::openMetaActions,
@@ -435,6 +438,7 @@ private fun HotListeningScreenContent(
                                             contentType = { "albumGrid" }
                                         ) { index ->
                                             HotListeningGridItem(
+                                                horizontal = tabletList,
                                                 entry = state.blockedEntries[index],
                                                 onAlbumClick = onAlbumClick,
                                                 onMetaLongClick = ::openMetaActions,
@@ -528,6 +532,7 @@ private fun HotListeningListItem(
 
 @Composable
 private fun HotListeningGridItem(
+    horizontal: Boolean = false,
     entry: HotListeningEntry,
     onAlbumClick: (Album) -> Unit,
     onMetaLongClick: (String) -> Unit,
@@ -542,6 +547,7 @@ private fun HotListeningGridItem(
         val album = entry.album
         val coverBadge = remember(entry) { entry.toCoverBadge() }
         AlbumGridItem(
+            horizontal = horizontal,
             album = album,
             onClick = { onAlbumClick(album) },
             coverRetainPainterDuringReload = true,

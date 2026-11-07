@@ -137,6 +137,7 @@ internal fun SettingsDropdownSelector(
     flatTrigger: Boolean = false,
     lazyOptions: Boolean = false,
     singleLineOptions: Boolean = false,
+    valueTextAlign: androidx.compose.ui.text.style.TextAlign = androidx.compose.ui.text.style.TextAlign.Start,
 ) {
     val colors = AsmrTheme.colorScheme
     var expanded by remember { mutableStateOf(false) }
@@ -188,6 +189,7 @@ internal fun SettingsDropdownSelector(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 Text(options.getValue(value), modifier = Modifier.weight(1f),
+                    textAlign = valueTextAlign,
                     style = textStyle,
                     color = if (enabled) colors.textPrimary else colors.textTertiary,
                     maxLines = 1, overflow = TextOverflow.Ellipsis)

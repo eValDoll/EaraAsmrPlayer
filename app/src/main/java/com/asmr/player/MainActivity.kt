@@ -109,10 +109,8 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             initialThemeBootstrapPreferences = settingsDataStore.loadThemeBootstrapPreferences()
             if (isFinishing || isDestroyed) return@launch
-            val recentAlbumsPanelExpandedInitial = false
             val startRouteFromIntent = intent.getStringExtra("start_route")
             setAppContent(
-                recentAlbumsPanelExpandedInitial = recentAlbumsPanelExpandedInitial,
                 startRouteFromIntent = startRouteFromIntent
             )
         }
@@ -120,7 +118,6 @@ class MainActivity : ComponentActivity() {
 
     @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
     private fun setAppContent(
-        recentAlbumsPanelExpandedInitial: Boolean,
         startRouteFromIntent: String?
     ) {
         setContent {
@@ -177,7 +174,6 @@ class MainActivity : ComponentActivity() {
                 initialValue = NowPlayingLyricsSettings()
             )
             val lyricsPageSettings by settingsDataStore.lyricsPageSettings.collectAsStateWithLifecycle(initialValue = LyricsPageSettings())
-            val showMiniPlayerBar by settingsRepository.showMiniPlayerBar.collectAsStateWithLifecycle(initialValue = true)
             val neutral = remember(mode) { neutralPaletteForMode(mode) }
             val cacheManager = remember(context.applicationContext) {
                 dagger.hilt.android.EntryPointAccessors.fromApplication(
@@ -463,12 +459,10 @@ class MainActivity : ComponentActivity() {
                         settingsDataStore = settingsDataStore,
                         messageManager = messageManager,
                         listeningTracker = listeningTracker,
-                        recentAlbumsPanelExpandedInitial = recentAlbumsPanelExpandedInitial,
                         startRouteFromIntent = startRouteFromIntent,
                         onShowQueue = { overlaySheet = OverlaySheet.Queue },
                         onShowSleepTimer = { overlaySheet = OverlaySheet.SleepTimer },
                         onContentReady = { contentReady = true },
-                        showMiniPlayerBar = showMiniPlayerBar,
                         playerBackgroundMode = playerBackgroundMode,
                         coverBackgroundEnabled = coverBackgroundEnabled,
                         dynamicFlowingBackgroundEnabled = dynamicFlowingBackgroundEnabled,

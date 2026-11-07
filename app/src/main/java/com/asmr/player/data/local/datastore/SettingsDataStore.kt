@@ -50,7 +50,6 @@ class SettingsDataStore @Inject constructor(
     private val lyricsPageLineHeightMultiplierKey = floatPreferencesKey("lyrics_page_line_height_multiplier")
     private val lyricsPageAlignKey = intPreferencesKey("lyrics_page_align")
     private val lyricsPageDisplayAreaModeKey = intPreferencesKey("lyrics_page_display_area_mode")
-    private val recentAlbumsPanelExpandedKey = booleanPreferencesKey("recent_albums_panel_expanded")
     private val miniPlayerDisplayModeKey = stringPreferencesKey("mini_player_display_mode")
     private val autoUpdateCheckEnabledKey = booleanPreferencesKey("auto_update_check_enabled")
     private val lastHandledClipboardEventKey = stringPreferencesKey("last_handled_clipboard_event")
@@ -117,7 +116,6 @@ class SettingsDataStore @Inject constructor(
             displayAreaMode = prefs[lyricsPageDisplayAreaModeKey] ?: 0
         )
     }
-    val recentAlbumsPanelExpanded: Flow<Boolean> = context.settingsDataStore.data.map { it[recentAlbumsPanelExpandedKey] ?: true }
     val miniPlayerDisplayMode: Flow<String> = context.settingsDataStore.data.map { prefs ->
         prefs[miniPlayerDisplayModeKey] ?: "CoverOnly"
     }
@@ -222,10 +220,6 @@ class SettingsDataStore @Inject constructor(
             it[nowPlayingLyricsHighlightFontSizeKey] = settings.highlightFontSizeSp
             it[nowPlayingLyricsMultilineEnabledKey] = settings.multilineEnabled
         }
-    }
-
-    suspend fun setRecentAlbumsPanelExpanded(expanded: Boolean) {
-        context.settingsDataStore.edit { it[recentAlbumsPanelExpandedKey] = expanded }
     }
 
     suspend fun setMiniPlayerDisplayMode(mode: String) {
