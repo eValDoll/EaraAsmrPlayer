@@ -58,7 +58,11 @@ class AlbumHeaderActionBarTest {
 
         assertActionsFit(width = 736.dp, secondaryLabel = "保存")
         compose.onNodeWithText("打开网页").assertWidthIsEqualTo(104.dp)
-        compose.onNodeWithText("日语").assertIsDisplayed()
+        val download = compose.onNodeWithText("下载").getUnclippedBoundsInRoot()
+        val save = compose.onNodeWithText("保存").getUnclippedBoundsInRoot()
+        val language = compose.onNodeWithText("日语").assertIsDisplayed().getUnclippedBoundsInRoot()
+        assertTrue("主操作按钮应充分利用剩余宽度", download.right - download.left >= 200.dp && save.right - save.left >= 200.dp)
+        assertTrue("按钮组与语言入口间不应留下大片空白", language.left - save.right <= 16.dp)
         compose.onNodeWithText("下载").performClick()
         compose.onNodeWithText("保存").performClick()
         compose.runOnIdle {

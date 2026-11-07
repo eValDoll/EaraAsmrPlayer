@@ -50,7 +50,6 @@ class LibraryScreenChromeTest {
                     onSortAdded = {},
                     onSortTitle = {},
                     onOpenFilterScreen = {},
-                    rightPanelToggle = null,
                     materialColorScheme = MaterialTheme.colorScheme,
                     chromeState = chromeState,
                     onMeasured = { chromeState.updateHeight(it.height.toFloat()) }
@@ -118,7 +117,6 @@ class LibraryScreenChromeTest {
                         onSortAdded = {},
                         onSortTitle = {},
                         onOpenFilterScreen = {},
-                        rightPanelToggle = null,
                         materialColorScheme = MaterialTheme.colorScheme,
                         chromeState = chromeState,
                         onMeasured = { chromeState.updateHeight(it.height.toFloat()) }

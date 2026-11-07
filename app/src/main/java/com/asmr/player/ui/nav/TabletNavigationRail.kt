@@ -10,6 +10,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.res.stringResource
+import com.asmr.player.R
+import com.asmr.player.ui.common.EaraBrand
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.testTagsAsResourceId
@@ -46,14 +49,35 @@ fun TabletNavigationRail(
         modifier.semantics { testTagsAsResourceId = true }.width(TabletNavigationRailWidth).fillMaxHeight()
             .shadow(elevation = 6.dp, clip = false)
             .background(resolveMainPageBackgroundColor(colors))
+            .drawBehind {
+                if (colors.isDark) {
+                    val edgeWidth = 1.dp.toPx()
+                    drawRect(
+                        color = colors.onSurface.copy(alpha = 0.18f),
+                        topLeft = Offset(size.width - edgeWidth, 0f),
+                        size = Size(edgeWidth, size.height),
+                    )
+                }
+            }
             .windowInsetsPadding(StableWindowInsets.statusBars.union(StableWindowInsets.navigationBars).only(WindowInsetsSides.Vertical))
-            .verticalScroll(rememberScrollState())
-            .padding(vertical = 8.dp),
+            .padding(top = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        navItems.forEach { item ->
-            RailItem(item.label, item.icon, activeRoute == item.route) { onNavigate(item.route) }
+        EaraBrand(
+            appName = stringResource(R.string.app_name),
+            tint = colors.primaryStrong,
+            stacked = true,
+            modifier = Modifier.testTag("tabletBrand"),
+        )
+        Column(
+            modifier = Modifier.weight(1f).fillMaxWidth()
+                .verticalScroll(rememberScrollState()).padding(top = 8.dp, bottom = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.Bottom),
+        ) {
+            navItems.forEach { item ->
+                RailItem(item.label, item.icon, activeRoute == item.route) { onNavigate(item.route) }
+            }
         }
     }
 }

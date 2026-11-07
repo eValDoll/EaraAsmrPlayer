@@ -109,10 +109,8 @@ class MainActivity : ComponentActivity() {
         lifecycleScope.launch {
             initialThemeBootstrapPreferences = settingsDataStore.loadThemeBootstrapPreferences()
             if (isFinishing || isDestroyed) return@launch
-            val recentAlbumsPanelExpandedInitial = false
             val startRouteFromIntent = intent.getStringExtra("start_route")
             setAppContent(
-                recentAlbumsPanelExpandedInitial = recentAlbumsPanelExpandedInitial,
                 startRouteFromIntent = startRouteFromIntent
             )
         }
@@ -120,7 +118,6 @@ class MainActivity : ComponentActivity() {
 
     @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3WindowSizeClassApi::class)
     private fun setAppContent(
-        recentAlbumsPanelExpandedInitial: Boolean,
         startRouteFromIntent: String?
     ) {
         setContent {
@@ -463,7 +460,6 @@ class MainActivity : ComponentActivity() {
                         settingsDataStore = settingsDataStore,
                         messageManager = messageManager,
                         listeningTracker = listeningTracker,
-                        recentAlbumsPanelExpandedInitial = recentAlbumsPanelExpandedInitial,
                         startRouteFromIntent = startRouteFromIntent,
                         onShowQueue = { overlaySheet = OverlaySheet.Queue },
                         onShowSleepTimer = { overlaySheet = OverlaySheet.SleepTimer },

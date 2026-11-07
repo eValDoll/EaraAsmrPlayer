@@ -471,7 +471,6 @@ internal fun SearchAssistContent(
             canGoPrev = false,
             canGoNext = false,
             controlsLocked = false,
-            rightPanelToggle = null,
             chromeState = chromeState,
             chromeTestTag = SEARCH_ASSIST_CHROME_TAG,
             inputTestTag = SEARCH_ASSIST_INPUT_TAG,

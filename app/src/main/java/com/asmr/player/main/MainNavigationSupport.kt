@@ -1,40 +1,16 @@
 package com.asmr.player
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.material.icons.rounded.*
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.pm.ActivityInfo
 import android.net.Uri
-import com.asmr.player.data.local.db.entities.PlaylistItemEntity
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.media3.common.MediaItem
 import androidx.navigation.NavHostController
+import com.asmr.player.data.local.db.entities.PlaylistItemEntity
 import com.asmr.player.ui.nav.Routes
 import java.net.URLDecoder
 import java.net.URLEncoder
-
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
-import com.asmr.player.ui.theme.AsmrTheme
-import androidx.compose.animation.*
-import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.positionInWindow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.input.pointer.pointerInput
-import com.asmr.player.ui.theme.LocalThemeTransitionTrigger
-import com.asmr.player.ui.theme.ThemeTransitionTriggerRequest
-
-
-
-import androidx.media3.common.MediaItem
 
 internal fun encodeRouteArg(value: String): String = URLEncoder.encode(value, "UTF-8")
 
@@ -193,65 +169,6 @@ internal fun shouldTriggerPrimaryRouteScrollToTop(
         activePrimaryRoute = activePrimaryRoute,
         currentPrimaryRoute = currentPrimaryRoute
     )
-}
-
-@Composable
-internal fun PrimaryTopBarBrand(
-    appName: String,
-    tint: Color,
-    modifier: Modifier = Modifier
-) {
-    val trigger = LocalThemeTransitionTrigger.current
-    val isDark = AsmrTheme.colorScheme.isDark
-    var positionInRoot by remember { mutableStateOf(Offset.Zero) }
-
-    val clickModifier = if (trigger != null) {
-        Modifier
-            .onGloballyPositioned { coordinates ->
-                positionInRoot = coordinates.positionInWindow()
-            }
-            .pointerInput(isDark) {
-                detectTapGestures {
-                    val origin = Offset(
-                        positionInRoot.x + it.x,
-                        positionInRoot.y + it.y
-                    )
-                    val targetPref = if (isDark) "light" else "dark"
-                    trigger(
-                        ThemeTransitionTriggerRequest(
-                            origin = origin,
-                            targetPref = targetPref
-                        )
-                    )
-                }
-            }
-    } else {
-        Modifier
-    }
-
-    Row(
-        modifier = modifier
-            .padding(start = 6.dp)
-            .height(44.dp)
-            .then(clickModifier)
-            .padding(start = 2.dp, end = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        Icon(
-            painter = painterResource(R.drawable.ic_launcher_foreground),
-            contentDescription = null,
-            tint = tint,
-            modifier = Modifier.size(38.dp)
-        )
-        Text(
-            text = appName,
-            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
-            color = tint,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-    }
 }
 
 internal data class DefaultSystemUiState(

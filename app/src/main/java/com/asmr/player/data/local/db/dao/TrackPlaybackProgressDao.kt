@@ -5,7 +5,6 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.asmr.player.data.local.db.entities.TrackPlaybackProgressEntity
-import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface TrackPlaybackProgressDao {
@@ -26,29 +25,4 @@ interface TrackPlaybackProgressDao {
 
     @Query("DELETE FROM track_playback_progress WHERE albumId = :albumId")
     suspend fun deleteByAlbumId(albumId: Long)
-
-    @Query(
-        """
-        SELECT
-            p.albumId AS albumId,
-            p.mediaId AS mediaId,
-            p.positionMs AS positionMs,
-            p.updatedAt AS updatedAt,
-            COALESCE(NULLIF(t.displayTitle, ''), t.title) AS trackTitle
-        FROM track_playback_progress p
-        LEFT JOIN tracks t ON t.path = p.mediaId
-        WHERE p.albumId IN (:albumIds)
-        ORDER BY p.albumId ASC, p.updatedAt DESC
-        """
-    )
-    fun observeLastPlayedRowsForAlbums(albumIds: List<Long>): Flow<List<AlbumLastPlayedRow>>
-
 }
-
-data class AlbumLastPlayedRow(
-    val albumId: Long?,
-    val mediaId: String,
-    val positionMs: Long,
-    val updatedAt: Long,
-    val trackTitle: String?
-)

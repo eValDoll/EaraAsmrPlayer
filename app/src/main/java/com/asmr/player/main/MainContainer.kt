@@ -84,7 +84,6 @@ import com.asmr.player.ui.player.playerSurfaceColors
 import com.asmr.player.ui.player.PlayerViewModel
 import com.asmr.player.ui.player.rememberCoverDragPreviewState
 import com.asmr.player.ui.player.rememberCoverMotionState
-import com.asmr.player.ui.sidepanel.LocalRightPanelExpandedState
 import com.asmr.player.ui.downloads.DownloadsScreen
 import com.asmr.player.ui.downloads.DownloadsViewModel
 import com.asmr.player.ui.downloads.DownloadItemState
@@ -126,6 +125,7 @@ import com.asmr.player.ui.common.FlatDialogAction
 import com.asmr.player.ui.common.FlatDialogActionTone
 import com.asmr.player.ui.common.FlatTextFieldDialog
 import com.asmr.player.ui.common.RoundedTopSheet
+import com.asmr.player.ui.common.EaraBrand
 import com.asmr.player.ui.common.EaraTopBarContainer
 import com.asmr.player.ui.common.ProgressiveHeaderBlurState
 import com.asmr.player.ui.common.TabletLayout
@@ -810,7 +810,6 @@ fun MainContainer(
     settingsDataStore: SettingsDataStore,
     messageManager: MessageManager,
     listeningTracker: ListeningTracker,
-    recentAlbumsPanelExpandedInitial: Boolean,
     startRouteFromIntent: String?,
     onShowQueue: () -> Unit,
     onShowSleepTimer: () -> Unit,
@@ -1614,16 +1613,6 @@ fun MainContainer(
         val miniPlayerHasContent = showMiniPlayerBar && hasCurrentMediaItem
         val miniPlayerVisible = miniPlayerHasContent && !nowPlayingVisible
         val bottomChromeVisible = !nowPlayingVisible
-        val rightPanelExpandedFromStore by settingsDataStore.recentAlbumsPanelExpanded
-            .collectAsStateWithLifecycle(initialValue = recentAlbumsPanelExpandedInitial)
-        val rightPanelExpandedState = remember(settingsDataStore, scope, recentAlbumsPanelExpandedInitial) {
-            PersistedBooleanState(initial = recentAlbumsPanelExpandedInitial) { expanded ->
-                scope.launch { settingsDataStore.setRecentAlbumsPanelExpanded(expanded) }
-            }
-        }
-        LaunchedEffect(rightPanelExpandedFromStore) {
-            rightPanelExpandedState.updateFromStore(rightPanelExpandedFromStore)
-        }
         // 专辑详情始终覆盖在主页面之上；让底层顶栏/页面 active 标记在整个详情生命周期内
         // 保持稳定，退出时只更新必要的详情页位移和裁剪，不在同一帧重建整套主页面 chrome。
         val currentScreenIsPrimary = currentPrimaryRoute != null ||
@@ -1771,8 +1760,8 @@ fun MainContainer(
                             ),
                             navigationIcon = {
                                 Box {
-                                    if (showPrimaryBrand || albumDetailTransitionActive) {
-                                        PrimaryTopBarBrand(
+                                    if (!useTabletRail && (showPrimaryBrand || albumDetailTransitionActive)) {
+                                        EaraBrand(
                                             appName = stringResource(R.string.app_name),
                                             tint = colorScheme.primaryStrong
                                         )
@@ -1971,7 +1960,6 @@ fun MainContainer(
         CompositionLocalProvider(
             LocalBottomOverlayPadding provides (if (useTabletRail) tabletBottomPadding else bottomOverlayPadding),
             LocalTabletLayout provides TabletLayout(!isPhone, configuration.screenWidthDp.dp - tabletRailInset, configuration.screenHeightDp.dp),
-            LocalRightPanelExpandedState provides rightPanelExpandedState,
             LocalPageTranslationHeader provides pageTranslationHeader,
         ) {
             Box(
@@ -3087,37 +3075,18 @@ fun MainContainer(
         }
 
         if (bottomChromeVisible && !useTabletRail) {
-            BoxWithConstraints(
-                modifier = Modifier.fillMaxSize()
-            ) {
+            Box(modifier = Modifier.fillMaxSize()) {
                 val bottomChromeHorizontalPadding = if (useLargeBottomChrome) 16.dp else 12.dp
-                val isCompactWidth = windowSizeClass.widthSizeClass == WindowWidthSizeClass.Compact
-                val canUseRightPanel = !isCompactWidth &&
-                    !isPhone &&
-                    isLandscape &&
-                    (currentRoute == "library" || currentRoute == "search")
-                val rightPanelExpanded = rightPanelExpandedState.value
-                val rightPanelWidth = (maxWidth - 680.dp).coerceAtMost(320.dp)
-                val showRightPanel = canUseRightPanel && maxWidth >= 1128.dp && rightPanelWidth >= 280.dp
-                val reservedRightTarget = if (!showRightPanel) {
-                    0.dp
-                } else if (rightPanelExpanded) {
-                    rightPanelWidth + 12.dp
-                } else {
-                    36.dp + 12.dp
-                }
-                val reservedRight by animateDpAsState(
-                    targetValue = reservedRightTarget,
-                    animationSpec = tween(durationMillis = if (rightPanelExpanded) 220 else 180),
-                    label = "miniPlayerReservedRight"
-                )
-                val chromeWidth = (maxWidth - reservedRight - (bottomChromeHorizontalPadding * 2)).coerceAtLeast(0.dp)
                 Box(
                     modifier = Modifier
                         .align(Alignment.BottomStart)
                         .graphicsLayer { clip = false }
-                        .padding(start = bottomChromeHorizontalPadding, bottom = bottomChromeBottomPadding)
-                        .width(chromeWidth)
+                        .padding(
+                            start = bottomChromeHorizontalPadding,
+                            end = bottomChromeHorizontalPadding,
+                            bottom = bottomChromeBottomPadding
+                        )
+                        .fillMaxWidth()
                 ) {
                     PrimaryBottomChrome(
                         activeRoute = visualPrimaryRoute,

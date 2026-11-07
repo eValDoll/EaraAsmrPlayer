@@ -90,27 +90,3 @@ internal fun HardwareVolumeOverlay(
     }
     AppVolumeHearingWarningDialog(state = protectedVolumeChangeState)
 }
-
-@Stable
-internal class PersistedBooleanState(
-    initial: Boolean,
-    private val save: (Boolean) -> Unit
-) : MutableState<Boolean> {
-    private var backing by mutableStateOf(initial)
-
-    override var value: Boolean
-        get() = backing
-        set(value) {
-            if (backing == value) return
-            backing = value
-            save(value)
-        }
-
-    override fun component1(): Boolean = value
-
-    override fun component2(): (Boolean) -> Unit = { value = it }
-
-    fun updateFromStore(value: Boolean) {
-        backing = value
-    }
-}

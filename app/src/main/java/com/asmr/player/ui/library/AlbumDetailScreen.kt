@@ -3388,8 +3388,7 @@ internal fun AlbumHeaderActionBar(
         ) {
             Surface(
                 modifier = Modifier
-                    .weight(1f, fill = false)
-                    .widthIn(min = 160.dp, max = 220.dp)
+                    .weight(1f)
                     .fillMaxHeight(),
                 shape = floatingShape,
                 color = containerColor,
@@ -3436,8 +3435,6 @@ internal fun AlbumHeaderActionBar(
                     }
                 }
             }
-
-            Spacer(modifier = Modifier.weight(1f))
 
             Surface(
                 modifier = Modifier

@@ -37,7 +37,6 @@ class LibraryChromeAndroidTest {
                     onSortTitle = {},
                     onOpenFilterScreen = {},
                     filterActive = true,
-                    rightPanelToggle = null,
                     materialColorScheme = MaterialTheme.colorScheme,
                     chromeState = remember { CollapsibleHeaderState() },
                     onMeasured = {}
@@ -67,7 +66,6 @@ class LibraryChromeAndroidTest {
                     onSortTitle = {},
                     onOpenFilterScreen = {},
                     filterActive = false,
-                    rightPanelToggle = null,
                     materialColorScheme = MaterialTheme.colorScheme,
                     chromeState = remember { CollapsibleHeaderState() },
                     onMeasured = {}
