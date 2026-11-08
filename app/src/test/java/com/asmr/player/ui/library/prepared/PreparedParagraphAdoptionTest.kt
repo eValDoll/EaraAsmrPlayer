@@ -4,6 +4,7 @@ package com.asmr.player.ui.library.prepared
 
 import android.app.Application
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.padding
@@ -31,6 +32,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performSemanticsAction
 import com.asmr.player.ui.createEaraComposeRule
 import com.asmr.player.ui.library.AlbumInlineText
+import com.asmr.player.ui.library.AlbumMetadataFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -137,7 +139,7 @@ class PreparedParagraphAdoptionTest {
 
     @Test
     @OptIn(ExperimentalLayoutApi::class)
-    fun flowRowAdoptsBoundedParagraphsWithoutChangingWrappingOrEllipsis() {
+    fun metadataFlowAdoptsBoundedParagraphsAndMatchesFlowRowAcrossLayoutChanges() {
         val resolver = createFontFamilyResolver(RuntimeEnvironment.getApplication())
         val executor = QueuedParagraphExecutor()
         val session = PreparedParagraphSession(resolver, executor)
@@ -150,6 +152,9 @@ class PreparedParagraphAdoptionTest {
                 )
             }
         }
+        val width = mutableStateOf(180)
+        val fontScale = mutableStateOf(1f)
+        val direction = mutableStateOf(LayoutDirection.Ltr)
         session.setAheadWindow(requests)
         executor.runNext()
         try {
@@ -157,12 +162,16 @@ class PreparedParagraphAdoptionTest {
                 CompositionLocalProvider(
                     LocalPreparedParagraphSession provides session,
                     LocalFontFamilyResolver provides resolver,
-                    LocalDensity provides Density(1f, 1f),
-                    LocalLayoutDirection provides LayoutDirection.Ltr,
+                    LocalDensity provides Density(1f, fontScale.value),
+                    LocalLayoutDirection provides direction.value,
                 ) {
                     Column {
-                        ParagraphTestLayout(maxWidth = 180) {
-                            FlowRow(Modifier.testTag("reference-flow")) {
+                        ParagraphTestLayout(maxWidth = width.value) {
+                            FlowRow(
+                                Modifier.testTag("reference-flow"),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(3.dp),
+                            ) {
                                 requests.forEachIndexed { index, request ->
                                     Text(
                                         request.text,
@@ -175,8 +184,8 @@ class PreparedParagraphAdoptionTest {
                                 }
                             }
                         }
-                        ParagraphTestLayout(maxWidth = 180) {
-                            FlowRow(Modifier.testTag("prepared-flow")) {
+                        ParagraphTestLayout(maxWidth = width.value) {
+                            AlbumMetadataFlow(Modifier.testTag("prepared-flow")) {
                                 requests.forEachIndexed { index, request ->
                                     AlbumInlineText(
                                         request.text,
@@ -196,15 +205,27 @@ class PreparedParagraphAdoptionTest {
             compose.waitForIdle()
             assertEquals(requests.size.toLong(), session.stats().adopted)
             assertEquals(0L, session.stats().staleAdoptions)
-            val referenceBounds = compose.onNodeWithTag("reference-flow").fetchSemanticsNode().boundsInRoot
-            val preparedBounds = compose.onNodeWithTag("prepared-flow").fetchSemanticsNode().boundsInRoot
-            assertEquals(referenceBounds.size, preparedBounds.size)
-            requests.indices.forEach { index ->
-                assertPairGeometryAndStyle("reference-$index", "prepared-$index")
-                val reference = compose.onNodeWithTag("reference-$index").fetchSemanticsNode().boundsInRoot
-                val prepared = compose.onNodeWithTag("prepared-$index").fetchSemanticsNode().boundsInRoot
-                assertEquals(reference.topLeft - referenceBounds.topLeft, prepared.topLeft - preparedBounds.topLeft)
+            fun assertFlowGeometry() {
+                val referenceBounds = compose.onNodeWithTag("reference-flow").fetchSemanticsNode().boundsInRoot
+                val preparedBounds = compose.onNodeWithTag("prepared-flow").fetchSemanticsNode().boundsInRoot
+                assertEquals(referenceBounds.size, preparedBounds.size)
+                requests.indices.forEach { index ->
+                    assertPairGeometryAndStyle("reference-$index", "prepared-$index")
+                    val reference = compose.onNodeWithTag("reference-$index").fetchSemanticsNode().boundsInRoot
+                    val prepared = compose.onNodeWithTag("prepared-$index").fetchSemanticsNode().boundsInRoot
+                    assertEquals(reference.topLeft - referenceBounds.topLeft, prepared.topLeft - preparedBounds.topLeft)
+                }
             }
+            assertFlowGeometry()
+            listOf(90, 300).forEach { newWidth ->
+                compose.runOnIdle { width.value = newWidth }
+                assertFlowGeometry()
+            }
+            compose.runOnIdle {
+                fontScale.value = 1.7f
+                direction.value = LayoutDirection.Rtl
+            }
+            assertFlowGeometry()
         } finally {
             session.close()
         }

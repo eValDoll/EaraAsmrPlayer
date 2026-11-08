@@ -14,8 +14,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
@@ -314,7 +312,7 @@ internal enum class AlbumInlineValuesLayout {
     Flow,
 }
 
-@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun AlbumItemInlineValuesLightweight(
     values: List<String>,
@@ -376,12 +374,10 @@ private fun AlbumItemInlineValuesLightweight(
                 }
             }
 
-            AlbumInlineValuesLayout.Flow -> FlowRow(
+            AlbumInlineValuesLayout.Flow -> AlbumMetadataFlow(
                 modifier = Modifier
                     .weight(1f)
                     .alignBy(AlbumItemMetaCenterLine),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(3.dp),
             ) {
                 AlbumItemInlineValueItems(
                     values = values,
