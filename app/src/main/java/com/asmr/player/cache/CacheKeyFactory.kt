@@ -16,7 +16,9 @@ object CacheKeyFactory {
             return size > MaxRememberedHashes
         }
     }
-    private val md5Digest = ThreadLocal.withInitial { MessageDigest.getInstance("MD5") }
+    private val md5Digest = object : ThreadLocal<MessageDigest>() {
+        override fun initialValue(): MessageDigest = MessageDigest.getInstance("MD5")
+    }
 
     fun createKey(
         context: Context,

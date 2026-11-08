@@ -11,6 +11,7 @@ import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
 import android.webkit.MimeTypeMap
+import androidx.annotation.RequiresApi
 import androidx.core.content.FileProvider
 import com.asmr.player.cache.CacheImageModel
 import com.asmr.player.util.Formatting
@@ -265,6 +266,7 @@ private fun <T> withPreviewImageInput(
     }
 }
 
+@RequiresApi(Build.VERSION_CODES.Q)
 private fun savePreviewImageWithMediaStore(
     context: Context,
     input: InputStream,

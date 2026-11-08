@@ -144,8 +144,12 @@ android {
     testOptions {
         unitTests.isIncludeAndroidResources = true
         unitTests.all {
+            it.maxHeapSize = "2g"
             it.systemProperty("asmr.latency", (project.findProperty("asmr.latency") as? String).orEmpty())
         }
+    }
+    lint {
+        fatal += setOf("NewApi", "InlinedApi")
     }
     packaging {
         resources {

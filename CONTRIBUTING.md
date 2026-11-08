@@ -11,6 +11,9 @@
 
 ## 变更验证
 
+- 以 `app/build.gradle.kts` 的 `minSdk` 为系统兼容下限；新增高版本平台 API 必须有版本判断和旧系统回退，监听器注册、移除及相关类型都要检查。不得通过提高最低版本或抑制 `NewApi`、`InlinedApi` 绕过兼容问题。
+- 发布前使用 `.\gradlew-local.bat :app:lintVitalRelease` 检查 API 兼容性，相关问题作为 fatal 错误阻断 Release。涉及版本分支的回归测试必须运行真实实现并覆盖版本分界两侧，不能只在最新系统或空测试替身上验证。
+- 修复已发布版本时，以对应发布分支为构建基线；覆盖安装前核对数据库版本及迁移链，确保设备已有数据可以直接打开。
 - 提交前检查完整差异和暂存区，核对剩余引用、编码及无用代码；清理不能改变既有界面、交互或业务行为。
 - 使用 `.\gradlew-local.bat :app:testReleaseUnitTest` 执行 Release 单元测试，使用 `.\gradlew-local.bat :app:installRelease` 完成最终构建和保留数据的覆盖安装验证。
 - 禁止通过卸载、清除数据或会自动卸载的设备测试流程解决验证问题；安装被设备拒绝时保留 APK 并报告，不自动重试。
